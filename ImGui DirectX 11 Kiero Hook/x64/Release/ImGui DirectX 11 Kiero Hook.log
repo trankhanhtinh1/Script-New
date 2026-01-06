@@ -1,0 +1,150 @@
+﻿  Menu.cpp
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(12,9): warning C4005: 'DXGI_STATUS_OCCLUDED': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59255,9):
+      see previous definition of 'DXGI_STATUS_OCCLUDED'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(13,9): warning C4005: 'DXGI_STATUS_CLIPPED': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59264,9):
+      see previous definition of 'DXGI_STATUS_CLIPPED'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(14,9): warning C4005: 'DXGI_STATUS_NO_REDIRECTION': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59273,9):
+      see previous definition of 'DXGI_STATUS_NO_REDIRECTION'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(15,9): warning C4005: 'DXGI_STATUS_NO_DESKTOP_ACCESS': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59282,9):
+      see previous definition of 'DXGI_STATUS_NO_DESKTOP_ACCESS'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(16,9): warning C4005: 'DXGI_STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59291,9):
+      see previous definition of 'DXGI_STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(17,9): warning C4005: 'DXGI_STATUS_MODE_CHANGED': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59300,9):
+      see previous definition of 'DXGI_STATUS_MODE_CHANGED'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(18,9): warning C4005: 'DXGI_STATUS_MODE_CHANGE_IN_PROGRESS': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59309,9):
+      see previous definition of 'DXGI_STATUS_MODE_CHANGE_IN_PROGRESS'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(21,9): warning C4005: 'DXGI_ERROR_INVALID_CALL': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59324,9):
+      see previous definition of 'DXGI_ERROR_INVALID_CALL'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(22,9): warning C4005: 'DXGI_ERROR_NOT_FOUND': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59333,9):
+      see previous definition of 'DXGI_ERROR_NOT_FOUND'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(23,9): warning C4005: 'DXGI_ERROR_MORE_DATA': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59342,9):
+      see previous definition of 'DXGI_ERROR_MORE_DATA'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(24,9): warning C4005: 'DXGI_ERROR_UNSUPPORTED': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59351,9):
+      see previous definition of 'DXGI_ERROR_UNSUPPORTED'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(25,9): warning C4005: 'DXGI_ERROR_DEVICE_REMOVED': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59360,9):
+      see previous definition of 'DXGI_ERROR_DEVICE_REMOVED'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(26,9): warning C4005: 'DXGI_ERROR_DEVICE_HUNG': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59369,9):
+      see previous definition of 'DXGI_ERROR_DEVICE_HUNG'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(27,9): warning C4005: 'DXGI_ERROR_DEVICE_RESET': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59379,9):
+      see previous definition of 'DXGI_ERROR_DEVICE_RESET'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(28,9): warning C4005: 'DXGI_ERROR_WAS_STILL_DRAWING': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59388,9):
+      see previous definition of 'DXGI_ERROR_WAS_STILL_DRAWING'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(29,9): warning C4005: 'DXGI_ERROR_FRAME_STATISTICS_DISJOINT': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59398,9):
+      see previous definition of 'DXGI_ERROR_FRAME_STATISTICS_DISJOINT'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(30,9): warning C4005: 'DXGI_ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59407,9):
+      see previous definition of 'DXGI_ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(31,9): warning C4005: 'DXGI_ERROR_DRIVER_INTERNAL_ERROR': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59417,9):
+      see previous definition of 'DXGI_ERROR_DRIVER_INTERNAL_ERROR'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(32,9): warning C4005: 'DXGI_ERROR_NONEXCLUSIVE': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59426,9):
+      see previous definition of 'DXGI_ERROR_NONEXCLUSIVE'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(33,9): warning C4005: 'DXGI_ERROR_NOT_CURRENTLY_AVAILABLE': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59435,9):
+      see previous definition of 'DXGI_ERROR_NOT_CURRENTLY_AVAILABLE'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(34,9): warning C4005: 'DXGI_ERROR_REMOTE_CLIENT_DISCONNECTED': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59445,9):
+      see previous definition of 'DXGI_ERROR_REMOTE_CLIENT_DISCONNECTED'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\dxgitype.h(35,9): warning C4005: 'DXGI_ERROR_REMOTE_OUTOFMEMORY': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59454,9):
+      see previous definition of 'DXGI_ERROR_REMOTE_OUTOFMEMORY'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\d3d11.h(917,9): warning C4005: 'D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59769,9):
+      see previous definition of 'D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\d3d11.h(918,9): warning C4005: 'D3D11_ERROR_FILE_NOT_FOUND': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59778,9):
+      see previous definition of 'D3D11_ERROR_FILE_NOT_FOUND'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\d3d11.h(919,9): warning C4005: 'D3D11_ERROR_TOO_MANY_UNIQUE_VIEW_OBJECTS': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59788,9):
+      see previous definition of 'D3D11_ERROR_TOO_MANY_UNIQUE_VIEW_OBJECTS'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\d3d11.h(920,9): warning C4005: 'D3D11_ERROR_DEFERRED_CONTEXT_MAP_WITHOUT_INITIAL_DISCARD': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59797,9):
+      see previous definition of 'D3D11_ERROR_DEFERRED_CONTEXT_MAP_WITHOUT_INITIAL_DISCARD'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\d3d10.h(608,9): warning C4005: 'D3D10_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59745,9):
+      see previous definition of 'D3D10_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS'
+  
+C:\Program Files (x86)\Microsoft DirectX SDK (June 2010)\Include\d3d10.h(609,9): warning C4005: 'D3D10_ERROR_FILE_NOT_FOUND': macro redefinition
+  (compiling source file 'Menu.cpp')
+      E:\Windows Kits\10\Include\10.0.26100.0\shared\winerror.h(59754,9):
+      see previous definition of 'D3D10_ERROR_FILE_NOT_FOUND'
+  
+D:\source\LOL_Dumper_[unknowncheats.me]_\New Project\Internal_OrbWalker\ImGui DirectX 11 Kiero Hook\SDK\HudOffsetScanner.h(166,32): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+  (compiling source file 'Menu.cpp')
+  
+D:\source\LOL_Dumper_[unknowncheats.me]_\New Project\Internal_OrbWalker\ImGui DirectX 11 Kiero Hook\SDK\HudOffsetScanner.h(197,36): warning C4244: '+=': conversion from 'double' to 'float', possible loss of data
+  (compiling source file 'Menu.cpp')
+  
+D:\source\LOL_Dumper_[unknowncheats.me]_\New Project\Internal_OrbWalker\ImGui DirectX 11 Kiero Hook\SDK\SpellCaster.h(17,10): error C1083: Cannot open include file: '../ScanInternal.h': No such file or directory
+  (compiling source file 'Menu.cpp')
+  
