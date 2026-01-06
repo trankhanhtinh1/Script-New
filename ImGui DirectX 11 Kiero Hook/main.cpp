@@ -7368,26 +7368,144 @@ DWORD WINAPI ThreadTerminate(LPVOID lpParam) {
     return TRUE;
 }
 
-BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved) {
-    if (dwReason == DLL_PROCESS_ATTACH) {
-        DisableThreadLibraryCalls(hMod);
-        
-        // Debug File Init
-        std::ofstream logFile("orbwalker_debug.txt", std::ios_base::trunc);
-        if (logFile.is_open()) {
-            logFile << "--- INTERNAL ORBWALKER DEBUG LOG START ---" << std::endl;
-            logFile.close();
+// ============================================================================
+// THREAD HIDING - Evade basic anti-cheat detection
+// From leagueoflegends-master
+// ============================================================================
+static HMODULE g_hLocalModule = nullptr;
+static bool g_bEject = false;
+
+bool WINAPI HideThread(const HANDLE hThread) noexcept
+{
+    __try {
+        using FnSetInformationThread = NTSTATUS(NTAPI*)(HANDLE ThreadHandle, UINT ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength);
+        FnSetInformationThread NtSetInformationThread = reinterpret_cast<FnSetInformationThread>(
+            ::GetProcAddress(::GetModuleHandleA("ntdll.dll"), "NtSetInformationThread")
+        );
+
+        if (!NtSetInformationThread)
+            return false;
+
+        // ThreadHideFromDebugger = 0x11
+        NTSTATUS status = NtSetInformationThread(hThread, 0x11u, nullptr, 0ul);
+        if (status == 0x00000000)
+            return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return false;
+}
+
+// ============================================================================
+// WAIT FOR GAME READY - Don't init until game is actually loaded
+// ============================================================================
+bool WaitForGameReady(int timeoutSeconds = 60)
+{
+    std::ofstream logFile("orbwalker_debug.txt", std::ios_base::app);
+    logFile << "Waiting for game to be ready..." << std::endl;
+    
+    int waited = 0;
+    while (waited < timeoutSeconds * 10)
+    {
+        __try {
+            float gameTime = SDK::Game::GetTime();
+            if (gameTime > 3.0f) {
+                logFile << "Game ready! GameTime: " << gameTime << std::endl;
+                logFile.close();
+                return true;
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {
+            // Memory not ready yet
         }
         
-        CreateThread(nullptr, 0, ThreadGUI, hMod, 0, nullptr);
-        CreateThread(nullptr, 0, ThreadMatrix, hMod, 0, nullptr);
-        CreateThread(nullptr, 0, ThreadOrbwalkerHero, hMod, 0, nullptr);
-        CreateThread(nullptr, 0, ThreadOrbwalkerMinion, hMod, 0, nullptr);
-        CreateThread(nullptr, 0, ThreadOrbwalkerFlee, hMod, 0, nullptr);
-        CreateThread(nullptr, 0, ThreadAutoCastScan, hMod, 0, nullptr); // NEW
-        CreateThread(nullptr, 0, ThreadTerminate, hMod, 0, nullptr);
-    } else if (dwReason == DLL_PROCESS_DETACH) {
+        Sleep(100);
+        waited++;
+    }
+    
+    logFile << "Timeout waiting for game" << std::endl;
+    logFile.close();
+    return false;
+}
+
+// ============================================================================
+// EJECT THREAD - Safe DLL unload
+// ============================================================================
+DWORD __stdcall EjectThread(LPVOID lpParameter)
+{
+    Sleep(100);
+    kiero::shutdown();
+    FreeLibraryAndExitThread(g_hLocalModule, 0);
+    return 0;
+}
+
+// ============================================================================
+// MAIN INJECTION THREAD - All initialization happens here
+// ============================================================================
+DWORD __stdcall OnInject(LPVOID lpReserved)
+{
+    // Debug File Init
+    std::ofstream logFile("orbwalker_debug.txt", std::ios_base::trunc);
+    logFile << "--- INTERNAL ORBWALKER DEBUG LOG START ---" << std::endl;
+    logFile << "Injected successfully!" << std::endl;
+    logFile.close();
+    
+    Sleep(100);
+    
+    // Hide this thread from debugger
+    if (HideThread(::GetCurrentThread())) {
+        std::ofstream log("orbwalker_debug.txt", std::ios_base::app);
+        log << "Thread hidden from debugger" << std::endl;
+        log.close();
+    }
+    
+    // Wait for game to be ready
+    if (!WaitForGameReady(60)) {
+        std::ofstream log("orbwalker_debug.txt", std::ios_base::app);
+        log << "Game not ready, aborting..." << std::endl;
+        log.close();
+        return 0;
+    }
+    
+    // Start all worker threads
+    CreateThread(nullptr, 0, ThreadGUI, g_hLocalModule, 0, nullptr);
+    CreateThread(nullptr, 0, ThreadMatrix, g_hLocalModule, 0, nullptr);
+    CreateThread(nullptr, 0, ThreadOrbwalkerHero, g_hLocalModule, 0, nullptr);
+    CreateThread(nullptr, 0, ThreadOrbwalkerMinion, g_hLocalModule, 0, nullptr);
+    CreateThread(nullptr, 0, ThreadOrbwalkerFlee, g_hLocalModule, 0, nullptr);
+    CreateThread(nullptr, 0, ThreadAutoCastScan, g_hLocalModule, 0, nullptr);
+    CreateThread(nullptr, 0, ThreadTerminate, g_hLocalModule, 0, nullptr);
+    
+    // Wait for eject signal
+    while (!g_bEject)
+    {
+        Sleep(5);
+        if (GetAsyncKeyState(VK_DELETE) & 1) {
+            g_bEject = true;
+        }
+    }
+    
+    // Clean eject
+    CreateThread(nullptr, 0, EjectThread, nullptr, 0, nullptr);
+    
+    return 0;
+}
+
+// ============================================================================
+// DLL MAIN ENTRY POINT
+// ============================================================================
+BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved) {
+    switch (dwReason)
+    {
+    case DLL_PROCESS_ATTACH:
+        g_hLocalModule = hMod;
+        DisableThreadLibraryCalls(hMod);
+        CreateThread(nullptr, 0, OnInject, hMod, 0, nullptr);
+        break;
+    case DLL_PROCESS_DETACH:
         kiero::shutdown();
+        break;
     }
     return TRUE;
 }
@@ -7395,25 +7513,9 @@ BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved) {
 // ============================================================================
 // MANUAL MAP ENTRY POINT
 // ============================================================================
-// For manual map injection, call this function directly.
-// The injector should call ManualMapEntry(hModule) after mapping.
-// ============================================================================
 extern "C" __declspec(dllexport) void ManualMapEntry(HMODULE hMod) {
-    // Same initialization as DllMain DLL_PROCESS_ATTACH
+    g_hLocalModule = hMod;
     DisableThreadLibraryCalls(hMod);
-    
-    // Debug File Init
-    std::ofstream logFile("orbwalker_debug.txt", std::ios_base::trunc);
-    if (logFile.is_open()) {
-        logFile << "--- MANUAL MAP ENTRY ---" << std::endl;
-        logFile.close();
-    }
-    
-    CreateThread(nullptr, 0, ThreadGUI, hMod, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadMatrix, hMod, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadOrbwalkerHero, hMod, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadOrbwalkerMinion, hMod, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadOrbwalkerFlee, hMod, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadAutoCastScan, hMod, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadTerminate, hMod, 0, nullptr);
+    CreateThread(nullptr, 0, OnInject, hMod, 0, nullptr);
 }
+

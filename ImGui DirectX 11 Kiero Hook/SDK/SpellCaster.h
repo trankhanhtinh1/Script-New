@@ -9,12 +9,14 @@
 #include <sstream>
 #include <iomanip>
 #include <ctime>
+#include <chrono>
 #include "Offsets.h"
 #include "ObjectManager.h"
 #include "GameObject.h"
 #include "Spell.h"
+#include "Game.h"  // For Game::GetTime()
+#include "Orbwalker.h"  // Contains mem::ScanModInternal
 #include "../Spoof_call/spoofcall.h"
-#include "../ScanInternal.h"  // For ScanModInternal
 #include "../Vector.h"
 
 namespace SDK
@@ -135,7 +137,7 @@ namespace SDK
             LogHex("SpellSlot Address", spell.Address);
             
             // Check if spell is ready
-            float gameTime = ObjectManager::GetGameTime();
+            float gameTime = Game::GetTime();
             if (!spell.IsReady(gameTime)) {
                 Log("ERROR: Spell is not ready (on cooldown)");
                 Log("Cooldown remaining: " + std::to_string(spell.GetRemainingCooldown(gameTime)) + "s");
