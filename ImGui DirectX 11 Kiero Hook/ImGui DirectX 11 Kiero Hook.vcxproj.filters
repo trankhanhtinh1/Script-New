@@ -30,24 +30,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="kiero\minhook\src\buffer.c">
-      <Filter>kiero</Filter>
-    </ClCompile>
-    <ClCompile Include="kiero\minhook\src\hde\hde32.c">
-      <Filter>kiero</Filter>
-    </ClCompile>
-    <ClCompile Include="kiero\minhook\src\hde\hde64.c">
-      <Filter>kiero</Filter>
-    </ClCompile>
-    <ClCompile Include="kiero\minhook\src\hook.c">
-      <Filter>kiero</Filter>
-    </ClCompile>
-    <ClCompile Include="kiero\kiero.cpp">
-      <Filter>kiero</Filter>
-    </ClCompile>
-    <ClCompile Include="kiero\minhook\src\trampoline.c">
-      <Filter>kiero</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -73,6 +55,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Menu.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Console.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\SpellDatabase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -171,6 +159,75 @@
     </ClInclude>
     <ClInclude Include="Spoof_call\spoofcall.h">
       <Filter>SpoofCALL</Filter>
+    </ClInclude>
+    <ClInclude Include="Console.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\AiManagerDebug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\AiManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\AiManagerDumper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\LeagueObfuscation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Missile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\DamageCalculator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\BuffManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Collision.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\SpellDatabase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\MissileOffsetScanner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\AiManagerScan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\AiManagerNavGridScan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\MissileScan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\HudOffsetScanner.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\SpellCaster.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\MissileManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\MinionSelector.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Polygon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Script\Prediction.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="exports.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\DebugLog.h">
+      <Filter>SDK</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\ChampionDatabase.h">
+      <Filter>SDK</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

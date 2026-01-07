@@ -225,6 +225,15 @@
     <ClInclude Include="kiero\minhook\src\hde\table64.h" />
     <ClInclude Include="kiero\minhook\src\trampoline.h" />
     <ClInclude Include="Spoof_call\spoofcall.h" />
+    <ClInclude Include="SDK\DebugLog.h" />
+    <ClInclude Include="SDK\ChampionDatabase.h" />
+    <ClInclude Include="SDK\HudOffsetScanner.h" />
+    <ClInclude Include="SDK\SpellCaster.h" />
+    <ClInclude Include="SDK\MissileManager.h" />
+    <ClInclude Include="SDK\MinionSelector.h" />
+    <ClInclude Include="SDK\Polygon.h" />
+    <ClInclude Include="Script\Prediction.h" />
+    <ClInclude Include="exports.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="Spoof_call\spoof.asm" />

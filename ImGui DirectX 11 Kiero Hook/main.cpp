@@ -4920,18 +4920,19 @@ static void WriteVec3(uint64_t addr, Vector3 v) {
                  auto minions = SDK::ObjectManager::GetMinions();
                  for (auto minion : minions) {
                       if (!minion->IsValid() || minion->IsDead() || !minion->IsVisible()) continue;
-                      
+
                       Vector3 pos = minion->GetPosition();
                       Vector2 screenPos = Render::WorldToScreen(pos);
-                      
+
                       if (screenPos.x > 0 && screenPos.y > 0 && screenPos.x < Render::g_screenWidth && screenPos.y < Render::g_screenHeight) {
                            if (minion->GetTeam() != local->GetTeam()) {
                                 draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 15.0f, IM_COL32(255, 255, 0, 255));
                            }
                       }
                  }
+                 for (auto m : minions) delete m;
             }
-            
+
             // Draw Range - RealAttackRange = attackRange + myBoundingRadius (NO extra 65!)
             if (Menu::drawRange) {
                  Vector3 pos = local->GetPosition();
@@ -5628,7 +5629,8 @@ static void WriteVec3(uint64_t addr, Vector3 v) {
                 }
             }
         }
-        
+        for (auto h : heroes) delete h;
+
         ImGui::End();
     }
 
@@ -7453,6 +7455,7 @@ extern "C" __declspec(dllexport) void Logic_Render() {
                         }
                     }
                 }
+                for (auto h : heroes) delete h;
             }
 
             if (Menu::drawMinions) {
@@ -7469,6 +7472,7 @@ extern "C" __declspec(dllexport) void Logic_Render() {
                         }
                     }
                 }
+                for (auto m : minions) delete m;
             }
 
             if (Menu::drawRange) {

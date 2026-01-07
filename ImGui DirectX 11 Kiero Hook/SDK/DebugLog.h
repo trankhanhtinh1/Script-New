@@ -8,6 +8,7 @@
 namespace SDK {
 namespace Debug {
 
+inline bool g_debugEnabled = true;
 inline char g_sdkDebugPath[MAX_PATH] = {0};
 inline bool g_sdkDebugInit = false;
 inline int g_logCount = 0;
@@ -35,6 +36,7 @@ inline void InitPath() {
 }
 
 inline void Log(const char* msg) {
+    if (!g_debugEnabled) return;
     InitPath();
     if (g_logCount >= MAX_LOG_COUNT && msg[0] != '!') return;
     g_logCount++;

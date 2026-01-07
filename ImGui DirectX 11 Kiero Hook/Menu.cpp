@@ -176,33 +176,36 @@ namespace Menu
     void DumpObjects() {
         std::ofstream file("dump_objects.txt");
         if (!file.is_open()) return;
-        
+
         file << "=== HEROES ===\n";
         auto heroes = SDK::ObjectManager::GetHeroes();
         for (auto obj : heroes) {
-             file << "Addr: " << std::hex << obj->Address << std::dec 
+             file << "Addr: " << std::hex << obj->Address << std::dec
                   << " | Team: " << obj->GetTeam()
                   << " | HP: " << obj->GetHealth()
                   << " | Name: " << obj->GetName() << "\n";
         }
-        
+        for (auto h : heroes) delete h;
+
         file << "\n=== ALL MINIONS (Jungle/Lane) ===\n";
         auto minions = SDK::ObjectManager::GetAllMinions();
         for (auto obj : minions) {
-             file << "Addr: " << std::hex << obj->Address << std::dec 
+             file << "Addr: " << std::hex << obj->Address << std::dec
                   << " | Team: " << obj->GetTeam()
-                  << " | HP: " << obj->GetHealth() 
+                  << " | HP: " << obj->GetHealth()
                   << " | Name: " << obj->GetName() << "\n";
         }
+        for (auto m : minions) delete m;
 
         file << "\n=== TURRETS ===\n";
         auto turrets = SDK::ObjectManager::GetTurrets();
         for (auto obj : turrets) {
-             file << "Addr: " << std::hex << obj->Address << std::dec 
+             file << "Addr: " << std::hex << obj->Address << std::dec
                   << " | Team: " << obj->GetTeam()
-                  << " | HP: " << obj->GetHealth() 
+                  << " | HP: " << obj->GetHealth()
                   << " | Name: " << obj->GetName() << "\n";
         }
+        for (auto t : turrets) delete t;
 
         file.close();
     }

@@ -85,6 +85,10 @@ namespace SDK
         }
 
         float GetBoundingRadius() {
+            // Not sure
+            return 65.0f;
+
+            /*
             uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
             typedef float(__fastcall* fnGetBoundingRadius)(uint64_t obj);
             fnGetBoundingRadius getBoundingRadius = (fnGetBoundingRadius)(moduleBase + Offset::Function::oGetBoundingRadius);
@@ -101,6 +105,7 @@ namespace SDK
                 Debug::Log("!!! GetBoundingRadius EXCEPTION !!!");
                 return 65.0f;
             }
+            */
         }
         
         // Following leagueoflegends-master pattern:
