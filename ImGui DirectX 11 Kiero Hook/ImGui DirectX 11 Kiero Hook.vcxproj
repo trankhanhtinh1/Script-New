@@ -174,7 +174,6 @@
     <ClCompile Include="kiero\minhook\src\trampoline.c" />
     <ClCompile Include="Render.cpp" />
     <ClCompile Include="Menu.cpp" />
-    <ClCompile Include="Console.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SDK\SpellDatabase.cpp" />
   </ItemGroup>
@@ -197,7 +196,6 @@
     <ClInclude Include="Vector.h" />
     <ClInclude Include="Render.h" />
     <ClInclude Include="Menu.h" />
-    <ClInclude Include="Console.h" />
     <ClInclude Include="SDK\GameObject.h" />
     <ClInclude Include="SDK\ObjectManager.h" />
     <ClInclude Include="SDK\Game.h" />
