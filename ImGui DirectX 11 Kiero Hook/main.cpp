@@ -6503,19 +6503,15 @@ bool IsSmallJungleMonster(const std::string& name) {
 // Helper: Get minion type (4=Melee, 5=Ranged, 6=Cannon, 7=Super)
 int GetMinionType(uint64_t minionAddr) {
     if (!minionAddr) return 0;
-    return *(int*)(minionAddr + Offset::LaneMinionType);
+    __try { return *(int*)(minionAddr + Offset::LaneMinionType); }
+    __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
 
-// Helper: Simple health prediction (accounts for attack travel time)
+// Helper: Simple health prediction
 float PredictHealth(uint64_t unitAddr, float myDamage, float travelTime = 0.25f) {
     if (!unitAddr) return 0;
-    
-    float currentHP = *(float*)(unitAddr + Offset::oHealth);
-    
-    // Simple prediction: assume unit loses HP at constant rate
-    // In real implementation, would check incoming projectiles
-    // For now, just return current HP - this is placeholder
-    return currentHP;
+    __try { return *(float*)(unitAddr + Offset::oHealth); }
+    __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
 
 // Helper: Smart Farm Target Selection (Includes ShouldWait logic)
@@ -6528,23 +6524,20 @@ uint64_t GetBestFarmTargetSmart(uint64_t moduleBase, uint64_t localPlayer, float
 
         Vector3 myPos = GetObjPositionRaw(localPlayer);
         uint8_t myTeam = *(uint8_t*)(localPlayer + Offset::TeamID);
-    float myBoundingRadius = GetMyBoundingRadius(localPlayer);
-    
-    SDK::GameObject* killableTarget = nullptr;
-    SDK::GameObject* laneClearTarget = nullptr;
-    
-    float lowestKillableHP = 999999.0f;
-    float highestLaneClearHP = -1.0f; // For pushing, we might want highest HP or closest? Usually closest or cannon.
-    // Simple logic: Prioritize Cannon > Super > Melee > Ranged
-    int priorityScore = -1;
-    
-    bool anyMinionAlmostDead = false;
-    
-    for (auto* minion : minions) {
-        if (!minion || minion->Address == localPlayer) continue;
-        if (minion->GetTeam() == myTeam) continue;
-        if (minion->IsDead() || minion->GetHealth() <= 0) continue;
-        if (!minion->IsVisible() || !minion->IsTargetable()) continue;
+        float myBoundingRadius = GetMyBoundingRadius(localPlayer);
+
+        SDK::GameObject* killableTarget = nullptr;
+        SDK::GameObject* laneClearTarget = nullptr;
+
+        float lowestKillableHP = 999999.0f;
+        int priorityScore = -1;
+        bool anyMinionAlmostDead = false;
+
+        for (auto* minion : minions) {
+            if (!minion || minion->Address == localPlayer) continue;
+            if (minion->GetTeam() == myTeam) continue;
+            if (minion->IsDead() || minion->GetHealth() <= 0) continue;
+            if (!minion->IsVisible() || !minion->IsTargetable()) continue;
         
         Vector3 objPos = minion->GetPosition();
         float dist = myPos.Distance(objPos);

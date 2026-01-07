@@ -224,38 +224,44 @@ namespace SDK
         // References: inline constexpr uint64_t isMinion = 0x301120;
         
         // Type Checks
-        // Type Checks
         bool IsMinion() {
-             typedef bool(__thiscall* Fn)(void*);
-             static uint64_t funcAddr = Offset::Function::isMinion + (uint64_t)GetModuleHandle(NULL);
-             Fn func = (Fn)(funcAddr);
-             if (IsBadCodePtr((FARPROC)func)) return false;
-             return func((void*)Address);
+            __try {
+                typedef bool(__thiscall* Fn)(void*);
+                static uint64_t funcAddr = Offset::Function::isMinion + (uint64_t)GetModuleHandle(NULL);
+                Fn func = (Fn)(funcAddr);
+                if (IsBadCodePtr((FARPROC)func)) return false;
+                return func((void*)Address);
+            } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
         }
 
         bool IsTurret() {
-             typedef bool(__thiscall* Fn)(void*);
-             static uint64_t funcAddr = Offset::Function::isTurret + (uint64_t)GetModuleHandle(NULL);
-             Fn func = (Fn)(funcAddr);
-             if (IsBadCodePtr((FARPROC)func)) return false;
-             return func((void*)Address);
+            __try {
+                typedef bool(__thiscall* Fn)(void*);
+                static uint64_t funcAddr = Offset::Function::isTurret + (uint64_t)GetModuleHandle(NULL);
+                Fn func = (Fn)(funcAddr);
+                if (IsBadCodePtr((FARPROC)func)) return false;
+                return func((void*)Address);
+            } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
         }
-        
-        // Attack Speed / Delay
+
         float GetAttackDelay() {
-             typedef float(__cdecl* Fn)(GameObject*); // Reference says __cdecl, takes obj*
-             static uint64_t funcAddr = Offset::Function::AttackDelay + (uint64_t)GetModuleHandle(NULL);
-             Fn func = (Fn)(funcAddr);
-             if (IsBadCodePtr((FARPROC)func)) return 0.0f;
-             return func(this);
+            __try {
+                typedef float(__cdecl* Fn)(GameObject*);
+                static uint64_t funcAddr = Offset::Function::AttackDelay + (uint64_t)GetModuleHandle(NULL);
+                Fn func = (Fn)(funcAddr);
+                if (IsBadCodePtr((FARPROC)func)) return 0.0f;
+                return func(this);
+            } __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         float GetAttackWindup() {
-             typedef float(__cdecl* Fn)(GameObject*, int); // Reference says __cdecl, takes flags 0x40
-             static uint64_t funcAddr = Offset::Function::oGetAttackWindup + (uint64_t)GetModuleHandle(NULL);
-             Fn func = (Fn)(funcAddr);
-             if (IsBadCodePtr((FARPROC)func)) return 0.0f;
-             return func(this, 0x40); // 64 = legacy flag ? Reference uses 0x40
+            __try {
+                typedef float(__cdecl* Fn)(GameObject*, int);
+                static uint64_t funcAddr = Offset::Function::oGetAttackWindup + (uint64_t)GetModuleHandle(NULL);
+                Fn func = (Fn)(funcAddr);
+                if (IsBadCodePtr((FARPROC)func)) return 0.0f;
+                return func(this, 0x40);
+            } __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
         
         bool IsHero() {
@@ -266,30 +272,21 @@ namespace SDK
         }
 
         std::string GetName() {
-            // NamePlayer = 0x4358;
-            // The game uses a custom string class similar to std::string with SSO (Short String Optimization).
-            // Structure:
-            // [0x00]: Content (if len < 16) OR Pointer (if len >= 16)
-            // [0x10]: Length
-            // [0x14]: Capacity
-            
-            uint64_t nameStruct = Address + Offset::NamePlayer;
-            
-            int length = *(int*)(nameStruct + 0x10);
-            if (length <= 0 || length > 100) return ""; // Invalid length sanity check
-            
-            if (length < 16) {
-                // String is inline
-                return std::string((char*)nameStruct);
-            } else {
-                // String is pointed to
-                uint64_t ptr = *(uint64_t*)nameStruct;
-                if (!ptr || IsBadReadPtr((void*)ptr, length)) return "BadPtr";
-                
-                // Read the string from the pointer
-                // Since we can't directly construct std::string from remote memory pointer easily without reading it first...
-                // But we are Internal here! So we can just access it.
-                return std::string((char*)ptr);
+            __try {
+                uint64_t nameStruct = Address + Offset::NamePlayer;
+
+                int length = *(int*)(nameStruct + 0x10);
+                if (length <= 0 || length > 100) return "";
+
+                if (length < 16) {
+                    return std::string((char*)nameStruct);
+                } else {
+                    uint64_t ptr = *(uint64_t*)nameStruct;
+                    if (!ptr || IsBadReadPtr((void*)ptr, length)) return "";
+                    return std::string((char*)ptr);
+                }
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                return "";
             }
         }
         
