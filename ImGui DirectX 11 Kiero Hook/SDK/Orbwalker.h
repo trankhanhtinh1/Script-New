@@ -8,6 +8,7 @@
 #include "../Spoof_call/spoofcall.h"
 #include "../Menu.h"
 #include "HealthPrediction.h"
+#include "DebugLog.h"
 #include <algorithm>
 #include <Psapi.h>
 #include <fstream>
@@ -138,41 +139,32 @@ namespace SDK
         }
 
         static void IssueOrder(GameObject* unit, int Order, Vector3 Pos, GameObject* Target) {
-             // Debug logging
-             static std::ofstream debugLog("issueorder_debug.txt", std::ios::app);
-             debugLog << "=== IssueOrder Called ===" << std::endl;
-             debugLog << "Order: " << Order << std::endl;
-             debugLog << "Pos: (" << Pos.x << ", " << Pos.y << ", " << Pos.z << ")" << std::endl;
-             
+             Debug::Log("=== IssueOrder Called ===");
+             Debug::LogInt("Order", Order);
+
              if (!unit || !unit->Address) {
-                 debugLog << "ERROR: unit is null or invalid" << std::endl;
-                 debugLog.flush();
+                 Debug::Log("!!! IssueOrder ERROR: unit is null !!!");
                  return;
              }
-             debugLog << "Unit Address: 0x" << std::hex << unit->Address << std::dec << std::endl;
-             
+             Debug::LogHex("Unit", unit->Address);
+
              uint64_t moduleBase = ObjectManager::GetModuleBase();
              if (!moduleBase) {
-                 debugLog << "ERROR: moduleBase is null" << std::endl;
-                 debugLog.flush();
+                 Debug::Log("!!! IssueOrder ERROR: moduleBase is null !!!");
                  return;
              }
-             debugLog << "ModuleBase: 0x" << std::hex << moduleBase << std::dec << std::endl;
-             
-             // Get spoof_trampoline (using pattern scan like backup)
+
              static void* spoof_trampoline = nullptr;
              if (!spoof_trampoline) {
                  spoof_trampoline = mem::ScanModInternal((char*)"\xFF\x23", (char*)"xx", (char*)GetModuleHandleA(nullptr));
-                 debugLog << "Spoof_trampoline: 0x" << std::hex << (uint64_t)spoof_trampoline << std::dec << std::endl;
+                 Debug::LogPtr("spoof_trampoline", spoof_trampoline);
              }
-             
+
              if (!spoof_trampoline) {
-                 debugLog << "ERROR: spoof_trampoline is null" << std::endl;
-                 debugLog.flush();
+                 Debug::Log("!!! IssueOrder ERROR: spoof_trampoline is null !!!");
                  return;
              }
-             
-             // Backup signature: __cdecl (pAIBase, orderType, Vector3* pos, target, isAttack, isNetworked)
+
              using fnIssueOrderCdecl = int64_t(__cdecl*)(
                  uintptr_t pAIBase,
                  int orderType,
@@ -181,33 +173,32 @@ namespace SDK
                  bool isAttack,
                  bool isNetworked
              );
-             
+
              fnIssueOrderCdecl spoofedIssueOrder = reinterpret_cast<fnIssueOrderCdecl>(moduleBase + Offset::Function::oIssueOrder);
-             debugLog << "IssueOrder func: 0x" << std::hex << (uint64_t)spoofedIssueOrder << std::dec << std::endl;
-             
-             // IMPORTANT: Create a local copy of Vector3 (like backup does)
+             Debug::LogOffset("IssueOrder.func", moduleBase, Offset::Function::oIssueOrder, (uint64_t)spoofedIssueOrder);
+
              Vector3 localPos = Pos;
-             
              uint64_t targetAddr = Target ? Target->Address : 0;
              bool isAttack = (Order == 3);
 
-             debugLog << "Target Address: 0x" << std::hex << targetAddr << std::dec << std::endl;
-             debugLog << "About to call spoof_call..." << std::endl;
-             debugLog.flush();
-             
-             // Manual map compatible - no C++ exceptions
-             spoof_call(
-                 spoof_trampoline,
-                 spoofedIssueOrder,
-                 unit->Address,  // Pass unit address directly (LocalPlayer)
-                 Order,
-                 &localPos,      // Pass pointer to LOCAL copy
-                 targetAddr,
-                 isAttack,
-                 false           // isNetworked
-             );
-             debugLog << "spoof_call completed successfully" << std::endl;
-             debugLog.flush();
+             Debug::LogHex("Target", targetAddr);
+             Debug::Log("Calling spoof_call...");
+
+             __try {
+                 spoof_call(
+                     spoof_trampoline,
+                     spoofedIssueOrder,
+                     unit->Address,
+                     Order,
+                     &localPos,
+                     targetAddr,
+                     isAttack,
+                     false
+                 );
+                 Debug::Log("spoof_call OK");
+             } __except(EXCEPTION_EXECUTE_HANDLER) {
+                 Debug::Log("!!! IssueOrder spoof_call EXCEPTION !!!");
+             }
         }
 
         static void Attack(GameObject* target) {

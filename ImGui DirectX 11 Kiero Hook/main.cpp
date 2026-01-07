@@ -42,10 +42,32 @@
 static volatile bool g_logicRunning = false;
 static HANDLE g_threadHandles[5] = { nullptr };
 
-// Debug Logging - C style for SEH compatibility
-static void LogicDebugLog(const char* msg) {
-    HANDLE hFile = CreateFileA("C:\\zz\\Script-New\\x64\\Release\\logic_debug.txt",
-        FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+// ============================================================================
+// DEBUG LOGGING SYSTEM - 詳細記錄用於崩潰診斷
+// ============================================================================
+static HMODULE g_hLogicModule = nullptr;
+static char g_debugPath[MAX_PATH] = {0};
+
+static void InitDebugPath(HMODULE hMod) {
+    g_hLogicModule = hMod;
+    if (GetModuleFileNameA(hMod, g_debugPath, MAX_PATH)) {
+        char* lastSlash = g_debugPath;
+        for (char* p = g_debugPath; *p; p++) {
+            if (*p == '\\' || *p == '/') lastSlash = p;
+        }
+        if (lastSlash != g_debugPath) {
+            *(lastSlash + 1) = 0;
+            lstrcatA(g_debugPath, "debug.txt");
+        }
+    } else {
+        lstrcpyA(g_debugPath, "C:\\debug.txt");
+    }
+    DeleteFileA(g_debugPath);
+}
+
+static void DebugLog(const char* msg) {
+    if (!g_debugPath[0]) return;
+    HANDLE hFile = CreateFileA(g_debugPath, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile != INVALID_HANDLE_VALUE) {
         DWORD written;
         SYSTEMTIME st;
@@ -59,24 +81,35 @@ static void LogicDebugLog(const char* msg) {
     }
 }
 
-static void LogicDebugLogPtr(const char* prefix, void* ptr) {
+static void DebugLogPtr(const char* name, void* ptr) {
     char buf[256];
-    wsprintfA(buf, "%s%p", prefix, ptr);
-    LogicDebugLog(buf);
+    wsprintfA(buf, "%s: %p", name, ptr);
+    DebugLog(buf);
 }
 
-static void LogicDebugLogInt(const char* prefix, int val) {
+static void DebugLogHex(const char* name, uint64_t val) {
     char buf[256];
-    wsprintfA(buf, "%s%d", prefix, val);
-    LogicDebugLog(buf);
+    wsprintfA(buf, "%s: 0x%I64X", name, val);
+    DebugLog(buf);
 }
 
-namespace Debug {
-    void Log(const std::string& str) {
-        LogicDebugLog(str.c_str());
-    }
+static void DebugLogInt(const char* name, int val) {
+    char buf[256];
+    wsprintfA(buf, "%s: %d", name, val);
+    DebugLog(buf);
 }
-#define DBG_LOG(x) Debug::Log(x)
+
+static void DebugLogFloat(const char* name, float val) {
+    char buf[256];
+    sprintf(buf, "%s: %.4f", name, val);
+    DebugLog(buf);
+}
+
+static void DebugLogOffset(const char* name, uint64_t base, uint64_t offset, uint64_t value) {
+    char buf[256];
+    wsprintfA(buf, "%s: 0x%I64X + 0x%I64X = 0x%I64X", name, base, offset, value);
+    DebugLog(buf);
+}
 
 // ============================================================================
 // SAFE OFFSET DEBUG LOGGER - Writes to file with exception handling
@@ -6232,10 +6265,12 @@ static void WriteVec3(uint64_t addr, Vector3 v) {
 // Also acting as a test bed for SDK for now
 
 DWORD WINAPI ThreadMatrix(LPVOID lpParam) {
+    DebugLog("=== ThreadMatrix START ===");
     while(!DATA::ModuleBase && g_logicRunning) {
         DATA::ModuleBase = (uint64_t)GetModuleHandleA(NULL);
         Sleep(100);
     }
+    DebugLogHex("ModuleBase", DATA::ModuleBase);
 
     static bool sdkTested = false;
 
@@ -6244,6 +6279,8 @@ DWORD WINAPI ThreadMatrix(LPVOID lpParam) {
             if(!DATA::pViewMatrix) {
                 DATA::pViewMatrix = (float*)(DATA::ModuleBase + Offset::ViewProjectionMatrix);
                 DATA::pProjMatrix = (float*)(DATA::ModuleBase + Offset::ViewProjectionMatrix + Offset::projMatrix);
+                DebugLogPtr("pViewMatrix", DATA::pViewMatrix);
+                DebugLogPtr("pProjMatrix", DATA::pProjMatrix);
             }
 
             if (DATA::pViewMatrix && DATA::pProjMatrix) {
@@ -6253,19 +6290,26 @@ DWORD WINAPI ThreadMatrix(LPVOID lpParam) {
             }
 
             if (!sdkTested) {
+                DebugLog("Testing SDK...");
                 SDK::GameObject* local = SDK::ObjectManager::GetLocalPlayer();
                 if (local) {
+                    DebugLogHex("LocalPlayer", local->Address);
                     float hp = local->GetHealth();
+                    DebugLogFloat("HP", hp);
                     if (hp > 0) {
                         sdkTested = true;
+                        DebugLog("SDK test passed");
                     }
                     delete local;
                 }
             }
-        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            DebugLog("!!! ThreadMatrix EXCEPTION !!!");
+        }
 
         Sleep(10);
     }
+    DebugLog("=== ThreadMatrix END ===");
     return 0;
 }
 
@@ -6977,8 +7021,10 @@ namespace OrbwalkerTiming {
 
 // Orbwalker Hero Thread (SPACE key - Combo)
 DWORD WINAPI ThreadOrbwalkerHero(LPVOID lpParam) {
+    DebugLog("=== ThreadOrbwalkerHero START ===");
     Sleep(3000);
 
+    static bool firstLoop = true;
     while (g_logicRunning) {
         __try {
             if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
@@ -6988,6 +7034,10 @@ DWORD WINAPI ThreadOrbwalkerHero(LPVOID lpParam) {
             uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
             uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
 
+            if (firstLoop) {
+                DebugLogOffset("oLocalPlayer", moduleBase, Offset::oLocalPlayer, localPlayer);
+            }
+
             if (!localPlayer) { Sleep(100); continue; }
             if (!(GetAsyncKeyState(VK_SPACE) & 0x8000)) { Sleep(10); continue; }
 
@@ -6995,6 +7045,14 @@ DWORD WINAPI ThreadOrbwalkerHero(LPVOID lpParam) {
             float attackDelay = GetAttackDelay(localPlayer);
             float attackWindup = GetAttackWindup(localPlayer);
             float realAttackRange = GetRealAttackRangeRaw(localPlayer);
+
+            if (firstLoop) {
+                DebugLogFloat("gameTime", gameTime);
+                DebugLogFloat("attackDelay", attackDelay);
+                DebugLogFloat("attackWindup", attackWindup);
+                DebugLogFloat("realAttackRange", realAttackRange);
+                firstLoop = false;
+            }
 
             if (OrbwalkerTiming::IsWindingUp(gameTime, attackWindup)) {
                 Sleep(5);
@@ -7035,17 +7093,22 @@ DWORD WINAPI ThreadOrbwalkerHero(LPVOID lpParam) {
                     }
                 }
             }
-        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            DebugLog("!!! ThreadOrbwalkerHero EXCEPTION !!!");
+        }
 
         Sleep(5);
     }
+    DebugLog("=== ThreadOrbwalkerHero END ===");
     return 0;
 }
 
 // Orbwalker Minion Thread (V/X/C keys - LaneClear/LastHit/Harass)
 DWORD WINAPI ThreadOrbwalkerMinion(LPVOID lpParam) {
+    DebugLog("=== ThreadOrbwalkerMinion START ===");
     Sleep(3000);
 
+    static bool firstLoop = true;
     while (g_logicRunning) {
         __try {
             if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
@@ -7072,6 +7135,13 @@ DWORD WINAPI ThreadOrbwalkerMinion(LPVOID lpParam) {
             float attackWindup = GetAttackWindup(localPlayer);
             float realAttackRange = GetRealAttackRangeRaw(localPlayer);
             float attackDamage = *(float*)(localPlayer + Offset::DamageBase) + *(float*)(localPlayer + Offset::DamageBonus);
+
+            if (firstLoop) {
+                DebugLogOffset("DamageBase", localPlayer, Offset::DamageBase, *(uint64_t*)(localPlayer + Offset::DamageBase));
+                DebugLogOffset("DamageBonus", localPlayer, Offset::DamageBonus, *(uint64_t*)(localPlayer + Offset::DamageBonus));
+                DebugLogFloat("attackDamage", attackDamage);
+                firstLoop = false;
+            }
 
             if (OrbwalkerTiming::IsWindingUp(gameTime, attackWindup)) {
                 Sleep(5);
@@ -7123,15 +7193,19 @@ DWORD WINAPI ThreadOrbwalkerMinion(LPVOID lpParam) {
                     }
                 }
             }
-        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            DebugLog("!!! ThreadOrbwalkerMinion EXCEPTION !!!");
+        }
 
         Sleep(5);
     }
+    DebugLog("=== ThreadOrbwalkerMinion END ===");
     return 0;
 }
 
 // Orbwalker Flee Thread (Z key - Move only, no attacks)
 DWORD WINAPI ThreadOrbwalkerFlee(LPVOID lpParam) {
+    DebugLog("=== ThreadOrbwalkerFlee START ===");
     Sleep(3000);
 
     while (g_logicRunning) {
@@ -7155,10 +7229,13 @@ DWORD WINAPI ThreadOrbwalkerFlee(LPVOID lpParam) {
                     IssueMoveRaw(localPlayer, mousePos);
                 }
             }
-        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            DebugLog("!!! ThreadOrbwalkerFlee EXCEPTION !!!");
+        }
 
         Sleep(5);
     }
+    DebugLog("=== ThreadOrbwalkerFlee END ===");
     return 0;
 }
 
@@ -7166,6 +7243,7 @@ DWORD WINAPI ThreadOrbwalkerFlee(LPVOID lpParam) {
 // NEW: AUTO CAST & SCAN THREAD
 // ============================================================================
 DWORD WINAPI ThreadAutoCastScan(LPVOID lpParam) {
+    DebugLog("=== ThreadAutoCastScan START ===");
     Sleep(3000);
     bool lastState = false;
     float lastCastTime = 0.0f;
@@ -7195,10 +7273,13 @@ DWORD WINAPI ThreadAutoCastScan(LPVOID lpParam) {
             }
 
             lastState = currentState;
-        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+            DebugLog("!!! ThreadAutoCastScan EXCEPTION !!!");
+        }
 
         Sleep(100);
     }
+    DebugLog("=== ThreadAutoCastScan END ===");
     return 0;
 }
 
@@ -7234,90 +7315,80 @@ bool WINAPI HideThread(const HANDLE hThread) noexcept
 // ============================================================================
 
 extern "C" __declspec(dllexport) bool Logic_Init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd, ImGuiContext* imguiContext) {
-    LogicDebugLog("=== Logic_Init START ===");
-    LogicDebugLogPtr("Device: ", device);
-    LogicDebugLogPtr("Context: ", context);
-    LogicDebugLogPtr("HWND: ", hwnd);
-    LogicDebugLogPtr("ImGuiContext: ", imguiContext);
+    DebugLog("=== Logic_Init START ===");
+    DebugLogPtr("device", device);
+    DebugLogPtr("context", context);
+    DebugLogPtr("hwnd", hwnd);
+    DebugLogPtr("imguiContext", imguiContext);
 
     __try {
         pDevice = device;
         pContext = context;
         window = hwnd;
-        LogicDebugLog("Assigned device/context/window");
+        DebugLog("Assigned device/context/window");
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION assigning device/context/window!");
+        DebugLog("!!! EXCEPTION assigning device/context/window !!!");
         return false;
     }
 
     __try {
         if (imguiContext) {
-            LogicDebugLog("Setting ImGui context...");
             ImGui::SetCurrentContext(imguiContext);
-            LogicDebugLog("ImGui context set");
+            DebugLog("ImGui context set");
         }
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION in SetCurrentContext!");
+        DebugLog("!!! EXCEPTION in SetCurrentContext !!!");
         return false;
     }
 
     __try {
-        LogicDebugLog("Calling Console::Init...");
         Console::Init();
-        LogicDebugLog("Console::Init done");
+        DebugLog("Console::Init done");
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION in Console::Init!");
+        DebugLog("!!! EXCEPTION in Console::Init !!!");
     }
 
     __try {
-        LogicDebugLog("Getting module base...");
         DATA::ModuleBase = (uint64_t)GetModuleHandleA(NULL);
-        LogicDebugLogPtr("ModuleBase: ", (void*)DATA::ModuleBase);
+        DebugLogHex("ModuleBase", DATA::ModuleBase);
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION getting module base!");
+        DebugLog("!!! EXCEPTION getting ModuleBase !!!");
     }
 
     __try {
-        LogicDebugLog("Getting client rect...");
         RECT clientRect;
         if (GetClientRect(window, &clientRect)) {
             Render::g_screenWidth = clientRect.right - clientRect.left;
             Render::g_screenHeight = clientRect.bottom - clientRect.top;
-            LogicDebugLogInt("Screen width: ", Render::g_screenWidth);
-            LogicDebugLogInt("Screen height: ", Render::g_screenHeight);
+            DebugLogInt("screenWidth", Render::g_screenWidth);
+            DebugLogInt("screenHeight", Render::g_screenHeight);
         }
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION in GetClientRect!");
+        DebugLog("!!! EXCEPTION in GetClientRect !!!");
     }
 
     __try {
-        LogicDebugLog("Calling Render::InitCircle...");
         Render::InitCircle();
-        LogicDebugLog("Render::InitCircle done");
+        DebugLog("Render::InitCircle done");
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION in Render::InitCircle!");
+        DebugLog("!!! EXCEPTION in Render::InitCircle !!!");
     }
 
     __try {
-        LogicDebugLog("Creating threads...");
         g_logicRunning = true;
+        DebugLog("Creating threads...");
         g_threadHandles[0] = CreateThread(nullptr, 0, ThreadMatrix, nullptr, 0, nullptr);
-        LogicDebugLogPtr("ThreadMatrix: ", g_threadHandles[0]);
         g_threadHandles[1] = CreateThread(nullptr, 0, ThreadOrbwalkerHero, nullptr, 0, nullptr);
-        LogicDebugLogPtr("ThreadOrbwalkerHero: ", g_threadHandles[1]);
         g_threadHandles[2] = CreateThread(nullptr, 0, ThreadOrbwalkerMinion, nullptr, 0, nullptr);
-        LogicDebugLogPtr("ThreadOrbwalkerMinion: ", g_threadHandles[2]);
         g_threadHandles[3] = CreateThread(nullptr, 0, ThreadOrbwalkerFlee, nullptr, 0, nullptr);
-        LogicDebugLogPtr("ThreadOrbwalkerFlee: ", g_threadHandles[3]);
         g_threadHandles[4] = CreateThread(nullptr, 0, ThreadAutoCastScan, nullptr, 0, nullptr);
-        LogicDebugLogPtr("ThreadAutoCastScan: ", g_threadHandles[4]);
-        LogicDebugLog("All threads created");
+        DebugLog("All threads created");
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        LogicDebugLog("EXCEPTION creating threads!");
+        DebugLog("!!! EXCEPTION creating threads !!!");
     }
 
     init = true;
-    LogicDebugLog("=== Logic_Init END (success) ===");
+    DebugLog("=== Logic_Init END (success) ===");
     return true;
 }
 
@@ -7530,14 +7601,9 @@ extern "C" __declspec(dllexport) bool Logic_WantCaptureMouse() {
 // ============================================================================
 BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved) {
     if (dwReason == DLL_PROCESS_ATTACH) {
-        DeleteFileA("C:\\zz\\Script-New\\x64\\Release\\logic_debug.txt");
-        LogicDebugLog("=== logic.dll DllMain DLL_PROCESS_ATTACH ===");
-        LogicDebugLogPtr("Module handle: ", hMod);
         DisableThreadLibraryCalls(hMod);
-        LogicDebugLog("DisableThreadLibraryCalls done");
-    }
-    else if (dwReason == DLL_PROCESS_DETACH) {
-        LogicDebugLog("=== logic.dll DllMain DLL_PROCESS_DETACH ===");
+        InitDebugPath(hMod);
+        DebugLog("=== logic.dll DLL_PROCESS_ATTACH ===");
     }
     return TRUE;
 }

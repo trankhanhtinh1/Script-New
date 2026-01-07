@@ -10,6 +10,7 @@
 #include "AiManager.h" // Add this here
 #include "AiManagerScan.h" // For IDA::DecryptAiManager
 #include "../Vector.h"
+#include "DebugLog.h"
 
 namespace SDK
 {
@@ -84,19 +85,21 @@ namespace SDK
         }
 
         float GetBoundingRadius() {
-            // Use function call like leagueoflegends-master for accurate bounding radius
             uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
             typedef float(__fastcall* fnGetBoundingRadius)(uint64_t obj);
             fnGetBoundingRadius getBoundingRadius = (fnGetBoundingRadius)(moduleBase + Offset::Function::oGetBoundingRadius);
-            
+
+            Debug::LogOffset("GetBoundingRadius.func", moduleBase, Offset::Function::oGetBoundingRadius, (uint64_t)getBoundingRadius);
+            Debug::LogHex("GetBoundingRadius.obj", Address);
+
             __try {
                 float r = getBoundingRadius(Address);
-                // Sanity check
                 if (r < 0.0f || r > 500.0f || std::isnan(r)) return 65.0f;
                 return r;
             }
             __except(EXCEPTION_EXECUTE_HANDLER) {
-                return 65.0f; // Default on exception
+                Debug::Log("!!! GetBoundingRadius EXCEPTION !!!");
+                return 65.0f;
             }
         }
         
@@ -228,40 +231,56 @@ namespace SDK
             __try {
                 typedef bool(__thiscall* Fn)(void*);
                 static uint64_t funcAddr = Offset::Function::isMinion + (uint64_t)GetModuleHandle(NULL);
+                Debug::LogHex("IsMinion.funcAddr", funcAddr);
                 Fn func = (Fn)(funcAddr);
                 if (IsBadCodePtr((FARPROC)func)) return false;
                 return func((void*)Address);
-            } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                Debug::Log("!!! IsMinion EXCEPTION !!!");
+                return false;
+            }
         }
 
         bool IsTurret() {
             __try {
                 typedef bool(__thiscall* Fn)(void*);
                 static uint64_t funcAddr = Offset::Function::isTurret + (uint64_t)GetModuleHandle(NULL);
+                Debug::LogHex("IsTurret.funcAddr", funcAddr);
                 Fn func = (Fn)(funcAddr);
                 if (IsBadCodePtr((FARPROC)func)) return false;
                 return func((void*)Address);
-            } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                Debug::Log("!!! IsTurret EXCEPTION !!!");
+                return false;
+            }
         }
 
         float GetAttackDelay() {
             __try {
                 typedef float(__cdecl* Fn)(GameObject*);
                 static uint64_t funcAddr = Offset::Function::AttackDelay + (uint64_t)GetModuleHandle(NULL);
+                Debug::LogHex("GetAttackDelay.funcAddr", funcAddr);
                 Fn func = (Fn)(funcAddr);
                 if (IsBadCodePtr((FARPROC)func)) return 0.0f;
                 return func(this);
-            } __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                Debug::Log("!!! GetAttackDelay EXCEPTION !!!");
+                return 0.0f;
+            }
         }
 
         float GetAttackWindup() {
             __try {
                 typedef float(__cdecl* Fn)(GameObject*, int);
                 static uint64_t funcAddr = Offset::Function::oGetAttackWindup + (uint64_t)GetModuleHandle(NULL);
+                Debug::LogHex("GetAttackWindup.funcAddr", funcAddr);
                 Fn func = (Fn)(funcAddr);
                 if (IsBadCodePtr((FARPROC)func)) return 0.0f;
                 return func(this, 0x40);
-            } __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                Debug::Log("!!! GetAttackWindup EXCEPTION !!!");
+                return 0.0f;
+            }
         }
         
         bool IsHero() {
