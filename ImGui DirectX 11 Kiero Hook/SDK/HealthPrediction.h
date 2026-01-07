@@ -27,21 +27,27 @@ namespace SDK
     class HealthPrediction
     {
     private:
-        // Cache for storing tracked missiles (reduces overhead)
-        static std::map<int, std::vector<MissileInfo>> incomingDamageCache;
-        static float lastCacheUpdate;
-        
+        static std::map<int, std::vector<MissileInfo>>& GetIncomingDamageCache() {
+            static std::map<int, std::vector<MissileInfo>> cache;
+            return cache;
+        }
+        static float& GetLastCacheUpdate() {
+            static float lastUpdate = 0.0f;
+            return lastUpdate;
+        }
+
     public:
         // ============================================================================
         // Update Cache - Call once per frame to refresh missile tracking
         // ============================================================================
         static void UpdateCache() {
             float gameTime = Game::GetTime();
-            
-            // Only update every 50ms to reduce overhead
+            auto& incomingDamageCache = GetIncomingDamageCache();
+            auto& lastCacheUpdate = GetLastCacheUpdate();
+
             if (gameTime - lastCacheUpdate < 0.05f) return;
             lastCacheUpdate = gameTime;
-            
+
             incomingDamageCache.clear();
             
             auto missiles = ObjectManager::GetMissiles();
@@ -86,10 +92,10 @@ namespace SDK
             float gameTime = Game::GetTime();
             float predictTime = gameTime + (timeMs / 1000.0f);
             
-            // Get incoming damage from cache
             int unitNetId = unit->GetNetworkId();
             float incomingDamage = 0.0f;
-            
+            auto& incomingDamageCache = GetIncomingDamageCache();
+
             auto it = incomingDamageCache.find(unitNetId);
             if (it != incomingDamageCache.end()) {
                 for (const auto& missile : it->second) {
@@ -251,8 +257,4 @@ namespace SDK
             return count;
         }
     };
-    
-    // Static member initialization
-    inline std::map<int, std::vector<MissileInfo>> HealthPrediction::incomingDamageCache;
-    inline float HealthPrediction::lastCacheUpdate = 0.0f;
 }

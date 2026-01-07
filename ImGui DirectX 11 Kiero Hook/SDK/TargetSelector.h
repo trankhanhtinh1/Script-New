@@ -113,84 +113,79 @@ namespace SDK
         }
 
         // Main GetTarget including Modes (based on NewTargetSelector.cs)
-        // SAFE VERSION - with proper null checks and memory management
         static GameObject* GetTarget(float range, TargetSelectorMode mode = TargetSelectorMode::LowestHealth) {
-            GameObject* local = ObjectManager::GetLocalPlayer();
-            if (!local) return nullptr;
-            
-            // Read local player data first
-            Vector3 myPos = local->GetPosition();
-            int myTeam = local->GetTeam();
-            uint64_t myAddr = local->Address;
+            __try {
+                GameObject* local = ObjectManager::GetLocalPlayer();
+                if (!local) return nullptr;
 
-            // 1. Check Selected Target (Force/Only Select logic from NewTargetSelector.cs)
-            if (SelectedTarget != 0) {
-                GameObject manualTarget(SelectedTarget);
-                if (manualTarget.IsValid() && !manualTarget.IsDead() && manualTarget.IsVisible()) {
-                    float dist = myPos.Distance(manualTarget.GetPosition());
-                    bool inRange = dist <= range + manualTarget.GetBoundingRadius();
-                    
-                    // ForceSelectedTarget: Return selected if in range
-                    if (ForceSelectedTarget && inRange) {
-                        delete local;
-                        return new GameObject(SelectedTarget);
-                    }
-                    
-                    // OnlySelectedTarget: Only attack selected
-                    if (OnlySelectedTarget) {
-                        delete local;
-                        if (inRange) return new GameObject(SelectedTarget);
-                        return nullptr;
+                Vector3 myPos = local->GetPosition();
+                int myTeam = local->GetTeam();
+                uint64_t myAddr = local->Address;
+
+                if (SelectedTarget != 0) {
+                    GameObject manualTarget(SelectedTarget);
+                    if (manualTarget.IsValid() && !manualTarget.IsDead() && manualTarget.IsVisible()) {
+                        float dist = myPos.Distance(manualTarget.GetPosition());
+                        bool inRange = dist <= range + manualTarget.GetBoundingRadius();
+
+                        if (ForceSelectedTarget && inRange) {
+                            delete local;
+                            return new GameObject(SelectedTarget);
+                        }
+
+                        if (OnlySelectedTarget) {
+                            delete local;
+                            if (inRange) return new GameObject(SelectedTarget);
+                            return nullptr;
+                        }
                     }
                 }
-            }
 
-            // 2. Scan Enemy Heroes - Find best target directly (no vector storage)
-            auto heroes = ObjectManager::GetHeroes();
-            
-            uint64_t bestAddr = 0;
-            float bestScore = 999999.0f;
-            
-            for (auto hero : heroes) {
-                if (!hero || !hero->IsValid()) continue;
-                if (hero->Address == myAddr) continue;
-                if (hero->GetTeam() == myTeam) continue;
-                if (hero->IsDead()) continue;
-                if (!hero->IsVisible()) continue;
-                if (!hero->IsTargetable()) continue;
-                
-                // Range check
-                float dist = myPos.Distance(hero->GetPosition());
-                if (dist > range + hero->GetBoundingRadius()) continue;
-                
-                // Calculate score based on mode (use safe methods only)
-                float score = hero->GetHealth(); // Default: lowest health
-                
-                if (mode == TargetSelectorMode::MostPriority) {
-                    score = (float)(-GetPriority(hero)); // Negative so higher priority = lower score
-                }
-                else if (mode == TargetSelectorMode::NearMouse) {
-                    Vector3 mousePos = Game::GetMousePos();
-                    score = mousePos.Distance(hero->GetPosition());
-                }
-                // NOTE: LeastAttacks, MostAD, MostAP fallback to LowestHealth for safety
-                
-                // Update best target
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestAddr = hero->Address;
-                }
-            }
-            
-            // Cleanup heroes
-            for (auto h : heroes) delete h;
-            delete local;
+                auto heroes = ObjectManager::GetHeroes();
 
-            if (bestAddr == 0) {
+                uint64_t bestAddr = 0;
+                float bestScore = 999999.0f;
+
+                for (auto hero : heroes) {
+                    __try {
+                        if (!hero || !hero->IsValid()) continue;
+                        if (hero->Address == myAddr) continue;
+                        if (hero->GetTeam() == myTeam) continue;
+                        if (hero->IsDead()) continue;
+                        if (!hero->IsVisible()) continue;
+                        if (!hero->IsTargetable()) continue;
+
+                        float dist = myPos.Distance(hero->GetPosition());
+                        if (dist > range + hero->GetBoundingRadius()) continue;
+
+                        float score = hero->GetHealth();
+
+                        if (mode == TargetSelectorMode::MostPriority) {
+                            score = (float)(-GetPriority(hero));
+                        }
+                        else if (mode == TargetSelectorMode::NearMouse) {
+                            Vector3 mousePos = Game::GetMousePos();
+                            score = mousePos.Distance(hero->GetPosition());
+                        }
+
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestAddr = hero->Address;
+                        }
+                    } __except(EXCEPTION_EXECUTE_HANDLER) {}
+                }
+
+                for (auto h : heroes) delete h;
+                delete local;
+
+                if (bestAddr == 0) {
+                    return nullptr;
+                }
+
+                return new GameObject(bestAddr);
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
                 return nullptr;
             }
-            
-            return new GameObject(bestAddr);
         }
 
         // ============================================================================

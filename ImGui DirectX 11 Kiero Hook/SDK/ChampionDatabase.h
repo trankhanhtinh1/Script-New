@@ -18,19 +18,17 @@ namespace SDK
             int DefaultPriority;
         };
 
-        // Get runtime priority (configurable via menu)
         static int GetPriority(const std::string& championName) {
-            auto it = RuntimePriorities.find(championName);
-            if (it != RuntimePriorities.end()) {
+            auto& priorities = GetRuntimePriorities();
+            auto it = priorities.find(championName);
+            if (it != priorities.end()) {
                 return it->second;
             }
-            // Fallback to default
             return GetDefaultPriority(championName);
         }
 
-        // Set priority from menu
         static void SetPriority(const std::string& championName, int priority) {
-            RuntimePriorities[championName] = priority;
+            GetRuntimePriorities()[championName] = priority;
         }
 
         // Get default priority (based on champion class)
@@ -173,7 +171,9 @@ namespace SDK
             return champions;
         }
 
-        // Map to store runtime priorities (modified by menu)
-        static inline std::map<std::string, int> RuntimePriorities;
+        static std::map<std::string, int>& GetRuntimePriorities() {
+            static std::map<std::string, int> priorities;
+            return priorities;
+        }
     };
 }

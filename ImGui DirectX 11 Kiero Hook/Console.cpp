@@ -6,19 +6,28 @@ static FILE* g_consoleFile = nullptr;
 
 namespace Console {
     void Init() {
-        AllocConsole();
-        freopen_s(&g_consoleFile, "CONOUT$", "w", stdout);
+        __try {
+            AllocConsole();
+            freopen_s(&g_consoleFile, "CONOUT$", "w", stdout);
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
+        }
     }
 
     void Close() {
-        if (g_consoleFile) {
-            fclose(g_consoleFile);
-            g_consoleFile = nullptr;
+        __try {
+            if (g_consoleFile) {
+                fclose(g_consoleFile);
+                g_consoleFile = nullptr;
+            }
+            FreeConsole();
+        } __except(EXCEPTION_EXECUTE_HANDLER) {
         }
-        FreeConsole();
     }
 }
 
 void print(const std::string& msg) {
-    std::cout << msg << std::endl;
+    __try {
+        std::cout << msg << std::endl;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+    }
 }

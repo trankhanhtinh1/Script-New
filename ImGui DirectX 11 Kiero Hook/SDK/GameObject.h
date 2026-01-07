@@ -31,31 +31,35 @@ namespace SDK
 
         // Basic Properties
         float GetHealth() {
-            return *(float*)(Address + Offset::oHealth);
+            __try { return *(float*)(Address + Offset::oHealth); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         float GetMaxHealth() {
-            return *(float*)(Address + Offset::oMaxHealth);
+            __try { return *(float*)(Address + Offset::oMaxHealth); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         bool IsDead() {
-            // Check if health <= 0 or flag ? (usually flag is safer)
-            // But if we trust offset:
-            int dead = *(int*)(Address + Offset::oDead); // Check type, sometimes float or byte
-            return dead == 1 || GetHealth() <= 0.0f;
+            __try {
+                int dead = *(int*)(Address + Offset::oDead);
+                return dead == 1 || GetHealth() <= 0.0f;
+            } __except(EXCEPTION_EXECUTE_HANDLER) { return true; }
         }
 
         bool IsVisible() {
-            return *(bool*)(Address + Offset::oVisibility);
+            __try { return *(bool*)(Address + Offset::oVisibility); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
         }
 
         bool IsTargetable() {
-            return *(bool*)(Address + Offset::oTargetable);
+            __try { return *(bool*)(Address + Offset::oTargetable); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
         }
 
         int GetTeam() {
-            // Offset::TeamID (0x251). Instruction 0F B6 indicates byte.
-            return (int)(*(unsigned char*)(Address + Offset::TeamID)); 
+            __try { return (int)(*(unsigned char*)(Address + Offset::TeamID)); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
         }
 
         bool IsEnemyTo(GameObject* other) {
@@ -65,16 +69,18 @@ namespace SDK
 
         // Network ID for missile target matching
         int GetNetworkId() {
-            return *(int*)(Address + Offset::oObjNetId);
+            __try { return *(int*)(Address + Offset::oObjNetId); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
         }
 
         Vector3 GetPosition() {
-            // Using oObjPosition which seemed reliable in original
-            return *(Vector3*)(Address + Offset::oObjPosition);
+            __try { return *(Vector3*)(Address + Offset::oObjPosition); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return Vector3(0, 0, 0); }
         }
-        
+
         float GetAttackRange() {
-            return *(float*)(Address + Offset::RangeAttack);
+            __try { return *(float*)(Address + Offset::RangeAttack); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         float GetBoundingRadius() {
@@ -111,11 +117,13 @@ namespace SDK
 
         // Stats
         float GetBaseAttackDamage() {
-            return *(float*)(Address + Offset::DamageBase);
+            __try { return *(float*)(Address + Offset::DamageBase); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         float GetBonusAttackDamage() {
-            return *(float*)(Address + Offset::DamageBonus);
+            __try { return *(float*)(Address + Offset::DamageBonus); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
         
         float GetAttackDamage() {
@@ -126,45 +134,54 @@ namespace SDK
         // Defensive Stats
         // ============================================================================
         float GetArmor() {
-            return *(float*)(Address + Offset::Armor);
+            __try { return *(float*)(Address + Offset::Armor); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         float GetMagicResist() {
-            return *(float*)(Address + Offset::MagicResist);
+            __try { return *(float*)(Address + Offset::MagicResist); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         float GetAbilityPower() {
-            return *(float*)(Address + Offset::AbilityPower);
+            __try { return *(float*)(Address + Offset::AbilityPower); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         // ============================================================================
         // Penetration Stats
         // ============================================================================
-        float GetArmorPenFlat() {  // Sát lực (Lethality)
-            return *(float*)(Address + Offset::ArmorPenFlat);
+        float GetArmorPenFlat() {
+            __try { return *(float*)(Address + Offset::ArmorPenFlat); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
-        float GetArmorPenPercent() {  // Xuyên giáp %
-            return *(float*)(Address + Offset::ArmorPenPercent);
+        float GetArmorPenPercent() {
+            __try { return *(float*)(Address + Offset::ArmorPenPercent); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
-        float GetMagicPenFlat() {  // Xuyên kháng phép (chỉ số)
-            return *(float*)(Address + Offset::MagicPenFlat);
+        float GetMagicPenFlat() {
+            __try { return *(float*)(Address + Offset::MagicPenFlat); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
-        float GetMagicPenPercent() {  // Xuyên kháng phép %
-            return *(float*)(Address + Offset::MagicPenPercent);
+        float GetMagicPenPercent() {
+            __try { return *(float*)(Address + Offset::MagicPenPercent); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         // ============================================================================
         // Critical Strike
         // ============================================================================
-        float GetCritChance() {  // Tỉ lệ chí mạng (0.0 - 1.0)
-            return *(float*)(Address + Offset::CritChance);
+        float GetCritChance() {
+            __try { return *(float*)(Address + Offset::CritChance); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
-        
-        float GetCritDamage() {  // Sát thương chí mạng (1.75 base, 2.15 với IE)
-            return *(float*)(Address + Offset::CritDamage);
+
+        float GetCritDamage() {
+            __try { return *(float*)(Address + Offset::CritDamage); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 1.75f; }
         }
         
         // ============================================================================
@@ -183,7 +200,9 @@ namespace SDK
         }
 
         float GetTotalAD() {
-            return *(float*)(Address + Offset::DamageBase) + *(float*)(Address + Offset::DamageBonus);
+            __try {
+                return *(float*)(Address + Offset::DamageBase) + *(float*)(Address + Offset::DamageBonus);
+            } __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
 
         // Simple AutoAttackDamage calculation (AD only for now)

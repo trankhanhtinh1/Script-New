@@ -67,13 +67,19 @@ namespace Render
 
 	void InitCircle()
 	{
-		vCosTable.resize(circlePoints);
-		vSinTable.resize(circlePoints);
+		__try {
+			vCosTable.clear();
+			vSinTable.clear();
+			vCosTable.reserve(circlePoints);
+			vSinTable.reserve(circlePoints);
 
-		for (auto i = 0; i < circlePoints; i++)
-		{
-			vCosTable[i] = cos(static_cast<float>(i) * (M_PI * 2.f) / static_cast<float>(circlePoints - 1));
-			vSinTable[i] = sin(static_cast<float>(i) * (M_PI * 2.f) / static_cast<float>(circlePoints - 1));
+			for (size_t i = 0; i < circlePoints; i++)
+			{
+				float angle = static_cast<float>(i) * (static_cast<float>(M_PI) * 2.f) / static_cast<float>(circlePoints - 1);
+				vCosTable.push_back(cos(angle));
+				vSinTable.push_back(sin(angle));
+			}
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
 		}
 	}
 

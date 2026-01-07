@@ -89,66 +89,71 @@ namespace SDK
     class PathTracker
     {
     private:
-        static inline std::map<uint32_t, std::vector<StoredPath>> s_StoredPaths;
-        static inline std::mutex s_Mutex;
-        static constexpr double MAX_TIME = 1.5; // Maximum time to store paths
-        static constexpr int MAX_PATHS = 50;    // Maximum paths per unit
-        
+        static std::map<uint32_t, std::vector<StoredPath>>& GetStoredPathsMap() {
+            static std::map<uint32_t, std::vector<StoredPath>> paths;
+            return paths;
+        }
+        static std::mutex& GetMutex() {
+            static std::mutex mtx;
+            return mtx;
+        }
+        static constexpr double MAX_TIME = 1.5;
+        static constexpr int MAX_PATHS = 50;
+
     public:
-        // Record a new path for a unit (call when unit changes path)
         static void RecordPath(uint32_t networkId, const std::vector<Vector3>& path)
         {
-            std::lock_guard<std::mutex> lock(s_Mutex);
-            
-            if (s_StoredPaths.find(networkId) == s_StoredPaths.end()) {
-                s_StoredPaths[networkId] = std::vector<StoredPath>();
+            std::lock_guard<std::mutex> lock(GetMutex());
+            auto& storedPaths = GetStoredPathsMap();
+
+            if (storedPaths.find(networkId) == storedPaths.end()) {
+                storedPaths[networkId] = std::vector<StoredPath>();
             }
-            
+
             StoredPath newPath;
             newPath.Path = path;
             newPath.Tick = GetTickCount();
-            
-            s_StoredPaths[networkId].push_back(newPath);
-            
-            // Clean up old paths
-            if (s_StoredPaths[networkId].size() > MAX_PATHS) {
-                s_StoredPaths[networkId].erase(
-                    s_StoredPaths[networkId].begin(),
-                    s_StoredPaths[networkId].begin() + 40
+
+            storedPaths[networkId].push_back(newPath);
+
+            if (storedPaths[networkId].size() > MAX_PATHS) {
+                storedPaths[networkId].erase(
+                    storedPaths[networkId].begin(),
+                    storedPaths[networkId].begin() + 40
                 );
             }
         }
-        
-        // Get current path for a unit
+
         static StoredPath GetCurrentPath(uint32_t networkId)
         {
-            std::lock_guard<std::mutex> lock(s_Mutex);
-            
-            if (s_StoredPaths.find(networkId) == s_StoredPaths.end() ||
-                s_StoredPaths[networkId].empty()) {
+            std::lock_guard<std::mutex> lock(GetMutex());
+            auto& storedPaths = GetStoredPathsMap();
+
+            if (storedPaths.find(networkId) == storedPaths.end() ||
+                storedPaths[networkId].empty()) {
                 return StoredPath();
             }
-            
-            return s_StoredPaths[networkId].back();
+
+            return storedPaths[networkId].back();
         }
-        
-        // Get all stored paths within time limit
+
         static std::vector<StoredPath> GetStoredPaths(uint32_t networkId, double maxTime)
         {
-            std::lock_guard<std::mutex> lock(s_Mutex);
-            
+            std::lock_guard<std::mutex> lock(GetMutex());
+            auto& storedPaths = GetStoredPathsMap();
+
             std::vector<StoredPath> result;
-            
-            if (s_StoredPaths.find(networkId) == s_StoredPaths.end()) {
+
+            if (storedPaths.find(networkId) == storedPaths.end()) {
                 return result;
             }
-            
-            for (const auto& path : s_StoredPaths[networkId]) {
+
+            for (const auto& path : storedPaths[networkId]) {
                 if (path.Time() < maxTime) {
                     result.push_back(path);
                 }
             }
-            
+
             return result;
         }
         

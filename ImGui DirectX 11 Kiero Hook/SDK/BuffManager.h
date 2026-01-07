@@ -71,52 +71,56 @@ namespace SDK
         bool IsValid() const { return Address != 0; }
         
         // Get buff name from BuffScript
-        // Pattern discovered via debug: BuffInstance+0x10 -> BuffScript+0x08 = char* name
         std::string GetName() const {
             if (!IsValid()) return "";
-            
-            // Read BuffScript pointer at +0x10
-            uint64_t buffScript = *(uint64_t*)(Address + Offset::oBuffInstanceScript);
-            if (!buffScript || buffScript < 0x10000 || buffScript > 0x7FFFFFFFFFFF) return "";
-            
-            // Read name string pointer at BuffScript+0x08
-            char* namePtr = *(char**)(buffScript + Offset::oBuffScriptName);
-            if (!namePtr || (uint64_t)namePtr < 0x10000 || (uint64_t)namePtr > 0x7FFFFFFFFFFF) return "";
-            
-            // Safe string read with length limit
-            std::string result;
-            for (int i = 0; i < 64; i++) {
-                char c = namePtr[i];
-                if (c == 0) break;
-                if (c < 32 || c > 126) return ""; // Invalid char = bad pointer
-                result += c;
+            __try {
+                uint64_t buffScript = *(uint64_t*)(Address + Offset::oBuffInstanceScript);
+                if (!buffScript || buffScript < 0x10000 || buffScript > 0x7FFFFFFFFFFF) return "";
+
+                char* namePtr = *(char**)(buffScript + Offset::oBuffScriptName);
+                if (!namePtr || (uint64_t)namePtr < 0x10000 || (uint64_t)namePtr > 0x7FFFFFFFFFFF) return "";
+
+                std::string result;
+                for (int i = 0; i < 64; i++) {
+                    char c = namePtr[i];
+                    if (c == 0) break;
+                    if (c < 32 || c > 126) return "";
+                    result += c;
+                }
+                return result;
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                return "";
             }
-            return result;
         }
-        
+
         BuffType GetType() const {
             if (!IsValid()) return BuffType::Internal;
-            return (BuffType)(*(int*)(Address + Offset::oBuffInstanceType));
+            __try { return (BuffType)(*(int*)(Address + Offset::oBuffInstanceType)); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return BuffType::Internal; }
         }
-        
+
         float GetStartTime() const {
             if (!IsValid()) return 0.0f;
-            return *(float*)(Address + Offset::oBuffInstanceStartTime);
+            __try { return *(float*)(Address + Offset::oBuffInstanceStartTime); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
-        
+
         float GetEndTime() const {
             if (!IsValid()) return 0.0f;
-            return *(float*)(Address + Offset::oBuffInstanceEndTime);
+            __try { return *(float*)(Address + Offset::oBuffInstanceEndTime); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0.0f; }
         }
-        
+
         int GetStackCount() const {
             if (!IsValid()) return 0;
-            return *(int*)(Address + Offset::oBuffInstanceStackCount);
+            __try { return *(int*)(Address + Offset::oBuffInstanceStackCount); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
         }
-        
+
         int GetCount() const {
             if (!IsValid()) return 0;
-            return *(int*)(Address + Offset::oBuffInstanceCount);
+            __try { return *(int*)(Address + Offset::oBuffInstanceCount); }
+            __except(EXCEPTION_EXECUTE_HANDLER) { return 0; }
         }
         
         bool IsActive(float gameTime) const {
@@ -171,25 +175,29 @@ namespace SDK
         std::vector<BuffInstance> GetBuffs() const {
             std::vector<BuffInstance> buffs;
             if (!IsValid()) return buffs;
-            
-            uint64_t buffMgr = GetBuffManagerAddress();
-            if (!buffMgr) return buffs;
-            
-            uint64_t arrayStart = *(uint64_t*)(buffMgr + Offset::oBuffManagerArray);
-            uint64_t arrayEnd = *(uint64_t*)(buffMgr + Offset::oBuffManagerArrayEnd);
-            
-            if (!arrayStart || !arrayEnd || arrayEnd <= arrayStart) return buffs;
-            
-            size_t count = (arrayEnd - arrayStart) / sizeof(uint64_t);
-            if (count > 256) count = 256; // Safety limit
-            
-            for (size_t i = 0; i < count; i++) {
-                uint64_t buffPtr = *(uint64_t*)(arrayStart + i * sizeof(uint64_t));
-                if (buffPtr) {
-                    buffs.push_back(BuffInstance(buffPtr));
+
+            __try {
+                uint64_t buffMgr = GetBuffManagerAddress();
+                if (!buffMgr) return buffs;
+
+                uint64_t arrayStart = *(uint64_t*)(buffMgr + Offset::oBuffManagerArray);
+                uint64_t arrayEnd = *(uint64_t*)(buffMgr + Offset::oBuffManagerArrayEnd);
+
+                if (!arrayStart || !arrayEnd || arrayEnd <= arrayStart) return buffs;
+
+                size_t count = (arrayEnd - arrayStart) / sizeof(uint64_t);
+                if (count > 256) count = 256;
+
+                for (size_t i = 0; i < count; i++) {
+                    __try {
+                        uint64_t buffPtr = *(uint64_t*)(arrayStart + i * sizeof(uint64_t));
+                        if (buffPtr) {
+                            buffs.push_back(BuffInstance(buffPtr));
+                        }
+                    } __except(EXCEPTION_EXECUTE_HANDLER) {}
                 }
-            }
-            
+            } __except(EXCEPTION_EXECUTE_HANDLER) {}
+
             return buffs;
         }
         

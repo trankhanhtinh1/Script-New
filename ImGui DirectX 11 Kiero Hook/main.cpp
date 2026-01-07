@@ -35,17 +35,45 @@
 #include "imgui/imgui_impl_win32.h"
 #include "imgui/imgui_impl_dx11.h"
 
-// Kiero
-#include "kiero/kiero.h"
+// Exports for Core
+#include "exports.h"
 
-// Debug Logging Wrapper
+// Thread control
+static volatile bool g_logicRunning = false;
+static HANDLE g_threadHandles[5] = { nullptr };
+
+// Debug Logging - C style for SEH compatibility
+static void LogicDebugLog(const char* msg) {
+    HANDLE hFile = CreateFileA("C:\\zz\\Script-New\\x64\\Release\\logic_debug.txt",
+        FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        DWORD written;
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        char timeBuf[64];
+        wsprintfA(timeBuf, "[%02d:%02d:%02d.%03d] ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+        WriteFile(hFile, timeBuf, lstrlenA(timeBuf), &written, NULL);
+        WriteFile(hFile, msg, lstrlenA(msg), &written, NULL);
+        WriteFile(hFile, "\r\n", 2, &written, NULL);
+        CloseHandle(hFile);
+    }
+}
+
+static void LogicDebugLogPtr(const char* prefix, void* ptr) {
+    char buf[256];
+    wsprintfA(buf, "%s%p", prefix, ptr);
+    LogicDebugLog(buf);
+}
+
+static void LogicDebugLogInt(const char* prefix, int val) {
+    char buf[256];
+    wsprintfA(buf, "%s%d", prefix, val);
+    LogicDebugLog(buf);
+}
+
 namespace Debug {
     void Log(const std::string& str) {
-        std::ofstream logFile("orbwalker_debug.txt", std::ios_base::app);
-        if (logFile.is_open()) {
-            logFile << "[ORBWALKER] " << str << std::endl;
-            logFile.close();
-        }
+        LogicDebugLog(str.c_str());
     }
 }
 #define DBG_LOG(x) Debug::Log(x)
@@ -4806,13 +4834,10 @@ namespace DATA {
     uint64_t LocalPlayer = 0;
 }
 
-// Global Vars for Hook
-Present oPresent;
+// Global Vars
 HWND window = NULL;
-WNDPROC oWndProc;
 ID3D11Device* pDevice = NULL;
 ID3D11DeviceContext* pContext = NULL;
-ID3D11RenderTargetView* mainRenderTargetView;
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -4823,35 +4848,6 @@ Vector3 GetMouseWorldPosRaw();
 float GetAttackDelay(uint64_t localPlayer);
 float GetAttackWindup(uint64_t localPlayer);
 float GetPing();
-
-void InitImGui() {
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags = ImGuiConfigFlags_NoMouseCursorChange;
-    ImGui_ImplWin32_Init(window);
-    ImGui_ImplDX11_Init(pDevice, pContext);
-}
-
-LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    // Menu Toggle
-    if (uMsg == WM_KEYDOWN && wParam == VK_INSERT) {
-        Menu::menuOpen = !Menu::menuOpen;
-    }
-
-    if (Menu::menuOpen) {
-        if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
-            return true;
-    }
-
-    // Manual Target Selection - Call TargetSelector::OnLeftClick()
-    // WM_LBUTTONDOWN = 0x0201 = 513
-    // Note: Also handled in hkPresent with GetAsyncKeyState for reliability
-    if (uMsg == WM_LBUTTONDOWN && !Menu::menuOpen) {
-        SDK::TargetSelector::OnLeftClick();
-    }
-    
-    return CallWindowProc(oWndProc, hWnd, uMsg, wParam, lParam);
-}
 
 bool init = false;
 
@@ -4874,112 +4870,13 @@ static void WriteVec3(uint64_t addr, Vector3 v) {
     *(float*)(addr + 8) = v.z;
 }
 
-HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags) {
-    if (!init) {
-        if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void**)& pDevice))) {
-            pDevice->GetImmediateContext(&pContext);
-            DXGI_SWAP_CHAIN_DESC sd;
-            pSwapChain->GetDesc(&sd);
-            window = sd.OutputWindow;
-            
-            // Get Screen Size
-            RECT clientRect;
-            if (GetClientRect(window, &clientRect)) {
-                Render::g_screenWidth = clientRect.right - clientRect.left;
-                Render::g_screenHeight = clientRect.bottom - clientRect.top;
-            }
+// NOTE: hkPresent function removed - rendering is now handled by Logic_Render export
+// The old hkPresent code block has been deleted to allow clean compilation
 
-            ID3D11Texture2D* pBackBuffer;
-            pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)& pBackBuffer);
-            pDevice->CreateRenderTargetView(pBackBuffer, NULL, &mainRenderTargetView);
-            pBackBuffer->Release();
-            
-            oWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)WndProc);
-            InitImGui();
-            init = true;
-        } else {
-            return oPresent(pSwapChain, SyncInterval, Flags);
-        }
-    }
-
-    ImGui_ImplDX11_NewFrame();
-    ImGui_ImplWin32_NewFrame();
-    ImGui::NewFrame();
-    
-    // ESP Render Loop
-    ImDrawList* draw = ImGui::GetBackgroundDrawList();
-    
-    // Get Local Player once for frame
-    auto local = SDK::ObjectManager::GetLocalPlayer();
-    
-    // UPDATE GUIDED SCAN (AiManager offset scanner state machine)
-    if (local && AiManagerScan::g_scanState.isActive) {
-        AiManagerScan::UpdateGuidedScan(local->Address);
-    }
-    
-    // UPDATE NAVGRID GUIDED SCAN (NavGrid-based offset scanner)
-    if (local && AiManagerNavGridScan::g_navGridScanState.isActive) {
-        AiManagerNavGridScan::UpdateNavGridGuidedScan(local->Address);
-    }
-    
-    // TARGET SELECTOR CLICK HANDLER (using GetAsyncKeyState for reliability)
-    static bool wasLMBPressed = false;
-    bool isLMBPressed = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-    
-    // Detect click (rising edge)
-    if (isLMBPressed && !wasLMBPressed && !Menu::menuOpen) {
-        SDK::TargetSelector::OnLeftClick();
-    }
-    wasLMBPressed = isLMBPressed;
-    
-    // DEBUG: Log ESP counts once per 2 seconds
-    static int logTimer = 0;
-    if (logTimer++ > 200) { // Approx 2-3s at 60fps or dependent on hook speed
-        logTimer = 0;
-        std::ofstream log("orbwalker_debug.txt", std::ios_base::app);
-        if (log.is_open()) {
-            int heroCount = SDK::ObjectManager::GetHeroes().size();
-            int minionCount = SDK::ObjectManager::GetMinions().size();
-            log << "[ESP DEBUG] Heroes: " << heroCount << " | Minions: " << minionCount << std::endl;
-            if (local) {
-                log << "[LOCAL DEBUG] Range: " << local->GetAttackRange() 
-                    << " | Bounding: " << local->GetBoundingRadius() << std::endl;
-            } else {
-                log << "[LOCAL DEBUG] LocalPlayer is NULL" << std::endl;
-            }
-            log.close();
-        }
-    }
-
-    if (Menu::drawHeroes || Menu::drawMinions) {
-        // Prepare local player for team check
-        // auto local = SDK::ObjectManager::GetLocalPlayer(); // Removed
-        
-        if (local) {
-            // Heroes
-            if (Menu::drawHeroes) {
-                auto heroes = SDK::ObjectManager::GetHeroes();
-                for (auto hero : heroes) {
-                    if (!hero->IsValid() || hero->IsDead() || !hero->IsVisible()) continue;
-                    if (hero->Address == local->Address) continue; // Skip self
-
-                    Vector3 pos = hero->GetPosition();
-                    Vector2 screenPos = Render::WorldToScreen(pos);
-                    
-                    if (screenPos.x > 0 && screenPos.y > 0 && screenPos.x < Render::g_screenWidth && screenPos.y < Render::g_screenHeight) {
-                        if (hero->GetTeam() != local->GetTeam()) {
-                            // Enemy
-                            draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 30.0f, IM_COL32(255, 0, 0, 255), 32, 2.0f);
-                             
-                            if (Menu::drawEnemyRange) {
-                                float enemyRange = hero->GetAttackRange() + hero->GetBoundingRadius() + 65.0f;
-                                Render::DrawCircle3D(draw, pos, 64, enemyRange, ImColor(255, 50, 50, 100), 2.0f);
-                            }
-
-                             if (Menu::showObjectNames) {
-                                std::string text = hero->GetName() + " [AD: " + std::to_string((int)hero->GetAttackDamage()) + "]";
-                                draw->AddText(ImVec2(screenPos.x, screenPos.y - 10), IM_COL32(255, 255, 255, 255), text.c_str());
-                            }
+// ============================================================================
+// REMAINING OLD HKPRESENT CODE BELOW - TO BE DELETED
+// ============================================================================
+#if 0 // DISABLED - OLD CODE STARTS HERE
                         } else {
                             // Ally
                              // draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 30.0f, IM_COL32(0, 255, 0, 255), 32, 2.0f);
@@ -6326,51 +6223,47 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
     
     if (local) delete local; // Cleanup properly
-    
+
     return oPresent(pSwapChain, SyncInterval, Flags);
 }
+#endif // DISABLED - OLD CODE ENDS HERE
 
 // Thread to update Matrix (WorldToScreen Logic)
 // Also acting as a test bed for SDK for now
 
 DWORD WINAPI ThreadMatrix(LPVOID lpParam) {
-    // Wait for ModuleBase to be ready? Or just get it here.
-    while(!DATA::ModuleBase) {
+    while(!DATA::ModuleBase && g_logicRunning) {
         DATA::ModuleBase = (uint64_t)GetModuleHandleA(NULL);
         Sleep(100);
     }
-    
-    // Test SDK
+
     static bool sdkTested = false;
-    
-    while (true) {
-        // Update Matrix logic
-        if(!DATA::pViewMatrix) {
-             DATA::pViewMatrix = (float*)(DATA::ModuleBase + Offset::ViewProjectionMatrix);
-             DATA::pProjMatrix = (float*)(DATA::ModuleBase + Offset::ViewProjectionMatrix + Offset::projMatrix);
-        }
 
-        if (DATA::pViewMatrix && DATA::pProjMatrix) {
-            memcpy(Render::viewMatrix, DATA::pViewMatrix, sizeof(Render::viewMatrix));
-            memcpy(Render::projMatrix, DATA::pProjMatrix, sizeof(Render::projMatrix));
-            Render::MultiplyMatrices(Render::viewProjMatrix, Render::viewMatrix, 4, 4, Render::projMatrix, 4, 4);
-        }
+    while (g_logicRunning) {
+        __try {
+            if(!DATA::pViewMatrix) {
+                DATA::pViewMatrix = (float*)(DATA::ModuleBase + Offset::ViewProjectionMatrix);
+                DATA::pProjMatrix = (float*)(DATA::ModuleBase + Offset::ViewProjectionMatrix + Offset::projMatrix);
+            }
 
-        // Simple Print Test
-        if (!sdkTested) {
-             SDK::GameObject* local = SDK::ObjectManager::GetLocalPlayer();
-             if (local) {
-                 float hp = local->GetHealth();
-                 // Print using standard cout or DBG_LOG if we had one.
-                 // Since we deleted DBG_LOG, let's just inspect in debugger or add a simple check.
-                 if (hp > 0) {
-                      // It works
-                 }
-                 sdkTested = true;
-             }
-        }
-        
-        // Matrix update only - Orbwalker runs in its own thread now
+            if (DATA::pViewMatrix && DATA::pProjMatrix) {
+                memcpy(Render::viewMatrix, DATA::pViewMatrix, sizeof(Render::viewMatrix));
+                memcpy(Render::projMatrix, DATA::pProjMatrix, sizeof(Render::projMatrix));
+                Render::MultiplyMatrices(Render::viewProjMatrix, Render::viewMatrix, 4, 4, Render::projMatrix, 4, 4);
+            }
+
+            if (!sdkTested) {
+                SDK::GameObject* local = SDK::ObjectManager::GetLocalPlayer();
+                if (local) {
+                    float hp = local->GetHealth();
+                    if (hp > 0) {
+                        sdkTested = true;
+                    }
+                    delete local;
+                }
+            }
+        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+
         Sleep(10);
     }
     return 0;
@@ -6390,28 +6283,36 @@ namespace OrbTiming {
 // Helper: Get object position
 Vector3 GetObjPositionRaw(uint64_t obj) {
     if (!obj) return Vector3(0, 0, 0);
-    return *(Vector3*)(obj + Offset::oObjPosition);
+    __try {
+        return *(Vector3*)(obj + Offset::oObjPosition);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return Vector3(0, 0, 0);
+    }
 }
 
 // Helper: Get mouse world position (raw memory read)
 Vector3 GetMouseWorldPosRaw() {
-    uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-    uint64_t hudInstance = *(uint64_t*)(moduleBase + Offset::oHudInstance);
-    if (!hudInstance) return Vector3(0, 0, 0);
-    
-    uint64_t input = *(uint64_t*)(hudInstance + Offset::oHudInstanceInput);
-    if (!input) return Vector3(0, 0, 0);
-    
-    Vector3 mousePos;
-    mousePos.x = *(float*)(input + Offset::oHudMouseVec3);
-    mousePos.y = *(float*)(input + Offset::oHudMouseVec3 + 0x4);
-    mousePos.z = *(float*)(input + Offset::oHudMouseVec3 + 0x8);
-    
-    if (mousePos.x < -1000.0f || mousePos.x > 20000.0f ||
-        mousePos.z < -1000.0f || mousePos.z > 20000.0f) {
+    __try {
+        uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
+        uint64_t hudInstance = *(uint64_t*)(moduleBase + Offset::oHudInstance);
+        if (!hudInstance) return Vector3(0, 0, 0);
+
+        uint64_t input = *(uint64_t*)(hudInstance + Offset::oHudInstanceInput);
+        if (!input) return Vector3(0, 0, 0);
+
+        Vector3 mousePos;
+        mousePos.x = *(float*)(input + Offset::oHudMouseVec3);
+        mousePos.y = *(float*)(input + Offset::oHudMouseVec3 + 0x4);
+        mousePos.z = *(float*)(input + Offset::oHudMouseVec3 + 0x8);
+
+        if (mousePos.x < -1000.0f || mousePos.x > 20000.0f ||
+            mousePos.z < -1000.0f || mousePos.z > 20000.0f) {
+            return Vector3(0, 0, 0);
+        }
+        return mousePos;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
         return Vector3(0, 0, 0);
     }
-    return mousePos;
 }
 
 // Helper: Get attack delay in SECONDS (like leagueoflegends-master)
@@ -6518,48 +6419,54 @@ float GetMyBoundingRadius(uint64_t localPlayer) {
 // Helper: Get RealAttackRange (following leagueoflegends-master pattern)
 // RealAttackRange = baseAttackRange + myBoundingRadius
 float GetRealAttackRangeRaw(uint64_t localPlayer) {
-    if (!localPlayer) return 550.0f; // Default ADC range
-    float baseRange = *(float*)(localPlayer + Offset::RangeAttack);
-    float myRadius = GetMyBoundingRadius(localPlayer);
-    return baseRange + myRadius;
+    if (!localPlayer) return 550.0f;
+    __try {
+        float baseRange = *(float*)(localPlayer + Offset::RangeAttack);
+        float myRadius = GetMyBoundingRadius(localPlayer);
+        return baseRange + myRadius;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return 550.0f;
+    }
 }
 
 // Helper: Get best hero target in range (using SDK)
-// Following leagueoflegends-master pattern:
-// - Use RealAttackRange (attackRange + myBoundingRadius)
-// - Check: RealAttackRange + targetBoundingRadius >= distance
 uint64_t GetBestHeroTargetRaw(uint64_t moduleBase, uint64_t localPlayer, float realAttackRange) {
-    auto heroes = SDK::ObjectManager::GetHeroes();
-    if (heroes.empty()) return 0;
-    
-    Vector3 myPos = GetObjPositionRaw(localPlayer);
-    uint8_t myTeam = *(uint8_t*)(localPlayer + Offset::TeamID);
-    
-    uint64_t bestTarget = 0;
-    float lowestHealth = 999999.0f;
-    
-    for (auto* hero : heroes) {
-        if (!hero || hero->Address == localPlayer) continue;
-        if (hero->GetTeam() == myTeam) continue;
-        if (hero->IsDead() || hero->GetHealth() <= 0) continue;
-        if (!hero->IsVisible() || !hero->IsTargetable()) continue;
-        
-        Vector3 objPos = hero->GetPosition();
-        float dist = myPos.Distance(objPos);
-        
-        // leagueoflegends-master pattern: realAttackRange + targetBoundingRadius >= dist
-        float effectiveRange = realAttackRange + hero->GetBoundingRadius();
-        if (dist > effectiveRange) continue;
-        
-        float hp = hero->GetHealth();
-        if (hp < lowestHealth) {
-            lowestHealth = hp;
-            bestTarget = hero->Address;
+    __try {
+        auto heroes = SDK::ObjectManager::GetHeroes();
+        if (heroes.empty()) return 0;
+
+        Vector3 myPos = GetObjPositionRaw(localPlayer);
+        uint8_t myTeam = *(uint8_t*)(localPlayer + Offset::TeamID);
+
+        uint64_t bestTarget = 0;
+        float lowestHealth = 999999.0f;
+
+        for (auto* hero : heroes) {
+            __try {
+                if (!hero || hero->Address == localPlayer) continue;
+                if (hero->GetTeam() == myTeam) continue;
+                if (hero->IsDead() || hero->GetHealth() <= 0) continue;
+                if (!hero->IsVisible() || !hero->IsTargetable()) continue;
+
+                Vector3 objPos = hero->GetPosition();
+                float dist = myPos.Distance(objPos);
+
+                float effectiveRange = realAttackRange + hero->GetBoundingRadius();
+                if (dist > effectiveRange) continue;
+
+                float hp = hero->GetHealth();
+                if (hp < lowestHealth) {
+                    lowestHealth = hp;
+                    bestTarget = hero->Address;
+                }
+            } __except(EXCEPTION_EXECUTE_HANDLER) {}
         }
+
+        for (auto* hero : heroes) delete hero;
+        return bestTarget;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
     }
-    
-    for (auto* hero : heroes) delete hero;
-    return bestTarget;
 }
 
 // Helper: Check if jungle plant
@@ -6612,16 +6519,15 @@ float PredictHealth(uint64_t unitAddr, float myDamage, float travelTime = 0.25f)
 }
 
 // Helper: Smart Farm Target Selection (Includes ShouldWait logic)
-// Returns target address, or 0 if no target or if we should wait
 uint64_t GetBestFarmTargetSmart(uint64_t moduleBase, uint64_t localPlayer, float range, float myDamage, bool laneClearMode, bool* outShouldWait) {
     *outShouldWait = false;
-    
-    // Get all minions/monsters
-    auto minions = SDK::ObjectManager::GetAllMinions();
-    if (minions.empty()) return 0;
-    
-    Vector3 myPos = GetObjPositionRaw(localPlayer);
-    uint8_t myTeam = *(uint8_t*)(localPlayer + Offset::TeamID);
+
+    __try {
+        auto minions = SDK::ObjectManager::GetAllMinions();
+        if (minions.empty()) return 0;
+
+        Vector3 myPos = GetObjPositionRaw(localPlayer);
+        uint8_t myTeam = *(uint8_t*)(localPlayer + Offset::TeamID);
     float myBoundingRadius = GetMyBoundingRadius(localPlayer);
     
     SDK::GameObject* killableTarget = nullptr;
@@ -6759,10 +6665,13 @@ uint64_t GetBestFarmTargetSmart(uint64_t moduleBase, uint64_t localPlayer, float
         for (auto* t : turrets) delete t;
     }
     
-    for (auto* m : minions) delete m;
-    return 0;
+        for (auto* m : minions) delete m;
+        return 0;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
 }
-        
+
 
 
 // Helper: Calculate incoming minion damage (from allied minions attacking target)
@@ -6924,37 +6833,39 @@ uint64_t GetFastClearTarget(uint64_t moduleBase, uint64_t localPlayer, float ran
 }
 void IssueMoveRaw(uint64_t localPlayer, Vector3 pos) {
     if (!localPlayer || (pos.x == 0 && pos.z == 0)) return;
-    
-    uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-    static void* spoof_trampoline = nullptr;
-    if (!spoof_trampoline) {
-        spoof_trampoline = mem::ScanModInternal((char*)"\xFF\x23", (char*)"xx", (char*)GetModuleHandleA(nullptr));
-    }
-    if (!spoof_trampoline) return;
-    
-    using fnIssueOrder = int64_t(__cdecl*)(uintptr_t, int, Vector3*, uintptr_t, bool, bool);
-    fnIssueOrder issueOrder = (fnIssueOrder)(moduleBase + Offset::Function::oIssueOrder);
-    
-    Vector3 localPos = pos;
-    spoof_call(spoof_trampoline, issueOrder, localPlayer, 2, &localPos, (uintptr_t)0, false, false);
+    __try {
+        uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
+        static void* spoof_trampoline = nullptr;
+        if (!spoof_trampoline) {
+            spoof_trampoline = mem::ScanModInternal((char*)"\xFF\x23", (char*)"xx", (char*)GetModuleHandleA(nullptr));
+        }
+        if (!spoof_trampoline) return;
+
+        using fnIssueOrder = int64_t(__cdecl*)(uintptr_t, int, Vector3*, uintptr_t, bool, bool);
+        fnIssueOrder issueOrder = (fnIssueOrder)(moduleBase + Offset::Function::oIssueOrder);
+
+        Vector3 localPos = pos;
+        spoof_call(spoof_trampoline, issueOrder, localPlayer, 2, &localPos, (uintptr_t)0, false, false);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 // Helper: Issue attack order
 void IssueAttackRaw(uint64_t localPlayer, uint64_t target) {
     if (!localPlayer || !target) return;
-    
-    uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-    static void* spoof_trampoline = nullptr;
-    if (!spoof_trampoline) {
-        spoof_trampoline = mem::ScanModInternal((char*)"\xFF\x23", (char*)"xx", (char*)GetModuleHandleA(nullptr));
-    }
-    if (!spoof_trampoline) return;
-    
-    using fnIssueOrder = int64_t(__cdecl*)(uintptr_t, int, Vector3*, uintptr_t, bool, bool);
-    fnIssueOrder issueOrder = (fnIssueOrder)(moduleBase + Offset::Function::oIssueOrder);
-    
-    Vector3 targetPos = GetObjPositionRaw(target);
-    spoof_call(spoof_trampoline, issueOrder, localPlayer, 3, &targetPos, target, true, false);
+    __try {
+        uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
+        static void* spoof_trampoline = nullptr;
+        if (!spoof_trampoline) {
+            spoof_trampoline = mem::ScanModInternal((char*)"\xFF\x23", (char*)"xx", (char*)GetModuleHandleA(nullptr));
+        }
+        if (!spoof_trampoline) return;
+
+        using fnIssueOrder = int64_t(__cdecl*)(uintptr_t, int, Vector3*, uintptr_t, bool, bool);
+        fnIssueOrder issueOrder = (fnIssueOrder)(moduleBase + Offset::Function::oIssueOrder);
+
+        Vector3 targetPos = GetObjPositionRaw(target);
+        spoof_call(spoof_trampoline, issueOrder, localPlayer, 3, &targetPos, target, true, false);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
 // Helper: Check if League window is focused
@@ -7072,228 +6983,187 @@ namespace OrbwalkerTiming {
 }
 
 // Orbwalker Hero Thread (SPACE key - Combo)
-// REWRITTEN to use leagueoflegends-master logic exactly
 DWORD WINAPI ThreadOrbwalkerHero(LPVOID lpParam) {
     Sleep(3000);
-    
-    while (true) {
-        if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
-        if (!IsLeagueFocused()) { Sleep(100); continue; }
-        if (IsChatOpen()) { Sleep(50); continue; } // Don't orbwalk when chat is open
-        
-        uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-        uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
-        
-        if (!localPlayer) { Sleep(100); continue; }
-        if (!(GetAsyncKeyState(VK_SPACE) & 0x8000)) { Sleep(10); continue; }
-        
-        // Get gameTime in SECONDS (like leagueoflegends-master)
-        float gameTime = *(float*)(moduleBase + Offset::oGametime);
-        
-        // Get attack timing using FUNCTION CALLS (in SECONDS)
-        float attackDelay = GetAttackDelay(localPlayer);
-        float attackWindup = GetAttackWindup(localPlayer);
-        
-        // Get RealAttackRange = attackRange + myBoundingRadius
-        float realAttackRange = GetRealAttackRangeRaw(localPlayer);
-        
-        // leagueoflegends-master: StopOrbwalk - if still in windup, don't do anything
-        if (OrbwalkerTiming::IsWindingUp(gameTime, attackWindup)) {
-            Sleep(5);
-            continue;
-        }
-        
-        // leagueoflegends-master: IsReloading - if can't attack yet, just move
-        bool isReloading = OrbwalkerTiming::IsReloading(gameTime, attackDelay);
-        
-        if (isReloading) {
-            // Can't attack, just move (Idle)
-            if (OrbwalkerTiming::CanDoAction(gameTime)) {
-                Vector3 mousePos = GetMouseWorldPosRaw();
-                if (mousePos.x != 0 || mousePos.z != 0) {
-                    IssueMoveRaw(localPlayer, mousePos);
+
+    while (g_logicRunning) {
+        __try {
+            if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
+            if (!IsLeagueFocused()) { Sleep(100); continue; }
+            if (IsChatOpen()) { Sleep(50); continue; }
+
+            uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
+            uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
+
+            if (!localPlayer) { Sleep(100); continue; }
+            if (!(GetAsyncKeyState(VK_SPACE) & 0x8000)) { Sleep(10); continue; }
+
+            float gameTime = *(float*)(moduleBase + Offset::oGametime);
+            float attackDelay = GetAttackDelay(localPlayer);
+            float attackWindup = GetAttackWindup(localPlayer);
+            float realAttackRange = GetRealAttackRangeRaw(localPlayer);
+
+            if (OrbwalkerTiming::IsWindingUp(gameTime, attackWindup)) {
+                Sleep(5);
+                continue;
+            }
+
+            bool isReloading = OrbwalkerTiming::IsReloading(gameTime, attackDelay);
+
+            if (isReloading) {
+                if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                    Vector3 mousePos = GetMouseWorldPosRaw();
+                    if (mousePos.x != 0 || mousePos.z != 0) {
+                        IssueMoveRaw(localPlayer, mousePos);
+                    }
+                }
+                Sleep(5);
+                continue;
+            }
+
+            uint64_t target = 0;
+            SDK::TargetSelectorMode tsMode = SDK::Orbwalker::GetTSMode();
+            SDK::GameObject* targetObj = SDK::TargetSelector::GetTarget(realAttackRange, tsMode);
+            if (targetObj) {
+                target = targetObj->Address;
+                delete targetObj;
+            }
+
+            if (target) {
+                if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                    IssueAttackRaw(localPlayer, target);
+                    OrbwalkerTiming::lastAttackTime = gameTime;
+                }
+            } else {
+                if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                    Vector3 mousePos = GetMouseWorldPosRaw();
+                    if (mousePos.x != 0 || mousePos.z != 0) {
+                        IssueMoveRaw(localPlayer, mousePos);
+                    }
                 }
             }
-            Sleep(5);
-            continue;
-        }
-        
-        // Can attack - find target using TargetSelector with Menu mode
-        uint64_t target = 0;
-        SDK::TargetSelectorMode tsMode = SDK::Orbwalker::GetTSMode();
-        SDK::GameObject* targetObj = SDK::TargetSelector::GetTarget(realAttackRange, tsMode);
-        if (targetObj) {
-            target = targetObj->Address;
-            delete targetObj;
-        }
-        
-        if (target) {
-            // Attack target
-            if (OrbwalkerTiming::CanDoAction(gameTime)) {
-                IssueAttackRaw(localPlayer, target);
-                OrbwalkerTiming::lastAttackTime = gameTime;  // Record attack time in SECONDS
-                
-                // Debug log
-                std::ofstream log("attack_debug.txt", std::ios_base::app);
-                if (log.is_open()) {
-                    Vector3 myPos = GetObjPositionRaw(localPlayer);
-                    Vector3 targetPos = GetObjPositionRaw(target);
-                    float dist = myPos.Distance(targetPos);
-                    log << "[ATTACK] gameTime=" << gameTime 
-                        << " | dist=" << dist 
-                        << " | realRange=" << realAttackRange
-                        << " | attackDelay=" << attackDelay
-                        << " | attackWindup=" << attackWindup
-                        << std::endl;
-                    log.close();
-                }
-            }
-        } else {
-            // No target, move (Idle)
-            if (OrbwalkerTiming::CanDoAction(gameTime)) {
-                Vector3 mousePos = GetMouseWorldPosRaw();
-                if (mousePos.x != 0 || mousePos.z != 0) {
-                    IssueMoveRaw(localPlayer, mousePos);
-                }
-            }
-        }
-        
+        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+
         Sleep(5);
     }
     return 0;
 }
 
 // Orbwalker Minion Thread (V/X/C keys - LaneClear/LastHit/Harass)
-// REWRITTEN to use leagueoflegends-master logic (SECONDS)
 DWORD WINAPI ThreadOrbwalkerMinion(LPVOID lpParam) {
     Sleep(3000);
-    
-    while (true) {
-        if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
-        if (!IsLeagueFocused()) { Sleep(100); continue; }
-        
-        uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-        uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
-        
-        if (!localPlayer) { Sleep(100); continue; }
-        
-        // Check which mode is active
-        bool isLaneClear = (GetAsyncKeyState(0x56) & 0x8000); // V key
-        bool isLastHit = (GetAsyncKeyState(0x58) & 0x8000);   // X key
-        bool isHarass = (GetAsyncKeyState(0x43) & 0x8000);    // C key
-        
-        if (!isLaneClear && !isLastHit && !isHarass) { 
-            Sleep(10); 
-            continue; 
-        }
-        
-        // Block combo keys (VCXZ) when chat is open (check AFTER key check)
-        if (IsChatOpen()) { Sleep(50); continue; }
-        
-        // Get gameTime in SECONDS (like leagueoflegends-master)
-        float gameTime = *(float*)(moduleBase + Offset::oGametime);
-        
-        // Get attack timing using FUNCTION CALLS (in SECONDS)
-        float attackDelay = GetAttackDelay(localPlayer);
-        float attackWindup = GetAttackWindup(localPlayer);
-        
-        // Get RealAttackRange = attackRange + myBoundingRadius
-        float realAttackRange = GetRealAttackRangeRaw(localPlayer);
-        float attackDamage = *(float*)(localPlayer + Offset::DamageBase) + *(float*)(localPlayer + Offset::DamageBonus);
-        
-        // leagueoflegends-master: StopOrbwalk - if still in windup, don't do anything
-        if (OrbwalkerTiming::IsWindingUp(gameTime, attackWindup)) {
-            Sleep(5);
-            continue;
-        }
-        
-        // leagueoflegends-master: IsReloading - if can't attack yet, just move
-        bool isReloading = OrbwalkerTiming::IsReloading(gameTime, attackDelay);
-        
-        if (isReloading) {
-            // Can't attack, just move (Idle)
-            if (OrbwalkerTiming::CanDoAction(gameTime)) {
-                Vector3 mousePos = GetMouseWorldPosRaw();
-                if (mousePos.x != 0 || mousePos.z != 0) {
-                    IssueMoveRaw(localPlayer, mousePos);
+
+    while (g_logicRunning) {
+        __try {
+            if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
+            if (!IsLeagueFocused()) { Sleep(100); continue; }
+
+            uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
+            uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
+
+            if (!localPlayer) { Sleep(100); continue; }
+
+            bool isLaneClear = (GetAsyncKeyState(0x56) & 0x8000);
+            bool isLastHit = (GetAsyncKeyState(0x58) & 0x8000);
+            bool isHarass = (GetAsyncKeyState(0x43) & 0x8000);
+
+            if (!isLaneClear && !isLastHit && !isHarass) {
+                Sleep(10);
+                continue;
+            }
+
+            if (IsChatOpen()) { Sleep(50); continue; }
+
+            float gameTime = *(float*)(moduleBase + Offset::oGametime);
+            float attackDelay = GetAttackDelay(localPlayer);
+            float attackWindup = GetAttackWindup(localPlayer);
+            float realAttackRange = GetRealAttackRangeRaw(localPlayer);
+            float attackDamage = *(float*)(localPlayer + Offset::DamageBase) + *(float*)(localPlayer + Offset::DamageBonus);
+
+            if (OrbwalkerTiming::IsWindingUp(gameTime, attackWindup)) {
+                Sleep(5);
+                continue;
+            }
+
+            bool isReloading = OrbwalkerTiming::IsReloading(gameTime, attackDelay);
+
+            if (isReloading) {
+                if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                    Vector3 mousePos = GetMouseWorldPosRaw();
+                    if (mousePos.x != 0 || mousePos.z != 0) {
+                        IssueMoveRaw(localPlayer, mousePos);
+                    }
                 }
+                Sleep(5);
+                continue;
             }
-            Sleep(5);
-            continue;
-        }
-        
-        // Find target based on mode
-        uint64_t target = 0;
-        bool shouldWait = false;
-        
-        if (isHarass) {
-            // Harass (C key): Attack heroes + last hit minions
-            if (!Menu::farmOverHarass) {
-                target = GetBestHeroTargetRaw(moduleBase, localPlayer, realAttackRange);
-            }
-            if (!target) {
+
+            uint64_t target = 0;
+            bool shouldWait = false;
+
+            if (isHarass) {
+                if (!Menu::farmOverHarass) {
+                    target = GetBestHeroTargetRaw(moduleBase, localPlayer, realAttackRange);
+                }
+                if (!target) {
+                    target = GetBestFarmTargetSmart(moduleBase, localPlayer, realAttackRange, attackDamage, false, &shouldWait);
+                }
+                if (!target && Menu::farmOverHarass && !shouldWait) {
+                    target = GetBestHeroTargetRaw(moduleBase, localPlayer, realAttackRange);
+                }
+            } else if (isLastHit) {
                 target = GetBestFarmTargetSmart(moduleBase, localPlayer, realAttackRange, attackDamage, false, &shouldWait);
+            } else if (isLaneClear) {
+                target = GetBestFarmTargetSmart(moduleBase, localPlayer, realAttackRange, attackDamage, true, &shouldWait);
             }
-            if (!target && Menu::farmOverHarass && !shouldWait) {
-                target = GetBestHeroTargetRaw(moduleBase, localPlayer, realAttackRange);
-            }
-        } else if (isLastHit) {
-            // X key - LastHit only
-            target = GetBestFarmTargetSmart(moduleBase, localPlayer, realAttackRange, attackDamage, false, &shouldWait);
-        } else if (isLaneClear) {
-            // V key - LaneClear (push)
-            target = GetBestFarmTargetSmart(moduleBase, localPlayer, realAttackRange, attackDamage, true, &shouldWait);
-        }
-        
-        if (target) {
-            // Attack target
-            if (OrbwalkerTiming::CanDoAction(gameTime)) {
-                IssueAttackRaw(localPlayer, target);
-                OrbwalkerTiming::lastAttackTime = gameTime;  // Record attack time in SECONDS
-            }
-        } else {
-            // No target, move (Idle)
-            if (OrbwalkerTiming::CanDoAction(gameTime)) {
-                Vector3 mousePos = GetMouseWorldPosRaw();
-                if (mousePos.x != 0 || mousePos.z != 0) {
-                    IssueMoveRaw(localPlayer, mousePos);
+
+            if (target) {
+                if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                    IssueAttackRaw(localPlayer, target);
+                    OrbwalkerTiming::lastAttackTime = gameTime;
+                }
+            } else {
+                if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                    Vector3 mousePos = GetMouseWorldPosRaw();
+                    if (mousePos.x != 0 || mousePos.z != 0) {
+                        IssueMoveRaw(localPlayer, mousePos);
+                    }
                 }
             }
-        }
-        
+        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+
         Sleep(5);
     }
     return 0;
 }
 
 // Orbwalker Flee Thread (Z key - Move only, no attacks)
-// REWRITTEN to use leagueoflegends-master logic (SECONDS)
 DWORD WINAPI ThreadOrbwalkerFlee(LPVOID lpParam) {
     Sleep(3000);
-    
-    while (true) {
-        if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
-        if (!IsLeagueFocused()) { Sleep(100); continue; }
-        
-        uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-        uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
-        
-        if (!localPlayer) { Sleep(100); continue; }
-        if (!(GetAsyncKeyState(0x5A) & 0x8000)) { Sleep(10); continue; } // Z key
-        
-        // Block combo key (Z) when chat is open (check AFTER key check)
-        if (IsChatOpen()) { Sleep(50); continue; }
-        
-        float gameTime = *(float*)(moduleBase + Offset::oGametime);
-        
-        // Flee mode: Only move, no attacks
-        if (OrbwalkerTiming::CanDoAction(gameTime)) {
-            Vector3 mousePos = GetMouseWorldPosRaw();
-            if (mousePos.x != 0 || mousePos.z != 0) {
-                IssueMoveRaw(localPlayer, mousePos);
+
+    while (g_logicRunning) {
+        __try {
+            if (!Menu::orbwalkerEnabled) { Sleep(50); continue; }
+            if (!IsLeagueFocused()) { Sleep(100); continue; }
+
+            uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
+            uint64_t localPlayer = *(uint64_t*)(moduleBase + Offset::oLocalPlayer);
+
+            if (!localPlayer) { Sleep(100); continue; }
+            if (!(GetAsyncKeyState(0x5A) & 0x8000)) { Sleep(10); continue; }
+
+            if (IsChatOpen()) { Sleep(50); continue; }
+
+            float gameTime = *(float*)(moduleBase + Offset::oGametime);
+
+            if (OrbwalkerTiming::CanDoAction(gameTime)) {
+                Vector3 mousePos = GetMouseWorldPosRaw();
+                if (mousePos.x != 0 || mousePos.z != 0) {
+                    IssueMoveRaw(localPlayer, mousePos);
+                }
             }
-        }
-        
+        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+
         Sleep(5);
     }
     return 0;
@@ -7306,76 +7176,43 @@ DWORD WINAPI ThreadAutoCastScan(LPVOID lpParam) {
     Sleep(3000);
     bool lastState = false;
     float lastCastTime = 0.0f;
-    
-    while (true) {
-        bool currentState = Menu::autoCastAndScan;
-        
-        // CASE 1: Đang bật - Thực hiện Cast Spell liên tục
-        if (currentState) {
-            uintptr_t moduleBase = (uintptr_t)GetModuleHandle(NULL);
-            float gameTime = 0.0f;
-            if (moduleBase) {
-                gameTime = *(float*)(moduleBase + Offset::oGametime);
+
+    while (g_logicRunning) {
+        __try {
+            bool currentState = Menu::autoCastAndScan;
+
+            if (currentState) {
+                uintptr_t moduleBase = (uintptr_t)GetModuleHandle(NULL);
+                float gameTime = 0.0f;
+                if (moduleBase) {
+                    gameTime = *(float*)(moduleBase + Offset::oGametime);
+                }
+
+                if (gameTime > lastCastTime + 1.5f) {
+                    keybd_event('W', 0, 0, 0);
+                    Sleep(50);
+                    keybd_event('W', 0, KEYEVENTF_KEYUP, 0);
+                    lastCastTime = gameTime;
+                }
             }
-            
-            // Cast phím W mỗi 1.5 giây (đủ thời gian cho hầu hết các skillshot)
-            if (gameTime > lastCastTime + 1.5f) {
-                // Sử dụng phím W là skillshot phổ biến của nhiều champs (Smolder, Jinx, Ezreal)
-                keybd_event('W', 0, 0, 0);
-                Sleep(50);
-                keybd_event('W', 0, KEYEVENTF_KEYUP, 0);
-                lastCastTime = gameTime;
+
+            if (lastState && !currentState) {
+                Sleep(200);
+                ScanMissileOffsets();
             }
-        }
-        
-        // CASE 2: Vừa bỏ check - Trigger SCAN ngay lập tức
-        if (lastState && !currentState) {
-            // Đợi 0.2s để missile vừa cast có thời gian spawn
-            Sleep(200);
-            ScanMissileOffsets();
-        }
-        
-        lastState = currentState;
+
+            lastState = currentState;
+        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+
         Sleep(100);
     }
     return 0;
 }
 
-// Init Thread
-DWORD WINAPI ThreadGUI(LPVOID lpReserved) {
-    Render::InitCircle();
-    
-    bool init_hook = false;
-    do {
-        if (kiero::init(kiero::RenderType::D3D11) == kiero::Status::Success) {
-            kiero::bind(8, (void**)& oPresent, hkPresent);
-            init_hook = true;
-        }
-        Sleep(10);
-    } while (!init_hook);
-    return TRUE;
-}
-
-// Terminator Thread (Simple)
-DWORD WINAPI ThreadTerminate(LPVOID lpParam) {
-    while (true) {
-        if (GetAsyncKeyState(VK_END) & 1) {
-            kiero::shutdown();
-            break;
-        }
-        Sleep(100);
-    }
-    FreeLibraryAndExitThread((HMODULE)lpParam, 0);
-    return TRUE;
-}
 
 // ============================================================================
 // THREAD HIDING - Evade basic anti-cheat detection
-// From leagueoflegends-master
 // ============================================================================
-static HMODULE g_hLocalModule = nullptr;
-static bool g_bEject = false;
-
 bool WINAPI HideThread(const HANDLE hThread) noexcept
 {
     __try {
@@ -7398,127 +7235,317 @@ bool WINAPI HideThread(const HANDLE hThread) noexcept
     return false;
 }
 
+
 // ============================================================================
-// WAIT FOR GAME READY - Don't init until game is actually loaded
+// EXPORTED FUNCTIONS FOR LOADER
 // ============================================================================
-bool WaitForGameReady(int timeoutSeconds = 60)
-{
-    std::ofstream logFile("orbwalker_debug.txt", std::ios_base::app);
-    logFile << "Waiting for game to be ready..." << std::endl;
-    
-    int waited = 0;
-    while (waited < timeoutSeconds * 10)
-    {
-        __try {
-            float gameTime = SDK::Game::GetTime();
-            if (gameTime > 3.0f) {
-                logFile << "Game ready! GameTime: " << gameTime << std::endl;
-                logFile.close();
-                return true;
+
+extern "C" __declspec(dllexport) bool Logic_Init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd, ImGuiContext* imguiContext) {
+    LogicDebugLog("=== Logic_Init START ===");
+    LogicDebugLogPtr("Device: ", device);
+    LogicDebugLogPtr("Context: ", context);
+    LogicDebugLogPtr("HWND: ", hwnd);
+    LogicDebugLogPtr("ImGuiContext: ", imguiContext);
+
+    __try {
+        pDevice = device;
+        pContext = context;
+        window = hwnd;
+        LogicDebugLog("Assigned device/context/window");
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION assigning device/context/window!");
+        return false;
+    }
+
+    __try {
+        if (imguiContext) {
+            LogicDebugLog("Setting ImGui context...");
+            ImGui::SetCurrentContext(imguiContext);
+            LogicDebugLog("ImGui context set");
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION in SetCurrentContext!");
+        return false;
+    }
+
+    __try {
+        LogicDebugLog("Calling Console::Init...");
+        Console::Init();
+        LogicDebugLog("Console::Init done");
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION in Console::Init!");
+    }
+
+    __try {
+        LogicDebugLog("Getting module base...");
+        DATA::ModuleBase = (uint64_t)GetModuleHandleA(NULL);
+        LogicDebugLogPtr("ModuleBase: ", (void*)DATA::ModuleBase);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION getting module base!");
+    }
+
+    __try {
+        LogicDebugLog("Getting client rect...");
+        RECT clientRect;
+        if (GetClientRect(window, &clientRect)) {
+            Render::g_screenWidth = clientRect.right - clientRect.left;
+            Render::g_screenHeight = clientRect.bottom - clientRect.top;
+            LogicDebugLogInt("Screen width: ", Render::g_screenWidth);
+            LogicDebugLogInt("Screen height: ", Render::g_screenHeight);
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION in GetClientRect!");
+    }
+
+    __try {
+        LogicDebugLog("Calling Render::InitCircle...");
+        Render::InitCircle();
+        LogicDebugLog("Render::InitCircle done");
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION in Render::InitCircle!");
+    }
+
+    __try {
+        LogicDebugLog("Creating threads...");
+        g_logicRunning = true;
+        g_threadHandles[0] = CreateThread(nullptr, 0, ThreadMatrix, nullptr, 0, nullptr);
+        LogicDebugLogPtr("ThreadMatrix: ", g_threadHandles[0]);
+        g_threadHandles[1] = CreateThread(nullptr, 0, ThreadOrbwalkerHero, nullptr, 0, nullptr);
+        LogicDebugLogPtr("ThreadOrbwalkerHero: ", g_threadHandles[1]);
+        g_threadHandles[2] = CreateThread(nullptr, 0, ThreadOrbwalkerMinion, nullptr, 0, nullptr);
+        LogicDebugLogPtr("ThreadOrbwalkerMinion: ", g_threadHandles[2]);
+        g_threadHandles[3] = CreateThread(nullptr, 0, ThreadOrbwalkerFlee, nullptr, 0, nullptr);
+        LogicDebugLogPtr("ThreadOrbwalkerFlee: ", g_threadHandles[3]);
+        g_threadHandles[4] = CreateThread(nullptr, 0, ThreadAutoCastScan, nullptr, 0, nullptr);
+        LogicDebugLogPtr("ThreadAutoCastScan: ", g_threadHandles[4]);
+        LogicDebugLog("All threads created");
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogicDebugLog("EXCEPTION creating threads!");
+    }
+
+    init = true;
+    LogicDebugLog("=== Logic_Init END (success) ===");
+    return true;
+}
+
+extern "C" __declspec(dllexport) void Logic_Shutdown() {
+    g_logicRunning = false;
+
+    for (int i = 0; i < 5; i++) {
+        if (g_threadHandles[i]) {
+            WaitForSingleObject(g_threadHandles[i], 2000);
+            CloseHandle(g_threadHandles[i]);
+            g_threadHandles[i] = nullptr;
+        }
+    }
+
+    Console::Close();
+    init = false;
+}
+
+extern "C" __declspec(dllexport) void Logic_Render() {
+    if (!init) return;
+
+    __try {
+        ImDrawList* draw = ImGui::GetBackgroundDrawList();
+        auto local = SDK::ObjectManager::GetLocalPlayer();
+
+    if (local && AiManagerScan::g_scanState.isActive) {
+        AiManagerScan::UpdateGuidedScan(local->Address);
+    }
+
+    if (local && AiManagerNavGridScan::g_navGridScanState.isActive) {
+        AiManagerNavGridScan::UpdateNavGridGuidedScan(local->Address);
+    }
+
+    static bool wasLMBPressed = false;
+    bool isLMBPressed = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    if (isLMBPressed && !wasLMBPressed && !Menu::menuOpen) {
+        SDK::TargetSelector::OnLeftClick();
+    }
+    wasLMBPressed = isLMBPressed;
+
+    if (Menu::drawHeroes || Menu::drawMinions) {
+        if (local) {
+            if (Menu::drawHeroes) {
+                auto heroes = SDK::ObjectManager::GetHeroes();
+                for (auto hero : heroes) {
+                    if (!hero->IsValid() || hero->IsDead() || !hero->IsVisible()) continue;
+                    if (hero->Address == local->Address) continue;
+
+                    Vector3 pos = hero->GetPosition();
+                    Vector2 screenPos = Render::WorldToScreen(pos);
+
+                    if (screenPos.x > 0 && screenPos.y > 0 && screenPos.x < Render::g_screenWidth && screenPos.y < Render::g_screenHeight) {
+                        if (hero->GetTeam() != local->GetTeam()) {
+                            draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 30.0f, IM_COL32(255, 0, 0, 255), 32, 2.0f);
+
+                            if (Menu::drawEnemyRange) {
+                                float enemyRange = hero->GetAttackRange() + hero->GetBoundingRadius() + 65.0f;
+                                Render::DrawCircle3D(draw, pos, 64, enemyRange, ImColor(255, 50, 50, 100), 2.0f);
+                            }
+
+                            if (Menu::showObjectNames) {
+                                std::string text = hero->GetName() + " [AD: " + std::to_string((int)hero->GetAttackDamage()) + "]";
+                                draw->AddText(ImVec2(screenPos.x, screenPos.y - 10), IM_COL32(255, 255, 255, 255), text.c_str());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (Menu::drawMinions) {
+                auto minions = SDK::ObjectManager::GetMinions();
+                for (auto minion : minions) {
+                    if (!minion->IsValid() || minion->IsDead() || !minion->IsVisible()) continue;
+
+                    Vector3 pos = minion->GetPosition();
+                    Vector2 screenPos = Render::WorldToScreen(pos);
+
+                    if (screenPos.x > 0 && screenPos.y > 0 && screenPos.x < Render::g_screenWidth && screenPos.y < Render::g_screenHeight) {
+                        if (minion->GetTeam() != local->GetTeam()) {
+                            draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 15.0f, IM_COL32(255, 255, 0, 255));
+                        }
+                    }
+                }
+            }
+
+            if (Menu::drawRange) {
+                Vector3 pos = local->GetPosition();
+                float rangeWorld = local->GetRealAttackRange();
+                Render::DrawCircle3D(draw, pos, 64, rangeWorld, ImColor(0, 255, 255, 150), 2.0f);
             }
         }
-        __except (EXCEPTION_EXECUTE_HANDLER) {
-            // Memory not ready yet
-        }
-        
-        Sleep(100);
-        waited++;
     }
-    
-    logFile << "Timeout waiting for game" << std::endl;
-    logFile.close();
-    return false;
+
+    if (Menu::orbwalkerEnabled && local) {
+        if (local->IsValid()) {
+            Vector3 localPos = local->GetPosition();
+            float attackRange = local->GetRealAttackRange();
+
+            if (Menu::drawAttackRange) {
+                Render::DrawCircle3D(draw, localPos, 64, attackRange, ImColor(255, 255, 255, 100), 2.0f);
+            }
+
+            if (Menu::drawKillableMinions) {
+                float myDamage = local->GetAttackDamage();
+                auto minions = SDK::ObjectManager::GetAllMinions();
+
+                for (auto* minion : minions) {
+                    if (!minion || minion->GetTeam() == local->GetTeam()) continue;
+                    if (minion->IsDead() || !minion->IsVisible()) continue;
+
+                    float hp = minion->GetHealth();
+                    if (hp <= myDamage && hp > 0) {
+                        Vector3 minionPos = minion->GetPosition();
+                        Vector2 screenPos = Render::WorldToScreen(minionPos);
+
+                        if (screenPos.x > 0 && screenPos.y > 0 && screenPos.x < Render::g_screenWidth && screenPos.y < Render::g_screenHeight) {
+                            draw->AddCircleFilled(ImVec2(screenPos.x, screenPos.y), 8.0f, ImColor(0, 255, 0, 200));
+                            draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 10.0f, ImColor(255, 255, 255, 255), 32, 2.0f);
+                        }
+                    }
+                }
+
+                for (auto* minion : minions) delete minion;
+            }
+
+            if (Menu::tsDrawSelected && SDK::TargetSelector::SelectedTarget != 0) {
+                SDK::GameObject* selectedTarget = new SDK::GameObject(SDK::TargetSelector::SelectedTarget);
+
+                if (selectedTarget && selectedTarget->IsValid() && !selectedTarget->IsDead() && selectedTarget->IsVisible()) {
+                    Vector3 targetPos = selectedTarget->GetPosition();
+                    Vector2 screenPos = Render::WorldToScreen(targetPos);
+                    float boundingRadius = selectedTarget->GetBoundingRadius();
+
+                    if (screenPos.x > 0 && screenPos.y > 0 &&
+                        screenPos.x < Render::g_screenWidth && screenPos.y < Render::g_screenHeight) {
+
+                        ImU32 circleColor = IM_COL32(
+                            (int)(Menu::tsDrawColor[0] * 255),
+                            (int)(Menu::tsDrawColor[1] * 255),
+                            (int)(Menu::tsDrawColor[2] * 255),
+                            255
+                        );
+
+                        Render::DrawCircle3D(draw, targetPos, 64, boundingRadius + 20.0f, circleColor, 3.0f);
+
+                        ImU32 glowColor = IM_COL32(
+                            (int)(Menu::tsDrawColor[0] * 255),
+                            (int)(Menu::tsDrawColor[1] * 255),
+                            (int)(Menu::tsDrawColor[2] * 255),
+                            100
+                        );
+                        Render::DrawCircle3D(draw, targetPos, 64, boundingRadius + 40.0f, glowColor, 2.0f);
+
+                        draw->AddCircle(ImVec2(screenPos.x, screenPos.y), 40.0f, circleColor, 32, 3.0f);
+
+                        if (Menu::tsHighlightSelected) {
+                            static float pulse = 0.0f;
+                            pulse += 0.05f;
+                            if (pulse > 3.14159f * 2.0f) pulse = 0.0f;
+                            float pulseSize = 35.0f + sin(pulse) * 8.0f;
+
+                            ImU32 highlightColor = IM_COL32(
+                                (int)(Menu::tsDrawColor[0] * 255),
+                                (int)(Menu::tsDrawColor[1] * 255),
+                                (int)(Menu::tsDrawColor[2] * 255),
+                                150
+                            );
+                            draw->AddCircle(ImVec2(screenPos.x, screenPos.y), pulseSize, highlightColor, 32, 2.0f);
+                        }
+
+                        ImVec2 textSize = ImGui::CalcTextSize("TARGET");
+                        draw->AddText(ImVec2(screenPos.x - textSize.x / 2, screenPos.y - 60), circleColor, "TARGET");
+                    }
+                }
+
+                delete selectedTarget;
+            }
+        }
+    }
+
+        Menu::Render();
+
+        if (local) delete local;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-// ============================================================================
-// EJECT THREAD - Safe DLL unload
-// ============================================================================
-DWORD __stdcall EjectThread(LPVOID lpParameter)
-{
-    Sleep(100);
-    kiero::shutdown();
-    FreeLibraryAndExitThread(g_hLocalModule, 0);
+extern "C" __declspec(dllexport) LRESULT Logic_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_KEYDOWN && wParam == VK_INSERT) {
+        Menu::menuOpen = !Menu::menuOpen;
+    }
+
+    if (Menu::menuOpen) {
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+            return 1;
+    }
+
+    if (uMsg == WM_LBUTTONDOWN && !Menu::menuOpen) {
+        SDK::TargetSelector::OnLeftClick();
+    }
+
     return 0;
 }
 
-// ============================================================================
-// MAIN INJECTION THREAD - All initialization happens here
-// ============================================================================
-DWORD __stdcall OnInject(LPVOID lpReserved)
-{
-    // Debug File Init
-    std::ofstream logFile("orbwalker_debug.txt", std::ios_base::trunc);
-    logFile << "--- INTERNAL ORBWALKER DEBUG LOG START ---" << std::endl;
-    logFile << "Injected successfully!" << std::endl;
-    logFile.close();
-    
-    Sleep(100);
-    
-    // Hide this thread from debugger
-    if (HideThread(::GetCurrentThread())) {
-        std::ofstream log("orbwalker_debug.txt", std::ios_base::app);
-        log << "Thread hidden from debugger" << std::endl;
-        log.close();
-    }
-    
-    // Wait for game to be ready
-    if (!WaitForGameReady(60)) {
-        std::ofstream log("orbwalker_debug.txt", std::ios_base::app);
-        log << "Game not ready, aborting..." << std::endl;
-        log.close();
-        return 0;
-    }
-    
-    // Start all worker threads
-    CreateThread(nullptr, 0, ThreadGUI, g_hLocalModule, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadMatrix, g_hLocalModule, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadOrbwalkerHero, g_hLocalModule, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadOrbwalkerMinion, g_hLocalModule, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadOrbwalkerFlee, g_hLocalModule, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadAutoCastScan, g_hLocalModule, 0, nullptr);
-    CreateThread(nullptr, 0, ThreadTerminate, g_hLocalModule, 0, nullptr);
-    
-    // Wait for eject signal
-    while (!g_bEject)
-    {
-        Sleep(5);
-        if (GetAsyncKeyState(VK_DELETE) & 1) {
-            g_bEject = true;
-        }
-    }
-    
-    // Clean eject
-    CreateThread(nullptr, 0, EjectThread, nullptr, 0, nullptr);
-    
-    return 0;
+extern "C" __declspec(dllexport) bool Logic_WantCaptureMouse() {
+    return Menu::menuOpen && ImGui::GetIO().WantCaptureMouse;
 }
 
 // ============================================================================
-// DLL MAIN ENTRY POINT
+// DLL MAIN (minimal - just for DLL load/unload notification)
 // ============================================================================
 BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved) {
-    switch (dwReason)
-    {
-    case DLL_PROCESS_ATTACH:
-        Console::Init();
-        g_hLocalModule = hMod;
+    if (dwReason == DLL_PROCESS_ATTACH) {
+        DeleteFileA("C:\\zz\\Script-New\\x64\\Release\\logic_debug.txt");
+        LogicDebugLog("=== logic.dll DllMain DLL_PROCESS_ATTACH ===");
+        LogicDebugLogPtr("Module handle: ", hMod);
         DisableThreadLibraryCalls(hMod);
-        CreateThread(nullptr, 0, OnInject, hMod, 0, nullptr);
-        break;
-    case DLL_PROCESS_DETACH:
-        Console::Close();
-        kiero::shutdown();
-        break;
+        LogicDebugLog("DisableThreadLibraryCalls done");
+    }
+    else if (dwReason == DLL_PROCESS_DETACH) {
+        LogicDebugLog("=== logic.dll DllMain DLL_PROCESS_DETACH ===");
     }
     return TRUE;
-}
-
-// ============================================================================
-// MANUAL MAP ENTRY POINT
-// ============================================================================
-extern "C" __declspec(dllexport) void ManualMapEntry(HMODULE hMod) {
-    g_hLocalModule = hMod;
-    DisableThreadLibraryCalls(hMod);
-    CreateThread(nullptr, 0, OnInject, hMod, 0, nullptr);
 }
 

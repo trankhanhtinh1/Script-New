@@ -81,25 +81,18 @@ namespace IDA
 
 namespace AiManagerScan
 {
-    // Candidate offsets to scan for Vec3 positions
     struct OffsetCandidate {
         uint64_t offset;
         const char* name;
     };
-    
-    // Scan configuration based on leagueoflegends-master
-    inline std::vector<OffsetCandidate> g_vec3Candidates = {
-        // Known offsets from leagueoflegends-master (they work with their ancient decrypt)
+
+    inline constexpr OffsetCandidate g_vec3Candidates[] = {
         {0x14, "TargetPosition_0x14"},
         {0x2D0, "PathStart_0x2D0"},
         {0x2DC, "PathEnd_0x2DC"},
         {0x414, "ServerPos_0x414"},
-        
-        // Our current offsets (may work with new decrypt)
         {0x1E0, "StartPath_0x1E0"},
         {0x23C, "EndPath_0x23C"},
-        
-        // Additional candidates for scan
         {0x20, "Vec3_0x20"},
         {0x2C, "Vec3_0x2C"},
         {0x38, "Vec3_0x38"},
@@ -124,9 +117,9 @@ namespace AiManagerScan
         {0x480, "Vec3_0x480"},
         {0x48C, "Vec3_0x48C"},
     };
-    
-    inline std::vector<OffsetCandidate> g_boolCandidates = {
-        // IsMoving/IsDashing candidates
+    inline constexpr size_t g_vec3CandidatesCount = sizeof(g_vec3Candidates) / sizeof(g_vec3Candidates[0]);
+
+    inline constexpr OffsetCandidate g_boolCandidates[] = {
         {0x2BC, "IsMoving_0x2BC"},
         {0x324, "IsDashing_0x324"},
         {0x1B8, "State_0x1B8"},
@@ -143,27 +136,28 @@ namespace AiManagerScan
         {0x323, "Bool_0x323"},
         {0x325, "Bool_0x325"},
     };
-    
-    inline std::vector<OffsetCandidate> g_intCandidates = {
-        // Segment count / current segment
+    inline constexpr size_t g_boolCandidatesCount = sizeof(g_boolCandidates) / sizeof(g_boolCandidates[0]);
+
+    inline constexpr OffsetCandidate g_intCandidates[] = {
         {0x2C0, "CurrentSegment_0x2C0"},
         {0x2F0, "SegmentsCount_0x2F0"},
         {0x210, "Segments_0x210"},
         {0x268, "HasPath_0x268"},
     };
-    
-    inline std::vector<OffsetCandidate> g_floatCandidates = {
-        // Dash speed
+    inline constexpr size_t g_intCandidatesCount = sizeof(g_intCandidates) / sizeof(g_intCandidates[0]);
+
+    inline constexpr OffsetCandidate g_floatCandidates[] = {
         {0x300, "DashSpeed_0x300"},
         {0x304, "Float_0x304"},
         {0x308, "Float_0x308"},
     };
-    
-    inline std::vector<OffsetCandidate> g_ptrCandidates = {
-        // NavArray / Segments array pointer
+    inline constexpr size_t g_floatCandidatesCount = sizeof(g_floatCandidates) / sizeof(g_floatCandidates[0]);
+
+    inline constexpr OffsetCandidate g_ptrCandidates[] = {
         {0x2E8, "SegmentsPtr_0x2E8"},
         {0x348, "NavArray_0x348"},
     };
+    inline constexpr size_t g_ptrCandidatesCount = sizeof(g_ptrCandidates) / sizeof(g_ptrCandidates[0]);
     
     // ============================================================================
     // SAFE MEMORY READ HELPERS (SEH-compatible, no C++ objects)
