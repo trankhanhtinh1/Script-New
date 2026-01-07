@@ -28,7 +28,6 @@
 #include "SDK/MissileScan.h" // NEW: IDA-based Missile decryption
 #include "SDK/MissileOffsetScanner.h" // NEW: Dynamic offset discovery for multi-version support
 #include "SDK/SpellDatabase.h" // NEW: Database for missile speed/radius/width verification
-#include "Console.h"
 
 // ImGui
 #include "imgui/imgui.h"
@@ -7500,13 +7499,11 @@ BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved) {
     switch (dwReason)
     {
     case DLL_PROCESS_ATTACH:
-        Console::Init();
         g_hLocalModule = hMod;
         DisableThreadLibraryCalls(hMod);
         CreateThread(nullptr, 0, OnInject, hMod, 0, nullptr);
         break;
     case DLL_PROCESS_DETACH:
-        Console::Close();
         kiero::shutdown();
         break;
     }
