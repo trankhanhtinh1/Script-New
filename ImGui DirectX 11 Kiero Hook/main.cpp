@@ -42,9 +42,6 @@
 static volatile bool g_logicRunning = false;
 static HANDLE g_threadHandles[5] = { nullptr };
 
-// ============================================================================
-// DEBUG LOGGING SYSTEM - 詳細記錄用於崩潰診斷
-// ============================================================================
 static HMODULE g_hLogicModule = nullptr;
 static char g_debugPath[MAX_PATH] = {0};
 

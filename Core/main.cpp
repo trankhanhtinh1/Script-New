@@ -53,7 +53,6 @@ static bool g_loadAttempted = false;
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-// 只在崩潰時寫入 crash.txt
 static void WriteCrashLog(const char* msg) {
     HANDLE hFile = CreateFileA(g_crashPath, FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile != INVALID_HANDLE_VALUE) {
