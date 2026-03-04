@@ -19,15 +19,6 @@
     <Filter Include="imgui">
       <UniqueIdentifier>{3ba57e14-8ac2-485a-b12c-f06690c43d6e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="SpoofCALL">
-      <UniqueIdentifier>{c990f195-b49c-43a6-9a52-7c48c0e1bbce}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="SDK">
-      <UniqueIdentifier>{a1b2c3d4-e5f6-7890-1234-567890abcdef}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Script">
-      <UniqueIdentifier>{44d77651-cd30-41c5-b69a-b28de819242f}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="kiero\minhook\src\buffer.c">
@@ -68,12 +59,6 @@
     </ClCompile>
     <ClCompile Include="imgui\imgui_widgets.cpp">
       <Filter>imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="Render.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Menu.cpp">
-      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -136,51 +121,28 @@
     <ClInclude Include="includes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Vector.h">
+    <ClInclude Include="core\Offsets.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Render.h">
+    <ClInclude Include="core\LeagueObfuscation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Menu.h">
+    <ClInclude Include="core\Vector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SDK\GameObject.h">
-      <Filter>SDK</Filter>
+    <ClInclude Include="core\Globals.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SDK\ObjectManager.h">
-      <Filter>SDK</Filter>
+    <ClInclude Include="menu\MenuConfig.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SDK\Game.h">
-      <Filter>SDK</Filter>
-    </ClInclude>
-    <ClInclude Include="SDK\TargetSelector.h">
-      <Filter>SDK</Filter>
-    </ClInclude>
-    <ClInclude Include="SDK\Orbwalker.h">
-      <Filter>SDK</Filter>
-    </ClInclude>
-    <ClInclude Include="SDK\Offsets.h">
-      <Filter>SDK</Filter>
-    </ClInclude>
-    <ClInclude Include="SDK\Spell.h">
-      <Filter>SDK</Filter>
-    </ClInclude>
-    <ClInclude Include="SDK\HealthPrediction.h">
-      <Filter>SDK</Filter>
-    </ClInclude>
-    <ClInclude Include="Spoof_call\spoofcall.h">
-      <Filter>SpoofCALL</Filter>
+    <ClInclude Include="menu\Menu.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="kiero\minhook\dll_resources\MinHook.def">
       <Filter>kiero</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <MASM Include="Spoof_call\spoof.asm">
-      <Filter>SpoofCALL</Filter>
-    </MASM>
   </ItemGroup>
 </Project>

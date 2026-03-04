@@ -1,333 +1,170 @@
 #pragma once
-#include "ObjectManager.h"
-#include "BuffManager.h"
-#include "Game.h"
-#include "DamageCalculator.h"
-#include "ChampionDatabase.h"
-#include <limits>
-#include <set>
-#include <string>
-#include <vector>
+#include "GameObject.h"
+#include "GameObjects.h"
 #include <vector>
 #include <algorithm>
-#include <fstream>
-#include <iomanip>
-#include "../Menu.h"
 
-namespace SDK
-{
-    // Target Selector Mode (based on NewTargetSelector.cs)
-    // Must match Menu.cpp tsMode order: 0=LowestHealth, 1=MostPriority, 2=NearMouse, 3=LeastAttacks, 4=MostAD, 5=MostAP
-    enum class TargetSelectorMode {
-        LowestHealth = 0,   // GetRealHealth - Lowest effective health
-        MostPriority = 1,   // GetPriority - Highest priority champion (ADC > Assassin > Bruiser > Tank)
-        NearMouse = 2,      // Closest to mouse cursor
-        LeastAttacks = 3,   // Fewest auto attacks to kill
-        MostAD = 4,         // Best for AD damage dealers
-        MostAP = 5          // Best for AP damage dealers
-    };
+// ============================================================================
+// TargetSelector — Select best target for combat
+// Reference: EnsoulSharp.SDK/Core/Wrappers/TargetSelector/*
+// ============================================================================
 
-    class TargetSelector
-    {
+namespace SDK {
+
+    class TargetSelector {
     public:
-        static uint64_t SelectedTarget;      // Manually selected target (Address)
-        static bool ForceSelectedTarget;      // Force attack selected target if in range
-        static bool OnlySelectedTarget;       // Only attack selected target
+        // Selection modes
+        enum class Mode {
+            LowestHP,       // Attack lowest health first
+            Closest,        // Attack nearest enemy
+            MostAD,         // Prioritize highest AD
+            MostAP,         // Prioritize highest AP
+            Priority,       // Champion priority list
+            NearMouse,      // Closest to mouse cursor
+            LeastAttacks    // Fewest attacks to kill
+        };
 
-        // Get champion priority using ChampionDatabase (supports menu customization)
-        // Returns: 5=Max (ADC), 4=High (Assassin), 3=Medium (Fighter), 2=Default, 1=Low (Tank)
-        static int GetPriority(GameObject* hero) {
-            if (!hero) return 1;
-            std::string name = hero->GetName();
-            return ChampionDatabase::GetPriority(name);
-        }
-        
-        // ============================================================================
-        // IsValidTarget - WITH BuffManager integration
-        // Based on NewTargetSelector.cs IsValidTarget()
-        // ============================================================================
-        static bool IsValidTarget(GameObject* target, float range, Vector3* checkFrom = nullptr) {
-            if (!target || !target->IsValid()) return false;
-            if (target->IsDead()) return false;
-            if (!target->IsVisible()) return false;
-            if (!target->IsTargetable()) return false;
-            
-            // ============================================================================
-            // BUFF CHECKS - From NewTargetSelector.cs
-            // ============================================================================
-            float gameTime = Game::GetTime();
-            BuffManager buffMgr(target->Address);
-            
-            // Check invulnerability (Zhonya, Kayle R, Kindred R, etc.)
-            if (buffMgr.IsInvulnerable(gameTime)) {
-                return false;
-            }
-            
-            // Check zombie state (Sion passive, Karthus passive, Kog'Maw passive)
-            if (buffMgr.IsZombie(gameTime)) {
-                return false;
-            }
-            
-            // Check Tryndamere ult - unkillable at low HP
-            // From NewTargetSelector.cs: HasBuff("UndyingRage") && health <= 71
-            if (buffMgr.HasBuff("UndyingRage", gameTime) && target->GetHealth() <= 71.0f) {
-                return false;
-            }
-            
-            // Check untargetable (Fizz E, Vladimir W, Master Yi Q, etc.)
-            if (buffMgr.IsUntargetable(gameTime)) {
-                return false;
-            }
-            
-            // ============================================================================
-            // Range check
-            // ============================================================================
-            GameObject* local = ObjectManager::GetLocalPlayer();
-            if (!local) return false;
-            
-            Vector3 fromPos = checkFrom ? *checkFrom : local->GetPosition();
-            float dist = fromPos.Distance(target->GetPosition());
-            
-            delete local;
-            
-            return dist <= range + target->GetBoundingRadius();
-        }
-        
-        // AaIndicator - Số đòn đánh cần để hạ mục tiêu (lower = better target)
-        // Based on NewTargetSelector.cs Base.AaIndicator()
-        static float GetAaIndicator(GameObject* source, GameObject* target, DamageType damageType) {
-            if (!source || !target) return 999999.0f;
-            
-            float effectiveHealth = DamageCalculator::GetEffectiveHealth(source, target, damageType);
-            float aaDamage = DamageCalculator::GetAutoAttackDamage(source, target, false);
-            
-            if (aaDamage <= 0) return 999999.0f;
-            
-            // Return number of auto attacks needed (float for better sorting)
-            return effectiveHealth / aaDamage;
-        }
-        
-        // GetRealHealth - Effective health against damage type (lower = better target)
-        static float GetRealHealth(GameObject* source, GameObject* target, DamageType damageType) {
-            return DamageCalculator::GetEffectiveHealth(source, target, damageType);
-        }
+        // ====================================================================
+        // Main target selection
+        // ====================================================================
 
-        // Main GetTarget including Modes (based on NewTargetSelector.cs)
-        // SAFE VERSION - with proper null checks and memory management
-        static GameObject* GetTarget(float range, TargetSelectorMode mode = TargetSelectorMode::LowestHealth) {
-            GameObject* local = ObjectManager::GetLocalPlayer();
-            if (!local) return nullptr;
-            
-            // Read local player data first
-            Vector3 myPos = local->GetPosition();
-            int myTeam = local->GetTeam();
-            uint64_t myAddr = local->Address;
+        static GameObject GetTarget(float range, Mode mode = Mode::LowestHP) {
+            auto targets = GetValidTargets(range);
+            if (targets.empty()) return GameObject();
 
-            // 1. Check Selected Target (Force/Only Select logic from NewTargetSelector.cs)
-            if (SelectedTarget != 0) {
-                GameObject manualTarget(SelectedTarget);
-                if (manualTarget.IsValid() && !manualTarget.IsDead() && manualTarget.IsVisible()) {
-                    float dist = myPos.Distance(manualTarget.GetPosition());
-                    bool inRange = dist <= range + manualTarget.GetBoundingRadius();
-                    
-                    // ForceSelectedTarget: Return selected if in range
-                    if (ForceSelectedTarget && inRange) {
-                        delete local;
-                        return new GameObject(SelectedTarget);
-                    }
-                    
-                    // OnlySelectedTarget: Only attack selected
-                    if (OnlySelectedTarget) {
-                        delete local;
-                        if (inRange) return new GameObject(SelectedTarget);
-                        return nullptr;
-                    }
-                }
-            }
-
-            // 2. Scan Enemy Heroes - Find best target directly (no vector storage)
-            auto heroes = ObjectManager::GetHeroes();
-            
-            uint64_t bestAddr = 0;
-            float bestScore = 999999.0f;
-            
-            for (auto hero : heroes) {
-                if (!hero || !hero->IsValid()) continue;
-                if (hero->Address == myAddr) continue;
-                if (hero->GetTeam() == myTeam) continue;
-                if (hero->IsDead()) continue;
-                if (!hero->IsVisible()) continue;
-                if (!hero->IsTargetable()) continue;
-                
-                // Range check
-                float dist = myPos.Distance(hero->GetPosition());
-                if (dist > range + hero->GetBoundingRadius()) continue;
-                
-                // Calculate score based on mode (use safe methods only)
-                float score = hero->GetHealth(); // Default: lowest health
-                
-                if (mode == TargetSelectorMode::MostPriority) {
-                    score = (float)(-GetPriority(hero)); // Negative so higher priority = lower score
-                }
-                else if (mode == TargetSelectorMode::NearMouse) {
-                    Vector3 mousePos = Game::GetMousePos();
-                    score = mousePos.Distance(hero->GetPosition());
-                }
-                // NOTE: LeastAttacks, MostAD, MostAP fallback to LowestHealth for safety
-                
-                // Update best target
-                if (score < bestScore) {
-                    bestScore = score;
-                    bestAddr = hero->Address;
-                }
-            }
-            
-            // Cleanup heroes
-            for (auto h : heroes) delete h;
-            delete local;
-
-            if (bestAddr == 0) {
-                return nullptr;
-            }
-            
-            return new GameObject(bestAddr);
-        }
-
-        // ============================================================================
-        // GetTargets - Get ordered list of valid targets (for multi-target skills)
-        // Based on NewTargetSelector.cs GetTargets()
-        // ============================================================================
-        static std::vector<GameObject*> GetTargets(float range, TargetSelectorMode mode = TargetSelectorMode::LowestHealth) {
-            std::vector<GameObject*> result;
-
-            GameObject* local = ObjectManager::GetLocalPlayer();
-            if (!local) return result;
-            
-            Vector3 myPos = local->GetPosition();
-
-            // Scan Enemy Heroes
-            auto heroes = ObjectManager::GetHeroes();
-            std::vector<GameObject*> validHeroes;
-            
-            for (auto hero : heroes) {
-                if (!hero->IsValid()) continue;
-                if (hero->Address == local->Address) continue;
-                if (hero->GetTeam() == local->GetTeam()) continue;
-                if (!IsValidTarget(hero, range, &myPos)) continue;
-                validHeroes.push_back(new GameObject(hero->Address));
-            }
-
-            // Sort by mode
             switch (mode) {
-                case TargetSelectorMode::MostAD:
-                    std::sort(validHeroes.begin(), validHeroes.end(), [local](GameObject* a, GameObject* b) {
-                        return GetAaIndicator(local, a, DamageType::Physical) < GetAaIndicator(local, b, DamageType::Physical);
-                    });
-                    break;
-                case TargetSelectorMode::MostPriority:
-                    std::sort(validHeroes.begin(), validHeroes.end(), [](GameObject* a, GameObject* b) {
-                        return GetPriority(a) > GetPriority(b);
-                    });
-                    break;
-                case TargetSelectorMode::LowestHealth:
-                    std::sort(validHeroes.begin(), validHeroes.end(), [local](GameObject* a, GameObject* b) {
-                        return a->GetHealth() < b->GetHealth();
-                    });
-                    break;
-                default:
-                    break;
+            case Mode::LowestHP:
+                return GetLowestHP(targets);
+            case Mode::Closest:
+                return GetClosest(targets);
+            case Mode::MostAD:
+                return GetMostAD(targets);
+            case Mode::MostAP:
+                return GetMostAP(targets);
+            case Mode::Priority:
+                return GetByPriority(targets);
+            case Mode::NearMouse:
+                return GetNearMouse(targets);
+            case Mode::LeastAttacks:
+                return GetLeastAttacks(targets);
+            default:
+                return GetLowestHP(targets);
             }
+        }
 
-            // If ForceSelectedTarget is on and selected is in list, move to front
-            if (ForceSelectedTarget && SelectedTarget != 0) {
-                for (size_t i = 0; i < validHeroes.size(); i++) {
-                    if (validHeroes[i]->Address == SelectedTarget) {
-                        GameObject* selected = validHeroes[i];
-                        validHeroes.erase(validHeroes.begin() + i);
-                        validHeroes.insert(validHeroes.begin(), selected);
-                        break;
-                    }
+        // Get multiple targets sorted by mode
+        static std::vector<GameObject> GetTargets(float range, Mode mode = Mode::LowestHP) {
+            auto targets = GetValidTargets(range);
+            SortByMode(targets, mode);
+            return targets;
+        }
+
+        // ====================================================================
+        // Validity check
+        // ====================================================================
+
+        static bool IsValidTarget(const GameObject& target, float range = 25000.0f) {
+            if (!target.IsValid()) return false;
+            if (!target.IsAlive()) return false;
+            if (!target.IsVisible()) return false;
+            if (!target.IsTargetable()) return false;
+            if (range > 0.0f) {
+                float dist = GameObjects::Player.DistanceTo(target);
+                if (dist > range) return false;
+            }
+            return true;
+        }
+
+    private:
+        // ====================================================================
+        // Get all valid targets in range
+        // ====================================================================
+        static std::vector<GameObject> GetValidTargets(float range) {
+            std::vector<GameObject> result;
+            for (auto& hero : GameObjects::EnemyHeroes) {
+                if (IsValidTarget(hero, range)) {
+                    result.push_back(hero);
                 }
             }
-
-            // Cleanup source heroes
-            for (auto h : heroes) delete h;
-            delete local;
-
-            return validHeroes;
+            return result;
         }
 
-        // ============================================================================
-        // Click-to-Select Handler (LMB - Left Mouse Button)
-        // Call this from hkPresent when left mouse button is pressed
-        // Uses oUnderMouseObj offset to get object under cursor
-        // ============================================================================
-        static void OnLeftClick() {
-            uint64_t moduleBase = (uint64_t)GetModuleHandle(NULL);
-            
-            // Read UnderMouseObj pointer
-            uint64_t underMousePtr = *(uint64_t*)(moduleBase + Offset::oUnderMouseObj);
-            if (!underMousePtr || underMousePtr < 0x10000) {
-                SelectedTarget = 0;  // Clear selection if clicking empty space
-                return;
-            }
-            
-            // Read actual object from offset
-            uint64_t objAddress = *(uint64_t*)(underMousePtr + Offset::oUnderMouseObjOffset);
-            if (!objAddress || objAddress < 0x10000) {
-                SelectedTarget = 0;
-                return;
-            }
-            
-            // Validate object
-            GameObject obj(objAddress);
-            if (!obj.IsValid() || obj.IsDead()) {
-                return; // Don't clear - might be clicking on terrain
-            }
-            
-            GameObject* local = ObjectManager::GetLocalPlayer();
-            if (!local) return;
-            
-            // Check if enemy
-            if (obj.GetTeam() == local->GetTeam()) {
-                delete local;
-                return; // Clicked on ally, don't change selection
-            }
-            
-            // Set as selected target (any enemy object - hero, minion, etc.)
-            SelectedTarget = objAddress;
-            delete local;
+        // ====================================================================
+        // Mode implementations
+        // ====================================================================
+
+        static GameObject GetLowestHP(std::vector<GameObject>& targets) {
+            return *std::min_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    return a.GetHealth() < b.GetHealth();
+                });
         }
 
-        // Get currently selected target as GameObject
-        static GameObject* GetSelectedTarget() {
-            if (SelectedTarget == 0) return nullptr;
-            GameObject* target = new GameObject(SelectedTarget);
-            if (target->IsValid() && !target->IsDead()) {
-                return target;
-            }
-            delete target;
-            SelectedTarget = 0;  // Clear invalid selection
-            return nullptr;
+        static GameObject GetClosest(std::vector<GameObject>& targets) {
+            return *std::min_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    return GameObjects::Player.DistanceTo(a) < GameObjects::Player.DistanceTo(b);
+                });
         }
 
-        // Clear manual target selection
-        static void ClearSelectedTarget() {
-            SelectedTarget = 0;
+        static GameObject GetMostAD(std::vector<GameObject>& targets) {
+            return *std::max_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    return a.GetTotalAD() < b.GetTotalAD();
+                });
+        }
+
+        static GameObject GetMostAP(std::vector<GameObject>& targets) {
+            return *std::max_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    return a.GetAP() < b.GetAP();
+                });
+        }
+
+        static GameObject GetNearMouse(std::vector<GameObject>& targets) {
+            Vec3 mousePos = Game::GetMouseWorldPos();
+            return *std::min_element(targets.begin(), targets.end(),
+                [&mousePos](const GameObject& a, const GameObject& b) {
+                    return a.GetPosition().Distance2D(mousePos) < b.GetPosition().Distance2D(mousePos);
+                });
+        }
+
+        static GameObject GetLeastAttacks(std::vector<GameObject>& targets) {
+            float myAD = GameObjects::Player.GetTotalAD();
+            if (myAD <= 0.0f) myAD = 1.0f;
+            return *std::min_element(targets.begin(), targets.end(),
+                [myAD](const GameObject& a, const GameObject& b) {
+                    return (a.GetHealth() / myAD) < (b.GetHealth() / myAD);
+                });
+        }
+
+        static GameObject GetByPriority(std::vector<GameObject>& targets) {
+            // Champion priority: ADC > Mage > Assassin > Support > Tank
+            // Simplified: sort by total AD+AP descending → highest threat first
+            return *std::max_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    float scoreA = a.GetTotalAD() + a.GetAP();
+                    float scoreB = b.GetTotalAD() + b.GetAP();
+                    return scoreA < scoreB;
+                });
+        }
+
+        static void SortByMode(std::vector<GameObject>& targets, Mode mode) {
+            switch (mode) {
+            case Mode::LowestHP:
+                std::sort(targets.begin(), targets.end(),
+                    [](const GameObject& a, const GameObject& b) { return a.GetHealth() < b.GetHealth(); });
+                break;
+            case Mode::Closest:
+                std::sort(targets.begin(), targets.end(),
+                    [](const GameObject& a, const GameObject& b) {
+                        return GameObjects::Player.DistanceTo(a) < GameObjects::Player.DistanceTo(b);
+                    });
+                break;
+            default:
+                break;
+            }
         }
     };
-    
-    // Define statics (inline to avoid ODR violations in header-only)
-    inline uint64_t TargetSelector::SelectedTarget = 0;
-    inline bool TargetSelector::ForceSelectedTarget = true;
-    inline bool TargetSelector::OnlySelectedTarget = false;
-}
 
-// ============================================================================
-// NOTE: Minion targeting functions have been moved to MinionSelector.h
-// Use SDK::MinionSelector for:
-//   - GetLastHitMinion()
-//   - GetLaneClearMinion()
-//   - GetJungleMinion()
-//   - ShouldWait()
-// ============================================================================
+} // namespace SDK
