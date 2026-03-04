@@ -1,288 +1,523 @@
 #pragma once
-// ============================================================================
-// SPELLCASTER.H - Cast spells using memory function call with spoof_call
-// Based on: leagueoflegends-master CastSpell implementation
-// ============================================================================
-
-#include <Windows.h>
-#include <fstream>
-#include <sstream>
-#include <iomanip>
-#include <ctime>
-#include <chrono>
-#include "Offsets.h"
-#include "ObjectManager.h"
 #include "GameObject.h"
-#include "Spell.h"
-#include "Game.h"  // For Game::GetTime()
-#include "Orbwalker.h"  // Contains mem::ScanModInternal
-#include "../Spoof_call/spoofcall.h"
-#include "../Vector.h"
+#include "SpellBook.h"
+#include "GameObjects.h"
+#include "Prediction.h"
+#include "Game.h"
+#include "Enums.h"
+#include "../spoof/spoofcall.h"
+#include <Psapi.h>
+#include <string>
 
-namespace SDK
-{
-    class SpellCaster
-    {
+// ============================================================================
+// SpellCaster — High-level spell casting with prediction
+// Reference: EnsoulSharp.SDK/Core/Wrappers/Spells/Spell.cs
+// ============================================================================
+
+namespace SDK {
+
+    // Collision flags for spells
+    enum CollisionFlags : int {
+        CollisionNone          = 0,
+        CollisionMinions       = (1 << 0),
+        CollisionChampions     = (1 << 1),
+        CollisionYasuoWall     = (1 << 2),
+        CollisionWalls         = (1 << 4),
+    };
+
+    // Spell type
+    enum class SpellType {
+        Targeted,
+        Line,
+        Circle,
+        Cone,
+        None
+    };
+
+    class SpellCaster {
     public:
-        // Static log file
-        static std::ofstream& GetLog() {
-            static std::ofstream log("castspell_debug.txt", std::ios::app);
-            return log;
+        // Spell properties
+        SpellSlotId Slot;
+        SpellType Type;
+        float Range;
+        float Speed;            // 0 = instant
+        float Delay;            // Cast delay (seconds)
+        float Width;            // Skillshot width
+        int Collision;          // CollisionFlags
+        bool IsCharged;
+        float ChargeTime;
+        float MinRange;
+
+        // Constructors
+        SpellCaster()
+            : Slot(SpellSlotId::Q), Type(SpellType::Targeted), Range(0),
+              Speed(0), Delay(0.25f), Width(0), Collision(CollisionNone),
+              IsCharged(false), ChargeTime(0), MinRange(0) {}
+
+        SpellCaster(SpellSlotId slot, float range)
+            : Slot(slot), Type(SpellType::Targeted), Range(range),
+              Speed(0), Delay(0.25f), Width(0), Collision(CollisionNone),
+              IsCharged(false), ChargeTime(0), MinRange(0) {}
+
+        // ====================================================================
+        // Factory Methods
+        // ====================================================================
+
+        static SpellCaster Targeted(SpellSlotId slot, float range) {
+            SpellCaster s;
+            s.Slot = slot; s.Range = range; s.Type = SpellType::Targeted;
+            return s;
         }
-        
-        // Log with timestamp
-        static void Log(const std::string& msg) {
-            auto& log = GetLog();
-            auto now = std::chrono::system_clock::now();
-            auto time = std::chrono::system_clock::to_time_t(now);
-            log << "[" << std::put_time(std::localtime(&time), "%H:%M:%S") << "] " << msg << std::endl;
-            log.flush();
+
+        static SpellCaster Line(SpellSlotId slot, float range, float speed,
+                                float width, float delay = 0.25f) {
+            SpellCaster s;
+            s.Slot = slot; s.Type = SpellType::Line;
+            s.Range = range; s.Speed = speed; s.Width = width; s.Delay = delay;
+            return s;
         }
-        
-        static void LogHex(const std::string& name, uint64_t value) {
-            std::stringstream ss;
-            ss << name << ": 0x" << std::hex << value << std::dec;
-            Log(ss.str());
+
+        static SpellCaster Circle(SpellSlotId slot, float range, float radius,
+                                  float speed = 0, float delay = 0.25f) {
+            SpellCaster s;
+            s.Slot = slot; s.Type = SpellType::Circle;
+            s.Range = range; s.Speed = speed; s.Width = radius * 2; s.Delay = delay;
+            return s;
         }
-        
-        // ============================================================================
-        // Get spoof trampoline (pattern scan for FF 23 = jmp qword ptr [rbx])
-        // ============================================================================
-        static void* GetSpoofTrampoline() {
-            static void* spoof_trampoline = nullptr;
-            if (!spoof_trampoline) {
-                spoof_trampoline = mem::ScanModInternal(
-                    (char*)"\xFF\x23", 
-                    (char*)"xx", 
-                    (char*)GetModuleHandleA(nullptr)
-                );
-            }
-            return spoof_trampoline;
+
+        static SpellCaster Cone(SpellSlotId slot, float range, float angle,
+                                float delay = 0.25f) {
+            SpellCaster s;
+            s.Slot = slot; s.Type = SpellType::Cone;
+            s.Range = range; s.Width = angle; s.Delay = delay;
+            return s;
         }
-        
-        // ============================================================================
-        // Read/Write Vector3 helpers (from leagueoflegends-master)
-        // ============================================================================
-        static Vector3 ReadVector3(uint64_t offset) {
-            Vector3 result;
-            result.x = *(float*)(offset);
-            result.y = *(float*)(offset + 0x4);
-            result.z = *(float*)(offset + 0x8);
-            return result;
+
+        // ====================================================================
+        // Builder
+        // ====================================================================
+        SpellCaster& SetCollision(int flags) { Collision = flags; return *this; }
+        SpellCaster& SetCharged(float time, float minR) {
+            IsCharged = true; ChargeTime = time; MinRange = minR; return *this;
         }
-        
-        static void WriteVector3(uint64_t offset, Vector3 vector) {
-            *(float*)(offset) = vector.x;
-            *(float*)(offset + 0x4) = vector.y;
-            *(float*)(offset + 0x8) = vector.z;
+
+        // ====================================================================
+        // State
+        // ====================================================================
+
+        bool IsReady() const {
+            SpellBook sb(GameObjects::Player.address);
+            return sb.IsReady(Slot);
         }
-        
-        // ============================================================================
-        // CAST SPELL - Main function
-        // Uses same logic as leagueoflegends-master/global/functions.cpp
-        // ============================================================================
-        static bool CastSpell(int spellSlot, Vector3 targetPos) {
-            Log("========================================");
-            Log("=== CastSpell Called ===");
-            Log("SpellSlot: " + std::to_string(spellSlot));
-            Log("Target Pos: (" + std::to_string(targetPos.x) + ", " + 
-                std::to_string(targetPos.y) + ", " + std::to_string(targetPos.z) + ")");
-            
-            // Validate spell slot (0=Q, 1=W, 2=E, 3=R, 4-5=Summoners)
-            if (spellSlot < 0 || spellSlot >= 14) {
-                Log("ERROR: Invalid spell slot " + std::to_string(spellSlot));
+
+        int GetLevel() const {
+            SpellBook sb(GameObjects::Player.address);
+            return sb.GetSpell(Slot).GetLevel();
+        }
+
+        float GetRemainingCD() const {
+            SpellBook sb(GameObjects::Player.address);
+            return sb.GetSpell(Slot).GetRemainingCooldown();
+        }
+
+        bool IsSkillshot() const {
+            return Type != SpellType::Targeted && Type != SpellType::None;
+        }
+
+        bool InRange(const GameObject& target) const {
+            return GameObjects::Player.DistanceTo(target) <= Range;
+        }
+
+        // ====================================================================
+        // Cast Methods
+        // ====================================================================
+
+        // Self cast (no target)
+        bool Cast() {
+            if (!IsReady()) return false;
+            CastSpellInternal(GameObjects::Player.GetPosition());
+            return true;
+        }
+
+        // Cast on target (targeted spell)
+        bool Cast(const GameObject& target) {
+            if (!IsReady() || !target.IsValid()) return false;
+            if (!InRange(target)) return false;
+
+            if (IsSkillshot()) {
+                return CastWithPrediction(target, HitChance::High);
+            }
+
+            // Targeted: cast at target position
+            CastSpellInternal(target.GetPosition());
+            return true;
+        }
+
+        // Cast at position
+        bool Cast(const Vec3& pos) {
+            if (!IsReady()) return false;
+            CastSpellInternal(pos);
+            return true;
+        }
+
+        // Cast with prediction + hit chance requirement
+        bool CastWithPrediction(const GameObject& target,
+                                HitChance minChance = HitChance::High) {
+            if (!IsReady() || !target.IsValid()) return false;
+
+            PredictionInput input;
+            input.Range = Range;
+            input.Speed = Speed;
+            input.Delay = Delay;
+            input.Width = Width;
+
+            switch (Type) {
+            case SpellType::Line:   input.Type = SkillshotType::Line; break;
+            case SpellType::Circle: input.Type = SkillshotType::Circle; break;
+            case SpellType::Cone:   input.Type = SkillshotType::Cone; break;
+            default: break;
+            }
+
+            auto pred = Prediction::GetPrediction(target, input);
+
+            if ((int)pred.Hitchance < (int)minChance)
+                return false;
+
+            // Collision check
+            if (Collision & CollisionMinions) {
+                Vec3 from = GameObjects::Player.GetPosition();
+                if (Prediction::HasCollision(from, pred.CastPosition, Width))
+                    return false;
+            }
+
+            CastSpellInternal(pred.CastPosition);
+            return true;
+        }
+
+        // ====================================================================
+        // Prediction helpers
+        // ====================================================================
+
+        PredictionResult GetPrediction(const GameObject& target) const {
+            PredictionInput input;
+            input.Range = Range;
+            input.Speed = Speed;
+            input.Delay = Delay;
+            input.Width = Width;
+            switch (Type) {
+            case SpellType::Line:   input.Type = SkillshotType::Line; break;
+            case SpellType::Circle: input.Type = SkillshotType::Circle; break;
+            case SpellType::Cone:   input.Type = SkillshotType::Cone; break;
+            default: break;
+            }
+            return Prediction::GetPrediction(target, input);
+        }
+
+        // Get travel time to target
+        float GetTravelTime(const GameObject& target) const {
+            float dist = GameObjects::Player.DistanceTo(target);
+            if (Speed <= 0) return Delay;
+            return Delay + dist / Speed;
+        }
+
+        // ====================================================================
+        // Cast at mouse position (convenience)
+        // ====================================================================
+        bool CastAtMouse() {
+            LastCastTime = Game::GetTime();
+            if (!IsReady()) {
+                LastCastResult = -10; LastCastError = "Spell not ready";
                 return false;
             }
-            
-            // Get module base
-            uint64_t moduleBase = ObjectManager::GetModuleBase();
-            if (!moduleBase) {
-                Log("ERROR: moduleBase is null");
+            Vec3 mousePos = Game::GetMouseWorldPos();
+            if (mousePos.IsZero()) {
+                LastCastResult = -11; LastCastError = "Mouse pos zero";
                 return false;
             }
-            LogHex("ModuleBase", moduleBase);
-            
-            // Get spoof trampoline
-            void* spoof_trampoline = GetSpoofTrampoline();
-            if (!spoof_trampoline) {
-                Log("ERROR: spoof_trampoline is null (pattern FF 23 not found)");
+            CastSpellInternal(mousePos);
+            return true;
+        }
+
+        // ====================================================================
+        // Cast via keypress simulation (Method 3 - most reliable for testing)
+        // Reference: leagueoflegends-master guide castspell.md Method 3
+        // Writes target to HUD mouse → simulates key press
+        // ====================================================================
+        bool CastAtMouseViaKey() {
+            LastCastTime = Game::GetTime();
+            if (!IsReady()) {
+                LastCastResult = -10; LastCastError = "Spell not ready";
                 return false;
             }
-            LogHex("SpoofTrampoline", (uint64_t)spoof_trampoline);
-            
-            // Get local player
-            GameObject* localPlayer = ObjectManager::GetLocalPlayer();
-            if (!localPlayer || !localPlayer->IsValid()) {
-                Log("ERROR: LocalPlayer is null or invalid");
-                if (localPlayer) delete localPlayer;
+
+            Vec3 mousePos = Game::GetMouseWorldPos();
+            if (mousePos.IsZero()) {
+                LastCastResult = -11; LastCastError = "Mouse pos zero";
                 return false;
             }
-            LogHex("LocalPlayer", localPlayer->Address);
-            
-            // Get SpellBook
-            SpellBook spellBook(localPlayer->Address);
-            if (!spellBook.IsValid()) {
-                Log("ERROR: SpellBook is invalid");
-                delete localPlayer;
+
+            // Get key for slot
+            BYTE key = 0;
+            switch (Slot) {
+                case SpellSlotId::Q: key = 'Q'; break;
+                case SpellSlotId::W: key = 'W'; break;
+                case SpellSlotId::E: key = 'E'; break;
+                case SpellSlotId::R: key = 'R'; break;
+                default: {
+                    LastCastResult = -12; LastCastError = "Invalid slot for key";
+                    return false;
+                }
+            }
+
+            // Find game window
+            HWND gameWnd = FindWindowA("RiotWindowClass", nullptr);
+            if (!gameWnd) gameWnd = FindWindowA(nullptr, "League of Legends (TM) Client");
+            if (!gameWnd) {
+                LastCastResult = -13; LastCastError = "Game window not found";
                 return false;
             }
-            
-            // Get Spell Slot
-            SpellSlot spell = spellBook.GetSpell(spellSlot);
-            if (!spell.IsValid()) {
-                Log("ERROR: SpellSlot is invalid for slot " + std::to_string(spellSlot));
-                delete localPlayer;
-                return false;
+
+            // Simulate keypress → game casts spell at current mouse position
+            PostMessageA(gameWnd, WM_KEYDOWN, key, 0);
+            PostMessageA(gameWnd, WM_KEYUP, key, 0);
+
+            LastCastResult = 1;
+            LastCastError = "OK (KeySim)";
+            return true;
+        }
+
+        // ====================================================================
+        // Debug: Last cast result (for overlay)
+        // ====================================================================
+        static inline int    LastCastResult  = 0;   // 0=none, 1=success, -1..-9=error
+        static inline float  LastCastTime    = 0.0f;
+        static inline const char* LastCastError = "";
+
+    private:
+        // ====================================================================
+        // Find trampoline gadget for spoof_call (cached, FF 23 = jmp [rbx])
+        // ====================================================================
+        static void* GetTrampoline() {
+            static void* trampoline = nullptr;
+            if (!trampoline) {
+                MODULEINFO modInfo{};
+                GetModuleInformation(GetCurrentProcess(),
+                    (HMODULE)GetModuleHandleA(nullptr), &modInfo, sizeof(modInfo));
+                char* base = (char*)GetModuleHandleA(nullptr);
+                for (size_t i = 0; i < modInfo.SizeOfImage - 2; i++) {
+                    if (base[i] == '\xFF' && base[i + 1] == '\x23') {
+                        trampoline = base + i;
+                        break;
+                    }
+                }
             }
-            LogHex("SpellSlot Address", spell.Address);
-            
-            // Check if spell is ready
-            float gameTime = Game::GetTime();
-            if (!spell.IsReady(gameTime)) {
-                Log("ERROR: Spell is not ready (on cooldown)");
-                Log("Cooldown remaining: " + std::to_string(spell.GetRemainingCooldown(gameTime)) + "s");
-                delete localPlayer;
-                return false;
+            return trampoline;
+        }
+
+        // ====================================================================
+        // Internal: Cast spell via CastSpellSafe (0xBB9DE0)
+        //
+        // IDA MCP analysis of sub_BB9DE0:
+        //   - RCX = HudSpellInfo (from HudInstance + 0x68)
+        //   - RDX = SpellInfo ptr (from SpellSlot + SlotSpellInfo)
+        //   - Internally: searches spell slots via RDX, reads positions
+        //     from SpellInput vtable calls, sets CastSpell flag, sends packet
+        //
+        // Flow:
+        //   1. Write target pos to SpellInput (positions read via vtable)
+        //   2. Write target pos to HUD mouse (fallback reads)
+        //   3. Call CastSpellSafe(hudSpellInfo, spellInfoPtr) via spoof_call
+        //   4. Restore original values
+        // ====================================================================
+        void CastSpellInternal(const Vec3& pos) {
+            void* trampoline = GetTrampoline();
+            if (!trampoline) {
+                LastCastResult = -1; LastCastError = "No trampoline (FF 23)";
+                return;
             }
-            Log("Spell is ready!");
-            
-            // Get SpellInfo pointer (from SpellSlot + oSpellSlotSpellInfo)
-            uint64_t spellInfoPtr = *(uint64_t*)(spell.Address + Offset::oSpellSlotSpellInfo);
-            if (!spellInfoPtr || spellInfoPtr < 0x10000) {
-                Log("ERROR: SpellInfo pointer is invalid");
-                LogHex("SpellInfo ptr", spellInfoPtr);
-                delete localPlayer;
-                return false;
+
+            auto& player = GameObjects::Player;
+            if (!player.IsValid()) {
+                LastCastResult = -2; LastCastError = "Player invalid";
+                return;
             }
-            LogHex("SpellInfo", spellInfoPtr);
-            
-            // Get SpellInput pointer (from SpellSlot + oSpellSlotSpellInput)
-            uint64_t spellInput = *(uint64_t*)(spell.Address + Offset::oSpellSlotSpellInput);
-            if (!spellInput || spellInput < 0x10000) {
-                Log("ERROR: SpellInput pointer is invalid");
-                LogHex("SpellInput ptr", spellInput);
-                delete localPlayer;
-                return false;
+
+            // Get SpellBook → SpellSlot
+            uintptr_t spellBookAddr = player.address + Offset::SpellBook::Offset;
+            uintptr_t spellSlotAddr = Globals::Read<uintptr_t>(
+                spellBookAddr + Offset::SpellBook::SpellSlotArray + (int)Slot * 8);
+            if (!Globals::IsValidPtr(spellSlotAddr)) {
+                LastCastResult = -3; LastCastError = "SpellSlot invalid";
+                return;
             }
-            LogHex("SpellInput", spellInput);
-            
-            // Get HudInstance
-            uint64_t hudInstance = *(uint64_t*)(moduleBase + Offset::oHudInstance);
-            if (!hudInstance) {
-                Log("ERROR: HudInstance is null");
-                delete localPlayer;
-                return false;
+
+            // Get SpellInfo + SpellInput pointers
+            // Confirmed: SpellInfo=0x128 (SlotSpellInfo), SpellInput=0x120 (SlotSpellInput)
+            uintptr_t spellInfoPtr = Globals::Read<uintptr_t>(
+                spellSlotAddr + Offset::SpellBook::SlotSpellInfo);
+            if (!Globals::IsValidPtr(spellInfoPtr)) {
+                LastCastResult = -4; LastCastError = "SpellInfo invalid";
+                return;
             }
-            LogHex("HudInstance", hudInstance);
-            
-            // Get HudSpellInfo (HudInstance + oHudInstanceSpellInfo)
-            uint64_t hudSpellInfo = *(uint64_t*)(hudInstance + Offset::oHudInstanceSpellInfo);
-            if (!hudSpellInfo) {
-                Log("ERROR: HudSpellInfo is null");
-                delete localPlayer;
-                return false;
+
+            uintptr_t spellInput = Globals::Read<uintptr_t>(
+                spellSlotAddr + Offset::SpellBook::SlotSpellInput);
+            if (!Globals::IsValidPtr(spellInput)) {
+                LastCastResult = -5; LastCastError = "SpellInput invalid";
+                return;
             }
-            LogHex("HudSpellInfo", hudSpellInfo);
-            
-            // Save original SpellInput values (restore after cast)
-            Vector3 originalStartPos = ReadVector3(spellInput + Offset::oSpellInputStartPos);
-            Vector3 originalEndPos = ReadVector3(spellInput + Offset::oSpellInputEndPos);
-            Vector3 originalEndPos2 = ReadVector3(spellInput + Offset::oSpellInputEndPos + sizeof(Vector3));
-            Vector3 originalEndPos3 = ReadVector3(spellInput + Offset::oSpellInputEndPos + sizeof(Vector3) * 2);
-            
-            Log("Original StartPos: (" + std::to_string(originalStartPos.x) + ", " + 
-                std::to_string(originalStartPos.y) + ", " + std::to_string(originalStartPos.z) + ")");
-            Log("Original EndPos: (" + std::to_string(originalEndPos.x) + ", " + 
-                std::to_string(originalEndPos.y) + ", " + std::to_string(originalEndPos.z) + ")");
-            
+
+            // Get HudInstance → HudSpellInfo (RCX param for CastSpellSafe)
+            uintptr_t hudInstance = Globals::Read<uintptr_t>(
+                Globals::base + Offset::Global::HudInstance);
+            if (!Globals::IsValidPtr(hudInstance)) {
+                LastCastResult = -6; LastCastError = "HudInstance invalid";
+                return;
+            }
+
+            uintptr_t hudSpellInfo = Globals::Read<uintptr_t>(
+                hudInstance + Offset::Hud::SpellInfo);
+            if (!Globals::IsValidPtr(hudSpellInfo)) {
+                LastCastResult = -7; LastCastError = "HudSpellInfo invalid";
+                return;
+            }
+
+            Vec3 playerPos = player.GetPosition();
+
+            // Save original SpellInput values (will restore after cast)
+            Vec3 origStartPos = Globals::Read<Vec3>(
+                spellInput + Offset::SpellBook::InputStartPos);
+            Vec3 origEndPos = Globals::Read<Vec3>(
+                spellInput + Offset::SpellBook::InputEndPos);
+            Vec3 origEndPos2 = Globals::Read<Vec3>(
+                spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3));
+            Vec3 origEndPos3 = Globals::Read<Vec3>(
+                spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2);
+
             // Write target position to SpellInput
-            Vector3 playerPos = localPlayer->GetPosition();
-            if (targetPos.x != 0 || targetPos.y != 0 || targetPos.z != 0) {
-                WriteVector3(spellInput + Offset::oSpellInputStartPos, playerPos);
-                WriteVector3(spellInput + Offset::oSpellInputEndPos, targetPos);
-                WriteVector3(spellInput + Offset::oSpellInputEndPos + sizeof(Vector3), targetPos);
-                WriteVector3(spellInput + Offset::oSpellInputEndPos + sizeof(Vector3) * 2, targetPos);
-                Log("Wrote target position to SpellInput");
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputStartPos, playerPos);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos, pos);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3), pos);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2, pos);
+
+            // Also write to HUD mouse position (game also reads from here)
+            uintptr_t hudInput = Globals::Read<uintptr_t>(hudInstance + Offset::Hud::Input);
+            Vec3 origMouse;
+            bool savedMouse = false;
+            if (Globals::IsValidPtr(hudInput)) {
+                origMouse = Globals::Read<Vec3>(hudInput + Offset::Hud::MouseWorldPos);
+                Globals::Write<Vec3>(hudInput + Offset::Hud::MouseWorldPos, pos);
+                savedMouse = true;
             }
-            
-            // Get CastSpellWrapper function address
-            uint64_t castSpellAddr = moduleBase + Offset::Function::oCastSpellWrapper;
-            LogHex("CastSpellWrapper addr", castSpellAddr);
-            
-            // Define function type
-            // Signature: bool __fastcall CastSpellWrapper(uint64_t* hudSpellInfo, uint64_t* spellInfo)
-            using fnCastSpellWrapper = bool(__fastcall*)(uint64_t* hudSpellInfo, uint64_t* spellInfo);
-            fnCastSpellWrapper _fnCastSpellWrapper = (fnCastSpellWrapper)castSpellAddr;
-            
-            Log("Calling spoof_call to CastSpellWrapper...");
-            
-            // Call with spoof_call
-            bool result = false;
+
+            // ============================================================
+            // Set bypass flags BEFORE calling (LeagueChimera pattern)
+            // CastSpellFlag = byte, set to 1 to allow spell cast
+            // ============================================================
+            Globals::Write<uint8_t>(Globals::base + Offset::Flag::CastSpell, 1);
+
+            // ============================================================
+            // Call CastSpellSafe(hudSpellInfo, spellInfoPtr) via spoof_call
+            // Reference: leagueoflegends-master/global/functions.cpp line 229
+            //   param1 = *(HudInstance + 0x68) = hudSpellInfo
+            //   param2 = *(SpellSlot + SlotSpellInfo) = spellInfoPtr
+            // ============================================================
+            using fnCastSpell = void(__fastcall*)(uintptr_t, uintptr_t);
+            fnCastSpell fn = reinterpret_cast<fnCastSpell>(
+                Globals::base + Offset::Function::CastSpellSafe);
+
             __try {
-                result = spoof_call(
-                    spoof_trampoline,
-                    _fnCastSpellWrapper,
-                    (uint64_t*)hudSpellInfo,
-                    (uint64_t*)spellInfoPtr
-                );
+                spoof_call(trampoline, fn, hudSpellInfo, spellInfoPtr);
+                LastCastResult = 1;
+                LastCastError = "OK (FnCall)";
+            } __except(1) {
+                LastCastResult = -8; LastCastError = "CastSpellSafe CRASHED";
             }
-            __except (EXCEPTION_EXECUTE_HANDLER) {
-                Log("EXCEPTION: CastSpellWrapper crashed!");
-            }
-            
-            Log("CastSpellWrapper returned: " + std::to_string(result));
-            
+
+            // Reset CastSpell flag
+            Globals::Write<uint8_t>(Globals::base + Offset::Flag::CastSpell, 0);
+
             // Restore original SpellInput values
-            WriteVector3(spellInput + Offset::oSpellInputStartPos, originalStartPos);
-            WriteVector3(spellInput + Offset::oSpellInputEndPos, originalEndPos);
-            WriteVector3(spellInput + Offset::oSpellInputEndPos + sizeof(Vector3), originalEndPos2);
-            WriteVector3(spellInput + Offset::oSpellInputEndPos + sizeof(Vector3) * 2, originalEndPos3);
-            Log("Restored original SpellInput values");
-            
-            delete localPlayer;
-            
-            Log("=== CastSpell Complete ===");
-            Log("Result: " + std::string(result ? "SUCCESS" : "FAILED"));
-            Log("========================================");
-            
-            return result;
-        }
-        
-        // ============================================================================
-        // Convenience functions
-        // ============================================================================
-        static bool CastQ(Vector3 targetPos) { return CastSpell(0, targetPos); }
-        static bool CastW(Vector3 targetPos) { return CastSpell(1, targetPos); }
-        static bool CastE(Vector3 targetPos) { return CastSpell(2, targetPos); }
-        static bool CastR(Vector3 targetPos) { return CastSpell(3, targetPos); }
-        
-        // Cast at mouse position
-        static bool CastQAtMouse() {
-            Vector3 mousePos = GetMouseWorldPos();
-            return CastQ(mousePos);
-        }
-        
-        static bool CastWAtMouse() {
-            Vector3 mousePos = GetMouseWorldPos();
-            return CastW(mousePos);
-        }
-        
-        static bool CastEAtMouse() {
-            Vector3 mousePos = GetMouseWorldPos();
-            return CastE(mousePos);
-        }
-        
-        static bool CastRAtMouse() {
-            Vector3 mousePos = GetMouseWorldPos();
-            return CastR(mousePos);
-        }
-        
-        // Get mouse world position
-        static Vector3 GetMouseWorldPos() {
-            uint64_t moduleBase = ObjectManager::GetModuleBase();
-            uint64_t hudInstance = *(uint64_t*)(moduleBase + Offset::oHudInstance);
-            uint64_t hudInput = *(uint64_t*)(hudInstance + Offset::oHudInstanceInput);
-            return ReadVector3(hudInput + Offset::oHudMouseVec3);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputStartPos, origStartPos);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos, origEndPos);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3), origEndPos2);
+            Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2, origEndPos3);
+
+            // Restore HUD mouse position
+            if (savedMouse && Globals::IsValidPtr(hudInput)) {
+                Globals::Write<Vec3>(hudInput + Offset::Hud::MouseWorldPos, origMouse);
+            }
+
+            LastCastTime = Game::GetTime();
         }
     };
-}
+
+    // ========================================================================
+    // SpellFactory — Pre-defined spells for popular champions
+    // ========================================================================
+    namespace SpellFactory {
+        // Ezreal
+        inline SpellCaster EzrealQ() {
+            return SpellCaster::Line(SpellSlotId::Q, 1150, 2000, 120, 0.25f)
+                .SetCollision(CollisionMinions | CollisionChampions);
+        }
+        inline SpellCaster EzrealW() {
+            return SpellCaster::Line(SpellSlotId::W, 1150, 1700, 160, 0.25f);
+        }
+        inline SpellCaster EzrealR() {
+            return SpellCaster::Line(SpellSlotId::R, 20000, 2000, 320, 1.0f);
+        }
+
+        // Lux
+        inline SpellCaster LuxQ() {
+            return SpellCaster::Line(SpellSlotId::Q, 1175, 1200, 70, 0.25f)
+                .SetCollision(CollisionChampions);
+        }
+        inline SpellCaster LuxE() {
+            return SpellCaster::Circle(SpellSlotId::E, 1100, 310, 1200, 0.25f);
+        }
+        inline SpellCaster LuxR() {
+            return SpellCaster::Line(SpellSlotId::R, 3340, 0, 110, 1.0f);
+        }
+
+        // Morgana
+        inline SpellCaster MorganaQ() {
+            return SpellCaster::Line(SpellSlotId::Q, 1175, 1200, 70, 0.25f)
+                .SetCollision(CollisionMinions | CollisionChampions);
+        }
+
+        // Jinx
+        inline SpellCaster JinxW() {
+            return SpellCaster::Line(SpellSlotId::W, 1450, 3300, 60, 0.6f)
+                .SetCollision(CollisionMinions | CollisionChampions);
+        }
+        inline SpellCaster JinxR() {
+            return SpellCaster::Line(SpellSlotId::R, 25000, 1700, 140, 0.6f)
+                .SetCollision(CollisionChampions);
+        }
+
+        // Blitzcrank
+        inline SpellCaster BlitzcrankQ() {
+            return SpellCaster::Line(SpellSlotId::Q, 1150, 1800, 70, 0.25f)
+                .SetCollision(CollisionMinions | CollisionChampions);
+        }
+
+        // Thresh
+        inline SpellCaster ThreshQ() {
+            return SpellCaster::Line(SpellSlotId::Q, 1100, 1900, 70, 0.5f)
+                .SetCollision(CollisionMinions | CollisionChampions);
+        }
+
+        // Ahri
+        inline SpellCaster AhriE() {
+            return SpellCaster::Line(SpellSlotId::E, 975, 1550, 60, 0.25f)
+                .SetCollision(CollisionMinions | CollisionChampions);
+        }
+
+        // Brand
+        inline SpellCaster BrandW() {
+            return SpellCaster::Circle(SpellSlotId::W, 900, 250, 0, 0.85f);
+        }
+    }
+
+} // namespace SDK

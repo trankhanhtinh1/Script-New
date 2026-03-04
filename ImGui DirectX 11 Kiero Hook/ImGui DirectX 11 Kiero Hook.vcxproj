@@ -92,6 +92,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -104,6 +105,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -118,6 +120,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -132,31 +135,15 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>false</SDLCheck>
+      <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\Users\ADMIN\Downloads\ImGui-DirectX-11-Kiero-Hook-master\ImGui-DirectX-11-Kiero-Hook-master\ImGui DirectX 11 Kiero Hook\Spoof_call;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Manual Map Compatible: Use static runtime -->
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
-      <!-- Disable buffer security check to reduce TLS usage -->
-      <BufferSecurityCheck>false</BufferSecurityCheck>
-      <!-- CRITICAL: Disable C++ exceptions to avoid .pdata section (fixes RtlAddFunctionTable error) -->
-      <ExceptionHandling>false</ExceptionHandling>
-      <!-- Disable RTTI -->
-      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;legacy_stdio_definitions.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <!-- Manual Map Compatible -->
-      <LinkIncremental>false</LinkIncremental>
-      <IgnoreSpecificDefaultLibraries>msvcrt.lib;msvcrtd.lib</IgnoreSpecificDefaultLibraries>
-      <!-- Disable debug info generation -->
-      <GenerateDebugInformation>false</GenerateDebugInformation>
-      <!-- Disable Safe Exception Handlers -->
-      <ImageHasSafeExceptionHandlers>false</ImageHasSafeExceptionHandlers>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -172,10 +159,7 @@
     <ClCompile Include="kiero\minhook\src\hde\hde64.c" />
     <ClCompile Include="kiero\minhook\src\hook.c" />
     <ClCompile Include="kiero\minhook\src\trampoline.c" />
-    <ClCompile Include="Render.cpp" />
-    <ClCompile Include="Menu.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="SDK\SpellDatabase.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="kiero\minhook\dll_resources\MinHook.def" />
@@ -193,30 +177,12 @@
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="includes.h" />
-    <ClInclude Include="Vector.h" />
-    <ClInclude Include="Render.h" />
-    <ClInclude Include="Menu.h" />
-    <ClInclude Include="SDK\GameObject.h" />
-    <ClInclude Include="SDK\ObjectManager.h" />
-    <ClInclude Include="SDK\Game.h" />
-    <ClInclude Include="SDK\TargetSelector.h" />
-    <ClInclude Include="SDK\Orbwalker.h" />
-    <ClInclude Include="SDK\Offsets.h" />
-    <ClInclude Include="SDK\Spell.h" />
-    <ClInclude Include="SDK\HealthPrediction.h" />
-    <ClInclude Include="SDK\AiManagerDebug.h" />
-    <ClInclude Include="SDK\AiManager.h" />
-    <ClInclude Include="SDK\AiManagerDumper.h" />
-    <ClInclude Include="SDK\LeagueObfuscation.h" />
-    <ClInclude Include="SDK\Missile.h" />
-    <ClInclude Include="SDK\DamageCalculator.h" />
-    <ClInclude Include="SDK\BuffManager.h" />
-    <ClInclude Include="SDK\Collision.h" />
-    <ClInclude Include="SDK\SpellDatabase.h" />
-    <ClInclude Include="SDK\MissileOffsetScanner.h" />
-    <ClInclude Include="SDK\AiManagerScan.h" />
-    <ClInclude Include="SDK\AiManagerNavGridScan.h" />
-    <ClInclude Include="SDK\MissileScan.h" />
+    <ClInclude Include="core\Offsets.h" />
+    <ClInclude Include="core\LeagueObfuscation.h" />
+    <ClInclude Include="core\Vector.h" />
+    <ClInclude Include="core\Globals.h" />
+    <ClInclude Include="menu\MenuConfig.h" />
+    <ClInclude Include="menu\Menu.h" />
     <ClInclude Include="kiero\kiero.h" />
     <ClInclude Include="kiero\minhook\include\MinHook.h" />
     <ClInclude Include="kiero\minhook\src\buffer.h" />
@@ -226,10 +192,10 @@
     <ClInclude Include="kiero\minhook\src\hde\table32.h" />
     <ClInclude Include="kiero\minhook\src\hde\table64.h" />
     <ClInclude Include="kiero\minhook\src\trampoline.h" />
-    <ClInclude Include="Spoof_call\spoofcall.h" />
+    <ClInclude Include="spoof\spoofcall.h" />
   </ItemGroup>
   <ItemGroup>
-    <MASM Include="Spoof_call\spoof.asm" />
+    <MASM Include="spoof\spoof.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

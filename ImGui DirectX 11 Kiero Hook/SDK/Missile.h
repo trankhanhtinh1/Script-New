@@ -1,213 +1,162 @@
 #pragma once
-#include <Windows.h>
-#include <cstdint>
+#include "../core/Globals.h"
+#include "../core/Offsets.h"
+#include "../core/Vector.h"
+#include "Enums.h"
 #include <string>
-#include <vector>
-#include "Offsets.h"
-#include "../Vector.h"
+#include <cstdint>
 
-namespace SDK
-{
-    // Missile/Projectile class for turret aggro detection
-    // Based on leagueoflegends-master and NewOrbwalker.cs patterns
-    class Missile
-    {
+// ============================================================================
+// Missile — Projectile tracking (turret shots, auto attacks, spells)
+// Reference: Script-New-main/SDK/Missile.h
+// ============================================================================
+
+namespace SDK {
+
+    class Missile {
     public:
-        uint64_t Address;
+        uintptr_t address;
 
-        Missile(uint64_t addr) : Address(addr) {}
+        Missile() : address(0) {}
+        Missile(uintptr_t addr) : address(addr) {}
+        bool IsValid() const { return Globals::IsValidPtr(address); }
 
-        bool IsValid() {
-            return Address != 0;
+        // ====================================================================
+        // Position (inherited from GameObject)
+        // ====================================================================
+
+        Vec3 GetPosition() const {
+            if (!IsValid()) return Vec3();
+            return Globals::Read<Vec3>(address + Offset::Missile::Position);
         }
 
-        // Get SpellInfo pointer from missile (INDIRECT ACCESS)
-        // Structure: Missile[0x1F0] -> SpellCast* -> SpellCast[0xD8] -> SpellInfo*
-        uint64_t GetSpellInfo() {
-            if (!Address) return 0;
-            __try {
-                // Step 1: Get SpellCast pointer from Missile
-                uint64_t spellCast = *(uint64_t*)(Address + Offset::oMissileSpellCast);
-                if (!spellCast || spellCast < 0x10000) return 0;
-                
-                // Step 2: Get SpellInfo pointer from SpellCast
-                uint64_t spellInfo = *(uint64_t*)(spellCast + Offset::oSpellCastSpellInfo);
-                return spellInfo;
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
-                return 0;
-            }
+        // ====================================================================
+        // Cast Info (via CastInfoBase)
+        // ====================================================================
+
+        uintptr_t GetCastInfo() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<uintptr_t>(address + Offset::Missile::CastInfoBase);
         }
 
-        // Get source object index (who fired this missile)
-        // Read from SpellInfo + oSpellInfoSrcIndex
-        int GetSourceIndex() {
-            uint64_t spellInfo = GetSpellInfo();
-            if (!spellInfo) return 0;
-            __try {
-                return *(int*)(spellInfo + Offset::oSpellInfoSrcIndex);
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
-                return 0;
-            }
+        // Source caster network ID
+        int GetCasterNetId() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<int>(address + Offset::Missile::CasterNetId);
         }
 
-        // Get target object network ID (who is being targeted)
-        // Read from SpellInfo + oSpellInfoTargetIndex
-        int GetTargetIndex() {
-            uint64_t spellInfo = GetSpellInfo();
-            if (!spellInfo) return 0;
-            __try {
-                return *(int*)(spellInfo + Offset::oSpellInfoTargetIndex);
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
-                return 0;
-            }
+        // Missile network ID
+        int GetNetworkId() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<int>(address + Offset::Missile::NetworkId);
         }
 
-        // Get start position from SpellInfo
-        Vector3 GetStartPos() {
-            uint64_t spellInfo = GetSpellInfo();
-            if (!spellInfo) return Vector3(0, 0, 0);
-            __try {
-                return *(Vector3*)(spellInfo + Offset::oSpellInfoStartPos);
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
-                return Vector3(0, 0, 0);
-            }
+        // Start position
+        Vec3 GetStartPos() const {
+            if (!IsValid()) return Vec3();
+            return Globals::Read<Vec3>(address + Offset::Missile::StartPos);
         }
 
-        // Get end position from SpellInfo
-        Vector3 GetEndPos() {
-            uint64_t spellInfo = GetSpellInfo();
-            if (!spellInfo) return Vector3(0, 0, 0);
-            __try {
-                return *(Vector3*)(spellInfo + Offset::oSpellInfoEndPos);
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
-                return Vector3(0, 0, 0);
-            }
+        // End position (target)
+        Vec3 GetEndPos() const {
+            if (!IsValid()) return Vec3();
+            return Globals::Read<Vec3>(address + Offset::Missile::EndPos);
         }
 
-        // Check if this is an auto attack (not a spell)
-        bool IsAutoAttack() {
-            uint64_t spellInfo = GetSpellInfo();
-            if (!spellInfo) return false;
-            __try {
-                return *(bool*)(spellInfo + Offset::oSpellInfoIsAuto);
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
-                return false;
-            }
+        // Cast end position
+        Vec3 GetCastEndPos() const {
+            if (!IsValid()) return Vec3();
+            return Globals::Read<Vec3>(address + Offset::Missile::CastEndPos);
         }
 
-        // Get missile name (from SpellInfo -> SpellData -> Name)
-        std::string GetName() {
-            uint64_t spellInfo = GetSpellInfo();
-            if (!spellInfo) return "";
-            
-            __try {
-                // SpellInfo -> SpellData at offset 0x0
-                uint64_t spellData = *(uint64_t*)(spellInfo + Offset::oSpellInfoSpellData);
-                if (!spellData) return "";
-                
-                // SpellData -> Name at offset 0x8
-                char* namePtr = (char*)(spellData + Offset::oSpellDataName);
-                if (!namePtr) return "";
-                
-                return std::string(namePtr);
-            }
-            __except(EXCEPTION_EXECUTE_HANDLER) {
+        // ====================================================================
+        // Spell name via CastInfo → SpellData
+        // ====================================================================
+
+        std::string GetSpellName() const {
+            if (!IsValid()) return "";
+            char buf[128] = {};
+            if (!ReadSpellNameRaw(address, buf, sizeof(buf)))
                 return "";
-            }
+            return std::string(buf);
         }
 
-        // Check if this missile is from a turret
-        bool IsTurretShot() {
-            std::string name = GetName();
-            // Turret missile names contain "Turret" or specific patterns
+        std::string GetMissileName() const {
+            if (!IsValid()) return "";
+            char buf[128] = {};
+            if (!Globals::ReadGameString(address + Offset::Missile::MissileName, buf, sizeof(buf)))
+                return "";
+            return std::string(buf);
+        }
+
+    private:
+        // SEH-safe: read spell name via SpellDataInst → name (no C++ objects)
+        static bool ReadSpellNameRaw(uintptr_t addr, char* out, int maxLen) {
+            __try {
+                uintptr_t sdi = *(uintptr_t*)(addr + Offset::Missile::SpellDataInst);
+                if (sdi < 0x10000 || sdi > 0x7FFFFFFFFFFF) return false;
+                uintptr_t nameAddr = sdi + 0x80;
+                return Globals::ReadGameString(nameAddr, out, maxLen);
+            } __except(1) { out[0] = 0; return false; }
+        }
+    public:
+
+        // ====================================================================
+        // Type checks
+        // ====================================================================
+
+        bool IsTurretShot() const {
+            std::string name = GetSpellName();
+            if (name.empty()) name = GetMissileName();
             return (name.find("TurretAttack") != std::string::npos ||
                     name.find("Turret") != std::string::npos ||
-                    name.find("Obelisk") != std::string::npos);  // Nexus turret
+                    name.find("Obelisk") != std::string::npos);
+        }
+
+        bool IsAutoAttack() const {
+            std::string name = GetSpellName();
+            return (name.find("BasicAttack") != std::string::npos ||
+                    name.find("CritAttack") != std::string::npos);
         }
     };
 
-    // MissileManager - Get all active missiles
-    class MissileManager
-    {
+    // ========================================================================
+    // MissileManager — Get all active missiles
+    // ========================================================================
+    class MissileManager {
     public:
-        static uint64_t GetModuleBase() {
-            return (uint64_t)GetModuleHandle(NULL);
-        }
+        static std::vector<Missile> GetMissiles() {
+            std::vector<Missile> result;
+            uintptr_t mgr = Globals::Read<uintptr_t>(
+                Globals::base + Offset::Global::MissileManager);
+            if (!Globals::IsValidPtr(mgr)) return result;
 
-        static std::vector<Missile*> GetMissiles() {
-            std::vector<Missile*> missiles;
-            uint64_t missileManager = *(uint64_t*)(GetModuleBase() + Offset::oMissileList);
-            if (!missileManager) return missiles;
+            uintptr_t list = Globals::Read<uintptr_t>(mgr + Offset::ManagerList::Items);
+            int count = Globals::Read<int>(mgr + Offset::ManagerList::Size);
+            if (!Globals::IsValidPtr(list) || count <= 0 || count > 500)
+                return result;
 
-            // Standard list structure
-            uint64_t arrayPtr = *(uint64_t*)(missileManager + 0x08);
-            int size = *(int*)(missileManager + 0x10);
-
-            if (size > 500 || size < 0) size = 0;
-
-            for (int i = 0; i < size; i++) {
-                uint64_t objAddr = *(uint64_t*)(arrayPtr + (i * 0x8));
-                if (objAddr) {
-                    missiles.push_back(new Missile(objAddr));
-                }
+            uintptr_t addrs[500] = {};
+            int n = Globals::ReadPtrArray(list, count, addrs, 500);
+            for (int i = 0; i < n; i++) {
+                if (Globals::IsValidPtr(addrs[i]))
+                    result.emplace_back(addrs[i]);
             }
-            return missiles;
+            return result;
         }
 
-        // Check if local player has turret aggro (turret is shooting at us)
-        static bool HasTurretAggro(int localNetId) {
+        // Check if a target has turret aggro
+        static bool HasTurretAggro(int targetNetId) {
             auto missiles = GetMissiles();
-            bool hasAggro = false;
-
-            for (auto* missile : missiles) {
-                if (missile->IsTurretShot() && missile->GetTargetIndex() == localNetId) {
-                    hasAggro = true;
-                    break;
+            for (auto& m : missiles) {
+                if (m.IsTurretShot() && m.GetCasterNetId() != targetNetId) {
+                    // Check if missile is heading toward target area
+                    // Simplified: check by caster NetId (TODO: proper target check)
+                    return true;
                 }
             }
-
-            // Cleanup
-            for (auto* m : missiles) delete m;
-            return hasAggro;
-        }
-
-        // Check if a specific minion has turret aggro
-        static bool MinionHasTurretAggro(int minionNetId) {
-            auto missiles = GetMissiles();
-            bool hasAggro = false;
-
-            for (auto* missile : missiles) {
-                if (missile->IsTurretShot() && missile->GetTargetIndex() == minionNetId) {
-                    hasAggro = true;
-                    break;
-                }
-            }
-
-            // Cleanup
-            for (auto* m : missiles) delete m;
-            return hasAggro;
-        }
-
-        // Count turret shots targeting a minion (for farm under turret logic)
-        static int CountTurretShotsOnMinion(int minionNetId) {
-            auto missiles = GetMissiles();
-            int count = 0;
-
-            for (auto* missile : missiles) {
-                if (missile->IsTurretShot() && missile->GetTargetIndex() == minionNetId) {
-                    count++;
-                }
-            }
-
-            // Cleanup
-            for (auto* m : missiles) delete m;
-            return count;
+            return false;
         }
     };
-}
+
+} // namespace SDK
