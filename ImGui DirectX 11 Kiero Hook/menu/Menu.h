@@ -1,6 +1,7 @@
 #pragma once
 #include "../imgui/imgui.h"
 #include "MenuConfig.h"
+#include "../plugins/PluginManager.h"
 
 // ============================================================================
 // Menu - ImGui Menu Rendering
@@ -455,6 +456,11 @@ namespace Menu {
 
             if (ImGui::BeginTabItem("Misc")) {
                 DrawMiscTab();
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Plugins")) {
+                Plugins::PluginManager::Get().OnMenu();
                 ImGui::EndTabItem();
             }
 

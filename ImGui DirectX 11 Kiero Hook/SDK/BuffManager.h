@@ -190,7 +190,7 @@ namespace SDK {
                    IsSuppressed() || IsSnared() || IsAsleep();
         }
 
-    private:
+    public:
         bool HasBuffOfType(BuffType type) const {
             bool found = false;
             ForEach([&](Buff& buff) {

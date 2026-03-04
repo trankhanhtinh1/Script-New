@@ -1,0 +1,295 @@
+==============================================================================
+  NightSharp SDK — TODO: Hoàn thiện SDK (so sánh với EnsoulSharp)
+  Ngày tạo: 2026-03-04
+==============================================================================
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  1. ORBWALKER PLUGIN — Thiếu so với NewOrbwalker.cs                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 1.1  Champion-specific logic
+         - Sett: passive attack (nextAttackIsPassive, AttackCastDelay / 8)
+         - Kalista: isKalista CanMove always true, MissileLaunched reset
+         - Graves: ammo system check (gravesbasicattackammo1), delay formula
+         - Jhin: JhinPassiveReload check
+         - Rengar: RengarQ/RengarQEmp attack reset, animation handling
+         - Aphelios: weapon-specific missile speed, reload check, crescendum reset
+
+[  ] 1.2  GetProjectileSpeed() per champion
+         - Jinx (JinxQ buff → 2000), Kayle (range check → 2250),
+         - Neeko (neekowpassiveready → max), Viktor (ViktorPowerTransferReturn → max)
+         - Jayce (form check), Ivern (ivernwpassive → 1600)
+         - Poppy (poppypassivebuff → 1600), Aphelios (weapon tooltipvars)
+         - GetBasicAttackMissileSpeed(): IsMelee → MaxFloat, else BasicAttack.MissileSpeed
+
+[  ] 1.3  CanAttackWithWindWall — Yasuo WindWall collision check
+         - WindWallBrokenChampions[] array (64 champs)
+         - SpecialWindWallChampions[] array (Kayle, Elise, Nidalee, Jayce, Gnar, Azir, Neeko)
+         - Gọi Collisions.HasYasuoWindWallCollision(from, to)
+
+[  ] 1.4  Jax CounterStrike check — skip attack if Jax has "JaxCounterStrike" buff
+
+[  ] 1.5  Turret farm logic
+         - CanTurretFarm(): check turret farm menu, support mode, player level, baron buff
+         - Turret-priority last hitting: track turret aggro, calculate multi-shot HP prediction
+         - FarmMenu: "TurretFarm" (Enabled/Off), "TurretFramMaxLevel" slider
+
+[  ] 1.6  ShouldWait() — proper HP prediction cho lane control
+         - Dùng HealthPrediction.GetPrediction() với GameObjects.Player.AttackDelay * 2000ms
+         - So sánh predicted HP < GetAutoAttackDamage → return true (đợi last hit)
+         - Có FastLaneClear mode delay riêng
+
+[  ] 1.7  Pause timer system
+         - int AttackPauseTick, MovePauseTick, AllPauseTick
+         - SetAttackPauseTime(ms), SetMovePauseTime(ms), SetPauseTime(ms)
+         - SetAttackServerPauseTime(), SetMoveServerPauseTime(), SetServerPauseTime()
+         - Check trong CanAttack() và CanMove()
+
+[  ] 1.8  MissileLaunched check cho CanMove
+         - Track MissileLaunched = false khi OnDoCast
+         - MissileLaunched = true khi OnProcessSpellCast (auto attack)
+         - CanMove: if MissileLaunched && MissileCheck enabled → return true
+
+[  ] 1.9  Menu options thiếu
+         - "ComboWithMove" keybind (combo nhưng không di chuyển)
+         - "FastLaneClear" keybind (fast farm mode)
+         - "Fast Farm Delay" slider (0-1000ms)
+         - "TurretFarm" dropdown (Enabled/Off) + "TurretFramMaxLevel" slider
+         - "CalcItemDamage" bool (tính sát thương item)
+         - "YasuoWallCheck" bool
+         - "MissileCheck" bool (Use Missile Checks)
+         - "SupportMode_<champion>" bool
+         - "HighOrb" bool (tần suất walk cao hơn)
+         - "CalculateRunaway" bool (tính khoảng cách chạy trốn)
+         - "DrawChaseRange" bool
+         - "ShowFakeClick" bool
+
+[  ] 1.10 ForceChase mode
+         - MiscMenu: "FindKey" keybind + "Range" slider (0-500)
+         - Khi Combo + FindKey active → mở rộng attack range thêm Range value
+         - Vẽ circle rainbow (colorindex) quanh player
+
+[  ] 1.11 LaneClear target priority
+         - Sort: Siege > Super > attacks-to-kill (ceil(hp/ad)) > MaxHealth descending
+         - Track LaneClearMinion (sticky target nếu vẫn valid)
+         - Kiểm tra prediction 2x attack delay xem minion có sống đủ lâu không
+
+[  ] 1.12 Move path angle check
+         - Kiểm tra angle giữa current waypoint và new waypoint
+         - Skip move nếu angle < 10° và distance < 500
+         - Throttle: 70ms + min(60, Ping), nếu angle >= 60° thì 60ms
+
+[  ] 1.13 Randomize movement khi mouse quá gần
+         - OrbwalkerMenu["MoveRandom"] → extend position 0.6-1.0 * 400 units
+
+[  ] 1.14 GetSpecialMinion
+         - Barrels (GP): gangplankbarrel (owner level check, barrel timer)
+         - Wards: EnemyWards in range
+         - JunglePlant: in range
+         - Pets: IsPet(true) check
+
+[  ] 1.15 LimitAttack — Don't Kite nếu AttackSpeed > 2.5
+         - Nếu AttackDelay < 0.3846 && autoAttackCounter % 3 != 0 → skip move
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  2. TARGET SELECTOR PLUGIN — Thiếu so với NewTargetSelector.cs             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 2.1  IsValidTarget thiếu check
+         - IsInvulnerableVisual check (property trên GameObject)
+         - IsZombie() check (Sion passive, Karthus passive, Kog'Maw passive)
+         - HasBuff("UndyingRage") && HP <= 71 → skip (Tryndamere ult)
+         - IsTargetable check (đã có nhưng cần verify)
+
+[  ] 2.2  GetRealHealth — HP thực tế theo damage type
+         - Physical: HP + PhysicalShield + AllShield
+         - Magical: HP + MagicalShield + AllShield
+         - True: HP + AllShield
+         - C# dùng x.GetRealHeath(damageType)
+
+[  ] 2.3  Smart AD/AP mode — port AaIndicator logic
+         - C# dùng Base.AaIndicator(x, damageType) — scoring function tính threat
+         - Cần port hoặc tạo equivalent: (EHP / priority) scoring
+
+[  ] 2.4  OnlySelectTarget enforcement trong GetTargets()
+         - Khi "Only Attack Select Target" enabled + SelectedTarget valid
+         → chỉ return list gồm 1 target duy nhất
+
+[  ] 2.5  InCurrentAutoAttackRange với Azir soldiers
+         - Check AzirSoldiers distance ≤ 770 từ player
+         - Nếu soldier cách target ≤ 350 → true
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  3. GAMEOBJECT — Properties thiếu                                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 3.1  Thêm properties cơ bản
+         - IsMoving (đọc từ AiManager)
+         - IsMelee (AttackRange < 300)
+         - IsMe (address == GameObjects::Player.address)
+         - ServerPosition (AiManager.GetServerPosition)
+
+[  ] 3.2  Path / Waypoints
+         - GetWaypoints() → vector<Vec2>
+         - GetPath(Vec3 target) → vector<Vec3>
+         - Path.Length (number of waypoints)
+
+[  ] 3.3  Buff access trực tiếp trên GameObject
+         - HasBuff(name) → tạo BuffManager(address).HasBuff(name)
+         - HasBuffOfType(type) → BuffManager(address).HasBuffOfType(type)
+         - GetBuff(name) → trả về Buff instance
+
+[  ] 3.4  GetAutoAttackDamage(target, includePassive, calcItemDmg)
+         - Base AD damage + crit + bonus on-hit
+         - Item passive damage (Sheen, Trinity, BOTRK, Kraken, etc.)
+         - Champion passive damage (Vayne W, Ashe passive, etc.)
+         - Giản lược: ít nhất CalcPhysicalDamage(TotalAD) + item modifier
+
+[  ] 3.5  InCurrentAutoAttackRange(extraRange, fromObj)
+         - GetRealAutoAttackRange() = AttackRange + BoundingRadius
+         - Distance ≤ GetRealAutoAttackRange + target.BoundingRadius + extraRange
+         - Azir special: soldier range check
+
+[  ] 3.6  Type checks + properties
+         - IsZombie() — check buffs: SionPassiveZone, KarthusDeathDefiedBuff, KogMawIcathianSurprise
+         - IsInvulnerable — check IsInvulnerableVisual or invuln buffs
+         - GameObjectType enum (AIHeroClient, AIMinionClient, AITurretClient, MissileClient)
+         - Type property → read from offset
+         - Owner property (pets → chủ sở hữu)
+         - NetworkId (alias cho GetNetId)
+
+[  ] 3.7  BasicAttack.MissileSpeed
+         - Read SpellData → MissileSpeed từ SpellBook slot[0]
+         - Dùng cho GetBasicAttackMissileSpeed()
+
+[  ] 3.8  AttackCastDelay / AttackDelay properties
+         - Expose GetAttackDelay() và GetAttackWindup() as inline properties
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  4. GAMEOBJECTS (Lists) — Thiếu                                           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 4.1  Split Turrets → AllyTurrets + EnemyTurrets
+[  ] 4.2  Thêm EnemyWards list (ward tracking)
+[  ] 4.3  Thêm JunglePlant list
+[  ] 4.4  Thêm EnemyInhibitors / AllyInhibitors lists
+[  ] 4.5  Thêm EnemyNexus / AllyNexus
+[  ] 4.6  Thêm AzirSoldiers tracking (nếu player là Azir)
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  5. HEALTH PREDICTION — Cần cải thiện                                      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 5.1  Thay thế hardcoded damage (50.0f) bằng actual missile damage
+         - Read SData damage từ MissileClient
+         - Track caster's AD/AP để tính real damage
+
+[  ] 5.2  HasTurretAggro(unit) — check nếu turret đang nhắm unit
+[  ] 5.3  HasMinionAggro(unit) — check nếu minion đang nhắm unit
+[  ] 5.4  HealthPredictionType (Default vs Simulated)
+         - Default: chỉ tính incoming missile
+         - Simulated: tính cả turret + minion DPS dự đoán
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  6. SDK CORE — Thiếu                                                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 6.1  Event System — hook game events
+         - OnDoCast(sender, args) → detect auto attacks, spell casts
+         - OnProcessSpellCast(sender, args) → spell cast start
+         - OnPlayAnimation(sender, args) → animation events
+         - OnStopCast(spellbook, args) → missile destroy events
+         - OnDelete(sender) → object removed
+         - Cần hook từ game hoặc track thay đổi mỗi frame
+
+[  ] 6.2  Spellbook.OnStopCast + GameObject.OnDelete events
+
+[  ] 6.3  Variables.GameTimeTickCount equivalent
+         - int GetGameTickCount() = (int)(Game::GetTime() * 1000.0f)
+         - Dùng trong timing calculations
+
+[  ] 6.4  Expose IssueOrder trên GameObject
+         - player.IssueOrder(OrderType::AttackUnit, target) giống E# API
+         - Bên trong gọi Orbwalker::IssueOrder
+
+[  ] 6.5  Collisions.HasYasuoWindWallCollision(from, to)
+         - Scan cho WindWall objects (YasuoWMovingWall)
+         - Check line intersection
+
+[  ] 6.6  Game::IsShopOpen() check
+         - Đọc shop state từ HUD
+
+[  ] 6.7  Config save/load
+         - Lưu menu settings ra JSON hoặc INI file
+         - Load khi plugin khởi tạo
+         - Auto-save khi thay đổi
+
+[  ] 6.8  SpellData improvements
+         - SpellData.Name (tên chiêu thức)
+         - SpellData.TooltipVars (biến tooltip cho damage scaling)
+         - SpellData.MissileSpeed
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  7. DAMAGE CALCULATION — Cần port                                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 7.1  GetAutoAttackDamage(target, includePassive, calcItemDmg)
+         - Proper armor pen calculation (flat + percent + lethality scaling by level)
+         - Crit damage calculation
+         - Item on-hit: Sheen/Trinity/Lich Bane proc, BOTRK, Nashor's, Kraken Slayer
+         - Champion passive: Vayne W, Ashe Q, etc.
+
+[  ] 7.2  CalcPhysicalDamage cải thiện
+         - Armor pen calculation: (target armor) * (1 - percent pen) - lethality
+         - Lethality scales with attacker level
+
+[  ] 7.3  CalcMagicalDamage cải thiện
+         - Magic pen: flat pen after percent pen
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  8. TESTING & DEBUG                                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+[  ] 8.1  Inject DLL → verify Orbwalker attack+move cycle hoạt động
+[  ] 8.2  Verify TargetSelector chọn đúng target theo mode
+[  ] 8.3  Verify CanAttack/CanMove timing đúng (no double attacks, smooth kiting)
+[  ] 8.4  Test LaneClear: last hit accuracy, turret farm
+[  ] 8.5  Test các buff checks: Fear, Polymorph, Stun → không attack
+[  ] 8.6  Profile performance — đảm bảo không lag khi nhiều objects
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  ƯU TIÊN THỰC HIỆN                                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  Cao:   3.1, 3.3, 3.4, 3.5, 4.1, 6.3, 6.4, 7.1
+         → Đây là foundation, Orbwalker + TS cần những cái này
+
+  Trung: 1.6, 1.7, 1.8, 1.9, 2.1, 2.2, 5.1, 5.2, 6.1
+         → Cải thiện accuracy, farming, event system
+
+  Thấp:  1.1, 1.2, 1.3, 1.10, 1.12, 1.13, 2.5, 3.7, 4.2-4.6, 6.5, 6.7
+         → Champion-specific, niche features, polish
+
+==============================================================================
+  GHI CHÚ
+==============================================================================
+- Khi port từ C# → C++: EnsoulSharp SDK types map:
+    AIHeroClient    → SDK::GameObject (filtered hero)
+    AIMinionClient  → SDK::GameObject (filtered minion)
+    AIBaseClient    → SDK::GameObject (base class)
+    AttackableUnit  → SDK::GameObject
+    Spellbook       → SDK::SpellBook
+    BuffInstance     → SDK::Buff
+    GameObjects     → SDK::GameObjects namespace
+    Game            → SDK::Game namespace
+    Variables       → SDK::Game::GetTickCount()
+    MenuUI.Menu     → SDK::MenuUI::Menu
+    MenuBool        → SDK::MenuUI::MenuBool
+    MenuSlider      → SDK::MenuUI::MenuSlider
+    MenuKeyBind     → SDK::MenuUI::MenuKeyBind
+    Drawing         → SDK::Drawing namespace
+    CircleRender    → SDK::Drawing::DrawCircle
+
+- Spoof_call PHẢI được dùng cho mọi game function call (anti-cheat)
+- __try/__except CHỈ dùng trong hàm KHÔNG có C++ objects (no std::string/vector)
+  → Dùng Globals::ReadGameString/ReadPtrArray helpers thay thế

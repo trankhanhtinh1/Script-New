@@ -52,46 +52,57 @@ namespace GameObjects {
                 EnemyHeroes.push_back(hero);
         }
 
-        // ---- Minions (from full object iteration) ----
+        // ---- Turrets (from TurretManager directly) ----
+        Turrets.clear();
+        {
+            uintptr_t tmgr = Globals::Read<uintptr_t>(Globals::base + Offset::Global::TurretManager);
+            if (Globals::IsValidPtr(tmgr)) {
+                uintptr_t tlist = Globals::Read<uintptr_t>(tmgr + 0x8);
+                int tcount = Globals::Read<int>(tmgr + 0x10);
+                if (Globals::IsValidPtr(tlist) && tcount > 0 && tcount <= 30) {
+                    uintptr_t addrs[30] = {};
+                    int n = Globals::ReadPtrArray(tlist, tcount, addrs, 30);
+                    for (int i = 0; i < n; i++) {
+                        if (Globals::IsValidPtr(addrs[i])) {
+                            GameObject t(addrs[i]);
+                            if (t.IsAlive())
+                                Turrets.push_back(t);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Minions + Jungle (from MinionManager) ----
         AllMinions.clear();
         AllyMinions.clear();
         EnemyMinions.clear();
         JungleMinions.clear();
-        Turrets.clear();
+        {
+            auto minions = ObjectManager::GetMinions();
+            for (auto& obj : minions) {
+                if (!obj.IsValid() || !obj.IsAlive()) continue;
 
-        ObjectManager::ForEach([&](GameObject& obj) {
-            if (!obj.IsAlive()) return;
+                GameObjectTeam team = obj.GetTeam();
 
-            GameObjectTeam team = obj.GetTeam();
-
-            // Check for turrets
-            if (obj.IsTurret()) {
-                Turrets.push_back(obj);
-                return;
-            }
-
-            // Check for heroes (already handled above, skip)
-            if (obj.IsHero()) return;
-
-            // Check for jungle monsters
-            if (team == GameObjectTeam::Neutral) {
-                if (obj.GetMaxHealth() > 1.0f) { // Filter out wards etc.
-                    JungleMinions.push_back(obj);
+                // Jungle monsters (Neutral team)
+                if (team == GameObjectTeam::Neutral) {
+                    if (obj.GetMaxHealth() > 1.0f)
+                        JungleMinions.push_back(obj);
+                    continue;
                 }
-                return;
-            }
 
-            // Lane minions — by HP/Team validation
-            float maxHP = obj.GetMaxHealth();
-            if (maxHP > 0.0f && maxHP < 10000.0f) {
-                // Has reasonable health → likely a lane minion
-                AllMinions.push_back(obj);
-                if (team == myTeam)
-                    AllyMinions.push_back(obj);
-                else
-                    EnemyMinions.push_back(obj);
+                // Lane minions
+                float maxHP = obj.GetMaxHealth();
+                if (maxHP > 0.0f && maxHP < 10000.0f) {
+                    AllMinions.push_back(obj);
+                    if (team == myTeam)
+                        AllyMinions.push_back(obj);
+                    else
+                        EnemyMinions.push_back(obj);
+                }
             }
-        });
+        }
     }
 
     // ====================================================================

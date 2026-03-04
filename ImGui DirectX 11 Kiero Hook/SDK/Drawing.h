@@ -14,25 +14,74 @@ namespace SDK {
 namespace Drawing {
 
     // ====================================================================
-    // World to Screen conversion
+    // ViewProjMatrix cache (updated each frame)
+    // Reference: Script-New-main/Render.cpp — matrix is DIRECT memory, not a pointer!
+    // ====================================================================
+    inline float g_viewProjMatrix[16] = {};
+    inline bool  g_matrixReady = false;
+
+    inline void UpdateMatrix() {
+        if (!Globals::base) return;
+        __try {
+            // ViewMatrix at ViewMatrixInst, ProjMatrix at ViewMatrixInst + 0x40
+            // These are DIRECT float arrays in memory, NOT pointers!
+            float* pView = (float*)(Globals::base + Offset::Extra::ViewMatrixInst);
+            float* pProj = (float*)(Globals::base + Offset::Extra::ViewMatrixInst + 0x40);
+
+            // Multiply View * Proj → ViewProj
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    float sum = 0.0f;
+                    for (int k = 0; k < 4; k++)
+                        sum += pView[i * 4 + k] * pProj[k * 4 + j];
+                    g_viewProjMatrix[i * 4 + j] = sum;
+                }
+            }
+            g_matrixReady = true;
+        } __except(1) { g_matrixReady = false; }
+    }
+
+    // ====================================================================
+    // W2S via ViewProjMatrix (most reliable — no game function call)
+    // Reference: Script-New-main/Render.cpp WorldToScreen
+    // ====================================================================
+    inline bool WorldToScreenMatrix(const Vec3& world, Vec2& screen) {
+        if (!g_matrixReady) return false;
+
+        float* m = g_viewProjMatrix;
+        float w = m[3] * world.x + m[7] * world.y + m[11] * world.z + m[15];
+
+        if (w < 0.01f) return false;
+
+        float x = m[0] * world.x + m[4] * world.y + m[8]  * world.z + m[12];
+        float y = m[1] * world.x + m[5] * world.y + m[9]  * world.z + m[13];
+
+        // Use ImGui display size for screen dimensions
+        ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+
+        screen.x = (displaySize.x / 2.0f) * (1.0f + x / w);
+        screen.y = (displaySize.y / 2.0f) * (1.0f - y / w);
+        return true;
+    }
+
+    // ====================================================================
+    // World to Screen (tries matrix first, fallback to game function)
     // ====================================================================
     inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
+        // Try matrix-based first (no game function call)
+        if (WorldToScreenMatrix(world, screen))
+            return true;
+
+        // Fallback: game function W2S
+        if (!Globals::base) return false;
+        uintptr_t fnAddr = Globals::base + Offset::Function::WorldToScreen;
+        if (!fnAddr) return false;
+
         typedef bool(__cdecl* fnW2S)(Vec3*, Vec3*);
-        static uintptr_t fn = Globals::base + Offset::Function::WorldToScreen;
-
         Vec3 screenPos;
+        Vec3 worldCopy = world;
         __try {
-            // HudInstance → ViewPort→ W2S
-            uintptr_t hud = Globals::Read<uintptr_t>(
-                Globals::base + Offset::Global::HudInstance);
-            if (!Globals::IsValidPtr(hud)) return false;
-
-            uintptr_t viewport = Globals::Read<uintptr_t>(
-                Globals::base + Offset::Global::ViewPort);
-            if (!Globals::IsValidPtr(viewport)) return false;
-
-            Vec3 worldCopy = world;
-            bool result = ((fnW2S)fn)(&worldCopy, &screenPos);
+            bool result = ((fnW2S)fnAddr)(&worldCopy, &screenPos);
             if (result) {
                 screen.x = screenPos.x;
                 screen.y = screenPos.y;
@@ -40,39 +89,6 @@ namespace Drawing {
             }
         } __except(1) {}
         return false;
-    }
-
-    // Alternative W2S using ViewMatrix
-    inline bool WorldToScreen2(const Vec3& world, Vec2& screen) {
-        __try {
-            uintptr_t viewMatAddr = Globals::Read<uintptr_t>(
-                Globals::base + Offset::Extra::ViewMatrixInst);
-            if (!Globals::IsValidPtr(viewMatAddr)) return false;
-
-            uintptr_t renderer = Globals::Read<uintptr_t>(
-                Globals::base + Offset::Global::r3dRenderer);
-            if (!Globals::IsValidPtr(renderer)) return false;
-
-            int width  = Globals::Read<int>(renderer + 0x10);
-            int height = Globals::Read<int>(renderer + 0x14);
-
-            float matrix[16];
-            for (int i = 0; i < 16; i++)
-                matrix[i] = Globals::Read<float>(viewMatAddr + i * 4);
-
-            float clipX = world.x * matrix[0] + world.y * matrix[4] + world.z * matrix[8]  + matrix[12];
-            float clipY = world.x * matrix[1] + world.y * matrix[5] + world.z * matrix[9]  + matrix[13];
-            float clipW = world.x * matrix[3] + world.y * matrix[7] + world.z * matrix[11] + matrix[15];
-
-            if (clipW < 0.1f) return false;
-
-            float ndcX = clipX / clipW;
-            float ndcY = clipY / clipW;
-
-            screen.x = (width  / 2.0f) * (1.0f + ndcX);
-            screen.y = (height / 2.0f) * (1.0f - ndcY);
-            return true;
-        } __except(1) { return false; }
     }
 
     // ====================================================================
