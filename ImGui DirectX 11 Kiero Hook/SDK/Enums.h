@@ -6,12 +6,12 @@
 
 namespace SDK {
 
-// Team IDs
+// Team IDs (byte at offset 0x259: 1=Blue, 2=Red, 3=Neutral)
 enum class GameObjectTeam : int {
     Unknown  = 0,
-    Blue     = 100,
-    Red      = 200,
-    Neutral  = 300
+    Blue     = 1,
+    Red      = 2,
+    Neutral  = 3
 };
 
 // Orbwalker modes (EnsoulSharp OrbwalkingMode.cs)

@@ -59,3 +59,6 @@
 
 // Phase 4: Drawing / Rendering
 #include "Drawing.h"
+
+// Phase 5: Menu UI (EnsoulSharp SDK compatible)
+#include "MenuUI.h"

@@ -271,16 +271,30 @@ namespace SDK {
         // State
         // ====================================================================
 
+        // IsDead — calls game function (offset 0x250 is ENCRYPTED LeagueObfuscation)
+        // IDA: sub_29B380 takes RCX=obj, decrypts encrypted bool at obj+0x250
         bool IsDead() const {
-            return Globals::Read<int>(address + Offset::GameObject::Dead) != 0;
+            if (!IsValid()) return true;
+            typedef bool(__fastcall* Fn)(uintptr_t);
+            static uintptr_t fn = Globals::base + Offset::Function::IsDead;
+            __try { return ((Fn)fn)(address); }
+            __except(1) { return true; }
         }
 
+        // IsAlive — calls game function (uses vtable + IsDead internally)
+        // IDA: sub_2E6350 takes RCX=obj, calls vtable check + IsDead
         bool IsAlive() const {
-            return !IsDead() && GetHealth() > 0.0f;
+            if (!IsValid()) return false;
+            typedef bool(__fastcall* Fn)(uintptr_t);
+            static uintptr_t fn = Globals::base + Offset::Function::IsAlive;
+            __try { return ((Fn)fn)(address); }
+            __except(1) { return false; }
         }
 
+        // IsVisible — direct byte read at 0x308 (CE confirmed: 0=fog, 1=visible)
         bool IsVisible() const {
-            return Globals::Read<bool>(address + Offset::GameObject::Visible);
+            if (!IsValid()) return false;
+            return Globals::Read<unsigned char>(address + Offset::GameObject::Visible) == 1;
         }
 
         bool IsTargetable() const {

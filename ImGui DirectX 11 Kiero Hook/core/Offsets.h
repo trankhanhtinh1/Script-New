@@ -31,7 +31,7 @@ namespace Global {
     constexpr auto UnderMouseObj    = 0x1D7DF50;   // [D] object under mouse cursor
     constexpr auto ViewPort         = 0x1D8D1B0;   // [D] viewport ptr
     constexpr auto ObjectManager    = 0x1D7A3D8;   // [D][P] object manager instance
-    constexpr auto MinionManager    = 0x1D7A430;   // [P] minion manager ptr (same as HeroManager in plugin)
+    constexpr auto MinionManager    = 0x1D7A428;   // [CE] minion+jungle list (count=~150)
     constexpr auto NetInstance      = 0x1D7A3D0;   // [IDA] net instance (970 xrefs confirmed)
     constexpr auto CursorInstance   = 0x1E05698;   // [P] cursor position (Vec3)
     constexpr auto MouseScreenVec2  = 0x1D7DCF8;   // [D] mouse 2D screen position
@@ -40,6 +40,7 @@ namespace Global {
     constexpr auto r3dRenderer      = 0x1E3FE78;   // [D] renderer instance (oViewPort2)
     constexpr auto ViewPort2        = 0x1E3FE78;   // [D] viewport2/renderer
     constexpr auto MySpellState     = 0x1D80AA0;   // [D] spell state global
+    constexpr auto TurretManager    = 0x1D87068;   // [CE] turret list (count=24)
 }
 
 // ================================================================
@@ -100,6 +101,9 @@ namespace Function {
     constexpr auto HasBuffOfType        = 0x296400;     // [P]
     constexpr auto GetGoldRedirectTgt   = 0x1FF990;     // [P]
 
+    // Map / Minimap
+    constexpr auto GetMapID             = 0x28E310;     // [CE] E8 ?? ?? ?? ?? 4C 89 7C 24 40 48 8D 4C 24 70
+
     // Hooks / Callbacks
     constexpr auto OnCreateObject       = 0x517E70;     // [P]
     constexpr auto OnGameUpdate         = 0x511210;     // [P]
@@ -125,7 +129,7 @@ namespace GameObject {
     constexpr auto EffectEmitter    = 0x258;        // [S]
     constexpr auto Visibility       = 0x2E0;        // [S]
     constexpr auto MissileClient    = 0x2D8;        // [S]
-    constexpr auto Visible          = 0x300;        // [S]
+    constexpr auto Visible          = 0x308;        // [CE] verified: 0=fog, 1=visible on screen
     constexpr auto IsInvulnerable   = 0x5A0;        // [S]
     constexpr auto Radius           = 0x6F8;        // [D]
     constexpr auto RecallState      = 0xF48;        // [S]
@@ -477,6 +481,15 @@ namespace NavGrid {
 namespace ManagerList {
     constexpr auto Items            = 0x8;          // [S]
     constexpr auto Size             = 0x10;         // [S]
+}
+
+// ================================================================
+// MINIMAP
+// ================================================================
+namespace Minimap {
+    constexpr auto MinimapParent    = 0x1D7A3D0;    // [CE] global ptr (same as NetInstance)
+    constexpr auto MinimapHud       = 0x3B8;         // [CE] MinimapParent->+0x3B8 (was 0x288 in 14.23)
+    constexpr auto HudVisible       = 0xD8;          // [CE] MinimapHud+0xD8 byte flag
 }
 
 // ================================================================

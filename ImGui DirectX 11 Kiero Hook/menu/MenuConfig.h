@@ -7,8 +7,8 @@
 namespace Config {
 
     // ============ General ============
-    inline bool showMenu        = true;     // Toggle with INSERT key
-    inline int  menuKey         = VK_INSERT;
+    // Menu toggle: CapsLock (toggle), Shift (hold) — managed by BGXMenu::Render()
+    inline bool showMenu        = true;
 
     // ============ Orbwalker ============
     namespace Orbwalker {
