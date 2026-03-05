@@ -142,4 +142,133 @@ enum class GapcloserType {
     Targeted
 };
 
+// Game object types (EnsoulSharp GameObjectType)
+enum class GameObjectType {
+    Unknown           = 0,
+    AIHeroClient      = 1,
+    AIMinionClient    = 2,
+    AITurretClient    = 3,
+    MissileClient     = 4,
+    NeutralMinionCamp = 5,
+    BarracksDampener  = 6,
+    HQ               = 7
+};
+
+// Resource types (mana, energy, etc.)
+enum class ResourceType : int {
+    Mana      = 0,
+    Energy    = 1,
+    None      = 2,
+    Shield    = 3,
+    BattleFury = 4,
+    DragonFury = 5,
+    Rage      = 6,
+    Heat      = 7,
+    Gnarfury  = 8,
+    Ferocity  = 9,
+    BloodWell = 10,
+    Wind      = 11,
+    Ammo      = 12,
+    Other     = 13
+};
+
+// Summoner spell names (for identification)
+namespace SummonerSpells {
+    constexpr const char* Flash     = "SummonerFlash";
+    constexpr const char* Ignite    = "SummonerDot";
+    constexpr const char* Heal      = "SummonerHeal";
+    constexpr const char* Exhaust   = "SummonerExhaust";
+    constexpr const char* Barrier   = "SummonerBarrier";
+    constexpr const char* Teleport  = "SummonerTeleport";
+    constexpr const char* Smite     = "SummonerSmite";
+    constexpr const char* Cleanse   = "SummonerBoost";
+    constexpr const char* Ghost     = "SummonerHaste";
+    constexpr const char* Mark      = "SummonerSnowball";  // ARAM
+}
+
+// ============================================================================
+// SpellType — Comprehensive spell type (from SpellType.cs)
+// Used by SpellDatabaseEntry for full spell classification
+// ============================================================================
+enum class SpellType {
+    SkillshotCircle,           // Circle skillshot (Ziggs Q)
+    SkillshotMissileCircle,    // Circle skillshot with missile (Lulu E)
+    SkillshotLine,             // Line skillshot (Ezreal Q)
+    SkillshotMissileLine,      // Line skillshot with missile (Morgana Q)
+    SkillshotCone,             // Cone skillshot (Annie W)
+    SkillshotMissileCone,      // Cone skillshot with missile (Ashe W)
+    SkillshotMissileArc,       // Arc missile skillshot (Diana Q)
+    SkillshotRing,             // Ring skillshot (Veigar E)
+    SkillshotArc,              // Arc skillshot
+    Targeted,                  // Targeted spell (Annie Q)
+    TargetedMissile,           // Targeted with missile (Caitlyn R)
+    Toggled,                   // Toggle spell (Singed Q)
+    Activated,                 // Activated spell (Vayne R, Olaf R)
+    Passive,                   // Passive only (Vayne W)
+    Position,                  // Position-based but undodgeable (Ezreal E)
+    Vector                     // Start+End point (Viktor E, Rumble R)
+};
+
+// ============================================================================
+// CastType — How a spell can be cast (from CastTypes.cs)
+// ============================================================================
+enum class CastType {
+    EnemyChampions,
+    EnemyMinions,
+    EnemyTurrets,
+    AllyChampions,
+    AllyMinions,
+    AllyTurrets,
+    HeroPets,
+    Position,
+    Direction,
+    Self,
+    Charging,
+    Toggle,
+    Channel,
+    Activate,
+    ImpossibleToCast
+};
+
+// ============================================================================
+// CollisionableObjects — What a spell missile can collide with (Flags)
+// From CollisionableObjects.cs
+// ============================================================================
+enum CollisionableObjects : int {
+    CollisionNone       = 0,
+    CollisionMinions    = 1 << 0,
+    CollisionHeroes     = 1 << 1,
+    CollisionYasuoWall  = 1 << 2,
+    CollisionBraumShield = 1 << 3,
+    CollisionWalls      = 1 << 4
+};
+
+// ============================================================================
+// SpellTags — Properties/tags a spell can have (from SpellTags.cs)
+// ============================================================================
+enum class SpellTags {
+    Damage,
+    AoE,
+    AppliesOnHitEffects,
+    CrowdControl,
+    Shield,
+    Heal,
+    Stasis,
+    LeavesMark,
+    CanDetonateMark,
+    Transformation,
+    Dash,
+    Blink,
+    Teleport,
+    DamageAmplifier,
+    DefensiveBuff,
+    MovementSpeedAmplifier,
+    AttackSpeedAmplifier,
+    AttackRangeModifier,
+    SpellShield,
+    RemoveCrowdControl,
+    GrantsVision,
+    Interruptable
+};
+
 } // namespace SDK

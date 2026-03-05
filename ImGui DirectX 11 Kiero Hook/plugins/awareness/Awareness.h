@@ -400,14 +400,33 @@ namespace Plugins {
                             IM_COL32(255, 50, 50, 120), 1.5f);
                     }
 
-                    // Movement Path
+                    // Movement Path — draw full path with segments
                     if (cfg.drawEnemyPath) {
                         SDK::AiManager ai(hero.address);
                         if (ai.IsValid() && ai.IsMoving()) {
-                            Vec3 target = ai.GetPathEnd();
-                            if (!target.IsZero()) {
-                                SDK::Drawing::DrawLine(pos, target,
-                                    IM_COL32(255, 255, 100, 120), 1.5f);
+                            auto path = ai.GetRemainingPath();
+                            if (!path.empty()) {
+                                // Draw from hero position to first waypoint, then each segment
+                                Vec3 prev = hero.GetPosition();
+                                for (auto& wp : path) {
+                                    if (wp.IsZero()) continue;
+                                    SDK::Drawing::DrawLine(prev, wp,
+                                        IM_COL32(255, 255, 100, 120), 1.5f);
+                                    prev = wp;
+                                }
+                                // Draw small circle at destination
+                                Vec3 dest = path.back();
+                                if (!dest.IsZero()) {
+                                    SDK::Drawing::DrawCircle(dest, 30.0f,
+                                        IM_COL32(255, 255, 100, 160), 1.5f);
+                                }
+                            } else {
+                                // Fallback: simple line to path end
+                                Vec3 endPos = ai.GetPathEnd();
+                                if (!endPos.IsZero()) {
+                                    SDK::Drawing::DrawLine(hero.GetPosition(), endPos,
+                                        IM_COL32(255, 255, 100, 120), 1.5f);
+                                }
                             }
                         }
                     }

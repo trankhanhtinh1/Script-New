@@ -5,6 +5,9 @@
 #include "../../sdk/GameObjects.h"
 #include "../../sdk/Game.h"
 #include "../../sdk/Drawing.h"
+#include "../../sdk/DamageCalc.h"
+#include "../../sdk/BuffManager.h"
+#include "../../sdk/TargetSelector.h"
 #include "../../sdk/Enums.h"
 #include "../../core/Globals.h"
 #include <algorithm>
@@ -75,6 +78,10 @@ namespace Plugins {
                 m_prioritiesPopulated = true;
             }
 
+            // Sync "Only Attack Selected Target" flag to SDK::TargetSelector
+            auto* only = m_menu->Get<SDK::MenuUI::MenuBool>("OnlySelectTarget");
+            SDK::TargetSelector::OnlyAttackSelected = (only && only->Enabled && m_selectedTarget.IsValid());
+
             // Handle click-to-select (left click near enemy)
             HandleClickSelect();
         }
@@ -113,10 +120,21 @@ namespace Plugins {
 
         // Get single best target in range
         SDK::GameObject GetTarget(float range, SDK::DamageType damageType = SDK::DamageType::Physical) {
+            // "Only Attack Selected Target" — strict mode: ONLY attack selected target
+            auto* only = m_menu ? m_menu->Get<SDK::MenuUI::MenuBool>("OnlySelectTarget") : nullptr;
+            if (only && only->Enabled && m_selectedTarget.IsValid()) {
+                if (m_selectedTarget.IsAlive() && m_selectedTarget.IsVisible() && m_selectedTarget.IsTargetable()) {
+                    float dist = SDK::GameObjects::Player.DistanceTo(m_selectedTarget);
+                    if (dist <= range + m_selectedTarget.GetBoundingRadius())
+                        return m_selectedTarget;
+                }
+                return SDK::GameObject(); // Selected target out of range → attack nothing
+            }
+
             auto targets = GetValidTargets(range);
             if (targets.empty()) return SDK::GameObject();
 
-            // Check forced selected target
+            // "Force on Selected Target" — prefer selected but fallback to best
             if (m_selectedTarget.IsValid() && m_selectedTarget.IsAlive()) {
                 auto* force = m_menu ? m_menu->Get<SDK::MenuUI::MenuBool>("ForceSelectTarget") : nullptr;
                 if (force && force->Enabled) {
@@ -125,9 +143,6 @@ namespace Plugins {
                             return m_selectedTarget;
                     }
                 }
-                auto* only = m_menu ? m_menu->Get<SDK::MenuUI::MenuBool>("OnlySelectTarget") : nullptr;
-                if (only && only->Enabled && IsValidTarget(m_selectedTarget, 99999.0f))
-                    return m_selectedTarget;
             }
 
             return SelectByMode(targets, damageType);
@@ -157,7 +172,17 @@ namespace Plugins {
         }
 
         // Get multiple targets sorted by priority
+        // 2.4: OnlySelectTarget enforcement — if enabled, only return selected target
         std::vector<SDK::GameObject> GetTargets(float range, SDK::DamageType damageType = SDK::DamageType::Physical) {
+            // 2.4: Only Attack Selected Target
+            auto* only = m_menu ? m_menu->Get<SDK::MenuUI::MenuBool>("OnlySelectTarget") : nullptr;
+            if (only && only->Enabled && m_selectedTarget.IsValid() && m_selectedTarget.IsAlive()) {
+                if (IsValidTarget(m_selectedTarget, range)) {
+                    return { m_selectedTarget };
+                }
+                return {}; // Selected target out of range / invalid → return nothing
+            }
+
             auto targets = GetValidTargets(range);
             SortByMode(targets, damageType);
 
@@ -221,22 +246,46 @@ namespace Plugins {
                     }
                 }
 
-                if (nearest.IsValid())
+                if (nearest.IsValid()) {
                     m_selectedTarget = nearest;
-                else
+                    SDK::TargetSelector::SetForcedTarget(nearest); // Sync with SDK
+                } else {
                     m_selectedTarget = SDK::GameObject(); // deselect
+                    SDK::TargetSelector::ClearForcedTarget();
+                }
             }
             wasClickDown = clickDown;
+
+            // Keep ForcedTarget in sync — clear if selected target died or went invisible
+            if (m_selectedTarget.IsValid()) {
+                if (!m_selectedTarget.IsAlive() || !m_selectedTarget.IsVisible()) {
+                    m_selectedTarget = SDK::GameObject();
+                    SDK::TargetSelector::ClearForcedTarget();
+                }
+            }
         }
 
         // ====================================================================
-        // Valid target checks
+        // Valid target checks (enhanced with invulnerable/zombie checks)
         // ====================================================================
         bool IsValidTarget(const SDK::GameObject& target, float range) {
             if (!target.IsValid()) return false;
             if (!target.IsAlive()) return false;
             if (!target.IsVisible()) return false;
             if (!target.IsTargetable()) return false;
+
+            // Zombie check (Sion/Karthus/Kog'Maw passive)
+            if (target.IsZombie()) return false;
+
+            // Invulnerable check (Kayle R, Tryndamere R, etc.)
+            SDK::BuffManager buffs(target.address);
+            static const char* invulnBuffs[] = {
+                "KayleR", "TryndamereR", "kindaborroweytime",
+                "ChronoShift", "UndyingRage", nullptr
+            };
+            for (const char** p = invulnBuffs; *p; p++)
+                if (buffs.HasBuff(*p)) return false;
+
             if (range > 0.0f) {
                 float dist = SDK::GameObjects::Player.DistanceTo(target);
                 if (dist > range + target.GetBoundingRadius()) return false;
@@ -246,17 +295,94 @@ namespace Plugins {
 
         std::vector<SDK::GameObject> GetValidTargets(float range) {
             std::vector<SDK::GameObject> result;
+
+            // 2.5 Azir: also check if Azir soldiers are in range of target
+            bool isAzir = false;
+            auto& player = SDK::GameObjects::Player;
+            if (player.IsValid()) {
+                std::string champName = player.GetChampionName();
+                isAzir = (_stricmp(champName.c_str(), "Azir") == 0);
+            }
+
             for (auto& hero : SDK::GameObjects::EnemyHeroes) {
-                if (IsValidTarget(hero, range))
+                if (!hero.IsValid() || !hero.IsAlive() || !hero.IsVisible() || !hero.IsTargetable())
+                    continue;
+                if (hero.IsZombie()) continue;
+
+                float dist = player.DistanceTo(hero);
+
+                // Standard range check
+                bool inRange = (dist <= range + hero.GetBoundingRadius());
+
+                // 2.5 Azir soldier extended range:
+                // If Azir + soldier within 770 of player + soldier within 350 of target → in range
+                if (!inRange && isAzir) {
+                    for (auto& soldier : SDK::GameObjects::AzirSoldiers) {
+                        if (!soldier.IsValid()) continue;
+                        float soldierToPlayer = player.DistanceTo(soldier);
+                        float soldierToTarget = soldier.GetPosition().Distance2D(hero.GetPosition());
+                        if (soldierToPlayer <= 770.0f && soldierToTarget <= 350.0f) {
+                            inRange = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (inRange)
                     result.push_back(hero);
             }
             return result;
         }
 
         // ====================================================================
+        // 2.3 Smart AD/AP Scoring (ported from NewTargetSelector.cs)
+        // Score = (EHP / priority_weight) — lower is better
+        //
+        // This combines:
+        //   - Effective Health (physical or magical based on source)
+        //   - Champion priority (higher prio = lower divisor)
+        //   - Distance penalty
+        //   - Kill threat bonus (if we can kill them soon)
+        // ====================================================================
+        float GetSmartScore(const SDK::GameObject& target, SDK::DamageType damageType) {
+            auto& player = SDK::GameObjects::Player;
+            float hp = target.GetHealth();
+
+            // Effective HP based on damage type
+            float ehp;
+            if (damageType == SDK::DamageType::Magical)
+                ehp = target.GetEffectiveHealthAP();
+            else
+                ehp = target.GetEffectiveHealthAD();
+
+            if (ehp <= 0) ehp = 1.0f;
+
+            // Priority weight (higher priority = lower EHP score → better target)
+            int prio = GetPriority(target);
+            float prioWeight = 0.5f + (float)prio * 0.5f; // 1.0 at prio=1, 3.0 at prio=5
+
+            // Distance penalty
+            float dist = player.DistanceTo(target);
+            float distPenalty = dist / 1000.0f * 30.0f;
+
+            // Kill threat bonus: if we can kill them in 2-3 AAs, strongly prefer
+            float aaDmg = SDK::DamageCalc::GetAutoAttackDamage(player, target, false, true);
+            float killBonus = 0.0f;
+            if (aaDmg > 0 && hp / aaDmg <= 3.0f)
+                killBonus = -200.0f * (3.0f - hp / aaDmg); // Negative = lower score = better
+
+            return (ehp / prioWeight) + distPenalty + killBonus;
+        }
+
+        // ====================================================================
         // Mode-based selection (ported from NewTargetSelector)
+        // Mode 0: Smart AD/AP (2.3) — DamageCalc-based with priority weighting
+        // Mode 1: Lowest Health
+        // Mode 2: Most Priority
         // ====================================================================
         SDK::GameObject SelectByMode(std::vector<SDK::GameObject>& targets, SDK::DamageType damageType) {
+            if (targets.empty()) return SDK::GameObject();
+
             int mode = 0;
             if (m_menu) {
                 auto* modeList = m_menu->Get<SDK::MenuUI::MenuList>("TSMode");
@@ -264,12 +390,10 @@ namespace Plugins {
             }
 
             switch (mode) {
-            case 0: // Smart AD/AP — lowest effective health based on damage type
+            case 0: // Smart AD/AP — 2.3 scoring
                 return *std::min_element(targets.begin(), targets.end(),
-                    [damageType](const SDK::GameObject& a, const SDK::GameObject& b) {
-                        float ehA = (damageType == SDK::DamageType::Magical) ? a.GetEffectiveHealthAP() : a.GetEffectiveHealthAD();
-                        float ehB = (damageType == SDK::DamageType::Magical) ? b.GetEffectiveHealthAP() : b.GetEffectiveHealthAD();
-                        return ehA < ehB;
+                    [this, damageType](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return GetSmartScore(a, damageType) < GetSmartScore(b, damageType);
                     });
             case 1: // Lowest Health
                 return *std::min_element(targets.begin(), targets.end(),
@@ -282,7 +406,7 @@ namespace Plugins {
                         return GetPriority(a) > GetPriority(b);
                     });
             default:
-                return targets.empty() ? SDK::GameObject() : targets[0];
+                return targets[0];
             }
         }
 
@@ -294,21 +418,19 @@ namespace Plugins {
             }
 
             switch (mode) {
-            case 0:
+            case 0: // Smart AD/AP
                 std::sort(targets.begin(), targets.end(),
-                    [damageType](const SDK::GameObject& a, const SDK::GameObject& b) {
-                        float ehA = (damageType == SDK::DamageType::Magical) ? a.GetEffectiveHealthAP() : a.GetEffectiveHealthAD();
-                        float ehB = (damageType == SDK::DamageType::Magical) ? b.GetEffectiveHealthAP() : b.GetEffectiveHealthAD();
-                        return ehA < ehB;
+                    [this, damageType](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return GetSmartScore(a, damageType) < GetSmartScore(b, damageType);
                     });
                 break;
-            case 1:
+            case 1: // Lowest Health
                 std::sort(targets.begin(), targets.end(),
                     [](const SDK::GameObject& a, const SDK::GameObject& b) {
                         return a.GetHealth() < b.GetHealth();
                     });
                 break;
-            case 2:
+            case 2: // Most Priority
                 std::sort(targets.begin(), targets.end(),
                     [this](const SDK::GameObject& a, const SDK::GameObject& b) {
                         return GetPriority(a) > GetPriority(b);

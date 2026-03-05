@@ -51,14 +51,26 @@
 
 // Phase 3: Combat Systems
 #include "DamageCalc.h"
+#include "HealthPrediction.h"
+#include "Collisions.h"
 #include "TargetSelector.h"
 #include "Prediction.h"
 #include "SpellCaster.h"
-#include "HealthPrediction.h"
 #include "Orbwalker.h"
 
-// Phase 4: Drawing / Rendering
+// Phase 4: Event System
+#include "EventSystem.h"
+
+// Phase 4.5: Spell Database & Trackers
+#include "SpellDatabaseEntry.h"
+#include "SpellDatabase.h"
+#include "SummonerTracker.h"
+#include "RecallTracker.h"
+#include "AutoLevel.h"
+
+// Phase 5: Drawing / Rendering
 #include "Drawing.h"
 
-// Phase 5: Menu UI (EnsoulSharp SDK compatible)
+// Phase 6: Menu UI (EnsoulSharp SDK compatible)
 #include "MenuUI.h"
+#include "ConfigManager.h"

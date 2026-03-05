@@ -204,14 +204,25 @@ namespace BGXMenu {
     // Main Render
     // ====================================================================
     inline void Render() {
+        // ---- Only process menu keys when game window is focused ----
+        bool gameFocused = false;
+        {
+            HWND fg = GetForegroundWindow();
+            if (fg) {
+                DWORD pid = 0;
+                GetWindowThreadProcessId(fg, &pid);
+                gameFocused = (pid == GetCurrentProcessId());
+            }
+        }
+
         // ---- Toggle: CapsLock (toggle) or Shift (hold) ----
         static bool capsWasDown = false;
-        bool capsIsDown = (GetAsyncKeyState(VK_CAPITAL) & 0x8000) != 0;
+        bool capsIsDown = gameFocused && (GetAsyncKeyState(VK_CAPITAL) & 0x8000) != 0;
         if (capsIsDown && !capsWasDown) showMenu = !showMenu;
         capsWasDown = capsIsDown;
 
-        // Shift hold — show while held
-        bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+        // Shift hold — show while held (only when game focused)
+        bool shiftHeld = gameFocused && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         bool visible = showMenu || shiftHeld;
 
         if (!visible) return;

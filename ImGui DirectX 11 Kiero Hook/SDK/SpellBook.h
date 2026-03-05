@@ -35,6 +35,84 @@ namespace SDK {
             if (!IsValid()) return 0.0f;
             return Globals::Read<float>(address + Offset::SpellBook::DataManaCost);
         }
+
+        // ====================================================================
+        // SpellDataResource access (SpellData + 0x60 → SpellDataResource ptr)
+        // ====================================================================
+    private:
+        uintptr_t GetResource() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<uintptr_t>(address + Offset::SpellBook::DataResourceBase);
+        }
+
+    public:
+        // Cast range per rank (array of 7 floats)
+        float GetCastRange(int rank = 0) const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return 0.0f;
+            if (rank < 0) rank = 0;
+            if (rank > 6) rank = 6;
+            return Globals::Read<float>(res + Offset::SpellBook::ResCastRange + rank * sizeof(float));
+        }
+
+        // Missile speed
+        float GetMissileSpeed() const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return 0.0f;
+            return Globals::Read<float>(res + Offset::SpellBook::ResMissileSpeed);
+        }
+
+        // Line width / radius
+        float GetLineWidth() const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return 0.0f;
+            return Globals::Read<float>(res + Offset::SpellBook::ResLineWidth);
+        }
+
+        // Cooldown per rank (array of 7 floats)
+        float GetCooldown(int rank = 0) const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return 0.0f;
+            if (rank < 0) rank = 0;
+            if (rank > 6) rank = 6;
+            return Globals::Read<float>(res + Offset::SpellBook::ResCooldownTime + rank * sizeof(float));
+        }
+
+        // Max ammo per rank
+        int GetMaxAmmo(int rank = 0) const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return 0;
+            if (rank < 0) rank = 0;
+            if (rank > 6) rank = 6;
+            return Globals::Read<int>(res + Offset::SpellBook::ResMaxAmmo + rank * sizeof(int));
+        }
+
+        // Cast type (targeting type enum)
+        int GetCastType() const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return 0;
+            return Globals::Read<int>(res + Offset::SpellBook::ResCastType);
+        }
+
+        // Script name
+        std::string GetScriptName() const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return "";
+            char buf[128] = {};
+            if (!Globals::ReadGameString(res + Offset::SpellBook::ResScriptName, buf, sizeof(buf)))
+                return "";
+            return std::string(buf);
+        }
+
+        // Icon name
+        std::string GetIconName() const {
+            uintptr_t res = GetResource();
+            if (!Globals::IsValidPtr(res)) return "";
+            char buf[128] = {};
+            if (!Globals::ReadGameString(res + Offset::SpellBook::ResImgIconName, buf, sizeof(buf)))
+                return "";
+            return std::string(buf);
+        }
     };
 
     // ========================================================================

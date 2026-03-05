@@ -16,17 +16,9 @@
 
 namespace SDK {
 
-    // Collision flags for spells
-    enum CollisionFlags : int {
-        CollisionNone          = 0,
-        CollisionMinions       = (1 << 0),
-        CollisionChampions     = (1 << 1),
-        CollisionYasuoWall     = (1 << 2),
-        CollisionWalls         = (1 << 4),
-    };
-
-    // Spell type
-    enum class SpellType {
+    // Spell caster type — simplified version for SpellCaster factory
+    // (SpellType in Enums.h is the comprehensive EnsoulSharp version)
+    enum class SpellCasterType {
         Targeted,
         Line,
         Circle,
@@ -38,7 +30,7 @@ namespace SDK {
     public:
         // Spell properties
         SpellSlotId Slot;
-        SpellType Type;
+        SpellCasterType Type;
         float Range;
         float Speed;            // 0 = instant
         float Delay;            // Cast delay (seconds)
@@ -50,12 +42,12 @@ namespace SDK {
 
         // Constructors
         SpellCaster()
-            : Slot(SpellSlotId::Q), Type(SpellType::Targeted), Range(0),
+            : Slot(SpellSlotId::Q), Type(SpellCasterType::Targeted), Range(0),
               Speed(0), Delay(0.25f), Width(0), Collision(CollisionNone),
               IsCharged(false), ChargeTime(0), MinRange(0) {}
 
         SpellCaster(SpellSlotId slot, float range)
-            : Slot(slot), Type(SpellType::Targeted), Range(range),
+            : Slot(slot), Type(SpellCasterType::Targeted), Range(range),
               Speed(0), Delay(0.25f), Width(0), Collision(CollisionNone),
               IsCharged(false), ChargeTime(0), MinRange(0) {}
 
@@ -65,14 +57,14 @@ namespace SDK {
 
         static SpellCaster Targeted(SpellSlotId slot, float range) {
             SpellCaster s;
-            s.Slot = slot; s.Range = range; s.Type = SpellType::Targeted;
+            s.Slot = slot; s.Range = range; s.Type = SpellCasterType::Targeted;
             return s;
         }
 
         static SpellCaster Line(SpellSlotId slot, float range, float speed,
                                 float width, float delay = 0.25f) {
             SpellCaster s;
-            s.Slot = slot; s.Type = SpellType::Line;
+            s.Slot = slot; s.Type = SpellCasterType::Line;
             s.Range = range; s.Speed = speed; s.Width = width; s.Delay = delay;
             return s;
         }
@@ -80,7 +72,7 @@ namespace SDK {
         static SpellCaster Circle(SpellSlotId slot, float range, float radius,
                                   float speed = 0, float delay = 0.25f) {
             SpellCaster s;
-            s.Slot = slot; s.Type = SpellType::Circle;
+            s.Slot = slot; s.Type = SpellCasterType::Circle;
             s.Range = range; s.Speed = speed; s.Width = radius * 2; s.Delay = delay;
             return s;
         }
@@ -88,7 +80,7 @@ namespace SDK {
         static SpellCaster Cone(SpellSlotId slot, float range, float angle,
                                 float delay = 0.25f) {
             SpellCaster s;
-            s.Slot = slot; s.Type = SpellType::Cone;
+            s.Slot = slot; s.Type = SpellCasterType::Cone;
             s.Range = range; s.Width = angle; s.Delay = delay;
             return s;
         }
@@ -121,7 +113,7 @@ namespace SDK {
         }
 
         bool IsSkillshot() const {
-            return Type != SpellType::Targeted && Type != SpellType::None;
+            return Type != SpellCasterType::Targeted && Type != SpellCasterType::None;
         }
 
         bool InRange(const GameObject& target) const {
@@ -172,9 +164,9 @@ namespace SDK {
             input.Width = Width;
 
             switch (Type) {
-            case SpellType::Line:   input.Type = SkillshotType::Line; break;
-            case SpellType::Circle: input.Type = SkillshotType::Circle; break;
-            case SpellType::Cone:   input.Type = SkillshotType::Cone; break;
+            case SpellCasterType::Line:   input.Type = SkillshotType::Line; break;
+            case SpellCasterType::Circle: input.Type = SkillshotType::Circle; break;
+            case SpellCasterType::Cone:   input.Type = SkillshotType::Cone; break;
             default: break;
             }
 
@@ -184,9 +176,17 @@ namespace SDK {
                 return false;
 
             // Collision check
+            Vec3 from = GameObjects::Player.GetPosition();
             if (Collision & CollisionMinions) {
-                Vec3 from = GameObjects::Player.GetPosition();
-                if (Prediction::HasCollision(from, pred.CastPosition, Width))
+                if (Collisions::HasMinionCollision(from, pred.CastPosition, Width))
+                    return false;
+            }
+            if (Collision & CollisionHeroes) {
+                if (Collisions::HasHeroCollision(from, pred.CastPosition, Width, target))
+                    return false;
+            }
+            if (Collision & CollisionYasuoWall) {
+                if (Collisions::HasYasuoWindWallCollision(from, pred.CastPosition))
                     return false;
             }
 
@@ -205,9 +205,9 @@ namespace SDK {
             input.Delay = Delay;
             input.Width = Width;
             switch (Type) {
-            case SpellType::Line:   input.Type = SkillshotType::Line; break;
-            case SpellType::Circle: input.Type = SkillshotType::Circle; break;
-            case SpellType::Cone:   input.Type = SkillshotType::Cone; break;
+            case SpellCasterType::Line:   input.Type = SkillshotType::Line; break;
+            case SpellCasterType::Circle: input.Type = SkillshotType::Circle; break;
+            case SpellCasterType::Cone:   input.Type = SkillshotType::Cone; break;
             default: break;
             }
             return Prediction::GetPrediction(target, input);
@@ -459,7 +459,7 @@ namespace SDK {
         // Ezreal
         inline SpellCaster EzrealQ() {
             return SpellCaster::Line(SpellSlotId::Q, 1150, 2000, 120, 0.25f)
-                .SetCollision(CollisionMinions | CollisionChampions);
+                .SetCollision(CollisionMinions | CollisionHeroes);
         }
         inline SpellCaster EzrealW() {
             return SpellCaster::Line(SpellSlotId::W, 1150, 1700, 160, 0.25f);
@@ -471,7 +471,7 @@ namespace SDK {
         // Lux
         inline SpellCaster LuxQ() {
             return SpellCaster::Line(SpellSlotId::Q, 1175, 1200, 70, 0.25f)
-                .SetCollision(CollisionChampions);
+                .SetCollision(CollisionHeroes);
         }
         inline SpellCaster LuxE() {
             return SpellCaster::Circle(SpellSlotId::E, 1100, 310, 1200, 0.25f);
@@ -483,35 +483,35 @@ namespace SDK {
         // Morgana
         inline SpellCaster MorganaQ() {
             return SpellCaster::Line(SpellSlotId::Q, 1175, 1200, 70, 0.25f)
-                .SetCollision(CollisionMinions | CollisionChampions);
+                .SetCollision(CollisionMinions | CollisionHeroes);
         }
 
         // Jinx
         inline SpellCaster JinxW() {
             return SpellCaster::Line(SpellSlotId::W, 1450, 3300, 60, 0.6f)
-                .SetCollision(CollisionMinions | CollisionChampions);
+                .SetCollision(CollisionMinions | CollisionHeroes);
         }
         inline SpellCaster JinxR() {
             return SpellCaster::Line(SpellSlotId::R, 25000, 1700, 140, 0.6f)
-                .SetCollision(CollisionChampions);
+                .SetCollision(CollisionHeroes);
         }
 
         // Blitzcrank
         inline SpellCaster BlitzcrankQ() {
             return SpellCaster::Line(SpellSlotId::Q, 1150, 1800, 70, 0.25f)
-                .SetCollision(CollisionMinions | CollisionChampions);
+                .SetCollision(CollisionMinions | CollisionHeroes);
         }
 
         // Thresh
         inline SpellCaster ThreshQ() {
             return SpellCaster::Line(SpellSlotId::Q, 1100, 1900, 70, 0.5f)
-                .SetCollision(CollisionMinions | CollisionChampions);
+                .SetCollision(CollisionMinions | CollisionHeroes);
         }
 
         // Ahri
         inline SpellCaster AhriE() {
             return SpellCaster::Line(SpellSlotId::E, 975, 1550, 60, 0.25f)
-                .SetCollision(CollisionMinions | CollisionChampions);
+                .SetCollision(CollisionMinions | CollisionHeroes);
         }
 
         // Brand
