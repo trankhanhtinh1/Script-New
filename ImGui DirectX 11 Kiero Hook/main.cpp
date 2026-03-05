@@ -35,6 +35,7 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 }
 
 bool init = false;
+bool sdkInitialized = false;
 HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags)
 {
 	if (!init)
@@ -50,19 +51,12 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 			pDevice->CreateRenderTargetView(pBackBuffer, NULL, &mainRenderTargetView);
 			pBackBuffer->Release();
 			oWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)WndProc);
-			InitImGui();
+		InitImGui();
 
-			// Initialize module base
-			Globals::Init();
+		// Initialize module base
+		Globals::Init();
 
-			// Register core plugins
-			auto& pm = Plugins::PluginManager::Get();
-			pm.Register<Plugins::OrbwalkerPlugin>();
-			pm.Register<Plugins::TargetSelectorPlugin>();
-			pm.Register<Plugins::AwarenessPlugin>();
-			pm.LoadAll(); // Load all by default
-
-			init = true;
+		init = true;
 		}
 
 		else
@@ -73,24 +67,58 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
 
-	// ====== SDK Game Logic (every frame) ======
-	if (Globals::base) {
+	// ====== SDK Game Logic — only when in game (LocalPlayer exists) ======
+	bool inGame = Globals::base && SDK::Game::IsInGame();
+
+	// One-time SDK initialization when first entering game
+	if (inGame && !sdkInitialized) {
+		SDK::Orbwalker::Init();
+		SDK::AutoLevel::Init();
+
+		auto& pm = Plugins::PluginManager::Get();
+		pm.Register<Plugins::OrbwalkerPlugin>();
+		pm.Register<Plugins::TargetSelectorPlugin>();
+		pm.Register<Plugins::AwarenessPlugin>();
+		pm.LoadAll();
+
+		SDK::ConfigManager::LoadAll();
+		sdkInitialized = true;
+	}
+
+	if (inGame) {
 		SDK::Drawing::UpdateMatrix(); // Update W2S matrix FIRST
 		SDK::GameObjects::Update();
+		SDK::EventSystem::Update();      // Track game events
+		SDK::HealthPrediction::Update(); // Track incoming damage
+		SDK::SummonerTracker::Update();  // Track enemy summoner CDs
+		SDK::RecallTracker::Update();    // Track enemy recalls
+		SDK::AutoLevel::Update();        // Auto level up skills
 
-		// Update all SDK MenuUI keybinds
+		// Update all SDK MenuUI keybinds (only in game)
 		SDK::MenuUI::Menu::UpdateAllKeyBinds();
 
 		// Update and render all plugins
 		Plugins::PluginManager::Get().OnUpdate();
 		Plugins::PluginManager::Get().OnRender();
+
+		// Auto-save config (every 5s if changed)
+		SDK::ConfigManager::AutoSave();
 	}
 
-	// ====== Render Menu (BGX Style) ======
-	BGXMenu::Render();
+	// ====== Render Menu (BGX Style) — only when in game ======
+	if (inGame) {
+		BGXMenu::Render();
+	} else if (Globals::base) {
+		// Waiting for game — show small status indicator
+		ImDrawList* dl = ImGui::GetBackgroundDrawList();
+		if (dl) {
+			dl->AddText(ImVec2(10, 10), IM_COL32(255, 200, 100, 200),
+				"[NightSharp] Waiting for game...");
+		}
+	}
 
-	// ====== Info Overlay (always visible) ======
-	if (Config::Misc::showFPS || Config::Misc::showPing || Config::Misc::showGameTime) {
+	// ====== Info Overlay — only when in game ======
+	if (inGame && (Config::Misc::showFPS || Config::Misc::showPing || Config::Misc::showGameTime)) {
 		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
 		ImGui::SetNextWindowBgAlpha(0.35f);
 		ImGui::Begin("##InfoOverlay", nullptr,
@@ -101,7 +129,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 		if (Config::Misc::showFPS) {
 			ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
 		}
-		if (Config::Misc::showGameTime && Globals::base) {
+		if (Config::Misc::showGameTime) {
 			float gt = Globals::Read<float>(Globals::base + Offset::Global::GameTime);
 			if (gt > 0) {
 				ImGui::Text("Time: %d:%02d", (int)gt / 60, (int)gt % 60);

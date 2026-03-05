@@ -211,28 +211,109 @@ namespace SDK {
         // Collision check — are there minions between source and target?
         // ====================================================================
         static bool HasCollision(const Vec3& from, const Vec3& to, float width) {
-            Vec3 dir = to - from;
-            float dist = dir.Length2D();
-            if (dist < 1.0f) return false;
+            Vec2 a = from.To2D();
+            Vec2 b = to.To2D();
+            float lineLen = a.Distance(b);
+            if (lineLen < 1.0f) return false;
 
-            Vec3 norm = Vec3(-dir.z / dist, 0, dir.x / dist); // perpendicular
+            // Check all non-ally minions between us and target
+            auto checkList = [&](std::vector<GameObject>& list) -> bool {
+                for (auto& minion : list) {
+                    if (!minion.IsAlive() || !minion.IsVisible()) continue;
+                    Vec2 mPos = minion.GetPosition().To2D();
+                    float totalWidth = width / 2.0f + minion.GetBoundingRadius();
+                    if (Geometry::LineCircleIntersects(a, b, mPos, totalWidth))
+                        return true;
+                }
+                return false;
+            };
 
-            for (auto& minion : GameObjects::EnemyMinions) {
-                if (!minion.IsAlive() || !minion.IsVisible()) continue;
-                Vec3 mPos = minion.GetPosition();
-
-                // Project minion onto line
-                Vec3 toMinion = mPos - from;
-                float proj = toMinion.x * dir.x / dist + toMinion.z * dir.z / dist;
-                if (proj < 0 || proj > dist) continue;
-
-                // Distance from line
-                float perpDist = std::abs(toMinion.x * norm.x + toMinion.z * norm.z);
-                float totalWidth = width / 2.0f + minion.GetBoundingRadius();
-
-                if (perpDist <= totalWidth) return true;
-            }
+            if (checkList(GameObjects::EnemyMinions)) return true;
+            if (checkList(GameObjects::AllyMinions)) return true;
             return false;
+        }
+
+        // ====================================================================
+        // Yasuo WindWall collision check
+        // Delegates to SDK::Collisions::HasYasuoWindWallCollision()
+        // ====================================================================
+        static bool HasYasuoWindWallCollision(const Vec3& from, const Vec3& to) {
+            return Collisions::HasYasuoWindWallCollision(from, to);
+        }
+
+        // ====================================================================
+        // AoE prediction — Get best cast position for circle/cone AoE
+        // ====================================================================
+        static PredictionResult GetAoEPrediction(const PredictionInput& input,
+                                                  float aoeRadius) {
+            PredictionResult bestResult;
+            bestResult.AoEHitCount = 0;
+
+            Vec3 from = input.From.IsZero() ? GameObjects::Player.GetPosition() : input.From;
+
+            // Get predicted positions for all enemy heroes in range
+            struct PredTarget {
+                GameObject obj;
+                Vec3 predictedPos;
+            };
+            std::vector<PredTarget> targets;
+
+            for (auto& hero : GameObjects::EnemyHeroes) {
+                if (!hero.IsValid() || !hero.IsAlive() || !hero.IsVisible()) continue;
+                float dist = from.Distance2D(hero.GetPosition());
+                if (dist > input.Range + aoeRadius) continue;
+
+                auto pred = GetPrediction(hero, input);
+                if ((int)pred.Hitchance >= (int)HitChance::Low) {
+                    targets.push_back({ hero, pred.CastPosition });
+                }
+            }
+
+            if (targets.empty()) return bestResult;
+
+            // If only 1 target, just return its prediction
+            if (targets.size() == 1) {
+                auto pred = GetPrediction(targets[0].obj, input);
+                pred.AoEHitCount = 1;
+                return pred;
+            }
+
+            // Find position that hits the most targets
+            for (auto& t : targets) {
+                Vec3 castPos = t.predictedPos;
+                if (from.Distance2D(castPos) > input.Range) continue;
+
+                int hitCount = 0;
+                for (auto& other : targets) {
+                    if (castPos.Distance2D(other.predictedPos) <= aoeRadius + other.obj.GetBoundingRadius())
+                        hitCount++;
+                }
+
+                if (hitCount > bestResult.AoEHitCount) {
+                    bestResult.CastPosition = castPos;
+                    bestResult.UnitPosition = t.predictedPos;
+                    bestResult.AoEHitCount = hitCount;
+                    bestResult.Hitchance = HitChance::High;
+                }
+            }
+
+            return bestResult;
+        }
+
+        // ====================================================================
+        // Get predicted health of target at arrival time of spell
+        // Useful for execute spells (Cho R, Garen R, etc.)
+        // Uses HealthPrediction for accurate incoming damage tracking
+        // ====================================================================
+        static float GetPredictedHealth(const GameObject& target,
+                                         float delay, float speed,
+                                         const Vec3& from = Vec3()) {
+            Vec3 origin = from.IsZero() ? GameObjects::Player.GetPosition() : from;
+            float dist = origin.Distance2D(target.GetPosition());
+            float totalDelay = delay;
+            if (speed > 0) totalDelay += dist / speed;
+            float totalDelayMs = totalDelay * 1000.0f;
+            return HealthPrediction::GetPrediction(target, totalDelayMs);
         }
     };
 
