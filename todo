@@ -1,274 +1,458 @@
 ==============================================================================
-  NightSharp SDK — TODO: Hoàn thiện SDK (so sánh với EnsoulSharp)
+  NightSharp SDK — TODO: Hoàn thiện SDK 100% (so sánh với EnsoulSharp)
   Ngày tạo: 2026-03-04
+  Cập nhật: 2026-03-05
 ==============================================================================
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  1. ORBWALKER PLUGIN — Thiếu so với NewOrbwalker.cs                        ║
+║  ĐÃ HOÀN THÀNH — 1. ORBWALKER (15/15)                                    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-[  ] 1.1  Champion-specific logic
-         - Sett: passive attack (nextAttackIsPassive, AttackCastDelay / 8)
-         - Kalista: isKalista CanMove always true, MissileLaunched reset
-         - Graves: ammo system check (gravesbasicattackammo1), delay formula
-         - Jhin: JhinPassiveReload check
-         - Rengar: RengarQ/RengarQEmp attack reset, animation handling
-         - Aphelios: weapon-specific missile speed, reload check, crescendum reset
-
-[  ] 1.2  GetProjectileSpeed() per champion
-         - Jinx (JinxQ buff → 2000), Kayle (range check → 2250),
-         - Neeko (neekowpassiveready → max), Viktor (ViktorPowerTransferReturn → max)
-         - Jayce (form check), Ivern (ivernwpassive → 1600)
-         - Poppy (poppypassivebuff → 1600), Aphelios (weapon tooltipvars)
-         - GetBasicAttackMissileSpeed(): IsMelee → MaxFloat, else BasicAttack.MissileSpeed
-
-[  ] 1.3  CanAttackWithWindWall — Yasuo WindWall collision check
-         - WindWallBrokenChampions[] array (64 champs)
-         - SpecialWindWallChampions[] array (Kayle, Elise, Nidalee, Jayce, Gnar, Azir, Neeko)
-         - Gọi Collisions.HasYasuoWindWallCollision(from, to)
-
-[  ] 1.4  Jax CounterStrike check — skip attack if Jax has "JaxCounterStrike" buff
-
-[  ] 1.5  Turret farm logic
-         - CanTurretFarm(): check turret farm menu, support mode, player level, baron buff
-         - Turret-priority last hitting: track turret aggro, calculate multi-shot HP prediction
-         - FarmMenu: "TurretFarm" (Enabled/Off), "TurretFramMaxLevel" slider
-
-[  ] 1.6  ShouldWait() — proper HP prediction cho lane control
-         - Dùng HealthPrediction.GetPrediction() với GameObjects.Player.AttackDelay * 2000ms
-         - So sánh predicted HP < GetAutoAttackDamage → return true (đợi last hit)
-         - Có FastLaneClear mode delay riêng
-
-[  ] 1.7  Pause timer system
-         - int AttackPauseTick, MovePauseTick, AllPauseTick
-         - SetAttackPauseTime(ms), SetMovePauseTime(ms), SetPauseTime(ms)
-         - SetAttackServerPauseTime(), SetMoveServerPauseTime(), SetServerPauseTime()
-         - Check trong CanAttack() và CanMove()
-
-[  ] 1.8  MissileLaunched check cho CanMove
-         - Track MissileLaunched = false khi OnDoCast
-         - MissileLaunched = true khi OnProcessSpellCast (auto attack)
-         - CanMove: if MissileLaunched && MissileCheck enabled → return true
-
-[  ] 1.9  Menu options thiếu
-         - "ComboWithMove" keybind (combo nhưng không di chuyển)
-         - "FastLaneClear" keybind (fast farm mode)
-         - "Fast Farm Delay" slider (0-1000ms)
-         - "TurretFarm" dropdown (Enabled/Off) + "TurretFramMaxLevel" slider
-         - "CalcItemDamage" bool (tính sát thương item)
-         - "YasuoWallCheck" bool
-         - "MissileCheck" bool (Use Missile Checks)
-         - "SupportMode_<champion>" bool
-         - "HighOrb" bool (tần suất walk cao hơn)
-         - "CalculateRunaway" bool (tính khoảng cách chạy trốn)
-         - "DrawChaseRange" bool
-         - "ShowFakeClick" bool
-
-[  ] 1.10 ForceChase mode
-         - MiscMenu: "FindKey" keybind + "Range" slider (0-500)
-         - Khi Combo + FindKey active → mở rộng attack range thêm Range value
-         - Vẽ circle rainbow (colorindex) quanh player
-
-[  ] 1.11 LaneClear target priority
-         - Sort: Siege > Super > attacks-to-kill (ceil(hp/ad)) > MaxHealth descending
-         - Track LaneClearMinion (sticky target nếu vẫn valid)
-         - Kiểm tra prediction 2x attack delay xem minion có sống đủ lâu không
-
-[  ] 1.12 Move path angle check
-         - Kiểm tra angle giữa current waypoint và new waypoint
-         - Skip move nếu angle < 10° và distance < 500
-         - Throttle: 70ms + min(60, Ping), nếu angle >= 60° thì 60ms
-
-[  ] 1.13 Randomize movement khi mouse quá gần
-         - OrbwalkerMenu["MoveRandom"] → extend position 0.6-1.0 * 400 units
-
-[  ] 1.14 GetSpecialMinion
-         - Barrels (GP): gangplankbarrel (owner level check, barrel timer)
-         - Wards: EnemyWards in range
-         - JunglePlant: in range
-         - Pets: IsPet(true) check
-
-[  ] 1.15 LimitAttack — Don't Kite nếu AttackSpeed > 2.5
-         - Nếu AttackDelay < 0.3846 && autoAttackCounter % 3 != 0 → skip move
+[✓] 1.1-1.15 — Tất cả Orbwalker features                        ✅ ALL DONE
+    Champion-specific, ProjectileSpeed, WindWall, Jax, TurretFarm,
+    ShouldWait, Pause, Missile, Menu, ForceChase, LanePriority,
+    AngleCheck, Randomize, SpecialMinion, LimitAttack
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  2. TARGET SELECTOR PLUGIN — Thiếu so với NewTargetSelector.cs             ║
+║  ĐÃ HOÀN THÀNH — 2. TARGET SELECTOR (6/6)                                ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-[  ] 2.1  IsValidTarget thiếu check
-         - IsInvulnerableVisual check (property trên GameObject)
-         - IsZombie() check (Sion passive, Karthus passive, Kog'Maw passive)
-         - HasBuff("UndyingRage") && HP <= 71 → skip (Tryndamere ult)
-         - IsTargetable check (đã có nhưng cần verify)
-
-[  ] 2.2  GetRealHealth — HP thực tế theo damage type
-         - Physical: HP + PhysicalShield + AllShield
-         - Magical: HP + MagicalShield + AllShield
-         - True: HP + AllShield
-         - C# dùng x.GetRealHeath(damageType)
-
-[  ] 2.3  Smart AD/AP mode — port AaIndicator logic
-         - C# dùng Base.AaIndicator(x, damageType) — scoring function tính threat
-         - Cần port hoặc tạo equivalent: (EHP / priority) scoring
-
-[  ] 2.4  OnlySelectTarget enforcement trong GetTargets()
-         - Khi "Only Attack Select Target" enabled + SelectedTarget valid
-         → chỉ return list gồm 1 target duy nhất
-
-[  ] 2.5  InCurrentAutoAttackRange với Azir soldiers
-         - Check AzirSoldiers distance ≤ 770 từ player
-         - Nếu soldier cách target ≤ 350 → true
+[✓] 2.1-2.5, 2.x — Tất cả TargetSelector features               ✅ ALL DONE
+    ValidTarget, RealHealth, SmartScoring, OnlySelect, Azir, AutoPriority
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  3. GAMEOBJECT — Properties thiếu                                          ║
+║  ĐÃ HOÀN THÀNH — 3-8. CORE SDK                                           ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-[  ] 3.1  Thêm properties cơ bản
-         - IsMoving (đọc từ AiManager)
-         - IsMelee (AttackRange < 300)
-         - IsMe (address == GameObjects::Player.address)
-         - ServerPosition (AiManager.GetServerPosition)
-
-[  ] 3.2  Path / Waypoints
-         - GetWaypoints() → vector<Vec2>
-         - GetPath(Vec3 target) → vector<Vec3>
-         - Path.Length (number of waypoints)
-
-[  ] 3.3  Buff access trực tiếp trên GameObject
-         - HasBuff(name) → tạo BuffManager(address).HasBuff(name)
-         - HasBuffOfType(type) → BuffManager(address).HasBuffOfType(type)
-         - GetBuff(name) → trả về Buff instance
-
-[  ] 3.4  GetAutoAttackDamage(target, includePassive, calcItemDmg)
-         - Base AD damage + crit + bonus on-hit
-         - Item passive damage (Sheen, Trinity, BOTRK, Kraken, etc.)
-         - Champion passive damage (Vayne W, Ashe passive, etc.)
-         - Giản lược: ít nhất CalcPhysicalDamage(TotalAD) + item modifier
-
-[  ] 3.5  InCurrentAutoAttackRange(extraRange, fromObj)
-         - GetRealAutoAttackRange() = AttackRange + BoundingRadius
-         - Distance ≤ GetRealAutoAttackRange + target.BoundingRadius + extraRange
-         - Azir special: soldier range check
-
-[  ] 3.6  Type checks + properties
-         - IsZombie() — check buffs: SionPassiveZone, KarthusDeathDefiedBuff, KogMawIcathianSurprise
-         - IsInvulnerable — check IsInvulnerableVisual or invuln buffs
-         - GameObjectType enum (AIHeroClient, AIMinionClient, AITurretClient, MissileClient)
-         - Type property → read from offset
-         - Owner property (pets → chủ sở hữu)
-         - NetworkId (alias cho GetNetId)
-
-[  ] 3.7  BasicAttack.MissileSpeed
-         - Read SpellData → MissileSpeed từ SpellBook slot[0]
-         - Dùng cho GetBasicAttackMissileSpeed()
-
-[  ] 3.8  AttackCastDelay / AttackDelay properties
-         - Expose GetAttackDelay() và GetAttackWindup() as inline properties
+[✓] 3. GameObject properties (3.1-3.8)                           ✅ ALL DONE
+[✓] 4. GameObjects lists (4.1-4.6)                               ✅ ALL DONE
+[✓] 5. HealthPrediction (5.1-5.4)                                ✅ ALL DONE
+[✓] 6. SDK Core (6.1-6.8)                                        ✅ ALL DONE
+[✓] 7. DamageCalc (7.1-7.3)                                      ✅ ALL DONE
+[✓] 8. Enums (8.1-8.3 + SpellType/CastType/CollisionableObjects/SpellTags) ✅ DONE
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  4. GAMEOBJECTS (Lists) — Thiếu                                           ║
+║  ĐÃ HOÀN THÀNH — INFRASTRUCTURE                                          ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-[  ] 4.1  Split Turrets → AllyTurrets + EnemyTurrets
-[  ] 4.2  Thêm EnemyWards list (ward tracking)
-[  ] 4.3  Thêm JunglePlant list
-[  ] 4.4  Thêm EnemyInhibitors / AllyInhibitors lists
-[  ] 4.5  Thêm EnemyNexus / AllyNexus
-[  ] 4.6  Thêm AzirSoldiers tracking (nếu player là Azir)
+[✓] Prediction.h — Skillshot prediction system                   ✅ DONE
+[✓] Vec2/Vec3 helpers                                            ✅ DONE
+[✓] Event System (6 event types)                                 ✅ DONE
+[✓] Config Manager (INI save/load/auto-save)                     ✅ DONE
+[✓] Plugin system (IPlugin, PluginManager)                       ✅ DONE
+[✓] Menu system (SDK::MenuUI — EnsoulSharp compatible)           ✅ DONE
+[✓] BGX-style cascading menu                                     ✅ DONE
+[✓] Collisions utility (WindWall, Minion, Hero)                  ✅ DONE
+[✓] SpellDatabase — 3 file structure (Entry + DB + JSON)         ✅ DONE
+[✓] SummonerTracker — Flash/Ignite/TP cooldown tracking          ✅ DONE
+[✓] RecallTracker — enemy recall detection                       ✅ DONE
+[✓] AutoLevel — auto skill level-up                              ✅ DONE
+[✓] Awareness/ESP plugin                                         ✅ DONE
+
+==============================================================================
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║  CÒN THIẾU — Cần hoàn thành để đạt 100% EnsoulSharp SDK                   ║
+║                                                                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+==============================================================================
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  5. HEALTH PREDICTION — Cần cải thiện                                      ║
+║  10. VERIFICATION & RECHECK (ƯU TIÊN #1 — Cần trước khi test)            ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-[  ] 5.1  Thay thế hardcoded damage (50.0f) bằng actual missile damage
-         - Read SData damage từ MissileClient
-         - Track caster's AD/AP để tính real damage
+[  ] 10.1 Verify Item IDs từ Data Dragon / game memory
+         - Recheck ItemId enum values (3057, 3078, 3100, 3508, 6698, etc.)
+         - Confirm new S26 items exist in game (8001, 8002, 8003)
+         - Validate GetItems() offset chain works in-game
 
-[  ] 5.2  HasTurretAggro(unit) — check nếu turret đang nhắm unit
-[  ] 5.3  HasMinionAggro(unit) — check nếu minion đang nhắm unit
-[  ] 5.4  HealthPredictionType (Default vs Simulated)
-         - Default: chỉ tính incoming missile
-         - Simulated: tính cả turret + minion DPS dự đoán
+[  ] 10.2 Verify Damage Formulas — so sánh với wiki S26
+         - BOTRK: 9%/6% current HP, min 15 → check cap (max 60 vs monsters?)
+         - Titanic Hydra: 5 + 1.5% bonus HP → verify AA on-hit vs cleave
+         - Sundered Sky: cooldown per-target → cần track per-target timer
+         - Statikk Shiv: energized stack system → cần energized state check
+         - Stormrazor: energized system → need shared energized tracker
+         - Sheen: 1.5s cooldown → cần check cooldown state
+
+[  ] 10.3 Verify Champion Passive Buff Names in-game
+         - ashepassiveslow, BraumMark, caitlynheadshotready, etc.
+         - Correct buff names may differ between patches
+
+[  ] 10.4 Recheck all Offsets.h sau mỗi game patch
+         - Function RVAs thay đổi theo hotfix
+         - Struct offsets hiếm khi thay đổi ngoại trừ big update
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  6. SDK CORE — Thiếu                                                       ║
+║  11. EVENTS — Thiếu so với EnsoulSharp (ƯU TIÊN #2)                      ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/Events/
 
-[  ] 6.1  Event System — hook game events
-         - OnDoCast(sender, args) → detect auto attacks, spell casts
-         - OnProcessSpellCast(sender, args) → spell cast start
-         - OnPlayAnimation(sender, args) → animation events
-         - OnStopCast(spellbook, args) → missile destroy events
-         - OnDelete(sender) → object removed
-         - Cần hook từ game hoặc track thay đổi mỗi frame
+[  ] 11.1 Gapcloser Detection                                    🔴 HIGH
+         Source: Events/Gapcloser.cs + Resources/Data/Gapclosers.json
+         - OnGapCloser event → fire when enemy dashes toward ally
+         - GapCloserEventArgs: Sender, Slot, StartPos, EndPos, Speed
+         - Database of gapcloser spells per champion (JSON data copied)
+         - Detect via OnProcessSpellCast → match against database
 
-[  ] 6.2  Spellbook.OnStopCast + GameObject.OnDelete events
+[  ] 11.2 Interruptable Spell Detection                          🔴 HIGH
+         Source: Events/InterruptableSpell.cs + InterruptableSpells.json
+         - OnInterruptableTarget event → fire when enemy channels
+         - InterruptableTargetEventArgs: Sender, Slot, DangerLevel
+         - Database of interruptable spells (JSON data copied)
+         - Detect via ActiveSpellCast polling
 
-[  ] 6.3  Variables.GameTimeTickCount equivalent
-         - int GetGameTickCount() = (int)(Game::GetTime() * 1000.0f)
-         - Dùng trong timing calculations
+[  ] 11.3 Dash Detection                                         🔴 HIGH
+         Source: Events/Dash.cs
+         - OnDash event → fire when any hero dashes
+         - DashArgs: Sender, StartPos, EndPos, Speed, Duration, IsBlink
+         - Detect via waypoint changes + speed threshold
 
-[  ] 6.4  Expose IssueOrder trên GameObject
-         - player.IssueOrder(OrderType::AttackUnit, target) giống E# API
-         - Bên trong gọi Orbwalker::IssueOrder
+[  ] 11.4 Stealth Detection                                      🟡 MEDIUM
+         Source: Events/Stealth.cs
+         - OnStealth event → fire when hero goes invisible
+         - StealthEventArgs: Sender, IsStealthed, Time
+         - Detect via IsVisible() state change
 
-[  ] 6.5  Collisions.HasYasuoWindWallCollision(from, to)
-         - Scan cho WindWall objects (YasuoWMovingWall)
-         - Check line intersection
+[  ] 11.5 Teleport/Recall Improved                               🟡 MEDIUM
+         Source: Events/Teleport.cs (439 lines — covers TP, Recall, Shen R, TF R)
+         - Hiện tại RecallTracker chỉ detect recall bằng buff
+         - Cần: detect Teleport, Shen R, TF R, Hexgate
+         - TeleportEventArgs: NetworkId, Status, Type, Duration, Start
 
-[  ] 6.6  Game::IsShopOpen() check
-         - Đọc shop state từ HUD
-
-[  ] 6.7  Config save/load
-         - Lưu menu settings ra JSON hoặc INI file
-         - Load khi plugin khởi tạo
-         - Auto-save khi thay đổi
-
-[  ] 6.8  SpellData improvements
-         - SpellData.Name (tên chiêu thức)
-         - SpellData.TooltipVars (biến tooltip cho damage scaling)
-         - SpellData.MissileSpeed
+[  ] 11.6 Turret Aggro Events                                    🟡 MEDIUM
+         Source: Events/Turret.cs
+         - OnTurretTargetChange event
+         - Track turret → target mapping per frame
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  7. DAMAGE CALCULATION — Cần port                                          ║
+║  12. GEOMETRY & MATH — Thiếu hoàn toàn (ƯU TIÊN #3 — cần cho Evade)     ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/Math/
 
-[  ] 7.1  GetAutoAttackDamage(target, includePassive, calcItemDmg)
-         - Proper armor pen calculation (flat + percent + lethality scaling by level)
-         - Crit damage calculation
-         - Item on-hit: Sheen/Trinity/Lich Bane proc, BOTRK, Nashor's, Kraken Slayer
-         - Champion passive: Vayne W, Ashe Q, etc.
+[  ] 12.1 Polygon Base Class                                      🔴 HIGH
+         Source: Math/Polygons/Polygon.cs
+         - Polygon: vertices, edges, Contains(), IsInside(), IsOutside()
+         - ClipPolygons() — Clipper library integration
+         - Draw() for debug visualization
 
-[  ] 7.2  CalcPhysicalDamage cải thiện
-         - Armor pen calculation: (target armor) * (1 - percent pen) - lethality
-         - Lethality scales with attacker level
+[  ] 12.2 CirclePoly                                              🔴 HIGH
+         Source: Math/Polygons/CirclePoly.cs
+         - CirclePoly(center, radius, quality)
+         - Used by: circle skillshot zones, turret ranges
 
-[  ] 7.3  CalcMagicalDamage cải thiện
-         - Magic pen: flat pen after percent pen
+[  ] 12.3 LinePoly (RectanglePoly)                               🔴 HIGH
+         Source: Math/Polygons/LinePoly.cs + RectanglePoly.cs
+         - LinePoly(start, end, width) → rectangle around line
+         - Used by: line skillshot zones
+
+[  ] 12.4 SectorPoly (Cone)                                      🟡 MEDIUM
+         Source: Math/Polygons/SectorPoly.cs
+         - SectorPoly(center, direction, angle, radius)
+         - Used by: cone skillshot zones (Annie W, etc.)
+
+[  ] 12.5 RingPoly                                                🟡 MEDIUM
+         Source: Math/Polygons/RingPoly.cs
+         - RingPoly(center, innerRadius, outerRadius)
+         - Used by: Veigar E cage zone
+
+[  ] 12.6 ArcPoly                                                 🟡 MEDIUM
+         Source: Math/Polygons/ArcPoly.cs
+         - ArcPoly(center, direction, angle, radius)
+         - Used by: Diana Q arc zone
+
+[  ] 12.7 Advanced Geometry                                       🟡 MEDIUM
+         Source: Math/Geometry.cs
+         - PathIntersection(), SegmentIntersection()
+         - MovementCollision() — predict when two paths cross
+         - GetCollisionPoints()
+         - IsWall(Vec3) — NavGrid check cho terrain collision
+
+[  ] 12.8 ConvexHull                                              🟢 LOW
+         Source: Math/ConvexHull.cs
+         - ConvexHull algorithm for cluster detection
+         - Used by AoE prediction
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  8. TESTING & DEBUG                                                        ║
+║  13. UTILS — Thiếu (ƯU TIÊN #4)                                          ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/Utils/
 
-[  ] 8.1  Inject DLL → verify Orbwalker attack+move cycle hoạt động
-[  ] 8.2  Verify TargetSelector chọn đúng target theo mode
-[  ] 8.3  Verify CanAttack/CanMove timing đúng (no double attacks, smooth kiting)
-[  ] 8.4  Test LaneClear: last hit accuracy, turret farm
-[  ] 8.5  Test các buff checks: Fear, Polymorph, Stun → không attack
-[  ] 8.6  Profile performance — đảm bảo không lag khi nhiều objects
+[  ] 13.1 Invulnerable Database                                   🔴 HIGH
+         Source: Utils/Invulnerable.cs
+         - Database: Alistar R, Fiora W, Jax E, Kayle R, Kindred R,
+           Tryndamere R, Bard R, Zhonyas, GA revive, Sion passive
+         - Check(target, damageType) → is target invulnerable to this damage?
+         - Per-champion conditions (Alistar R only if >1 enemy nearby)
+
+[  ] 13.2 AutoAttack Database                                     🔴 HIGH
+         Source: Utils/AutoAttack.cs
+         - Attack Reset spells list (45+ spells: CamilleQ, NasusQ, etc.)
+         - Special attack names (not containing "attack" keyword)
+         - No-attack spells (GangplankQProceed, etc.)
+         - IsAutoAttack(spellName), IsAutoAttackReset(spellName)
+
+[  ] 13.3 Minion Classification Utils                             🟡 MEDIUM
+         Source: Utils/Minion.cs
+         - NormalMinions, SiegeMinions, SuperMinions lists
+         - Clone detection: LeBlanc, Wukong, Neeko, Shaco
+         - Pet list: Annie Tibbers, Heimerdinger turrets, Zyra plants, etc.
+         - IsMinion(), IsPet(), IsClone(), IsSiegeMinion()
+
+[  ] 13.4 Jungle Classification Utils                             🟡 MEDIUM
+         Source: Utils/Jungle.cs
+         - Large/Legendary/Epic/Small monster classification
+         - Dragon variants, Baron, Rift Herald, etc.
+         - GetSmiteValue(monster) — for smite damage calculation
+
+[  ] 13.5 DelayAction / ActionQueue                               🟢 LOW
+         Source: Utils/DelayAction.cs + ActionQueue.cs
+         - DelayAction.Add(time, callback) — execute after delay
+         - ActionQueue for buffered actions
+         - Useful for combo sequences
+
+[  ] 13.6 Cursor Utils                                            🟢 LOW
+         Source: Utils/Cursor.cs
+         - Cursor position tracking / fake click visualization
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  ƯU TIÊN THỰC HIỆN                                                        ║
+║  14. DAMAGE LIBRARY — Per-Champion QWER (ƯU TIÊN #5)                     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/Wrappers/Damages/
+
+[  ] 14.1 DamageLibrary — Per-Champion Spell Damage               🟡 MEDIUM
+         Source: Damages/DamageLibrary.cs + JSON data files
+         - GetSpellDamage(source, target, slot, stage)
+         - Toàn bộ QWER damage formulas cho mỗi champion
+         - Level scaling, AP/AD ratios, bonus damage conditions
+         - Rất lớn (2000+ lines JSON) — có thể dùng JSON data
+
+[  ] 14.2 DamagePassives Complete (50+ champions)                 🟡 MEDIUM
+         Source: Damages/DamagePassives.cs (1448 lines)
+         - Hiện tại chỉ có ~20 champions
+         - Cần thêm: Akali, Bel'Veth, Camille, Fiora, Gwen,
+           Irelia, Jax, Kalista, Kayle, Kindred, Lucian,
+           Miss Fortune, Orianna, Quinn, Rengar, Sett,
+           Shyvana, Thresh, Warwick, Xin Zhao, Yasuo, Yone, Zed
+         - Một số cần buff stacking logic
+
+[  ] 14.3 DamageMastery (Runes/Keystones)                        🟢 LOW
+         Source: Damages/DamageMastery.cs
+         - Press the Attack, Lethal Tempo, Conqueror, etc.
+         - Rune-based bonus damage calculations
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  15. SPELL SYSTEM — Cải thiện (ƯU TIÊN #6)                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/Wrappers/Spells/
+
+[  ] 15.1 SpellDatabase JSON Loading                              🔴 HIGH
+         - Tích hợp nlohmann/json hoặc rapidjson
+         - Implement SpellDatabase::LoadFromJson()
+         - Parse toàn bộ Database.json (700KB, ~500 spells)
+         - Parse helpers đã sẵn sàng trong SpellDatabase.h
+
+[  ] 15.2 Spell Type Subclasses                                   🟡 MEDIUM
+         Source: Spells/SpellTypes/ (14 files)
+         - SkillshotCircle, SkillshotLine, SkillshotCone
+         - SkillshotMissileCircle, SkillshotMissileLine, SkillshotMissileCone
+         - SkillshotMissileArc, SkillshotRing
+         - Targeted, TargetedMissile
+         - Mỗi type có logic UpdatePolygon() riêng
+
+[  ] 15.3 Spell Tracker (Skillshot Detection)                     🔴 HIGH
+         Source: Spells/Tracker/Tracker.cs + Detector.cs
+         - Detect incoming skillshots from enemies
+         - Track active skillshots (position, direction, speed)
+         - Cần cho Evade system
+
+[  ] 15.4 LastCast Tracking                                       🟡 MEDIUM
+         Source: Spells/LastCast.cs + LastCastedSpellEntry.cs
+         - Track last casted spell per hero
+         - LastCastedSpellEntry: Name, Slot, Target, StartTime, EndTime
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  16. PREDICTION IMPROVEMENTS (ƯU TIÊN #7)                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/Math/Prediction/
+
+[  ] 16.1 GamePath Prediction                                     🟡 MEDIUM
+         Source: Math/Prediction/GamePath.cs
+         - GetAngle() — predict direction change
+         - GetWaypoints() improvements
+         - CanReachPosition() — terrain-aware pathfinding
+
+[  ] 16.2 Cluster Prediction (AoE)                                🟡 MEDIUM
+         Source: Math/Prediction/Cluster.cs
+         - GetBestCircularCastPosition() — optimal AoE center
+         - GetBestLineCastPosition() — optimal line cast
+         - GetBestConeCastPosition()
+         - Cluster analysis for multi-target hits
+
+[  ] 16.3 Advanced Collision                                      🟡 MEDIUM
+         Source: Math/Collision.cs (149 lines)
+         - Collision with terrain walls
+         - Braum shield collision
+         - Dynamic collision (moving targets)
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  17. EVADE SYSTEM — Hệ thống phức tạp nhất (ƯU TIÊN #8)                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Cần: SpellDatabase (15.1) + Geometry (12.1-12.7) + SpellTracker (15.3)
+
+[  ] 17.1 Skillshot Detection Engine                              🔴 HIGH
+         - Detect enemy skillshots from OnProcessSpellCast
+         - Match against SpellDatabase entries
+         - Create Skillshot objects with zone polygons
+
+[  ] 17.2 Safe Position Finder                                    🔴 HIGH
+         - Find safe position outside all active skillshot zones
+         - Consider: terrain, turret safety, ally proximity
+         - Pathfinding to safe position (shortest path)
+
+[  ] 17.3 Evade Movement                                          🔴 HIGH
+         - Issue dodge movement command
+         - Re-route back to original path after dodge
+         - Priority system: higher danger = more urgent dodge
+
+[  ] 17.4 Spell Shield / Dash Integration                        🟡 MEDIUM
+         - Use spells to dodge (Ezreal E, Zed W, etc.)
+         - Spell shield usage (Sivir E, Nocturne W)
+         - Flash dodge for highest danger
+
+[  ] 17.5 Evade Menu Configuration                                🟡 MEDIUM
+         - Per-spell enable/disable
+         - Per-spell dodge priority
+         - Draw skillshot zones
+         - Dodge only dangerous (DangerLevel filter)
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  18. MENU SYSTEM IMPROVEMENTS (ƯU TIÊN #9)                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Source: EnsoulSharp.SDK/Core/UI/IMenu/ (111 files!)
+
+[  ] 18.1 ColorPicker widget                                      🟢 LOW
+[  ] 18.2 MenuList (dropdown with items)                          🟢 LOW
+[  ] 18.3 Separator / Header widgets                              🟢 LOW
+[  ] 18.4 Nested sub-menus (unlimited depth)                      🟢 LOW
+[  ] 18.5 PermaShow (always-visible keybind status)               🟡 MEDIUM
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  19. DRAWING IMPROVEMENTS (ƯU TIÊN #10)                                  ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-  Cao:   3.1, 3.3, 3.4, 3.5, 4.1, 6.3, 6.4, 7.1
-         → Đây là foundation, Orbwalker + TS cần những cái này
+[  ] 19.1 DrawPolygon() — render Polygon objects                  🟡 MEDIUM
+[  ] 19.2 DrawDamageBar() — show damage on enemy HP bar           🟡 MEDIUM
+[  ] 19.3 DrawMinimap icons/text                                  🟡 MEDIUM
+[  ] 19.4 DrawLine3D() — 3D line with thickness                   🟢 LOW
 
-  Trung: 1.6, 1.7, 1.8, 1.9, 2.1, 2.2, 5.1, 5.2, 6.1
-         → Cải thiện accuracy, farming, event system
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  9. TESTING & DEBUG                                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 
-  Thấp:  1.1, 1.2, 1.3, 1.10, 1.12, 1.13, 2.5, 3.7, 4.2-4.6, 6.5, 6.7
-         → Champion-specific, niche features, polish
+[  ] 9.1  Inject DLL → verify Orbwalker attack+move cycle hoạt động
+[  ] 9.2  Verify TargetSelector chọn đúng target theo mode
+[  ] 9.3  Verify CanAttack/CanMove timing đúng (smooth kiting)
+[  ] 9.4  Test LaneClear: last hit accuracy, ShouldWait logic
+[  ] 9.5  Test buff checks: Fear, Polymorph, Stun → không attack
+[  ] 9.6  Profile performance — đảm bảo không lag
+[  ] 9.7  Test SpellCaster — cast with prediction accuracy
+[  ] 9.8  Test DamageCalc accuracy — compare with in-game damage
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  TIẾN ĐỘ TỔNG THỂ                                                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ✅ Hoàn thành: Sections 1-8 + Infrastructure (48 items)
+  ⏳ Còn lại:    Sections 9-19 (45 items)
+
+  ═══════════════════════════════════════════════════════
+  Module              | Trạng thái  | % Complete
+  ═══════════════════════════════════════════════════════
+  Orbwalker           | ✅ DONE      | 100%
+  TargetSelector      | ✅ DONE      | 100%
+  GameObject          | ✅ DONE      | 100%
+  GameObjects         | ✅ DONE      | 100%
+  HealthPrediction    | ✅ DONE      | 100%
+  SDK Core            | ✅ DONE      | 100%
+  DamageCalc          | ✅ Base done | ~70% (cần verify + DamageLibrary)
+  Enums               | ✅ DONE      | 100%
+  SpellDatabase       | ⚠️ Struct ok  | ~40% (cần JSON loading)
+  Events              | ⚠️ Basic     | ~35% (cần Gapcloser/Dash/Interrupt)
+  Geometry/Polygon    | ❌ Missing   | ~20% (cần cho Evade)
+  Utils               | ⚠️ Partial   | ~40% (cần Invulnerable/AutoAttack DB)
+  Evade               | ❌ Missing   | 0%
+  Menu                | ⚠️ Basic     | ~60%
+  Drawing             | ⚠️ Basic     | ~60%
+  Spell System        | ⚠️ Basic     | ~50% (cần SpellTracker)
+  Prediction          | ⚠️ Basic     | ~65% (cần Cluster/GamePath)
+  ═══════════════════════════════════════════════════════
+  TỔNG SDK COMPLETION:  ~65%
+  ═══════════════════════════════════════════════════════
+
+  THỨ TỰ ƯU TIÊN IMPLEMENT:
+  1. 🔴 Verify & Recheck (10.1-10.4) — cần trước khi test
+  2. 🔴 Events: Gapcloser + Interruptable + Dash (11.1-11.3)
+  3. 🔴 Geometry/Polygon system (12.1-12.3)
+  4. 🔴 Invulnerable + AutoAttack DB (13.1-13.2)
+  5. 🔴 SpellDatabase JSON loading (15.1) + SpellTracker (15.3)
+  6. 🟡 DamageLibrary per-champion (14.1)
+  7. 🟡 More DamagePassives (14.2)
+  8. 🔴 Evade system (17.1-17.5) — biggest remaining feature
+  9. 🟡 Testing (9.1-9.8)
+  10. 🟢 Nice-to-have: Menu, Drawing, Prediction improvements
+
+==============================================================================
+  FILE MAP — Tất cả SDK files
+==============================================================================
+
+  core/
+    Globals.h           — Memory read/write helpers
+    Offsets.h           — All game memory offsets (hotfix 2026-03-05)
+    Vector.h            — Vec2/Vec3/Vec4 math
+
+  sdk/
+    Enums.h             — All SDK enums (SpellType, CastType, CollisionableObjects, SpellTags, ...)
+    Game.h              — Game state (time, ping, chat/shop/focus)
+    GameObject.h        — Core game object wrapper (850+ lines)
+    SpellBook.h         — Spell system (SpellSlot, SpellData, SpellBook)
+    BuffManager.h       — Buff system (HasBuff, HasBuffOfType)
+    AiManager.h         — AI pathfinding (waypoints, nav mesh)
+    Missile.h           — Projectile tracking
+    ObjectManager.h     — Object iteration
+    GameObjects.h       — Cached object lists (heroes, minions, turrets, ...)
+    DamageCalc.h        — Damage calculations (physical/magic/true/items/passives)
+    HealthPrediction.h  — Future health prediction
+    Collisions.h        — Collision detection (WindWall, minion, hero)
+    TargetSelector.h    — Target priority selection
+    Prediction.h        — Movement/skillshot prediction
+    SpellCaster.h       — High-level spell casting with prediction
+    Orbwalker.h         — Auto-attack and movement logic
+    EventSystem.h       — Game event callbacks
+    SpellDatabaseEntry.h — Spell data struct (30+ fields, EnsoulSharp-compatible)
+    SpellDatabase.h     — Spell database class (skeleton, needs JSON parser)
+    SummonerTracker.h   — Enemy summoner spell CD tracking
+    RecallTracker.h     — Enemy recall detection
+    AutoLevel.h         — Auto skill level-up
+    Drawing.h           — World-to-screen, drawing primitives
+    MenuUI.h            — SDK menu system (EnsoulSharp API compatible)
+    ConfigManager.h     — INI config save/load
+
+  sdk/Data/
+    Database.json       — 700KB spell database (from EnsoulSharp)
+    Gapclosers.json     — Gapcloser spells database
+    InterruptableSpells.json — Interruptable spells database
+    Priority.json       — Champion priority data
+    Map.json            — Map data
+
+  plugins/
+    IPlugin.h           — Plugin interface
+    PluginManager.h     — Plugin lifecycle manager
+    awareness/Awareness.h — ESP/Awareness plugin
+    core/OrbwalkerPlugin.h    — Orbwalker as core plugin
+    core/TargetSelectorPlugin.h — TargetSelector as core plugin
+
+  menu/
+    BGXMenu.h           — BGX-style cascading menu
 
 ==============================================================================
   GHI CHÚ
@@ -276,20 +460,16 @@
 - Khi port từ C# → C++: EnsoulSharp SDK types map:
     AIHeroClient    → SDK::GameObject (filtered hero)
     AIMinionClient  → SDK::GameObject (filtered minion)
-    AIBaseClient    → SDK::GameObject (base class)
-    AttackableUnit  → SDK::GameObject
-    Spellbook       → SDK::SpellBook
-    BuffInstance     → SDK::Buff
-    GameObjects     → SDK::GameObjects namespace
-    Game            → SDK::Game namespace
-    Variables       → SDK::Game::GetTickCount()
-    MenuUI.Menu     → SDK::MenuUI::Menu
-    MenuBool        → SDK::MenuUI::MenuBool
-    MenuSlider      → SDK::MenuUI::MenuSlider
-    MenuKeyBind     → SDK::MenuUI::MenuKeyBind
-    Drawing         → SDK::Drawing namespace
-    CircleRender    → SDK::Drawing::DrawCircle
+    SpellType (ES)  → SDK::SpellType (comprehensive, Enums.h)
+    SpellType (old) → SDK::SpellCasterType (simple, SpellCaster.h)
+    CollisionableObjects → SDK::CollisionableObjects (Enums.h, flags)
+    CastType        → SDK::CastType (Enums.h)
+    SpellTags       → SDK::SpellTags (Enums.h)
+    SpellDatabase   → SDK::SpellDatabase (SpellDatabase.h)
+    SpellDatabaseEntry → SDK::SpellDatabaseEntry (SpellDatabaseEntry.h)
 
 - Spoof_call PHẢI được dùng cho mọi game function call (anti-cheat)
-- __try/__except CHỈ dùng trong hàm KHÔNG có C++ objects (no std::string/vector)
-  → Dùng Globals::ReadGameString/ReadPtrArray helpers thay thế
+- __try/__except CHỈ dùng trong hàm KHÔNG có C++ objects
+- Item IDs cần verify từ Data Dragon / game memory (⏳ pending)
+- Champion passive buff names cần verify in-game (⏳ pending)
+- Database.json đã copy nhưng cần JSON parser library để load
