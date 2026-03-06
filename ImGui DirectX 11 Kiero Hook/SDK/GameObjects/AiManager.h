@@ -2,10 +2,12 @@
 #include "core/Globals.h"
 #include "core/Offsets.h"
 #include "core/Vector.h"
+#include "core/LeagueObfuscation.h"
 
 // ============================================================================
 // AiManager — Movement, pathing, dashing state
-// Reference: Script-New-main/SDK/AiManager.h (verified offsets)
+// Resolution: Read LeagueObfuscation<uint64_t> at obj + 0x4038,
+//             Decrypt → +InnerManager(0x10) → AiManager pointer.
 // ============================================================================
 
 namespace SDK {
@@ -16,13 +18,23 @@ namespace SDK {
 
         AiManager() : address(0) {}
         AiManager(uintptr_t objAddr) : address(0) {
-            // Resolve via function OR direct offset
+            if (!objAddr) return;
+
             __try {
-                uintptr_t aiPtr = Globals::Read<uintptr_t>(objAddr + Offset::AiManager::Offset);
-                if (Globals::IsValidPtr(aiPtr)) {
-                    address = aiPtr;
+                // Read the obfuscation structure at verified offset 0x4038
+                auto obf = Globals::Read<LeagueObfuscation<uint64_t>>(objAddr + Offset::AiManager::Offset);
+
+                if (obf.isInit) {
+                    uint64_t decrypted = Decrypt(obf);
+                    if (decrypted && decrypted > 0x10000 && decrypted < 0x7FFFFFFFFFFF) {
+                        // Read actual AiManager pointer at decrypted + InnerManager(0x10)
+                        uintptr_t manager = Globals::Read<uintptr_t>(decrypted + Offset::AiManager::InnerManager);
+                        if (Globals::IsValidPtr(manager)) {
+                            address = manager;
+                        }
+                    }
                 }
-            } __except(1) {}
+            } __except(1) { address = 0; }
         }
 
         bool IsValid() const { return Globals::IsValidPtr(address); }
