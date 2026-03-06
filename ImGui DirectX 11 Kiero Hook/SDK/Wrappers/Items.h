@@ -60,8 +60,12 @@ namespace SDK {
         bool IsValid() const { return Id > 0 && SlotIndex >= 0; }
     };
 
+    // Forward declaration — Items class is defined below
+    class Items;
+
     // ========================================================================
     // Item — High-level item wrapper (EnsoulSharp: Items.Item)
+    // Methods that depend on Items are defined after Items class.
     // ========================================================================
     class Item {
     public:
@@ -72,24 +76,10 @@ namespace SDK {
         Item(int id, float range = 0) : Id(id), Range(range) {}
         Item(ItemId id, float range = 0) : Id((int)id), Range(range) {}
 
-        // ====================================================================
-        // Ownership & Ready checks
-        // ====================================================================
-
-        /// Check if local player owns this item
-        bool IsOwned() const {
-            return Items::HasItem(Id);
-        }
-
-        /// Check if local player owns this item (on specific unit)
-        bool IsOwned(const GameObject& unit) const {
-            return Items::HasItem(unit, Id);
-        }
-
-        /// Check if the item is ready to use (owned + off cooldown)
-        bool IsReady() const {
-            return Items::CanUseItem(Id);
-        }
+        // Ownership & Ready — implemented after Items class
+        inline bool IsOwned() const;
+        inline bool IsOwned(const GameObject& unit) const;
+        inline bool IsReady() const;
 
         /// Check if item is in range of target
         bool IsInRange(const GameObject& target) const {
@@ -99,41 +89,14 @@ namespace SDK {
             return dist <= Range + GameObjects::Player.GetBoundingRadius() + target.GetBoundingRadius();
         }
 
-        // ====================================================================
-        // Cast / Use
-        // ====================================================================
+        // Cast — implemented after Items class
+        inline bool Cast() const;
+        inline bool Cast(const GameObject& target) const;
+        inline bool Cast(const Vec3& pos) const;
 
-        /// Use item (self-cast / no target)
-        bool Cast() const {
-            return Items::UseItem(Id);
-        }
-
-        /// Use item on target
-        bool Cast(const GameObject& target) const {
-            if (!IsReady()) return false;
-            if (Range > 0 && !IsInRange(target)) return false;
-            return Items::UseItem(Id, &target);
-        }
-
-        /// Use item at position
-        bool Cast(const Vec3& pos) const {
-            if (!IsReady()) return false;
-            return Items::UseItemAtPos(Id, pos);
-        }
-
-        // ====================================================================
-        // Info
-        // ====================================================================
-
-        /// Get remaining cooldown
-        float GetCooldown() const {
-            return Items::GetItemCooldown(Id);
-        }
-
-        /// Get current stacks
-        int GetStacks() const {
-            return Items::GetItemStacks(Id);
-        }
+        // Info — implemented after Items class
+        inline float GetCooldown() const;
+        inline int GetStacks() const;
     };
 
     // ========================================================================
@@ -564,5 +527,24 @@ namespace SDK {
             return trampoline;
         }
     };
+
+    // ========================================================================
+    // Item method implementations (depend on Items class)
+    // ========================================================================
+    inline bool Item::IsOwned() const { return Items::HasItem(Id); }
+    inline bool Item::IsOwned(const GameObject& unit) const { return Items::HasItem(unit, Id); }
+    inline bool Item::IsReady() const { return Items::CanUseItem(Id); }
+    inline bool Item::Cast() const { return Items::UseItem(Id); }
+    inline bool Item::Cast(const GameObject& target) const {
+        if (!IsReady()) return false;
+        if (Range > 0 && !IsInRange(target)) return false;
+        return Items::UseItem(Id, &target);
+    }
+    inline bool Item::Cast(const Vec3& pos) const {
+        if (!IsReady()) return false;
+        return Items::UseItemAtPos(Id, pos);
+    }
+    inline float Item::GetCooldown() const { return Items::GetItemCooldown(Id); }
+    inline int Item::GetStacks() const { return Items::GetItemStacks(Id); }
 
 } // namespace SDK

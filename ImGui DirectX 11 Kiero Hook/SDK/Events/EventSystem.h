@@ -227,8 +227,8 @@ namespace SDK {
             if (now < 5.0f) return;
 
             // Local player must exist and be valid
-            auto* localPlayer = GameObjects::Player;
-            if (!localPlayer || !localPlayer->IsValid()) return;
+            auto& localPlayer = GameObjects::Player;
+            if (!localPlayer.IsValid()) return;
 
             // At least 2 heroes must exist (player + 1 other)
             if (GameObjects::AllHeroes.size() < 2) return;

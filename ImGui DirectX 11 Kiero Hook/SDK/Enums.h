@@ -116,7 +116,10 @@ enum class BuffType : int {
     Asleep           = 21,
     Grounded         = 22,
     Drowsy           = 23,
-    Charm            = 24
+    Charm            = 24,
+    Poison           = 25,
+    Knockup          = 26,
+    Knockback        = 27
 };
 
 // Action states (bitflags)

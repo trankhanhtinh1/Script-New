@@ -120,6 +120,7 @@
 #include "Utils/AutoLevel.h"
 #include "Utils/Cache.h"
 #include "Utils/Performance.h"
+#include "Utils/SignalManager.h"
 
 // ─── Phase 7: UI ────────────────────────────────────────────────────────────
 #include "UI/Drawing.h"

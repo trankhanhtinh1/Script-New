@@ -46,6 +46,7 @@ namespace MenuUI {
     // ========================================================================
     class Menu; // Forward declaration
     class MenuItem; // Forward declaration
+    class RadioMenu; // Forward declaration
 
     struct MenuValueChangedEventArgs {
         Menu* OwnerMenu;        // The menu that contains the changed item
@@ -435,13 +436,8 @@ namespace MenuUI {
             return Get<T>(name);
         }
 
-        // Add a RadioMenu (radio-button group)
-        std::shared_ptr<RadioMenu> AddRadioMenu(const std::string& name, const std::string& display) {
-            auto radio = std::make_shared<RadioMenu>(name, display);
-            m_items.push_back(radio);
-            m_lookup[name] = radio;
-            return radio;
-        }
+        // Add a RadioMenu (radio-button group) — defined after RadioMenu class
+        inline std::shared_ptr<RadioMenu> AddRadioMenu(const std::string& name, const std::string& display);
 
         // Register menu-level OnValueChanged callback (fires for any child item)
         // Source: EnsoulSharp Menu.MenuValueChanged event
@@ -672,6 +668,16 @@ namespace MenuUI {
     private:
         std::vector<std::shared_ptr<MenuBool>> m_options;
     };
+
+    // ========================================================================
+    // Menu::AddRadioMenu implementation (needs full RadioMenu definition)
+    // ========================================================================
+    inline std::shared_ptr<RadioMenu> Menu::AddRadioMenu(const std::string& name, const std::string& display) {
+        auto radio = std::make_shared<RadioMenu>(name, display);
+        m_items.push_back(radio);
+        m_lookup[name] = radio;
+        return radio;
+    }
 
     // ========================================================================
     // MenuCustomizer — Theme/appearance customization

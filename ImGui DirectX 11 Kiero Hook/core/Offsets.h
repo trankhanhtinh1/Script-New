@@ -46,13 +46,15 @@ namespace Global {
     constexpr auto NetInstance      = 0x1D7A3D0;   // [IDA] net instance (confirmed via IssueOrder decompile, 970 xrefs)
     constexpr auto CursorInstance   = 0x1E05698;   // [P] cursor position (Vec3)
     constexpr auto MouseScreenVec2  = 0x1D7DCF8;   // [D] mouse 2D screen position
-    constexpr auto ChatClient       = 0x1D8D240;   // [IDA] chat client ptr (16 xrefs, null when chat closed)
+    constexpr auto ChatClient       = 0x1D8D240;   // [IDA] chat client ptr (17 xrefs) — ChatClient+0x10 = chat open byte
     constexpr auto ChatInstance     = 0x1D7DFA0;   // [IDA] chat instance (82 xrefs confirmed)
     constexpr auto r3dRenderer      = 0x1E3FE78;   // [D] renderer instance (oViewPort2)
     constexpr auto ViewPort2        = 0x1E3FE78;   // [D] viewport2/renderer
     constexpr auto MySpellState     = 0x1D80AA0;   // [D] spell state global
     constexpr auto TurretManager    = 0x1D87068;   // [CE][P][IDA] turret list (20 xrefs confirmed)
-    constexpr auto ShopOpen         = 0x1D77448;   // [IDA] shop open state dword (from "ShopOpen" string xref)
+    constexpr auto ShopInstance     = 0x1D8D258;   // [IDA] shop window instance ptr (sub_BC58F0 uses qword_1D8C258)
+    constexpr auto OpenWindowsArray = 0x1E3DC58;   // [IDA] ptr to array of open HUD window ptrs (sub_129FD80)
+    constexpr auto OpenWindowsCount = 0x1E3DC60;   // [IDA] dword count of open windows (dword_1E3CC60)
 }
 
 // ================================================================
@@ -455,8 +457,8 @@ namespace Hud {
     // User Data
     constexpr auto SelectedObjNetId = 0x28;         // [S]
 
-    // Chat
-    constexpr auto ChatOpen         = 0x649;        // [IDA] byte flag chat open state
+    // Chat  (ChatClient object offsets)
+    constexpr auto ChatOpen         = 0x10;         // [IDA] byte flag: 1=chat input active, 0=closed (sub_3B4E00 sets ChatClient+16)
 
     // Viewport W2S
     constexpr auto ViewportW2S      = 0x2B0;        // [IDA] viewport W2S matrix offset
@@ -466,17 +468,17 @@ namespace Hud {
 // MISSILE OBJECT
 // ================================================================
 namespace Missile {
-    constexpr auto SpellCastPtr     = 0x8;          // [S]
-    constexpr auto CastInfoBase     = 0x1C0;        // [D] changed! was 0x2C0
-    constexpr auto SpellDataInst    = 0x1C0;        // [D] first QWORD
-    constexpr auto SpellName        = 0x1E0;        // [D] CastInfo+0x20 relative to new base
-    constexpr auto MissileName      = 0x208;        // [D] CastInfo+0x48
-    constexpr auto StartPos         = 0x230;        // [D] CastInfo+0x70
-    constexpr auto EndPos           = 0x23C;        // [D] CastInfo+0x7C
-    constexpr auto CastEndPos       = 0x24C;        // [D] CastInfo+0x8C
-    constexpr auto CasterNetId      = 0x258;        // [D] CastInfo+0x98
-    constexpr auto NetworkId        = 0x264;        // [D] CastInfo+0xA4
-    constexpr auto Position         = 0x25C;        // [S] inherited vec3 position
+    constexpr auto SpellCastPtr     = 0x8;          // [S] ptr to SpellCast object
+    constexpr auto CastInfoBase     = 0x318;        // [IDA] sub_24E4E0: lea rcx,[r15+318h] (was 0x2C0→0x1C0 WRONG)
+    constexpr auto SpellDataInst    = 0x318;        // [IDA] first QWORD at CastInfoBase = SpellData ptr
+    constexpr auto SpellName        = 0x338;        // [IDA] CastInfo+0x20 (obfuscated ptr/value at obj+0x338)
+    constexpr auto MissileName      = 0x360;        // [IDA] CastInfo+0x48 (string init call sub_322440 confirmed)
+    constexpr auto StartPos         = 0x388;        // [IDA] CastInfo+0x70 vec3 (confirmed by Raxrot + IDA float access)
+    constexpr auto EndPos           = 0x394;        // [IDA] CastInfo+0x7C vec3 (confirmed: movss xmm0,[r10+394h])
+    constexpr auto CastEndPos       = 0x3A4;        // [IDA] CastInfo+0x8C vec3
+    constexpr auto CasterNetId      = 0x3B0;        // [IDA] CastInfo+0x98 int (source caster network id)
+    constexpr auto NetworkId        = 0x3BC;        // [IDA] CastInfo+0xA4 int (missile network id)
+    constexpr auto Position         = 0x25C;        // [S] inherited vec3 position (GameObject base)
 }
 
 // ================================================================
