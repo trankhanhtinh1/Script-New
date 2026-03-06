@@ -1,15 +1,15 @@
 #pragma once
 #include "../IPlugin.h"
-#include "../../sdk/MenuUI.h"
-#include "../../sdk/GameObject.h"
-#include "../../sdk/GameObjects.h"
-#include "../../sdk/Game.h"
-#include "../../sdk/Drawing.h"
-#include "../../sdk/DamageCalc.h"
-#include "../../sdk/BuffManager.h"
-#include "../../sdk/TargetSelector.h"
-#include "../../sdk/Enums.h"
-#include "../../core/Globals.h"
+#include "sdk/UI/MenuUI.h"
+#include "sdk/GameObjects/GameObject.h"
+#include "sdk/GameObjects/GameObjects.h"
+#include "sdk/Game.h"
+#include "sdk/UI/Drawing.h"
+#include "sdk/Wrappers/Damages/DamageCalc.h"
+#include "sdk/GameObjects/BuffManager.h"
+#include "sdk/Wrappers/TargetSelector/TargetSelector.h"
+#include "sdk/Enums.h"
+#include "core/Globals.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -47,7 +47,7 @@ namespace Plugins {
             m_menu->Add<SDK::MenuUI::MenuBool>("ForceSelectTarget", "Force on Select Target", true);
             m_menu->Add<SDK::MenuUI::MenuBool>("OnlySelectTarget", "Only Attack Select Target", false);
             m_menu->Add<SDK::MenuUI::MenuList>("TSMode", "TS Mode",
-                std::vector<std::string>{"Smart AD/AP", "Lowest Health", "Most Priority"}, 0);
+                std::vector<std::string>{"Smart AD/AP", "Lowest Health", "Most Priority", "Weighted"}, 0);
         }
 
         void OnUnload() override {
@@ -405,6 +405,8 @@ namespace Plugins {
                     [this](const SDK::GameObject& a, const SDK::GameObject& b) {
                         return GetPriority(a) > GetPriority(b);
                     });
+            case 3: // Weighted
+                return SDK::WeightedTargetSelector::GetTarget(targets);
             default:
                 return targets[0];
             }
@@ -434,6 +436,13 @@ namespace Plugins {
                 std::sort(targets.begin(), targets.end(),
                     [this](const SDK::GameObject& a, const SDK::GameObject& b) {
                         return GetPriority(a) > GetPriority(b);
+                    });
+                break;
+            case 3: // Weighted
+                std::sort(targets.begin(), targets.end(),
+                    [](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return SDK::WeightedTargetSelector::CalculateScore(a)
+                             < SDK::WeightedTargetSelector::CalculateScore(b);
                     });
                 break;
             }

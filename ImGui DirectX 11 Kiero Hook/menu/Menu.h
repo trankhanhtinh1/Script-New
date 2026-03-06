@@ -1,7 +1,7 @@
 #pragma once
-#include "../imgui/imgui.h"
+#include "imgui/imgui.h"
 #include "MenuConfig.h"
-#include "../plugins/PluginManager.h"
+#include "plugins/PluginManager.h"
 
 // ============================================================================
 // Menu - ImGui Menu Rendering

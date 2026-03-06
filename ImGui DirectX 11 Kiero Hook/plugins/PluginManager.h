@@ -1,6 +1,6 @@
 #pragma once
 #include "IPlugin.h"
-#include "../imgui/imgui.h"
+#include "imgui/imgui.h"
 #include <vector>
 #include <memory>
 #include <algorithm>

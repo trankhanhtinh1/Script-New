@@ -115,9 +115,25 @@
       "Slot": "R"
     }
   ],
+  "Pyke": [
+    {
+      "DangerLevel": "Low",
+      "MovementInterrupts": false,
+      "Name": null,
+      "Slot": "Q"
+    }
+  ],
   "Quinn": [
     {
       "DangerLevel": "Medium",
+      "MovementInterrupts": true,
+      "Name": null,
+      "Slot": "R"
+    }
+  ],
+  "Samira": [
+    {
+      "DangerLevel": "High",
       "MovementInterrupts": true,
       "Name": null,
       "Slot": "R"
@@ -201,12 +217,20 @@
       "Slot": "R"
     }
   ],
-  "Zilean": [
+  "Yuumi": [
+    {
+      "DangerLevel": "High",
+      "MovementInterrupts": true,
+      "Name": null,
+      "Slot": "R"
+    }
+  ],
+  "Zac": [
     {
       "DangerLevel": "Low",
       "MovementInterrupts": true,
       "Name": null,
-      "Slot": 52
+      "Slot": "E"
     }
   ]
 }

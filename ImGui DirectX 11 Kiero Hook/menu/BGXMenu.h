@@ -1,7 +1,7 @@
 #pragma once
-#include "../imgui/imgui.h"
-#include "../plugins/PluginManager.h"
-#include "../sdk/MenuUI.h"
+#include "imgui/imgui.h"
+#include "plugins/PluginManager.h"
+#include "sdk/UI/MenuUI.h"
 #include "MenuConfig.h"
 #include <string>
 #include <vector>

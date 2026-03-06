@@ -1,6 +1,6 @@
 #include "includes.h"
 #include "sdk/SDK.h"
-#include "sdk/MenuUI.h"
+#include "sdk/UI/MenuUI.h"
 #include "plugins/PluginManager.h"
 #include "plugins/awareness/Awareness.h"
 #include "plugins/core/OrbwalkerPlugin.h"
@@ -25,6 +25,9 @@ void InitImGui()
 }
 
 LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+
+	// Track cursor position for SDK::CursorUtils
+	SDK::CursorUtils::OnWndProc(uMsg, lParam);
 
 	// Pass input to ImGui when menu is visible (toggle or shift-hold)
 	bool menuVisible = BGXMenu::showMenu || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
@@ -51,12 +54,12 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 			pDevice->CreateRenderTargetView(pBackBuffer, NULL, &mainRenderTargetView);
 			pBackBuffer->Release();
 			oWndProc = (WNDPROC)SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)WndProc);
-		InitImGui();
+			InitImGui();
 
-		// Initialize module base
-		Globals::Init();
+			// Initialize module base
+			Globals::Init();
 
-		init = true;
+			init = true;
 		}
 
 		else
@@ -72,8 +75,57 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 
 	// One-time SDK initialization when first entering game
 	if (inGame && !sdkInitialized) {
+		SDK::SpellDatabase::Init();  // Load Database.json (auto-detect path)
+		SDK::DamageLibrary::Init();  // Load 9.7.269.2391.json (per-champion QWER damage)
+		SDK::DamagePassives::Init(); // Init 60+ champion passive on-hit database
+		SDK::DamageMastery::Init();  // Init rune/keystone damage database
+
+		// Hook DamageCalc callbacks for DamagePassives + DamageMastery
+		SDK::DamageCalc::SetPassiveDmgCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
+			return SDK::DamagePassives::GetPassiveDamage(s, t);
+		});
+		SDK::DamageCalc::SetRuneDmgCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
+			return SDK::DamageMastery::GetRuneDamage(s, t);
+		});
+		SDK::DamageCalc::SetRuneMultCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
+			return SDK::DamageMastery::GetDamageMultiplier(s, t);
+		});
+		SDK::Invulnerable::Init();   // Init invulnerable database
+		SDK::LastCast::Init();       // Init last cast tracking
+		SDK::WeightedTargetSelector::Init(); // Init weight system for target selection
+		SDK::ChampionPriority::Init();       // Init champion priority database (ADC=5, Tank=1)
+		SDK::Teleport::Init();               // Init teleport/recall tracker
+		SDK::GamePath::PathTracker::Init(); // Init path tracker for prediction
 		SDK::Orbwalker::Init();
 		SDK::AutoLevel::Init();
+
+		// Initialize event subsystems — load JSON databases
+		{
+			// Use GetModuleHandleEx trick to find DLL directory
+			char buf[MAX_PATH] = {};
+			HMODULE hm = NULL;
+			GetModuleHandleExA(
+				GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				(LPCSTR)&hkPresent, &hm);
+			GetModuleFileNameA(hm, buf, MAX_PATH);
+			std::string dllDir(buf);
+			dllDir = dllDir.substr(0, dllDir.find_last_of("\\/"));
+
+			std::string gapJson = dllDir + "\\sdk\\Data\\Gapclosers.json";
+			std::string intJson = dllDir + "\\sdk\\Data\\InterruptableSpells.json";
+			std::string globalIntJson = dllDir + "\\sdk\\Data\\GlobalInterruptableSpellsList.json";
+			if (!SDK::Gapcloser::Init(gapJson))
+				SDK::Gapcloser::InitDefault();
+			if (!SDK::InterruptableSpell::Init(intJson))
+				SDK::InterruptableSpell::InitDefault();
+			if (!SDK::InterruptableSpell::InitGlobal(globalIntJson))
+				SDK::InterruptableSpell::InitGlobalDefault();
+		}
+
+		// Connect Gapcloser to EventSystem's OnProcessSpellCast
+		SDK::EventSystem::OnProcessSpellCast([](const SDK::SpellCastArgs& args) {
+			SDK::Gapcloser::OnSpellCastDetected(args);
+		});
 
 		auto& pm = Plugins::PluginManager::Get();
 		pm.Register<Plugins::OrbwalkerPlugin>();
@@ -88,11 +140,17 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 	if (inGame) {
 		SDK::Drawing::UpdateMatrix(); // Update W2S matrix FIRST
 		SDK::GameObjects::Update();
-		SDK::EventSystem::Update();      // Track game events
+		SDK::EventSystem::Update();      // Track game events (fires OnProcessSpellCast → Gapcloser)
+		SDK::GamePath::PathTracker::Update(); // Track hero path changes for prediction
 		SDK::HealthPrediction::Update(); // Track incoming damage
 		SDK::SummonerTracker::Update();  // Track enemy summoner CDs
 		SDK::RecallTracker::Update();    // Track enemy recalls
+		SDK::Teleport::Update();         // Track teleport/recall channels (TP, Shen R, TF R, Hexgate)
 		SDK::AutoLevel::Update();        // Auto level up skills
+		SDK::DashDetector::Update();     // Track hero dashes
+		SDK::StealthDetector::Update();  // Track stealth state changes
+		SDK::InterruptableSpell::Update(); // Track interruptable channels
+		SDK::TurretAggro::Update();      // Track turret aggro changes
 
 		// Update all SDK MenuUI keybinds (only in game)
 		SDK::MenuUI::Menu::UpdateAllKeyBinds();
@@ -100,6 +158,15 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 		// Update and render all plugins
 		Plugins::PluginManager::Get().OnUpdate();
 		Plugins::PluginManager::Get().OnRender();
+
+		// Process delayed actions
+		SDK::DelayAction::Update();
+
+		// Render PermaShow overlay (always-visible keybind status)
+		SDK::MenuUI::PermaShow::Render();
+
+		// Render notifications overlay
+		SDK::MenuUI::Notifications::Render();
 
 		// Auto-save config (every 5s if changed)
 		SDK::ConfigManager::AutoSave();
