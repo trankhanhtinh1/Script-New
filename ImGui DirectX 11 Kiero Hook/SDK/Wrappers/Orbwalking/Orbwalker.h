@@ -10,13 +10,27 @@
 #include <Psapi.h>
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <vector>
 
 // ============================================================================
 // Orbwalker — Attack + Move logic with spoofcall
-// Reference: EnsoulSharp.SDK Orbwalker + NewOrbwalker.cs
+// Reference: EnsoulSharp.SDK OrbwalkerBase + Orbwalker + OrbwalkerSelector
 // ============================================================================
 
 namespace SDK {
+
+    // ========================================================================
+    // OrbwalkingActionArgs — Event data for orbwalker actions
+    // Source: EnsoulSharp.SDK OrbwalkerBase.cs / OrbwalkingActionArgs
+    // ========================================================================
+    struct OrbwalkingActionArgs {
+        OrbwalkingType Type = OrbwalkingType::None;
+        GameObject     Target;         // Attack target (for attack events)
+        GameObject     Sender;         // Caster (usually local player)
+        Vec3           Position;       // Move destination (for movement events)
+        bool           Process = true; // Set to false in BeforeAttack/Movement to cancel
+    };
 
     // Memory scanning for trampoline gadget
     namespace mem {
@@ -57,6 +71,27 @@ namespace SDK {
     class Orbwalker {
     public:
         // ====================================================================
+        // OnAction Event System — EnsoulSharp OrbwalkerBase.OnAction port
+        // Scripts subscribe to get notified of orbwalker actions.
+        // For BeforeAttack/Movement: set args.Process = false to cancel.
+        // ====================================================================
+        using OnActionCallback = std::function<void(OrbwalkingActionArgs&)>;
+        static inline std::vector<OnActionCallback> s_onActionCallbacks;
+
+        /// Subscribe to orbwalker action events
+        static void OnAction(OnActionCallback cb) {
+            s_onActionCallbacks.push_back(std::move(cb));
+        }
+
+        /// Fire an action event — returns false if any subscriber set Process=false
+        static bool InvokeAction(OrbwalkingActionArgs& args) {
+            for (auto& cb : s_onActionCallbacks) {
+                try { cb(args); } catch (...) {}
+            }
+            return args.Process;
+        }
+
+        // ====================================================================
         // State (public — readable by plugins)
         // ====================================================================
         static inline float LastAttackTime  = 0.0f;   // Game time of last AA start
@@ -73,6 +108,10 @@ namespace SDK {
 
         // Auto attack counter (for Sett / high AS limit logic)
         static inline int AutoAttackCounter = 0;
+
+        // Attack/Move state — set by scripts to block orbwalker actions
+        static inline bool AttackState = true;   // false = don't attack
+        static inline bool MovementState = true;  // false = don't move
 
         // ====================================================================
         // Pause Timers (millisecond-based, using GetTickCount64)
@@ -104,6 +143,7 @@ namespace SDK {
             initialized = true;
 
             // Auto-detect MissileLaunched when our auto-attack missile is created
+            // This fires the AfterAttack event (ranged: projectile visible)
             EventSystem::OnMissileCreated([](const MissileArgs& args) {
                 auto& player = GameObjects::Player;
                 if (!player.IsValid()) return;
@@ -115,10 +155,17 @@ namespace SDK {
                 if (args.SpellName.find("BasicAttack") != std::string::npos ||
                     args.SpellName.find("CritAttack") != std::string::npos) {
                     OnMissileLaunched();
+
+                    // Fire AfterAttack event (ranged champions)
+                    OrbwalkingActionArgs actionArgs;
+                    actionArgs.Type = OrbwalkingType::AfterAttack;
+                    actionArgs.Target = LastTarget;
+                    actionArgs.Sender = player;
+                    InvokeAction(actionArgs);
                 }
             });
 
-            // Auto-detect spell casts for attack timing
+            // Auto-detect spell casts for attack timing (OnDoCast equivalent)
             EventSystem::OnProcessSpellCast([](const SpellCastArgs& args) {
                 auto& player = GameObjects::Player;
                 if (!player.IsValid()) return;
@@ -130,6 +177,53 @@ namespace SDK {
                     LastAttackTime = Game::GetTime();
                     MissileLaunched = false;
                     AutoAttackCounter++;
+
+                    // Fire OnAttack event (attack command confirmed by server)
+                    OrbwalkingActionArgs actionArgs;
+                    actionArgs.Type = OrbwalkingType::OnAttack;
+                    actionArgs.Target = LastTarget;
+                    actionArgs.Sender = player;
+                    InvokeAction(actionArgs);
+
+                    // For melee champions, also fire AfterAttack immediately
+                    // (no projectile missile to wait for)
+                    if (player.IsMelee()) {
+                        OrbwalkingActionArgs afterArgs;
+                        afterArgs.Type = OrbwalkingType::AfterAttack;
+                        afterArgs.Target = LastTarget;
+                        afterArgs.Sender = player;
+                        InvokeAction(afterArgs);
+                    }
+                }
+
+                // Auto-attack reset detection
+                static const char* resetSpells[] = {
+                    "JaxEmpowerTwo", "GarenQ", "shaborroweetime",
+                    "LucianQ", "VayneTumble", "Vi-q", "RenektonPreExecute",
+                    "FioraE", "FioraFlurry", "MonkeyKingDoubleAttack",
+                    "GravesMove", "CamilleQ", "CamilleQ2", "powerfist",
+                    "daborroweedtime", "takedown", "AspectOfTheCougar",
+                    "KatarinaE", "masochism", "itemtitanichydracleavestarter",
+                    "voltaicspear", "yoraborroweedtime", "doransbladebuff",
+                    nullptr
+                };
+                std::string spellName = args.SpellName;
+                for (const char** p = resetSpells; *p; p++) {
+                    if (_stricmp(spellName.c_str(), *p) == 0) {
+                        ResetAutoAttackTimer();
+                        break;
+                    }
+                }
+            });
+
+            // StopCast event — reset timer when our AA is interrupted
+            EventSystem::OnStopCast([](const StopCastArgs& args) {
+                auto& player = GameObjects::Player;
+                if (!player.IsValid()) return;
+                if (!args.Sender.IsValid() || args.Sender.GetNetId() != player.GetNetId()) return;
+                // Reset if our auto-attack was force-stopped (CC interrupt)
+                if (args.WasAutoAttack && args.ForceStop) {
+                    ResetAutoAttackTimer();
                 }
             });
         }
@@ -286,6 +380,24 @@ namespace SDK {
 
         static void Attack(GameObject& target) {
             if (!CanAttack() || !target.IsValid()) return;
+            if (!AttackState) return; // BlockOrders: attack disabled by script
+
+            // Fire BeforeAttack event — scripts can cancel by setting Process=false
+            OrbwalkingActionArgs beforeArgs;
+            beforeArgs.Type = OrbwalkingType::BeforeAttack;
+            beforeArgs.Target = target;
+            beforeArgs.Sender = GameObjects::Player;
+            if (!InvokeAction(beforeArgs)) return; // Cancelled
+
+            // TargetSwitch event
+            if (LastTarget.IsValid() && LastTarget.GetNetId() != target.GetNetId()) {
+                OrbwalkingActionArgs switchArgs;
+                switchArgs.Type = OrbwalkingType::TargetSwitch;
+                switchArgs.Target = target;
+                switchArgs.Sender = GameObjects::Player;
+                InvokeAction(switchArgs);
+            }
+
             IssueOrder(3, target.GetPosition(), &target);
             LastAttackTime = Game::GetTime();
             LastTarget = target;
@@ -295,6 +407,7 @@ namespace SDK {
 
         static void MoveTo(Vec3 pos) {
             if (!CanMove()) return;
+            if (!MovementState) return; // BlockOrders: movement disabled by script
 
             auto& player = GameObjects::Player;
 
@@ -304,6 +417,20 @@ namespace SDK {
 
             float time = Game::GetTime();
             if (time < LastMoveTime + ClickDelay) return;
+
+            // Fire Movement event — scripts can cancel
+            OrbwalkingActionArgs moveArgs;
+            moveArgs.Type = OrbwalkingType::Movement;
+            moveArgs.Position = pos;
+            moveArgs.Sender = player;
+            if (!InvokeAction(moveArgs)) {
+                // Cancelled — fire StopMovement event
+                OrbwalkingActionArgs stopArgs;
+                stopArgs.Type = OrbwalkingType::StopMovement;
+                stopArgs.Sender = player;
+                InvokeAction(stopArgs);
+                return;
+            }
 
             IssueOrder(2, pos);
             LastMoveTime = time;

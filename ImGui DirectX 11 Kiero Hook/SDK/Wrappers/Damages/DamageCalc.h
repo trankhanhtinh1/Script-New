@@ -1,6 +1,7 @@
 #pragma once
 #include "GameObject.h"
 #include "BuffManager.h"
+#include "SpellBook.h"
 #include "Enums.h"
 #include "core/Offsets.h"
 #include "core/Globals.h"
@@ -125,13 +126,243 @@ namespace SDK {
         // ====================================================================
         static float CalcDamage(const GameObject& source, const GameObject& target,
                                 DamageType type, float rawDamage) {
+            float dmg = 0.0f;
             switch (type) {
-            case DamageType::Physical: return CalcPhysicalDamage(source, target, rawDamage);
-            case DamageType::Magical:  return CalcMagicDamage(source, target, rawDamage);
-            case DamageType::True:     return CalcTrueDamage(rawDamage);
-            case DamageType::Mixed:    return CalcMixedDamage(source, target, rawDamage);
-            default:                   return rawDamage;
+            case DamageType::Physical: dmg = CalcPhysicalDamage(source, target, rawDamage); break;
+            case DamageType::Magical:  dmg = CalcMagicDamage(source, target, rawDamage); break;
+            case DamageType::True:     dmg = CalcTrueDamage(rawDamage); break;
+            case DamageType::Mixed:    dmg = CalcMixedDamage(source, target, rawDamage); break;
+            default:                   dmg = rawDamage; break;
             }
+            // Apply damage reduction passives (Alistar R, Garen W, Exhaust, etc.)
+            if (type != DamageType::True) {
+                dmg = DamageReductionMod(source, target, dmg, type);
+            }
+            return std::max(dmg, 0.0f);
+        }
+
+        // ====================================================================
+        // DamageReductionMod — Buff-based damage reduction
+        // Port of EnsoulSharp Damage.cs::DamageReductionMod()
+        // Covers: champion defensive abilities, summoner spells, debuffs
+        // ====================================================================
+        static float DamageReductionMod(const GameObject& source, const GameObject& target,
+                                        float amount, DamageType damageType) {
+            try {
+                BuffManager targetBuffs(target.address);
+                BuffManager sourceBuffs(source.address);
+
+                // ----------------------------------------------------------------
+                // Exhaust (SummonerExhaust) — Source deals 40% less damage
+                // ----------------------------------------------------------------
+                if (source.IsHero() && sourceBuffs.HasBuff("SummonerExhaust")) {
+                    amount *= 0.6f;
+                }
+
+                // ----------------------------------------------------------------
+                // Vladimir R — Target takes 10% more damage
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("vladimirhemoplaguedamageamp")) {
+                    amount *= 1.1f;
+                }
+
+                // Only apply hero-specific reductions if target is a hero
+                if (!target.IsHero()) return amount;
+
+                int targetLevel = target.GetLevel();
+                if (targetLevel < 1) targetLevel = 1;
+
+                // ----------------------------------------------------------------
+                // Alistar R — Unbreakable Will: 55/65/75% damage reduction
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("FerociousHowl")) {
+                    float reductions[] = { 0.55f, 0.65f, 0.75f };
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::R);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 3)
+                            amount *= (1.0f - reductions[lvl - 1]);
+                    }
+                }
+
+                // ----------------------------------------------------------------
+                // Amumu E — Tantrum: reduces physical damage taken
+                // 2/4/6/8/10 + 3% bonus armor + 3% bonus MR
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("Tantrum") && damageType == DamageType::Physical) {
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::E);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 5) {
+                            float flat[] = { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f };
+                            amount -= flat[lvl - 1]
+                                + 0.03f * target.GetBonusArmor()
+                                + 0.03f * target.GetBonusMR();
+                        }
+                    }
+                }
+
+                // ----------------------------------------------------------------
+                // Braum E — Unbreakable: 30/32.5/35/37.5/40% damage reduction
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("braumeshieldbuff")) {
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::E);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 5) {
+                            float pct[] = { 0.30f, 0.325f, 0.35f, 0.375f, 0.40f };
+                            amount *= (1.0f - pct[lvl - 1]);
+                        }
+                    }
+                }
+
+                // ----------------------------------------------------------------
+                // Galio W — Shield of Durand: 20-40% damage reduction
+                //   Magic: full reduction; Physical: half reduction
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("galiowbuff")) {
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::W);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 5) {
+                            float basePct[] = { 0.20f, 0.25f, 0.30f, 0.35f, 0.40f };
+                            float pct = basePct[lvl - 1];
+                            if (damageType == DamageType::Magical)
+                                amount *= (1.0f - pct);
+                            else if (damageType == DamageType::Physical)
+                                amount *= (1.0f - pct * 0.5f);
+                        }
+                    }
+                }
+
+                // ----------------------------------------------------------------
+                // Garen W — Courage: 60% first 0.75s, then 30%
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("GarenW")) {
+                    // Simplified: average ~30% reduction (can't easily check start time)
+                    amount *= 0.7f;
+                }
+
+                // ----------------------------------------------------------------
+                // Gragas W — Drunken Rage: 10-18% + 4% per 100 AP
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("gragaswself")) {
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::W);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 5) {
+                            float pct[] = { 0.10f, 0.12f, 0.14f, 0.16f, 0.18f };
+                            float totalPct = pct[lvl - 1] + 0.04f * target.GetAP() / 100.0f;
+                            amount *= (1.0f - totalPct);
+                        }
+                    }
+                }
+
+                // ----------------------------------------------------------------
+                // Irelia W — Defiant Dance: 50% + 7% per 100 AP physical reduction
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("ireliawdefense") && damageType == DamageType::Physical) {
+                    float pct = 0.50f + 0.07f * target.GetAP() / 100.0f;
+                    amount *= (1.0f - pct);
+                }
+
+                // ----------------------------------------------------------------
+                // Kassadin P — Void Stone: 15% magic damage reduction
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("voidstone") && damageType == DamageType::Magical) {
+                    amount *= 0.85f;
+                }
+
+                // ----------------------------------------------------------------
+                // Master Yi W — Meditate: 60-70% damage reduction (50% for turrets)
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("Meditate")) {
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::W);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 5) {
+                            float pct[] = { 0.60f, 0.625f, 0.65f, 0.675f, 0.70f };
+                            float mult = source.IsTurret() ? 0.5f : 1.0f;
+                            amount *= (1.0f - pct[lvl - 1] * mult);
+                        }
+                    }
+                }
+
+                // ----------------------------------------------------------------
+                // Warwick E — Primal Howl: 35-55% damage reduction
+                // ----------------------------------------------------------------
+                if (targetBuffs.HasBuff("WarwickE")) {
+                    SpellBook sb(target.address);
+                    if (sb.IsValid()) {
+                        auto sp = sb.GetSpell(SpellSlotId::E);
+                        int lvl = sp.IsValid() ? sp.GetLevel() : 1;
+                        if (lvl >= 1 && lvl <= 5) {
+                            float pct[] = { 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
+                            amount *= (1.0f - pct[lvl - 1]);
+                        }
+                    }
+                }
+
+            } catch (...) {}
+
+            return amount;
+        }
+
+        // ====================================================================
+        // AutoAttackDamageOverrideMod — Turret vs minion damage
+        // Port of EnsoulSharp Damage.cs::AutoAttackDamageOverrideMod()
+        // Returns {true, overriddenDamage} if turret damage is overridden
+        // ====================================================================
+        struct AAOverrideResult {
+            bool Override = false;
+            float Damage = 0.0f;
+        };
+
+        static AAOverrideResult AutoAttackDamageOverrideMod(
+            const GameObject& source, const GameObject& target, float amount)
+        {
+            AAOverrideResult result;
+
+            if (!source.IsTurret()) return result;
+            if (!target.IsMinion()) return result;
+
+            try {
+                float maxHP = target.GetMaxHealth();
+                std::string minionName = target.GetName();
+
+                // Melee minion: turret deals 45% of minion max HP
+                if (minionName.find("Melee") != std::string::npos ||
+                    minionName.find("MeleeMinion") != std::string::npos) {
+                    result.Override = true;
+                    result.Damage = 0.45f * maxHP;
+                }
+                // Ranged minion: turret deals 70% of minion max HP
+                else if (minionName.find("Ranged") != std::string::npos ||
+                         minionName.find("Wizard") != std::string::npos ||
+                         minionName.find("CasterMinion") != std::string::npos) {
+                    result.Override = true;
+                    result.Damage = 0.70f * maxHP;
+                }
+                // Siege minion (Cannon): turret deals 14%/11%/8% depending on tier
+                else if (minionName.find("Siege") != std::string::npos ||
+                         minionName.find("Cannon") != std::string::npos) {
+                    result.Override = true;
+                    result.Damage = 0.14f * maxHP; // Tier 1 default
+                }
+                // Super minion: turret deals 5% of max HP
+                else if (minionName.find("Super") != std::string::npos) {
+                    result.Override = true;
+                    result.Damage = 0.05f * maxHP;
+                }
+            } catch (...) {}
+
+            return result;
         }
 
         // ====================================================================
@@ -330,8 +561,13 @@ namespace SDK {
                 // Status: Still in game Patch 26.5
                 // ================================================================
                 case (int)ItemId::TitanicHydra: {
+                    // Bonus HP = MaxHP - BaseHP (base HP at level, not total)
+                    // Approximate base HP: use level-based estimate
                     float maxHP = source.GetMaxHealth();
-                    float bonusDmg = 5.0f + maxHP * 0.015f;
+                    float baseHP = 600.0f + 95.0f * (float)(source.GetLevel() - 1); // Rough average
+                    float bonusHP = maxHP - baseHP;
+                    if (bonusHP < 0.0f) bonusHP = 0.0f;
+                    float bonusDmg = 5.0f + bonusHP * 0.015f;
                     totalDmg += CalcPhysicalDamage(source, target, bonusDmg);
                     break;
                 }
@@ -563,11 +799,18 @@ namespace SDK {
 
         // ====================================================================
         // Auto Attack Damage (with optional item damage)
+        // Includes: turret override, Ninja Tabi reduction, Fizz P
         // ====================================================================
         static float GetAutoAttackDamage(const GameObject& source, const GameObject& target,
                                          bool includeCrit = false, bool includeItems = false) {
             float totalAD = source.GetTotalAD();
             float damage = totalAD;
+
+            // Turret vs minion override
+            auto overrideResult = AutoAttackDamageOverrideMod(source, target, damage);
+            if (overrideResult.Override) {
+                return overrideResult.Damage;
+            }
 
             if (includeCrit) {
                 float critChance = source.GetCrit();
@@ -578,11 +821,31 @@ namespace SDK {
 
             float result = CalcPhysicalDamage(source, target, damage);
 
+            // Ninja Tabi / Plated Steelcaps: 12% AA damage reduction
+            if (target.IsHero()) {
+                try {
+                    if (HasItem(target, 3047)) { // Plated Steelcaps (formerly Ninja Tabi)
+                        result *= 0.88f;
+                    }
+                } catch (...) {}
+            }
+
+            // Fizz P: reduce AA damage by 4 + 2 * floor((level-1)/3)
+            if (target.IsHero()) {
+                try {
+                    std::string champName = target.GetChampionName();
+                    if (_stricmp(champName.c_str(), "Fizz") == 0) {
+                        int lvl = target.GetLevel();
+                        result -= 4.0f + 2.0f * std::floor((float)(lvl - 1) / 3.0f);
+                    }
+                } catch (...) {}
+            }
+
             if (includeItems) {
                 result += GetItemOnHitDamage(source, target);
             }
 
-            return result;
+            return std::max(result, 0.0f);
         }
 
         // Guaranteed crit damage
@@ -659,10 +922,18 @@ namespace SDK {
             return 600.0f + 300.0f * ((float)(sourceLevel - 1) / 17.0f);
         }
 
-        // Overload for compat
+        // Overload for compat — uses local player level
         static float GetSmiteDamage(const GameObject& target, bool isChampion = false) {
             if (isChampion) return 0.0f;
-            return 900.0f;
+            bool isEpic = false;
+            try {
+                std::string name = target.GetChampionName();
+                isEpic = (name.find("Baron") != std::string::npos ||
+                          name.find("Dragon") != std::string::npos ||
+                          name.find("Herald") != std::string::npos ||
+                          name.find("Grubs") != std::string::npos);
+            } catch (...) {}
+            return GetSmiteDamage(GameObjects::Player.GetLevel(), isEpic);
         }
 
         // ====================================================================

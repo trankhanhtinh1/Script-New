@@ -89,6 +89,8 @@ namespace SDK {
     using OnMissileCreateFn = std::function<void(const MissileArgs&)>;
     using OnMissileDeleteFn = std::function<void(const MissileArgs&)>;
     using OnBuffChangeFn    = std::function<void(const BuffChangeArgs&)>;
+    using OnGameLoadFn      = std::function<void()>;
+    using OnGameUpdateFn    = std::function<void(float /*gameTime*/)>;
 
     // ========================================================================
     // EventSystem — Main class
@@ -125,18 +127,54 @@ namespace SDK {
         }
 
         // ====================================================================
+        // OnGameLoad — fires once when game is fully loaded
+        // (all heroes exist, game time > 0, local player valid)
+        // Reference: EnsoulSharp.SDK/Core/Events/Load.cs
+        // ====================================================================
+        static void OnGameLoad(OnGameLoadFn callback) {
+            if (gameLoaded) {
+                // Already loaded — invoke immediately (like EnsoulSharp behavior)
+                try { callback(); } catch (...) {}
+            } else {
+                gameLoadCallbacks.push_back(callback);
+            }
+        }
+
+        // ====================================================================
+        // OnGameUpdate — fires every frame after all tracking is done
+        // Reference: EnsoulSharp Game.OnUpdate
+        // ====================================================================
+        static void OnGameUpdate(OnGameUpdateFn callback) {
+            gameUpdateCallbacks.push_back(callback);
+        }
+
+        // ====================================================================
+        // IsGameLoaded — check if game has been detected as loaded
+        // ====================================================================
+        static bool IsGameLoaded() { return gameLoaded; }
+
+        // ====================================================================
         // Update — Call once per frame AFTER GameObjects::Update()
         // ====================================================================
         static void Update() {
             float now = Game::GetTime();
             if (now <= 0.0f) return;
 
+            // --- OnLoad detection (fires once) ---
+            CheckGameLoad(now);
+
+            // --- Core event tracking ---
             TrackSpellCasts(now);  // also handles OnStopCast (6.2)
             TrackMissiles(now);
             TrackObjectDeletions(now);
             TrackBuffChanges(now);
 
             lastUpdateTime = now;
+
+            // --- OnUpdate callbacks (fires every frame) ---
+            for (auto& cb : gameUpdateCallbacks) {
+                try { cb(now); } catch (...) {}
+            }
         }
 
         // ====================================================================
@@ -149,10 +187,13 @@ namespace SDK {
             missileCreateCallbacks.clear();
             missileDeleteCallbacks.clear();
             buffChangeCallbacks.clear();
+            gameLoadCallbacks.clear();
+            gameUpdateCallbacks.clear();
             heroSpellStates.clear();
             knownMissiles.clear();
             knownObjects.clear();
             heroBuffStates.clear();
+            gameLoaded = false;
         }
 
     private:
@@ -165,8 +206,41 @@ namespace SDK {
         static inline std::vector<OnMissileCreateFn> missileCreateCallbacks;
         static inline std::vector<OnMissileDeleteFn> missileDeleteCallbacks;
         static inline std::vector<OnBuffChangeFn>    buffChangeCallbacks;
+        static inline std::vector<OnGameLoadFn>      gameLoadCallbacks;
+        static inline std::vector<OnGameUpdateFn>    gameUpdateCallbacks;
 
         static inline float lastUpdateTime = 0.0f;
+        static inline bool  gameLoaded = false;
+
+        // ====================================================================
+        // CheckGameLoad — detect when game is fully loaded, fire OnLoad once
+        // Reference: EnsoulSharp.SDK/Core/Events/Load.cs
+        //
+        // Conditions: game time > 5s, local player valid, at least 2 heroes
+        // exist. This mimics EnsoulSharp's EventLoad() which fires OnLoad
+        // subscribers once per subscriber after game is detected as loaded.
+        // ====================================================================
+        static void CheckGameLoad(float now) {
+            if (gameLoaded) return;
+
+            // Game needs some time to fully initialize
+            if (now < 5.0f) return;
+
+            // Local player must exist and be valid
+            auto* localPlayer = GameObjects::Player;
+            if (!localPlayer || !localPlayer->IsValid()) return;
+
+            // At least 2 heroes must exist (player + 1 other)
+            if (GameObjects::AllHeroes.size() < 2) return;
+
+            // Game is loaded! Fire all OnLoad callbacks
+            gameLoaded = true;
+            for (auto& cb : gameLoadCallbacks) {
+                try { cb(); } catch (...) {}
+            }
+            // Clear load callbacks after firing (they only fire once)
+            gameLoadCallbacks.clear();
+        }
 
         // ====================================================================
         // Spell Cast Tracking — per hero, per slot

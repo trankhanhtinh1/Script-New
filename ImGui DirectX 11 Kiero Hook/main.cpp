@@ -96,8 +96,10 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 		SDK::ChampionPriority::Init();       // Init champion priority database (ADC=5, Tank=1)
 		SDK::Teleport::Init();               // Init teleport/recall tracker
 		SDK::GamePath::PathTracker::Init(); // Init path tracker for prediction
+		SDK::SkillshotTracker::Init();       // Init skillshot auto-detection via EventSystem
 		SDK::Orbwalker::Init();
 		SDK::AutoLevel::Init();
+		SDK::Map::Init();                    // Detect current map type
 
 		// Initialize event subsystems — load JSON databases
 		{
@@ -151,6 +153,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 		SDK::StealthDetector::Update();  // Track stealth state changes
 		SDK::InterruptableSpell::Update(); // Track interruptable channels
 		SDK::TurretAggro::Update();      // Track turret aggro changes
+		SDK::SkillshotTracker::Update(); // Track active enemy skillshots (Evade foundation)
 
 		// Update all SDK MenuUI keybinds (only in game)
 		SDK::MenuUI::Menu::UpdateAllKeyBinds();

@@ -136,6 +136,19 @@ namespace ActionState {
     constexpr int Suppressed   = 8192;
 }
 
+// Orbwalker action types (OrbwalkingType.cs)
+// Fired via Orbwalker::OnAction events
+enum class OrbwalkingType {
+    None = 0,
+    Movement,           // Move command issued
+    StopMovement,       // Move suppressed (hold position / menu disabled)
+    BeforeAttack,       // About to issue attack (Process flag can cancel)
+    AfterAttack,        // Missile launched / ranged: after windup
+    OnAttack,           // Attack command confirmed (DoCast)
+    NonKillableMinion,  // Minion about to die before our AA arrives
+    TargetSwitch        // Orbwalker switched target
+};
+
 // Gapcloser types (GapcloserType.cs)
 enum class GapcloserType {
     Skillshot,

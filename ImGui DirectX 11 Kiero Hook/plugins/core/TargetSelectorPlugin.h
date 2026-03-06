@@ -38,22 +38,57 @@ namespace Plugins {
             m_priorityMenu = m_menu->AddSubMenu("Priority", "Priority");
             // Priorities will be populated on first update when enemies are known
 
+            // Weight sub-menu (per-weight item configuration)
+            m_weightMenu = m_menu->AddSubMenu("Weights", "Weight Settings");
+
+            // Hero percentage sub-menu (per-hero weight multiplier)
+            m_heroPercentMenu = m_menu->AddSubMenu("HeroPercent", "Hero Weight %");
+
             // Drawing sub-menu
             auto drawMenu = m_menu->AddSubMenu("Drawings", "Drawings");
             drawMenu->Add<SDK::MenuUI::MenuBool>("DrawSelect", "Draw Selected Target", true);
             drawMenu->Add<SDK::MenuUI::MenuColor>("SelectColor", "Select Circle Color", 1.0f, 0.0f, 0.0f, 1.0f);
+            drawMenu->Add<SDK::MenuUI::MenuBool>("DrawWeightScore", "Draw Weight Scores", false);
+            drawMenu->Add<SDK::MenuUI::MenuBool>("DrawBestTarget", "Draw Best Target Circle", true);
+            drawMenu->Add<SDK::MenuUI::MenuColor>("BestTargetColor", "Best Target Color", 0.0f, 1.0f, 0.0f, 1.0f);
+
+            // Humanizer sub-menu
+            auto humMenu = m_menu->AddSubMenu("Humanizer", "Humanizer");
+            humMenu->Add<SDK::MenuUI::MenuSlider>("FowDelay", "FoW Delay (ms)", 0, 0, 1500);
 
             // Main options
             m_menu->Add<SDK::MenuUI::MenuBool>("ForceSelectTarget", "Force on Select Target", true);
             m_menu->Add<SDK::MenuUI::MenuBool>("OnlySelectTarget", "Only Attack Select Target", false);
             m_menu->Add<SDK::MenuUI::MenuList>("TSMode", "TS Mode",
-                std::vector<std::string>{"Smart AD/AP", "Lowest Health", "Most Priority", "Weighted"}, 0);
+                std::vector<std::string>{
+                    "Smart AD/AP",     // 0
+                    "Lowest Health",   // 1
+                    "Most Priority",   // 2
+                    "Weighted",        // 3
+                    "Closest",         // 4
+                    "Near Mouse",      // 5
+                    "Least Attacks",   // 6
+                    "Most AD",         // 7
+                    "Most AP"          // 8
+                }, 0);
+
+            // Initialize weight items for menu
+            SDK::WeightedTargetSelector::Init();
+            for (auto& w : SDK::WeightedTargetSelector::Weights) {
+                if (!w) continue;
+                std::string key = "w_" + w->Name;
+                m_weightMenu->Add<SDK::MenuUI::MenuBool>("en_" + w->Name, w->DisplayName + " Enabled", w->Enabled);
+                m_weightMenu->Add<SDK::MenuUI::MenuSlider>("wt_" + w->Name, w->DisplayName + " Weight",
+                    (int)(w->DefaultWeight * 10.0f), 0, 50);
+            }
         }
 
         void OnUnload() override {
             SDK::MenuUI::Menu::Remove("TargetSelector");
             m_menu.reset();
             m_priorityMenu.reset();
+            m_weightMenu.reset();
+            m_heroPercentMenu.reset();
         }
 
         // ====================================================================
@@ -62,25 +97,65 @@ namespace Plugins {
         void OnUpdate() override {
             if (!m_menu) return;
 
-            // Populate priority menu for enemy heroes (once)
+            // Populate priority menu and hero percentage for enemy heroes (once)
             if (!m_prioritiesPopulated && !SDK::GameObjects::EnemyHeroes.empty()) {
                 for (auto& enemy : SDK::GameObjects::EnemyHeroes) {
                     if (!enemy.IsValid()) continue;
                     std::string name = enemy.GetChampionName();
                     if (name.empty()) continue;
 
+                    // Priority slider
                     std::string key = "TS_" + name;
                     if (m_priorityMenu && !m_priorityMenu->Get<SDK::MenuUI::MenuSlider>(key)) {
                         int prio = GetDefaultPriority(name);
                         m_priorityMenu->Add<SDK::MenuUI::MenuSlider>(key, name, prio, 1, 5);
                     }
+
+                    // Hero weight percentage slider (0-200%, default 100%)
+                    std::string hpKey = "HP_" + name;
+                    if (m_heroPercentMenu && !m_heroPercentMenu->Get<SDK::MenuUI::MenuSlider>(hpKey)) {
+                        m_heroPercentMenu->Add<SDK::MenuUI::MenuSlider>(hpKey, name + " %", 100, 0, 200);
+                    }
                 }
                 m_prioritiesPopulated = true;
+            }
+
+            // Sync hero percentages to WeightedTargetSelector
+            if (m_heroPercentMenu) {
+                for (auto& enemy : SDK::GameObjects::EnemyHeroes) {
+                    if (!enemy.IsValid()) continue;
+                    std::string name = enemy.GetChampionName();
+                    std::string hpKey = "HP_" + name;
+                    auto* slider = m_heroPercentMenu->Get<SDK::MenuUI::MenuSlider>(hpKey);
+                    if (slider)
+                        SDK::WeightedTargetSelector::SetHeroPercentage(name, (float)slider->Value / 100.0f);
+                }
+            }
+
+            // Sync weight settings
+            if (m_weightMenu) {
+                for (auto& w : SDK::WeightedTargetSelector::Weights) {
+                    if (!w) continue;
+                    auto* enBool = m_weightMenu->Get<SDK::MenuUI::MenuBool>("en_" + w->Name);
+                    if (enBool) w->Enabled = enBool->Enabled;
+                    auto* wtSlider = m_weightMenu->Get<SDK::MenuUI::MenuSlider>("wt_" + w->Name);
+                    if (wtSlider) w->DefaultWeight = (float)wtSlider->Value / 10.0f;
+                }
+            }
+
+            // Sync FoW humanizer delay
+            if (auto* humMenu = m_menu->GetSubMenu("Humanizer")) {
+                auto* fowSlider = humMenu->Get<SDK::MenuUI::MenuSlider>("FowDelay");
+                if (fowSlider)
+                    SDK::TargetSelectorHumanizer::FowDelay = (float)fowSlider->Value / 1000.0f;
             }
 
             // Sync "Only Attack Selected Target" flag to SDK::TargetSelector
             auto* only = m_menu->Get<SDK::MenuUI::MenuBool>("OnlySelectTarget");
             SDK::TargetSelector::OnlyAttackSelected = (only && only->Enabled && m_selectedTarget.IsValid());
+
+            // Update TargetSelector FoW tracking
+            SDK::TargetSelector::Update();
 
             // Handle click-to-select (left click near enemy)
             HandleClickSelect();
@@ -95,16 +170,72 @@ namespace Plugins {
             auto* drawMenu = m_menu->GetSubMenu("Drawings");
             if (!drawMenu) return;
 
+            // Draw selected target circle
             auto* drawSelect = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawSelect");
-            if (!drawSelect || !drawSelect->Enabled) return;
+            if (drawSelect && drawSelect->Enabled && m_selectedTarget.IsValid() && m_selectedTarget.IsAlive()) {
+                auto* color = drawMenu->Get<SDK::MenuUI::MenuColor>("SelectColor");
+                ImU32 col = color ? color->GetImU32() : IM_COL32(255, 0, 0, 255);
+                SDK::Drawing::DrawCircle(m_selectedTarget.GetPosition(),
+                    m_selectedTarget.GetBoundingRadius() + 20.0f, col, 3.0f);
+            }
 
-            if (!m_selectedTarget.IsValid() || !m_selectedTarget.IsAlive()) return;
+            // Draw best weighted target circle (green circle on the best target)
+            auto* drawBest = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawBestTarget");
+            if (drawBest && drawBest->Enabled) {
+                int bestNetId = SDK::WeightedTargetSelector::BestTargetNetId;
+                if (bestNetId > 0) {
+                    for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                        if (!hero.IsValid() || !hero.IsAlive()) continue;
+                        if (hero.GetNetId() == bestNetId) {
+                            auto* bestCol = drawMenu->Get<SDK::MenuUI::MenuColor>("BestTargetColor");
+                            ImU32 col = bestCol ? bestCol->GetImU32() : IM_COL32(0, 255, 0, 255);
+                            SDK::Drawing::DrawCircle(hero.GetPosition(),
+                                hero.GetBoundingRadius() + 30.0f, col, 2.5f);
+                            break;
+                        }
+                    }
+                }
+            }
 
-            auto* color = drawMenu->Get<SDK::MenuUI::MenuColor>("SelectColor");
-            ImU32 col = color ? color->GetImU32() : IM_COL32(255, 0, 0, 255);
+            // Draw weight scores above enemy heroes
+            auto* drawScores = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawWeightScore");
+            if (drawScores && drawScores->Enabled) {
+                ImDrawList* dl = ImGui::GetBackgroundDrawList();
+                if (!dl) return;
 
-            SDK::Drawing::DrawCircle(m_selectedTarget.GetPosition(),
-                m_selectedTarget.GetBoundingRadius() + 20.0f, col, 3.0f);
+                auto& scores = SDK::WeightedTargetSelector::LastScores;
+                for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                    if (!hero.IsValid() || !hero.IsAlive() || !hero.IsVisible()) continue;
+
+                    int netId = hero.GetNetId();
+                    auto it = scores.find(netId);
+                    if (it == scores.end()) continue;
+
+                    float score = it->second;
+                    Vec3 worldPos = hero.GetPosition();
+                    worldPos.y += 120.0f; // Above the hero
+
+                    // WorldToScreen
+                    Vec2 screenPos;
+                    if (!SDK::Drawing::WorldToScreen(worldPos, screenPos)) continue;
+
+                    // Format score text
+                    char scoreBuf[64];
+                    snprintf(scoreBuf, sizeof(scoreBuf), "%.1f%%", score * 100.0f);
+
+                    // Color based on score: red (high priority) → green (low)
+                    int r = (int)(score * 255);
+                    int g = (int)((1.0f - score) * 255);
+                    ImU32 textCol = IM_COL32(r, g, 50, 255);
+
+                    // Shadow + text
+                    ImVec2 textSize = ImGui::CalcTextSize(scoreBuf);
+                    float tx = screenPos.x - textSize.x / 2.0f;
+                    float ty = screenPos.y - textSize.y / 2.0f;
+                    dl->AddText(ImVec2(tx + 1, ty + 1), IM_COL32(0, 0, 0, 200), scoreBuf);
+                    dl->AddText(ImVec2(tx, ty), textCol, scoreBuf);
+                }
+            }
         }
 
         // ====================================================================
@@ -220,6 +351,8 @@ namespace Plugins {
     private:
         std::shared_ptr<SDK::MenuUI::Menu> m_menu;
         std::shared_ptr<SDK::MenuUI::Menu> m_priorityMenu;
+        std::shared_ptr<SDK::MenuUI::Menu> m_weightMenu;
+        std::shared_ptr<SDK::MenuUI::Menu> m_heroPercentMenu;
         SDK::GameObject m_selectedTarget;
         bool m_prioritiesPopulated = false;
 

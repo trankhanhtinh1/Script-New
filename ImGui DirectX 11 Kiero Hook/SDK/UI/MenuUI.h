@@ -41,6 +41,25 @@ namespace MenuUI {
     };
 
     // ========================================================================
+    // MenuValueChangedEventArgs — Event data for value change callbacks
+    // Source: EnsoulSharp.SDK/Core/UI/IMenu/MenuValueChangedEventArgs.cs
+    // ========================================================================
+    class Menu; // Forward declaration
+    class MenuItem; // Forward declaration
+
+    struct MenuValueChangedEventArgs {
+        Menu* OwnerMenu;        // The menu that contains the changed item
+        MenuItem* ChangedItem;  // The MenuItem that changed value
+        std::string ItemName;   // InternalName of the changed item
+
+        MenuValueChangedEventArgs() : OwnerMenu(nullptr), ChangedItem(nullptr) {}
+        MenuValueChangedEventArgs(Menu* menu, MenuItem* item, const std::string& name)
+            : OwnerMenu(menu), ChangedItem(item), ItemName(name) {}
+    };
+
+    using OnValueChangedFn = std::function<void(const MenuValueChangedEventArgs&)>;
+
+    // ========================================================================
     // Base MenuItem
     // ========================================================================
     class MenuItem {
@@ -61,10 +80,26 @@ namespace MenuUI {
             return *this;
         }
 
+        /// Register a value change callback (EnsoulSharp: MenuItem.ValueChanged)
+        void OnValueChanged(OnValueChangedFn callback) {
+            m_valueChangedCallbacks.push_back(callback);
+        }
+
         /// Draw tooltip if hovered (call after Draw() in each subclass if needed)
         void DrawTooltip() const {
             if (!Tooltip.empty() && ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("%s", Tooltip.c_str());
+            }
+        }
+
+    protected:
+        std::vector<OnValueChangedFn> m_valueChangedCallbacks;
+
+        /// Fire value changed event — call from subclass Draw() when value changes
+        void FireValueChanged() {
+            MenuValueChangedEventArgs args(nullptr, this, InternalName);
+            for (auto& cb : m_valueChangedCallbacks) {
+                cb(args);
             }
         }
     };
@@ -77,12 +112,15 @@ namespace MenuUI {
         bool Enabled;
 
         MenuBool(const std::string& name, const std::string& display, bool defaultValue = true)
-            : MenuItem(name, display), Enabled(defaultValue) {}
+            : MenuItem(name, display), Enabled(defaultValue), m_prev(defaultValue) {}
 
         void Draw() override {
             ImGui::Checkbox(DisplayName.c_str(), &Enabled);
+            if (Enabled != m_prev) { m_prev = Enabled; FireValueChanged(); }
             DrawTooltip();
         }
+    private:
+        bool m_prev;
     };
 
     // ========================================================================
@@ -96,12 +134,15 @@ namespace MenuUI {
 
         MenuSlider(const std::string& name, const std::string& display,
                    int defaultValue, int minVal, int maxVal)
-            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal) {}
+            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue) {}
 
         void Draw() override {
             ImGui::SliderInt(DisplayName.c_str(), &Value, MinValue, MaxValue);
+            if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
+    private:
+        int m_prev;
     };
 
     // ========================================================================
@@ -115,12 +156,15 @@ namespace MenuUI {
 
         MenuSliderF(const std::string& name, const std::string& display,
                     float defaultValue, float minVal, float maxVal)
-            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal) {}
+            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue) {}
 
         void Draw() override {
             ImGui::SliderFloat(DisplayName.c_str(), &Value, MinValue, MaxValue);
+            if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
+    private:
+        float m_prev;
     };
 
     // ========================================================================
@@ -133,10 +177,9 @@ namespace MenuUI {
 
         MenuList(const std::string& name, const std::string& display,
                  const std::vector<std::string>& items, int defaultIndex = 0)
-            : MenuItem(name, display), Items(items), Index(defaultIndex) {}
+            : MenuItem(name, display), Items(items), Index(defaultIndex), m_prev(defaultIndex) {}
 
         void Draw() override {
-            // Build items for ImGui combo
             if (ImGui::BeginCombo(DisplayName.c_str(), 
                 (Index >= 0 && Index < (int)Items.size()) ? Items[Index].c_str() : "")) {
                 for (int i = 0; i < (int)Items.size(); i++) {
@@ -147,8 +190,11 @@ namespace MenuUI {
                 }
                 ImGui::EndCombo();
             }
+            if (Index != m_prev) { m_prev = Index; FireValueChanged(); }
             DrawTooltip();
         }
+    private:
+        int m_prev;
     };
 
     // ========================================================================
@@ -389,6 +435,28 @@ namespace MenuUI {
             return Get<T>(name);
         }
 
+        // Add a RadioMenu (radio-button group)
+        std::shared_ptr<RadioMenu> AddRadioMenu(const std::string& name, const std::string& display) {
+            auto radio = std::make_shared<RadioMenu>(name, display);
+            m_items.push_back(radio);
+            m_lookup[name] = radio;
+            return radio;
+        }
+
+        // Register menu-level OnValueChanged callback (fires for any child item)
+        // Source: EnsoulSharp Menu.MenuValueChanged event
+        void OnMenuValueChanged(OnValueChangedFn callback) {
+            m_menuValueChangedCallbacks.push_back(callback);
+        }
+
+        // Fire menu-level value changed event
+        void FireMenuValueChanged(MenuItem* item) {
+            MenuValueChangedEventArgs args(this, item, item ? item->InternalName : "");
+            for (auto& cb : m_menuValueChangedCallbacks) {
+                cb(args);
+            }
+        }
+
         // Count items
         int Count() const { return (int)m_items.size(); }
 
@@ -409,6 +477,7 @@ namespace MenuUI {
         bool m_isRoot;
         std::vector<std::shared_ptr<MenuItem>> m_items;
         std::unordered_map<std::string, std::shared_ptr<MenuItem>> m_lookup;
+        std::vector<OnValueChangedFn> m_menuValueChangedCallbacks;
     };
 
     // ========================================================================
@@ -428,6 +497,280 @@ namespace MenuUI {
             ImGui::SameLine();
             if (ImGui::Button(ButtonText.c_str())) {
                 if (OnClick) OnClick();
+            }
+        }
+    };
+
+    // ========================================================================
+    // MenuSliderButton — Slider with an enable/disable button
+    // Source: EnsoulSharp.SDK/Core/UI/IMenu/Values/MenuSliderButton.cs
+    // ========================================================================
+    // Usage:
+    //   menu->Add<MenuSliderButton>("Range", "Cast Range", 900, 0, 2000, true);
+    //   auto* sb = menu->Get<MenuSliderButton>("Range");
+    //   int val = sb->Value;       // -1 if disabled or at min, else SValue
+    //   int raw = sb->SValue;      // Always the slider value
+    //   bool on = sb->BValue;      // Button enabled state
+    // ========================================================================
+    class MenuSliderButton : public MenuItem {
+    public:
+        int SValue;         // Slider value (always accessible)
+        int MinValue;
+        int MaxValue;
+        bool BValue;        // Button enabled/disabled
+
+        /// Value property: returns SValue if BValue && SValue != MinValue, else -1
+        int Value() const {
+            return (SValue != MinValue && BValue) ? SValue : -1;
+        }
+
+        MenuSliderButton(const std::string& name, const std::string& display,
+                         int value = 0, int minVal = 0, int maxVal = 100,
+                         bool bValue = false)
+            : MenuItem(name, display), SValue(value), MinValue(minVal), MaxValue(maxVal),
+              BValue(bValue), m_prevS(value), m_prevB(bValue) {
+            // Clamp initial value
+            if (SValue < MinValue) SValue = MinValue;
+            if (SValue > MaxValue) SValue = MaxValue;
+        }
+
+        void Draw() override {
+            // Draw slider and button on same line
+            ImGui::PushID(InternalName.c_str());
+
+            // Slider portion (takes most width)
+            float avail = ImGui::GetContentRegionAvail().x;
+            float btnWidth = 50.0f;
+            ImGui::SetNextItemWidth(avail - btnWidth - 10.0f);
+            ImGui::SliderInt("##slider", &SValue, MinValue, MaxValue);
+
+            // Button portion
+            ImGui::SameLine();
+            if (BValue) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.45f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.55f, 0.9f, 1.0f));
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+            }
+            if (ImGui::Button(BValue ? "ON" : "OFF", ImVec2(btnWidth, 0))) {
+                BValue = !BValue;
+            }
+            ImGui::PopStyleColor(2);
+
+            ImGui::PopID();
+
+            // Show display name as label
+            ImGui::SameLine();
+            ImGui::Text("%s", DisplayName.c_str());
+
+            // Fire change event
+            if (SValue != m_prevS || BValue != m_prevB) {
+                m_prevS = SValue;
+                m_prevB = BValue;
+                FireValueChanged();
+            }
+            DrawTooltip();
+        }
+
+    private:
+        int m_prevS;
+        bool m_prevB;
+    };
+
+    // ========================================================================
+    // RadioMenu — Menu with radio-button behavior (only one bool active)
+    // Source: EnsoulSharp.SDK/Core/UI/IMenu/RadioMenu.cs
+    // ========================================================================
+    // Usage:
+    //   auto radio = menu->AddRadioMenu("TargetMode", "Target Mode");
+    //   radio->Add<MenuBool>("smart", "Smart", true);
+    //   radio->Add<MenuBool>("lowHP", "Lowest HP", false);
+    //   radio->Add<MenuBool>("closest", "Closest", false);
+    //   // When "lowHP" is enabled, "smart" and "closest" auto-disable
+    //
+    //   std::string active = radio->GetActiveItem(); // "smart"
+    //   int activeIdx = radio->GetActiveIndex();     // 0
+    // ========================================================================
+    class RadioMenu : public MenuItem, public std::enable_shared_from_this<RadioMenu> {
+    public:
+        RadioMenu(const std::string& name, const std::string& display)
+            : MenuItem(name, display) {}
+
+        // Add a radio option (MenuBool)
+        MenuBool* AddOption(const std::string& name, const std::string& display, bool defaultValue = false) {
+            auto item = std::make_shared<MenuBool>(name, display, defaultValue);
+            MenuBool* ptr = item.get();
+            m_options.push_back(item);
+
+            // Register value changed callback for radio behavior
+            ptr->OnValueChanged([this, name](const MenuValueChangedEventArgs& args) {
+                auto* changedBool = dynamic_cast<MenuBool*>(args.ChangedItem);
+                if (changedBool && changedBool->Enabled) {
+                    // Disable all others
+                    for (auto& opt : m_options) {
+                        if (opt->InternalName != name) {
+                            opt->Enabled = false;
+                        }
+                    }
+                }
+            });
+
+            return ptr;
+        }
+
+        /// Get the internal name of the currently active option
+        std::string GetActiveItem() const {
+            for (auto& opt : m_options) {
+                if (opt->Enabled) return opt->InternalName;
+            }
+            return "";
+        }
+
+        /// Get the index of the currently active option (-1 if none)
+        int GetActiveIndex() const {
+            for (int i = 0; i < (int)m_options.size(); i++) {
+                if (m_options[i]->Enabled) return i;
+            }
+            return -1;
+        }
+
+        /// Set active option by name
+        void SetActive(const std::string& name) {
+            for (auto& opt : m_options) {
+                opt->Enabled = (opt->InternalName == name);
+            }
+        }
+
+        /// Set active option by index
+        void SetActive(int index) {
+            for (int i = 0; i < (int)m_options.size(); i++) {
+                m_options[i]->Enabled = (i == index);
+            }
+        }
+
+        void Draw() override {
+            if (ImGui::CollapsingHeader(DisplayName.c_str())) {
+                ImGui::Indent(10.0f);
+                // Draw as radio buttons for clearer UX
+                for (int i = 0; i < (int)m_options.size(); i++) {
+                    bool active = m_options[i]->Enabled;
+                    if (ImGui::RadioButton(m_options[i]->DisplayName.c_str(), active)) {
+                        // Set this one active, disable all others
+                        for (int j = 0; j < (int)m_options.size(); j++) {
+                            m_options[j]->Enabled = (j == i);
+                        }
+                        FireValueChanged();
+                    }
+                }
+                ImGui::Unindent(10.0f);
+            }
+        }
+
+        const std::vector<std::shared_ptr<MenuBool>>& GetOptions() const { return m_options; }
+
+    private:
+        std::vector<std::shared_ptr<MenuBool>> m_options;
+    };
+
+    // ========================================================================
+    // MenuCustomizer — Theme/appearance customization
+    // Source: EnsoulSharp.SDK/Core/UI/IMenu/Customizer/MenuCustomizer.cs
+    // ========================================================================
+    // Usage:
+    //   MenuCustomizer::Init();  // Call once
+    //   MenuCustomizer::Draw();  // Call in menu render loop
+    // ========================================================================
+    class MenuCustomizer {
+    public:
+        // Customizable properties
+        static inline float FontScale = 1.0f;           // ImGui font scale
+        static inline float MenuAlpha = 0.95f;           // Menu background alpha
+        static inline float ItemSpacing = 4.0f;          // Spacing between items
+        static inline float Rounding = 5.0f;             // Corner rounding
+        static inline bool LockPosition = false;         // Lock menu position
+        static inline float AccentColor[4] = {0.0f, 0.47f, 0.84f, 1.0f}; // Accent color (RGBA)
+        static inline float BgColor[4] = {0.08f, 0.08f, 0.12f, 0.95f};   // Background color
+
+        static void Init() {
+            // Apply defaults from current ImGui style
+            auto& style = ImGui::GetStyle();
+            FontScale = ImGui::GetIO().FontGlobalScale;
+            MenuAlpha = style.Alpha;
+            ItemSpacing = style.ItemSpacing.y;
+            Rounding = style.WindowRounding;
+        }
+
+        /// Apply current customization to ImGui style
+        static void Apply() {
+            auto& style = ImGui::GetStyle();
+            ImGui::GetIO().FontGlobalScale = FontScale;
+            style.Alpha = MenuAlpha;
+            style.ItemSpacing.y = ItemSpacing;
+            style.WindowRounding = Rounding;
+            style.FrameRounding = Rounding * 0.6f;
+            style.GrabRounding = Rounding * 0.4f;
+
+            // Apply accent color
+            ImVec4 accent(AccentColor[0], AccentColor[1], AccentColor[2], AccentColor[3]);
+            ImVec4 accentHover(
+                std::min(1.0f, AccentColor[0] + 0.1f),
+                std::min(1.0f, AccentColor[1] + 0.1f),
+                std::min(1.0f, AccentColor[2] + 0.1f),
+                AccentColor[3]);
+            ImVec4 accentActive(
+                std::min(1.0f, AccentColor[0] + 0.2f),
+                std::min(1.0f, AccentColor[1] + 0.2f),
+                std::min(1.0f, AccentColor[2] + 0.2f),
+                AccentColor[3]);
+
+            style.Colors[ImGuiCol_Header] = accent;
+            style.Colors[ImGuiCol_HeaderHovered] = accentHover;
+            style.Colors[ImGuiCol_HeaderActive] = accentActive;
+            style.Colors[ImGuiCol_CheckMark] = accent;
+            style.Colors[ImGuiCol_SliderGrab] = accent;
+            style.Colors[ImGuiCol_SliderGrabActive] = accentActive;
+            style.Colors[ImGuiCol_Button] = accent;
+            style.Colors[ImGuiCol_ButtonHovered] = accentHover;
+            style.Colors[ImGuiCol_ButtonActive] = accentActive;
+            style.Colors[ImGuiCol_FrameBg] = ImVec4(BgColor[0], BgColor[1], BgColor[2], 0.5f);
+            style.Colors[ImGuiCol_WindowBg] = ImVec4(BgColor[0], BgColor[1], BgColor[2], BgColor[3]);
+        }
+
+        /// Draw the customizer UI (add to menu)
+        static void Draw() {
+            if (ImGui::CollapsingHeader("Menu Customizer")) {
+                ImGui::Indent(10.0f);
+                bool changed = false;
+
+                changed |= ImGui::SliderFloat("Font Scale", &FontScale, 0.7f, 1.5f);
+                changed |= ImGui::SliderFloat("Menu Alpha", &MenuAlpha, 0.3f, 1.0f);
+                changed |= ImGui::SliderFloat("Item Spacing", &ItemSpacing, 0.0f, 12.0f);
+                changed |= ImGui::SliderFloat("Rounding", &Rounding, 0.0f, 15.0f);
+                changed |= ImGui::Checkbox("Lock Position", &LockPosition);
+                changed |= ImGui::ColorEdit4("Accent Color", AccentColor, ImGuiColorEditFlags_AlphaBar);
+                changed |= ImGui::ColorEdit4("Background", BgColor, ImGuiColorEditFlags_AlphaBar);
+
+                if (ImGui::Button("Apply")) {
+                    Apply();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Reset")) {
+                    FontScale = 1.0f;
+                    MenuAlpha = 0.95f;
+                    ItemSpacing = 4.0f;
+                    Rounding = 5.0f;
+                    LockPosition = false;
+                    AccentColor[0] = 0.0f; AccentColor[1] = 0.47f;
+                    AccentColor[2] = 0.84f; AccentColor[3] = 1.0f;
+                    BgColor[0] = 0.08f; BgColor[1] = 0.08f;
+                    BgColor[2] = 0.12f; BgColor[3] = 0.95f;
+                    Apply();
+                }
+
+                if (changed) Apply();
+
+                ImGui::Unindent(10.0f);
             }
         }
     };
