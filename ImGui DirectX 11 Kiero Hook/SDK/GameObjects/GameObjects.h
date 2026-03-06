@@ -32,14 +32,20 @@ namespace GameObjects {
     inline std::vector<GameObject> EnemyTurrets;
 
     // Extra categorized lists
+    inline std::vector<GameObject> AllWards;
+    inline std::vector<GameObject> AllyWards;
     inline std::vector<GameObject> EnemyWards;
     inline std::vector<GameObject> JunglePlants;
+    inline std::vector<GameObject> JungleLarge;       // Baron, Dragon, Rift Herald, Blue/Red buff
+    inline std::vector<GameObject> JungleSmall;       // Smaller jungle mobs
+    inline std::vector<GameObject> JungleLegendary;   // Baron, Dragon, Rift Herald
     inline std::vector<GameObject> AllyInhibitors;
     inline std::vector<GameObject> EnemyInhibitors;
     inline std::vector<GameObject> AllyNexus;
     inline std::vector<GameObject> EnemyNexus;
     inline std::vector<GameObject> AzirSoldiers;
     inline std::vector<GameObject> Pets;
+    inline std::vector<GameObject> ParticleEmitters;  // EffectEmitter objects (Jarvan flag, Thresh lantern, etc.)
 
     // Backwards compatibility alias
     inline std::vector<GameObject>& Turrets = AllTurrets;
@@ -100,6 +106,11 @@ namespace GameObjects {
         AllyMinions.clear();
         EnemyMinions.clear();
         JungleMinions.clear();
+        JungleLarge.clear();
+        JungleSmall.clear();
+        JungleLegendary.clear();
+        AllWards.clear();
+        AllyWards.clear();
         EnemyWards.clear();
         JunglePlants.clear();
         Pets.clear();
@@ -115,12 +126,15 @@ namespace GameObjects {
             for (auto& obj : minions) {
                 if (!obj.IsValid() || !obj.IsAlive()) continue;
 
-            GameObjectTeam team = obj.GetTeam();
+                GameObjectTeam team = obj.GetTeam();
                 std::string name = obj.GetName();
 
-                // --- Wards (enemy) ---
+                // --- Wards (All/Ally/Enemy) ---
                 if (obj.IsWard()) {
-                    if (team != myTeam)
+                    AllWards.push_back(obj);
+                    if (team == myTeam)
+                        AllyWards.push_back(obj);
+                    else
                         EnemyWards.push_back(obj);
                     continue;
                 }
@@ -129,7 +143,7 @@ namespace GameObjects {
                 if (obj.IsPlant()) {
                     JunglePlants.push_back(obj);
                     continue;
-            }
+                }
 
                 // --- Azir Soldiers ---
                 if (isAzir && team == myTeam &&
@@ -144,37 +158,82 @@ namespace GameObjects {
                     continue;
                 }
 
-                // Jungle monsters (Neutral team)
-            if (team == GameObjectTeam::Neutral) {
-                    if (obj.GetMaxHealth() > 1.0f)
+                // Jungle monsters (Neutral team) — subcategorize
+                if (team == GameObjectTeam::Neutral) {
+                    float maxHP = obj.GetMaxHealth();
+                    if (maxHP <= 1.0f) continue;
+
                     JungleMinions.push_back(obj);
+
+                    // Legendary: Baron, Dragon, Rift Herald, Elder Dragon
+                    if (name.find("SRU_Baron") != std::string::npos ||
+                        name.find("SRU_Dragon") != std::string::npos ||
+                        name.find("SRU_RiftHerald") != std::string::npos) {
+                        JungleLegendary.push_back(obj);
+                        JungleLarge.push_back(obj);
+                    }
+                    // Large: Blue/Red buff, Gromp, Krugs main, Wolves main, Raptors main
+                    else if (name.find("SRU_Blue") != std::string::npos ||
+                             name.find("SRU_Red") != std::string::npos ||
+                             name.find("SRU_Gromp") != std::string::npos ||
+                             name.find("SRU_Krug") == 0 ||
+                             name.find("SRU_Murkwolf") != std::string::npos ||
+                             name.find("SRU_Razorbeak") != std::string::npos ||
+                             name.find("Sru_Crab") != std::string::npos) {
+                        // Main camp monsters (not mini versions)
+                        if (maxHP > 800.0f)
+                            JungleLarge.push_back(obj);
+                        else
+                            JungleSmall.push_back(obj);
+                    }
+                    else {
+                        // Default: small jungle mobs (mini krugs, mini raptors, etc.)
+                        JungleSmall.push_back(obj);
+                    }
                     continue;
-            }
+                }
 
                 // Lane minions
-            float maxHP = obj.GetMaxHealth();
-            if (maxHP > 0.0f && maxHP < 10000.0f) {
-                AllMinions.push_back(obj);
-                if (team == myTeam)
-                    AllyMinions.push_back(obj);
-                else
-                    EnemyMinions.push_back(obj);
-            }
+                float maxHP = obj.GetMaxHealth();
+                if (maxHP > 0.0f && maxHP < 10000.0f) {
+                    AllMinions.push_back(obj);
+                    if (team == myTeam)
+                        AllyMinions.push_back(obj);
+                    else
+                        EnemyMinions.push_back(obj);
+                }
             }
         }
 
-        // ---- Inhibitors & Nexus (from full object iteration) ----
+        // ---- Inhibitors, Nexus & ParticleEmitters (from full object iteration) ----
         AllyInhibitors.clear();
         EnemyInhibitors.clear();
         AllyNexus.clear();
         EnemyNexus.clear();
+        ParticleEmitters.clear();
         {
             ObjectManager::ForEach([&](GameObject& obj) {
-                if (!obj.IsAlive()) return;
                 std::string name = obj.GetName();
                 if (name.empty()) return;
 
                 GameObjectTeam team = obj.GetTeam();
+
+                // --- ParticleEmitters / EffectEmitters ---
+                // Detect known particle effect objects used by scripts:
+                // Jarvan flag (JarvanIVDemacianStandard), Thresh lantern (ThreshLantern),
+                // Zilean bomb (ZileanQBomb), Zyra plants, etc.
+                if (name.find("_buf_") != std::string::npos ||
+                    name.find("_tar_") != std::string::npos ||
+                    name.find("_mis_") != std::string::npos ||
+                    name.find("Particle") != std::string::npos ||
+                    name.find("particle") != std::string::npos ||
+                    name.find("global_ss_") != std::string::npos ||
+                    name.find("Perks_") != std::string::npos) {
+                    ParticleEmitters.push_back(obj);
+                    // Don't return — particles can also match other categories
+                }
+
+                if (!obj.IsAlive()) return;
 
                 // Inhibitors: "Barracks_T1_*" or "Barracks_T2_*"
                 if (name.find("Barracks_T") != std::string::npos) {
@@ -322,6 +381,28 @@ namespace GameObjects {
     // ====================================================================
     // Ward helpers
     // ====================================================================
+    inline std::vector<GameObject> GetWardsInRange(float range, const Vec3& from = Vec3()) {
+        std::vector<GameObject> result;
+        Vec3 origin = from.IsZero() ? Player.GetPosition() : from;
+        for (auto& ward : AllWards) {
+            if (!ward.IsAlive()) continue;
+            if (ward.GetPosition().Distance2D(origin) <= range)
+                result.push_back(ward);
+        }
+        return result;
+    }
+
+    inline std::vector<GameObject> GetAllyWardsInRange(float range, const Vec3& from = Vec3()) {
+        std::vector<GameObject> result;
+        Vec3 origin = from.IsZero() ? Player.GetPosition() : from;
+        for (auto& ward : AllyWards) {
+            if (!ward.IsAlive()) continue;
+            if (ward.GetPosition().Distance2D(origin) <= range)
+                result.push_back(ward);
+        }
+        return result;
+    }
+
     inline std::vector<GameObject> GetEnemyWardsInRange(float range, const Vec3& from = Vec3()) {
         std::vector<GameObject> result;
         Vec3 origin = from.IsZero() ? Player.GetPosition() : from;
@@ -385,6 +466,61 @@ namespace GameObjects {
             if (soldier.GetPosition().Distance2D(origin) <= range) count++;
         }
         return count;
+    }
+
+    // ====================================================================
+    // Jungle subcategory helpers
+    // ====================================================================
+    inline std::vector<GameObject> GetJungleLargeInRange(float range, const Vec3& from = Vec3()) {
+        std::vector<GameObject> result;
+        Vec3 origin = from.IsZero() ? Player.GetPosition() : from;
+        for (auto& mob : JungleLarge) {
+            if (!mob.IsAlive() || !mob.IsVisible()) continue;
+            if (mob.GetPosition().Distance2D(origin) <= range)
+                result.push_back(mob);
+        }
+        return result;
+    }
+
+    inline std::vector<GameObject> GetJungleLegendaryInRange(float range, const Vec3& from = Vec3()) {
+        std::vector<GameObject> result;
+        Vec3 origin = from.IsZero() ? Player.GetPosition() : from;
+        for (auto& mob : JungleLegendary) {
+            if (!mob.IsAlive() || !mob.IsVisible()) continue;
+            if (mob.GetPosition().Distance2D(origin) <= range)
+                result.push_back(mob);
+        }
+        return result;
+    }
+
+    // ====================================================================
+    // ParticleEmitter helpers
+    // ====================================================================
+
+    /// Find a particle emitter by name substring
+    inline GameObject FindParticleEmitter(const std::string& nameSubstr) {
+        for (auto& emitter : ParticleEmitters) {
+            std::string name = emitter.GetName();
+            if (name.find(nameSubstr) != std::string::npos)
+                return emitter;
+        }
+        return GameObject();
+    }
+
+    /// Get all particle emitters in range
+    inline std::vector<GameObject> GetParticleEmittersInRange(float range, const Vec3& from = Vec3()) {
+        std::vector<GameObject> result;
+        Vec3 origin = from.IsZero() ? Player.GetPosition() : from;
+        for (auto& emitter : ParticleEmitters) {
+            if (emitter.GetPosition().Distance2D(origin) <= range)
+                result.push_back(emitter);
+        }
+        return result;
+    }
+
+    /// Check if a specific particle effect exists (by name substring)
+    inline bool HasParticleEmitter(const std::string& nameSubstr) {
+        return FindParticleEmitter(nameSubstr).IsValid();
     }
 
 } // namespace GameObjects

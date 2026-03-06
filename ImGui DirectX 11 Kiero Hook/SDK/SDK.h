@@ -26,6 +26,7 @@
 //       Spells/    SpellCaster.h, SpellTypes.h, SpellDatabase.h, LastCast.h, ...
 //       Orbwalking/ Orbwalker.h, HealthPrediction.h
 //       TargetSelector/ TargetSelector.h
+//       Items.h, Map.h
 //     UI/                          ← Menu & Drawing
 //       MenuUI.h, Drawing.h, ConfigManager.h, KeyConvert.h
 //     Utils/                       ← Utilities
@@ -86,6 +87,10 @@
 #include "Wrappers/Spells/SpellCaster.h"
 #include "Wrappers/Spells/SpellTypes.h"
 
+// ─── Phase 4: Wrappers — Items & Map ────────────────────────────────────────
+#include "Wrappers/Items.h"
+#include "Wrappers/Map.h"
+
 // ─── Phase 4: Wrappers — Orbwalking ─────────────────────────────────────────
 #include "Wrappers/Orbwalking/HealthPrediction.h"
 #include "Wrappers/Orbwalking/Orbwalker.h"
@@ -113,6 +118,8 @@
 #include "Utils/SummonerTracker.h"
 #include "Utils/RecallTracker.h"
 #include "Utils/AutoLevel.h"
+#include "Utils/Cache.h"
+#include "Utils/Performance.h"
 
 // ─── Phase 7: UI ────────────────────────────────────────────────────────────
 #include "UI/Drawing.h"

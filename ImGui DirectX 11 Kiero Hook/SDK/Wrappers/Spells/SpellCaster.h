@@ -52,13 +52,17 @@ namespace SDK {
         float ChargeStartTime;      // When charge started (game time)
         bool  IsCharging_;          // Currently charging?
 
+        // EnsoulSharp-compatible: additional
+        float MinManaPercent;       // Min mana % to cast (0 = disabled)
+        std::function<bool()> CastCondition; // Custom condition delegate
+
         // Constructors
         SpellCaster()
             : Slot(SpellSlotId::Q), Type(SpellCasterType::Targeted), Range(0),
               Speed(0), Delay(0.25f), Width(0), Collision(CollisionNone),
               IsCharged(false), ChargeTime(0), MinRange(0),
               MinHitChance(HitChance::High), Aoe(false), RangeSqr(0), WidthSqr(0),
-              ChargeStartTime(0), IsCharging_(false) {}
+              ChargeStartTime(0), IsCharging_(false), MinManaPercent(0) {}
 
         SpellCaster(SpellSlotId slot, float range)
             : Slot(slot), Type(SpellCasterType::Targeted), Range(range),
@@ -66,7 +70,30 @@ namespace SDK {
               IsCharged(false), ChargeTime(0), MinRange(0),
               MinHitChance(HitChance::High), Aoe(false),
               RangeSqr(range * range), WidthSqr(0),
-              ChargeStartTime(0), IsCharging_(false) {}
+              ChargeStartTime(0), IsCharging_(false), MinManaPercent(0) {}
+
+        // Constructor from game data (EnsoulSharp: Spell(slot, loadFromGame))
+        SpellCaster(SpellSlotId slot, bool loadFromGame, HitChance hitChance = HitChance::Medium)
+            : Slot(slot), Type(SpellCasterType::Targeted), Range(0),
+              Speed(0), Delay(0.25f), Width(0), Collision(CollisionNone),
+              IsCharged(false), ChargeTime(0), MinRange(0),
+              MinHitChance(hitChance), Aoe(false), RangeSqr(0), WidthSqr(0),
+              ChargeStartTime(0), IsCharging_(false), MinManaPercent(0)
+        {
+            if (loadFromGame && GameObjects::Player.IsValid()) {
+                SpellBook sb(GameObjects::Player.address);
+                auto spell = sb.GetSpell(slot);
+                if (spell.IsValid()) {
+                    auto sdata = spell.GetSpellData();
+                    Range = sdata.GetCastRange();
+                    float lineWidth = sdata.GetLineWidth();
+                    Width = (lineWidth > 0.0f) ? lineWidth : sdata.GetCastRadius();
+                    Speed = sdata.GetMissileSpeed();
+                    RangeSqr = Range * Range;
+                    WidthSqr = Width * Width;
+                }
+            }
+        }
 
         // ====================================================================
         // Factory Methods
@@ -121,6 +148,30 @@ namespace SDK {
             WidthSqr = width * width;
             return *this;
         }
+
+        // SetSkillshot (overload — collision + type only, delay/width/speed from game data)
+        // Reference: EnsoulSharp Spell.SetSkillshot(bool, SkillshotType, ...)
+        SpellCaster& SetSkillshot(int collision, SpellCasterType type) {
+            Collision = collision; Type = type;
+            return *this;
+        }
+
+        // SetTargetted — configure as targeted spell (EnsoulSharp: Spell.SetTargetted)
+        SpellCaster& SetTargetted(float delay = 0.0f, float speed = 0.0f,
+                                  const Vec3& fromPos = Vec3(), const Vec3& rangeCheckPos = Vec3()) {
+            Delay = delay; Speed = speed; Type = SpellCasterType::Targeted;
+            if (!fromPos.IsZero()) From = fromPos;
+            if (!rangeCheckPos.IsZero()) RangeCheckFrom = rangeCheckPos;
+            return *this;
+        }
+
+        // SetMinimumManaPercentage — minimum mana % required to cast
+        // Reference: EnsoulSharp Spell.SetMinimumManaPercentage
+        SpellCaster& SetMinimumManaPercentage(float percent) { MinManaPercent = percent; return *this; }
+
+        // CastCondition — custom delegate that must return true before casting
+        // Reference: EnsoulSharp Spell.CastCondition
+        SpellCaster& SetCastCondition(std::function<bool()> fn) { CastCondition = fn; return *this; }
 
         // UpdateSourcePosition — update From and RangeCheckFrom each frame
         void UpdateSourcePosition(const Vec3& from = Vec3(), const Vec3& rangeCheck = Vec3()) {
@@ -249,6 +300,139 @@ namespace SDK {
         }
 
         // ====================================================================
+        // CanCast / CanKill (EnsoulSharp: Spell.CanCast, Spell.CanKill)
+        // ====================================================================
+
+        /// Returns if spell is ready and target is in range
+        bool CanCast(const GameObject& target) const {
+            return IsReady() && target.IsValid() && target.IsAlive() && InRange(target);
+        }
+
+        /// Returns if spell can kill the target (damage > health)
+        bool CanKill(const GameObject& target, int stage = 0) const {
+            return target.IsValid() && target.IsAlive() && GetSpellDamage(target, stage) > target.GetHealth();
+        }
+
+        // ====================================================================
+        // GetHitCount — Count enemies that would be hit with high hitchance
+        // Reference: EnsoulSharp Spell.GetHitCount
+        // ====================================================================
+        int GetHitCount(HitChance minHC = HitChance::High) const {
+            int count = 0;
+            for (auto& hero : GameObjects::EnemyHeroes) {
+                if (!hero.IsValid() || !hero.IsAlive() || !hero.IsVisible()) continue;
+                if (!InRange(hero)) continue;
+                PredictionInput input = BuildPredictionInput();
+                auto pred = Prediction::GetPrediction(hero, input);
+                if ((int)pred.Hitchance >= (int)minHC) count++;
+            }
+            return count;
+        }
+
+        // ====================================================================
+        // GetUnitsByHitChance — Get all enemies that can be hit
+        // Reference: EnsoulSharp Spell.GetUnitsByHitChance
+        // ====================================================================
+        std::vector<GameObject> GetUnitsByHitChance(HitChance minHC = HitChance::High) const {
+            std::vector<GameObject> result;
+            for (auto& hero : GameObjects::EnemyHeroes) {
+                if (!hero.IsValid() || !hero.IsAlive() || !hero.IsVisible()) continue;
+                if (!InRange(hero)) continue;
+                PredictionInput input = BuildPredictionInput();
+                auto pred = Prediction::GetPrediction(hero, input);
+                if ((int)pred.Hitchance >= (int)minHC)
+                    result.push_back(hero);
+            }
+            return result;
+        }
+
+        // ====================================================================
+        // FarmLocation — Find best position to hit most minions
+        // Reference: EnsoulSharp Spell.GetCircularFarmLocation / GetLineFarmLocation
+        // ====================================================================
+
+        struct FarmLocation {
+            Vec3 Position;
+            int MinionsHit = 0;
+        };
+
+        /// Get best circular farm location (for circle/AoE spells)
+        FarmLocation GetCircularFarmLocation(float overrideWidth = -1) const {
+            float effectiveWidth = overrideWidth >= 0 ? overrideWidth : Width;
+            FarmLocation best;
+
+            // Collect enemy minion positions in range
+            std::vector<Vec3> minionPos;
+            for (auto& minion : GameObjects::EnemyMinions) {
+                if (!minion.IsValid() || !minion.IsAlive()) continue;
+                Vec3 pos = minion.GetPosition();
+                if (pos.Distance2D(GetSourcePosition()) <= Range + effectiveWidth)
+                    minionPos.push_back(pos);
+            }
+            if (minionPos.empty()) return best;
+
+            // Test each minion position as center
+            for (auto& center : minionPos) {
+                int hits = 0;
+                for (auto& pos : minionPos) {
+                    if (center.Distance2D(pos) <= effectiveWidth)
+                        hits++;
+                }
+                if (hits > best.MinionsHit) {
+                    best.MinionsHit = hits;
+                    best.Position = center;
+                }
+            }
+            return best;
+        }
+
+        /// Get best line farm location (for line spells)
+        FarmLocation GetLineFarmLocation(float overrideWidth = -1) const {
+            float effectiveWidth = overrideWidth >= 0 ? overrideWidth : Width;
+            FarmLocation best;
+            Vec3 from = GetSourcePosition();
+
+            // Collect enemy minion positions in range
+            std::vector<Vec3> minionPos;
+            for (auto& minion : GameObjects::EnemyMinions) {
+                if (!minion.IsValid() || !minion.IsAlive()) continue;
+                Vec3 pos = minion.GetPosition();
+                if (pos.Distance2D(from) <= Range + 200.0f)
+                    minionPos.push_back(pos);
+            }
+            if (minionPos.empty()) return best;
+
+            // For each minion, cast line towards it and count hits
+            for (auto& target : minionPos) {
+                Vec2 dir2d = (target.To2D() - from.To2D());
+                float len = dir2d.Length();
+                if (len <= 0) continue;
+                dir2d = Vec2(dir2d.x / len, dir2d.y / len);
+
+                Vec3 endPos = Vec3(from.x + dir2d.x * Range, 0, from.z + dir2d.y * Range);
+
+                int hits = 0;
+                for (auto& pos : minionPos) {
+                    // Distance from point to line segment
+                    Vec2 ap = pos.To2D() - from.To2D();
+                    Vec2 ab = endPos.To2D() - from.To2D();
+                    float abLenSq = ab.x * ab.x + ab.y * ab.y;
+                    if (abLenSq <= 0) continue;
+                    float t = std::clamp((ap.x * ab.x + ap.y * ab.y) / abLenSq, 0.0f, 1.0f);
+                    Vec2 closest(from.x + ab.x * t, from.z + ab.y * t);
+                    float dist = (pos.To2D() - closest).Length();
+                    if (dist <= effectiveWidth / 2.0f + 50.0f) // +50 for minion radius
+                        hits++;
+                }
+                if (hits > best.MinionsHit) {
+                    best.MinionsHit = hits;
+                    best.Position = endPos;
+                }
+            }
+            return best;
+        }
+
+        // ====================================================================
         // Health Prediction helpers (EnsoulSharp: Spell.GetHealthPrediction)
         // ====================================================================
 
@@ -278,22 +462,42 @@ namespace SDK {
 
         // ====================================================================
         // Cast Methods
+        // All Cast methods check: IsReady, MinManaPercent, CastCondition
+        // Reference: EnsoulSharp Spell.cs Cast() checks
         // ====================================================================
 
+    private:
+        /// Internal pre-cast checks (mana, condition, ready)
+        bool PreCastCheck() const {
+            if (!IsReady()) return false;
+            // MinManaPercent check
+            if (MinManaPercent > 0.0f) {
+                float maxMana = GameObjects::Player.GetMaxMana();
+                if (maxMana > 0.0f) {
+                    float manaPercent = (GameObjects::Player.GetMana() / maxMana) * 100.0f;
+                    if (manaPercent < MinManaPercent) return false;
+                }
+            }
+            // CastCondition delegate
+            if (CastCondition && !CastCondition()) return false;
+            return true;
+        }
+
+    public:
         // Self cast (no target)
         bool Cast() {
-            if (!IsReady()) return false;
+            if (!PreCastCheck()) return false;
             CastSpellInternal(GameObjects::Player.GetPosition());
             return true;
         }
 
         // Cast on target (targeted spell)
         bool Cast(const GameObject& target) {
-            if (!IsReady() || !target.IsValid()) return false;
+            if (!PreCastCheck() || !target.IsValid()) return false;
             if (!InRange(target)) return false;
 
             if (IsSkillshot()) {
-                return CastWithPrediction(target, HitChance::High);
+                return CastWithPrediction(target, MinHitChance);
             }
 
             // Targeted: cast at target position
@@ -303,15 +507,26 @@ namespace SDK {
 
         // Cast at position
         bool Cast(const Vec3& pos) {
-            if (!IsReady()) return false;
+            if (!PreCastCheck()) return false;
             CastSpellInternal(pos);
+            return true;
+        }
+
+        // Cast from one position to another (EnsoulSharp: Spell.Cast(from, to))
+        bool Cast(const Vec3& fromPos, const Vec3& toPos) {
+            if (!PreCastCheck()) return false;
+            // Temporarily override From position for this cast
+            Vec3 savedFrom = From;
+            From = fromPos;
+            CastSpellInternal(toPos);
+            From = savedFrom;
             return true;
         }
 
         // Cast with prediction + hit chance requirement
         bool CastWithPrediction(const GameObject& target,
                                 HitChance minChance = HitChance::High) {
-            if (!IsReady() || !target.IsValid()) return false;
+            if (!PreCastCheck() || !target.IsValid()) return false;
 
             PredictionInput input = BuildPredictionInput();
 
@@ -344,7 +559,7 @@ namespace SDK {
         // Cast AoE with cluster prediction (EnsoulSharp: CastIfWillHit)
         bool CastIfWillHit(const GameObject& mainTarget, int minTargets = 2,
                            HitChance minChance = HitChance::High) {
-            if (!IsReady() || !mainTarget.IsValid() || !Aoe) return false;
+            if (!PreCastCheck() || !mainTarget.IsValid() || !Aoe) return false;
 
             PredictionInput input = BuildPredictionInput();
 

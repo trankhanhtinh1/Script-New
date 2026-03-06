@@ -23,16 +23,30 @@
 #include "Game.h"
 #include "GameObject.h"
 #include "GameObjects.h"
+#include "EventSystem.h"
+#include "SpellDatabase.h"
 #include "core/Vector.h"
 #include <cmath>
 #include <algorithm>
 #include <memory>
+#include <unordered_set>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
 namespace SDK {
+
+// ============================================================================
+// DetectionType — How a skillshot was detected
+// Reference: EnsoulSharp.SDK SpellTypes/DetectionType
+// ============================================================================
+enum class DetectionType {
+    ProcessSpell,     // Detected via OnProcessSpellCast
+    MissileCreate,    // Detected via missile creation
+    RecvPacket,       // Detected via network packet (not used in internal)
+    Unknown
+};
 
 // ============================================================================
 // Skillshot — Base class for all skillshot types
@@ -71,6 +85,18 @@ public:
     int DangerLevel = 1;           // 1-5 danger rating
     bool IsDangerous = false;
 
+    // ---- Missile Physics (EnsoulSharp: MissileAccel, MissileMinSpeed, MissileMaxSpeed) ----
+    float MissileAccel = 0.0f;     // Missile acceleration (units/sec²), 0 = constant speed
+    float MissileMinSpeed = 0.0f;  // Minimum missile speed (if accelerating)
+    float MissileMaxSpeed = 0.0f;  // Maximum missile speed
+    bool  MissileFollowsCaster = false; // Missile stays relative to caster (Viktor R, etc.)
+    float CurrentSpeed = 0.0f;     // Computed current missile speed (with accel)
+
+    // ---- Detection ----
+    DetectionType Detection = DetectionType::Unknown;  // How this was detected
+    unsigned int CasterNetId = 0;   // Network ID of caster (for dedup & tracking)
+    unsigned int MissileNetId = 0;  // Network ID of missile object (for matching)
+
     // ---- State ----
     bool IsActive = true;          // Is the skillshot still active?
     bool IsMissile = false;        // Does this type have a visible missile?
@@ -97,6 +123,7 @@ public:
         EndPosition = end;
         StartTime = Game::GetTime();
         Speed = static_cast<float>(data.MissileSpeed);
+        CurrentSpeed = Speed;
         Range = static_cast<float>(data.Range);
         Width = static_cast<float>(data.GetRealWidth());
         Radius = static_cast<float>(data.Radius);
@@ -106,6 +133,12 @@ public:
         DangerLevel = data.DangerValue;
         IsDangerous = data.IsDangerous;
         CollisionFlags = data.CollisionObjects;
+
+        // Missile physics from SpellDatabaseEntry
+        MissileAccel = static_cast<float>(data.MissileAccel);
+        MissileMinSpeed = static_cast<float>(data.MissileMinSpeed);
+        MissileMaxSpeed = static_cast<float>(data.MissileMaxSpeed);
+        MissileFollowsCaster = data.MissileFollowsCaster;
 
         // Calculate direction
         Vec2 diff = EndPosition - StartPosition;
@@ -152,7 +185,36 @@ public:
         if (IsMissile && Speed > 0) {
             float elapsed = now - StartTime - CastDelay;
             if (elapsed > 0) {
-                float dist = elapsed * Speed;
+                float dist = 0.0f;
+
+                // MissileAccel support (EnsoulSharp: accelerating/decelerating missiles)
+                if (MissileAccel != 0.0f) {
+                    // v(t) = v0 + a*t, clamped to [min, max]
+                    CurrentSpeed = Speed + MissileAccel * elapsed;
+                    if (MissileMaxSpeed > 0) CurrentSpeed = std::min(CurrentSpeed, MissileMaxSpeed);
+                    if (MissileMinSpeed > 0) CurrentSpeed = std::max(CurrentSpeed, MissileMinSpeed);
+
+                    // s = v0*t + 0.5*a*t^2 (with clamping approximation)
+                    dist = Speed * elapsed + 0.5f * MissileAccel * elapsed * elapsed;
+                    if (dist < 0) dist = 0;
+                } else {
+                    dist = elapsed * Speed;
+                }
+
+                // MissileFollowsCaster: update start position to caster's current position
+                if (MissileFollowsCaster && CasterNetId != 0) {
+                    for (auto& hero : GameObjects::EnemyHeroes) {
+                        if (hero.IsValid() && hero.GetNetId() == CasterNetId) {
+                            Vec2 newStart = hero.GetPosition().To2D();
+                            // Shift end position relative to new start
+                            Vec2 offset = newStart - StartPosition;
+                            StartPosition = newStart;
+                            EndPosition = EndPosition + offset;
+                            break;
+                        }
+                    }
+                }
+
                 MissilePosition = StartPosition + Direction * dist;
 
                 // Cap at max range
@@ -272,9 +334,16 @@ public:
         float elapsed = time - StartTime - CastDelay;
         if (elapsed <= 0) return StartPosition;
 
-        float dist = elapsed * Speed;
-        if (dist >= Range) return StartPosition + Direction * Range;
+        float dist = 0.0f;
+        if (MissileAccel != 0.0f) {
+            // s = v0*t + 0.5*a*t^2
+            dist = Speed * elapsed + 0.5f * MissileAccel * elapsed * elapsed;
+            if (dist < 0) dist = 0;
+        } else {
+            dist = elapsed * Speed;
+        }
 
+        if (dist >= Range) return StartPosition + Direction * Range;
         return StartPosition + Direction * dist;
     }
 
@@ -693,6 +762,36 @@ public:
     // ====================================================================
     static inline std::vector<std::shared_ptr<Skillshot>> ActiveSkillshots;
 
+    // Deduplication: track (casterNetId, spellName, startTime) to avoid duplicates
+    // from both ProcessSpell and MissileCreate detecting the same cast
+    static inline std::unordered_set<std::string> s_dedupKeys;
+
+    static inline bool s_initialized = false;
+
+    // ====================================================================
+    // Init — Subscribe to EventSystem for auto-detection
+    // Reference: EnsoulSharp SkillshotTracker auto-detects via game events
+    // ====================================================================
+    static void Init() {
+        if (s_initialized) return;
+        s_initialized = true;
+
+        // Auto-detect skillshots from ProcessSpellCast
+        EventSystem::OnProcessSpellCast([](const SpellCastArgs& args) {
+            OnProcessSpellCast(args);
+        });
+
+        // Auto-detect from missile creation
+        EventSystem::OnMissileCreate([](const MissileArgs& args) {
+            OnMissileCreate(args);
+        });
+
+        // Remove on missile delete
+        EventSystem::OnMissileDelete([](const MissileArgs& args) {
+            OnMissileDelete(args);
+        });
+    }
+
     // ====================================================================
     // Update — Call each frame
     // ====================================================================
@@ -712,22 +811,41 @@ public:
                 }),
             ActiveSkillshots.end()
         );
+
+        // Clean old dedup keys (older than 5s)
+        // Simple: clear every 60s to avoid unbounded growth
+        static float lastCleanup = 0.0f;
+        float now = Game::GetTime();
+        if (now - lastCleanup > 60.0f) {
+            s_dedupKeys.clear();
+            lastCleanup = now;
+        }
     }
 
     // ====================================================================
-    // Add a skillshot to tracking
+    // Add a skillshot to tracking (with deduplication)
     // ====================================================================
     static void AddSkillshot(const SpellDatabaseEntry& data,
                               const Vec2& start, const Vec2& end,
-                              const std::string& caster = "") {
+                              const std::string& caster = "",
+                              DetectionType detection = DetectionType::Unknown,
+                              unsigned int casterNetId = 0) {
+        // Dedup check: same caster + spell within 0.5s
+        std::string key = caster + "_" + data.SpellName + "_" +
+            std::to_string(static_cast<int>(Game::GetTime() * 2)); // 0.5s granularity
+        if (s_dedupKeys.count(key) > 0) return;
+        s_dedupKeys.insert(key);
+
         auto ss = Skillshot::Create(data, start, end, caster);
         if (ss) {
+            ss->Detection = detection;
+            ss->CasterNetId = casterNetId;
             ActiveSkillshots.push_back(ss);
         }
     }
 
     // ====================================================================
-    // Add a pre-created skillshot
+    // Add a pre-created skillshot (no dedup)
     // ====================================================================
     static void AddSkillshot(std::shared_ptr<Skillshot> ss) {
         if (ss) ActiveSkillshots.push_back(ss);
@@ -747,10 +865,24 @@ public:
     }
 
     // ====================================================================
+    // Remove by missile network ID
+    // ====================================================================
+    static void RemoveByMissileId(unsigned int missileNetId) {
+        ActiveSkillshots.erase(
+            std::remove_if(ActiveSkillshots.begin(), ActiveSkillshots.end(),
+                [&](const std::shared_ptr<Skillshot>& ss) {
+                    return ss && ss->MissileNetId == missileNetId;
+                }),
+            ActiveSkillshots.end()
+        );
+    }
+
+    // ====================================================================
     // Clear all
     // ====================================================================
     static void Clear() {
         ActiveSkillshots.clear();
+        s_dedupKeys.clear();
     }
 
     // ====================================================================
@@ -867,6 +999,110 @@ public:
     // ====================================================================
     static int Count() {
         return static_cast<int>(ActiveSkillshots.size());
+    }
+
+private:
+    // ====================================================================
+    // Auto-detect: OnProcessSpellCast handler
+    // Looks up spell in SpellDatabase and adds if it's a known skillshot
+    // ====================================================================
+    static void OnProcessSpellCast(const SpellCastArgs& args) {
+        // Only track enemy hero casts
+        if (!args.Sender.IsValid() || !args.Sender.IsHero()) return;
+        if (args.Sender.GetTeam() == GameObjects::Player.GetTeam()) return;
+        if (args.IsAutoAttack) return; // Skip auto attacks
+
+        // Look up in SpellDatabase
+        auto entries = SpellDatabase::GetByName(args.SpellName);
+        if (entries.empty()) {
+            // Also try by champion
+            entries = SpellDatabase::GetByChampion(args.Sender.GetChampionName());
+        }
+
+        for (auto& entry : entries) {
+            if (!entry.IsSkillshot()) continue;
+
+            // Match by spell name (case-insensitive)
+            if (_stricmp(entry.SpellName.c_str(), args.SpellName.c_str()) != 0) continue;
+
+            Vec2 start = args.StartPos.To2D();
+            Vec2 end = args.EndPos.To2D();
+
+            AddSkillshot(entry, start, end,
+                         args.Sender.GetChampionName(),
+                         DetectionType::ProcessSpell,
+                         args.Sender.GetNetId());
+            break; // Only add once
+        }
+    }
+
+    // ====================================================================
+    // Auto-detect: OnMissileCreate handler
+    // Matches missile to spell database entries
+    // ====================================================================
+    static void OnMissileCreate(const MissileArgs& args) {
+        if (!args.MissileObj.IsValid()) return;
+
+        Missile missile(args.MissileObj.address);
+        if (!missile.IsValid()) return;
+
+        // Only track enemy missiles — check caster is not on our team
+        int casterNetId = args.CasterNetId;
+        bool isEnemy = true;
+        for (auto& hero : GameObjects::AllyHeroes) {
+            if (hero.IsValid() && static_cast<int>(hero.GetNetId()) == casterNetId) {
+                isEnemy = false;
+                break;
+            }
+        }
+        // Also check local player
+        if (static_cast<int>(GameObjects::Player.GetNetId()) == casterNetId) isEnemy = false;
+        if (!isEnemy) return;
+
+        std::string missileName = missile.GetMissileName();
+        if (missileName.empty()) return;
+
+        // Look up in SpellDatabase by missile name
+        auto entries = SpellDatabase::GetByMissileName(missileName);
+        if (entries.empty()) return;
+
+        for (auto& entry : entries) {
+            if (!entry.IsSkillshot()) continue;
+
+            Vec2 start = missile.GetStartPos().To2D();
+            Vec2 end = missile.GetEndPos().To2D();
+
+            // Check if already tracked by ProcessSpell (dedup handles this)
+            AddSkillshot(entry, start, end,
+                         entry.ChampionName,
+                         DetectionType::MissileCreate,
+                         static_cast<unsigned int>(missile.GetCasterNetId()));
+
+            // Store missile NetId for later removal
+            if (!ActiveSkillshots.empty()) {
+                auto& last = ActiveSkillshots.back();
+                if (last) last->MissileNetId = args.MissileObj.GetNetworkId();
+            }
+            break;
+        }
+    }
+
+    // ====================================================================
+    // Auto-detect: OnMissileDelete handler
+    // Deactivate corresponding skillshot
+    // ====================================================================
+    static void OnMissileDelete(const MissileArgs& args) {
+        if (!args.MissileObj.IsValid()) return;
+        unsigned int netId = static_cast<unsigned int>(args.MissileObj.GetNetworkId());
+        if (netId == 0) return;
+
+        // Find and deactivate skillshot with matching missile ID
+        for (auto& ss : ActiveSkillshots) {
+            if (ss && ss->MissileNetId == netId) {
+                ss->IsActive = false;
+                break;
+            }
+        }
     }
 };
 

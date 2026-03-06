@@ -10,6 +10,7 @@
 #include <memory>
 #include <functional>
 #include <cmath>
+#include <unordered_map>
 
 #undef min
 #undef max
@@ -216,6 +217,14 @@ namespace SDK {
         static inline std::vector<std::shared_ptr<IWeightItem>> Weights;
         static inline bool Initialized = false;
 
+        // Per-hero weight percentage (champName → 0.0-2.0, default 1.0)
+        // Allows increasing/decreasing a specific hero's total weight
+        static inline std::unordered_map<std::string, float> HeroPercentage;
+
+        // Last calculated scores for drawing (champNetId → score)
+        static inline std::unordered_map<int, float> LastScores;
+        static inline int BestTargetNetId = 0;
+
         /// Initialize all default weight items
         static void Init() {
             if (Initialized) return;
@@ -245,7 +254,18 @@ namespace SDK {
             return nullptr;
         }
 
-        /// Calculate total weighted score for a target (higher = higher priority)
+        /// Set per-hero percentage (1.0 = default, 2.0 = double weight, 0.5 = half)
+        static void SetHeroPercentage(const std::string& champName, float pct) {
+            HeroPercentage[champName] = std::max(0.0f, std::min(2.0f, pct));
+        }
+
+        static float GetHeroPercentage(const std::string& champName) {
+            auto it = HeroPercentage.find(champName);
+            return (it != HeroPercentage.end()) ? it->second : 1.0f;
+        }
+
+        /// Calculate normalized weighted score using min-max normalization across targets
+        /// (EnsoulSharp Weight.cs pattern: normalize each weight item across all targets)
         static float CalculateScore(const GameObject& target) {
             if (!Initialized) Init();
 
@@ -256,47 +276,143 @@ namespace SDK {
                 if (!item || !item->Enabled) continue;
 
                 float rawWeight = item->GetWeight(target);
-
-                // Clamp to 0-1
                 rawWeight = std::max(0.0f, std::min(1.0f, rawWeight));
-
-                // Invert if needed (lower raw value = higher priority)
                 if (item->Inverted) rawWeight = 1.0f - rawWeight;
 
                 totalScore += rawWeight * item->DefaultWeight;
                 totalWeight += item->DefaultWeight;
             }
 
-            // Normalize to 0-1 range
             if (totalWeight > 0) totalScore /= totalWeight;
+
+            // Apply per-hero percentage multiplier
+            float heroPct = GetHeroPercentage(target.GetChampionName());
+            totalScore *= heroPct;
 
             return totalScore;
         }
 
-        /// Get best target using weight system
+        /// Calculate scores for ALL targets with min-max normalization
+        /// This is more accurate than individual CalculateScore calls because
+        /// it normalizes each weight item across the full candidate set
+        static std::unordered_map<int, float> CalculateNormalizedScores(
+            const std::vector<GameObject>& targets)
+        {
+            if (!Initialized) Init();
+
+            std::unordered_map<int, float> scores;
+            if (targets.empty()) return scores;
+
+            // Step 1: Collect raw values for each weight item per target
+            struct TargetRaw {
+                int netId;
+                std::string champName;
+                std::vector<float> rawValues;
+            };
+
+            std::vector<TargetRaw> rawData;
+            for (auto& t : targets) {
+                TargetRaw tr;
+                tr.netId = t.GetNetId();
+                tr.champName = t.GetChampionName();
+                for (auto& item : Weights) {
+                    if (!item || !item->Enabled) {
+                        tr.rawValues.push_back(0.0f);
+                        continue;
+                    }
+                    float raw = item->GetWeight(t);
+                    raw = std::max(0.0f, std::min(1.0f, raw));
+                    if (item->Inverted) raw = 1.0f - raw;
+                    tr.rawValues.push_back(raw);
+                }
+                rawData.push_back(tr);
+            }
+
+            // Step 2: Min-max normalize each weight dimension across all targets
+            size_t numWeights = Weights.size();
+            for (size_t w = 0; w < numWeights; w++) {
+                float minVal = FLT_MAX, maxVal = -FLT_MAX;
+                for (auto& tr : rawData) {
+                    if (w < tr.rawValues.size()) {
+                        minVal = std::min(minVal, tr.rawValues[w]);
+                        maxVal = std::max(maxVal, tr.rawValues[w]);
+                    }
+                }
+                float range = maxVal - minVal;
+                if (range < 0.001f) range = 1.0f; // Avoid division by zero
+                for (auto& tr : rawData) {
+                    if (w < tr.rawValues.size()) {
+                        tr.rawValues[w] = (tr.rawValues[w] - minVal) / range;
+                    }
+                }
+            }
+
+            // Step 3: Calculate weighted sum
+            for (auto& tr : rawData) {
+                float totalScore = 0.0f;
+                float totalWeight = 0.0f;
+                for (size_t w = 0; w < numWeights; w++) {
+                    if (w >= Weights.size() || !Weights[w] || !Weights[w]->Enabled) continue;
+                    totalScore += tr.rawValues[w] * Weights[w]->DefaultWeight;
+                    totalWeight += Weights[w]->DefaultWeight;
+                }
+                if (totalWeight > 0) totalScore /= totalWeight;
+
+                // Apply per-hero percentage
+                totalScore *= GetHeroPercentage(tr.champName);
+
+                scores[tr.netId] = totalScore;
+            }
+
+            return scores;
+        }
+
+        /// Get best target using normalized weight system
         static GameObject GetTarget(const std::vector<GameObject>& targets) {
             if (targets.empty()) return GameObject();
+
+            // Use normalized scoring
+            auto scores = CalculateNormalizedScores(targets);
+
+            // Update last scores for drawing
+            LastScores = scores;
 
             GameObject best;
             float bestScore = -1.0f;
 
             for (auto& target : targets) {
-                float score = CalculateScore(target);
+                float score = 0.0f;
+                auto it = scores.find(target.GetNetId());
+                if (it != scores.end()) score = it->second;
+
                 if (score > bestScore) {
                     bestScore = score;
                     best = target;
                 }
             }
 
+            BestTargetNetId = best.IsValid() ? best.GetNetId() : 0;
             return best;
         }
 
         /// Get all targets sorted by weight (highest first)
         static std::vector<GameObject> GetSorted(std::vector<GameObject> targets) {
+            auto scores = CalculateNormalizedScores(targets);
+            LastScores = scores;
+
             std::sort(targets.begin(), targets.end(),
-                [](const GameObject& a, const GameObject& b) {
-                    return CalculateScore(a) > CalculateScore(b);
+                [&scores](const GameObject& a, const GameObject& b) {
+                    float sa = 0.0f, sb = 0.0f;
+                    auto itA = scores.find(a.GetNetId());
+                    auto itB = scores.find(b.GetNetId());
+                    if (itA != scores.end()) sa = itA->second;
+                    if (itB != scores.end()) sb = itB->second;
+                    return sa > sb;
                 });
+
+            if (!targets.empty())
+                BestTargetNetId = targets[0].GetNetId();
+
             return targets;
         }
     };
@@ -380,6 +496,70 @@ namespace SDK {
     // ========================================================================
     // TargetSelector — Main class
     // ========================================================================
+    // ========================================================================
+    // FoW Humanizer — Adds human-like delay after target appears from fog
+    // ========================================================================
+    // Source: EnsoulSharp.SDK TargetSelectorHumanizer.cs
+    // ========================================================================
+    class TargetSelectorHumanizer {
+    public:
+        static inline float FowDelay = 0.0f;  // Delay in seconds (0 = disabled)
+
+        struct VisibilityEntry {
+            float lastVisibleChangeTime = 0.0f;  // Game time when visibility changed
+            bool wasVisible = false;
+        };
+
+        static inline std::unordered_map<int, VisibilityEntry> VisibilityMap;
+
+        /// Update visibility tracking for all enemy heroes (call every frame)
+        static void Update() {
+            float now = Game::GetTime();
+            for (auto& hero : GameObjects::EnemyHeroes) {
+                if (!hero.IsValid()) continue;
+                int netId = hero.GetNetId();
+                bool visible = hero.IsVisible();
+
+                auto it = VisibilityMap.find(netId);
+                if (it == VisibilityMap.end()) {
+                    VisibilityMap[netId] = { now, visible };
+                } else {
+                    if (visible != it->second.wasVisible) {
+                        it->second.lastVisibleChangeTime = now;
+                        it->second.wasVisible = visible;
+                    }
+                }
+            }
+        }
+
+        /// Check if target should be filtered out (recently appeared from fog)
+        static bool ShouldFilter(const GameObject& target) {
+            if (FowDelay <= 0.0f) return false;
+            if (!target.IsVisible()) return false;
+
+            int netId = target.GetNetId();
+            auto it = VisibilityMap.find(netId);
+            if (it == VisibilityMap.end()) return false;
+
+            float timeSinceAppear = Game::GetTime() - it->second.lastVisibleChangeTime;
+            return timeSinceAppear < FowDelay;
+        }
+
+        /// Filter targets by FoW humanizer
+        static std::vector<GameObject> FilterTargets(const std::vector<GameObject>& targets) {
+            if (FowDelay <= 0.0f) return targets;
+
+            std::vector<GameObject> result;
+            for (auto& t : targets) {
+                if (!ShouldFilter(t))
+                    result.push_back(t);
+            }
+            // If all targets filtered, return original list (don't leave empty)
+            return result.empty() ? targets : result;
+        }
+    };
+
+
     class TargetSelector {
     public:
         // Selection modes
@@ -392,7 +572,9 @@ namespace SDK {
             NearMouse,      // Closest to mouse cursor
             LeastAttacks,   // Fewest attacks to kill
             AutoPriority,   // DamageCalc-based scoring (recommended)
-            Weighted        // Full weight system (12 weight items)
+            Weighted,       // Full weight system (12 weight items)
+            LessAttack,     // Similar to LeastAttacks but using effective HP
+            MostStacks,     // Prioritize targets with most buff stacks
         };
 
         // Current selection mode (settable from menu)
@@ -469,6 +651,8 @@ namespace SDK {
             case Mode::LeastAttacks: return GetLeastAttacks(targets);
             case Mode::AutoPriority: return GetAutoPriority(targets);
             case Mode::Weighted:     return WeightedTargetSelector::GetTarget(targets);
+            case Mode::LessAttack:   return GetLessAttack(targets);
+            case Mode::MostStacks:   return GetMostStacks(targets);
             default:                 return GetAutoPriority(targets);
             }
         }
@@ -539,6 +723,74 @@ namespace SDK {
             return GetTarget(range, mode);
         }
 
+        // ====================================================================
+        // GetTargetNoCollision — Get target without minion collision
+        // Source: EnsoulSharp TargetSelector.GetTargetNoCollision(Spell)
+        // Returns a target where there are no minions blocking the path
+        // ====================================================================
+        static GameObject GetTargetNoCollision(float range, float spellWidth = 70.0f,
+                                               float spellSpeed = FLT_MAX,
+                                               Mode mode = CurrentMode) {
+            auto targets = GetValidTargets(range);
+            if (targets.empty()) return GameObject();
+
+            // Apply FoW humanizer
+            targets = TargetSelectorHumanizer::FilterTargets(targets);
+
+            // Filter targets by collision: remove those blocked by minions
+            std::vector<GameObject> unblocked;
+            Vec3 from = GameObjects::Player.GetPosition();
+
+            for (auto& target : targets) {
+                bool blocked = false;
+                Vec3 to = target.GetPosition();
+                float dist = from.Distance2D(to);
+
+                // Check if any enemy minion is in the path
+                for (auto& minion : GameObjects::EnemyMinions) {
+                    if (!minion.IsAlive()) continue;
+                    Vec3 mPos = minion.GetPosition();
+
+                    // Point-to-line distance check
+                    Vec3 dir = Vec3(to.x - from.x, 0, to.z - from.z);
+                    float dirLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
+                    if (dirLen < 1.0f) continue;
+
+                    Vec3 toMinion = Vec3(mPos.x - from.x, 0, mPos.z - from.z);
+                    float proj = (toMinion.x * dir.x + toMinion.z * dir.z) / dirLen;
+
+                    if (proj < 0 || proj > dirLen) continue; // Behind or beyond
+
+                    float perpDist = std::abs(toMinion.x * dir.z - toMinion.z * dir.x) / dirLen;
+                    if (perpDist < spellWidth + minion.GetBoundingRadius()) {
+                        blocked = true;
+                        break;
+                    }
+                }
+
+                if (!blocked)
+                    unblocked.push_back(target);
+            }
+
+            if (unblocked.empty()) return GameObject(); // All blocked
+
+            // Select best from unblocked targets using chosen mode
+            switch (mode) {
+            case Mode::Weighted:     return WeightedTargetSelector::GetTarget(unblocked);
+            case Mode::AutoPriority: return GetAutoPriority(unblocked);
+            case Mode::LowestHP:     return GetLowestHP(unblocked);
+            case Mode::Closest:      return GetClosest(unblocked);
+            default:                 return GetAutoPriority(unblocked);
+            }
+        }
+
+        // ====================================================================
+        // Update — call every frame for FoW humanizer tracking
+        // ====================================================================
+        static void Update() {
+            TargetSelectorHumanizer::Update();
+        }
+
     private:
         // ====================================================================
         // Invulnerable buff check — comprehensive list
@@ -550,7 +802,8 @@ namespace SDK {
 
             BuffManager buffs(target.address);
 
-            // Comprehensive invulnerable buff list
+            // Comprehensive invulnerable buff list (expanded)
+            // Source: EnsoulSharp.SDK Invulnerable.cs + community additions
             static const char* invulnBuffs[] = {
                 // Full invulnerability
                 "KayleR",                       // Kayle R
@@ -559,25 +812,45 @@ namespace SDK {
                 "ChronoShift",                  // Zilean R (revive)
                 "JudicatorIntervention",        // Old Kayle R
                 "ZhonyasRingShield",            // Zhonya's
+                "zhonyasringshield",            // Zhonya's (lowercase)
+                "chronorevive",                 // Zilean R revive state
+                "BardRStasis",                  // Bard R
 
-                // Partial invulnerability / untargetable
+                // Untargetable states
                 "FioraW",                       // Fiora W (riposte)
-                "fizaborroweetime",             // Fizz E
+                "faborroweetime",             // Fizz E
                 "VladimirSanguinePool",         // Vladimir W
+                "EkkoR",                        // Ekko R
+                "lissaborroweetime",            // Lissandra R (self)
+                "MasterYiQ",                    // Master Yi Q
+                "XayahR",                       // Xayah R
+                "SamiraW",                      // Samira W (partial)
+
+                // Damage immunity / dodge
                 "YiMeditate",                   // Master Yi W (damage reduction)
                 "JaxCounterStrike",             // Jax E (dodge)
                 "PantheonE",                    // Pantheon E (shield)
-                "NilahE",                       // Nilah W
+                "NilahW",                       // Nilah W
                 "ShenWBuff",                    // Shen W (spirit blade)
+                "GwenW",                        // Gwen W (hallowed mist)
+                "TaricR",                       // Taric R (cosmic radiance)
+                "MorganaE",                     // Morgana E (Black Shield, magic only)
 
                 // Guardian Angel / revive
                 "willrevive",                   // GA passive
                 "AkShanEResurrect",             // Akshan passive
+                "aatroxpassivedeath",           // Aatrox revive
 
-                // Spell shields
+                // Spell shields (targeted spells only)
                 "bansheesveil",                 // Banshee's Veil
                 "SpellShield",                  // Edge of Night / Sivir E
                 "NocturneShield",               // Nocturne W
+                "malaborroweeveil",             // Malzahar passive
+
+                // Special states
+                "KogMawIcathianSurprise",       // Kog'Maw passive (already dead)
+                "KarthusDeathDefiedBuff",       // Karthus passive
+                "SionPassiveZombie",            // Sion passive
                 nullptr
             };
 
@@ -588,7 +861,7 @@ namespace SDK {
         }
 
         // ====================================================================
-        // Get all valid targets in range
+        // Get all valid targets in range (with FoW humanizer filter)
         // ====================================================================
         static std::vector<GameObject> GetValidTargets(float range) {
             std::vector<GameObject> result;
@@ -596,6 +869,8 @@ namespace SDK {
                 if (IsValidTarget(hero, range))
                     result.push_back(hero);
             }
+            // Apply FoW humanizer
+            result = TargetSelectorHumanizer::FilterTargets(result);
             return result;
         }
 
@@ -670,6 +945,40 @@ namespace SDK {
                     float scoreA = DamageCalc::GetTargetScore(GameObjects::Player, a, DamageType::Physical);
                     float scoreB = DamageCalc::GetTargetScore(GameObjects::Player, b, DamageType::Physical);
                     return scoreA < scoreB;
+                });
+        }
+
+        // LessAttack — effective HP / our damage (considers shields)
+        static GameObject GetLessAttack(std::vector<GameObject>& targets) {
+            return *std::min_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    float ehpA = GetRealHealth(a) / std::max(1.0f,
+                        DamageCalc::GetAutoAttackDamage(GameObjects::Player, a));
+                    float ehpB = GetRealHealth(b) / std::max(1.0f,
+                        DamageCalc::GetAutoAttackDamage(GameObjects::Player, b));
+                    return ehpA < ehpB;
+                });
+        }
+
+        // MostStacks — prioritize targets with most CC debuffs (proxy for stack count)
+        static GameObject GetMostStacks(std::vector<GameObject>& targets) {
+            return *std::max_element(targets.begin(), targets.end(),
+                [](const GameObject& a, const GameObject& b) {
+                    // Approximate stack priority by checking CC debuffs
+                    auto countDebuffs = [](const GameObject& t) -> int {
+                        BuffManager buffs(t.address);
+                        int count = 0;
+                        if (buffs.HasBuffOfType(BuffType::Stun))       count += 3;
+                        if (buffs.HasBuffOfType(BuffType::Snare))      count += 2;
+                        if (buffs.HasBuffOfType(BuffType::Slow))       count += 1;
+                        if (buffs.HasBuffOfType(BuffType::Suppression)) count += 3;
+                        if (buffs.HasBuffOfType(BuffType::Charm))      count += 2;
+                        if (buffs.HasBuffOfType(BuffType::Fear))       count += 2;
+                        if (buffs.HasBuffOfType(BuffType::Taunt))      count += 2;
+                        if (buffs.HasBuffOfType(BuffType::Poison))     count += 1;
+                        return count;
+                    };
+                    return countDebuffs(a) < countDebuffs(b);
                 });
         }
 
