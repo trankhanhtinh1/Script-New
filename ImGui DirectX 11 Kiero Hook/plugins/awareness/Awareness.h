@@ -1,7 +1,7 @@
 #pragma once
 #include "../IPlugin.h"
-#include "../../sdk/SDK.h"
-#include "../../menu/MenuConfig.h"
+#include "sdk/SDK.h"
+#include "menu/MenuConfig.h"
 #include <unordered_map>
 
 // ============================================================================

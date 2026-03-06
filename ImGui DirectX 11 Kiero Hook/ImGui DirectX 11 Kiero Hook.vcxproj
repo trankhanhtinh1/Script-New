@@ -93,6 +93,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -106,6 +107,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -121,6 +123,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -138,6 +141,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -183,6 +187,77 @@
     <ClInclude Include="core\Globals.h" />
     <ClInclude Include="menu\MenuConfig.h" />
     <ClInclude Include="menu\Menu.h" />
+    <ClInclude Include="menu\BGXMenu.h" />
+    <!-- SDK Root -->
+    <ClInclude Include="sdk\SDK.h" />
+    <ClInclude Include="sdk\Enums.h" />
+    <ClInclude Include="sdk\Game.h" />
+    <!-- SDK\GameObjects -->
+    <ClInclude Include="sdk\GameObjects\AiManager.h" />
+    <ClInclude Include="sdk\GameObjects\BuffManager.h" />
+    <ClInclude Include="sdk\GameObjects\GameObject.h" />
+    <ClInclude Include="sdk\GameObjects\GameObjects.h" />
+    <ClInclude Include="sdk\GameObjects\Missile.h" />
+    <ClInclude Include="sdk\GameObjects\ObjectManager.h" />
+    <ClInclude Include="sdk\GameObjects\SpellBook.h" />
+    <!-- SDK\Events -->
+    <ClInclude Include="sdk\Events\Dash.h" />
+    <ClInclude Include="sdk\Events\EventSystem.h" />
+    <ClInclude Include="sdk\Events\Gapcloser.h" />
+    <ClInclude Include="sdk\Events\InterruptableSpell.h" />
+    <ClInclude Include="sdk\Events\Stealth.h" />
+    <ClInclude Include="sdk\Events\Teleport.h" />
+    <ClInclude Include="sdk\Events\TurretAggro.h" />
+    <!-- SDK\Math -->
+    <ClInclude Include="sdk\Math\Cluster.h" />
+    <ClInclude Include="sdk\Math\Collisions.h" />
+    <ClInclude Include="sdk\Math\GamePath.h" />
+    <ClInclude Include="sdk\Math\MathUtils.h" />
+    <ClInclude Include="sdk\Math\Polygon.h" />
+    <ClInclude Include="sdk\Math\Prediction.h" />
+    <!-- SDK\Wrappers\Damages -->
+    <ClInclude Include="sdk\Wrappers\Damages\DamageCalc.h" />
+    <ClInclude Include="sdk\Wrappers\Damages\DamageLibrary.h" />
+    <ClInclude Include="sdk\Wrappers\Damages\DamageMastery.h" />
+    <ClInclude Include="sdk\Wrappers\Damages\DamagePassives.h" />
+    <!-- SDK\Wrappers\Spells -->
+    <ClInclude Include="sdk\Wrappers\Spells\LastCast.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\LastCastedSpellEntry.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\LastCastPacketSentEntry.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellCaster.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellDatabase.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellDatabaseEntry.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes.h" />
+    <!-- SDK\Wrappers\Orbwalking -->
+    <ClInclude Include="sdk\Wrappers\Orbwalking\HealthPrediction.h" />
+    <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h" />
+    <!-- SDK\Wrappers\TargetSelector -->
+    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelector.h" />
+    <!-- SDK\UI -->
+    <ClInclude Include="sdk\UI\ConfigManager.h" />
+    <ClInclude Include="sdk\UI\Drawing.h" />
+    <ClInclude Include="sdk\UI\KeyConvert.h" />
+    <ClInclude Include="sdk\UI\MenuUI.h" />
+    <!-- SDK\Utils -->
+    <ClInclude Include="sdk\Utils\ActionQueue.h" />
+    <ClInclude Include="sdk\Utils\AutoAttackUtil.h" />
+    <ClInclude Include="sdk\Utils\AutoLevel.h" />
+    <ClInclude Include="sdk\Utils\CursorUtils.h" />
+    <ClInclude Include="sdk\Utils\DelayAction.h" />
+    <ClInclude Include="sdk\Utils\Invulnerable.h" />
+    <ClInclude Include="sdk\Utils\JungleUtils.h" />
+    <ClInclude Include="sdk\Utils\Logging.h" />
+    <ClInclude Include="sdk\Utils\MinionUtils.h" />
+    <ClInclude Include="sdk\Utils\RecallTracker.h" />
+    <ClInclude Include="sdk\Utils\SummonerTracker.h" />
+    <ClInclude Include="sdk\Utils\TickOperation.h" />
+    <ClInclude Include="sdk\Utils\WeightedRandom.h" />
+    <!-- Plugins -->
+    <ClInclude Include="plugins\IPlugin.h" />
+    <ClInclude Include="plugins\PluginManager.h" />
+    <ClInclude Include="plugins\awareness\Awareness.h" />
+    <ClInclude Include="plugins\core\OrbwalkerPlugin.h" />
+    <ClInclude Include="plugins\core\TargetSelectorPlugin.h" />
     <ClInclude Include="kiero\kiero.h" />
     <ClInclude Include="kiero\minhook\include\MinHook.h" />
     <ClInclude Include="kiero\minhook\src\buffer.h" />

@@ -1,7 +1,7 @@
 #pragma once
-#include "../core/Globals.h"
-#include "../core/Offsets.h"
-#include "../core/Vector.h"
+#include "core/Globals.h"
+#include "core/Offsets.h"
+#include "core/Vector.h"
 #include "Enums.h"
 #include <string>
 #include <cmath>

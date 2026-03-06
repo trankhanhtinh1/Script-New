@@ -43,6 +43,58 @@
       "Invert": false
     }
   ],
+  "Ambessa": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "ambessae",
+      "Invert": false
+    },
+    {
+      "SkillType": "Skillshot",
+      "Slot": "R",
+      "SpellName": "ambessar",
+      "Invert": false
+    }
+  ],
+  "Aurora": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "aurorae",
+      "Invert": false
+    }
+  ],
+  "Azir": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "azire",
+      "Invert": false
+    }
+  ],
+  "BelVeth": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "Q",
+      "SpellName": "belvethq",
+      "Invert": false
+    }
+  ],
+  "Briar": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "briare",
+      "Invert": false
+    },
+    {
+      "SkillType": "Skillshot",
+      "Slot": "R",
+      "SpellName": "briarr",
+      "Invert": false
+    }
+  ],
   "Caitlyn": [
     {
       "SkillType": "Skillshot",
@@ -155,6 +207,14 @@
       "Slot": "R",
       "SpellName": "graveschargeshot",
       "Invert": true
+    }
+  ],
+  "Gwen": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "gwene",
+      "Invert": false
     }
   ],
   "Hecarim": [
@@ -279,6 +339,20 @@
       "Invert": false
     }
   ],
+  "KSante": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "ksantee",
+      "Invert": false
+    },
+    {
+      "SkillType": "Targeted",
+      "Slot": "R",
+      "SpellName": "ksanter",
+      "Invert": false
+    }
+  ],
   "Leblanc": [
     {
       "SkillType": "Skillshot",
@@ -341,11 +415,35 @@
       "Invert": false
     }
   ],
+  "Naafiri": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "W",
+      "SpellName": "naafiriw",
+      "Invert": false
+    }
+  ],
   "Nidalee": [
     {
       "SkillType": "Skillshot",
       "Slot": "W",
       "SpellName": "pounce",
+      "Invert": false
+    }
+  ],
+  "Nilah": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "E",
+      "SpellName": "nilahe",
+      "Invert": false
+    }
+  ],
+  "Nocturne": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "R",
+      "SpellName": "nocturneparanoia2",
       "Invert": false
     }
   ],
@@ -387,11 +485,35 @@
       "Invert": false
     }
   ],
+  "Qiyana": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "E",
+      "SpellName": "qiyanae",
+      "Invert": false
+    }
+  ],
   "Rakan": [
     {
       "SkillType": "Skillshot",
       "Slot": "W",
       "SpellName": "rakanw",
+      "Invert": false
+    }
+  ],
+  "RekSai": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "R",
+      "SpellName": "reksair",
+      "Invert": false
+    }
+  ],
+  "Rell": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "W",
+      "SpellName": "rellw",
       "Invert": false
     }
   ],
@@ -403,6 +525,14 @@
       "Invert": false
     }
   ],
+  "Rengar": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "Q",
+      "SpellName": "rengarpassiveleap",
+      "Invert": false
+    }
+  ],
   "Riven": [
     {
       "SkillType": "Skillshot",
@@ -411,11 +541,27 @@
       "Invert": false
     }
   ],
+  "Samira": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "E",
+      "SpellName": "samirae",
+      "Invert": false
+    }
+  ],
   "Sejuani": [
     {
       "SkillType": "Skillshot",
       "Slot": "Q",
       "SpellName": "sejuaniq",
+      "Invert": false
+    }
+  ],
+  "Sett": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "R",
+      "SpellName": "settr",
       "Invert": false
     }
   ],
@@ -439,13 +585,19 @@
     {
       "SkillType": "Targeted",
       "Slot": "W",
-      "SpellName": "SylasW",
+      "SpellName": "sylasw",
       "Invert": false
     },
     {
       "SkillType": "Skillshot",
       "Slot": "E",
-      "SpellName": "SylasE",
+      "SpellName": "sylase",
+      "Invert": false
+    },
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "sylase2",
       "Invert": false
     }
   ],
@@ -454,6 +606,14 @@
       "SkillType": "Targeted",
       "Slot": "Q",
       "SpellName": "talonq",
+      "Invert": false
+    }
+  ],
+  "Thresh": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "Q",
+      "SpellName": "threshqleap",
       "Invert": false
     }
   ],
@@ -489,11 +649,41 @@
       "Invert": false
     }
   ],
+  "Vex": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "R",
+      "SpellName": "vexr",
+      "Invert": false
+    }
+  ],
   "Vi": [
     {
       "SkillType": "Skillshot",
       "Slot": "Q",
       "SpellName": "viq",
+      "Invert": false
+    }
+  ],
+  "Viego": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "W",
+      "SpellName": "viegow",
+      "Invert": false
+    },
+    {
+      "SkillType": "Skillshot",
+      "Slot": "R",
+      "SpellName": "viegor",
+      "Invert": false
+    }
+  ],
+  "Warwick": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "R",
+      "SpellName": "warwickr",
       "Invert": false
     }
   ],
@@ -513,11 +703,41 @@
       "Invert": false
     }
   ],
+  "Yone": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "Q",
+      "SpellName": "yoneq3",
+      "Invert": false
+    },
+    {
+      "SkillType": "Skillshot",
+      "Slot": "R",
+      "SpellName": "yoner",
+      "Invert": false
+    }
+  ],
   "Zac": [
     {
       "SkillType": "Skillshot",
       "Slot": "E",
       "SpellName": "zace",
+      "Invert": false
+    }
+  ],
+  "Zed": [
+    {
+      "SkillType": "Targeted",
+      "Slot": "R",
+      "SpellName": "zedr",
+      "Invert": false
+    }
+  ],
+  "Zeri": [
+    {
+      "SkillType": "Skillshot",
+      "Slot": "E",
+      "SpellName": "zerie",
       "Invert": false
     }
   ]
