@@ -63,26 +63,41 @@ namespace Game {
         return Globals::IsValidPtr(localPlayer);
     }
 
-    // Is chat open?
+    // Is chat input open? (player is typing in chat box)
+    // Verified via IDA: sub_3B4E00 sets *(byte*)(ChatClient + 0x10) = 1 on open, 0 on close.
+    // ChatClient global at base+0x1D8D240, flag at ChatClient+0x10.
     inline bool IsChatOpen() {
         __try {
-            uintptr_t chatInst = Globals::Read<uintptr_t>(Globals::base + Offset::Global::ChatInstance);
-            if (!Globals::IsValidPtr(chatInst)) return false;
-            unsigned char val = Globals::Read<unsigned char>(chatInst + Offset::Hud::ChatOpen);
-            return val == 1; // Only true if exactly 1, not garbage
+            uintptr_t chatClient = Globals::Read<uintptr_t>(Globals::base + Offset::Global::ChatClient);
+            if (!Globals::IsValidPtr(chatClient)) return false;
+            unsigned char val = Globals::Read<unsigned char>(chatClient + Offset::Hud::ChatOpen);
+            return val == 1;
         } __except(1) {
-            return false; // On crash, assume chat is closed (safe default)
+            return false;
         }
     }
 
-    // Is shop open?
-    // NOTE: Offset 0x1D77448 found via IDA "ShopOpen" xref but NOT yet verified in-game.
-    // Reading wrong data will block all input! Disabled from ShouldProcessInput until verified.
+    // Is shop window open?
+    // Verified via IDA: sub_129FD80 (IsWindowOpen) scans OpenWindowsArray for ShopInstance ptr.
+    // - ShopInstance: base+0x1D8D258 → ptr to shop window object
+    // - OpenWindowsArray: base+0x1E3DC58 → ptr to array of open window ptrs
+    // - OpenWindowsCount: base+0x1E3DC60 → dword count
+    // Returns true if ShopInstance is found in the open windows array.
     inline bool IsShopOpen() {
         __try {
-            int shopState = Globals::Read<int>(Globals::base + Offset::Global::ShopOpen);
-            // Only consider shop open if value is exactly 1 (not random garbage)
-            return shopState == 1;
+            uintptr_t shopInst = Globals::Read<uintptr_t>(Globals::base + Offset::Global::ShopInstance);
+            if (!shopInst || !Globals::IsValidPtr(shopInst)) return false;
+
+            uintptr_t arrayPtr = Globals::Read<uintptr_t>(Globals::base + Offset::Global::OpenWindowsArray);
+            int count = Globals::Read<int>(Globals::base + Offset::Global::OpenWindowsCount);
+
+            if (!Globals::IsValidPtr(arrayPtr) || count <= 0 || count > 64) return false;
+
+            for (int i = 0; i < count; i++) {
+                uintptr_t entry = Globals::Read<uintptr_t>(arrayPtr + (uintptr_t)i * 8);
+                if (entry == shopInst) return true;
+            }
+            return false;
         } __except(1) {
             return false;
         }
@@ -97,12 +112,12 @@ namespace Game {
         return pid == GetCurrentProcessId();
     }
 
-    // Should process input (in game + game focused + chat closed)
-    // NOTE: IsShopOpen() disabled until offset verified — was blocking all input
+    // Should process input (in game + game focused + chat/shop closed)
+    // All offsets verified via IDA Pro MCP decompilation:
+    //   - ChatOpen: ChatClient(0x1D8D240)+0x10 — sub_3B4E00 confirmed
+    //   - ShopOpen: OpenWindowsArray scan — sub_129FD80/sub_BC58F0 confirmed
     inline bool ShouldProcessInput() {
-        return IsInGame() && IsGameFocused() && !IsChatOpen();
-        // TODO: Re-enable after verifying ShopOpen offset in-game:
-        // return IsInGame() && IsGameFocused() && !IsChatOpen() && !IsShopOpen();
+        return IsInGame() && IsGameFocused() && !IsChatOpen() && !IsShopOpen();
     }
 
 } // namespace Game

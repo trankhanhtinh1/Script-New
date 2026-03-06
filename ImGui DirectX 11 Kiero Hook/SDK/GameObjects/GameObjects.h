@@ -126,7 +126,7 @@ namespace GameObjects {
             for (auto& obj : minions) {
                 if (!obj.IsValid() || !obj.IsAlive()) continue;
 
-                GameObjectTeam team = obj.GetTeam();
+            GameObjectTeam team = obj.GetTeam();
                 std::string name = obj.GetName();
 
                 // --- Wards (All/Ally/Enemy) ---
@@ -143,7 +143,7 @@ namespace GameObjects {
                 if (obj.IsPlant()) {
                     JunglePlants.push_back(obj);
                     continue;
-                }
+            }
 
                 // --- Azir Soldiers ---
                 if (isAzir && team == myTeam &&
@@ -159,7 +159,7 @@ namespace GameObjects {
                 }
 
                 // Jungle monsters (Neutral team) — subcategorize
-                if (team == GameObjectTeam::Neutral) {
+            if (team == GameObjectTeam::Neutral) {
                     float maxHP = obj.GetMaxHealth();
                     if (maxHP <= 1.0f) continue;
 
@@ -191,17 +191,17 @@ namespace GameObjects {
                         JungleSmall.push_back(obj);
                     }
                     continue;
-                }
+            }
 
                 // Lane minions
-                float maxHP = obj.GetMaxHealth();
-                if (maxHP > 0.0f && maxHP < 10000.0f) {
-                    AllMinions.push_back(obj);
-                    if (team == myTeam)
-                        AllyMinions.push_back(obj);
-                    else
-                        EnemyMinions.push_back(obj);
-                }
+            float maxHP = obj.GetMaxHealth();
+            if (maxHP > 0.0f && maxHP < 10000.0f) {
+                AllMinions.push_back(obj);
+                if (team == myTeam)
+                    AllyMinions.push_back(obj);
+                else
+                    EnemyMinions.push_back(obj);
+            }
             }
         }
 

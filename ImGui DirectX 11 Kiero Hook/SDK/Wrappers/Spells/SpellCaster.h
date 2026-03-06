@@ -84,10 +84,10 @@ namespace SDK {
                 SpellBook sb(GameObjects::Player.address);
                 auto spell = sb.GetSpell(slot);
                 if (spell.IsValid()) {
-                    auto sdata = spell.GetSpellData();
+                    auto sdata = spell.GetSpellInfo().GetSpellData();
                     Range = sdata.GetCastRange();
                     float lineWidth = sdata.GetLineWidth();
-                    Width = (lineWidth > 0.0f) ? lineWidth : sdata.GetCastRadius();
+                    Width = (lineWidth > 0.0f) ? lineWidth : 0.0f;
                     Speed = sdata.GetMissileSpeed();
                     RangeSqr = Range * Range;
                     WidthSqr = Width * Width;

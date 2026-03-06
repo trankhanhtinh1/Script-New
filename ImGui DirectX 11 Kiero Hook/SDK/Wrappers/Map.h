@@ -160,7 +160,7 @@ namespace SDK {
         /// Get ally spawn point (based on local player team)
         static Vec3 GetAllySpawnPoint() {
             if (!GameObjects::Player.IsValid()) return GetBlueSpawnPoint();
-            return (GameObjects::Player.GetTeam() == GameObjectTeam::Order)
+            return (GameObjects::Player.GetTeam() == GameObjectTeam::Blue)
                 ? GetBlueSpawnPoint()
                 : GetRedSpawnPoint();
         }
@@ -168,7 +168,7 @@ namespace SDK {
         /// Get enemy spawn point (based on local player team)
         static Vec3 GetEnemySpawnPoint() {
             if (!GameObjects::Player.IsValid()) return GetRedSpawnPoint();
-            return (GameObjects::Player.GetTeam() == GameObjectTeam::Order)
+            return (GameObjects::Player.GetTeam() == GameObjectTeam::Blue)
                 ? GetRedSpawnPoint()
                 : GetBlueSpawnPoint();
         }
@@ -338,30 +338,30 @@ namespace SDK {
         static std::vector<TowerPosition> GetTowerPositions() {
             return {
                 // Blue side towers
-                {"Blue_Top_Outer",    Vec3(981.0f, 0, 10441.0f),   GameObjectTeam::Order},
-                {"Blue_Top_Inner",    Vec3(1512.0f, 0, 6699.0f),   GameObjectTeam::Order},
-                {"Blue_Top_Inhib",    Vec3(1169.0f, 0, 4287.0f),   GameObjectTeam::Order},
-                {"Blue_Mid_Outer",    Vec3(5846.0f, 0, 6396.0f),   GameObjectTeam::Order},
-                {"Blue_Mid_Inner",    Vec3(5048.0f, 0, 4812.0f),   GameObjectTeam::Order},
-                {"Blue_Mid_Inhib",    Vec3(3651.0f, 0, 3696.0f),   GameObjectTeam::Order},
-                {"Blue_Bot_Outer",    Vec3(6919.0f, 0, 1483.0f),   GameObjectTeam::Order},
-                {"Blue_Bot_Inner",    Vec3(4281.0f, 0, 1253.0f),   GameObjectTeam::Order},
-                {"Blue_Bot_Inhib",    Vec3(2177.0f, 0, 1807.0f),   GameObjectTeam::Order},
-                {"Blue_Nexus_Top",    Vec3(1748.0f, 0, 2270.0f),   GameObjectTeam::Order},
-                {"Blue_Nexus_Bot",    Vec3(2177.0f, 0, 1807.0f),   GameObjectTeam::Order},
+                {"Blue_Top_Outer",    Vec3(981.0f, 0, 10441.0f),   GameObjectTeam::Blue},
+                {"Blue_Top_Inner",    Vec3(1512.0f, 0, 6699.0f),   GameObjectTeam::Blue},
+                {"Blue_Top_Inhib",    Vec3(1169.0f, 0, 4287.0f),   GameObjectTeam::Blue},
+                {"Blue_Mid_Outer",    Vec3(5846.0f, 0, 6396.0f),   GameObjectTeam::Blue},
+                {"Blue_Mid_Inner",    Vec3(5048.0f, 0, 4812.0f),   GameObjectTeam::Blue},
+                {"Blue_Mid_Inhib",    Vec3(3651.0f, 0, 3696.0f),   GameObjectTeam::Blue},
+                {"Blue_Bot_Outer",    Vec3(6919.0f, 0, 1483.0f),   GameObjectTeam::Blue},
+                {"Blue_Bot_Inner",    Vec3(4281.0f, 0, 1253.0f),   GameObjectTeam::Blue},
+                {"Blue_Bot_Inhib",    Vec3(2177.0f, 0, 1807.0f),   GameObjectTeam::Blue},
+                {"Blue_Nexus_Top",    Vec3(1748.0f, 0, 2270.0f),   GameObjectTeam::Blue},
+                {"Blue_Nexus_Bot",    Vec3(2177.0f, 0, 1807.0f),   GameObjectTeam::Blue},
 
                 // Red side towers
-                {"Red_Top_Outer",     Vec3(7943.0f, 0, 13411.0f),  GameObjectTeam::Chaos},
-                {"Red_Top_Inner",     Vec3(10481.0f, 0, 13650.0f), GameObjectTeam::Chaos},
-                {"Red_Top_Inhib",     Vec3(12611.0f, 0, 13084.0f), GameObjectTeam::Chaos},
-                {"Red_Mid_Outer",     Vec3(8955.0f, 0, 8510.0f),   GameObjectTeam::Chaos},
-                {"Red_Mid_Inner",     Vec3(9767.0f, 0, 10113.0f),  GameObjectTeam::Chaos},
-                {"Red_Mid_Inhib",     Vec3(11134.0f, 0, 11207.0f), GameObjectTeam::Chaos},
-                {"Red_Bot_Outer",     Vec3(13866.0f, 0, 4505.0f),  GameObjectTeam::Chaos},
-                {"Red_Bot_Inner",     Vec3(13327.0f, 0, 8226.0f),  GameObjectTeam::Chaos},
-                {"Red_Bot_Inhib",     Vec3(13624.0f, 0, 10572.0f), GameObjectTeam::Chaos},
-                {"Red_Nexus_Top",     Vec3(12920.0f, 0, 12525.0f), GameObjectTeam::Chaos},
-                {"Red_Nexus_Bot",     Vec3(13052.0f, 0, 12612.0f), GameObjectTeam::Chaos},
+                {"Red_Top_Outer",     Vec3(7943.0f, 0, 13411.0f),  GameObjectTeam::Red},
+                {"Red_Top_Inner",     Vec3(10481.0f, 0, 13650.0f), GameObjectTeam::Red},
+                {"Red_Top_Inhib",     Vec3(12611.0f, 0, 13084.0f), GameObjectTeam::Red},
+                {"Red_Mid_Outer",     Vec3(8955.0f, 0, 8510.0f),   GameObjectTeam::Red},
+                {"Red_Mid_Inner",     Vec3(9767.0f, 0, 10113.0f),  GameObjectTeam::Red},
+                {"Red_Mid_Inhib",     Vec3(11134.0f, 0, 11207.0f), GameObjectTeam::Red},
+                {"Red_Bot_Outer",     Vec3(13866.0f, 0, 4505.0f),  GameObjectTeam::Red},
+                {"Red_Bot_Inner",     Vec3(13327.0f, 0, 8226.0f),  GameObjectTeam::Red},
+                {"Red_Bot_Inhib",     Vec3(13624.0f, 0, 10572.0f), GameObjectTeam::Red},
+                {"Red_Nexus_Top",     Vec3(12920.0f, 0, 12525.0f), GameObjectTeam::Red},
+                {"Red_Nexus_Bot",     Vec3(13052.0f, 0, 12612.0f), GameObjectTeam::Red},
             };
         }
 

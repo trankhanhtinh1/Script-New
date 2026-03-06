@@ -782,12 +782,12 @@ public:
         });
 
         // Auto-detect from missile creation
-        EventSystem::OnMissileCreate([](const MissileArgs& args) {
+        EventSystem::OnMissileCreated([](const MissileArgs& args) {
             OnMissileCreate(args);
         });
 
         // Remove on missile delete
-        EventSystem::OnMissileDelete([](const MissileArgs& args) {
+        EventSystem::OnMissileDeleted([](const MissileArgs& args) {
             OnMissileDelete(args);
         });
     }
@@ -1012,27 +1012,29 @@ private:
         if (args.Sender.GetTeam() == GameObjects::Player.GetTeam()) return;
         if (args.IsAutoAttack) return; // Skip auto attacks
 
-        // Look up in SpellDatabase
-        auto entries = SpellDatabase::GetByName(args.SpellName);
-        if (entries.empty()) {
-            // Also try by champion
-            entries = SpellDatabase::GetByChampion(args.Sender.GetChampionName());
+        // Look up in SpellDatabase by name first
+        const SpellDatabaseEntry* entry = SpellDatabase::GetByName(args.SpellName);
+
+        // If not found by name, try by champion
+        if (!entry) {
+            auto champEntries = SpellDatabase::GetByChampion(args.Sender.GetChampionName());
+            for (auto* e : champEntries) {
+                if (e && e->IsSkillshot() &&
+                    _stricmp(e->SpellName.c_str(), args.SpellName.c_str()) == 0) {
+                    entry = e;
+                    break;
+                }
+            }
         }
 
-        for (auto& entry : entries) {
-            if (!entry.IsSkillshot()) continue;
-
-            // Match by spell name (case-insensitive)
-            if (_stricmp(entry.SpellName.c_str(), args.SpellName.c_str()) != 0) continue;
-
+        if (entry && entry->IsSkillshot()) {
             Vec2 start = args.StartPos.To2D();
             Vec2 end = args.EndPos.To2D();
 
-            AddSkillshot(entry, start, end,
+            AddSkillshot(*entry, start, end,
                          args.Sender.GetChampionName(),
                          DetectionType::ProcessSpell,
                          args.Sender.GetNetId());
-            break; // Only add once
         }
     }
 
@@ -1063,18 +1065,16 @@ private:
         if (missileName.empty()) return;
 
         // Look up in SpellDatabase by missile name
-        auto entries = SpellDatabase::GetByMissileName(missileName);
-        if (entries.empty()) return;
+        const SpellDatabaseEntry* entry = SpellDatabase::GetByMissileName(missileName);
+        if (!entry || !entry->IsSkillshot()) return;
 
-        for (auto& entry : entries) {
-            if (!entry.IsSkillshot()) continue;
-
+        {
             Vec2 start = missile.GetStartPos().To2D();
             Vec2 end = missile.GetEndPos().To2D();
 
             // Check if already tracked by ProcessSpell (dedup handles this)
-            AddSkillshot(entry, start, end,
-                         entry.ChampionName,
+            AddSkillshot(*entry, start, end,
+                         entry->ChampionName,
                          DetectionType::MissileCreate,
                          static_cast<unsigned int>(missile.GetCasterNetId()));
 
@@ -1083,7 +1083,6 @@ private:
                 auto& last = ActiveSkillshots.back();
                 if (last) last->MissileNetId = args.MissileObj.GetNetworkId();
             }
-            break;
         }
     }
 
