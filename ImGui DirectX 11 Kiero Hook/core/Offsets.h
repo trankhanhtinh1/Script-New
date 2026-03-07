@@ -415,22 +415,26 @@ namespace BuffManager {
 // AI MANAGER (Navigation / Pathing)
 // ================================================================
 namespace AiManager {
-    constexpr auto Offset           = 0x4038;       // [D]
-    constexpr auto NavPathPtr       = 0x30;         // [S]
-    constexpr auto InnerManager     = 0x10;         // [S]
+    constexpr auto Offset           = 0x41F0;       // [V] LeagueObfuscation offset from IDA sub_28E8C0
+    constexpr auto InnerManager     = 0x10;         // [V] Final dereference to real AiManager
+    constexpr auto NavPathPtr       = 0x30;         // [S] NavPath pointer (in dec struct)
+    constexpr auto TargetPosition   = 0x034;        // [V] Vec3: Click destination / target position
     constexpr auto StartPath        = 0x88;         // [D]
     constexpr auto RefCount         = 0x1F0;        // [S]
-    constexpr auto Velocity         = 0x318;        // [S]
-    constexpr auto IsMoving         = 0x31C;        // [S]
-    constexpr auto CurrentSegment   = 0x320;        // [S]
-    constexpr auto PathStart        = 0x330;        // [S]
-    constexpr auto PathEnd          = 0x33C;        // [S]
-    constexpr auto Segments         = 0x348;        // [S]
-    constexpr auto SegmentsCount    = 0x350;        // [S]
-    constexpr auto DashSpeed        = 0x360;        // [S]
-    constexpr auto IsDashing        = 0x384;        // [S]
-    constexpr auto ServerPos        = 0x474;        // [S]
-    constexpr auto MoveVec3         = 0x480;        // [S]
+    constexpr auto Velocity         = 0x318;        // [V] float: Movement speed value
+    constexpr auto IsMoving         = 0x31C;        // [V] bool: Is currently moving
+    constexpr auto CurrentSegment   = 0x320;        // [V] int: Current path segment index
+    constexpr auto PathStart        = 0x330;        // [V] Vec3: Start of current path
+    constexpr auto PathEnd          = 0x33C;        // [V] Vec3: End of current path
+    constexpr auto Segments         = 0x348;        // [V] ptr: Waypoints array (Vec3[])
+    constexpr auto NavArray         = 0x348;        // [V] ptr: Same as Segments (alias)
+    constexpr auto SegmentsCount    = 0x350;        // [V] int: Number of waypoints
+    constexpr auto HasPath          = 0x354;        // [V] int: Whether path data exists
+    constexpr auto DashSpeed        = 0x360;        // [V] float: Dash speed
+    constexpr auto IsDashing        = 0x384;        // [V] bool: Is currently dashing
+    constexpr auto TargetPos2       = 0x3A8;        // [V] Vec3: Secondary target position
+    constexpr auto ServerPos        = 0x474;        // [V] Vec3: Server-authoritative position
+    constexpr auto MoveVec3         = 0x480;        // [S] Vec3: Move direction vector
 }
 
 // ================================================================

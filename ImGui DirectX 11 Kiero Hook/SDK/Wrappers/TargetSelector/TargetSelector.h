@@ -635,9 +635,19 @@ namespace SDK {
         }
 
         // ====================================================================
+        // Custom Provider Override (For Plugins like TargetSelectorPlugin)
+        // ====================================================================
+        static inline std::function<GameObject(float, DamageType)> CustomTargetSelector = nullptr;
+
+        // ====================================================================
         // Main target selection
         // ====================================================================
         static GameObject GetTarget(float range, Mode mode = CurrentMode) {
+            if (CustomTargetSelector) {
+                // If a plugin has registered a custom selector, delegate to it
+                return CustomTargetSelector(range, DamageType::Physical);
+            }
+
             auto targets = GetValidTargets(range);
             if (targets.empty()) return GameObject();
 
@@ -662,6 +672,10 @@ namespace SDK {
         // EnsoulSharp: TargetSelector.GetTarget(float range, DamageType dmgType)
         // ====================================================================
         static GameObject GetTarget(float range, DamageType dmgType, Mode mode = CurrentMode) {
+            if (CustomTargetSelector) {
+                return CustomTargetSelector(range, dmgType);
+            }
+
             auto targets = GetValidTargets(range);
             if (targets.empty()) return GameObject();
 

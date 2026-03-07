@@ -4,6 +4,7 @@
 #include "core/Vector.h"
 #include "imgui/imgui.h"
 #include <cmath>
+#include <Psapi.h>
 
 // ============================================================================
 // Drawing — World-to-Screen rendering helpers
@@ -65,29 +66,15 @@ namespace Drawing {
     }
 
     // ====================================================================
-    // World to Screen (tries matrix first, fallback to game function)
+    // World to Screen (Matrix based)
     // ====================================================================
     inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
-        // Try matrix-based first (no game function call)
-        if (WorldToScreenMatrix(world, screen))
+        // Try matrix-based
+        if (WorldToScreenMatrix(world, screen)) {
             return true;
-
-        // Fallback: game function W2S
-        if (!Globals::base) return false;
-        uintptr_t fnAddr = Globals::base + Offset::Function::WorldToScreen;
-        if (!fnAddr) return false;
-
-        typedef bool(__cdecl* fnW2S)(Vec3*, Vec3*);
-        Vec3 screenPos;
-        Vec3 worldCopy = world;
-        __try {
-            bool result = ((fnW2S)fnAddr)(&worldCopy, &screenPos);
-            if (result) {
-                screen.x = screenPos.x;
-                screen.y = screenPos.y;
-                return true;
-            }
-        } __except(1) {}
+        }
+        
+        // Matrix failed or out of bounds
         return false;
     }
 

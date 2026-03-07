@@ -66,15 +66,76 @@ namespace Game {
     // Is chat input open? (player is typing in chat box)
     // Verified via IDA: sub_3B4E00 sets *(byte*)(ChatClient + 0x10) = 1 on open, 0 on close.
     // ChatClient global at base+0x1D8D240, flag at ChatClient+0x10.
+    // Additional known offsets across patches: +0x68 (is editing), +0x6C (has focus)
     inline bool IsChatOpen() {
         __try {
             uintptr_t chatClient = Globals::Read<uintptr_t>(Globals::base + Offset::Global::ChatClient);
-            if (!Globals::IsValidPtr(chatClient)) return false;
+            if (!Globals::IsValidPtr(chatClient)) {
+                // ChatClient ptr invalid — try ChatInstance as backup pointer
+                chatClient = Globals::Read<uintptr_t>(Globals::base + Offset::Global::ChatInstance);
+                if (!Globals::IsValidPtr(chatClient)) return false;
+            }
+
+            // Primary: ChatClient + 0x10 (chat open byte)
             unsigned char val = Globals::Read<unsigned char>(chatClient + Offset::Hud::ChatOpen);
-            return val == 1;
+            if (val != 0) return true;
+
+            // Backup offsets used in some patches:
+            // +0x68 — some versions use this for "is editing" 
+            // +0x6C — some versions use this for "chat has focus"
+            unsigned char val2 = Globals::Read<unsigned char>(chatClient + 0x68);
+            if (val2 != 0) return true;
+
+            return false;
         } __except(1) {
             return false;
         }
+    }
+
+    // Is game focused?
+    inline bool IsGameFocused() {
+        HWND fg = GetForegroundWindow();
+        if (!fg) return false;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(fg, &pid);
+        return pid == GetCurrentProcessId();
+    }
+
+    // Alternative: keyboard-based chat detection
+    // When memory pointers fail (like ChatClient pointing to NULL in current patch),
+    // this heuristic tracks the ENTER and ESC keys to simulate the chat open state.
+    // It is primarily used to stop the Orbwalker from moving while the player is typing.
+    inline bool IsChatOpenByKeyboard() {
+        static bool chatIsOpen = false;
+        static int lastToggleTick = 0;
+        int currentTick = ::GetTickCount(); // Windows API tick count
+
+        // Ensure game is focused before intercepting keys
+        if (!IsGameFocused()) return false;
+
+        // Toggle chat state on Enter key press (with 300ms debounce)
+        // 0x8000 checks if key is currently pressed
+        if ((GetAsyncKeyState(VK_RETURN) & 0x8000) != 0) {
+            if (currentTick - lastToggleTick > 300) {
+                chatIsOpen = !chatIsOpen;
+                lastToggleTick = currentTick;
+            }
+        }
+
+        // Escape always forces chat closed
+        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0) {
+            chatIsOpen = false;
+            // No strict debounce needed because Esc only turns it off
+        }
+
+        // Right-Click usually indicates the user is commanding the champion,
+        // which implies they are likely NOT in the middle of typing a chat message.
+        // Very useful as a self-correcting mechanic if the state gets de-synced.
+        if (chatIsOpen && ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0)) {
+            chatIsOpen = false;
+        }
+
+        return chatIsOpen;
     }
 
     // Is shop window open?
@@ -103,21 +164,17 @@ namespace Game {
         }
     }
 
-    // Is game focused?
-    inline bool IsGameFocused() {
-        HWND fg = GetForegroundWindow();
-        if (!fg) return false;
-        DWORD pid = 0;
-        GetWindowThreadProcessId(fg, &pid);
-        return pid == GetCurrentProcessId();
-    }
-
     // Should process input (in game + game focused + chat/shop closed)
     // All offsets verified via IDA Pro MCP decompilation:
     //   - ChatOpen: ChatClient(0x1D8D240)+0x10 — sub_3B4E00 confirmed
     //   - ShopOpen: OpenWindowsArray scan — sub_129FD80/sub_BC58F0 confirmed
     inline bool ShouldProcessInput() {
-        return IsInGame() && IsGameFocused() && !IsChatOpen() && !IsShopOpen();
+        if (!IsInGame()) return false;
+        if (!IsGameFocused()) return false;
+        // Check chat with both methods for robustness
+        if (IsChatOpen() || IsChatOpenByKeyboard()) return false;
+        if (IsShopOpen()) return false;
+        return true;
     }
 
 } // namespace Game
