@@ -540,15 +540,17 @@ namespace ItemSystem {
 
 // ================================================================
 // NAV GRID
+// Source: sig 48 8B 05 ? ? ? ? 0F 28 DA → rva 0x1D32A80 (15.24)
+// navGrid ptr → +0x8 → Manager ptr → fields below
 // ================================================================
 namespace NavGrid {
-    constexpr auto NavGridMgr       = 0x8;          // [S]
-    constexpr auto MinX             = 0x30;         // [D] changed! was 0xEC
-    constexpr auto MinZ             = 0x38;         // [D] estimated
-    constexpr auto Data             = 0x150;        // [S]
-    constexpr auto Width            = 0x708;        // [S]
-    constexpr auto Height           = 0x70C;        // [S]
-    constexpr auto Scale            = 0x714;        // [S]
+    constexpr auto NavGridMgr       = 0x8;          // [S]  navGrid+0x8  → Manager ptr
+    constexpr auto MinX             = 0xEC;         // [V]  manager+0xEC → float minX  (patch 15.24)
+    constexpr auto MinZ             = 0xF4;         // [V]  manager+0xF4 → float minZ  (patch 15.24)
+    constexpr auto Data             = 0x150;        // [S]  manager+0x150 → uint64 gridData ptr
+    constexpr auto Width            = 0x708;        // [S]  manager+0x708 → int width
+    constexpr auto Height           = 0x70C;        // [S]  manager+0x70C → int height
+    constexpr auto Scale            = 0x714;        // [S]  manager+0x714 → float scale (NavGridScale)
 }
 
 // ================================================================

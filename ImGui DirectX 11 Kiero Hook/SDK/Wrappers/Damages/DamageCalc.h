@@ -61,20 +61,21 @@ namespace SDK {
         static float CalcPhysicalDamage(const GameObject& source, const GameObject& target, float rawDamage) {
             if (rawDamage <= 0) return 0.0f;
 
-            float armor = target.GetArmor();
+            // Use Total Armor (Base + Bonus) read directly from memory
+            float armor = target.GetArmor(); 
             float armorPenPercent = source.GetArmorPenPercent();
             float armorPenFlat = source.GetArmorPenFlat();
             float lethality = source.GetLethality();
 
-            // Lethality scales with target level
-            int targetLevel = target.GetLevel();
-            if (targetLevel <= 0) targetLevel = 1;
-            float flatPen = armorPenFlat + lethality * (0.6f + 0.4f * (float)targetLevel / 18.0f);
+            // Patch 14.1+ (Season 2026): Lethality is 1:1 flat penetration at all levels
+            float flatPen = armorPenFlat + lethality;
 
             float damageMultiplier;
             if (armor < 0) {
+                // For negative armor, damage is increased: DMG * (2 - 100/(100 - armor))
                 damageMultiplier = 2.0f - (100.0f / (100.0f - armor));
             } else {
+                // Effective armor calculation: Armor * (1 - %Pen) - FlatPen
                 float effectiveArmor = armor * (1.0f - armorPenPercent) - flatPen;
                 if (effectiveArmor < 0) effectiveArmor = 0;
                 damageMultiplier = 100.0f / (100.0f + effectiveArmor);
