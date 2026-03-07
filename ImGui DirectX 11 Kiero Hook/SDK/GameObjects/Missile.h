@@ -8,7 +8,23 @@
 
 // ============================================================================
 // Missile — Projectile tracking (turret shots, auto attacks, spells)
-// Reference: Script-New-main/SDK/Missile.h
+//
+// IDA MCP verified layout (2026-03-08):
+//   CastInfo is INLINE at missile+0x2C0 (NOT a pointer!)
+//   sub_886AE0 copies CastInfo struct into missile+0x2C0 via sub_845A50
+//   sub_90A0E0 reads Position at +0x25C, CasterNetId at +0x358
+//
+//   missile+0x128 = SpellData ptr (direct)
+//   missile+0x25C = Position (Vec3, inherited from GameObject)
+//   missile+0x2C0 = CastInfo INLINE base
+//     +0x2C0 = SpellData ptr (= CastInfo+0x00)
+//     +0x2E0 = SpellName (std::string SSO, CastInfo+0x20)
+//     +0x308 = MissileName (std::string SSO, CastInfo+0x48)
+//     +0x330 = StartPos (Vec3, CastInfo+0x70)
+//     +0x33C = EndPos (Vec3, CastInfo+0x7C)
+//     +0x34C = CastEndPos (Vec3, CastInfo+0x8C)
+//     +0x358 = CasterNetId (int, CastInfo+0x98)
+//     +0x364 = MissileNetId (int, CastInfo+0xA4)
 // ============================================================================
 
 namespace SDK {
@@ -31,52 +47,53 @@ namespace SDK {
         }
 
         // ====================================================================
-        // Cast Info (via CastInfoBase)
+        // CastInfo fields — read DIRECTLY (CastInfo is INLINE, no dereference!)
         // ====================================================================
 
-        uintptr_t GetCastInfo() const {
-            if (!IsValid()) return 0;
-            return Globals::Read<uintptr_t>(address + Offset::Missile::CastInfoBase);
-        }
-
-        // Source caster network ID
+        // Source caster network ID (CastInfo+0x98 → missile+0x358)
         int GetCasterNetId() const {
             if (!IsValid()) return 0;
             return Globals::Read<int>(address + Offset::Missile::CasterNetId);
         }
 
-        // Missile network ID
-        int GetNetworkId() const {
+        // Target network ID (CastInfo+0x9C → missile+0x35C)
+        int GetTargetNetId() const {
             if (!IsValid()) return 0;
-            return Globals::Read<int>(address + Offset::Missile::NetworkId);
+            return Globals::Read<int>(address + Offset::Missile::TargetNetId);
         }
 
-        // Start position
+        // Missile network ID (CastInfo+0xA4 → missile+0x364)
+        int GetNetworkId() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<int>(address + Offset::Missile::MissileNetId);
+        }
+
+        // Start position — where spell was cast from (CastInfo+0x70 → missile+0x330)
         Vec3 GetStartPos() const {
             if (!IsValid()) return Vec3();
             return Globals::Read<Vec3>(address + Offset::Missile::StartPos);
         }
 
-        // End position (target)
+        // End position — target destination (CastInfo+0x7C → missile+0x33C)
         Vec3 GetEndPos() const {
             if (!IsValid()) return Vec3();
             return Globals::Read<Vec3>(address + Offset::Missile::EndPos);
         }
 
-        // Cast end position
+        // Cast end position (CastInfo+0x8C → missile+0x34C)
         Vec3 GetCastEndPos() const {
             if (!IsValid()) return Vec3();
             return Globals::Read<Vec3>(address + Offset::Missile::CastEndPos);
         }
 
         // ====================================================================
-        // Spell name via CastInfo → SpellData
+        // Spell / Missile name (std::string SSO, read DIRECTLY from missile)
         // ====================================================================
 
         std::string GetSpellName() const {
             if (!IsValid()) return "";
             char buf[128] = {};
-            if (!ReadSpellNameRaw(address, buf, sizeof(buf)))
+            if (!Globals::ReadGameString(address + Offset::Missile::SpellName, buf, sizeof(buf)))
                 return "";
             return std::string(buf);
         }
@@ -89,17 +106,20 @@ namespace SDK {
             return std::string(buf);
         }
 
-    private:
-        // SEH-safe: read spell name via SpellDataInst → name (no C++ objects)
-        static bool ReadSpellNameRaw(uintptr_t addr, char* out, int maxLen) {
-            __try {
-                uintptr_t sdi = *(uintptr_t*)(addr + Offset::Missile::SpellDataInst);
-                if (sdi < 0x10000 || sdi > 0x7FFFFFFFFFFF) return false;
-                uintptr_t nameAddr = sdi + 0x80;
-                return Globals::ReadGameString(nameAddr, out, maxLen);
-            } __except(1) { out[0] = 0; return false; }
+        // ====================================================================
+        // SpellData pointer (direct at missile+0x128)
+        // ====================================================================
+
+        uintptr_t GetSpellData() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<uintptr_t>(address + Offset::Missile::SpellDataPtr);
         }
-    public:
+
+        // SpellData ptr from CastInfo (first QWORD at CastInfo base)
+        uintptr_t GetSpellDataFromCastInfo() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<uintptr_t>(address + Offset::Missile::CI_SpellData);
+        }
 
         // ====================================================================
         // Type checks
@@ -150,8 +170,6 @@ namespace SDK {
             auto missiles = GetMissiles();
             for (auto& m : missiles) {
                 if (m.IsTurretShot() && m.GetCasterNetId() != targetNetId) {
-                    // Check if missile is heading toward target area
-                    // Simplified: check by caster NetId (TODO: proper target check)
                     return true;
                 }
             }

@@ -6,7 +6,7 @@
 #include "plugins/core/OrbwalkerPlugin.h"
 #include "plugins/core/TargetSelectorPlugin.h"
 #include "plugins/core/RenderTestPlugin.h"
-#include "menu/BGXMenu.h"
+#include "menu/NightSharpMenu.h"
 #include <Psapi.h>
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -32,7 +32,7 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	SDK::CursorUtils::OnWndProc(uMsg, lParam);
 
 	// Pass input to ImGui when menu is visible (toggle or shift-hold)
-	bool menuVisible = BGXMenu::showMenu || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
+	bool menuVisible = NightSharpMenu::showMenu || ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
 	if (menuVisible && ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
 		return true;
 
@@ -136,7 +136,11 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 		pm.Register<Plugins::TargetSelectorPlugin>();
 		pm.Register<Plugins::AwarenessPlugin>();
 		pm.Register<Plugins::RenderTestPlugin>();
-		pm.LoadAll();
+		// Core defaults (BGX-style): always load Orbwalker + TargetSelector.
+		pm.SetAutoLoad("Orbwalker", true);
+		pm.SetAutoLoad("Target Selector", true);
+		pm.SetAutoLoad("Prediction", true); // Optional: loaded if module exists.
+		pm.LoadAuto();
 
 		SDK::ConfigManager::LoadAll();
 		sdkInitialized = true;
@@ -180,7 +184,7 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 
 	// ====== Render Menu (BGX Style) — only when in game ======
 	if (inGame) {
-		BGXMenu::Render();
+		NightSharpMenu::Render();
 	} else if (Globals::base) {
 		// Waiting for game — show small status indicator
 		ImDrawList* dl = ImGui::GetBackgroundDrawList();

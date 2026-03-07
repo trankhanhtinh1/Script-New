@@ -346,7 +346,8 @@ namespace SDK {
             case DamageScalingType::Armor:
                 return obj.GetArmor();
             case DamageScalingType::BonusArmor:
-                return obj.GetBonusArmor();
+                // NOTE: BonusArmor offset removed; using total Armor as best approximation
+                return obj.GetArmor();
             case DamageScalingType::SpellBlock:
                 return obj.GetMR();
             case DamageScalingType::BonusSpellBlock:

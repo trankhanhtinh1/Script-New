@@ -187,7 +187,7 @@
     <ClInclude Include="core\Globals.h" />
     <ClInclude Include="menu\MenuConfig.h" />
     <ClInclude Include="menu\Menu.h" />
-    <ClInclude Include="menu\BGXMenu.h" />
+    <ClInclude Include="menu\NightSharpMenu.h" />
     <!-- SDK Root -->
     <ClInclude Include="sdk\SDK.h" />
     <ClInclude Include="sdk\Enums.h" />

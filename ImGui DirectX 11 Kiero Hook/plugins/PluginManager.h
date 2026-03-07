@@ -4,6 +4,8 @@
 #include <vector>
 #include <memory>
 #include <algorithm>
+#include <unordered_set>
+#include <string>
 
 // ============================================================================
 // PluginManager — Manages plugin lifecycle, loading, and rendering
@@ -54,8 +56,25 @@ namespace Plugins {
             for (auto& p : m_plugins) Load(p.get());
         }
 
+        void LoadAuto() {
+            for (auto& p : m_plugins) {
+                if (IsAutoLoad(p->GetName()))
+                    Load(p.get());
+            }
+        }
+
         void UnloadAll() {
             for (auto& p : m_plugins) Unload(p.get());
+        }
+
+        bool LoadByName(const char* name) {
+            IPlugin* p = Find(name);
+            return p ? Load(p) : false;
+        }
+
+        bool UnloadByName(const char* name) {
+            IPlugin* p = Find(name);
+            return p ? Unload(p) : false;
         }
 
         // ====================================================================
@@ -84,9 +103,9 @@ namespace Plugins {
             ImGui::Separator();
 
             // Group by category
-            const char* catNames[] = { "Utility", "Champion", "Orbwalker", "Evade", "Other" };
+            const char* catNames[] = { "Core Plugin", "Champion", "Utility", "Misc" };
 
-            for (int cat = 0; cat < 5; cat++) {
+            for (int cat = 0; cat < 4; cat++) {
                 auto category = (PluginCategory)cat;
                 bool hasAny = false;
                 for (auto& p : m_plugins)
@@ -146,6 +165,15 @@ namespace Plugins {
             return n;
         }
 
+        void SetAutoLoad(const std::string& pluginName, bool enabled) {
+            if (enabled) m_autoLoadNames.insert(pluginName);
+            else m_autoLoadNames.erase(pluginName);
+        }
+
+        bool IsAutoLoad(const std::string& pluginName) const {
+            return m_autoLoadNames.find(pluginName) != m_autoLoadNames.end();
+        }
+
         // Find plugin by name
         IPlugin* Find(const char* name) {
             for (auto& p : m_plugins)
@@ -156,6 +184,7 @@ namespace Plugins {
     private:
         PluginManager() = default;
         std::vector<std::unique_ptr<IPlugin>> m_plugins;
+        std::unordered_set<std::string> m_autoLoadNames;
     };
 
 } // namespace Plugins

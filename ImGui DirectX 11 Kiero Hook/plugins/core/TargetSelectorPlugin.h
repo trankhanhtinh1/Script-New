@@ -26,7 +26,7 @@ namespace Plugins {
     public:
         const char* GetName() const override { return "Target Selector"; }
         const char* GetAuthor() const override { return "NightSharp"; }
-        PluginCategory GetCategory() const override { return PluginCategory::Utility; }
+        PluginCategory GetCategory() const override { return PluginCategory::CorePlugin; }
 
         // ====================================================================
         // Lifecycle
@@ -52,6 +52,7 @@ namespace Plugins {
             // Drawing sub-menu
             auto drawMenu = m_menu->AddSubMenu("Drawings", "Drawings");
             drawMenu->Add<SDK::MenuUI::MenuBool>("DrawSelect", "Draw Selected Target", true);
+            drawMenu->Add<SDK::MenuUI::MenuBool>("LightSelect", "HighLight Selected Target", true);
             drawMenu->Add<SDK::MenuUI::MenuColor>("SelectColor", "Select Circle Color", 1.0f, 0.0f, 0.0f, 1.0f);
             drawMenu->Add<SDK::MenuUI::MenuBool>("DrawWeightScore", "Draw Weight Scores", false);
             drawMenu->Add<SDK::MenuUI::MenuBool>("DrawBestTarget", "Draw Best Target Circle", true);
@@ -207,6 +208,16 @@ namespace Plugins {
                 ImU32 col = color ? color->GetImU32() : IM_COL32(255, 0, 0, 255);
                 SDK::Drawing::DrawCircle(m_selectedTarget.GetPosition(),
                     m_selectedTarget.GetBoundingRadius() + 20.0f, col, 3.0f);
+
+                // LightSelect (C# OnRenderMouseOvers analog): animated outer ring highlight.
+                auto* light = drawMenu->Get<SDK::MenuUI::MenuBool>("LightSelect");
+                if (light && light->Enabled) {
+                    float t = SDK::Game::GetTime();
+                    float pulse = 8.0f + 6.0f * (0.5f + 0.5f * sinf(t * 6.0f));
+                    ImU32 glow = IM_COL32(180, 80, 255, 190);
+                    SDK::Drawing::DrawCircle(m_selectedTarget.GetPosition(),
+                        m_selectedTarget.GetBoundingRadius() + 24.0f + pulse, glow, 2.0f);
+                }
             }
 
             // Draw best weighted target circle (green circle on the best target)
@@ -398,10 +409,12 @@ namespace Plugins {
                 if (cursorPos.IsZero()) { wasClickDown = clickDown; return; }
 
                 SDK::GameObject nearest;
-                float nearestDist = 300.0f; // click tolerance
+                float nearestDist = 300.0f; // click tolerance (NewTargetSelector.cs)
+                auto& player = SDK::GameObjects::Player;
 
                 for (auto& hero : SDK::GameObjects::EnemyHeroes) {
                     if (!hero.IsAlive() || !hero.IsVisible()) continue;
+                    if (player.IsValid() && player.DistanceTo(hero) > 5000.0f) continue;
                     float dist = hero.GetPosition().Distance2D(cursorPos);
                     if (dist < nearestDist) {
                         nearestDist = dist;
@@ -545,6 +558,8 @@ namespace Plugins {
         // ====================================================================
         SDK::GameObject SelectByMode(std::vector<SDK::GameObject>& targets, SDK::DamageType damageType) {
             if (targets.empty()) return SDK::GameObject();
+            auto& player = SDK::GameObjects::Player;
+            Vec3 mousePos = SDK::Game::GetMouseWorldPos();
 
             int mode = 0;
             if (m_menu) {
@@ -570,12 +585,44 @@ namespace Plugins {
                     });
             case 3: // Weighted
                 return SDK::WeightedTargetSelector::GetTarget(targets);
+            case 4: // Closest
+                return *std::min_element(targets.begin(), targets.end(),
+                    [&player](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return player.DistanceTo(a) < player.DistanceTo(b);
+                    });
+            case 5: // Near Mouse
+                return *std::min_element(targets.begin(), targets.end(),
+                    [&mousePos](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return a.GetPosition().Distance2D(mousePos) < b.GetPosition().Distance2D(mousePos);
+                    });
+            case 6: // Least Attacks
+                return *std::min_element(targets.begin(), targets.end(),
+                    [&player](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return SDK::DamageCalc::GetAutoAttacksToKill(player, a) <
+                               SDK::DamageCalc::GetAutoAttacksToKill(player, b);
+                    });
+            case 7: // Most AD
+                return *std::max_element(targets.begin(), targets.end(),
+                    [](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return a.GetTotalAD() < b.GetTotalAD();
+                    });
+            case 8: // Most AP
+                return *std::max_element(targets.begin(), targets.end(),
+                    [](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return a.GetAP() < b.GetAP();
+                    });
             default:
-                return targets[0];
+                return *std::min_element(targets.begin(), targets.end(),
+                    [this, damageType](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return GetSmartScore(a, damageType) < GetSmartScore(b, damageType);
+                    });
             }
         }
 
         void SortByMode(std::vector<SDK::GameObject>& targets, SDK::DamageType damageType) {
+            auto& player = SDK::GameObjects::Player;
+            Vec3 mousePos = SDK::Game::GetMouseWorldPos();
+
             int mode = 0;
             if (m_menu) {
                 auto* modeList = m_menu->Get<SDK::MenuUI::MenuList>("TSMode");
@@ -607,6 +654,39 @@ namespace Plugins {
                         return SDK::WeightedTargetSelector::CalculateScore(a)
                              < SDK::WeightedTargetSelector::CalculateScore(b);
                     });
+                break;
+            case 4: // Closest
+                std::sort(targets.begin(), targets.end(),
+                    [&player](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return player.DistanceTo(a) < player.DistanceTo(b);
+                    });
+                break;
+            case 5: // Near Mouse
+                std::sort(targets.begin(), targets.end(),
+                    [&mousePos](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return a.GetPosition().Distance2D(mousePos) < b.GetPosition().Distance2D(mousePos);
+                    });
+                break;
+            case 6: // Least Attacks
+                std::sort(targets.begin(), targets.end(),
+                    [&player](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return SDK::DamageCalc::GetAutoAttacksToKill(player, a) <
+                               SDK::DamageCalc::GetAutoAttacksToKill(player, b);
+                    });
+                break;
+            case 7: // Most AD
+                std::sort(targets.begin(), targets.end(),
+                    [](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return a.GetTotalAD() > b.GetTotalAD();
+                    });
+                break;
+            case 8: // Most AP
+                std::sort(targets.begin(), targets.end(),
+                    [](const SDK::GameObject& a, const SDK::GameObject& b) {
+                        return a.GetAP() > b.GetAP();
+                    });
+                break;
+            default:
                 break;
             }
         }

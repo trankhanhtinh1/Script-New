@@ -188,23 +188,6 @@ namespace SDK {
         }
 
         // ====================================================================
-        // Internal Game Predictions (InDamage / InHeal)
-        // These are calculated by the game engine for targeted attacks/heals.
-        // ====================================================================
-
-        float GetInternalIncomingDamage() const {
-            return Globals::Read<float>(address + Offset::Health::InDamage);
-        }
-
-        float GetInternalIncomingHeal() const {
-            return Globals::Read<float>(address + Offset::Health::InHealAllied);
-        }
-
-        float GetInternalIncomingHealEnemy() const {
-            return Globals::Read<float>(address + Offset::Health::InHealEnemy);
-        }
-
-        // ====================================================================
         // Combat Stats (Direct float — confirmed working)
         // ====================================================================
 
@@ -229,10 +212,8 @@ namespace SDK {
         float GetArmor() const {
             return Globals::Read<float>(address + Offset::HeroStats::Armor);
         }
-
-        float GetBonusArmor() const {
-            return Globals::Read<float>(address + Offset::HeroStats::BonusArmor);
-        }
+        // NOTE: GetBonusArmor() removed — Armor offset (0x2060) already returns TOTAL armor.
+        //       Do not add base and bonus separately — it would double count.
 
         float GetMR() const {
             return Globals::Read<float>(address + Offset::HeroStats::SpellBlock);

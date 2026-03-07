@@ -1,6 +1,5 @@
 #pragma once
 
-// Prevent Windows min/max macros from conflicting with std::min/std::max
 #ifdef min
 #undef min
 #endif
@@ -8,11 +7,11 @@
 #undef max
 #endif
 
-#include "GameObject.h"
-#include "ObjectManager.h"
-#include "GameObjects.h"
-#include "Missile.h"
-#include "DamageCalc.h"
+#include "GameObjects/GameObject.h"
+#include "GameObjects/ObjectManager.h"
+#include "GameObjects/GameObjects.h"
+#include "GameObjects/Missile.h"
+#include "Wrappers/Damages/DamageCalc.h"
 #include "Game.h"
 #include <vector>
 #include <map>
@@ -20,365 +19,368 @@
 #include <algorithm>
 
 // ============================================================================
-// HealthPrediction — Predict future health with incoming damage
-// Reference: EnsoulSharp.SDK HealthPrediction + NewOrbwalker.cs
+// HealthPrediction — Predict future health (improved for last-hit accuracy)
+//
+// Strategy (hybrid, 2 layers):
+//
+//   Layer 1 — Game-native InDamage read (Offset::Health::InDamage)
+//     The game engine itself tracks incoming damage in a field at obj+0x1210.
+//     Reading this directly gives the most accurate "about to take damage"
+//     value. We use this as the primary source for imminent damage prediction.
+//
+//   Layer 2 — Missile tracking (backup / future arrivals)
+//     For missiles that will arrive AFTER the InDamage window, we fall back
+//     to tracking projectiles in flight and estimating their arrival time.
+//     This is the old approach but now only used as a supplement.
+//
+// Usage:
+//   HealthPrediction::Update();          // call once per frame
+//   float hp = HealthPrediction::GetPrediction(minion, 250.0f);   // 250ms ahead
+//   bool  lh = HealthPrediction::CanLastHit(minion, myDamage, delay);
 // ============================================================================
 
 namespace SDK {
 
-    // Tracking data for an incoming attack/missile
+    // Incoming attack record (Layer 2 — missile tracking)
     struct IncomingAttack {
-        uintptr_t sourceAddr;      // caster address
-        int       sourceNetId;     // caster net ID
-        int       targetNetId;     // target net ID
-        float     damage;          // estimated damage
-        float     arrivalTime;     // absolute game time when damage arrives
-        bool      isTurretShot;    // is this from a turret?
-        bool      isAutoAttack;    // is this an auto attack?
-        float     missileSpeed;    // missile travel speed
-        Vec3      sourcePos;       // where missile was fired from
+        int   sourceNetId;
+        int   targetNetId;
+        float damage;
+        float arrivalTime;    // absolute game time when damage lands
+        bool  isTurretShot;
+        bool  isAutoAttack;
+        Vec3  startPos;
+        Vec3  endPos;
     };
 
     class HealthPrediction {
     private:
-        // All tracked incoming attacks, keyed by target NetID
-        static inline std::map<int, std::vector<IncomingAttack>> incomingAttacks;
+        static inline std::map<int, std::vector<IncomingAttack>> trackedMissiles;
         static inline float lastUpdateTime = 0.0f;
 
+        // ------------------------------------------------------------------
+        // ReadInDamage — read game-native incoming damage from memory.
+        // Offset::Health::InDamage (0x1210) is the LeagueObfuscation<float>
+        // that the game uses internally for the health-bar "damage preview".
+        // It represents all damage that has been committed but not yet applied.
+        //
+        // NOTE: this reads as a plain float (not obfuscated in our dump),
+        //       confirmed via IDA: sub_2E3220 HP+400 = 0x1080+0x190 = 0x1210
+        // ------------------------------------------------------------------
+        static float ReadInDamage(const GameObject& unit) {
+            if (!unit.IsValid()) return 0.0f;
+            __try {
+                float val = Globals::Read<float>(unit.address + Offset::Health::InDamage);
+                // Sanity: InDamage should be 0 <= val <= MaxHP
+                if (val < 0.0f) return 0.0f;
+                float maxHP = unit.GetMaxHealth();
+                if (val > maxHP) return 0.0f; // clearly a bad read
+                return val;
+            } __except(1) { return 0.0f; }
+        }
+
     public:
-        // ====================================================================
-        // Update — Call once per frame
-        // Scans missiles and nearby attackers to build damage predictions
-        // ====================================================================
+        // ==================================================================
+        // Update — call once per frame (~every 33ms)
+        // Tracks in-flight missiles for Layer 2 prediction
+        // ==================================================================
         static void Update() {
             float now = Game::GetTime();
-            if (now - lastUpdateTime < 0.03f) return; // throttle ~33fps
+            if (now - lastUpdateTime < 0.033f) return;
             lastUpdateTime = now;
 
-            // Prune expired entries
-            for (auto it = incomingAttacks.begin(); it != incomingAttacks.end();) {
+            // Prune expired entries (arrived > 500ms ago)
+            for (auto it = trackedMissiles.begin(); it != trackedMissiles.end();) {
                 auto& vec = it->second;
                 vec.erase(std::remove_if(vec.begin(), vec.end(),
-                    [now](const IncomingAttack& atk) {
-                        return atk.arrivalTime < now - 0.5f; // expired 500ms ago
+                    [now](const IncomingAttack& a) {
+                        return a.arrivalTime < now - 0.5f;
                     }), vec.end());
                 if (vec.empty())
-                    it = incomingAttacks.erase(it);
+                    it = trackedMissiles.erase(it);
                 else
                     ++it;
             }
 
-            // ---- Track missiles for targeted damage ----
+            // Track in-flight missiles
             auto missiles = MissileManager::GetMissiles();
             for (auto& m : missiles) {
                 if (!m.IsValid()) continue;
 
                 int casterNetId = m.GetCasterNetId();
-                Vec3 missilePos = m.GetPosition();
+                Vec3 mPos  = m.GetPosition();
                 Vec3 endPos = m.GetEndPos();
                 Vec3 startPos = m.GetStartPos();
-
                 bool isTurret = m.IsTurretShot();
-                bool isAA = m.IsAutoAttack();
+                bool isAA     = m.IsAutoAttack();
 
-                // Find the target: closest unit near the endpoint
-                int bestTargetNetId = 0;
-                float bestDist = 200.0f; // search radius around missile end pos
-                float bestHP = FLT_MAX;
-
-                auto findTarget = [&](std::vector<GameObject>& units) {
-                    for (auto& unit : units) {
-                        if (!unit.IsValid() || !unit.IsAlive()) continue;
-                        float d = unit.GetPosition().Distance2D(endPos);
+                // Find target: closest alive unit to missile endpoint
+                int bestNetId = 0;
+                float bestDist = 180.0f; // search radius
+                auto checkList = [&](std::vector<GameObject>& list) {
+                    for (auto& u : list) {
+                        if (!u.IsValid() || !u.IsAlive()) continue;
+                        float d = u.GetPosition().Distance2D(endPos);
                         if (d < bestDist) {
                             bestDist = d;
-                            bestTargetNetId = unit.GetNetId();
+                            bestNetId = u.GetNetId();
                         }
                     }
                 };
+                checkList(GameObjects::EnemyMinions);
+                checkList(GameObjects::AllyMinions);
+                checkList(GameObjects::JungleMinions);
+                checkList(GameObjects::AllHeroes);
+                if (bestNetId == 0) continue;
 
-                findTarget(GameObjects::EnemyMinions);
-                findTarget(GameObjects::AllyMinions);
-                findTarget(GameObjects::JungleMinions);
-                findTarget(GameObjects::AllHeroes);
-
-                if (bestTargetNetId == 0) continue;
-
-                // Already tracking this specific missile for this target?
+                // Already tracking this exact missile (same caster + launch point)?
                 bool alreadyTracked = false;
-                auto it = incomingAttacks.find(bestTargetNetId);
-                if (it != incomingAttacks.end()) {
-                    for (auto& atk : it->second) {
-                        if (atk.sourceNetId == casterNetId &&
-                            std::abs(atk.sourcePos.x - startPos.x) < 10.0f) {
-                            alreadyTracked = true;
-                            break;
+                auto it = trackedMissiles.find(bestNetId);
+                if (it != trackedMissiles.end()) {
+                    for (auto& a : it->second) {
+                        if (a.sourceNetId == casterNetId &&
+                            startPos.Distance2D(a.startPos) < 15.0f) {
+                            alreadyTracked = true; break;
                         }
                     }
                 }
                 if (alreadyTracked) continue;
 
-                // Calculate damage
-                float damage = EstimateMissileDamage(casterNetId, bestTargetNetId, isTurret, isAA);
+                // Estimate damage from this missile
+                float dmg = EstimateMissileDamage(casterNetId, bestNetId, isTurret, isAA);
 
-                // Calculate arrival time
-                float dist = missilePos.Distance2D(endPos);
-                float speed = 1800.0f; // default
-                if (isTurret) speed = 1200.0f;
-                else if (isAA) speed = 1600.0f;
-
+                // Estimate arrival time from current missile position
+                float dist = mPos.Distance2D(endPos);
+                float speed = isTurret ? 1200.0f : (isAA ? 1600.0f : 1800.0f);
                 float arrival = now + (dist / speed);
 
                 IncomingAttack atk;
-                atk.sourceAddr = 0;
-                atk.sourceNetId = casterNetId;
-                atk.targetNetId = bestTargetNetId;
-                atk.damage = damage;
-                atk.arrivalTime = arrival;
+                atk.sourceNetId  = casterNetId;
+                atk.targetNetId  = bestNetId;
+                atk.damage       = dmg;
+                atk.arrivalTime  = arrival;
                 atk.isTurretShot = isTurret;
                 atk.isAutoAttack = isAA;
-                atk.missileSpeed = speed;
-                atk.sourcePos = startPos;
-
-                incomingAttacks[bestTargetNetId].push_back(atk);
+                atk.startPos     = startPos;
+                atk.endPos       = endPos;
+                trackedMissiles[bestNetId].push_back(atk);
             }
         }
 
-        // ====================================================================
-        // GetPrediction — Predict unit health after timeMs delay
-        // @param unit: target unit
-        // @param timeMs: delay in milliseconds
-        // @return: predicted health value
-        // ====================================================================
+        // ==================================================================
+        // GetPrediction — predict health of a unit after `timeMs` milliseconds
+        //
+        // Uses hybrid approach:
+        //   - InDamage (game native) for imminent hits (0~300ms)
+        //   - Missile tracking for later arrivals (>300ms)
+        // ==================================================================
         static float GetPrediction(const GameObject& unit, float timeMs) {
             if (!unit.IsValid()) return 0.0f;
 
-            float currentHP = unit.GetHealth();
-            float now = Game::GetTime();
+            float now         = unit.IsValid() ? Game::GetTime() : 0.0f;
+            float currentHP   = unit.GetHealth();
             float predictTime = now + (timeMs / 1000.0f);
 
-            int netId = unit.GetNetId();
-            float incomingDmg = 0.0f;
+            // -----------------------------------------------------------------
+            // Layer 1: game-native InDamage — most accurate for imminent damage
+            // This is what the game itself uses to draw the "grey bar" on health.
+            // -----------------------------------------------------------------
+            float nativeDmg = ReadInDamage(unit);
 
-            // Sum all tracked incoming damage arriving before predictTime
-            auto it = incomingAttacks.find(netId);
-            if (it != incomingAttacks.end()) {
+            // -----------------------------------------------------------------
+            // Layer 2: missile tracking — damage arriving in the prediction window
+            // Add missiles that arrive AFTER the native InDamage has already
+            // committed (roughly >150ms out), to avoid double-counting.
+            // -----------------------------------------------------------------
+            float missileDmg = 0.0f;
+            int netId = unit.GetNetId();
+            auto it = trackedMissiles.find(netId);
+            if (it != trackedMissiles.end()) {
                 for (auto& atk : it->second) {
-                    if (atk.arrivalTime <= predictTime && atk.arrivalTime >= now - 0.1f)
-                        incomingDmg += atk.damage;
+                    // Only count missiles arriving within our prediction window
+                    // but not yet "committed" to InDamage (i.e., > 150ms out)
+                    if (atk.arrivalTime > now + 0.15f &&
+                        atk.arrivalTime <= predictTime &&
+                        atk.arrivalTime >= now) {
+                        missileDmg += atk.damage;
+                    }
                 }
             }
 
-            // Estimate continuous turret damage
-            if (HasTurretAggro(unit)) {
-                float turretDPS = GetTurretDPS(unit);
-                float duration = timeMs / 1000.0f;
-                incomingDmg += turretDPS * duration;
+            // -----------------------------------------------------------------
+            // Layer 3: turret & minion continuous DPS estimate
+            // (for longer time windows like > 500ms)
+            // -----------------------------------------------------------------
+            float continuousDmg = 0.0f;
+            if (timeMs > 200.0f) {
+                if (HasTurretAggro(unit)) {
+                    continuousDmg += GetTurretDPS(unit) * (timeMs / 1000.0f);
+                }
+                if (timeMs > 400.0f) {
+                    continuousDmg += GetMinionAggroDPS(unit) * (timeMs / 1000.0f);
+                }
             }
 
-            // Estimate minion aggro DPS
-            float minionDPS = GetMinionAggroDPS(unit);
-            if (minionDPS > 0) {
-                incomingDmg += minionDPS * (timeMs / 1000.0f);
-            }
-
-            return std::max(0.0f, currentHP - incomingDmg);
+            float totalIncoming = nativeDmg + missileDmg + continuousDmg;
+            return std::max(0.0f, currentHP - totalIncoming);
         }
 
-        // ====================================================================
-        // GetLaneClearPrediction — Prediction including additional ally DPS
-        // ====================================================================
+        // ==================================================================
+        // CanLastHit — will unit die from our next auto attack?
+        // @param myDamage  : our auto attack damage (post-mitigation)
+        // @param delayMs   : windup + travel time in milliseconds
+        // ==================================================================
+        static bool CanLastHit(const GameObject& unit, float myDamage, float delayMs = 250.0f) {
+            if (!unit.IsValid() || !unit.IsAlive()) return false;
+            float predicted = GetPrediction(unit, delayMs);
+            return predicted > 0.0f && predicted <= myDamage;
+        }
+
+        // ==================================================================
+        // ShouldWait — should we hold our auto to let allies/tower kill first?
+        // Returns true when unit is in kill range but isn't safe to last-hit now
+        // ==================================================================
+        static bool ShouldWait(const GameObject& minion, float myDamage, float delayMs = 250.0f) {
+            if (!minion.IsValid()) return false;
+
+            float currentHP   = minion.GetHealth();
+            float predictedHP = GetPrediction(minion, delayMs);
+
+            // Already dead by the time we hit — don't waste the attack
+            if (predictedHP <= 0.0f) return false;
+
+            // Unit is in our kill range right now — just hit it
+            if (currentHP <= myDamage) return false;
+
+            // Unit will soon be in kill range — wait for it
+            if (predictedHP > 0.0f && predictedHP <= myDamage * 1.5f)
+                return true;
+
+            return false;
+        }
+
+        // ==================================================================
+        // GetLaneClearPrediction — health + optional ally DPS
+        // ==================================================================
         static float GetLaneClearPrediction(const GameObject& unit, float timeMs, float allyDPS = 0.0f) {
             float hp = GetPrediction(unit, timeMs);
-            if (allyDPS > 0) {
+            if (allyDPS > 0)
                 hp -= allyDPS * (timeMs / 1000.0f);
-            }
             return std::max(0.0f, hp);
         }
 
-        // ====================================================================
-        // ShouldWait — Should we wait to last-hit? (improved logic)
-        // Reference: NewOrbwalker.cs ShouldWait()
-        // ====================================================================
-        static bool ShouldWait(const GameObject& minion, float myDamage, float delayMs) {
-            if (!minion.IsValid()) return false;
-
-            float hp = minion.GetHealth();
-            float predictedHP = GetPrediction(minion, delayMs);
-
-            // Minion will die before our attack arrives → don't waste
-            if (predictedHP <= 0) return false;
-
-            // Minion HP is approaching killable range → wait
-            if (hp <= myDamage * 2.5f && hp > myDamage) {
-                if (predictedHP <= myDamage * 1.2f)
-                    return true;
-            }
-
-            return false;
-        }
-
-        // ====================================================================
-        // HasTurretAggro — Is a turret targeting this unit?
-        // ====================================================================
-        static bool HasTurretAggro(const GameObject& unit) {
-            GameObjectTeam unitTeam = unit.GetTeam();
-            Vec3 unitPos = unit.GetPosition();
-
-            // Check if unit is in enemy turret range
-            for (auto& turret : GameObjects::AllTurrets) {
-                if (!turret.IsAlive()) continue;
-                if (turret.GetTeam() == unitTeam) continue; // ally turret won't shoot us
-
-                float dist = turret.GetPosition().Distance2D(unitPos);
-                if (dist <= 875.0f) {
-                    // Check if turret has a missile targeting this unit
-                    // (Simplified: any turret in range counts)
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // ====================================================================
-        // HasMinionAggro — Are minions targeting this unit?
-        // ====================================================================
-        static bool HasMinionAggro(const GameObject& unit) {
-            return GetMinionAggroCount(unit) > 0;
-        }
-
-        // ====================================================================
-        // Count minions about to die in range
-        // ====================================================================
+        // ==================================================================
+        // CountMinionsDying — how many enemy minions will die within timeMs?
+        // ==================================================================
         static int CountMinionsDying(float range, float timeMs) {
             int count = 0;
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return 0;
-
-            for (auto& minion : GameObjects::EnemyMinions) {
-                if (!minion.IsAlive() || !minion.IsVisible()) continue;
-                if (player.DistanceTo(minion) > range) continue;
-                if (GetPrediction(minion, timeMs) <= 0)
-                    count++;
+            for (auto& m : GameObjects::EnemyMinions) {
+                if (!m.IsAlive() || !m.IsVisible()) continue;
+                if (player.DistanceTo(m) > range) continue;
+                if (GetPrediction(m, timeMs) <= 0.0f) count++;
             }
             return count;
         }
 
-        // ====================================================================
-        // Count killable minions (our damage can last-hit them)
-        // ====================================================================
-        static int CountKillableMinions(float range, float myDamage, float timeMs) {
+        // ==================================================================
+        // CountKillableMinions — how many minions can we last-hit?
+        // ==================================================================
+        static int CountKillableMinions(float range, float myDamage, float delayMs = 250.0f) {
             int count = 0;
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return 0;
-
-            for (auto& minion : GameObjects::EnemyMinions) {
-                if (!minion.IsAlive() || !minion.IsVisible()) continue;
-                if (player.DistanceTo(minion) > range) continue;
-                float predicted = GetPrediction(minion, timeMs);
-                if (predicted > 0.0f && predicted <= myDamage)
-                    count++;
+            for (auto& m : GameObjects::EnemyMinions) {
+                if (!m.IsAlive() || !m.IsVisible()) continue;
+                if (player.DistanceTo(m) > range) continue;
+                if (CanLastHit(m, myDamage, delayMs)) count++;
             }
             return count;
         }
 
-    private:
-        // ====================================================================
-        // Estimate damage from a missile based on caster stats
-        // ====================================================================
-        static float EstimateMissileDamage(int casterNetId, int targetNetId, bool isTurret, bool isAA) {
-            if (isTurret) {
-                // Turret damage scales, but rough estimate
-                return 150.0f;
+        // ==================================================================
+        // HasTurretAggro — is a turret currently targeting this unit?
+        // ==================================================================
+        static bool HasTurretAggro(const GameObject& unit) {
+            GameObjectTeam unitTeam = unit.GetTeam();
+            Vec3 unitPos = unit.GetPosition();
+            for (auto& t : GameObjects::AllTurrets) {
+                if (!t.IsAlive()) continue;
+                if (t.GetTeam() == unitTeam) continue;
+                if (t.GetPosition().Distance2D(unitPos) <= 905.0f) // turret range ~900
+                    return true;
             }
+            return false;
+        }
 
-            // Try to find caster and target for proper calculation
-            GameObject caster, target;
-            for (auto& hero : GameObjects::AllHeroes) {
-                if (hero.GetNetId() == casterNetId) { caster = hero; break; }
-            }
-            if (!caster.IsValid()) {
-                // Check minions
-                auto findInList = [casterNetId](std::vector<GameObject>& list) -> GameObject {
-                    for (auto& obj : list)
-                        if (obj.GetNetId() == casterNetId) return obj;
-                    return GameObject();
-                };
-                caster = findInList(GameObjects::AllMinions);
-                if (!caster.IsValid()) caster = findInList(GameObjects::JungleMinions);
-            }
+        static bool HasMinionAggro(const GameObject& unit) {
+            return GetMinionAggroCount(unit) > 0;
+        }
+
+    private:
+        // ------------------------------------------------------------------
+        // Estimate damage from a missile based on caster stats
+        // ------------------------------------------------------------------
+        static float EstimateMissileDamage(int casterNetId, int targetNetId,
+                                           bool isTurret, bool isAA) {
+            if (isTurret) return 160.0f; // typical T1 turret AA damage
+
+            // Find caster
+            GameObject caster;
+            auto findInList = [casterNetId](std::vector<GameObject>& list) -> GameObject {
+                for (auto& o : list) if (o.GetNetId() == casterNetId) return o;
+                return GameObject();
+            };
+            for (auto& h : GameObjects::AllHeroes) if (h.GetNetId() == casterNetId) { caster = h; break; }
+            if (!caster.IsValid()) caster = findInList(GameObjects::AllMinions);
+            if (!caster.IsValid()) caster = findInList(GameObjects::JungleMinions);
 
             // Find target
+            GameObject target;
             auto findTarget = [targetNetId](std::vector<GameObject>& list) -> GameObject {
-                for (auto& obj : list)
-                    if (obj.GetNetId() == targetNetId) return obj;
+                for (auto& o : list) if (o.GetNetId() == targetNetId) return o;
                 return GameObject();
             };
             target = findTarget(GameObjects::AllMinions);
             if (!target.IsValid()) target = findTarget(GameObjects::EnemyMinions);
             if (!target.IsValid()) target = findTarget(GameObjects::AllyMinions);
-            if (!target.IsValid()) {
-                for (auto& h : GameObjects::AllHeroes)
-                    if (h.GetNetId() == targetNetId) { target = h; break; }
-            }
+            if (!target.IsValid()) for (auto& h : GameObjects::AllHeroes) if (h.GetNetId() == targetNetId) { target = h; break; }
 
-            if (caster.IsValid() && target.IsValid() && isAA) {
-                return DamageCalc::GetAutoAttackDamage(caster, target, false);
-            }
+            if (caster.IsValid() && target.IsValid() && isAA)
+                return DamageCalc::GetAutoAttackDamage(caster, target, false, false);
 
-            // Fallback: use caster's AD or estimate
             if (caster.IsValid()) {
                 float ad = caster.GetTotalAD();
-                if (ad > 0) return ad * 0.9f; // rough estimate
+                if (ad > 0) return ad * 0.9f;
             }
-
-            return 50.0f; // last resort fallback
+            return 50.0f;
         }
 
-        // Count minions attacking a unit
         static int GetMinionAggroCount(const GameObject& unit) {
             int count = 0;
-            GameObjectTeam unitTeam = unit.GetTeam();
-
-            // Find minions from opposing team near the unit
-            auto& minionList = (unitTeam == GameObjects::Player.GetTeam())
+            GameObjectTeam team = unit.GetTeam();
+            auto& list = (team == GameObjects::Player.GetTeam())
                 ? GameObjects::EnemyMinions : GameObjects::AllyMinions;
-
-            for (auto& minion : minionList) {
-                if (!minion.IsValid() || !minion.IsAlive()) continue;
-                // Minion likely attacking if close and facing (simplified: just distance)
-                if (unit.DistanceTo(minion) <= 500.0f)
-                    count++;
+            for (auto& m : list) {
+                if (!m.IsValid() || !m.IsAlive()) continue;
+                if (unit.DistanceTo(m) <= 500.0f) count++;
             }
             return count;
         }
 
-        // Get minion aggro DPS on a unit
         static float GetMinionAggroDPS(const GameObject& unit) {
-            int aggressors = GetMinionAggroCount(unit);
-            if (aggressors <= 0) return 0.0f;
-
-            // Minion base DPS: ~12 per minion at early game, scales up
-            float now = Game::GetTime();
-            float gameMinutes = now / 60.0f;
-            float baseDPS = 12.0f + gameMinutes * 0.5f; // ~12 early, ~27 at 30min
-
-            return aggressors * baseDPS;
+            int n = GetMinionAggroCount(unit);
+            if (n <= 0) return 0.0f;
+            float mins = Game::GetTime() / 60.0f;
+            float baseDPS = 12.0f + mins * 0.5f;
+            return (float)n * baseDPS;
         }
 
-        // Get turret DPS against a unit (turret damage ramps up)
         static float GetTurretDPS(const GameObject& unit) {
-            // Turret attacks every ~0.83s, base damage ~150
-            // Turret ramps up vs champions
-            float baseDmg = 150.0f;
-            float attackSpeed = 1.0f / 0.83f; // ~1.2 attacks/sec
-
-            if (unit.IsHero()) {
-                // Turrets deal more damage to champions (ramp up)
-                baseDmg = 200.0f;
-            }
-
-            return baseDmg * attackSpeed;
+            // Tier 1 outer turret: ~160 damage per shot, ~1.2 shots/sec
+            float dmg = unit.IsHero() ? 200.0f : 160.0f;
+            return dmg * (1.0f / 0.83f); // ~1.2 attacks/sec
         }
     };
 
