@@ -57,6 +57,7 @@
 #include "GameObjects/SpellBook.h"
 #include "GameObjects/BuffManager.h"
 #include "GameObjects/AiManager.h"
+#include "GameObjects/NavGrid.h"
 #include "GameObjects/Missile.h"
 #include "GameObjects/ObjectManager.h"
 #include "GameObjects/GameObjects.h"

@@ -6,6 +6,7 @@
 #include "Game.h"
 #include "BuffManager.h"
 #include "AiManager.h"
+#include "NavGrid.h"
 #include "SpellBook.h"
 #include <string>
 #include <cmath>
@@ -184,6 +185,23 @@ namespace SDK {
         float GetManaPercent() const {
             float max = GetMaxMana();
             return max > 0.0f ? (GetMana() / max * 100.0f) : 0.0f;
+        }
+
+        // ====================================================================
+        // Internal Game Predictions (InDamage / InHeal)
+        // These are calculated by the game engine for targeted attacks/heals.
+        // ====================================================================
+
+        float GetInternalIncomingDamage() const {
+            return Globals::Read<float>(address + Offset::Health::InDamage);
+        }
+
+        float GetInternalIncomingHeal() const {
+            return Globals::Read<float>(address + Offset::Health::InHealAllied);
+        }
+
+        float GetInternalIncomingHealEnemy() const {
+            return Globals::Read<float>(address + Offset::Health::InHealEnemy);
         }
 
         // ====================================================================
@@ -922,6 +940,53 @@ namespace SDK {
             }
 
             return 1500.0f; // default fallback
+        }
+
+        // ====================================================================
+        // NavGrid helpers — wall & bush checks
+        // ====================================================================
+
+        // Is this object standing in a bush right now?
+        bool IsInBush() const {
+            auto ng = SDK::NavGrid::Get();
+            if (!ng.IsValid()) return false;
+            return ng.IsInBush(GetPosition());
+        }
+
+        // Is this object standing on a wall cell?
+        // (Useful for detecting units that clipped into terrain.)
+        bool IsOnWall() const {
+            auto ng = SDK::NavGrid::Get();
+            if (!ng.IsValid()) return false;
+            return ng.IsWall(GetPosition());
+        }
+
+        // Is a specific world position a wall?
+        static bool IsWallAt(const Vec3& pos) {
+            auto ng = SDK::NavGrid::Get();
+            if (!ng.IsValid()) return false;
+            return ng.IsWall(pos);
+        }
+
+        // Is a specific world position inside a bush?
+        static bool IsInBushAt(const Vec3& pos) {
+            auto ng = SDK::NavGrid::Get();
+            if (!ng.IsValid()) return false;
+            return ng.IsInBush(pos);
+        }
+
+        // Does a clear line-of-sight exist between this object and another?
+        // Uses NavGrid wall check (no bush blocking — only terrain blocks LOS).
+        bool HasLineOfSightTo(const GameObject& target, float stepSize = 50.0f) const {
+            auto ng = SDK::NavGrid::Get();
+            if (!ng.IsValid()) return true; // assume LOS if grid unavailable
+            return ng.HasLineOfSight(GetPosition(), target.GetPosition(), stepSize);
+        }
+
+        bool HasLineOfSightTo(const Vec3& pos, float stepSize = 50.0f) const {
+            auto ng = SDK::NavGrid::Get();
+            if (!ng.IsValid()) return true;
+            return ng.HasLineOfSight(GetPosition(), pos, stepSize);
         }
     };
 
