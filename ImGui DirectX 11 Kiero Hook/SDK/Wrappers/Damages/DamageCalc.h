@@ -54,29 +54,29 @@ namespace SDK {
     class DamageCalc {
     public:
         // ====================================================================
-        // Physical Damage
+        // Physical Damage — Updated: Patch 26.5
+        //
+        // Armor Pen order (official wiki, V14.1+):
+        //   1. % Armor Pen first
+        //   2. Lethality (flat pen) — 1:1 since Patch V14.1, no level scaling!
+        //
         // Formula: rawDamage * (100 / (100 + effectiveArmor))
-        // effectiveArmor = armor * (1 - armorPenPercent) - lethality
+        //   effectiveArmor = Armor * (1 - %ArmorPen) - Lethality
         // ====================================================================
         static float CalcPhysicalDamage(const GameObject& source, const GameObject& target, float rawDamage) {
             if (rawDamage <= 0) return 0.0f;
 
-            // Use Total Armor (Base + Bonus) read directly from memory
-            float armor = target.GetArmor(); 
+            float armor = target.GetArmor();
             float armorPenPercent = source.GetArmorPenPercent();
-            float armorPenFlat = source.GetArmorPenFlat();
+            // Lethality = flat armor pen 1:1 since Patch V14.1 — no level scaling
             float lethality = source.GetLethality();
-
-            // Patch 14.1+ (Season 2026): Lethality is 1:1 flat penetration at all levels
-            float flatPen = armorPenFlat + lethality;
 
             float damageMultiplier;
             if (armor < 0) {
-                // For negative armor, damage is increased: DMG * (2 - 100/(100 - armor))
                 damageMultiplier = 2.0f - (100.0f / (100.0f - armor));
             } else {
-                // Effective armor calculation: Armor * (1 - %Pen) - FlatPen
-                float effectiveArmor = armor * (1.0f - armorPenPercent) - flatPen;
+                // Order: % pen first, then flat lethality
+                float effectiveArmor = armor * (1.0f - armorPenPercent) - lethality;
                 if (effectiveArmor < 0) effectiveArmor = 0;
                 damageMultiplier = 100.0f / (100.0f + effectiveArmor);
             }
@@ -189,8 +189,7 @@ namespace SDK {
 
                 // ----------------------------------------------------------------
                 // Amumu E — Tantrum: reduces physical damage taken
-                // 2/4/6/8/10 + 3% bonus armor + 3% bonus MR
-                // ----------------------------------------------------------------
+                // 2/4/6/8/10 flat reduction (Patch 14.1 — removed armor/MR scaling)
                 if (targetBuffs.HasBuff("Tantrum") && damageType == DamageType::Physical) {
                     SpellBook sb(target.address);
                     if (sb.IsValid()) {
@@ -198,9 +197,7 @@ namespace SDK {
                         int lvl = sp.IsValid() ? sp.GetLevel() : 1;
                         if (lvl >= 1 && lvl <= 5) {
                             float flat[] = { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f };
-                            amount -= flat[lvl - 1]
-                                + 0.03f * target.GetBonusArmor()
-                                + 0.03f * target.GetBonusMR();
+                            amount -= flat[lvl - 1]; // flat reduction only, no bonus armor scaling
                         }
                     }
                 }

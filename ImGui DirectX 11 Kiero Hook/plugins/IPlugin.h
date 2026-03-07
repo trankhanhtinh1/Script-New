@@ -10,11 +10,15 @@ namespace Plugins {
 
     // Plugin categories (for menu grouping)
     enum class PluginCategory {
-        Utility,        // Awareness, Trackers, Ward timers
+        CorePlugin,     // Core systems: Orbwalker, TargetSelector, Prediction, etc.
         Champion,       // Champion-specific scripts (Ezreal, Jinx, etc.)
-        Orbwalker,      // Orbwalker implementations
-        Evade,          // Evade/dodge systems
-        Other
+        Utility,        // Utility systems: awareness, evade, helpers
+        Misc,           // Dev/test/other modules
+
+        // Backward-compatible aliases
+        Orbwalker = CorePlugin,
+        Evade = Utility,
+        Other = Misc
     };
 
     // ========================================================================

@@ -14,7 +14,7 @@ namespace Plugins {
     public:
         const char* GetName() const override { return "Awareness"; }
         const char* GetAuthor() const override { return "NS#"; }
-        PluginCategory GetCategory() const override { return PluginCategory::Utility; }
+        PluginCategory GetCategory() const override { return PluginCategory::CorePlugin; }
 
         void OnLoad() override {}
         void OnUnload() override {}

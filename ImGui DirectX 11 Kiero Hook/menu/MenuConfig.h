@@ -7,7 +7,7 @@
 namespace Config {
 
     // ============ General ============
-    // Menu toggle: CapsLock (toggle), Shift (hold) — managed by BGXMenu::Render()
+    // Menu toggle: F1 (toggle), Shift (hold) — managed by NightSharpMenu::Render()
     inline bool showMenu        = true;
 
     // ============ Orbwalker ============

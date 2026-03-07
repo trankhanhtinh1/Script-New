@@ -395,7 +395,7 @@ namespace Menu {
     inline void Render() {
         // Toggle menu
         static bool keyWasDown = false;
-        bool keyIsDown = (GetAsyncKeyState(VK_CAPITAL) & 0x8000) != 0;  // CapsLock toggle
+        bool keyIsDown = (GetAsyncKeyState(VK_F1) & 0x8000) != 0;  // F1 toggle
         if (keyIsDown && !keyWasDown) {
             Config::showMenu = !Config::showMenu;
         }

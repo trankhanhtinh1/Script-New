@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "../IPlugin.h"
 #include "sdk/UI/MenuUI.h"
 #include "sdk/GameObjects/GameObject.h"
@@ -16,13 +16,14 @@
 #include "core/Globals.h"
 #include "core/Offsets.h"
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <string>
 #include <vector>
 #include <unordered_map>
 
 // ============================================================================
-// OrbwalkerPlugin — Ported from ImpulseAIO NewOrbwalker.cs (EnsoulSharp SDK)
+// OrbwalkerPlugin â€” Ported from ImpulseAIO NewOrbwalker.cs (EnsoulSharp SDK)
 // Core plugin: handles attack + move cycle with proper timing
 // ============================================================================
 
@@ -32,7 +33,7 @@ namespace Plugins {
     public:
         const char* GetName() const override { return "Orbwalker"; }
         const char* GetAuthor() const override { return "NightSharp"; }
-        PluginCategory GetCategory() const override { return PluginCategory::Orbwalker; }
+        PluginCategory GetCategory() const override { return PluginCategory::CorePlugin; }
 
         // ====================================================================
         // Lifecycle
@@ -175,7 +176,7 @@ namespace Plugins {
                     player.GetBoundingRadius() + (float)holdDist, IM_COL32(128, 0, 200, 100), 1.0f);
             }
 
-            // Draw killable minion — uses HealthPrediction for accuracy
+            // Draw killable minion â€” uses HealthPrediction for accuracy
             auto* drawKill = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawKillableMinion");
             if (drawKill && drawKill->Enabled) {
                 auto* killCol = drawMenu->Get<SDK::MenuUI::MenuColor>("KillableColor");
@@ -223,7 +224,7 @@ namespace Plugins {
                 }
             }
 
-            // Draw chase range (ForceChase visualization) — rainbow when active
+            // Draw chase range (ForceChase visualization) â€” rainbow when active
             auto* miscMenu = m_menu->GetSubMenu("Misc");
             if (miscMenu) {
                 auto* drawChase = miscMenu->Get<SDK::MenuUI::MenuBool>("DrawChaseRange");
@@ -318,7 +319,7 @@ namespace Plugins {
         }
 
         // ====================================================================
-        // Timing — Simplified approach matching Script-New-main (proven working)
+        // Timing â€” Simplified approach matching Script-New-main (proven working)
         // Uses m_lastAttackCommandTime (set when we send attack command)
         // and optionally SDK::Orbwalker::LastAttackTime (set by OnProcessSpellCast event)
         // ====================================================================
@@ -378,7 +379,7 @@ namespace Plugins {
             float now = SDK::Game::GetTime();
             float windup = player.GetAttackWindup();
 
-            // Missile launched — allow movement immediately (ranged champions)
+            // Missile launched â€” allow movement immediately (ranged champions)
             auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
             bool missileCheck = settings ? settings->Get<SDK::MenuUI::MenuBool>("MissileCheck")->Enabled : true;
             if (SDK::Orbwalker::MissileLaunched && missileCheck) return true;
@@ -400,7 +401,7 @@ namespace Plugins {
         SDK::OrbwalkingMode ActiveMode() const { return m_activeMode; }
 
         // ====================================================================
-        // ShouldWait — EnsoulSharp OrbwalkerSelector.ShouldWait
+        // ShouldWait â€” EnsoulSharp OrbwalkerSelector.ShouldWait
         // Returns true if any minion will be last-hittable soon, so we
         // should NOT push the wave (used in LaneClear to delay attacks)
         // ====================================================================
@@ -412,30 +413,40 @@ namespace Plugins {
             if (!sw || !sw->Enabled) return false;
 
             auto& player = SDK::GameObjects::Player;
-            float ad = player.GetTotalAD();
             bool calcItems = true;
             if (auto* settings = m_menu->GetSubMenu("Settings"))
                 if (auto* ci = settings->Get<SDK::MenuUI::MenuBool>("CalcItemDamage"))
                     calcItems = ci->Enabled;
+
+            float farmDelayMs = 30.0f;
+            if (auto* fd = farm->Get<SDK::MenuUI::MenuSlider>("FarmDelay"))
+                farmDelayMs = (float)fd->Value;
+
+            float predictionMs = player.GetAttackDelay() * 2000.0f;
+            if (IsFastLaneClear()) {
+                float fastFarmDelayMs = 220.0f;
+                if (auto* ffd = farm->Get<SDK::MenuUI::MenuSlider>("FastFarmDelay"))
+                    fastFarmDelayMs = (float)ffd->Value;
+                predictionMs = player.GetAttackDelay() * 1000.0f + fastFarmDelayMs;
+            }
 
             for (auto& minion : SDK::GameObjects::EnemyMinions) {
                 if (!minion.IsAlive() || !minion.IsVisible()) continue;
                 if (!player.IsInAttackRange(minion)) continue;
 
                 float dmg = SDK::DamageCalc::GetAutoAttackDamage(player, minion, false, calcItems);
-                // Predict HP after 2 AA travel times (near future)
-                float impactMs = GetAAImpactTimeMs(minion);
-                float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactMs * 2.0f);
+                float predictedHP = SDK::HealthPrediction::GetPrediction(minion, predictionMs + farmDelayMs);
 
-                if (predictedHP > 0.0f && predictedHP <= dmg) {
-                    return true; // A minion will be last-hittable soon
+                // NewOrbwalker.cs behavior: wait if minion will become killable soon.
+                if (predictedHP > 0.0f && predictedHP < dmg) {
+                    return true;
                 }
             }
             return false;
         }
 
         // ====================================================================
-        // BlockOrders — allow scripts to temporarily block attacks/moves
+        // BlockOrders â€” allow scripts to temporarily block attacks/moves
         // ====================================================================
         bool BlockAttack() const { return m_blockAttack; }
         bool BlockMove() const { return m_blockMove; }
@@ -459,7 +470,7 @@ namespace Plugins {
         SDK::GameObject m_lastTarget;             // For TargetSwitch event
 
         // ====================================================================
-        // 1.2 GetProjectileSpeed — AA missile speed per champion
+        // 1.2 GetProjectileSpeed â€” AA missile speed per champion
         // Source: EnsoulSharp NewOrbwalker.cs GetProjectileSpeed()
         // ====================================================================
         static float GetProjectileSpeed(const SDK::GameObject& unit) {
@@ -472,10 +483,10 @@ namespace Plugins {
             // Champion-specific missile speeds (from EnsoulSharp)
             static const std::unordered_map<std::string, float> speedMap = {
                 // Buff-dependent (return max to let buff check handle it)
-                {"Jinx", 2750.0f},    // Default; with JinxQ → rockets = 2000
-                {"Kayle", 2000.0f},   // With range upgrade → 2250
-                {"Viktor", 2300.0f},  // ViktorPowerTransferReturn → max
-                {"Neeko", 1500.0f},   // neekowpassiveready → max (melee transform)
+                {"Jinx", 2750.0f},    // Default; with JinxQ â†’ rockets = 2000
+                {"Kayle", 2000.0f},   // With range upgrade â†’ 2250
+                {"Viktor", 2300.0f},  // ViktorPowerTransferReturn â†’ max
+                {"Neeko", 1500.0f},   // neekowpassiveready â†’ max (melee transform)
 
                 // Form-dependent
                 {"Jayce", 2500.0f},   // Ranged form
@@ -488,7 +499,7 @@ namespace Plugins {
                 {"Thresh", 1800.0f},
                 {"Rakan", 1800.0f},
 
-                // Aphelios — weapon-dependent (average value)
+                // Aphelios â€” weapon-dependent (average value)
                 {"Aphelios", 2100.0f},
 
                 // ADCs with known speeds
@@ -543,15 +554,19 @@ namespace Plugins {
             };
 
             auto it = speedMap.find(name);
-            if (it != speedMap.end()) return it->second;
+            if (it != speedMap.end())
+                return it->second;
 
-            // Fallback: read from BasicAttack spell data
-            // Most ranged champions have ~1500-2500 missile speed
+            // Primary fallback: SDK spell-data read.
+            float sdkSpeed = unit.GetBasicAttackMissileSpeed();
+            if (sdkSpeed > 100.0f && sdkSpeed < 10000.0f)
+                return sdkSpeed;
+
             return 2000.0f;
         }
 
         // ====================================================================
-        // 1.4 Jax CounterStrike check — skip attack if target has this buff
+        // 1.4 Jax CounterStrike check â€” skip attack if target has this buff
         // ====================================================================
         static bool HasJaxCounterStrike(const SDK::GameObject& target) {
             if (!target.IsValid() || !target.IsHero()) return false;
@@ -572,7 +587,7 @@ namespace Plugins {
 
             float range = player.GetRealAttackRange();
 
-            // 1.10 ForceChase — extend attack range when key held
+            // 1.10 ForceChase â€” extend attack range when key held
             if (m_forceChaseActive)
                 range += m_forceChaseExtraRange;
 
@@ -612,7 +627,7 @@ namespace Plugins {
                 if (hero.IsValid()) return hero;
             }
 
-            // Priority 4: Special minions (non-priority mode) — in combo
+            // Priority 4: Special minions (non-priority mode) â€” in combo
             if (m_activeMode == SDK::OrbwalkingMode::Combo && !prioritizeSpecial) {
                 auto special = GetSpecialMinion(range);
                 if (special.IsValid()) return special;
@@ -626,7 +641,7 @@ namespace Plugins {
                 if (jungle.IsValid()) return jungle;
             }
 
-            // Priority 6: Any minion (laneclear push — with ShouldWait logic)
+            // Priority 6: Any minion (laneclear push â€” with ShouldWait logic)
             if (m_activeMode == SDK::OrbwalkingMode::LaneClear) {
                 // Use GetLaneClearMinion which respects ShouldWait
                 auto lcMinion = GetLaneClearMinion(range);
@@ -695,13 +710,13 @@ namespace Plugins {
                     if (!HasJaxCounterStrike(forced))
                         return forced;
                 }
-                // "Only Attack Selected Target": forced target exists but OOR → attack nothing
+                // "Only Attack Selected Target": forced target exists but OOR â†’ attack nothing
                 if (SDK::TargetSelector::OnlyAttackSelected)
                     return SDK::GameObject();
             }
 
             // "Only Attack Selected Target" with a valid forced target that's
-            // dead/invisible → still don't attack other targets
+            // dead/invisible â†’ still don't attack other targets
             if (SDK::TargetSelector::OnlyAttackSelected &&
                 SDK::TargetSelector::ForcedTarget.IsValid())
                 return SDK::GameObject();
@@ -709,7 +724,7 @@ namespace Plugins {
             // 2. Use SDK::TargetSelector for smart target selection
             auto target = SDK::TargetSelector::GetTarget(range);
 
-            // 1.4 Jax CounterStrike — skip if target has it, try next
+            // 1.4 Jax CounterStrike â€” skip if target has it, try next
             if (target.IsValid() && HasJaxCounterStrike(target)) {
                 auto targets = SDK::TargetSelector::GetTargets(range);
                 for (auto& t : targets) {
@@ -723,7 +738,7 @@ namespace Plugins {
         }
 
         // ====================================================================
-        // 1.14 GetSpecialMinion — GP barrels, enemy wards, jungle plants, pets
+        // 1.14 GetSpecialMinion â€” GP barrels, enemy wards, jungle plants, pets
         // ====================================================================
         SDK::GameObject GetSpecialMinion(float range) {
             auto& player = SDK::GameObjects::Player;
@@ -827,10 +842,10 @@ namespace Plugins {
             return best;
         }
 
-        // Calculate AA travel time (windup + projectile fly time) in milliseconds
+        // Calculate AA travel time (cast + projectile) in milliseconds
         float GetAAImpactTimeMs(const SDK::GameObject& target) {
             auto& player = SDK::GameObjects::Player;
-            float windup = player.GetAttackWindup() * 1000.0f; // windup in ms
+            float windup = player.GetAttackWindup() * 1000.0f;
             float ping = SDK::Game::GetPing() / 2.0f;         // half RTT
 
             // Projectile travel time for ranged champions
@@ -841,14 +856,7 @@ namespace Plugins {
                 projTime = (dist / projSpeed) * 1000.0f; // ms
             }
 
-            // FarmDelay from menu
-            float farmDelay = 30.0f;
-            if (auto* farm = m_menu ? m_menu->GetSubMenu("Farm") : nullptr) {
-                auto* fd = farm->Get<SDK::MenuUI::MenuSlider>("FarmDelay");
-                if (fd) farmDelay = (float)fd->Value;
-            }
-
-            return windup + projTime + ping + farmDelay;
+            return windup + projTime + ping;
         }
 
         SDK::GameObject GetLastHitMinion(float range) {
@@ -862,6 +870,11 @@ namespace Plugins {
                 if (auto* ci = settings->Get<SDK::MenuUI::MenuBool>("CalcItemDamage"))
                     calcItems = ci->Enabled;
 
+            float farmDelayMs = 30.0f;
+            if (auto* farm = m_menu ? m_menu->GetSubMenu("Farm") : nullptr)
+                if (auto* fd = farm->Get<SDK::MenuUI::MenuSlider>("FarmDelay"))
+                    farmDelayMs = (float)fd->Value;
+
             for (auto& minion : SDK::GameObjects::EnemyMinions) {
                 if (!minion.IsAlive() || !minion.IsVisible()) continue;
                 if (!player.IsInAttackRange(minion)) continue;
@@ -871,7 +884,7 @@ namespace Plugins {
 
                 // Predict minion HP at the time our AA projectile arrives
                 float impactTimeMs = GetAAImpactTimeMs(minion);
-                float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactTimeMs);
+                float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactTimeMs + farmDelayMs);
 
                 // The minion should be killable when our AA lands (not now!)
                 // Also check it won't already be dead (HP > 0 at impact)
@@ -917,15 +930,22 @@ namespace Plugins {
 
         SDK::GameObject GetPushMinion(float range) {
             auto& player = SDK::GameObjects::Player;
-            float ad = player.GetTotalAD();
-            if (ad < 1.0f) ad = 1.0f;
+            bool calcItems = true;
+            if (auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr) {
+                if (auto* ci = settings->Get<SDK::MenuUI::MenuBool>("CalcItemDamage"))
+                    calcItems = ci->Enabled;
+            }
 
-            // Advanced LaneClear priority: Siege > Super > attacks-to-kill (lowest) > MaxHealth (highest)
+            float farmDelayMs = 30.0f;
+            if (auto* farm = m_menu ? m_menu->GetSubMenu("Farm") : nullptr) {
+                if (auto* fd = farm->Get<SDK::MenuUI::MenuSlider>("FarmDelay"))
+                    farmDelayMs = (float)fd->Value;
+            }
+
             struct MinionScore {
                 SDK::GameObject obj;
-                int typePrio;   // higher = attack first (siege=3, super=2, normal=1)
-                int attacksToKill;
-                float maxHP;
+                int attacksToKill = 999;
+                float maxHP = 0.0f;
             };
 
             std::vector<MinionScore> candidates;
@@ -933,28 +953,28 @@ namespace Plugins {
                 if (!minion.IsAlive() || !minion.IsVisible()) continue;
                 if (!player.IsInAttackRange(minion)) continue;
 
+                float aaDamage = SDK::DamageCalc::GetAutoAttackDamage(player, minion, false, calcItems);
+                if (aaDamage <= 0.0f) continue;
+
+                float predHealth = SDK::HealthPrediction::GetPrediction(
+                    minion,
+                    player.GetAttackDelay() * 2000.0f + farmDelayMs);
+
+                // Keep only push candidates, avoid stealing near last-hit minions.
+                if (!(predHealth >= 2.0f * aaDamage || fabsf(predHealth - minion.GetHealth()) < FLT_EPSILON))
+                    continue;
+
                 MinionScore ms;
                 ms.obj = minion;
                 ms.maxHP = minion.GetMaxHealth();
-
-                // Determine type by max HP range (siege ~600+, super ~1000+)
-                if (ms.maxHP > 900.0f) ms.typePrio = 3;      // Super minion
-                else if (ms.maxHP > 600.0f) ms.typePrio = 2;  // Siege minion
-                else ms.typePrio = 1;                          // Normal minion
-
-                float hp = minion.GetHealth();
-                float dmg = SDK::DamageCalc::CalcPhysicalDamage(player, minion, ad);
-                ms.attacksToKill = (dmg > 0) ? (int)std::ceil(hp / dmg) : 999;
-
+                ms.attacksToKill = (int)std::ceil((std::max)(predHealth, 1.0f) / aaDamage);
                 candidates.push_back(ms);
             }
 
             if (candidates.empty()) return SDK::GameObject();
 
-            // Sort: typePrio DESC → attacksToKill ASC → maxHP DESC
             std::sort(candidates.begin(), candidates.end(),
                 [](const MinionScore& a, const MinionScore& b) {
-                    if (a.typePrio != b.typePrio) return a.typePrio > b.typePrio;
                     if (a.attacksToKill != b.attacksToKill) return a.attacksToKill < b.attacksToKill;
                     return a.maxHP > b.maxHP;
                 });
@@ -963,7 +983,7 @@ namespace Plugins {
         }
 
         // ====================================================================
-        // 1.5 Turret farm — advanced turret farming logic
+        // 1.5 Turret farm â€” advanced turret farming logic
         // Ported from NewOrbwalker.cs CanTurretFarm()
         // ====================================================================
         bool CanTurretFarm() {
@@ -1014,7 +1034,7 @@ namespace Plugins {
         }
 
         // ====================================================================
-        // Orbwalk — Attack + Move cycle (full EnsoulSharp port)
+        // Orbwalk â€” Attack + Move cycle (full EnsoulSharp port)
         // Features: BlockOrders, OnAction events, ShouldWait, angle check,
         //           max distance, movement delay, NonKillableMinion, turret farm
         // ====================================================================
@@ -1026,7 +1046,7 @@ namespace Plugins {
 
             // ---- ATTACK PHASE ----
             if (CanAttack() && !m_blockAttack && target.IsValid() && player.IsInAttackRange(target)) {
-                // Fire BeforeAttack event — scripts can cancel by setting Process = false
+                // Fire BeforeAttack event â€” scripts can cancel by setting Process = false
                 SDK::OrbwalkingActionArgs beforeArgs;
                 beforeArgs.Target = target;
                 beforeArgs.Sender = player;
@@ -1056,7 +1076,7 @@ namespace Plugins {
                     SDK::Orbwalker::InvokeAction(onArgs);
 
                     m_lastTarget = target;
-                    return; // Attack issued — don't move this frame
+                    return; // Attack issued â€” don't move this frame
                 }
             }
 
@@ -1237,7 +1257,7 @@ namespace Plugins {
         }
 
         // ====================================================================
-        // GetLaneClearMinion — returns a minion to attack in LaneClear mode
+        // GetLaneClearMinion â€” returns a minion to attack in LaneClear mode
         // Uses ShouldWait logic: if a minion will be last-hittable soon, wait
         // ====================================================================
         SDK::GameObject GetLaneClearMinion(float range) {
@@ -1252,3 +1272,4 @@ namespace Plugins {
     };
 
 } // namespace Plugins
+

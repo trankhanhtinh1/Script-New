@@ -95,9 +95,9 @@ namespace Function {
     constexpr auto IsBuilding           = 0x3087F0;     // [P] (was 0x308820)
     constexpr auto IsAlive              = 0x2E6320;     // [D][P] (was 0x2E6350)
     constexpr auto IsDead               = 0x29B350;     // [P][IDA] decompiled, obfuscated check (was 0x29B380)
-    constexpr auto IsTargetableByUnit   = 0x29E250;     // [P] (was 0x29E280)
+    constexpr auto IsTargetableByUnit   = 0x29E3D0;     // [P] (was 0x29E280)
     constexpr auto IsVulnerable         = 0x29C010;     // [P] (was 0x29C040)
-    constexpr auto IsJungleMonster      = 0x29C1E0;     // [P] (was 0x29C210)
+    constexpr auto IsJungleMonster      = 0x29D5D0;     // [P] (was 0x29C210)
     constexpr auto IsDragon             = 0x29B600;     // [P] (was 0x29B630)
     constexpr auto IsElderDragon        = 0x29B670;     // [P] (was 0x29B6A0)
     constexpr auto IsBaron              = 0x29AA60;     // [P] (was 0x29AA90)
@@ -126,7 +126,7 @@ namespace Function {
     constexpr auto OnGameUpdate         = 0x511180;     // [P] (was 0x511210)
     constexpr auto OnProcessSpell       = 0x920430;     // [P] (was 0x9204F0)
     constexpr auto OnSpellImpact        = 0x917B40;     // [P] (was 0x917C00)
-    constexpr auto OnStopCast           = 0x920740;     // [P] (was 0x920800)
+    constexpr auto OnStopCast           = 0x9204C0;     // [P] (was 0x920800)
     constexpr auto OnFinishCast         = 0x2C5730;     // [P] (was 0x2C5760)
     constexpr auto OnBuffAdd            = 0xBCDD30;     // [P] (was 0xBCDE00)
     constexpr auto CreateClientEffect   = 0x869DB0;     // [P] (was 0x869E70)
@@ -266,9 +266,11 @@ namespace HeroStats {
     constexpr auto FlatBaseHPPoolMod        = 0x2038;       // [D] base + 0x4B0
 
     // Armor & MR
-    constexpr auto Armor                    = 0x2060;       // [D] base + 0x4D8
-    constexpr auto BonusArmor               = 0x2088;       // [D] base + 0x500
-    constexpr auto SpellBlock               = 0x20B0;       // [D] base + 0x528  (MR)
+    // NOTE: Armor (0x2060) is TOTAL armor — already includes base + bonus.
+    //       BonusArmor removed intentionally; use Armor directly for all calcs.
+    constexpr auto Armor                    = 0x2060;       // [D] base + 0x4D8  (TOTAL armor — use this)
+    // BonusArmor                           = 0x2088        // REMOVED — would double-count vs. Armor total
+    constexpr auto SpellBlock               = 0x20B0;       // [D] base + 0x528  (MR, total)
     constexpr auto BonusSpellBlock          = 0x20D8;       // [D] base + 0x550
 
     // HP Regen
@@ -470,19 +472,49 @@ namespace Hud {
 
 // ================================================================
 // MISSILE OBJECT
+// IDA MCP verified (2026-03-08):
+//   sub_886AE0: missile init — copies CastInfo INLINE at missile+0x2C0
+//   sub_845A50: CastInfo copy function (full struct layout mapped)
+//   sub_90A0E0: missile collision — reads Position at +0x25C, CasterNetId at +0x358
+//   sub_49E9F0: returns *(missile+0x128) = SpellData ptr
+//   sub_28E710: returns *(missile+0x2C0) = first QWORD = SpellData ptr of CastInfo
+//
+// CastInfo is INLINE at missile+0x2C0 (NOT a pointer!)
+// Read fields directly: startPos = Read<Vec3>(missile + StartPos)
 // ================================================================
 namespace Missile {
-    constexpr auto SpellCastPtr     = 0x8;          // [S] ptr to SpellCast object
-    constexpr auto CastInfoBase     = 0x318;        // [IDA] sub_24E4E0: lea rcx,[r15+318h] (was 0x2C0→0x1C0 WRONG)
-    constexpr auto SpellDataInst    = 0x318;        // [IDA] first QWORD at CastInfoBase = SpellData ptr
-    constexpr auto SpellName        = 0x338;        // [IDA] CastInfo+0x20 (obfuscated ptr/value at obj+0x338)
-    constexpr auto MissileName      = 0x360;        // [IDA] CastInfo+0x48 (string init call sub_322440 confirmed)
-    constexpr auto StartPos         = 0x388;        // [IDA] CastInfo+0x70 vec3 (confirmed by Raxrot + IDA float access)
-    constexpr auto EndPos           = 0x394;        // [IDA] CastInfo+0x7C vec3 (confirmed: movss xmm0,[r10+394h])
-    constexpr auto CastEndPos       = 0x3A4;        // [IDA] CastInfo+0x8C vec3
-    constexpr auto CasterNetId      = 0x3B0;        // [IDA] CastInfo+0x98 int (source caster network id)
-    constexpr auto NetworkId        = 0x3BC;        // [IDA] CastInfo+0xA4 int (missile network id)
-    constexpr auto Position         = 0x25C;        // [S] inherited vec3 position (GameObject base)
+    // --- Missile Object (absolute offsets from missile base) ---
+    constexpr auto SpellDataPtr     = 0x128;        // [IDA] sub_49E9F0: *(missile+0x128) = SpellData ptr
+    constexpr auto Position         = 0x25C;        // [IDA] sub_90A0E0: Vec3 pos (inherited from GameObject)
+    constexpr auto CastInfoBase     = 0x2C0;        // [IDA] sub_886AE0: CastInfo struct INLINE here (NOT a pointer!)
+    constexpr auto MissileNetId     = 0x364;        // [IDA] sub_886AE0: [rsi+364h] = NetID (tree key) = CI+0xA4
+
+    // --- CastInfo fields — ABSOLUTE offsets from missile base (0x2C0 + CI_*) ---
+    //   Read directly: value = Read<T>(missile + offset)
+    constexpr auto CI_SpellData     = 0x2C0;        // [IDA] QWORD: SpellData ptr (CastInfo+0x00)
+    constexpr auto SpellName        = 0x2E0;        // [IDA] std::string SSO: spell name (CastInfo+0x20)
+    constexpr auto MissileName      = 0x308;        // [IDA] std::string SSO: missile name (CastInfo+0x48)
+    constexpr auto StartPos         = 0x330;        // [IDA] Vec3: start position (CastInfo+0x70)
+    constexpr auto EndPos           = 0x33C;        // [IDA] Vec3: end position (CastInfo+0x7C)
+    constexpr auto CastEndPos       = 0x34C;        // [IDA] Vec3: cast end position (CastInfo+0x8C)
+    constexpr auto CasterNetId      = 0x358;        // [IDA] int: source caster net id (CastInfo+0x98)
+    constexpr auto TargetNetId      = 0x35C;        // [IDA] int: target net id (CastInfo+0x9C)
+    constexpr auto CI_TargetNetId2  = 0x360;        // [IDA] int: secondary target (CastInfo+0xA0)
+    constexpr auto CI_MissileNetId  = 0x364;        // [IDA] int: missile net id (CastInfo+0xA4)
+
+    // --- CastInfo relative offsets (for code that needs CI base + offset pattern) ---
+    constexpr auto CI_REL_SpellData    = 0x00;      // [IDA] CastInfo+0x00
+    constexpr auto CI_REL_SpellName    = 0x20;      // [IDA] CastInfo+0x20
+    constexpr auto CI_REL_MissileName  = 0x48;      // [IDA] CastInfo+0x48
+    constexpr auto CI_REL_StartPos     = 0x70;      // [IDA] CastInfo+0x70
+    constexpr auto CI_REL_EndPos       = 0x7C;      // [IDA] CastInfo+0x7C
+    constexpr auto CI_REL_CastEndPos   = 0x8C;      // [IDA] CastInfo+0x8C
+    constexpr auto CI_REL_CasterNetId  = 0x98;      // [IDA] CastInfo+0x98
+    constexpr auto CI_REL_MissileNetId = 0xA4;      // [IDA] CastInfo+0xA4
+
+    // --- Legacy aliases ---
+    constexpr auto NetworkId        = MissileNetId; // 0x364
+    constexpr auto SpellDataInst    = CI_SpellData; // 0x2C0
 }
 
 // ================================================================
@@ -544,13 +576,13 @@ namespace ItemSystem {
 // navGrid ptr → +0x8 → Manager ptr → fields below
 // ================================================================
 namespace NavGrid {
-    constexpr auto NavGridMgr       = 0x8;          // [S]  navGrid+0x8  → Manager ptr
-    constexpr auto MinX             = 0xEC;         // [V]  manager+0xEC → float minX  (patch 15.24)
-    constexpr auto MinZ             = 0xF4;         // [V]  manager+0xF4 → float minZ  (patch 15.24)
-    constexpr auto Data             = 0x150;        // [S]  manager+0x150 → uint64 gridData ptr
-    constexpr auto Width            = 0x708;        // [S]  manager+0x708 → int width
-    constexpr auto Height           = 0x70C;        // [S]  manager+0x70C → int height
-    constexpr auto Scale            = 0x714;        // [S]  manager+0x714 → float scale (NavGridScale)
+    constexpr auto NavGridMgr       = 0x8;          // [S]
+    constexpr auto MinX             = 0x30;         // [D] changed! was 0xEC
+    constexpr auto MinZ             = 0x38;         // [D] estimated
+    constexpr auto Data             = 0x150;        // [S]
+    constexpr auto Width            = 0x708;        // [S]
+    constexpr auto Height           = 0x70C;        // [S]
+    constexpr auto Scale            = 0x714;        // [S]
 }
 
 // ================================================================

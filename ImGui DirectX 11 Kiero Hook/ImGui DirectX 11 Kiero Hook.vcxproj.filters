@@ -309,7 +309,7 @@
       <Filter>sdk\Utils</Filter>
     </ClInclude>
     <!-- Menu -->
-    <ClInclude Include="menu\BGXMenu.h">
+    <ClInclude Include="menu\NightSharpMenu.h">
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="menu\Menu.h">
