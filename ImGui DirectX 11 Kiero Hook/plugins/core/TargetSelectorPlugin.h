@@ -34,6 +34,11 @@ namespace Plugins {
         void OnLoad() override {
             m_menu = SDK::MenuUI::Menu::Create("TargetSelector", "Target Selector");
 
+            // Register this plugin to override SDK TargetSelector
+            SDK::TargetSelector::CustomTargetSelector = [this](float range, SDK::DamageType dmgType) {
+                return this->GetTarget(range, dmgType);
+            };
+
             // Priority sub-menu (per-enemy hero)
             m_priorityMenu = m_menu->AddSubMenu("Priority", "Priority");
             // Priorities will be populated on first update when enemies are known
@@ -84,6 +89,7 @@ namespace Plugins {
         }
 
         void OnUnload() override {
+            SDK::TargetSelector::CustomTargetSelector = nullptr;
             SDK::MenuUI::Menu::Remove("TargetSelector");
             m_menu.reset();
             m_priorityMenu.reset();
@@ -148,6 +154,30 @@ namespace Plugins {
                 auto* fowSlider = humMenu->Get<SDK::MenuUI::MenuSlider>("FowDelay");
                 if (fowSlider)
                     SDK::TargetSelectorHumanizer::FowDelay = (float)fowSlider->Value / 1000.0f;
+            }
+
+            // Sync TSMode from menu to SDK::TargetSelector::CurrentMode
+            // Menu indices: 0=Smart, 1=LowestHP, 2=Priority, 3=Weighted, 4=Closest,
+            //               5=NearMouse, 6=LeastAttacks, 7=MostAD, 8=MostAP
+            {
+                auto* modeList = m_menu->Get<SDK::MenuUI::MenuList>("TSMode");
+                if (modeList) {
+                    static const SDK::TargetSelector::Mode modeMap[] = {
+                        SDK::TargetSelector::Mode::AutoPriority,   // 0: Smart AD/AP
+                        SDK::TargetSelector::Mode::LowestHP,       // 1: Lowest Health
+                        SDK::TargetSelector::Mode::Priority,       // 2: Most Priority
+                        SDK::TargetSelector::Mode::Weighted,       // 3: Weighted
+                        SDK::TargetSelector::Mode::Closest,        // 4: Closest
+                        SDK::TargetSelector::Mode::NearMouse,      // 5: Near Mouse
+                        SDK::TargetSelector::Mode::LeastAttacks,   // 6: Least Attacks
+                        SDK::TargetSelector::Mode::MostAD,         // 7: Most AD
+                        SDK::TargetSelector::Mode::MostAP,         // 8: Most AP
+                    };
+                    int idx = modeList->Index;
+                    if (idx >= 0 && idx < 9) {
+                        SDK::TargetSelector::CurrentMode = modeMap[idx];
+                    }
+                }
             }
 
             // Sync "Only Attack Selected Target" flag to SDK::TargetSelector

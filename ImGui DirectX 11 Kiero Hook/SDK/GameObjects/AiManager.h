@@ -21,7 +21,7 @@ namespace SDK {
             if (!objAddr) return;
 
             __try {
-                // Read the obfuscation structure at verified offset 0x4038
+                // Read the obfuscation structure at verified offset 0x41F0
                 auto obf = Globals::Read<LeagueObfuscation<uint64_t>>(objAddr + Offset::AiManager::Offset);
 
                 if (obf.isInit) {
@@ -62,9 +62,14 @@ namespace SDK {
         // Positions
         // ====================================================================
 
-        Vec3 GetVelocity() const {
-            if (!IsValid()) return Vec3();
-            return Globals::Read<Vec3>(address + Offset::AiManager::Velocity);
+        float GetMoveSpeed() const {
+            if (!IsValid()) return 0.0f;
+            return Globals::Read<float>(address + Offset::AiManager::Velocity);
+        }
+
+        bool HasPath() const {
+            if (!IsValid()) return false;
+            return Globals::Read<int>(address + Offset::AiManager::HasPath) != 0;
         }
 
         Vec3 GetServerPosition() const {
@@ -84,7 +89,17 @@ namespace SDK {
 
         Vec3 GetTargetPosition() const {
             if (!IsValid()) return Vec3();
+            return Globals::Read<Vec3>(address + Offset::AiManager::TargetPosition);
+        }
+
+        Vec3 GetMoveVec3() const {
+            if (!IsValid()) return Vec3();
             return Globals::Read<Vec3>(address + Offset::AiManager::MoveVec3);
+        }
+
+        uintptr_t GetNavArrayPtr() const {
+            if (!IsValid()) return 0;
+            return Globals::Read<uintptr_t>(address + Offset::AiManager::NavArray);
         }
 
         // ====================================================================
