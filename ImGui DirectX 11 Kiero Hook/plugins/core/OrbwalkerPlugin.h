@@ -1257,7 +1257,7 @@ namespace Plugins {
         }
 
         // ====================================================================
-        // GetLaneClearMinion â€” returns a minion to attack in LaneClear mode
+        // GetLaneClearMinion advanced returns a minion to attack in LaneClear mode
         // Uses ShouldWait logic: if a minion will be last-hittable soon, wait
         // ====================================================================
         SDK::GameObject GetLaneClearMinion(float range) {
