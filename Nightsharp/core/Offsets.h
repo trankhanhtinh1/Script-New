@@ -3,7 +3,7 @@
 
 // ================================================================
 // League of Legends - Offsets
-// Updated: 2026-03-05 (Hotfix) (LOLDumper v5.0 + offsetplugin.hpp + IDA MCP)
+// Updated: 2026-03-12 (Hotfix) (LOLDumper v5.0 + offsetplugin.hpp + IDA MCP)
 // Binary: League of Legends.exe
 // Global/Function RVAs: from module size 0x202D000 (dump files)
 // Struct offsets: verified via IDA on module size 0x2342000
@@ -17,14 +17,13 @@
 //   [S]   = struct offsets (unchanged between versions)
 //   [C]   = chimera_structures.h reference (needs CE verify)
 //
-// Hotfix notes (2026-03-05):
-//   - Function RVAs shifted ~0x30 due to hotfix code changes
-//   - All globals remained STABLE (confirmed via IDA xrefs)
+// Hotfix notes (2026-03-12):
+//   - Function RVAs shifted +0x10 from 2026-03-05 hotfix
+//   - All globals remained STABLE (confirmed via LOLDumper scan)
 //   - Struct offsets STABLE (RegisterProperty-based, version-independent)
-//   - IssueOrder decompile confirms: qword_1D7A3D8=ObjMgr, qword_1D7A578=HUD,
-//     qword_1D7A3D0=NetInst, dword_1CDDF88=IssueOrderFlag
-//   - CastSpellSafe decompile confirms: byte_1CDDF20=CastSpellFlag,
-//     qword_1D7A428=MinionMgr
+//   - LOLDumper re-scan confirmed globals unchanged
+//   - Function deltas: IssueOrder +0x10, IsAlive +0x10, GetAttackDelay +0x10, etc.
+//   - CastSpellSafe still at same RVA (offsetplugin.hpp: 0xBB9E60 → needs +0x10 verify)
 //   - DetectionWatcher2 for Chimera-style mainloop_check is currently
 //     resolved at runtime by signature: 4C 8B 3D ? ? ? ? 4D 85 FF 0F
 //   - Current packet pipeline:
@@ -38,28 +37,28 @@ namespace Offset {
 // GLOBAL POINTERS / INSTANCES  (all stable across hotfix)
 // ================================================================
 namespace Global {
-    constexpr auto LocalPlayer      = 0x1DAB720;   // [D][P] local player ptr
-    constexpr auto HeroManager      = 0x1D7A430;   // [D][P] hero list ptr
-    constexpr auto GameTime         = 0x1D88540;    // [D][P] game time float
-    constexpr auto MissileManager   = 0x1D7DD50;   // [D] missile manager ptr
-    constexpr auto NavGrid          = 0x1D7DCC8;   // [D] navigation grid ptr
-    constexpr auto HudInstance      = 0x1D7A578;   // [D][P][IDA] HUD instance ptr (confirmed via IssueOrder decompile)
-    constexpr auto UnderMouseObj    = 0x1D7DF50;   // [D] object under mouse cursor
-    constexpr auto ViewPort         = 0x1D8D1B0;   // [D] viewport ptr
-    constexpr auto ObjectManager    = 0x1D7A3D8;   // [D][P][IDA] object manager instance (confirmed via IssueOrder decompile)
-    constexpr auto MinionManager    = 0x1D7A428;   // [CE][IDA] minion+jungle list (confirmed via CastSpellSafe decompile)
-    constexpr auto NetInstance      = 0x1D7A3D0;   // [IDA] net instance (confirmed via IssueOrder decompile, 970 xrefs)
-    constexpr auto CursorInstance   = 0x1E05698;   // [P] cursor position (Vec3)
-    constexpr auto MouseScreenVec2  = 0x1D7DCF8;   // [D] mouse 2D screen position
-    constexpr auto ChatClient       = 0x1D8D240;   // [IDA] chat client ptr (17 xrefs) — ChatClient+0x10 = chat open byte
-    constexpr auto ChatInstance     = 0x1D7DFA0;   // [IDA] chat instance (82 xrefs confirmed)
-    constexpr auto r3dRenderer      = 0x1E3FE78;   // [D] renderer instance (oViewPort2)
-    constexpr auto ViewPort2        = 0x1E3FE78;   // [D] viewport2/renderer
-    constexpr auto MySpellState     = 0x1D80AA0;   // [D] spell state global
-    constexpr auto TurretManager    = 0x1D87068;   // [CE][P][IDA] turret list (20 xrefs confirmed)
-    constexpr auto ShopInstance     = 0x1D8D258;   // [IDA] shop window instance ptr (sub_BC58F0 uses qword_1D8C258)
-    constexpr auto OpenWindowsArray = 0x1E3DC58;   // [IDA] ptr to array of open HUD window ptrs (sub_129FD80)
-    constexpr auto OpenWindowsCount = 0x1E3DC60;   // [IDA] dword count of open windows (dword_1E3CC60)
+    constexpr auto LocalPlayer      = 0x1DAB760;   // [D][P] local player ptr
+    constexpr auto HeroManager      = 0x1D7A470;   // [D][P] hero list ptr
+    constexpr auto GameTime         = 0x1D88580;   // [D][P] game time float
+    constexpr auto MissileManager   = 0x1D7DD90;   // [D] missile manager ptr
+    constexpr auto NavGrid          = 0x1D7DD08;   // [D] navigation grid ptr
+    constexpr auto HudInstance      = 0x1D7A5B8;   // [D][P] HUD instance ptr
+    constexpr auto UnderMouseObj    = 0x1D7DF90;   // [D] object under mouse cursor
+    constexpr auto ViewPort         = 0x1D8D1F0;   // [D] viewport ptr
+    constexpr auto ObjectManager    = 0x1D7A418;   // [D][P] object manager instance
+    constexpr auto MinionManager    = 0x1D7A468;   // [IDA] minion+jungle list (CastSpellSafe decompile: qword_1D7A468)
+    constexpr auto NetInstance      = 0x1D7A410;   // [IDA] net instance (Script-New had 0x1D7A3D0, new build +0x40)
+    constexpr auto CursorInstance   = 0x1E056D8;   // [P] cursor position (Vec3)
+    constexpr auto MouseScreenVec2  = 0x1D7DD38;   // [D] mouse 2D screen position
+    constexpr auto ChatClient       = 0x1D8D240;   // [IDA] fallback, needs verification
+    constexpr auto ChatInstance     = 0x1D7DFA0;   // [IDA] fallback
+    constexpr auto r3dRenderer      = 0x1E3FEB8;   // [D] renderer instance (oViewPort2)
+    constexpr auto ViewPort2        = 0x1E3FEB8;   // [D] viewport2/renderer
+    constexpr auto MySpellState     = 0x1D80AE0;   // [D] spell state global
+    constexpr auto TurretManager    = 0x1D870A8;   // [P] turret list
+    constexpr auto ShopInstance     = 0x1D8D258;   // [IDA] fallback
+    constexpr auto OpenWindowsArray = 0x1E3DC58;   // [IDA] fallback
+    constexpr auto OpenWindowsCount = 0x1E3DC60;   // [IDA] fallback
 }
 
 // ================================================================
@@ -76,75 +75,75 @@ namespace Flag {
 // FUNCTIONS (RVAs) — UPDATED for hotfix 2026-03-05
 // ================================================================
 namespace Function {
-    // Core
-    constexpr auto IssueOrderCore       = 0x29FBE0;     // [D][P][IDA] current IssueOrder core
-    constexpr auto IssueOrder           = IssueOrderCore; // Backward-compatible alias
-    constexpr auto IssueOrderPacketBuilder = 0x360CA0;  // [IDA] current IssueOrder packet builder
-    constexpr auto IssueOrderPacketPostSend = 0x2CE8C0; // [IDA] current IssueOrder post-send handler
-    constexpr auto WorldToScreen        = 0x1241220;    // [D][P] (was 0x1241320)
-    constexpr auto CastSpellWrapper     = 0x1E9A40;     // [D] (unchanged)
-    constexpr auto CastSpellSafe        = 0xBB9D10;     // [P][IDA] (was 0xBB9DE0)
-    constexpr auto CastSpellPacketA     = 0x91BF00;     // [IDA] normal cast packet path A
-    constexpr auto CastSpellPacketB     = 0x91B6B0;     // [IDA] normal cast packet path B
-    constexpr auto CastSpellPacketCharged = 0x91C7C0;   // [IDA] charged spell packet path
-    constexpr auto PacketSendCommon     = 0x686930;     // [IDA] shared packet sender
-    constexpr auto PacketSerializeCommon = 0x686970;    // [IDA] shared packet serializer/dispatch
-    constexpr auto PrintChat            = 0xAFE1F0;     // [D] (was 0xAFE2E0)
-    constexpr auto GetBoundingRadius    = 0x285610;     // [D][P] (was 0x285640)
-    constexpr auto GetAttackDelay       = 0x52C560;     // [D][P] (was 0x52C620)
-    constexpr auto GetAttackWindup      = 0x52C460;     // [D][P] GetAttackCastDelay (was 0x52C520)
-    constexpr auto GetCollisionFlags    = 0x1195A30;    // [D] (was 0x1195B30)
-    constexpr auto GetPing              = 0x669EE0;     // [D][P] (was 0x669FA0)
+    // Core — 2026-03-12 hotfix (+0x10 from 03-05)
+    constexpr auto IssueOrderCore       = 0x29FC20;     // [D] was 0x29FC10
+    constexpr auto IssueOrder           = IssueOrderCore;
+    constexpr auto IssueOrderPacketBuilder = 0x360CB0;  // Fallback (+0x10)
+    constexpr auto IssueOrderPacketPostSend = 0x2CE8D0; // Fallback (+0x10)
+    constexpr auto WorldToScreen        = 0x1241600;    // [D] was 0x1241370
+    constexpr auto CastSpellWrapper     = 0x1E9A80;     // [D] was 0x1E9A70
+    constexpr auto CastSpellSafe        = 0xBB9E00;     // [IDA] sub_BB9E00 (was 0xBB9E70 = MIDDLE of func!)
+    constexpr auto CastSpellPacketA     = 0x91BF10;     // Fallback (+0x10)
+    constexpr auto CastSpellPacketB     = 0x91B6C0;     // Fallback (+0x10)
+    constexpr auto CastSpellPacketCharged = 0x91C7D0;   // Fallback (+0x10)
+    constexpr auto PacketSendCommon     = 0x686940;     // Fallback (+0x10)
+    constexpr auto PacketSerializeCommon = 0x686980;    // Fallback (+0x10)
+    constexpr auto PrintChat            = 0x1095120;    // [P] (+0x10)
+    constexpr auto GetBoundingRadius    = 0x285650;     // [D] was 0x285640
+    constexpr auto GetAttackDelay       = 0x52C5A0;     // [D] was 0x52C590
+    constexpr auto GetAttackWindup      = 0x52C4A0;     // [D] was 0x52C490
+    constexpr auto GetCollisionFlags    = 0x1195E10;    // [D] was 0x1195B80
+    constexpr auto GetPing              = 0x669EB0;     // [D] was 0x669F10
 
     // Object Iteration
-    constexpr auto GetFirstObject       = 0x5128E0;     // [D] main iterator (was 0x512970)
-    constexpr auto GetFirstObjectAlt    = 0x9D02B0;     // [P] alt via plugin (was 0x9D03A0)
-    constexpr auto GetNextObject        = 0x5133D0;     // [D][P] (was 0x513460)
-    constexpr auto FindObject           = 0x5120D0;     // [P] (was 0x512160)
-    constexpr auto GetAiManager         = 0x50AAA0;     // [D] (was 0x50AB30)
-    constexpr auto GetAIManagerAlt      = 0x28D3D0;     // [P] (was 0x28D400)
+    constexpr auto GetFirstObject       = 0x512920;     // [D] was 0x512910
+    constexpr auto GetFirstObjectAlt    = 0x9D0410;     // [P] (+0x10)
+    constexpr auto GetNextObject        = 0x513410;     // [D] was 0x513400
+    constexpr auto FindObject           = 0x512110;     // [P] (+0x10)
+    constexpr auto GetAiManager         = 0x50AAE0;     // [D] was 0x50AAD0
+    constexpr auto GetAIManagerAlt      = 0x28D410;     // [P] (+0x10)
 
     // Type Checks
-    constexpr auto IsTurret             = 0x3085C0;     // [D] (was 0x3085F0)
-    constexpr auto IsHero               = 0x3086C0;     // [D] (was 0x3086F0)
-    constexpr auto IsBuilding           = 0x3087F0;     // [P] (was 0x308820)
-    constexpr auto IsAlive              = 0x2E6320;     // [D][P] (was 0x2E6350)
-    constexpr auto IsDead               = 0x29B350;     // [P][IDA] decompiled, obfuscated check (was 0x29B380)
-    constexpr auto IsTargetableByUnit   = 0x29E3D0;     // [P] (was 0x29E280)
-    constexpr auto IsVulnerable         = 0x29C010;     // [P] (was 0x29C040)
-    constexpr auto IsJungleMonster      = 0x29D5D0;     // [P] (was 0x29C210)
-    constexpr auto IsDragon             = 0x29B600;     // [P] (was 0x29B630)
-    constexpr auto IsElderDragon        = 0x29B670;     // [P] (was 0x29B6A0)
-    constexpr auto IsBaron              = 0x29AA60;     // [P] (was 0x29AA90)
-    constexpr auto IsSelectable         = 0x212140;     // [P] (was 0x212170)
-    constexpr auto CompareTypeFlags     = 0x29CD00;     // [P] (was 0x29CD30)
-    constexpr auto IsFleeing            = 0x20F300;     // [P] (was 0x20F330)
-    constexpr auto IsNoRender           = 0x20F350;     // [P][IDA] decompiled, checks flag 0x40000 (was 0x20F380)
-    constexpr auto GetJungleType        = 0x66CE30;     // [P] (was 0x66CEF0)
+    constexpr auto IsTurret             = 0x308600;     // [D] was 0x3085F0
+    constexpr auto IsHero               = 0x308700;     // [D] was 0x3086F0
+    constexpr auto IsBuilding           = 0x308830;     // [P] (+0x10)
+    constexpr auto IsAlive              = 0x2E6360;     // [D] was 0x2E6350
+    constexpr auto IsDead               = 0x29B390;     // [P] (+0x10)
+    constexpr auto IsTargetableByUnit   = 0x29E290;     // [P] (+0x10)
+    constexpr auto IsVulnerable         = 0x29C050;     // [P] (+0x10)
+    constexpr auto IsJungleMonster      = 0x29C220;     // [P] (+0x10)
+    constexpr auto IsDragon             = 0x29B640;     // [P] (+0x10)
+    constexpr auto IsElderDragon        = 0x29B6B0;     // [P] (+0x10)
+    constexpr auto IsBaron              = 0x29AAA0;     // [P] (+0x10)
+    constexpr auto IsSelectable         = 0x212180;     // [P] (+0x10)
+    constexpr auto CompareTypeFlags     = 0x29CD40;     // [P] (+0x10)
+    constexpr auto IsFleeing            = 0x20F340;     // [P] (+0x10)
+    constexpr auto IsNoRender           = 0x20F390;     // [P] (+0x10)
+    constexpr auto GetJungleType        = 0x66CE70;     // [P] (+0x10)
 
     // Attack / Combat
-    constexpr auto CanAttack            = 0x1F90A0;     // [P] (was 0x1F90D0)
-    constexpr auto GetSpellCastInfo     = 0x283EE0;     // [P] (was 0x283F10)
-    constexpr auto GetSpellSlot         = 0x90A8F0;     // [P] (was 0x90A9B0)
-    constexpr auto GetResourceType      = 0x281200;     // [P] (was 0x281230)
-    constexpr auto HasBuffOfType        = 0x2963D0;     // [P] (was 0x296400)
-    constexpr auto GetGoldRedirectTgt   = 0x1FF960;     // [P] (was 0x1FF990)
+    constexpr auto CanAttack            = 0x1F90E0;     // [P] (+0x10)
+    constexpr auto GetSpellCastInfo     = 0x283F20;     // [P] (+0x10)
+    constexpr auto GetSpellSlot         = 0x90AA50;     // [P] (+0x10)
+    constexpr auto GetResourceType      = 0x281240;     // [P] (+0x10)
+    constexpr auto HasBuffOfType        = 0x296410;     // [P] (+0x10)
+    constexpr auto GetGoldRedirectTgt   = 0x1FF9A0;     // [P] (+0x10)
 
     // Level Up
-    constexpr auto LevelSpell           = 0xBA39B0;     // [IDA] sub_BA39B0 — evtLevelSpell handler, edx=slot(0-3)
+    constexpr auto LevelSpell           = 0xBA39C0;     // Fallback (+0x10)
 
     // Map / Minimap
-    constexpr auto GetMapID             = 0x28E2E0;     // [D] (was 0x28E310)
+    constexpr auto GetMapID             = 0x28E320;     // [D] was 0x28E310
 
     // Hooks / Callbacks
-    constexpr auto OnCreateObject       = 0x517DE0;     // [P] (was 0x517E70)
-    constexpr auto OnGameUpdate         = 0x511180;     // [P] (was 0x511210)
-    constexpr auto OnProcessSpell       = 0x920430;     // [P] (was 0x9204F0)
-    constexpr auto OnSpellImpact        = 0x917B40;     // [P] (was 0x917C00)
-    constexpr auto OnStopCast           = 0x9204C0;     // [P] (was 0x920800)
-    constexpr auto OnFinishCast         = 0x2C5730;     // [P] (was 0x2C5760)
-    constexpr auto OnBuffAdd            = 0xBCDD30;     // [P] (was 0xBCDE00)
-    constexpr auto CreateClientEffect   = 0x869DB0;     // [P] (was 0x869E70)
+    constexpr auto OnCreateObject       = 0x517E20;     // [P] (+0x10)
+    constexpr auto OnGameUpdate         = 0x5111C0;     // [P] (+0x10)
+    constexpr auto OnProcessSpell       = 0x920590;     // [P] (+0x10)
+    constexpr auto OnSpellImpact        = 0x917CA0;     // [P] (+0x10)
+    constexpr auto OnStopCast           = 0x9208A0;     // [P] (+0x10)
+    constexpr auto OnFinishCast         = 0x2C5770;     // [P] (+0x10)
+    constexpr auto OnBuffAdd            = 0xBCDE90;     // [P] (+0x10)
+    constexpr auto CreateClientEffect   = 0x869E90;     // [P] (+0x10)
 }
 
 // ================================================================
@@ -395,6 +394,7 @@ namespace SpellBook {
 
     // SpellData
     constexpr auto DataSpellName    = 0x80;         // [S]
+    constexpr auto SpellInfoNamePtr = 0x28;         // [brute confirmed] ptr -> char*
     constexpr auto DataManaCost     = 0x5F4;        // [S]
     constexpr auto DataResource     = 0x8;          // [D]
 
@@ -509,9 +509,9 @@ namespace Missile {
     constexpr auto CI_SpellData     = 0x2C0;        // [IDA] QWORD: SpellData ptr (CastInfo+0x00)
     constexpr auto SpellName        = 0x2E0;        // [IDA] std::string SSO: spell name (CastInfo+0x20)
     constexpr auto MissileName      = 0x308;        // [IDA] std::string SSO: missile name (CastInfo+0x48)
-    constexpr auto StartPos         = 0x330;        // [IDA] Vec3: start position (CastInfo+0x70)
-    constexpr auto EndPos           = 0x33C;        // [IDA] Vec3: end position (CastInfo+0x7C)
-    constexpr auto CastEndPos       = 0x34C;        // [IDA] Vec3: cast end position (CastInfo+0x8C)
+    constexpr auto StartPos         = 0x388;        // [IDA] Vec3: start position (CastInfo+0xC8)
+    constexpr auto EndPos           = 0x394;        // [IDA] Vec3: end position (CastInfo+0xD4)
+    constexpr auto CastEndPos       = 0x3A4;        // [IDA] Vec3: cast end position (CastInfo+0xE4)
     constexpr auto CasterNetId      = 0x358;        // [IDA] int: source caster net id (CastInfo+0x98)
     constexpr auto TargetNetId      = 0x35C;        // [IDA] int: target net id (CastInfo+0x9C)
     constexpr auto CI_TargetNetId2  = 0x360;        // [IDA] int: secondary target (CastInfo+0xA0)
@@ -521,9 +521,9 @@ namespace Missile {
     constexpr auto CI_REL_SpellData    = 0x00;      // [IDA] CastInfo+0x00
     constexpr auto CI_REL_SpellName    = 0x20;      // [IDA] CastInfo+0x20
     constexpr auto CI_REL_MissileName  = 0x48;      // [IDA] CastInfo+0x48
-    constexpr auto CI_REL_StartPos     = 0x70;      // [IDA] CastInfo+0x70
-    constexpr auto CI_REL_EndPos       = 0x7C;      // [IDA] CastInfo+0x7C
-    constexpr auto CI_REL_CastEndPos   = 0x8C;      // [IDA] CastInfo+0x8C
+    constexpr auto CI_REL_StartPos     = 0xC8;      // [IDA] CastInfo+0xC8
+    constexpr auto CI_REL_EndPos       = 0xD4;      // [IDA] CastInfo+0xD4
+    constexpr auto CI_REL_CastEndPos   = 0xE4;      // [IDA] CastInfo+0xE4
     constexpr auto CI_REL_CasterNetId  = 0x98;      // [IDA] CastInfo+0x98
     constexpr auto CI_REL_MissileNetId = 0xA4;      // [IDA] CastInfo+0xA4
 
@@ -545,6 +545,27 @@ namespace Minion {
     constexpr auto LaneArray        = 0x68;         // [D] ptr to lane minion array (relative to MinionManager)
     constexpr auto LaneCount        = 0x70;         // [IDA] count of lane minions (relative to MinionManager)
     constexpr auto LaneType         = 0x4CC9;       // [CE] byte on obj: 4=Melee, 5=Ranged, 6=Cannon, 7=Super
+}
+
+// ================================================================
+// DRAGON — Offsets for dragon soul detection (IDA sub_456A90 + sub_457DE0)
+// ================================================================
+namespace Dragon {
+    constexpr auto CharacterHash    = 0x68;          // [IDA] DWORD hash on CharacterData (obj+CharData → +0x68)
+    // Dragon Name Hash Table (global dword_1D995C0, 9 entries × 40 bytes)
+    constexpr auto HashTable        = 0x1D995C0;     // [IDA] static hash table base
+    constexpr auto HashTableEnd     = 0x1D99728;     // [IDA] end sentinel
+    constexpr auto HashEntrySize    = 0x28;          // 40 bytes per entry (10 DWORDs)
+    // Pre-computed dragon name hashes (sub_1074EA0 on dragon names)
+    constexpr auto HashAir          = 0x11D34E07;    // SRU_Dragon_Air     → Cloud
+    constexpr auto HashFire         = 0x99A9F7D9;    // SRU_Dragon_Fire    → Infernal
+    constexpr auto HashWater        = 0x27F69DF4;    // SRU_Dragon_Water   → Ocean
+    constexpr auto HashEarth        = 0x606D3187;    // SRU_Dragon_Earth   → Mountain
+    constexpr auto HashHextech      = 0xA0808ACE;    // SRU_Dragon_Hextech → Hextech
+    constexpr auto HashChemtech     = 0xF94EBA26;    // SRU_Dragon_Chemtech→ Chemtech
+    constexpr auto HashRuined       = 0x518A146A;    // SRU_Dragon_Ruined  → Ruined
+    constexpr auto HashElder        = 0x5944DC07;    // SRU_Dragon_Elder   → Elder
+    constexpr auto HashParty        = 0x4B962AA3;    // SRU_Dragon_Party   → Party
 }
 
 // ================================================================
@@ -587,17 +608,49 @@ namespace ItemSystem {
 
 // ================================================================
 // NAV GRID
-// Source: sig 48 8B 05 ? ? ? ? 0F 28 DA → rva 0x1D32A80 (15.24)
-// navGrid ptr → +0x8 → Manager ptr → fields below
+// Source: sig 48 8B 05 ? ? ? ? 0F 28 DA → Global::NavGrid (0x1D7DD08)
+// Chain: navGridPtr → +0x8 → NavGridManager → fields below
+// IDA MCP verified (2026-03-11): decompile of GetCollisionFlags 
+// (0x1195B80), sub_1195BC0, sub_1190840, sub_119C040, sub_119C380,
+// sub_119C210, sub_119C4F0 — all access *(qword_1D7DD08 + 8) = mgr
+//
+// KEY FIX: MinX/MinZ were WRONG (0x30/0x38).
+// Decompile shows mgr[59] and mgr[61] → float at 59*4=0xEC, 61*4=0xF4
+// This was causing intermittent bush/wall detection failure.
 // ================================================================
 namespace NavGrid {
-    constexpr auto NavGridMgr       = 0x8;          // [S]
-    constexpr auto MinX             = 0x30;         // [D] changed! was 0xEC
-    constexpr auto MinZ             = 0x38;         // [D] estimated
-    constexpr auto Data             = 0x150;        // [S]
-    constexpr auto Width            = 0x708;        // [S]
-    constexpr auto Height           = 0x70C;        // [S]
-    constexpr auto Scale            = 0x714;        // [S]
+    // Pointer chain
+    constexpr auto NavGridMgr       = 0x8;          // [IDA] navGridPtr → +0x8 → manager
+
+    // Map bounds (float)
+    constexpr auto MinX             = 0xEC;         // [IDA] mgr[59] = world min X coordinate
+    constexpr auto MinZ             = 0xF4;         // [IDA] mgr[61] = world min Z coordinate
+    constexpr auto MaxX             = 0xF8;         // [IDA] mgr[62] = world max X coordinate
+    constexpr auto MaxZ             = 0x100;        // [IDA] mgr[64] = world max Z coordinate
+
+    // Cell data
+    constexpr auto Data             = 0x110;        // [IDA] mgr+272 = ptr to cell array (16 bytes per cell)
+    constexpr auto Width            = 0x708;        // [IDA] mgr+1800 = grid width (cells)
+    constexpr auto Height           = 0x70C;        // [IDA] mgr+1804 = grid height (cells)
+
+    // Scale
+    constexpr auto InverseScale     = 0x714;        // [IDA] mgr+1812 = 1/cellSize (MULTIPLY to get cell index)
+    constexpr auto Scale            = 0x710;        // [IDA] mgr[452] = cell size (used in bounds check)
+
+    // Grass/Brush detection
+    constexpr auto GrassRegions     = 0x158;        // [IDA] mgr+344 = grass region bitfield ptr
+
+    // Cell structure: 16 bytes per cell
+    // Layout: [uint64_t ptrData][uint16_t flags][uint16_t pad][uint32_t pad]
+    // If ptrData != 0: real flags = *(uint16_t*)(ptrData + 6)
+    // If ptrData == 0: real flags = cell.flags (at cell + 8)
+    constexpr auto CellSize         = 16;           // [IDA] bytes per cell
+
+    // Collision flag bitmask (from decompile of multiple functions)
+    constexpr uint16_t FLAG_WALL    = 0x0001;       // [IDA] sub_119C380: bit 0 = wall
+    constexpr uint16_t FLAG_NOWALK  = 0x0002;       // [IDA] sub_119C210: bit 1 = not walkable
+    constexpr uint16_t FLAG_BRUSH   = 0x0C00;       // [IDA] sub_119C140: bits 10-11 = brush/grass
+    constexpr uint16_t FLAG_SPECIAL = 0x1000;       // [IDA] sub_119C040: bit 12 = special terrain
 }
 
 // ================================================================
@@ -622,8 +675,8 @@ namespace Minimap {
 // ================================================================
 namespace Extra {
     constexpr auto TurretManager    = 0x1D87068;    // [P][IDA] 20 xrefs confirmed
-    constexpr auto ViewMatrixInst   = 0x1E2C030;    // [P][IDA] 5+ xrefs confirmed (view/projection matrix)
-    constexpr auto IsClone          = 0x2BB2A0;     // [P] function RVA (from dump binary 0x202D000)
+    constexpr auto ViewMatrixInst   = 0x1E2C070;    // [P] view/projection matrix (from offsetplugin.hpp)
+    constexpr auto IsClone          = 0x2BB2B0;     // [P] function RVA (+0x10)
 }
 
 // ================================================================
@@ -647,6 +700,95 @@ namespace JungleNames {
     constexpr auto SRU_Dragon       = 0x18d66B0;    // [IDA] "SRU_Dragon"
     constexpr auto SRU_Dragon_Elder = 0x18d66C0;    // [IDA] "SRU_Dragon_Elder"
     constexpr auto SRU_Baron        = 0x18e58D0;    // [IDA] "SRU_Baron"
+}
+
+// ================================================================
+// OBJECT TYPE FLAGS (obfuscated field at obj+0x4C)
+// Checked via CompareTypeFlags (sub_29CD30) — do NOT read directly!
+// Use: Function::CompareTypeFlags(obj, FLAG_xxx)
+// Found via IDA MCP decompile of sub_3088A0, sub_308B50, sub_3089A0, sub_308C70
+// ================================================================
+namespace TypeFlags {
+    constexpr auto ObfuscatedField  = 0x4C;          // [IDA] obj+76 in sub_29CD30
+    // Bit flags passed to CompareTypeFlags:
+    constexpr auto Minion           = 0x0400;         // [IDA] sub_3089A0: flag 1024
+    constexpr auto Hero             = 0x0800;         // [IDA] sub_308B50: flag 2048
+    constexpr auto JungleMonster    = 0x2000;         // [IDA] sub_3088A0: flag 8192 (IsJungleMonster)
+    constexpr auto LargeMonster     = 0x0080;         // [IDA] sub_345650: "Monster_Large" flag
+    constexpr auto BuffMonster      = 0x0100;         // [IDA] sub_345650: "Monster_Buff" flag
+    constexpr auto MinionSummon     = 0x0100;         // [IDA] sub_345650: "Minion_Summon" flag (same bit)
+    constexpr auto Plant            = 0x8000;         // [IDA] sub_345650: "Plant" flag 32768
+    constexpr auto CampMonster      = 0x10000;        // [IDA] sub_345650: 0x10000 after Plant
+    constexpr auto Crab             = 0x2000;         // [IDA] sub_345650: "Monster_Crab" flag
+    constexpr auto IsFleeing        = 0x0200;         // [IDA] sub_345650: fleeing check flag
+    constexpr auto AttackableObj    = 0x0008;         // [IDA] sub_345650: attackable
+    constexpr auto VisibleObj       = 0x0010;         // [IDA] sub_345650: visible flag
+    constexpr auto RenderTarget     = 0x0020;         // [IDA] sub_345650: render target
+    constexpr auto IsRecalling      = 0x4000;         // [IDA] sub_345650: recall check
+    constexpr auto HasUltimate      = 0x20000;        // [IDA] sub_345650: vtable+2552 check
+}
+
+// ================================================================
+// MINION CLASSIFICATION (from sub_BBB10 RegisterProperty table)
+// LaneMinionType byte value on the minion object, registered via
+// sub_10D1B80 with string name + numeric class ID
+// Access: use GetJungleType (Function::GetJungleType) or read
+//         the byte at the correct offset after finding it at runtime
+// Found via IDA MCP decompile of sub_BBB10
+// ================================================================
+namespace MinionClass {
+    // Class IDs (byte values):
+    constexpr auto Unset            = 0;              // [IDA] v50=0 "Unset"
+    constexpr auto Pet              = 1;              // [IDA] v54=1 "Pet"
+    constexpr auto JungleMonster    = 2;              // [IDA] v58=2 "JungleMonster"
+    constexpr auto TeamMinion       = 3;              // [IDA] v62=3 "TeamMinion"
+    constexpr auto MeleeLaneMinion  = 4;              // [IDA] v66=4 "MeleeLaneMinion"
+    constexpr auto RangedLaneMinion = 5;              // [IDA] v70=5 "RangedLaneMinion"
+    constexpr auto SiegeLaneMinion  = 6;              // [IDA] v74=6 "SiegeLaneMinion"
+    constexpr auto SuperLaneMinion  = 7;              // [IDA] v78=7 "SuperLaneMinion"
+}
+
+// ================================================================
+// JUNGLE TYPE (from CharacterData sub-object)
+// sub_345410 returns *(uint32_t*)(charData + 0x4A84)
+// charData = obj + GameObject::CharacterData (0x40C8)
+// GetJungleType (sub_66CE60) maps these to:
+//   1 → type:0 (Normal),  2 → type:2 (Buff/Dragon), 3 → type:1 (Baron-like)
+// Found via IDA MCP decompile of sub_345410 (returns charData+19076)
+// ================================================================
+namespace JungleType {
+    constexpr auto TypeOffset       = 0x4A84;         // [IDA] charData + 19076 in sub_345410
+
+    // Return values from GetJungleType:
+    constexpr auto Normal           = 0;              // [IDA] sub_66CE60: case v23-1
+    constexpr auto Baron            = 1;              // [IDA] sub_66CE60: v24==0 → return 1
+    constexpr auto Dragon           = 2;              // [IDA] sub_66CE60: v22==0 → return 2
+}
+
+// ================================================================
+// PLANT IDENTIFICATION
+// Plants are identified via TypeFlags::Plant (0x8000)
+// checked through CompareTypeFlags function
+// Plant string names (IDA):
+//   "Plant"             @ 0x18EF538
+//   "OnPlantActivated"  @ 0x1902660
+//   "AttackVisionplant" @ 0x18EBDA0
+// Dragon subtypes (IDA string addresses):
+//   SRU_Dragon_Air      @ 0x1908F78
+//   SRU_Dragon_Fire     @ 0x1908F88
+//   SRU_Dragon_Water    @ 0x1908F98
+//   SRU_Dragon_Earth    @ 0x1908FB0
+//   SRU_Dragon_Ruined   @ 0x1908FC8
+//   SRU_Dragon_Hextech  @ 0x1908FE8
+//   SRU_Dragon_Chemtech @ 0x1909000
+//   SRU_Dragon_Party    @ 0x1909018
+// ================================================================
+namespace PlantInfo {
+    // Plants are checked via: CompareTypeFlags(obj, TypeFlags::Plant)
+    // Plant types are distinguished by CharacterName (obj + 0x4330):
+    //   "SRU_Plant_Health"   → Honeyfruit (healing plant)
+    //   "SRU_Plant_Satchel"  → Blast Cone (knockback plant)
+    //   "SRU_Plant_Vision"   → Scryer's Bloom (vision plant)
 }
 
 } // namespace Offset

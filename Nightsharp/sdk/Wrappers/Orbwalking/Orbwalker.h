@@ -22,6 +22,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "sdk/Utils/DebugConsole.h"
+#include "sdk/Utils/JungleUtils.h"
 
 // ============================================================================
 // Orbwalker — Attack + Move logic with spoofcall
@@ -146,9 +148,6 @@ namespace SDK {
         static inline bool PluginOverrideActive = false;
         static void SetPluginOverrideActive(bool active) {
             PluginOverrideActive = active;
-            if (active) {
-                ActiveMode = OrbwalkingMode::None;
-            }
         }
         static bool IsPluginOverrideActive() {
             return PluginOverrideActive;
@@ -163,6 +162,8 @@ namespace SDK {
 
         // Last target that was attacked
         static inline GameObject LastTarget;
+        // Locked target to prevent switching mid-windup
+        static inline GameObject LockedTarget;
         // Forced target (set by plugin/script)
         static inline GameObject ForceTarget;
         // Lane-clear cached minion (EnsoulSharp selector behavior)
@@ -212,6 +213,7 @@ namespace SDK {
         static inline bool DrawExtraHoldPosition = false;
         static inline bool DrawKillableMinion = false;
         static inline bool DrawKillableMinionFade = false;
+        static inline bool DebugLaneClear = true;  // LaneClear target debug overlay
 
         static MenuUI::Menu* GetMenuRoot() {
             return MenuRoot.get();
@@ -600,6 +602,7 @@ namespace SDK {
             IssueOrder(3, target.GetPosition(), &target);
             LastAttackTime = Game::GetTime();
             LastTarget = target;
+            LockedTarget = target;
             MissileLaunched = false;
             LastAttackCommandTick = nowTick;
             BlockOrdersUntilTick = nowTick + minOrderGap;
@@ -758,7 +761,13 @@ namespace SDK {
             if (!player.IsValid()) return false;
             if (!unit.IsValid()) return false;
             const float checkRange = range > 0.0f ? range : player.GetRealAttackRange() + 65.0f;
-            if (!unit.IsValidTarget(checkRange, true, player.GetPosition())) return false;
+            if (!unit.IsAlive()) return false;
+            if (!unit.IsVisible()) return false;
+            if (player.DistanceTo(unit) > checkRange) return false;
+
+            // Neutral units can be targetable even if IsTargetable offset is unreliable.
+            const bool isNeutral = unit.GetTeam() == GameObjectTeam::Neutral;
+            if (!isNeutral && !unit.IsTargetable()) return false;
 
             const std::string lowerName = ToLower(unit.GetName());
             if (IsIgnoredMinionName(lowerName)) return false;
@@ -833,15 +842,53 @@ namespace SDK {
                 std::vector<GameObject> jungle;
                 for (auto& j : GameObjects::JungleMinions) {
                     if (!IsValidUnit(j, checkRange)) continue;
-                    const std::string lower = ToLower(j.GetName());
+
+                    // Skip plants, wards, barrels — they are NOT jungle targets
                     if (j.IsPlant()) continue;
-                    if (lower.find("plant") != std::string::npos) continue;
-                    if (lower.find("hiddenminionplantdemon") != std::string::npos) continue;
-                    if (lower.find("minimapicon") != std::string::npos) continue;
-                    if (lower == "gangplankbarrel") continue;
-                    jungle.push_back(j);
+                    if (j.IsWard()) continue;
+                    if (j.IsBarrel()) continue;
+
+                    // Skip decorative objects (empty name, very low HP)
+                    const std::string name = j.GetName();
+                    if (name.length() <= 1) continue;
+                    if (j.GetMaxHealth() <= 6.0f && j.GetTeam() == GameObjectTeam::Neutral) continue;
+
+                    // Use MinionType to filter: Jungle(2) is real jungle monster
+                    MinionType mt = j.GetMinionType();
+                    if (mt == MinionType::Jungle) {
+                        jungle.push_back(j);
+                        continue;
+                    }
+
+                    // Fallback: check via IsJungleMonster flag or known name
+                    if (j.IsJungleMonster() || JungleUtils::IsKnownJungleMonsterName(ToLower(name))) {
+                        jungle.push_back(j);
+                    }
                 }
                 auto orderedJungle = OrderJungleMinions(jungle);
+
+                // Debug: Log what we're including/excluding
+                if (DebugLaneClear && mode == OrbwalkingMode::LaneClear) {
+                    static float s_lastJungleDebugLog = 0.0f;
+                    float now = Game::GetTime();
+                    if (now - s_lastJungleDebugLog > 2.0f) {
+                        s_lastJungleDebugLog = now;
+                        for (auto& j : GameObjects::JungleMinions) {
+                            if (!IsValidUnit(j, checkRange)) continue;
+                            const std::string lname = ToLower(j.GetName());
+                            bool isPlantByFunc = j.IsPlant();
+                            bool isPlantByName = lname.find("plant") != std::string::npos;
+                            bool isPlantByUtil = JungleUtils::IsJunglePlantName(lname);
+                            bool filtered = isPlantByFunc || isPlantByName || isPlantByUtil;
+                            if (filtered) {
+                                DebugConsole::LogTagged("LC-Filter", "SKIP jungle: [%s] hp=%.0f maxHP=%.0f plant=%d plantName=%d plantUtil=%d",
+                                    j.GetName().c_str(), j.GetHealth(), j.GetMaxHealth(),
+                                    isPlantByFunc ? 1 : 0, isPlantByName ? 1 : 0, isPlantByUtil ? 1 : 0);
+                            }
+                        }
+                    }
+                }
+
                 minionList.insert(minionList.end(), orderedJungle.begin(), orderedJungle.end());
             }
 
@@ -921,6 +968,14 @@ namespace SDK {
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return GameObject();
 
+            if (LockedTarget.IsValid()) {
+                if (LockedTarget.IsAlive() &&
+                    player.IsInAttackRange(LockedTarget) &&
+                    !CanAttack()) {
+                    return LockedTarget;
+                }
+            }
+
             const float range = player.GetRealAttackRange() + 65.0f;
             const bool prioritizeFarm = MenuBool("prioritizeFarm", true, "advanced");
 
@@ -936,14 +991,46 @@ namespace SDK {
                 minions = GetMinions(mode);
             }
 
+            // ===============================
+            // FIX: sort minions by predicted hp
+            // ===============================
+            std::sort(minions.begin(), minions.end(),
+            [&](const GameObject& a, const GameObject& b)
+            {
+                if (!a.IsValid() || !b.IsValid())
+                    return false;
+
+                const float timeA =
+                    AutoAttackUtil::GetTimeToHit(GameObjects::Player, a) +
+                    (FarmDelay * 1000.0f);
+
+                const float timeB =
+                    AutoAttackUtil::GetTimeToHit(GameObjects::Player, b) +
+                    (FarmDelay * 1000.0f);
+
+                float hpA = HealthPrediction::GetPrediction(a, timeA);
+                float hpB = HealthPrediction::GetPrediction(b, timeB);
+
+                return hpA < hpB;
+            });
+
             // Killable minion pass: LaneClear/Harass(=Hybrid)/LastHit
             if (mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Harass || mode == OrbwalkingMode::LastHit) {
                 for (auto& minion : minions) {
                     if (!minion.IsValid() || !minion.IsAlive()) continue;
                     if (!player.IsInAttackRange(minion)) continue;
 
-                    const float autoDamage = player.GetAutoAttackDamage(minion);
-                    if (minion.GetHealth() < autoDamage) {
+                    const float predictMs =
+                        AutoAttackUtil::GetTimeToHit(player, minion) +
+                        (FarmDelay * 1000.0f);
+
+                    const float predHp =
+                        HealthPrediction::GetPrediction(minion, predictMs);
+
+                    const float dmg =
+                        player.GetAutoAttackDamage(minion);
+
+                    if (predHp > 0.0f && predHp <= dmg) {
                         return minion;
                     }
 
@@ -952,9 +1039,7 @@ namespace SDK {
                             return minion;
                         }
                     } else {
-                        const float predictMs = AutoAttackUtil::GetTimeToHit(player, minion) + (FarmDelay * 1000.0f);
-                        const float pred = HealthPrediction::GetPrediction(minion, predictMs);
-                        if (pred <= 0.0f) {
+                        if (predHp <= 0.0f) {
                             OrbwalkingActionArgs nonKillable;
                             nonKillable.Type = OrbwalkingType::NonKillableMinion;
                             nonKillable.Target = minion;
@@ -962,7 +1047,7 @@ namespace SDK {
                             nonKillable.Process = true;
                             InvokeAction(nonKillable);
                         }
-                        if (pred > 0.0f && pred < autoDamage) {
+                        if (predHp > 0.0f && predHp < dmg) {
                             return minion;
                         }
                     }
@@ -1004,16 +1089,33 @@ namespace SDK {
                     if (minion.GetTeam() != GameObjectTeam::Neutral) return;
                     if (!player.IsInAttackRange(minion)) return;
 
-                    const std::string lower = ToLower(minion.GetName());
-                    if (lower.find("plant") != std::string::npos) return;
-                    if (lower.find("hiddenminionplantdemon") != std::string::npos) return;
-                    if (lower.find("minimapicon") != std::string::npos) return;
+                    // Skip plants, wards, barrels
+                    if (minion.IsPlant()) return;
+                    if (minion.IsWard()) return;
+                    if (minion.IsBarrel()) return;
 
+                    std::string name = minion.GetName();
+                    if (name.empty()) name = minion.GetChampionName();
+                    if (name.length() <= 1) return;
+                    if (minion.GetMaxHealth() <= 6.0f) return;
+                    if (JungleUtils::IsJunglePlantName(name)) return;
+
+                    // Must be a real jungle monster
+                    MinionType mt = minion.GetMinionType();
+                    if (mt != MinionType::Jungle &&
+                        !JungleUtils::IsKnownJungleMonsterName(ToLower(name))) {
+                        return;
+                    }
+
+                    // Priority based on game functions (fast, no string matching)
                     float priority = minion.GetMaxHealth();
-                    if (lower.find("baron") != std::string::npos) priority += 100000.0f;
-                    if (lower.find("dragon") != std::string::npos) priority += 50000.0f;
-                    if (lower.find("rift") != std::string::npos || lower.find("herald") != std::string::npos) priority += 30000.0f;
-                    if (lower.find("atakhan") != std::string::npos) priority += 30000.0f;
+                    if (minion.IsBaron()) priority += 100000.0f;
+                    else if (minion.IsDragon()) priority += 50000.0f;
+                    else {
+                        const std::string lower = ToLower(name);
+                        if (lower.find("rift") != std::string::npos || lower.find("herald") != std::string::npos) priority += 30000.0f;
+                        if (lower.find("atakhan") != std::string::npos) priority += 30000.0f;
+                    }
 
                     if (priority > bestPriority) {
                         bestPriority = priority;
@@ -1120,38 +1222,47 @@ namespace SDK {
 
             // Lane clear non-last-hit push target
             if (mode == OrbwalkingMode::LaneClear) {
-                if (!ShouldWait()) {
-                    if (LaneClearMinion.IsValid() && player.IsInAttackRange(LaneClearMinion)) {
-                        if (LaneClearMinion.GetMaxHealth() <= 10.0f) {
-                            return LaneClearMinion;
-                        }
+                if (ShouldWait()) {
+                    if (HealthPrediction::LaneClearWait()) {
+                        return GameObject();
+                    }
+                }
 
-                        const float pred = HealthPrediction::GetPrediction(
-                            LaneClearMinion,
-                            (player.GetAttackDelay() * 2000.0f) + (FarmDelay * 1000.0f));
-                        if (pred >= 2.0f * player.GetAutoAttackDamage(LaneClearMinion) ||
-                            fabsf(pred - LaneClearMinion.GetHealth()) < 0.001f) {
-                            return LaneClearMinion;
-                        }
+                if (LaneClearMinion.IsValid() && player.IsInAttackRange(LaneClearMinion)) {
+                    if (LaneClearMinion.GetMaxHealth() <= 10.0f) {
+                        return LaneClearMinion;
                     }
 
-                    for (auto& minion : minions) {
-                        if (minion.GetTeam() == GameObjectTeam::Neutral) continue;
-                        if (!player.IsInAttackRange(minion)) continue;
+                    const float pred = HealthPrediction::GetPrediction(
+                        LaneClearMinion,
+                        (player.GetAttackDelay() * 2000.0f) + (FarmDelay * 1000.0f));
+                    if (pred >= 2.0f * player.GetAutoAttackDamage(LaneClearMinion) ||
+                        fabsf(pred - LaneClearMinion.GetHealth()) < 0.001f) {
+                        return LaneClearMinion;
+                    }
+                }
 
-                        if (minion.GetMaxHealth() <= 10.0f) {
-                            LaneClearMinion = minion;
-                            return minion;
-                        }
+                for (auto& minion : minions)
+                {
+                    if (minion.GetTeam() == GameObjectTeam::Neutral)
+                        continue;
 
-                        const float pred = HealthPrediction::GetPrediction(
+                    if (!GameObjects::Player.IsInAttackRange(minion))
+                        continue;
+
+                    float pred =
+                        HealthPrediction::GetPrediction(
                             minion,
-                            (player.GetAttackDelay() * 2000.0f) + (FarmDelay * 1000.0f));
-                        if (pred >= 2.0f * player.GetAutoAttackDamage(minion) ||
-                            fabsf(pred - minion.GetHealth()) < 0.001f) {
-                            LaneClearMinion = minion;
-                            return minion;
-                        }
+                            (GameObjects::Player.GetAttackDelay() * 2000.0f) +
+                            (FarmDelay * 1000.0f));
+
+                    float dmg =
+                        GameObjects::Player.GetAutoAttackDamage(minion);
+
+                    if (pred >= 2.0f * dmg)
+                    {
+                        LaneClearMinion = minion;
+                        return minion;
                     }
                 }
             }
@@ -1180,6 +1291,7 @@ namespace SDK {
             if (!player.IsValid()) return;
 
             GameObject target = GetTarget(mode);
+            LastTarget = target;  // Cache for debug overlay
             if (target.IsValid() && CanAttack() && AttackState && player.IsInAttackRange(target)) {
                 Attack(target);
             }
@@ -1217,8 +1329,12 @@ namespace SDK {
             if (DrawKillableMinion) {
                 for (auto& minion : GameObjects::EnemyMinions) {
                     if (!minion.IsAlive() || !minion.IsVisible()) continue;
-                    if (player.DistanceTo(minion) > player.GetRealAttackRange() * 2.0f) continue;
+                    // ONLY draw for real lane minions — not plants, wards, special objects
+                    if (!minion.IsMinion()) continue;
+                    if (minion.GetMaxHealth() <= 6.0f) continue; // Skip plants/objects
+                    if (player.DistanceTo(minion) > player.GetRealAttackRange() * 1.5f) continue;
                     float dmg = DamageCalc::GetAutoAttackDamage(player, minion, false, true);
+                    if (dmg <= 0.01f) continue;
                     float alpha = 220.0f;
                     if (DrawKillableMinionFade && dmg > 1.0f) {
                         const float t = std::clamp(minion.GetHealth() / dmg, 0.0f, 1.0f);
@@ -1228,6 +1344,136 @@ namespace SDK {
                         Drawing::DrawCircle(minion.GetPosition(), minion.GetBoundingRadius() * 2.0f, IM_COL32(0, 255, 0, (int)alpha), 1.4f);
                     }
                 }
+            }
+
+            // ---- LaneClear Debug Overlay (throttled to avoid FPS drop) ----
+            if (DebugLaneClear && (ActiveMode == OrbwalkingMode::LaneClear || ActiveMode == OrbwalkingMode::LastHit)) {
+                static int s_debugFrameCounter = 0;
+                if (++s_debugFrameCounter >= 3) { // Only render every 3 frames
+                    s_debugFrameCounter = 0;
+                    DrawLaneClearDebugOverlay();
+                }
+            }
+        }
+
+        // ====================================================================
+        // LaneClear Debug: Shows what orbwalker is targeting and why
+        // Uses cached LastTarget to avoid calling GetTarget() again (expensive!)
+        // ====================================================================
+        static void DrawLaneClearDebugOverlay() {
+            const auto& player = GameObjects::Player;
+            if (!player.IsValid() || !player.IsAlive()) return;
+
+            const float aaRange = player.GetRealAttackRange() + 65.0f;
+            const float now = Game::GetTime();
+            static float lastDebugLogTime = 0.0f;
+            const bool shouldLog = (now - lastDebugLogTime > 2.0f);
+
+            float px = 10.0f;
+            float py = 350.0f;
+            float lh = 14.0f;
+            int line = 0;
+            char buf[300] = {};
+
+            auto drawDbgLine = [&](const char* text, ImU32 color = IM_COL32(230, 230, 230, 255)) {
+                Drawing::DrawScreenText(Vec2(px, py + lh * line++), text, color);
+            };
+
+            const char* modeName = (ActiveMode == OrbwalkingMode::LaneClear) ? "LaneClear" : "LastHit";
+            snprintf(buf, sizeof(buf), "=== Orbwalker [%s] Debug ===", modeName);
+            drawDbgLine(buf, IM_COL32(255, 220, 80, 255));
+
+            // Use cached LastTarget instead of calling GetTarget() again (FPS fix!)
+            GameObject currentTarget = LastTarget;
+            if (currentTarget.IsValid() && currentTarget.IsAlive() && player.IsInAttackRange(currentTarget)) {
+                std::string targetName = currentTarget.GetName();
+                if (targetName.empty()) {
+                    char tmp[64];
+                    snprintf(tmp, sizeof(tmp), "(noname_netId=%d)", currentTarget.GetNetId());
+                    targetName = tmp;
+                }
+                std::string targetLower = ToLower(targetName);
+                const char* targetType = "UNKNOWN";
+                bool isPlant = currentTarget.IsPlant() || JungleUtils::IsJunglePlantName(targetLower);
+                if (isPlant) {
+                    targetType = "PLANT (!)";
+                } else if (currentTarget.IsHero()) {
+                    targetType = "HERO";
+                } else if (currentTarget.IsTurret()) {
+                    targetType = "TURRET";
+                } else if (currentTarget.GetTeam() == GameObjectTeam::Neutral) {
+                    JungleType jType = JungleUtils::GetJungleType(currentTarget);
+                    switch (jType) {
+                    case JungleType::Legendary: targetType = "JUNGLE(Epic)"; break;
+                    case JungleType::Large: targetType = "JUNGLE(Large)"; break;
+                    case JungleType::Small: targetType = "JUNGLE(Small)"; break;
+                    default: targetType = "JUNGLE(?)"; break;
+                    }
+                } else if (currentTarget.IsMinion()) {
+                    targetType = "MINION";
+                }
+
+                float aaDmg = player.GetAutoAttackDamage(currentTarget);
+                float predMs = (player.GetAttackDelay() * 2000.0f) + (Orbwalker::FarmDelay * 1000.0f);
+                float predHP = HealthPrediction::GetPrediction(currentTarget, predMs);
+
+                snprintf(buf, sizeof(buf), "TARGET: [%s] %s", targetType, targetName.c_str());
+                ImU32 targetColor = isPlant ? IM_COL32(255, 60, 60, 255) : IM_COL32(100, 255, 120, 255);
+                drawDbgLine(buf, targetColor);
+
+                snprintf(buf, sizeof(buf), "  hp=%.0f/%.0f  aa_dmg=%.0f  pred_hp=%.0f  kill=%s",
+                    currentTarget.GetHealth(), currentTarget.GetMaxHealth(),
+                    aaDmg, predHP, (predHP > 0 && predHP < aaDmg) ? "YES" : "no");
+                drawDbgLine(buf, IM_COL32(180, 200, 255, 240));
+
+                snprintf(buf, sizeof(buf), "  team=%d  netId=%d  dist=%.0f  tgt=%d",
+                    (int)currentTarget.GetTeam(), currentTarget.GetNetId(),
+                    player.DistanceTo(currentTarget),
+                    currentTarget.IsTargetable() ? 1 : 0);
+                drawDbgLine(buf, IM_COL32(160, 180, 220, 220));
+
+                // Draw circle around target
+                Drawing::DrawCircle(currentTarget.GetPosition(),
+                    currentTarget.GetBoundingRadius() * 2.0f + 20.0f,
+                    isPlant ? IM_COL32(255, 50, 50, 230) : IM_COL32(50, 255, 100, 220), 2.5f);
+
+                if (shouldLog) {
+                    DebugConsole::LogTagged("LC-Target", "[%s] %s -> [%s] hp=%.0f/%.0f dmg=%.0f pred=%.0f tgtable=%d",
+                        modeName, targetType, targetName.c_str(),
+                        currentTarget.GetHealth(), currentTarget.GetMaxHealth(), aaDmg, predHP,
+                        currentTarget.IsTargetable() ? 1 : 0);
+                }
+            } else {
+                drawDbgLine("TARGET: (none)", IM_COL32(200, 200, 200, 180));
+            }
+
+            // Show nearby jungle units in range (where plant confusion happens)
+            drawDbgLine("--- Nearby Jungle ---", IM_COL32(180, 180, 200, 200));
+            int shown = 0;
+            for (auto& j : GameObjects::JungleMinions) {
+                if (!j.IsValid() || !j.IsAlive()) continue;
+                if (player.DistanceTo(j) > aaRange * 1.3f) continue;
+                if (shown >= 6) break;
+
+                std::string jungleName = j.GetName();
+                std::string jLower = ToLower(jungleName);
+                bool isPlant = j.IsPlant() || JungleUtils::IsJunglePlantName(jLower) || (j.GetMaxHealth() <= 6.0f);
+                bool inRange = player.IsInAttackRange(j);
+                const char* typeStr = isPlant ? "PLANT" : "MON";
+
+                snprintf(buf, sizeof(buf), "  [%s] %s hp=%.0f/%.0f %s",
+                    typeStr, jungleName.c_str(), j.GetHealth(), j.GetMaxHealth(),
+                    inRange ? "IN" : "out");
+                drawDbgLine(buf, isPlant ? IM_COL32(255, 100, 100, 220) : IM_COL32(100, 200, 255, 210));
+
+                if (isPlant && inRange) {
+                    Drawing::DrawCircle(j.GetPosition(), 30.0f, IM_COL32(255, 50, 50, 200), 2.0f);
+                }
+                ++shown;
+            }
+
+            if (shouldLog) {
+                lastDebugLogTime = now;
             }
         }
 
@@ -1266,3 +1512,4 @@ namespace SDK {
     };
 
 } // namespace SDK
+

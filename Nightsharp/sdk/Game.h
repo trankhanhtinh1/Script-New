@@ -12,7 +12,35 @@
 // ============================================================================
 
 namespace SDK {
+
+    // Global event tick counter — incremented each script tick
+    inline int EventSystemTick = 0;
+
 namespace Game {
+
+    // ========================================================================
+    // Script Tick Rate Limiter
+    // Reference: Script-New "update limit tick for script"
+    // Logic runs at 45 FPS (fixed), render runs at full framerate.
+    // Benefits: ~6x less CPU, ~6x less memory reads, safer vs anti-cheat.
+    // ========================================================================
+    inline int ScriptFrameId = 0;
+    inline double LastScriptTickWallClock = 0.0;
+    inline constexpr double ScriptTickRate = 45.0;
+    inline constexpr double ScriptTickIntervalMs = 1000.0 / ScriptTickRate;  // ~22.2ms
+
+    inline int GetScriptFrameId() {
+        return ScriptFrameId;
+    }
+
+    inline void AdvanceScriptFrame(double nowMs) {
+        ++ScriptFrameId;
+        LastScriptTickWallClock = nowMs;
+    }
+
+    inline bool ShouldRunScriptTick(double nowMs) {
+        return (nowMs - LastScriptTickWallClock) >= ScriptTickIntervalMs;
+    }
 
     // Get current game time (seconds)
     inline float GetTime() {

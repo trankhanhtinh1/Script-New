@@ -357,6 +357,44 @@ namespace Plugins {
                    EqualsIgnoreCase(buffName, "PykeQ");
         }
 
+        static std::string GetObjectNameSafe(const SDK::GameObject& obj) {
+            std::string name = obj.GetName();
+            if (name.empty()) {
+                name = obj.GetChampionName();
+            }
+            return name;
+        }
+
+        static bool IsPlantLike(const SDK::GameObject& obj) {
+            if (!obj.IsValid()) {
+                return false;
+            }
+
+            if (obj.IsPlant()) {
+                return true;
+            }
+
+            std::string name = GetObjectNameSafe(obj);
+            if (!name.empty()) {
+                const std::string lower = SDK::JungleUtils::ToLower(name);
+                if (lower.find("plant") != std::string::npos) {
+                    return true;
+                }
+                if (SDK::JungleUtils::IsJunglePlantName(lower)) {
+                    return true;
+                }
+            }
+
+            if (obj.GetTeam() == SDK::GameObjectTeam::Neutral) {
+                const float maxHP = obj.GetMaxHealth();
+                if (maxHP > 0.0f && maxHP <= 6.0f) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         void OnBuffAdd(const SDK::BuffChangeArgs& args) {
             const auto& player = SDK::GameObjects::Player;
             if (!player.IsValid() || !args.Unit.IsValid() || !args.Unit.IsMe() || !E.IsReady()) {
@@ -655,6 +693,10 @@ namespace Plugins {
                     continue;
                 }
 
+                if (IsPlantLike(minion) || minion.GetTeam() == SDK::GameObjectTeam::Neutral) {
+                    continue;
+                }
+
                 const float hpPred = Q.GetHealthPrediction(minion);
                 float qDamage = Q.GetDamage(minion);
                 if (qDamage <= 0.0f) {
@@ -680,65 +722,43 @@ namespace Plugins {
             if (!player.IsValid()) {
                 return;
             }
-
+        
             const bool useQ = m_jungleClearMenu->GetBoolValue("useQ", false);
             const bool useW = m_jungleClearMenu->GetBoolValue("useW", false);
-            const int mana = m_jungleClearMenu->GetSliderValue("ManaCL", 15);
-            (void)mana; // Source logic reads this value but does not use it in clear checks.
-
-            auto isValidJungleMob = [](const SDK::GameObject& obj) {
-                if (!obj.IsValid() || !obj.IsAlive()) {
-                    return false;
-                }
-
-                if (obj.IsPlant()) {
-                    return false;
-                }
-
-                std::string name = obj.GetName();
-                if (name.empty()) {
-                    name = obj.GetChampionName();
-                }
-                std::string lowerName = name;
-                std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) {
-                    return (char)std::tolower(c);
-                });
-
-                if (SDK::JungleUtils::IsJunglePlantName(lowerName)) {
-                    return false;
-                }
-
-                const SDK::JungleType jungleType = SDK::JungleUtils::GetJungleType(obj);
-                if (jungleType != SDK::JungleType::Unknown) {
-                    return true;
-                }
-
-                return obj.IsJungleMonster() && SDK::JungleUtils::IsKnownJungleMonsterName(lowerName);
-            };
-
+        
             auto mobs = SDK::GameObjects::GetJungleMonstersInRange(Q.Range, player.GetPosition());
-            mobs.erase(std::remove_if(mobs.begin(), mobs.end(),
-                                      [&](const SDK::GameObject& obj) { return !isValidJungleMob(obj); }),
-                       mobs.end());
-            std::sort(mobs.begin(), mobs.end(), [](const SDK::GameObject& a, const SDK::GameObject& b) {
-                return a.GetMaxHealth() < b.GetMaxHealth();
-            });
-
-            auto targets = SDK::GameObjects::GetJungleMonstersInRange(Q.Range, player.GetPosition());
-            targets.erase(std::remove_if(targets.begin(), targets.end(),
-                                         [&](const SDK::GameObject& obj) { return !isValidJungleMob(obj); }),
-                          targets.end());
-            if (targets.empty()) {
+        
+            // Remove invalid jungle objects (plants, wards, etc.)
+            mobs.erase(
+                std::remove_if(mobs.begin(), mobs.end(),
+                    [](const SDK::GameObject& obj) {
+                        if (!obj.IsValid() || !obj.IsAlive())
+                            return true;
+        
+                        if (SDK::JungleUtils::GetJungleType(obj) == SDK::JungleType::Unknown)
+                            return true;
+        
+                        return false;
+                    }),
+                mobs.end());
+        
+            if (mobs.empty())
                 return;
-            }
-
+        
+            // Prioritize big monsters
+            std::sort(mobs.begin(), mobs.end(),
+                [](const SDK::GameObject& a, const SDK::GameObject& b) {
+                    return SDK::JungleUtils::GetJungleType(a) >
+                           SDK::JungleUtils::GetJungleType(b);
+                });
+        
             if (useW && W.IsReady()) {
-                for (const auto& obj : targets) {
-                    if (!obj.IsValidTarget(W.Range)) {
+                for (const auto& mob : mobs) {
+                    if (!mob.IsValidTarget(W.Range))
                         continue;
-                    }
-                    if (SDK::JungleUtils::GetJungleType(obj) >= SDK::JungleType::Legendary) {
-                        auto pred = W.GetPrediction(obj, false, -1.0f, SDK::CollisionYasuoWall | SDK::CollisionHeroes);
+        
+                    if (SDK::JungleUtils::GetJungleType(mob) >= SDK::JungleType::Legendary) {
+                        auto pred = W.GetPrediction(mob);
                         if ((int)pred.Hitchance >= (int)SDK::HitChance::High) {
                             W.Cast(pred.CastPosition);
                             break;
@@ -746,10 +766,10 @@ namespace Plugins {
                     }
                 }
             }
-
-            if (!mobs.empty() && useQ && Q.IsReady()) {
+        
+            if (useQ && Q.IsReady()) {
                 const auto& mob = mobs.front();
-                if (player.GetPosition().Distance2D(mob.GetPosition()) < Q.Range) {
+                if (player.GetPosition().Distance2D(mob.GetPosition()) <= Q.Range) {
                     Q.Cast(mob.GetPosition());
                 }
             }
@@ -762,7 +782,7 @@ namespace Plugins {
             }
 
             const int mana = m_laneClearMenu->GetSliderValue("ManaCL", 15);
-            if (player.GetManaPercent() >= (float)mana) {
+            if (player.GetManaPercent() < (float)mana) {
                 return;
             }
 
@@ -775,6 +795,10 @@ namespace Plugins {
             candidates.reserve(minions.size());
 
             for (const auto& minion : minions) {
+                if (IsPlantLike(minion) || minion.GetTeam() == SDK::GameObjectTeam::Neutral) {
+                    continue;
+                }
+
                 if (!minion.IsValidTarget(Q.Range) || !minion.IsMinion()) {
                     continue;
                 }

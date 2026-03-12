@@ -14,3 +14,9 @@ Changelog 7/3/2026:
 - Fix ImGui compatibility for older versions by removing BeginDisabled/EndDisabled and PushItemFlag usage
 - Keep default-load UI state via alpha styling only to avoid old ImGui API compile errors"
 
+Changelog 12/3/2026
+
+- bug Ezreal cast Q plant,... (JungleClear)
+- wrong method drawing skillshot
+- miss Safe Position Solver
+- bug don't doge

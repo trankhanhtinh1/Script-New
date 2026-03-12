@@ -82,13 +82,17 @@ enum class DamageType {
     Mixed
 };
 
-// Minion types (MinionTypes.cs)
+// Minion types — matches game-internal values from sub_BBB10 (IDA)
+// Read from Offset::Minion::LaneType (obj+0x4CC9)
 enum class MinionType : int {
-    Unknown = 0,
-    Melee   = 4,
-    Ranged  = 5,
-    Cannon  = 6,
-    Super   = 7
+    Unknown = 0,    // Unset / unclassified
+    Pet     = 1,    // Champion pet (Annie Tibbers, Yorick ghouls, Zyra plants, Illaoi tentacles...)
+    Jungle  = 2,    // Jungle monster
+    Team    = 3,    // Team minion (special spawn)
+    Melee   = 4,    // Melee lane minion
+    Ranged  = 5,    // Ranged (caster) lane minion
+    Cannon  = 6,    // Siege/Cannon lane minion
+    Super   = 7     // Super lane minion
 };
 
 // Buff types
@@ -150,7 +154,9 @@ enum class OrbwalkingType {
     AfterAttack,        // Missile launched / ranged: after windup
     OnAttack,           // Attack command confirmed (DoCast)
     NonKillableMinion,  // Minion about to die before our AA arrives
-    TargetSwitch        // Orbwalker switched target
+    TargetSwitch,       // Orbwalker switched target
+    OnAttackReady,      // Attack cooldown ended, ready to attack again
+    OnMoveReady         // Move delay elapsed, ready to move again
 };
 
 // Gapcloser types (GapcloserType.cs)

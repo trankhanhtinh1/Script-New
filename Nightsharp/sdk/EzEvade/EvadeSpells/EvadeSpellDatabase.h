@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "../Spells/SpellData.h"
+#include "EvadeSpellData.h"
 #include <algorithm>
 #include <string>
 #include <vector>

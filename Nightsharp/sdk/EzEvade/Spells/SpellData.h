@@ -1,201 +1,115 @@
-﻿#pragma once
-#include <cstdint>
-#include <functional>
+#pragma once
 #include <string>
 #include <vector>
 
 // ============================================================================
-// EzEvade spell data models
-// Sources:
-//   EzEvade/Spells/SpellDatabase.cs
-//   EzEvade/EvadeSpells/EvadeSpellDatabase.cs
-//   SpellDatabase.lua
+// EzEvade::SpellData — Data structure for enemy skillshots to dodge.
+//
+// Ported from SpellDatabase.lua (NightSharp evade system).
+// Patch target: 26.5 (2026-03-03)
+//
+// Each entry represents a single skillshot or targeted spell that the
+// evade system should detect and dodge.
 // ============================================================================
 
 namespace EzEvade {
 
-    // Skill slots used by champion spells and summoner spells.
-    enum class SpellSlotId : int {
-        Q = 0,
-        W = 1,
-        E = 2,
-        R = 3,
-        F = 4,   // Summoner slot 1
-        T = 5,   // Summoner slot 2
-        None = -1,
+    // ========================================================================
+    // SkillshotType — The geometric shape of a skillshot.
+    // ========================================================================
+    enum class SkillshotType : int {
+        Line         = 0,   // Linear skillshot (Morgana Q)
+        Circle       = 1,   // Circular skillshot (Cho'Gath Q)
+        Cone         = 2,   // Cone skillshot (Annie W)
+        Ring         = 3,   // Ring skillshot (Veigar E)
+        Arc          = 4,   // Arc skillshot (Diana Q)
+        MissileLine  = 5,   // Line missile (Ezreal Q)
+        MissileArc   = 6,   // Arc missile
+        None         = -1,
     };
 
-    // Basic spell geometry used by evade and drawing.
-    enum class SpellType {
-        None,
-        Line,
-        Circular,
-        Cone,
-        Arc,
-        Ring,
-        MissileLinear,
-        MissileArc,
+    // ========================================================================
+    // CollisionType — What can block a spell missile.
+    // ========================================================================
+    enum CollisionType : int {
+        CollisionNone       = 0,
+        CollisionMinions    = 1 << 0,
+        CollisionHeroes     = 1 << 1,
+        CollisionYasuoWall  = 1 << 2,
+        CollisionBraumShield = 1 << 3,
+        CollisionWalls      = 1 << 4,
     };
 
-    enum class CollisionObjectType {
-        None,
-        EnemyChampions,
-        EnemyMinions,
-        AllyMinions,
-        YasuoWall,
-        Terrain,
+    // ========================================================================
+    // DangerLevel — How dangerous/important a spell is to dodge.
+    // ========================================================================
+    enum class DangerLevel : int {
+        Low      = 1,
+        Medium   = 2,
+        High     = 3,
+        Extreme  = 4,
+        Ultimate = 5,
     };
 
-    enum class EvadeType {
-        None,
-        Blink,
-        Dash,
-        MovementSpeedBuff,
-        SpellShield,
-        WindWall,
-        Shield,
-        Stasis,
-        Untargetable,
-        Recall,
-    };
-
-    enum class CastType {
-        None,
-        Self,
-        Position,
-        Target,
-    };
-
-    enum class SpellTargets {
-        None,
-        AllyChampions,
-        EnemyChampions,
-        AllyMinions,
-        EnemyMinions,
-        Targetables,
-    };
-
-    enum class DetectionType {
-        Missile,
-        CastSpell,
-        Buff,
-        EffectEmitter,
-        Spell,
-        LogicKing,
-        HaveOtherState,
-    };
-
-    enum class CCType {
-        None,
-        Soft,
-        Hard,
-    };
-
-    struct EvadeSpellData;
-    using UseSpellFunc = std::function<bool(const EvadeSpellData&, bool)>;
-
-    // Enemy spell entry used by evade detection.
+    // ========================================================================
+    // SpellData — Describes a single spell entry.
+    // ========================================================================
     struct SpellData {
         // Identity
-        std::string charName;       // Champion name. "AllChampions" = global entry.
-        std::string name;           // Readable display name.
-        std::string spellName;      // Internal cast name.
-        std::string missileName;    // Internal missile name.
-        std::vector<std::string> extraSpellNames;
-        std::vector<std::string> extraMissileNames;
-        SpellSlotId spellKey = SpellSlotId::Q;
+        std::string charName;           // Champion name (e.g. "Morgana")
+        std::string spellName;          // Internal spell name (e.g. "MorganaQ")
+        std::string displayName;        // Display name for menu (e.g. "Q - Dark Binding")
 
         // Geometry
-        SpellType   spellType       = SpellType::Line;
-        float       radius          = 50.0f;
-        float       range           = 1000.0f;
-        float       angle           = 0.0f;
-        float       secondaryRadius = 0.0f;
-        float       sideRadius      = 0.0f;
+        SkillshotType type = SkillshotType::Line;
+        float range        = 0.0f;      // Max range of the spell
+        float radius       = 0.0f;      // Radius (circle) or half-width (line)
+        float speed        = 0.0f;      // Missile speed (0 = instant)
+        float castDelay    = 0.25f;     // Cast delay in seconds
+        float extraRange   = 0.0f;      // Extra range beyond listed range
+        int   angle        = 0;         // Cone angle (degrees)
 
-        // Timing
-        float       spellDelay      = 250.0f;
-        float       projectileSpeed = 0.0f;
-        float       extraEndTime    = 0.0f;
-        float       extraDelay      = 0.0f;
-        float       extraDistance   = 0.0f;
+        // Flags
+        bool isMissile     = false;     // Whether this spell has a visible missile
+        bool isCC          = false;     // Does this spell apply crowd control?
+        bool fixedRange    = false;     // Is the range fixed?
+        bool canBeRemoved  = true;      // Can the spell zone be removed?
+        bool forceRemove   = false;     // Force remove on timeout
 
-        // Drawing
-        float       extraDrawHeight = 0.0f;
+        // Collision
+        int  collisionObjects = CollisionNone;
 
-        // Behavior
-        bool        fixedRange      = false;
-        bool        hasTrap         = false;
-        bool        hasEndExplosion = false;
-        bool        isThreeWay      = false;
-        bool        isWall          = false;
-        bool        isPerpendicular = false;
-        bool        isSpecial       = false;
-        bool        noProcess       = false;
-        bool        usePackets      = false;
-        bool        updatePosition  = true;
-        bool        invert          = false;
-        bool        defaultOff      = false;
-        bool        useEndPosition  = false;
-        bool        isTeleport      = false;
+        // Danger assessment
+        int dangerLevel    = 3;         // 1-5 danger level
 
-        // Collision and spawned objects
-        std::vector<CollisionObjectType> collisionObjects;
-        std::string trapBaseName;
-        std::string trapTroyName;
+        // Missile identification
+        std::string missileSpellName;                // Missile name if different
+        std::vector<std::string> extraMissileNames;  // Alternative missile names
+        std::vector<std::string> extraSpellNames;    // Alternative spell names
 
-        // Threat and detection metadata
-        int           dangerlevel   = 1;
-        DetectionType detectionType = DetectionType::CastSpell;
-        CCType        ccType        = CCType::None;
-        std::vector<uint32_t> hashes;
-        bool          isAutoAttack  = false;
+        // Menu evade settings
+        bool defaultEnabled   = true;   // Enabled by default
+        int  defaultEvadePct  = 100;    // Default dodge percentage (0=only-kill-me, 100=all)
+        bool defaultFow       = false;  // Dodge from fog of war
 
-        SpellData Clone() const {
-            return *this;
+        // ====================================================================
+        // Convenience
+        // ====================================================================
+        bool IsSkillshot() const {
+            return type != SkillshotType::None;
         }
-    };
 
-    // Defensive spell entry used by evade responses.
-    struct EvadeSpellData {
-        // Identity
-        std::string charName;
-        std::string name;
-        std::string spellName;
-        SpellSlotId spellKey = SpellSlotId::Q;
+        bool CollidesWithMinions() const {
+            return (collisionObjects & CollisionMinions) != 0;
+        }
 
-        // Geometry
-        float       range      = 0.0f;
+        bool CanBeWindWalled() const {
+            return (collisionObjects & CollisionYasuoWall) != 0;
+        }
 
-        // Timing
-        float       spellDelay = 250.0f;
-        float       speed      = 0.0f;
-
-        // Movement speed buff per spell level
-        std::vector<float> speedArray;
-        bool        fixedRange = false;
-
-        // Valid spell targets
-        std::vector<SpellTargets> spellTargets;
-
-        // Evade behavior
-        EvadeType   evadeType  = EvadeType::None;
-        CastType    castType   = CastType::Self;
-
-        // Behavior flags
-        bool        isReversed      = false;
-        bool        behindTarget    = false;
-        bool        infrontTarget   = false;
-        bool        untargetable    = false;
-        bool        isSpecial       = false;
-        bool        checkSpellName  = false;
-        bool        isSummonerSpell = false;
-        bool        isItem          = false;
-        int         itemID          = 0;
-        UseSpellFunc useSpellFunc   = nullptr;
-
-        // Minimum threat level before using this evade tool
-        int         dangerlevel = 1;
+        DangerLevel GetDangerLevel() const {
+            return static_cast<DangerLevel>(dangerLevel);
+        }
     };
 
 } // namespace EzEvade

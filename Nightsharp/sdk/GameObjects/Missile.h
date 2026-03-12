@@ -14,10 +14,9 @@
 // ============================================================================
 // Missile — Projectile tracking (turret shots, auto attacks, spells)
 //
-// IDA MCP verified layout (2026-03-08):
+// IDA MCP verified layout (2026-03-10):
 //   CastInfo is INLINE at missile+0x2C0 (NOT a pointer!)
-//   sub_886AE0 copies CastInfo struct into missile+0x2C0 via sub_845A50
-//   sub_90A0E0 reads Position at +0x25C, CasterNetId at +0x358
+//   sub_886BB0 copies CastInfo struct into missile+0x2C0 via sub_845B20
 //
 //   missile+0x128 = SpellData ptr (direct)
 //   missile+0x25C = Position (Vec3, inherited from GameObject)
@@ -25,9 +24,9 @@
 //     +0x2C0 = SpellData ptr (= CastInfo+0x00)
 //     +0x2E0 = SpellName (std::string SSO, CastInfo+0x20)
 //     +0x308 = MissileName (std::string SSO, CastInfo+0x48)
-//     +0x330 = StartPos (Vec3, CastInfo+0x70)
-//     +0x33C = EndPos (Vec3, CastInfo+0x7C)
-//     +0x34C = CastEndPos (Vec3, CastInfo+0x8C)
+//     +0x388 = StartPos (Vec3, CastInfo+0xC8)  [brute confirmed]
+//     +0x394 = EndPos (Vec3, CastInfo+0xD4)    [brute confirmed]
+//     +0x3A4 = CastEndPos (Vec3, CastInfo+0xE4) [brute confirmed]
 //     +0x358 = CasterNetId (int, CastInfo+0x98)
 //     +0x364 = MissileNetId (int, CastInfo+0xA4)
 // ============================================================================
@@ -55,7 +54,7 @@ namespace SDK {
         // CastInfo fields — read DIRECTLY (CastInfo is INLINE, no dereference!)
         // ====================================================================
 
-        // Source caster network ID (CastInfo+0x98 → missile+0x358)
+        // Source caster network ID (CastInfo+0x98 → missile+0x358) [confirmed]
         int GetCasterNetId() const {
             if (!IsValid()) return 0;
             int netId = Globals::Read<int>(address + Offset::Missile::CasterNetId);
@@ -78,33 +77,45 @@ namespace SDK {
             return Globals::Read<int>(address + Offset::GameObject::NetId);
         }
 
-        // Start position — where spell was cast from (CastInfo+0x70 → missile+0x330)
+        // Start position — where spell was cast from
+        // Primary: CastInfo+0xC8 (missile+0x388) [brute confirmed]
+        // Fallback: CastInfo+0x70 (missile+0x330) [old offset, has data earlier]
         Vec3 GetStartPos() const {
             if (!IsValid()) return Vec3();
+            // Try confirmed offset first
             Vec3 pos = SanitizeWorldPos(Globals::Read<Vec3>(address + Offset::Missile::StartPos));
-            if (!pos.IsZero()) {
-                return pos;
-            }
-            return ReadMissileClientVec(kMissileClientStartPos);
+            if (!pos.IsZero()) return pos;
+            // Fallback: old offset (CastInfo may populate this area first)
+            pos = SanitizeWorldPos(Globals::Read<Vec3>(address + 0x330));
+            if (!pos.IsZero()) return pos;
+            // Fallback: MissileClient
+            pos = ReadMissileClientVec(kMissileClientStartPos);
+            if (!pos.IsZero()) return pos;
+            // Last resort: current position
+            return GetPosition();
         }
 
-        // End position — target destination (CastInfo+0x7C → missile+0x33C)
+        // End position — target destination
+        // Primary: CastInfo+0xD4 (missile+0x394) [brute confirmed]
+        // Fallback: CastInfo+0x7C (missile+0x33C) [old offset]
         Vec3 GetEndPos() const {
             if (!IsValid()) return Vec3();
             Vec3 pos = SanitizeWorldPos(Globals::Read<Vec3>(address + Offset::Missile::EndPos));
-            if (!pos.IsZero()) {
-                return pos;
-            }
+            if (!pos.IsZero()) return pos;
+            pos = SanitizeWorldPos(Globals::Read<Vec3>(address + 0x33C));
+            if (!pos.IsZero()) return pos;
             return ReadMissileClientVec(kMissileClientEndPos);
         }
 
-        // Cast end position (CastInfo+0x8C → missile+0x34C)
+        // Cast end position
+        // Primary: CastInfo+0xE4 (missile+0x3A4) [brute confirmed]
+        // Fallback: CastInfo+0x8C (missile+0x34C) [old offset]
         Vec3 GetCastEndPos() const {
             if (!IsValid()) return Vec3();
             Vec3 pos = SanitizeWorldPos(Globals::Read<Vec3>(address + Offset::Missile::CastEndPos));
-            if (!pos.IsZero()) {
-                return pos;
-            }
+            if (!pos.IsZero()) return pos;
+            pos = SanitizeWorldPos(Globals::Read<Vec3>(address + 0x34C));
+            if (!pos.IsZero()) return pos;
             return ReadMissileClientVec(kMissileClientCastPos);
         }
 
@@ -259,12 +270,16 @@ namespace SDK {
                         return;
                     }
 
+                    uintptr_t missileClient = Globals::Read<uintptr_t>(obj.address + Offset::GameObject::MissileClient);
+                    if (!Globals::IsValidPtr(missileClient)) {
+                        return;
+                    }
+
                     Missile m(addr);
                     if (!m.IsValid()) {
                         return;
                     }
 
-                    uintptr_t missileClient = Globals::Read<uintptr_t>(addr + Offset::GameObject::MissileClient);
                     uintptr_t sd1 = m.GetSpellData();
                     uintptr_t sd2 = m.GetSpellDataFromCastInfo();
                     Vec3 start = m.GetStartPos();

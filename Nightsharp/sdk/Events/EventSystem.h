@@ -91,6 +91,7 @@ namespace SDK {
     using OnBuffChangeFn    = std::function<void(const BuffChangeArgs&)>;
     using OnGameLoadFn      = std::function<void()>;
     using OnGameUpdateFn    = std::function<void(float /*gameTime*/)>;
+    using OnScriptTickFn    = std::function<void(float /*gameTime*/)>;
 
     // ========================================================================
     // EventSystem — Main class
@@ -149,6 +150,14 @@ namespace SDK {
         }
 
         // ====================================================================
+        // OnScriptTick — fires once per script tick (rate-limited to 45 FPS)
+        // Use this instead of OnGameUpdate for most logic.
+        // ====================================================================
+        static void OnScriptTick(OnScriptTickFn callback) {
+            scriptTickCallbacks.push_back(callback);
+        }
+
+        // ====================================================================
         // IsGameLoaded — check if game has been detected as loaded
         // ====================================================================
         static bool IsGameLoaded() { return gameLoaded; }
@@ -157,6 +166,8 @@ namespace SDK {
         // Update — Call once per frame AFTER GameObjects::Update()
         // ====================================================================
         static void Update() {
+            EventSystemTick++;
+
             float now = Game::GetTime();
             if (now <= 0.0f) return;
 
@@ -178,6 +189,19 @@ namespace SDK {
         }
 
         // ====================================================================
+        // RunScriptTick — Call from main loop AFTER Update().
+        // Fires all OnScriptTick callbacks (rate-limited to 45 FPS).
+        // ====================================================================
+        static void RunScriptTick() {
+            float now = Game::GetTime();
+            if (now <= 0.0f) return;
+
+            for (auto& cb : scriptTickCallbacks) {
+                try { cb(now); } catch (...) {}
+            }
+        }
+
+        // ====================================================================
         // Clear all callbacks (for cleanup)
         // ====================================================================
         static void ClearAll() {
@@ -189,6 +213,7 @@ namespace SDK {
             buffChangeCallbacks.clear();
             gameLoadCallbacks.clear();
             gameUpdateCallbacks.clear();
+            scriptTickCallbacks.clear();
             heroSpellStates.clear();
             knownMissiles.clear();
             knownObjects.clear();
@@ -208,6 +233,7 @@ namespace SDK {
         static inline std::vector<OnBuffChangeFn>    buffChangeCallbacks;
         static inline std::vector<OnGameLoadFn>      gameLoadCallbacks;
         static inline std::vector<OnGameUpdateFn>    gameUpdateCallbacks;
+        static inline std::vector<OnScriptTickFn>    scriptTickCallbacks;
 
         static inline float lastUpdateTime = 0.0f;
         static inline bool  gameLoaded = false;
@@ -256,6 +282,88 @@ namespace SDK {
         // Key: (heroNetId * 16 + slotIndex)
         static inline std::map<int, SpellState> heroSpellStates;
 
+        static std::string ResolveSpellCastName(const SpellBook& spellBook, uintptr_t spellDataPtr, int slotIdx) {
+            auto readFromData = [](uintptr_t ptr) -> std::string {
+                if (!Globals::IsValidPtr(ptr)) {
+                    return {};
+                }
+
+                SpellData data(ptr);
+                std::string name = data.GetName();
+                if (!name.empty()) {
+                    return name;
+                }
+
+                name = data.GetScriptName();
+                if (!name.empty()) {
+                    return name;
+                }
+
+                SpellInfo info(ptr);
+                if (info.IsValid()) {
+                    name = info.GetName();
+                    if (!name.empty()) {
+                        return name;
+                    }
+
+                    SpellData infoData = info.GetSpellData();
+                    name = infoData.GetScriptName();
+                    if (!name.empty()) {
+                        return name;
+                    }
+
+                    name = infoData.GetIconName();
+                    if (!name.empty()) {
+                        return name;
+                    }
+                }
+
+                name = data.GetIconName();
+                if (!name.empty()) {
+                    return name;
+                }
+
+                return {};
+            };
+
+            std::string castName = readFromData(spellDataPtr);
+            if (!castName.empty()) {
+                return castName;
+            }
+
+            if (slotIdx < 0 || slotIdx > static_cast<int>(SpellSlotId::Recall)) {
+                return {};
+            }
+
+            SpellSlot slot = spellBook.GetSpell(static_cast<SpellSlotId>(slotIdx));
+            if (!slot.IsValid()) {
+                return {};
+            }
+
+            castName = slot.GetName();
+            if (!castName.empty()) {
+                return castName;
+            }
+
+            SpellInfo info = slot.GetSpellInfo();
+            if (!info.IsValid()) {
+                return {};
+            }
+
+            castName = info.GetName();
+            if (!castName.empty()) {
+                return castName;
+            }
+
+            SpellData data = info.GetSpellData();
+            castName = data.GetScriptName();
+            if (!castName.empty()) {
+                return castName;
+            }
+
+            return data.GetIconName();
+        }
+
         static void TrackSpellCasts(float now) {
             if (processSpellCallbacks.empty()) return;
 
@@ -284,10 +392,7 @@ namespace SDK {
                         state.lastCastTime = now;
 
                         bool isAA = Globals::Read<uint8_t>(activeCast + Offset::SpellCastInfo::IsAuto) != 0;
-                        std::string castName;
-                        if (Globals::IsValidPtr(spellData)) {
-                            castName = SpellData(spellData).GetName();
-                        }
+                        std::string castName = ResolveSpellCastName(sb, spellData, slotIdx);
 
                         // Store for StopCast tracking
                         state.slotIndex = slotIdx;

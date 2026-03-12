@@ -595,7 +595,7 @@ namespace Menu {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
 
         ImGui::BeginChild("##main_group_bar", ImVec2(groupBarWidth, 0.0f), true);
-        ImGui::TextDisabled("Sliderbar 1");
+        ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Sliderbar 1");
         ImGui::Separator();
         int groupCount = 0;
         const GroupEntry* groups = GetGroupEntries(groupCount);
@@ -610,7 +610,7 @@ namespace Menu {
         ImGui::SameLine(0.0f, 10.0f);
 
         ImGui::BeginChild("##main_page_bar", ImVec2(pageBarWidth, 0.0f), true);
-        ImGui::TextDisabled("Sliderbar 2");
+        ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Sliderbar 2");
         ImGui::Separator();
         int pageCount = 0;
         const PageEntry* pages = GetPageEntries(pageCount);

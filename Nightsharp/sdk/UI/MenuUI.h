@@ -224,7 +224,10 @@ namespace MenuUI {
             : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue) {}
 
         void Draw() override {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
             ImGui::SliderInt(DisplayName.c_str(), &Value, MinValue, MaxValue);
+            ImGui::PopStyleColor(2);
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
@@ -246,7 +249,10 @@ namespace MenuUI {
             : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue) {}
 
         void Draw() override {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
             ImGui::SliderFloat(DisplayName.c_str(), &Value, MinValue, MaxValue);
+            ImGui::PopStyleColor(2);
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
@@ -964,7 +970,7 @@ namespace MenuUI {
             }
 
             ImGui::BeginChild((std::string("##sidebar_") + InternalName).c_str(), ImVec2(170.0f, 0.0f), true);
-            ImGui::TextDisabled("Sliderbar");
+            ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Sliderbar");
             ImGui::Separator();
             for (auto& section : sections) {
                 bool selected = (m_activeRootSection == section.first);

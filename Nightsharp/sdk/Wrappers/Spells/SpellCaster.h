@@ -871,16 +871,11 @@ namespace SDK {
 
             // ============================================================
             // Chimera pattern: set CastSpellFlag before the HUD -> packet path.
-            // Current patch flows through:
-            //   CastSpellSafe -> CastSpellPacketA/B/Charged -> PacketSendCommon
             // ============================================================
             Bypass::PrepareCastSpell();
 
             // ============================================================
             // Call CastSpellSafe(hudSpellInfo, spellInfoPtr) via spoof_call
-            // Reference: leagueoflegends-master/global/functions.cpp line 229
-            //   param1 = *(HudInstance + 0x68) = hudSpellInfo
-            //   param2 = *(SpellSlot + SlotSpellInfo) = spellInfoPtr
             // ============================================================
             using fnCastSpell = void(__fastcall*)(uintptr_t, uintptr_t);
             fnCastSpell fn = reinterpret_cast<fnCastSpell>(

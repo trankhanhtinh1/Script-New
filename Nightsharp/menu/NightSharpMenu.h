@@ -30,8 +30,10 @@ namespace NightSharpMenu {
     };
 
     inline bool showMenu = true;
-    inline std::string activePrimaryKey = "core";
+    inline std::string activePrimaryKey = "";
     inline std::unordered_map<std::string, std::string> activeSecondaryByPrimary;
+    inline bool primarySelected = false;   // true once user clicks a primary item
+    inline bool secondarySelected = false; // true once user clicks a secondary item
     inline std::string hookBackendLabel = "Unknown";
 
     inline ImVec2 menuPos = ImVec2(20, 40);
@@ -68,7 +70,7 @@ namespace NightSharpMenu {
     inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 180);
 
     inline const std::array<const char*, 4> kCorePluginNames = {
-        "Orbwalker", "Target Selector", "Activator", "Awareness"
+        "Orbwalker 2.0", "Target Selector", "Activator", "Awareness"
     };
 
     inline void SetHookBackendLabel(const char* label) {
@@ -76,7 +78,7 @@ namespace NightSharpMenu {
     }
 
     inline Plugins::IPlugin* GetLoadedOrbwalkerPlugin() {
-        auto* plugin = Plugins::PluginManager::Get().Find("Orbwalker");
+        auto* plugin = Plugins::PluginManager::Get().Find("Orbwalker 2.0");
         if (plugin && plugin->IsLoaded()) {
             return plugin;
         }
@@ -185,10 +187,10 @@ namespace NightSharpMenu {
         entries.push_back({ "core", "Core", nullptr });
 
         auto& pm = Plugins::PluginManager::Get();
-        entries.push_back({ "orbwalker", "Orbwalker", GetLoadedOrbwalkerPlugin() });
+        entries.push_back({ "orbwalker", "Orbwalker 2.0", GetLoadedOrbwalkerPlugin() });
 
         for (const char* name : kCorePluginNames) {
-            if (strcmp(name, "Orbwalker") == 0) {
+            if (strcmp(name, "Orbwalker 2.0") == 0) {
                 continue;
             }
             auto* p = pm.Find(name);
@@ -330,6 +332,14 @@ namespace NightSharpMenu {
         bool changed = DrawOnOffEditor(plugin->GetName(), loaded, plugin->GetName());
         if (changed) {
             SetPluginLoaded(plugin, loaded);
+        }
+
+        // "Always Load" checkbox
+        ImGui::SameLine(0.0f, 12.0f);
+        bool autoLoad = Plugins::PluginManager::Get().IsAutoLoad(plugin->GetName());
+        std::string alId = std::string("##autoload_") + plugin->GetName();
+        if (ImGui::Checkbox(("Always Load" + alId).c_str(), &autoLoad)) {
+            Plugins::PluginManager::Get().SetAutoLoad(plugin->GetName(), autoLoad);
         }
     }
 
@@ -547,38 +557,63 @@ namespace NightSharpMenu {
         }
 
         auto primaryEntries = BuildPrimaryEntries();
-        if (!FindPrimaryEntry(primaryEntries, activePrimaryKey)) {
-            activePrimaryKey = "core";
+        if (!activePrimaryKey.empty() && !FindPrimaryEntry(primaryEntries, activePrimaryKey)) {
+            activePrimaryKey = "";
+            primarySelected = false;
+            secondarySelected = false;
         }
 
-        const SidebarEntry* activePrimary = FindPrimaryEntry(primaryEntries, activePrimaryKey);
-        if (!activePrimary) {
-            return;
+        // Determine which panels are visible
+        bool showSecondary = primarySelected && !activePrimaryKey.empty();
+        bool showContent = showSecondary && secondarySelected;
+
+        const SidebarEntry* activePrimary = nullptr;
+        std::vector<SecondaryEntry> secondaryEntries;
+        const char* activeSecondary = "";
+        const SecondaryEntry* activeSecondaryEntry = nullptr;
+
+        if (showSecondary) {
+            activePrimary = FindPrimaryEntry(primaryEntries, activePrimaryKey);
+            if (!activePrimary) {
+                showSecondary = false;
+                showContent = false;
+            }
         }
 
-        std::vector<SecondaryEntry> secondaryEntries = BuildSecondaryEntries(*activePrimary);
-        const char* activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
+        if (showSecondary && activePrimary) {
+            secondaryEntries = BuildSecondaryEntries(*activePrimary);
+            activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
+            activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
+        }
 
         const float primaryHeight = HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, primaryEntries.size())) + 4.0f;
-        const float secondaryHeight = HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, secondaryEntries.size())) + 4.0f;
-        const float sidebarHeight = std::max(primaryHeight, secondaryHeight);
+        const float secondaryHeight = showSecondary ? (HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, secondaryEntries.size())) + 4.0f) : 0.0f;
+        const float sidebarHeight = std::max(primaryHeight, secondaryHeight > 0 ? secondaryHeight : primaryHeight);
         int estimatedContentRows = 6;
-        if (activePrimary->key == "core") {
-            estimatedContentRows = EstimateCoreSectionRows(activeSecondary);
-        } else if (activePrimary->key == "orbwalker") {
-            estimatedContentRows = EstimateOrbwalkerSectionRows(activeSecondary);
-        } else {
-            estimatedContentRows = EstimatePluginSectionRows(activePrimary->plugin, activeSecondary);
+        if (showContent && activePrimary) {
+            if (activePrimary->key == "core") {
+                estimatedContentRows = EstimateCoreSectionRows(activeSecondary);
+            } else if (activePrimary->key == "orbwalker") {
+                estimatedContentRows = EstimateOrbwalkerSectionRows(activeSecondary);
+            } else {
+                estimatedContentRows = EstimatePluginSectionRows(activePrimary->plugin, activeSecondary);
+            }
         }
         const float contentHeight = std::max(HEADER_H + 18.0f + ITEM_H * static_cast<float>(estimatedContentRows), HEADER_H + 58.0f);
 
+        // Calculate title bar width based on visible panels
+        float totalMenuWidth = PRIMARY_W;
+        if (showSecondary) totalMenuWidth += PANEL_GAP + SECONDARY_W;
+        if (showContent) totalMenuWidth += PANEL_GAP + CONTENT_W;
+
         ImVec2 mousePos = ImGui::GetIO().MousePos;
         ImVec2 titleMin = menuPos;
-        ImVec2 titleMax = ImVec2(menuPos.x + PRIMARY_W + SECONDARY_W + CONTENT_W + PANEL_GAP * 2.0f, menuPos.y + HEADER_H);
+        ImVec2 titleMax = ImVec2(menuPos.x + totalMenuWidth, menuPos.y + HEADER_H);
         bool mouseInTitle = (mousePos.x >= titleMin.x && mousePos.x <= titleMax.x &&
             mousePos.y >= titleMin.y && mousePos.y <= titleMax.y);
 
-        if (ImGui::IsMouseClicked(0) && mouseInTitle) {
+        // Only start dragging if no ImGui window is hovered/active (fixes click-through issues)
+        if (ImGui::IsMouseClicked(0) && mouseInTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
             isDragging = true;
             dragOffset = ImVec2(mousePos.x - menuPos.x, mousePos.y - menuPos.y);
         }
@@ -599,50 +634,55 @@ namespace NightSharpMenu {
         const ImVec2 secondaryPos(menuPos.x + PRIMARY_W + PANEL_GAP, menuPos.y);
         const ImVec2 contentPos(menuPos.x + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2.0f, menuPos.y);
 
-        auto drawSidebarPanel = [&](ImVec2 pos, float width, float height, const char* title,
-                                    const auto& entries, const std::string& activeKeyRef) {
-            dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), COL_BG, 4.0f);
-            dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), COL_BORDER, 4.0f);
-            dl->AddText(ImVec2(pos.x + 10.0f, pos.y + 8.0f), COL_ACCENT, title);
-            dl->AddLine(ImVec2(pos.x, pos.y + HEADER_H), ImVec2(pos.x + width, pos.y + HEADER_H), COL_BORDER, 1.0f);
+        // Draw Primary sidebar (always visible)
+        {
+            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarHeight), COL_BG, 4.0f);
+            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 4.0f);
+            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarHeight), COL_BORDER, 4.0f);
+            dl->AddText(ImVec2(primaryPos.x + 10.0f, primaryPos.y + 8.0f), IM_COL32(120, 235, 120, 255), "NightSharp");
+            dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H), ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER, 1.0f);
 
-            float y = pos.y + HEADER_H + 2.0f;
-            for (const auto& entry : entries) {
-                if (DrawSidebarItem(dl, ImVec2(pos.x, y), width, entry.label.c_str(), activeKeyRef == entry.key, true)) {
-                    if constexpr (std::is_same_v<std::decay_t<decltype(entry)>, SidebarEntry>) {
+            float y = primaryPos.y + HEADER_H + 2.0f;
+            for (const auto& entry : primaryEntries) {
+                if (DrawSidebarItem(dl, ImVec2(primaryPos.x, y), PRIMARY_W, entry.label.c_str(), activePrimaryKey == entry.key, true)) {
+                    if (activePrimaryKey != entry.key) {
                         activePrimaryKey = entry.key;
-                    } else {
-                        activeSecondaryByPrimary[activePrimaryKey] = entry.key;
+                        secondarySelected = false; // Reset secondary when primary changes
                     }
+                    primarySelected = true;
                 }
                 y += ITEM_H;
             }
-        };
+        }
 
-        std::string primaryTitle = "NightSharp";
-        drawSidebarPanel(primaryPos, PRIMARY_W, sidebarHeight, primaryTitle.c_str(), primaryEntries, activePrimaryKey);
-
-        activePrimary = FindPrimaryEntry(primaryEntries, activePrimaryKey);
-        if (!activePrimary) {
-            activePrimaryKey = "core";
+        // Recalculate after potential click changes
+        if (primarySelected && !activePrimaryKey.empty()) {
             activePrimary = FindPrimaryEntry(primaryEntries, activePrimaryKey);
-            if (!activePrimary) {
-                return;
+            if (activePrimary) {
+                secondaryEntries = BuildSecondaryEntries(*activePrimary);
+                activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
+                activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
+                showSecondary = true;
             }
         }
-        secondaryEntries = BuildSecondaryEntries(*activePrimary);
-        activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
-        const SecondaryEntry* activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
+
+        if (!showSecondary || !activePrimary) {
+            return;
+        }
+
+        // Determine if we should collapse secondary+content into one panel
         const bool collapseOrbwalkerToSecondary =
             (activePrimary->key == "orbwalker" && secondaryEntries.size() <= 1);
+        const bool collapseToTwoPanel = (!collapseOrbwalkerToSecondary && secondaryEntries.size() <= 1);
+
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.96f, 0.99f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 4.0f));
 
-        if (collapseOrbwalkerToSecondary) {
+        if (collapseOrbwalkerToSecondary || collapseToTwoPanel) {
+            // 2-panel layout: Primary + merged content
             const float mergedWidth = SECONDARY_W + PANEL_GAP + CONTENT_W;
             const float mergedHeight = std::max(sidebarHeight, contentHeight);
 
@@ -663,40 +703,70 @@ namespace NightSharpMenu {
                 ImGuiWindowFlags_NoCollapse |
                 ImGuiWindowFlags_NoBackground);
             ImGui::BeginChild("##nightsharp_secondary_scroll", ImVec2(0.0f, 0.0f), false);
-            DrawOrbwalkerPrimaryContent(activeSecondary);
-            ImGui::EndChild();
-            ImGui::End();
-        } else {
-            drawSidebarPanel(secondaryPos, SECONDARY_W, sidebarHeight, activePrimary->label.c_str(), secondaryEntries, activeSecondaryByPrimary[activePrimaryKey]);
-
-            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentHeight), COL_CONTENT_BG, 4.0f);
-            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentHeight), COL_BORDER, 4.0f);
-            dl->AddText(ImVec2(contentPos.x + 10.0f, contentPos.y + 8.0f), COL_ACCENT,
-                activeSecondaryEntry ? activeSecondaryEntry->label.c_str() : activeSecondary);
-            dl->AddLine(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_BORDER, 1.0f);
-
-            ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentHeight - HEADER_H), ImGuiCond_Always);
-            ImGui::Begin("##nightsharp_content", nullptr,
-                ImGuiWindowFlags_NoTitleBar |
-                ImGuiWindowFlags_NoResize |
-                ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoCollapse |
-                ImGuiWindowFlags_NoBackground);
-            ImGui::BeginChild("##nightsharp_content_scroll", ImVec2(0.0f, 0.0f), false);
-
-            if (activePrimary->key == "core") {
-                DrawCoreSectionContent(activeSecondary);
-            } else if (activePrimary->key == "orbwalker") {
+            if (activePrimary->key == "orbwalker") {
                 DrawOrbwalkerPrimaryContent(activeSecondary);
+            } else if (activePrimary->key == "core") {
+                DrawCoreSectionContent(activeSecondary);
             } else {
                 DrawPluginSectionContent(activePrimary->plugin, activeSecondary);
             }
-
             ImGui::EndChild();
             ImGui::End();
+        } else {
+            // 3-panel layout: Primary + Secondary + Content
+            // Draw Secondary sidebar
+            {
+                dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarHeight), COL_BG, 4.0f);
+                dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
+                dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarHeight), COL_BORDER, 4.0f);
+                dl->AddText(ImVec2(secondaryPos.x + 10.0f, secondaryPos.y + 8.0f), IM_COL32(120, 235, 120, 255), activePrimary->label.c_str());
+                dl->AddLine(ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H), ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_BORDER, 1.0f);
+
+                float y = secondaryPos.y + HEADER_H + 2.0f;
+                for (const auto& entry : secondaryEntries) {
+                    if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W, entry.label.c_str(), activeSecondaryByPrimary[activePrimaryKey] == entry.key, true)) {
+                        activeSecondaryByPrimary[activePrimaryKey] = entry.key;
+                        secondarySelected = true;
+                    }
+                    y += ITEM_H;
+                }
+            }
+
+            // Draw Content panel (only if secondary is selected)
+            if (secondarySelected) {
+                // Refresh active secondary after potential click
+                activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
+
+                dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentHeight), COL_CONTENT_BG, 4.0f);
+                dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
+                dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentHeight), COL_BORDER, 4.0f);
+                activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
+                dl->AddText(ImVec2(contentPos.x + 10.0f, contentPos.y + 8.0f), COL_ACCENT,
+                    activeSecondaryEntry ? activeSecondaryEntry->label.c_str() : activeSecondary);
+                dl->AddLine(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_BORDER, 1.0f);
+
+                ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentHeight - HEADER_H), ImGuiCond_Always);
+                ImGui::Begin("##nightsharp_content", nullptr,
+                    ImGuiWindowFlags_NoTitleBar |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoSavedSettings |
+                    ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoBackground);
+                ImGui::BeginChild("##nightsharp_content_scroll", ImVec2(0.0f, 0.0f), false);
+
+                if (activePrimary->key == "core") {
+                    DrawCoreSectionContent(activeSecondary);
+                } else if (activePrimary->key == "orbwalker") {
+                    DrawOrbwalkerPrimaryContent(activeSecondary);
+                } else {
+                    DrawPluginSectionContent(activePrimary->plugin, activeSecondary);
+                }
+
+                ImGui::EndChild();
+                ImGui::End();
+            }
         }
 
         ImGui::PopStyleVar(2);

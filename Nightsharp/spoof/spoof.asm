@@ -1,5 +1,6 @@
 
 PUBLIC _spoofer_stub
+PUBLIC _advanced_spoofer_stub
      
 .code
      
@@ -28,4 +29,44 @@ fixup:
   jmp QWORD PTR [rcx + 8] ; jmp to the original return address
 _spoofer_stub ENDP
      
+
+_advanced_spoofer_stub PROC
+  mov r11, rsp
+  sub rsp, 58h      ; allocate stack space for the actual call
+  and rsp, 0FFFFFFFFFFFFFFF0h ; align stack 16 bytes
+
+  mov [rsp], r11     ; save original rsp at bottom
+  mov [rsp + 8h], rbx ; preserve rbx
+
+  ; Read target function and gadget
+  mov rbx, rcx       ; rbx = target_fn
+  mov r10, rdx       ; r10 = call_gadget
+
+  ; Shift args back
+  mov rcx, r8        ; param 1
+  mov rdx, r9        ; param 2
+  mov r8, [r11 + 28h] ; param 3
+  mov r9, [r11 + 30h] ; param 4
+
+  ; Copy stack arguments (from original caller stack to our aligned stack)
+  mov rax, [r11 + 38h]
+  mov [rsp + 20h], rax
+  mov rax, [r11 + 40h]
+  mov [rsp + 28h], rax
+  mov rax, [r11 + 48h]
+  mov [rsp + 30h], rax
+  mov rax, [r11 + 50h]
+  mov [rsp + 38h], rax
+  mov rax, [r11 + 58h]
+  mov [rsp + 40h], rax
+  
+  ; Perform the call (jumps to a "call [rbx]" which pushes a safe return address and jumps to rbx)
+  call r10
+
+  ; Restore stack & return
+  mov rbx, [rsp + 8h]  ; restore rbx
+  mov rsp, [rsp]       ; restore original rsp
+  ret
+_advanced_spoofer_stub ENDP
+
 END

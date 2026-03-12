@@ -1,329 +1,167 @@
 #pragma once
 #include "SpellData.h"
-#include "../../Wrappers/Spells/SpellDatabase.h"
 #include <algorithm>
-#include <climits>
 #include <string>
-#include <utility>
 #include <vector>
+#include <unordered_map>
 
 // ============================================================================
-// SpellDatabase
-// EzEvade-facing spell database built from sdk/Data/Database.json via
-// SDK::SpellDatabase. This keeps coverage aligned with the maintained wrapper
-// database instead of duplicating hundreds of hand-written entries.
+// EzEvade SpellDatabase — Offensive skillshot & targeted spell database
 //
-// Sources:
-//   sdk/Wrappers/Spells/SpellDatabase.h
-//   sdk/Data/Database.json
-//   SpellDatabase.lua (reference for future alias/detection expansion)
-// Patch target:
-//   26.5 (2026-03-03)
-// References:
-//   - Riot patch notes 26.5
-//   - League Wiki champion ability pages
+// Ported from SpellDatabase.lua for NightSharp Evade system.
+// Patch target: 26.5 (2026-03-03)
+//
+// Usage:
+//   auto& db = EzEvade::GetSpellDatabase();
+//   auto spells = EzEvade::GetSpellsForChampion("Morgana");
+//   auto* spell = EzEvade::GetSpellByName("MorganaQ");
 // ============================================================================
 
 namespace EzEvade {
+
+// Default evade percentages matching SpellDatabase.lua menu_settings
+namespace EvadeDefaults {
+    constexpr int All          = 100;  // menu_settings_all
+    constexpr int OnlyKillMe   = 0;    // menu_settings_only_kill_me
+    constexpr int Pct50        = 50;
+    constexpr int Pct40        = 40;
+    constexpr int Pct30        = 30;
+    constexpr int Pct20        = 20;
+    constexpr int Disabled     = -1;   // menu_settings_disabled
+}
+
+// ============================================================================
+// Compact builder helpers for inline data
+// ============================================================================
 namespace detail {
 
-inline constexpr const char* kSpellDatabasePatchVersion = "26.5";
-
-inline SpellSlotId ConvertSlot(SDK::SpellSlotId slot) {
-    switch (slot) {
-    case SDK::SpellSlotId::Q: return SpellSlotId::Q;
-    case SDK::SpellSlotId::W: return SpellSlotId::W;
-    case SDK::SpellSlotId::E: return SpellSlotId::E;
-    case SDK::SpellSlotId::R: return SpellSlotId::R;
-    case SDK::SpellSlotId::Summoner1: return SpellSlotId::F;
-    case SDK::SpellSlotId::Summoner2: return SpellSlotId::T;
-    default: return SpellSlotId::None;
-    }
-}
-
-inline SpellType ConvertSpellType(SDK::SpellType type) {
-    switch (type) {
-    case SDK::SpellType::SkillshotCircle:
-    case SDK::SpellType::SkillshotMissileCircle:
-        return SpellType::Circular;
-    case SDK::SpellType::SkillshotCone:
-    case SDK::SpellType::SkillshotMissileCone:
-        return SpellType::Cone;
-    case SDK::SpellType::SkillshotRing:
-        return SpellType::Ring;
-    case SDK::SpellType::SkillshotArc:
-        return SpellType::Arc;
-    case SDK::SpellType::SkillshotMissileArc:
-        return SpellType::MissileArc;
-    case SDK::SpellType::SkillshotLine:
-    case SDK::SpellType::SkillshotMissileLine:
-    default:
-        return SpellType::Line;
-    }
-}
-
-inline std::vector<CollisionObjectType> ConvertCollisionObjects(int mask) {
-    std::vector<CollisionObjectType> result;
-    if ((mask & SDK::CollisionHeroes) != 0) {
-        result.push_back(CollisionObjectType::EnemyChampions);
-    }
-    if ((mask & SDK::CollisionMinions) != 0) {
-        result.push_back(CollisionObjectType::EnemyMinions);
-    }
-    if ((mask & SDK::CollisionYasuoWall) != 0) {
-        result.push_back(CollisionObjectType::YasuoWall);
-    }
-    if ((mask & SDK::CollisionWalls) != 0) {
-        result.push_back(CollisionObjectType::Terrain);
-    }
-    return result;
-}
-
-inline CCType ConvertCcType(const SDK::SpellDatabaseEntry& entry) {
-    bool hasSoftCc = false;
-    for (const auto& buff : entry.AppliedBuffsOnEnemies) {
-        switch (buff) {
-        case SDK::BuffType::Stun:
-        case SDK::BuffType::Silence:
-        case SDK::BuffType::Taunt:
-        case SDK::BuffType::Berserk:
-        case SDK::BuffType::Snare:
-        case SDK::BuffType::Fear:
-        case SDK::BuffType::Suppression:
-        case SDK::BuffType::Asleep:
-        case SDK::BuffType::Charm:
-        case SDK::BuffType::Polymorph:
-        case SDK::BuffType::Knockup:
-        case SDK::BuffType::Knockback:
-            return CCType::Hard;
-        case SDK::BuffType::Slow:
-        case SDK::BuffType::Blind:
-        case SDK::BuffType::NearSight:
-        case SDK::BuffType::Grounded:
-        case SDK::BuffType::Drowsy:
-        case SDK::BuffType::Flee:
-            hasSoftCc = true;
-            break;
-        default:
-            break;
-        }
-    }
-    if (entry.HasTag(SDK::SpellTags::CrowdControl)) {
-        return hasSoftCc ? CCType::Soft : CCType::Hard;
-    }
-    return hasSoftCc ? CCType::Soft : CCType::None;
-}
-
-inline float ConvertRadius(const SDK::SpellDatabaseEntry& entry) {
-    switch (entry.Type) {
-    case SDK::SpellType::SkillshotCircle:
-    case SDK::SpellType::SkillshotMissileCircle:
-    case SDK::SpellType::SkillshotRing:
-        return static_cast<float>(entry.Radius > 0 ? entry.Radius : entry.Width);
-    case SDK::SpellType::SkillshotCone:
-    case SDK::SpellType::SkillshotMissileCone:
-        return static_cast<float>(entry.Radius > 0 ? entry.Radius : entry.Width);
-    default:
-        return static_cast<float>(entry.Width > 0 ? entry.Width : entry.Radius);
-    }
-}
-
-inline float ConvertRange(const SDK::SpellDatabaseEntry& entry) {
-    float range = static_cast<float>(entry.Range);
-    if (entry.ExtraRange > 0 && entry.Range < (INT_MAX / 2)) {
-        range += static_cast<float>(entry.ExtraRange);
-    }
-    return range;
-}
-
-inline bool HasName(const SpellData& data, const std::string& value) {
-    if (value.empty()) {
+inline bool EqualsIgnoreCase(const std::string& left, const std::string& right) {
+    if (left.size() != right.size()) {
         return false;
     }
-    if (data.spellName == value || data.missileName == value) {
-        return true;
-    }
-    for (const auto& extra : data.extraSpellNames) {
-        if (extra == value) {
-            return true;
+
+    for (size_t i = 0; i < left.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(left[i])) !=
+            std::tolower(static_cast<unsigned char>(right[i]))) {
+            return false;
         }
     }
-    for (const auto& extra : data.extraMissileNames) {
-        if (extra == value) {
-            return true;
-        }
-    }
-    return false;
+
+    return true;
 }
 
-inline bool IsDuplicate(const std::vector<SpellData>& db, const SpellData& candidate) {
-    for (const auto& existing : db) {
-        if (existing.charName != candidate.charName) {
-            continue;
-        }
-        if (HasName(existing, candidate.spellName) || HasName(existing, candidate.missileName)) {
-            return true;
-        }
-    }
-    return false;
+inline SpellData MakeSkillshot(
+    const char* champ, const char* name, const char* display,
+    SkillshotType type, bool missile, bool cc, int danger, int evadePct = 0)
+{
+    SpellData d;
+    d.charName       = champ;
+    d.spellName      = name;
+    d.displayName    = display;
+    d.type           = type;
+    d.isMissile      = missile;
+    d.isCC           = cc;
+    d.dangerLevel    = danger;
+    d.defaultEvadePct = evadePct;
+    d.defaultEnabled = (evadePct >= 0);
+    return d;
 }
 
-inline void ApplyPatch265Normalization(SpellData& data) {
-    // 26.5 introduced tuning changes (damage/cooldown focused) but no
-    // evade-geometry reworks that require hard overrides here.
-    // Keep this hook to make future patch updates localized.
-    (void)data;
+// Shorthand aliases
+inline SpellData SS(const char* c, const char* n, const char* d,
+    bool mis, bool cc, int dng, int pct = 0)
+{
+    return MakeSkillshot(c, n, d, SkillshotType::Line, mis, cc, dng, pct);
 }
 
 } // namespace detail
 
+// ============================================================================
+// Build the full spell database
+// Defined in SpellDatabase_Skillshots.inl and SpellDatabase_Targeted.inl
+// ============================================================================
 static std::vector<SpellData> BuildSpellDatabase() {
-    SDK::SpellDatabase::Init();
-
+    using namespace detail;
+    using namespace EvadeDefaults;
     std::vector<SpellData> db;
-    db.reserve(SDK::SpellDatabase::GetCount() + 1);
+    db.reserve(800);
 
-    // Global ARAM snowball entry.
-    db.push_back({
-        .charName="AllChampions",
-        .name="Mark/Snowball",
-        .spellName="SummonerSnowball",
-        .missileName="SummonerSnowball",
-        .extraSpellNames={"summonersnowball", "summonerporothrow"},
-        .extraMissileNames={"summonersnowball"},
-        .spellKey=SpellSlotId::F,
-        .spellType=SpellType::Line,
-        .radius=60.0f,
-        .range=1600.0f,
-        .spellDelay=0.0f,
-        .projectileSpeed=1300.0f,
-        .collisionObjects={CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions},
-        .dangerlevel=1,
-        .detectionType=DetectionType::Missile
-    });
+    // ==== Macros for ultra-compact entry ====
+    // S(champ, name, display, missile, cc, danger, evade%)
+    #define S(C,N,D,M,CC,DNG,PCT) db.push_back(SS(C,N,D,M,CC,DNG,PCT));
 
-    for (const auto& entry : SDK::SpellDatabase::Spells()) {
-        if (!entry.IsSkillshot()) {
-            continue;
-        }
+    // Include generated data files
+    #include "SpellDatabase_Skillshots.inl"
+    #include "SpellDatabase_Targeted.inl"
 
-        bool missileBacked =
-            entry.Type == SDK::SpellType::SkillshotMissileLine ||
-            entry.Type == SDK::SpellType::SkillshotMissileCircle ||
-            entry.Type == SDK::SpellType::SkillshotMissileCone ||
-            entry.Type == SDK::SpellType::SkillshotMissileArc ||
-            !entry.MissileSpellName.empty();
+    #undef S
 
-        SpellData data;
-        data.charName = entry.ChampionName.empty() ? "AllChampions" : entry.ChampionName;
-        data.name = entry.SpellName;
-        data.spellName = entry.SpellName;
-        data.missileName = entry.MissileSpellName;
-        data.extraSpellNames = entry.ExtraSpellNames;
-        data.extraMissileNames = entry.ExtraMissileNames;
-        data.spellKey = detail::ConvertSlot(entry.Slot);
-        data.spellType = detail::ConvertSpellType(entry.Type);
-        data.radius = detail::ConvertRadius(entry);
-        data.range = detail::ConvertRange(entry);
-        data.angle = static_cast<float>(entry.Angle);
-        data.secondaryRadius = static_cast<float>(entry.RingRadius);
-        data.spellDelay = static_cast<float>(entry.Delay);
-        data.projectileSpeed = missileBacked ? static_cast<float>(entry.MissileSpeed) : 0.0f;
-        data.fixedRange = entry.FixedRange;
-        data.isSpecial = entry.AvoidMaxRangeReduction || entry.MissileFollowsCaster ||
-                         !entry.SourceObjectName.empty() || !entry.FromObject.empty() ||
-                         !entry.FromObjects.empty();
-        data.hasEndExplosion = entry.RingRadius > 0;
-        data.collisionObjects = detail::ConvertCollisionObjects(entry.CollisionObjects);
-        data.dangerlevel = entry.DangerValue > 0 ? entry.DangerValue : 1;
-        data.detectionType = missileBacked ? DetectionType::Missile : DetectionType::CastSpell;
-        data.ccType = detail::ConvertCcType(entry);
-        if (!entry.SourceObjectName.empty()) {
-            data.extraMissileNames.push_back(entry.SourceObjectName);
-        }
-        if (!entry.FromObject.empty()) {
-            data.extraMissileNames.push_back(entry.FromObject);
-        }
-        for (const auto& source : entry.FromObjects) {
-            if (!source.empty()) {
-                data.extraMissileNames.push_back(source);
-            }
-        }
-
-        detail::ApplyPatch265Normalization(data);
-
-        if (!detail::IsDuplicate(db, data)) {
-            db.push_back(std::move(data));
-        }
-    }
-
-    std::stable_sort(db.begin() + 1, db.end(), [](const SpellData& left, const SpellData& right) {
-        if (left.charName != right.charName) {
-            return left.charName < right.charName;
-        }
-        if (left.spellKey != right.spellKey) {
-            return static_cast<int>(left.spellKey) < static_cast<int>(right.spellKey);
-        }
-        if (left.spellName != right.spellName) {
-            return left.spellName < right.spellName;
-        }
-        return left.missileName < right.missileName;
+    // Sort by champion name then spell name
+    std::stable_sort(db.begin(), db.end(), [](const SpellData& a, const SpellData& b) {
+        if (a.charName != b.charName) return a.charName < b.charName;
+        return a.spellName < b.spellName;
     });
 
     return db;
 }
 
+// ============================================================================
+// Global database access
+// ============================================================================
 inline std::vector<SpellData>& GetSpellDatabase() {
-    SDK::SpellDatabase::Init();
-
-    static std::vector<SpellData> db;
-    static size_t lastSourceCount = 0;
-
-    const size_t sourceCount = SDK::SpellDatabase::GetCount();
-    if (db.empty() || sourceCount != lastSourceCount || (db.size() <= 1 && sourceCount > 0)) {
-        db = BuildSpellDatabase();
-        lastSourceCount = SDK::SpellDatabase::GetCount();
-    }
-
+    static std::vector<SpellData> db = BuildSpellDatabase();
     return db;
 }
 
+// Get all spells for a champion
 inline std::vector<const SpellData*> GetSpellsForChampion(const std::string& champName) {
     std::vector<const SpellData*> result;
-    for (auto& spell : GetSpellDatabase()) {
-        if (spell.charName == champName || spell.charName == "AllChampions") {
-            result.push_back(&spell);
-        }
+    for (auto& s : GetSpellDatabase()) {
+        if (detail::EqualsIgnoreCase(s.charName, champName))
+            result.push_back(&s);
     }
     return result;
 }
 
-inline const SpellData* FindSpellByMissileName(const std::string& missileName) {
-    for (auto& spell : GetSpellDatabase()) {
-        if (spell.missileName == missileName) {
-            return &spell;
-        }
-        for (auto& extra : spell.extraMissileNames) {
-            if (extra == missileName) {
-                return &spell;
-            }
+// Get spell by internal name
+inline const SpellData* GetSpellByName(const std::string& spellName) {
+    for (auto& s : GetSpellDatabase()) {
+        if (detail::EqualsIgnoreCase(s.spellName, spellName))
+            return &s;
+        for (auto& extra : s.extraSpellNames) {
+            if (detail::EqualsIgnoreCase(extra, spellName)) return &s;
         }
     }
     return nullptr;
 }
 
-inline const SpellData* FindSpellBySpellName(const std::string& spellName) {
-    for (auto& spell : GetSpellDatabase()) {
-        if (spell.spellName == spellName) {
-            return &spell;
-        }
-        for (auto& extra : spell.extraSpellNames) {
-            if (extra == spellName) {
-                return &spell;
-            }
+// Get spell by missile name
+inline const SpellData* GetSpellByMissile(const std::string& missileName) {
+    for (auto& s : GetSpellDatabase()) {
+        if (detail::EqualsIgnoreCase(s.missileSpellName, missileName))
+            return &s;
+        if (s.isMissile && detail::EqualsIgnoreCase(s.spellName, missileName))
+            return &s;
+        for (auto& m : s.extraMissileNames) {
+            if (detail::EqualsIgnoreCase(m, missileName)) return &s;
         }
     }
     return nullptr;
+}
+
+// Get all dangerous (CC) spells
+inline std::vector<const SpellData*> GetDangerousSpells() {
+    std::vector<const SpellData*> result;
+    for (auto& s : GetSpellDatabase()) {
+        if (s.isCC || s.dangerLevel >= 4)
+            result.push_back(&s);
+    }
+    return result;
+}
+
+// Check if a spell name exists in the database
+inline bool IsKnownSpell(const std::string& spellName) {
+    return GetSpellByName(spellName) != nullptr;
 }
 
 } // namespace EzEvade

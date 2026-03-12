@@ -261,6 +261,32 @@ namespace SDK {
         }
 
         // ==================================================================
+        // LaneClearWait — should we hold autos to secure last-hits?
+        // Uses a shorter window than Orbwalker::ShouldWait to reduce over-wait.
+        // ==================================================================
+        static bool LaneClearWait() {
+            auto& player = GameObjects::Player;
+            if (!player.IsValid()) return false;
+
+            const float range = player.GetRealAttackRange() + 65.0f;
+            const float delayMs = player.GetAttackDelay() * 1000.0f;
+
+            for (auto& minion : GameObjects::EnemyMinions) {
+                if (!minion.IsValid() || !minion.IsAlive() || !minion.IsVisible()) continue;
+                if (minion.GetTeam() == GameObjectTeam::Neutral) continue;
+                if (player.DistanceTo(minion) > range) continue;
+
+                const float pred = GetPrediction(minion, delayMs);
+                const float dmg = player.GetAutoAttackDamage(minion);
+                if (pred > 0.0f && pred <= dmg) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // ==================================================================
         // GetLaneClearPrediction — health + optional ally DPS
         // ==================================================================
         static float GetLaneClearPrediction(const GameObject& unit, float timeMs, float allyDPS = 0.0f) {
@@ -310,6 +336,27 @@ namespace SDK {
 
         static bool HasMinionAggro(const GameObject& unit) {
             return GetMinionAggroCount(unit) > 0;
+        }
+
+        // ==================================================================
+        // GetIncomingAttackCount — how many attacks are heading towards unit?
+        // @param impactTimeMs  : window to check (ms from now)
+        // ==================================================================
+        static int GetIncomingAttackCount(const GameObject& unit, float impactTimeMs) {
+            if (!unit.IsValid()) return 0;
+            int netId = unit.GetNetId();
+            auto it = trackedMissiles.find(netId);
+            if (it == trackedMissiles.end()) return 0;
+
+            float now = Game::GetTime();
+            float deadline = now + (impactTimeMs / 1000.0f);
+            int count = 0;
+            for (auto& atk : it->second) {
+                if (atk.arrivalTime >= now && atk.arrivalTime <= deadline) {
+                    count++;
+                }
+            }
+            return count;
         }
 
     private:

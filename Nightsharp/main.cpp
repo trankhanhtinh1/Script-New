@@ -7,9 +7,10 @@
 #include "plugins/core/TargetSelectorPlugin.h"
 #include "plugins/core/RenderTestPlugin.h"
 #include "plugins/champions/EzrealPlugin.h"
-#include "plugins/utility/EzEvadePlugin.h"
+#include "plugins/utility/evade/EvadePlugin.h"
 #include "menu/NightSharpMenu.h"
 #include "sdk/Utils/DebugConsole.h"
+#include "sdk/Utils/PackmanPatcher.h"
 #include <Psapi.h>
 #include <chrono>
 #include <iostream>
@@ -72,11 +73,14 @@
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 Present oPresent;
+using ResizeBuffersFn = HRESULT(__stdcall*)(IDXGISwapChain*, UINT, UINT, UINT, DXGI_FORMAT, UINT);
+ResizeBuffersFn oResizeBuffers = nullptr;
+
 HWND window = NULL;
 WNDPROC oWndProc;
 ID3D11Device* pDevice = NULL;
 ID3D11DeviceContext* pContext = NULL;
-ID3D11RenderTargetView* mainRenderTargetView;
+ID3D11RenderTargetView* mainRenderTargetView = nullptr;
 
 void InitImGui()
 {
@@ -103,9 +107,264 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 bool init = false;
 bool sdkInitialized = false;
 bool debugLogged = false;
+float sdkWarmupStart = 0.0f;  // When IsInGame first became true
+constexpr float SDK_WARMUP_SECONDS = 3.0f; // Wait 3 seconds before heavy init
+static auto g_scriptClockStart = std::chrono::steady_clock::now();
 
 namespace HookConfig {
 	constexpr bool EnableKiero = true;
+}
+
+// ========================================================================
+// SEH-safe helper functions — extracted to avoid C2712
+// MSVC does not allow __try in functions with C++ objects needing unwinding.
+// These helpers contain ONLY POD types + C calls, so __try is safe here.
+// ========================================================================
+
+// Safe IsInGame check with SEH
+static bool SafeIsInGame() {
+	__try {
+		return Globals::base && SDK::Game::IsInGame();
+	} __except(1) {
+		return false;
+	}
+}
+
+// Safe GetTime with SEH
+static float SafeGetTime() {
+	__try {
+		return SDK::Game::GetTime();
+	} __except(1) {
+		return 0.0f;
+	}
+}
+
+// Safe SDK core update with SEH — event tracking only (runs per script tick)
+static void SafeUpdateSDKCore() {
+	__try {
+		SDK::GameObjects::Update();
+		SDK::EventSystem::Update();
+		SDK::GamePath::PathTracker::Update();
+		SDK::HealthPrediction::Update();
+		SDK::SummonerTracker::Update();
+		SDK::RecallTracker::Update();
+		SDK::Teleport::Update();
+		SDK::AutoLevel::Update();
+		SDK::DashDetector::Update();
+		SDK::StealthDetector::Update();
+		SDK::InterruptableSpell::Update();
+		SDK::TurretAggro::Update();
+		SDK::SkillshotTracker::Update();
+	} __except(1) {
+		// SDK frame update crashed — silently recover next frame
+	}
+}
+
+// Safe plugin logic update with SEH (runs per script tick — 45 FPS)
+static void SafeUpdatePluginLogic() {
+	__try {
+		SDK::MenuUI::Menu::UpdateAllKeyBinds();
+
+		if (auto* orbwalkerOverride = Plugins::PluginManager::Get().Find("Orbwalker 2.0")) {
+			SDK::Orbwalker::SetPluginOverrideActive(
+				orbwalkerOverride->IsLoaded() && orbwalkerOverride->IsEnabled());
+		}
+
+		SDK::Orbwalker::OnUpdate();
+
+		Plugins::PluginManager::Get().OnUpdate();
+		SDK::EventSystem::RunScriptTick();
+
+		SDK::DelayAction::Update();
+		SDK::ConfigManager::AutoSave();
+	} __except(1) {
+		// Plugin/orbwalker frame update crashed — silently recover next frame
+	}
+}
+
+// Safe render-only update with SEH (runs every Present frame — full FPS)
+static void SafeUpdateRender() {
+	__try {
+		SDK::Drawing::UpdateMatrix();
+		SDK::Orbwalker::OnRender();
+		Plugins::PluginManager::Get().OnRender();
+		SDK::MenuUI::PermaShow::Render();
+		SDK::MenuUI::Notifications::Render();
+	} __except(1) {
+		// Render crashed — silently recover
+	}
+}
+
+// Safe SDK initialization with SEH (InitializeSDK uses std::string internally)
+static bool InitializeSDK(); // forward decl
+static bool SafeInitializeSDK() {
+	__try {
+		return InitializeSDK();
+	} __except(1) {
+		DebugConsole::Log("[INIT] CRITICAL: SDK init crashed! Will retry...");
+		return false;
+	}
+}
+
+// Safe menu render with SEH
+static void SafeRenderMenu(bool inGame) {
+	__try {
+		if (inGame) {
+			NightSharpMenu::Render();
+		} else if (Globals::base) {
+			ImDrawList* dl = ImGui::GetBackgroundDrawList();
+			if (dl) {
+				dl->AddText(ImVec2(10, 10), IM_COL32(255, 200, 100, 200),
+					"[NightSharp] Waiting for game...");
+			}
+		}
+	} __except(1) {
+		// Menu render crashed — silently recover
+	}
+}
+
+// Safe info overlay render with SEH
+static void SafeRenderOverlay() {
+	__try {
+		if (Config::Misc::showFPS || Config::Misc::showPing || Config::Misc::showGameTime) {
+			ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowBgAlpha(0.35f);
+			ImGui::Begin("##InfoOverlay", nullptr,
+				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+				ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+				ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
+
+			if (Config::Misc::showFPS) {
+				ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
+			}
+			if (Config::Misc::showGameTime) {
+				float gt = Globals::Read<float>(Globals::base + Offset::Global::GameTime);
+				if (gt > 0) {
+					ImGui::Text("Time: %d:%02d", (int)gt / 60, (int)gt % 60);
+				}
+			}
+
+			ImGui::End();
+		}
+	} __except(1) {
+		// Overlay render crashed — silently recover
+	}
+}
+
+// ========================================================================
+// ResizeBuffers hook — CRITICAL for preventing crash on resolution change
+// Without this, the old RenderTargetView becomes invalid after resize
+// ========================================================================
+HRESULT __stdcall hkResizeBuffers(IDXGISwapChain* pSwapChain, UINT BufferCount,
+	UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT Flags)
+{
+	// Release old RTV before resize
+	if (mainRenderTargetView) {
+		mainRenderTargetView->Release();
+		mainRenderTargetView = nullptr;
+	}
+
+	HRESULT hr = oResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, Flags);
+
+	// Recreate RTV after resize
+	if (SUCCEEDED(hr) && pDevice) {
+		ID3D11Texture2D* pBackBuffer = nullptr;
+		if (SUCCEEDED(pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer))) {
+			pDevice->CreateRenderTargetView(pBackBuffer, NULL, &mainRenderTargetView);
+			pBackBuffer->Release();
+		}
+	}
+
+	return hr;
+}
+
+// SDK initialization (no __try needed — each sub-Init has its own safety)
+static bool InitializeSDK() {
+	// Resolve current DLL directory (hid.dll)
+	char modulePathBuf[MAX_PATH] = {};
+	HMODULE hm = NULL;
+	GetModuleHandleExA(
+		GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		(LPCSTR)&InitializeSDK, &hm);
+	GetModuleFileNameA(hm, modulePathBuf, MAX_PATH);
+	std::string dllDir(modulePathBuf);
+	dllDir = dllDir.substr(0, dllDir.find_last_of("\\/"));
+
+	SDK::SpellDatabase::Init();  // Load Database.json (auto-detect path)
+	SDK::DamageLibrary::Init();  // Load 9.7.269.2391.json (per-champion QWER damage)
+	SDK::DamagePassives::Init(); // Init 60+ champion passive on-hit database
+	SDK::DamageMastery::Init();  // Init rune/keystone damage database
+	SDK::SpellCaster::SetDamageCallback([](const SDK::GameObject& source, const SDK::GameObject& target, SDK::SpellSlotId slot, int stage) {
+		return (float)SDK::DamageLibrary::GetSpellDamage(source, target, slot, static_cast<SDK::DamageStage>(stage));
+	});
+
+	// Hook DamageCalc callbacks for DamagePassives + DamageMastery
+	SDK::DamageCalc::SetPassiveDmgCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
+		return SDK::DamagePassives::GetPassiveDamage(s, t);
+	});
+	SDK::DamageCalc::SetRuneDmgCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
+		return SDK::DamageMastery::GetRuneDamage(s, t);
+	});
+	SDK::DamageCalc::SetRuneMultCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
+		return SDK::DamageMastery::GetDamageMultiplier(s, t);
+	});
+	SDK::Invulnerable::Init();   // Init invulnerable database
+	SDK::LastCast::Init();       // Init last cast tracking
+	SDK::WeightedTargetSelector::Init(); // Init weight system for target selection
+	SDK::ChampionPriority::Init();       // Init champion priority database (ADC=5, Tank=1)
+	SDK::Teleport::Init();               // Init teleport/recall tracker
+	SDK::GamePath::PathTracker::Init(); // Init path tracker for prediction
+	SDK::SkillshotTracker::Init();       // Init skillshot auto-detection via EventSystem
+	SDK::Orbwalker::Init();
+	SDK::AutoLevel::Init();
+	SDK::Map::Init();                    // Detect current map type
+	SDK::GameObjects::Update();          // Prime local player before champion plugin auto-load
+
+	// Initialize event subsystems — load JSON databases
+	{
+		std::string gapJson = dllDir + "\\sdk\\Data\\Gapclosers.json";
+		std::string intJson = dllDir + "\\sdk\\Data\\InterruptableSpells.json";
+		std::string globalIntJson = dllDir + "\\sdk\\Data\\GlobalInterruptableSpellsList.json";
+		if (!SDK::Gapcloser::Init(gapJson))
+			SDK::Gapcloser::InitDefault();
+		if (!SDK::InterruptableSpell::Init(intJson))
+			SDK::InterruptableSpell::InitDefault();
+		if (!SDK::InterruptableSpell::InitGlobal(globalIntJson))
+			SDK::InterruptableSpell::InitGlobalDefault();
+	}
+
+	// Connect Gapcloser to EventSystem's OnProcessSpellCast
+	SDK::EventSystem::OnProcessSpellCast([](const SDK::SpellCastArgs& args) {
+		SDK::Gapcloser::OnSpellCastDetected(args);
+	});
+
+	auto& pm = Plugins::PluginManager::Get();
+	pm.Register<Plugins::OrbwalkerPlugin>();
+	pm.Register<Plugins::TargetSelectorPlugin>();
+	pm.Register<Plugins::RenderTestPlugin>();
+	pm.Register<Plugins::EzrealPlugin>();
+	pm.Register<Plugins::EvadePlugin>();
+	// SDK Orbwalker is default; OrbwalkerPlugin is optional override.
+	pm.SetAutoLoad("Orbwalker 2.0", true);
+	pm.SetAutoLoad("Target Selector", true);
+	pm.SetAutoLoad("Evade", true);
+	pm.LoadAuto();
+
+	// DEBUG: Log loaded plugins
+	DebugConsole::Log("=== Plugins Loaded ===");
+	for (auto& p : pm.GetPlugins()) {
+		DebugConsole::Log("  - %s: loaded=%d enabled=%d", 
+			p->GetName(), p->IsLoaded() ? 1 : 0, p->IsEnabled() ? 1 : 0);
+	}
+
+	// Save config right next to hid.dll
+	SDK::ConfigManager::SetConfigPath(dllDir);
+	SDK::ConfigManager::LoadAll();
+	// Initialize script tick clock
+	auto nowMs = std::chrono::duration<double, std::milli>(
+		std::chrono::steady_clock::now() - g_scriptClockStart).count();
+	SDK::Game::LastScriptTickWallClock = nowMs - SDK::Game::ScriptTickIntervalMs;
+	return true;
 }
 
 HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags)
@@ -147,219 +406,122 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 	ImGui::NewFrame();
 
 	// ====== SDK Game Logic — only when in game (LocalPlayer exists) ======
-	bool inGame = Globals::base && SDK::Game::IsInGame();
+	bool inGame = SafeIsInGame();
 
-	// One-time SDK initialization when first entering game
+	// ---- Warmup timer: ensure game is stable before heavy init ----
+	// This prevents crash from premature memory access during loading screen
 	if (inGame && !sdkInitialized) {
-		// Resolve current DLL directory (hid.dll)
-		char modulePathBuf[MAX_PATH] = {};
-		HMODULE hm = NULL;
-		GetModuleHandleExA(
-			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-			(LPCSTR)&hkPresent, &hm);
-		GetModuleFileNameA(hm, modulePathBuf, MAX_PATH);
-		std::string dllDir(modulePathBuf);
-		dllDir = dllDir.substr(0, dllDir.find_last_of("\\/"));
+		float gameTime = SafeGetTime();
 
-		SDK::SpellDatabase::Init();  // Load Database.json (auto-detect path)
-		SDK::DamageLibrary::Init();  // Load 9.7.269.2391.json (per-champion QWER damage)
-		SDK::DamagePassives::Init(); // Init 60+ champion passive on-hit database
-		SDK::DamageMastery::Init();  // Init rune/keystone damage database
-		SDK::SpellCaster::SetDamageCallback([](
-			const SDK::GameObject& source,
-			const SDK::GameObject& target,
-			SDK::SpellSlotId slot,
-			int stage) {
-			return (float)SDK::DamageLibrary::GetSpellDamage(
-				source,
-				target,
-				slot,
-				static_cast<SDK::DamageStage>(stage));
-		});
-
-		// Hook DamageCalc callbacks for DamagePassives + DamageMastery
-		SDK::DamageCalc::SetPassiveDmgCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
-			return SDK::DamagePassives::GetPassiveDamage(s, t);
-		});
-		SDK::DamageCalc::SetRuneDmgCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
-			return SDK::DamageMastery::GetRuneDamage(s, t);
-		});
-		SDK::DamageCalc::SetRuneMultCallback([](const SDK::GameObject& s, const SDK::GameObject& t) {
-			return SDK::DamageMastery::GetDamageMultiplier(s, t);
-		});
-		SDK::Invulnerable::Init();   // Init invulnerable database
-		SDK::LastCast::Init();       // Init last cast tracking
-		SDK::WeightedTargetSelector::Init(); // Init weight system for target selection
-		SDK::ChampionPriority::Init();       // Init champion priority database (ADC=5, Tank=1)
-		SDK::Teleport::Init();               // Init teleport/recall tracker
-		SDK::GamePath::PathTracker::Init(); // Init path tracker for prediction
-		SDK::SkillshotTracker::Init();       // Init skillshot auto-detection via EventSystem
-		SDK::Orbwalker::Init();
-		SDK::AutoLevel::Init();
-		SDK::Map::Init();                    // Detect current map type
-		SDK::GameObjects::Update();          // Prime local player before champion plugin auto-load
-
-		// Initialize event subsystems — load JSON databases
-		{
-			std::string gapJson = dllDir + "\\sdk\\Data\\Gapclosers.json";
-			std::string intJson = dllDir + "\\sdk\\Data\\InterruptableSpells.json";
-			std::string globalIntJson = dllDir + "\\sdk\\Data\\GlobalInterruptableSpellsList.json";
-			if (!SDK::Gapcloser::Init(gapJson))
-				SDK::Gapcloser::InitDefault();
-			if (!SDK::InterruptableSpell::Init(intJson))
-				SDK::InterruptableSpell::InitDefault();
-			if (!SDK::InterruptableSpell::InitGlobal(globalIntJson))
-				SDK::InterruptableSpell::InitGlobalDefault();
+		if (sdkWarmupStart <= 0.0f) {
+			sdkWarmupStart = gameTime;
+			DebugConsole::Log("[INIT] Game detected, starting warmup (%.1fs)...", gameTime);
 		}
 
-		// Connect Gapcloser to EventSystem's OnProcessSpellCast
-		SDK::EventSystem::OnProcessSpellCast([](const SDK::SpellCastArgs& args) {
-			SDK::Gapcloser::OnSpellCastDetected(args);
-		});
-
-		auto& pm = Plugins::PluginManager::Get();
-		pm.Register<Plugins::OrbwalkerPlugin>();
-		pm.Register<Plugins::TargetSelectorPlugin>();
-		pm.Register<Plugins::RenderTestPlugin>();
-		pm.Register<Plugins::EzrealPlugin>();
-		pm.Register<Plugins::EzEvadePlugin>();
-		// SDK Orbwalker is default; OrbwalkerPlugin is optional override.
-		pm.SetAutoLoad("Orbwalker", false);
-		pm.SetAutoLoad("Target Selector", true);
-		pm.SetAutoLoad("EzEvade", true);
-		pm.LoadAuto();
-
-		// DEBUG: Log loaded plugins
-		DebugConsole::Log("=== Plugins Loaded ===");
-		for (auto& p : pm.GetPlugins()) {
-			DebugConsole::Log("  - %s: loaded=%d enabled=%d", 
-				p->GetName(), p->IsLoaded() ? 1 : 0, p->IsEnabled() ? 1 : 0);
+		// Wait for game to be stable: gameTime > 5s AND warmup elapsed
+		if (gameTime < 5.0f || (gameTime - sdkWarmupStart) < SDK_WARMUP_SECONDS) {
+			// Show waiting message while warming up
+			ImDrawList* dl = ImGui::GetBackgroundDrawList();
+			if (dl) {
+				char warmupBuf[128];
+				snprintf(warmupBuf, sizeof(warmupBuf),
+					"[NightSharp] Initializing... (%.1fs / %.1fs)",
+					gameTime - sdkWarmupStart, SDK_WARMUP_SECONDS);
+				dl->AddText(ImVec2(10, 10), IM_COL32(255, 200, 100, 200), warmupBuf);
+			}
+			ImGui::Render();
+			if (mainRenderTargetView) {
+				pContext->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
+				ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+			}
+			return oPresent(pSwapChain, SyncInterval, Flags);
 		}
-
-		// Save config right next to hid.dll
-		SDK::ConfigManager::SetConfigPath(dllDir);
-		SDK::ConfigManager::LoadAll();
-		sdkInitialized = true;
 	}
 
-	if (inGame) {
-		SDK::Drawing::UpdateMatrix(); // Update W2S matrix FIRST
-		SDK::GameObjects::Update();
-		SDK::EventSystem::Update();      // Track game events (fires OnProcessSpellCast → Gapcloser)
-		SDK::GamePath::PathTracker::Update(); // Track hero path changes for prediction
-		SDK::HealthPrediction::Update(); // Track incoming damage
-		SDK::SummonerTracker::Update();  // Track enemy summoner CDs
-		SDK::RecallTracker::Update();    // Track enemy recalls
-		SDK::Teleport::Update();         // Track teleport/recall channels (TP, Shen R, TF R, Hexgate)
-		SDK::AutoLevel::Update();        // Auto level up skills
-		SDK::DashDetector::Update();     // Track hero dashes
-		SDK::StealthDetector::Update();  // Track stealth state changes
-		SDK::InterruptableSpell::Update(); // Track interruptable channels
-		SDK::TurretAggro::Update();      // Track turret aggro changes
-		SDK::SkillshotTracker::Update(); // Track active enemy skillshots (Evade foundation)
+	// One-time SDK initialization when first entering game (AFTER warmup)
+	if (inGame && !sdkInitialized) {
+		DebugConsole::Log("[INIT] Warmup complete, initializing SDK...");
+		sdkInitialized = SafeInitializeSDK();
+		if (!sdkInitialized) {
+			DebugConsole::Log("[INIT] SDK init failed, will retry next frame...");
+			sdkWarmupStart = 0.0f;
+		} else {
+			DebugConsole::Log("[INIT] SDK initialized successfully!");
+		}
+	}
 
-		// Update MenuUI keybinds before orbwalker reads them this frame.
-		SDK::MenuUI::Menu::UpdateAllKeyBinds();
+	if (inGame && sdkInitialized) {
+		// Calculate wall clock time for tick limiter
+		const auto nowMs = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - g_scriptClockStart).count();
 
-		if (auto* orbwalkerOverride = Plugins::PluginManager::Get().Find("Orbwalker")) {
-			SDK::Orbwalker::SetPluginOverrideActive(
-				orbwalkerOverride->IsLoaded() && orbwalkerOverride->IsEnabled());
+		// ---- Script tick (rate-limited to 45 FPS) ----
+		// SDK updates + plugin logic only run when enough time has passed.
+		// This reduces CPU/memory usage ~6x vs running every render frame.
+		if (SDK::Game::ShouldRunScriptTick(nowMs)) {
+			SDK::Game::AdvanceScriptFrame(nowMs);
+			SafeUpdateSDKCore();
+			SafeUpdatePluginLogic();
 		}
 
-		// Default SDK orbwalker runs every frame unless OrbwalkerPlugin override is active.
-		SDK::Orbwalker::OnUpdate();
+		// ---- Render (runs every Present frame — full FPS) ----
+		SafeUpdateRender();
 
-		// Update and render all plugins
-		Plugins::PluginManager::Get().OnUpdate();
-		SDK::Orbwalker::OnRender();
-		Plugins::PluginManager::Get().OnRender();
-
-		// DEBUG: Log after plugin update - ActiveMode is now synced by OrbwalkerPlugin.
-		auto modeToString = [](int mode) -> const char* {
-			switch ((SDK::OrbwalkingMode)mode) {
-			case SDK::OrbwalkingMode::Combo: return "Combo";
-			case SDK::OrbwalkingMode::Harass: return "Harass";
-			case SDK::OrbwalkingMode::LastHit: return "LastHit";
-			case SDK::OrbwalkingMode::LaneClear: return "LaneClear";
-			case SDK::OrbwalkingMode::Flee: return "Flee";
-			default: return "None";
-			}
-		};
+		// Log mode changes
 		static int lastMode = 0;
 		int currentMode = (int)SDK::Orbwalker::ActiveMode;
 		if (currentMode != 0 && currentMode != lastMode) {
-			DebugConsole::Log(">>> ORBWALK MODE ACTIVATED! %s (%d)", modeToString(currentMode), currentMode);
+			const char* names[] = {"None","Combo","Harass","LastHit","LaneClear","Flee"};
+			DebugConsole::Log(">>> ORBWALK MODE: %s (%d)",
+				(currentMode >= 0 && currentMode <= 5) ? names[currentMode] : "?", currentMode);
 		}
 		lastMode = currentMode;
-
-		// Process delayed actions
-		SDK::DelayAction::Update();
-
-		// Render PermaShow overlay (always-visible keybind status)
-		SDK::MenuUI::PermaShow::Render();
-
-		// Render notifications overlay
-		SDK::MenuUI::Notifications::Render();
-
-		// Auto-save config (every 5s if changed)
-		SDK::ConfigManager::AutoSave();
 	}
 
-	// ====== Render Menu (NightSharp Style) — only when in game ======
+	// ====== Render Menu + Overlays — ALL wrapped in SEH ======
+	SafeRenderMenu(inGame);
 	if (inGame) {
-		NightSharpMenu::Render();
-	} else if (Globals::base) {
-		// Waiting for game — show small status indicator
-		ImDrawList* dl = ImGui::GetBackgroundDrawList();
-		if (dl) {
-			dl->AddText(ImVec2(10, 10), IM_COL32(255, 200, 100, 200),
-				"[NightSharp] Waiting for game...");
-		}
-	}
-
-	// ====== Info Overlay — only when in game ======
-	if (inGame && (Config::Misc::showFPS || Config::Misc::showPing || Config::Misc::showGameTime)) {
-		ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-		ImGui::SetNextWindowBgAlpha(0.35f);
-		ImGui::Begin("##InfoOverlay", nullptr,
-			ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-			ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-			ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
-
-		if (Config::Misc::showFPS) {
-			ImGui::Text("FPS: %.0f", ImGui::GetIO().Framerate);
-		}
-		if (Config::Misc::showGameTime) {
-			float gt = Globals::Read<float>(Globals::base + Offset::Global::GameTime);
-			if (gt > 0) {
-				ImGui::Text("Time: %d:%02d", (int)gt / 60, (int)gt % 60);
-			}
-		}
-
-		ImGui::End();
+		SafeRenderOverlay();
 	}
 
 	ImGui::Render();
 
-	pContext->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
-	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	if (mainRenderTargetView) {
+		pContext->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	}
 	
-	// Render directly without spoofcall (could cause crash/instability)
 	return oPresent(pSwapChain, SyncInterval, Flags);
 }
 
 DWORD WINAPI MainThread(LPVOID lpReserved)
 {
+	// Delay 8s to wait for the game to complete rendering initialization (avoid crash on loading screen)
+	Sleep(8000);
+
 	bool init_hook = false;
 	if (HookConfig::EnableKiero) {
+		int attempts = 0;
 		do
 		{
 			if (kiero::init(kiero::RenderType::D3D11) == kiero::Status::Success)
 			{
 				kiero::bind(8, (void**)&oPresent, hkPresent);
+				// Hook ResizeBuffers (vtable index 13) to handle resolution changes
+				kiero::bind(13, (void**)&oResizeBuffers, hkResizeBuffers);
 				NightSharpMenu::SetHookBackendLabel("NightSharp");
-				DebugConsole::Log("[HOOK] Backend: Kiero");
+				DebugConsole::Log("[HOOK] Backend: Kiero (Present + ResizeBuffers)");
 				init_hook = true;
+			}
+			else {
+				// FIX: Sleep to prevent CPU spin loop that causes deadlocks
+				// with D3D initialization on the main thread
+				Sleep(100);
+				attempts++;
+				if (attempts > 300) { // 30 seconds max wait
+					DebugConsole::Log("[HOOK] Failed after 300 attempts, giving up");
+					break;
+				}
 			}
 		} while (!init_hook);
 	}
@@ -377,6 +539,19 @@ BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved)
 	{
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hMod);
+		// === PACKMAN NEUTRALIZER ===
+		// Patch Packman's detection engine FIRST before any scanning runs.
+		// If stub.dll isn't loaded yet, spawn a background retry.
+		{
+			int patchResult = PackmanPatcher::PatchAll();
+			if (patchResult <= 0) {
+				// stub.dll not loaded yet — retry in background
+				QueueUserWorkItem([](LPVOID) -> DWORD {
+					PackmanPatcher::PatchWithRetry(30, 300);
+					return 0;
+				}, nullptr, WT_EXECUTEDEFAULT);
+			}
+		}
 		// FIX: Sử dụng QueueUserWorkItem thay vì CreateThread để tránh NtCreateThreadEx INT3 trap
 		QueueUserWorkItem((LPTHREAD_START_ROUTINE)MainThread, nullptr, WT_EXECUTEDEFAULT);
         // Start Heartbeat Log capture

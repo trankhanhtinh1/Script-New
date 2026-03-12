@@ -238,6 +238,7 @@ private:
         "shacobox",
         "yorickghoulmelee", "yorickbigghoul",
         "zyrathornplant", "zyragraspingplant",
+        "illaoiminion",
         // Season 2026 additions
         "voidspawn",
         "jihnmine",         // Jhin trap

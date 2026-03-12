@@ -576,6 +576,13 @@ namespace SDK {
             return SpellSlotId::Summoner1; // fallback
         }
 
+        // Check if spell at given slot index is ready (learned + off cooldown)
+        bool CanUseSpell(int slotIndex) const {
+            if (!IsValid() || slotIndex < 0 || slotIndex > 13) return false;
+            SpellSlot slot = SpellBook(address).GetSpell(static_cast<SpellSlotId>(slotIndex));
+            return slot.IsValid() && slot.IsReady();
+        }
+
         // ====================================================================
         // Type Checks (via function calls)
         // ====================================================================
@@ -595,6 +602,31 @@ namespace SDK {
         }
 
         bool IsJungleMonster() const {
+            if (!IsValid()) return false;
+            if (IsPlant()) return false;
+            
+            // Check native function first
+            bool nativeJungle = CallNativeIsJungleMonster();
+
+            if (GetTeam() != GameObjectTeam::Neutral)
+                return false;
+
+            const std::string objectName = GetName();
+            const std::string characterName = GetChampionName();
+            const char* objectNamePtr = objectName.c_str();
+            const char* characterNamePtr = characterName.c_str();
+
+            if (nativeJungle) return true;
+
+            return strstr(objectNamePtr, "SRU_") != nullptr ||
+                strstr(characterNamePtr, "SRU_") != nullptr ||
+                strstr(objectNamePtr, "Sru_Crab") != nullptr ||
+                strstr(characterNamePtr, "Sru_Crab") != nullptr ||
+                strstr(objectNamePtr, "TT_") != nullptr ||
+                strstr(characterNamePtr, "TT_") != nullptr;
+        }
+
+        bool CallNativeIsJungleMonster() const {
             typedef bool(__fastcall* Fn)(uintptr_t);
             static uintptr_t fn = Globals::base + Offset::Function::IsJungleMonster;
             __try { return ((Fn)fn)(address); }
@@ -615,6 +647,21 @@ namespace SDK {
             __except(1) { return false; }
         }
 
+
+        // ====================================================================
+        // Object Classification using game-internal MinionType byte
+        // From sub_BBB10: 0=Unset,1=Pet,2=Jungle,3=Team,4=Melee,5=Ranged,6=Cannon,7=Super
+        // Offset: Minion::LaneType (0x4CC9) on the object
+        // ====================================================================
+
+        // CompareTypeFlags — calls game function sub_29CD30 to check obfuscated type flags
+        bool CompareTypeFlags(int flag) const {
+            typedef bool(__fastcall* Fn)(uintptr_t, int, int, uintptr_t);
+            static uintptr_t fn = Globals::base + Offset::Function::CompareTypeFlags;
+            __try { return ((Fn)fn)(address, 0, flag, address); }
+            __except(1) { return false; }
+        }
+
         bool IsMinion() const {
             if (!IsValid()) return false;
             float maxHP = GetMaxHealth();
@@ -630,37 +677,68 @@ namespace SDK {
         }
 
         bool IsPet() const {
-            // Pets have a name containing "Pet" or are jungle-type with specific names
+            if (!IsValid()) return false;
+            // Primary: game-internal MinionType == Pet(1)
+            MinionType mt = GetMinionType();
+            if (mt == MinionType::Pet) return true;
+            // Fallback: string-based for edge cases
             std::string name = GetName();
-            return name.find("Pet") != std::string::npos ||
-                   name.find("Clone") != std::string::npos;
+            std::string lower = name;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+                return (char)std::tolower(c);
+            });
+            // Known pet names (traps, summons, clones)
+            static const char* const kPets[] = {
+                "annietibbers", "elisespiderling", "heimertyellow", "heimertblue",
+                "ivernminion", "malzaharvoidling", "shacobox", "teemomushroom",
+                "yorickghoulmelee", "yorickbigghoul", "yorickmistwalker",
+                "zyrathornplant", "zyragraspingplant", "illaoiminion",
+                "azirsoldierghost", "voidspawn", "jihnmine"
+            };
+            for (auto& p : kPets) {
+                if (lower == p) return true;
+            }
+            return false;
         }
 
         bool IsWard() const {
+            if (!IsValid()) return false;
             std::string name = GetName();
+            // Check exact ward object names (fast)
+            static const char* const kWards[] = {
+                "SightWard", "YellowTrinket", "BlueTrinket", "JammerDevice",
+                "YellowTrinketUpgrade", "VisionWard", "ControlWard"
+            };
+            for (auto& w : kWards) {
+                if (name == w) return true;
+            }
+            // Fallback substring check
             return name.find("Ward") != std::string::npos ||
                    name.find("ward") != std::string::npos;
         }
 
         bool IsPlant() const {
             if (!IsValid()) return false;
-            std::string name = GetName();
-            if (name.empty()) return false;
+            // Jungle plants are Neutral team only
             if (GetTeam() != GameObjectTeam::Neutral) return false;
-
-            std::string lower = name;
-            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
-                return (char)std::tolower(c);
-            });
-
-            // Explicit jungle-plant object families (avoid classifying champion plants like Zyra plants).
-            if (lower.find("sru_plant_health") != std::string::npos) return true;
-            if (lower.find("sru_plant_satchel") != std::string::npos) return true;
-            if (lower.find("sru_plant_vision") != std::string::npos) return true;
-            if (lower.find("hiddenminionplantdemon") != std::string::npos) return true;
-            if (lower.find("planthealthmirrored") != std::string::npos) return true;
-            if (lower.find("plantmasterminion") != std::string::npos) return true;
-
+            // Primary: use game type flags (TypeFlags::Plant = 0x8000)
+            if (CompareTypeFlags(0x8000)) return true;
+            
+            // Fallback: string-based for reliability
+            std::string name = GetName();
+            std::string champName = GetChampionName();
+            
+            std::string lowerName = name;
+            std::string lowerChamp = champName;
+            
+            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            std::transform(lowerChamp.begin(), lowerChamp.end(), lowerChamp.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            
+            if (lowerName.find("sru_plant") != std::string::npos || lowerChamp.find("sru_plant") != std::string::npos) return true;
+            if (lowerName.find("hiddenminionplantdemon") != std::string::npos || lowerChamp.find("hiddenminionplantdemon") != std::string::npos) return true;
+            if (lowerName.find("planthealthmirrored") != std::string::npos || lowerChamp.find("planthealthmirrored") != std::string::npos) return true;
+            if (lowerName.find("plantmasterminion") != std::string::npos || lowerChamp.find("plantmasterminion") != std::string::npos) return true;
+            
             return false;
         }
 
@@ -947,7 +1025,7 @@ namespace SDK {
         bool IsInBush() const {
             auto ng = SDK::NavGrid::Get();
             if (!ng.IsValid()) return false;
-            return ng.IsInBush(GetPosition());
+            return ng.IsInBrush(GetPosition());
         }
 
         // Is this object standing on a wall cell?
@@ -969,7 +1047,7 @@ namespace SDK {
         static bool IsInBushAt(const Vec3& pos) {
             auto ng = SDK::NavGrid::Get();
             if (!ng.IsValid()) return false;
-            return ng.IsInBush(pos);
+            return ng.IsInBrush(pos);
         }
 
         // Does a clear line-of-sight exist between this object and another?

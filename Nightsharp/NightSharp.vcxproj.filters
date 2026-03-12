@@ -74,6 +74,9 @@
     <Filter Include="plugins\utility">
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-000000000012}</UniqueIdentifier>
     </Filter>
+    <Filter Include="plugins\utility\evade">
+      <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-000000000013}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <!-- Source Files (.cpp/.c) -->
   <ItemGroup>
@@ -331,8 +334,17 @@
     <ClInclude Include="plugins\core\TargetSelectorPlugin.h">
       <Filter>plugins\core</Filter>
     </ClInclude>
-    <ClInclude Include="plugins\utility\EzEvadePlugin.h">
-      <Filter>plugins\utility</Filter>
+    <ClInclude Include="plugins\utility\evade\EvadeMenuData.h">
+      <Filter>plugins\utility\evade</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\utility\evade\EvadeMenuBuilder.h">
+      <Filter>plugins\utility\evade</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\utility\evade\EvadeDrawer.h">
+      <Filter>plugins\utility\evade</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\utility\evade\EvadePlugin.h">
+      <Filter>plugins\utility\evade</Filter>
     </ClInclude>
     <!-- imgui -->
     <ClInclude Include="imgui\imconfig.h">
