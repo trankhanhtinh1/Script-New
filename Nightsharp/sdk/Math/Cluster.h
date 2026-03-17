@@ -225,22 +225,42 @@ namespace SDK {
                 }
 
                 if (bestHits > 1) {
-                    // Center the cast position for better coverage
+                    // Center the position — C# exact algorithm:
+                    // Find the two points with maximum spread via ProjectOn + AngleBetween > 90°
                     auto finalHits = GetLineHits(from2d, bestCandidate, input.Width, positions);
                     if (finalHits.size() >= 2) {
-                        Vec2 center;
-                        for (auto& h : finalHits) {
-                            center = center + h;
-                        }
-                        center = center / (float)finalHits.size();
+                        float maxDistance = -1.0f;
+                        Vec2 p1, p2;
 
-                        // Project center onto the line
-                        Vec2 dir = (bestCandidate - from2d).Normalized();
-                        float proj = (center - from2d).Dot(dir);
-                        Vec2 projPoint = from2d + dir * proj;
+                        for (size_t fi = 0; fi < finalHits.size(); fi++) {
+                            for (size_t fj = 0; fj < finalHits.size(); fj++) {
+                                Vec2 startP = from2d;
+                                Vec2 endP = bestCandidate;
+
+                                auto proj1 = Vec2_ProjectOn(positions[fi], startP, endP);
+                                auto proj2 = Vec2_ProjectOn(positions[fj], startP, endP);
+
+                                float distSum = finalHits[fi].DistanceSqr(proj1.segmentPoint)
+                                              + finalHits[fj].DistanceSqr(proj2.segmentPoint);
+
+                                // C#: AngleBetween > 90
+                                float angleDeg = fabsf(Geometry::RadToDeg(
+                                    (proj1.segmentPoint - positions[fi]).AngleBetween(
+                                     proj2.segmentPoint - positions[fj])));
+
+                                if (distSum >= maxDistance && angleDeg > 90.0f) {
+                                    maxDistance = distSum;
+                                    p1 = positions[fi];
+                                    p2 = positions[fj];
+                                }
+                            }
+                        }
+
+                        // C#: CastPosition = ((p1 + p2) * 0.5f).ToVector3()
+                        Vec2 castCenter = (p1 + p2) * 0.5f;
 
                         PredictionResult result;
-                        result.CastPosition = Vec3::From2D(projPoint, mainTarget.GetPosition().y);
+                        result.CastPosition = Vec3::From2D(castCenter, mainTarget.GetPosition().y);
                         result.UnitPosition = mainPred.UnitPosition;
                         result.Hitchance = mainPred.Hitchance;
                         result.AoEHitCount = bestHits;

@@ -165,12 +165,7 @@
     <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
-    <ClCompile Include="kiero\kiero.cpp" />
-    <ClCompile Include="kiero\minhook\src\buffer.c" />
-    <ClCompile Include="kiero\minhook\src\hde\hde32.c" />
-    <ClCompile Include="kiero\minhook\src\hde\hde64.c" />
-    <ClCompile Include="kiero\minhook\src\hook.c" />
-    <ClCompile Include="kiero\minhook\src\trampoline.c" />
+
     <ClCompile Include="main.cpp" />
   <ClCompile Include="sdk\EzEvade\Spells\ObjectTracker.cpp" />
   <ClCompile Include="sdk\EzEvade\Spells\Spell.cpp" />
@@ -186,10 +181,6 @@
   <ClCompile Include="sdk\EzEvade\Utils\EvadeUtils.cpp" />
 </ItemGroup>
   <ItemGroup>
-    <None Include="kiero\minhook\dll_resources\MinHook.def" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="kiero\minhook\dll_resources\MinHook.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h" />
@@ -281,15 +272,9 @@
     <ClInclude Include="plugins\utility\evade\EvadeMenuBuilder.h" />
     <ClInclude Include="plugins\utility\evade\EvadeDrawer.h" />
     <ClInclude Include="plugins\utility\evade\EvadePlugin.h" />
-    <ClInclude Include="kiero\kiero.h" />
-    <ClInclude Include="kiero\minhook\include\MinHook.h" />
-    <ClInclude Include="kiero\minhook\src\buffer.h" />
-    <ClInclude Include="kiero\minhook\src\hde\hde32.h" />
-    <ClInclude Include="kiero\minhook\src\hde\hde64.h" />
-    <ClInclude Include="kiero\minhook\src\hde\pstdint.h" />
-    <ClInclude Include="kiero\minhook\src\hde\table32.h" />
-    <ClInclude Include="kiero\minhook\src\hde\table64.h" />
-    <ClInclude Include="kiero\minhook\src\trampoline.h" />
+    <ClInclude Include="core\OverlayWindow.h" />
+    <ClInclude Include="core\OverlayRenderer.h" />
+    <ClInclude Include="core\AntiBan.h" />
     <ClInclude Include="spoof\spoofcall.h" />
   <ClInclude Include="sdk\EzEvade\Spells\ObjectTracker.h" />
   <ClInclude Include="sdk\EzEvade\Spells\Spell.h" />

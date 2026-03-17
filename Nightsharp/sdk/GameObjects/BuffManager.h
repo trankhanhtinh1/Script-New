@@ -190,6 +190,25 @@ namespace SDK {
                    IsSuppressed() || IsSnared() || IsAsleep();
         }
 
+        // Returns remaining immobility time in seconds (< 0 = not immobile)
+        // Reference: Movement.cs UnitIsImmobileUntil
+        float ImmobileUntil() const {
+            const float now = Game::GetTime();
+            float maxEnd = -1.0f;
+            ForEach([&](Buff& buff) {
+                if (!buff.IsActive()) return;
+                const BuffType t = buff.GetType();
+                if (t != BuffType::Charm &&
+                    t != BuffType::Knockup &&
+                    t != BuffType::Stun &&
+                    t != BuffType::Suppression &&
+                    t != BuffType::Snare) return;
+                float end = buff.GetEndTime();
+                if (end > maxEnd) maxEnd = end;
+            });
+            return maxEnd - now;
+        }
+
     public:
         bool HasBuffOfType(BuffType type) const {
             bool found = false;

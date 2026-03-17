@@ -117,7 +117,7 @@ namespace NightSharpMenu {
         const char* text, bool isActive, bool hasArrow = false) {
         ImVec2 mn = pos;
         ImVec2 mx = ImVec2(pos.x + w, pos.y + ITEM_H);
-        bool hovered = ImGui::IsMouseHoveringRect(mn, mx);
+        bool hovered = ImGui::IsMouseHoveringRect(mn, mx, false); // false = don't clip to current window
         bool clicked = hovered && ImGui::IsMouseClicked(0);
         if (hovered || isActive) {
             dl->AddRectFilled(mn, mx, isActive ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, 3.0f);
@@ -427,7 +427,7 @@ namespace NightSharpMenu {
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
         ImGui::Separator();
-        ImGui::TextDisabled("Bypass OBS is UI-only placeholder (no stream/screenshot bypass).");
+        ImGui::TextDisabled("Bypass OBS: overlay hidden from screen capture (Win10 2004+)");
     }
 
     inline void DrawCoreSectionContent(const std::string& sectionKey) {

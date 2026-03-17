@@ -24,3 +24,6 @@ Changelog 12/3/2026
 Changelog 17/3/2026
 - Change GameObject from offset to runtime API
 - bug Ezreal fixed
+- Change render from internal to external
+- fixed input menu
+- added bypass OBS, screen
