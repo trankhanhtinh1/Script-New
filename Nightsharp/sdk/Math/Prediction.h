@@ -6,6 +6,7 @@
 #include "Enums.h"
 #include "GamePath.h"
 #include "HealthPrediction.h"
+#include "Collisions.h"
 #include <cmath>
 
 // ============================================================================

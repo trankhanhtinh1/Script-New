@@ -1,6 +1,11 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// ============================================================================
+// Darius.h — C++ port of EzEvade/SpecialSpells/Darius.cs (42 lines)
+//   Line-by-line, preserving original logic
+// ============================================================================
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,55 +13,38 @@ namespace SpecialSpells {
 class Darius : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "DariusCleave")) {
-            return;
+        // C# line 19: if (spellData.spellName == "DariusCleave")
+        if (spellData.spellName == "DariusCleave") {
+            // C# line 21-25: find Darius hero
+            for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                if (hero.GetChampionName() == "Darius") {
+                    dariusHero = &hero;
+                    break;
+                }
+            }
         }
-        if (s_registered) {
-            return;
-        }
+    }
 
-        auto hero = FindHeroByChampion("Darius", true);
-        if (!hero.IsValid()) {
-            return;
-        }
+    // C# lines 29-38: Game_OnUpdate — update DariusCleave positions
+    void OnUpdate() {
+        if (!dariusHero || !dariusHero->IsValid()) return;
 
-        s_heroNetId = hero.GetNetId();
-        SDK::EventSystem::OnGameUpdate([](float) {
-            OnGameUpdate();
-        });
-        s_registered = true;
+        for (auto& entry : SpellDetector::detectedSpells) {
+            auto& spell = entry.second;
+            if (spell.heroID == dariusHero->GetNetId()) {
+                if (spell.info.spellName == "DariusCleave") {
+                    // C# line 35-36: update start/end to hero position
+                    spell.startPos = dariusHero->GetPosition().To2D();
+                    spell.endPos = dariusHero->GetPosition().To2D() +
+                                   spell.direction * spell.info.range;
+                }
+            }
+        }
     }
 
 private:
-    static inline bool s_registered = false;
-    static inline int s_heroNetId = 0;
-
-    static void OnGameUpdate() {
-        if (s_heroNetId <= 0) {
-            return;
-        }
-
-        auto hero = FindObjectByNetId(s_heroNetId);
-        if (!hero.IsValid()) {
-            return;
-        }
-
-        for (auto& kv : SpellDetector::DetectedSpells) {
-            auto& spell = kv.second;
-            if (spell.HeroID != s_heroNetId || !spell.Info) {
-                continue;
-            }
-            if (!EqualsI(spell.Info->spellName, "DariusCleave")) {
-                continue;
-            }
-
-            const Vec2 heroPos = hero.GetServerPosition().To2D();
-            spell.StartPos = heroPos;
-            spell.EndPos = heroPos + spell.Direction * spell.Info->range;
-        }
-    }
+    SDK::GameObject* dariusHero = nullptr;
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

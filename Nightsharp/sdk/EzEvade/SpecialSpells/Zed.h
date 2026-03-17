@@ -1,6 +1,10 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+#include "../Spells/ObjectTracker.h"
+#include "../Utils/DelayAction.h"
+
+// Zed.h — C++ port of EzEvade/SpecialSpells/Zed.cs (125 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,157 +12,93 @@ namespace SpecialSpells {
 class Zed : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "ZedQ")) {
-            return;
-        }
-
-        if (!s_processRegistered) {
-            SpellDetector::RegisterOnProcessSpecialSpell(
-                [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs&) {
-                    if (!SpellNameIs(spellData, "ZedQ")) {
-                        return;
-                    }
-
-                    for (auto it = ObjectTracker::ObjTracker.begin(); it != ObjectTracker::ObjTracker.end(); ) {
-                        auto& info = it->second;
-                        if (!EqualsI(info.Name, "Shadow")) {
-                            ++it;
-                            continue;
-                        }
-
-                        if (!info.UsePosition && (!info.Obj.IsValid() || info.Obj.IsDead())) {
-                            const int removeId = it->first;
-                            ++it;
-                            DelayAction::Add(1, [removeId]() { ObjectTracker::ObjTracker.erase(removeId); });
-                            continue;
-                        }
-
-                        const Vec3 start = info.UsePosition ? info.Position : info.Obj.GetPosition();
-                        const Vec3 end = start.Extend(args.EndPos, spellData->range);
-                        SpellDetector::CreateSpellData(args.Sender, start, end, spellData, SDK::GameObject(), 0.0f, false);
-                        ++it;
-                    }
+        if (spellData.spellName == "ZedQ") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell_ZedShuriken(hero, start, end, sd, sa);
                 });
-            s_processRegistered = true;
-        }
-
-        if (!s_missileRegistered) {
-            SDK::EventSystem::OnMissileCreated([](const SDK::MissileArgs& args) {
-                if (_stricmp(args.SpellName.c_str(), "ZedWMissile") != 0) {
-                    return;
-                }
-
-                auto caster = FindObjectByNetId(args.CasterNetId);
-                if (!caster.IsValid() || !Situation::CheckTeam(caster)) {
-                    return;
-                }
-
-                const int trackerId = args.MissileObj.GetNetworkId();
-                if (trackerId <= 0) {
-                    return;
-                }
-                if (ObjectTracker::ObjTracker.find(trackerId) != ObjectTracker::ObjTracker.end()) {
-                    return;
-                }
-
-                ObjectTrackerInfo info("Shadow", args.EndPos);
-                info.OwnerNetworkID = args.CasterNetId;
-                info.UsePosition = true;
-                info.Position = args.EndPos;
-                ObjectTracker::ObjTracker[trackerId] = info;
-
-                DelayAction::Add(1000, [trackerId]() {
-                    ObjectTracker::ObjTracker.erase(trackerId);
-                });
-            });
-            s_missileRegistered = true;
-        }
-
-        if (!s_updateRegistered) {
-            SDK::EventSystem::OnGameUpdate([](float) {
-                SyncShadowObjects();
-                CleanupStaleShadows();
-            });
-            s_updateRegistered = true;
         }
     }
 
-private:
-    static inline bool s_processRegistered = false;
-    static inline bool s_missileRegistered = false;
-    static inline bool s_updateRegistered = false;
-
-    static void SyncShadowObjects() {
-        for (const auto& minion : SDK::ObjectManager::GetMinions()) {
-            if (!minion.IsValid() || minion.IsDead()) {
-                continue;
-            }
-            if (!Situation::CheckTeam(minion)) {
-                continue;
-            }
-            if (!EqualsI(minion.GetName(), "Shadow")) {
-                continue;
-            }
-
-            const int netId = minion.GetNetId();
-            auto it = ObjectTracker::ObjTracker.find(netId);
-            if (it == ObjectTracker::ObjTracker.end()) {
-                ObjectTracker::ObjTracker[netId] = ObjectTrackerInfo(minion, "Shadow");
-            } else {
-                it->second.Obj = minion;
-                it->second.Name = "Shadow";
-                it->second.UsePosition = false;
-                it->second.Position = minion.GetPosition();
-                it->second.Timestamp = TickNow();
-            }
-
-            for (auto& kv : ObjectTracker::ObjTracker) {
-                auto& info = kv.second;
-                if (!EqualsI(info.Name, "Shadow")) {
-                    continue;
-                }
-                if (!info.UsePosition) {
-                    continue;
-                }
-                if (info.Position.Distance2D(minion.GetPosition()) >= 5.0f) {
-                    continue;
-                }
+    // C# lines 33-53: OnCreate shadow object
+    static void OnCreateObject(SDK::GameObject* obj) {
+        if (!obj) return;
+        if (obj->GetChampionName() == "Shadow" && obj->IsEnemy(SDK::GameObjects::Player)) {
+            if (ObjectTracker::objTracker.find(obj->GetNetId()) == ObjectTracker::objTracker.end()) {
+                ObjectTracker::ObjectTrackerInfo info;
+                info.obj = obj;
                 info.Name = "Shadow";
-                info.UsePosition = false;
-                info.Obj = minion;
-                info.Position = minion.GetPosition();
-                info.Timestamp = TickNow();
+                ObjectTracker::objTracker[obj->GetNetId()] = info;
+
+                // Check existing position-based shadows for matching
+                for (auto& entry : ObjectTracker::objTracker) {
+                    auto& existing = entry.second;
+                    if (existing.Name == "Shadow" && existing.usePosition &&
+                        existing.position.Distance(obj->GetPosition()) < 5) {
+                        existing.usePosition = false;
+                        existing.obj = obj;
+                    }
+                }
             }
         }
     }
 
-    static void CleanupStaleShadows() {
-        std::vector<int> removeIds;
-        for (const auto& kv : ObjectTracker::ObjTracker) {
-            const int id = kv.first;
-            const auto& info = kv.second;
-            if (!EqualsI(info.Name, "Shadow")) {
-                continue;
-            }
+    // C# lines 56-62: OnDelete shadow
+    static void OnDeleteObject(SDK::GameObject* obj) {
+        if (!obj) return;
+        if (obj->GetChampionName() == "Shadow") {
+            ObjectTracker::objTracker.erase(obj->GetNetId());
+        }
+    }
 
-            if (info.UsePosition) {
-                if (TickNow() - info.Timestamp > 1000.0f) {
-                    removeIds.push_back(id);
+    // C# lines 64-97: ProcessSpell — ZedQ fires from shadows too
+    static void ProcessSpell_ZedShuriken(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "ZedQ") {
+            for (auto& entry : ObjectTracker::objTracker) {
+                auto& info = entry.second;
+                if (info.Name == "Shadow") {
+                    if (!info.usePosition && (!info.obj || !info.obj->IsValid())) {
+                        EzEvade::DelayAction::Add(1, [id = entry.first]() {
+                            ObjectTracker::objTracker.erase(id);
+                        });
+                        continue;
+                    }
+
+                    if (!info.usePosition) {
+                        Vec3 endPos = info.obj->GetPosition().Extend(end, spellData.range);
+                        SpellDetector::CreateSpellData(hero, info.obj->GetPosition(), endPos, spellData, nullptr, 0, false);
+                    } else {
+                        Vec3 endPos = info.position.Extend(end, spellData.range);
+                        SpellDetector::CreateSpellData(hero, info.position, endPos, spellData, nullptr, 0, false);
+                    }
                 }
-                continue;
-            }
-
-            if (!info.Obj.IsValid() || info.Obj.IsDead()) {
-                removeIds.push_back(id);
             }
         }
+    }
 
-        for (int id : removeIds) {
-            ObjectTracker::ObjTracker.erase(id);
+    // C# lines 100-122: SpellMissile_ZedShadowDash — track W missile for shadow positioning
+    static void OnMissileCreate(SDK::Missile* missile) {
+        if (!missile) return;
+        if (missile->GetSpellName() == "ZedWMissile") {
+            int netId = missile->GetNetworkId();
+            if (ObjectTracker::objTracker.find(netId) == ObjectTracker::objTracker.end()) {
+                ObjectTracker::ObjectTrackerInfo info;
+                info.Name = "Shadow";
+                info.OwnerNetworkID = missile->GetCasterNetId();
+                info.usePosition = true;
+                info.position = missile->GetEndPos();
+                ObjectTracker::objTracker[netId] = info;
+
+                EzEvade::DelayAction::Add(1000, [netId]() {
+                    ObjectTracker::objTracker.erase(netId);
+                });
+            }
         }
     }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

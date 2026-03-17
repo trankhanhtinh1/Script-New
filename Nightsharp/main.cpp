@@ -8,9 +8,10 @@
 #include "plugins/core/RenderTestPlugin.h"
 #include "plugins/champions/EzrealPlugin.h"
 #include "plugins/utility/evade/EvadePlugin.h"
+#include "plugins/utility/ezevade/EzEvadePlugin.h"
 #include "menu/NightSharpMenu.h"
 #include "sdk/Utils/DebugConsole.h"
-#include "sdk/Utils/PackmanPatcher.h"
+#include "core/AntiBan.h"
 #include <Psapi.h>
 #include <chrono>
 #include <iostream>
@@ -110,6 +111,7 @@ bool debugLogged = false;
 float sdkWarmupStart = 0.0f;  // When IsInGame first became true
 constexpr float SDK_WARMUP_SECONDS = 3.0f; // Wait 3 seconds before heavy init
 static auto g_scriptClockStart = std::chrono::steady_clock::now();
+static HMODULE g_hSelfModule = nullptr; // For deferred AntiBan init
 
 namespace HookConfig {
 	constexpr bool EnableKiero = true;
@@ -344,10 +346,12 @@ static bool InitializeSDK() {
 	pm.Register<Plugins::RenderTestPlugin>();
 	pm.Register<Plugins::EzrealPlugin>();
 	pm.Register<Plugins::EvadePlugin>();
+	pm.Register<Plugins::EzEvadePlugin>();
 	// SDK Orbwalker is default; OrbwalkerPlugin is optional override.
 	pm.SetAutoLoad("Orbwalker 2.0", true);
 	pm.SetAutoLoad("Target Selector", true);
-	pm.SetAutoLoad("Evade", true);
+	pm.SetAutoLoad("Evade", false);  // Tắt Evade cũ
+	pm.SetAutoLoad("EzEvade", true);  // Chỉ dùng EzEvade
 	pm.LoadAuto();
 
 	// DEBUG: Log loaded plugins
@@ -496,6 +500,12 @@ HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
 
 DWORD WINAPI MainThread(LPVOID lpReserved)
 {
+	// Deferred AntiBan: unlink module from PEB + erase PE header
+	// Must run AFTER DllMain returns (loader lock released)
+	if (g_hSelfModule) {
+		AntiBan::DeferredInit(g_hSelfModule);
+	}
+
 	// Delay 8s to wait for the game to complete rendering initialization (avoid crash on loading screen)
 	Sleep(8000);
 
@@ -539,23 +549,13 @@ BOOL WINAPI DllMain(HMODULE hMod, DWORD dwReason, LPVOID lpReserved)
 	{
 	case DLL_PROCESS_ATTACH:
 		DisableThreadLibraryCalls(hMod);
-		// === PACKMAN NEUTRALIZER ===
-		// Patch Packman's detection engine FIRST before any scanning runs.
-		// If stub.dll isn't loaded yet, spawn a background retry.
-		{
-			int patchResult = PackmanPatcher::PatchAll();
-			if (patchResult <= 0) {
-				// stub.dll not loaded yet — retry in background
-				QueueUserWorkItem([](LPVOID) -> DWORD {
-					PackmanPatcher::PatchWithRetry(30, 300);
-					return 0;
-				}, nullptr, WT_EXECUTEDEFAULT);
-			}
-		}
-		// FIX: Sử dụng QueueUserWorkItem thay vì CreateThread để tránh NtCreateThreadEx INT3 trap
+		g_hSelfModule = hMod;
+		// === ANTI-BAN (DllMain — safe ops only) ===
+		// Resolve SSNs + Clean PEB (no API calls, no hooks triggered)
+		// UnlinkModule + ErasePEHeader deferred to MainThread
+		AntiBan::Initialize(hMod);
+		// Use QueueUserWorkItem to avoid NtCreateThreadEx INT3 trap
 		QueueUserWorkItem((LPTHREAD_START_ROUTINE)MainThread, nullptr, WT_EXECUTEDEFAULT);
-        // Start Heartbeat Log capture
-        //QueueUserWorkItem((LPTHREAD_START_ROUTINE)MainCheatThread, nullptr, WT_EXECUTEDEFAULT);
 		break;
 	case DLL_PROCESS_DETACH:
 		SDK::ConfigManager::SaveAll();

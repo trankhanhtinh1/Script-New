@@ -513,9 +513,11 @@ namespace Missile {
     constexpr auto EndPos           = 0x394;        // [IDA] Vec3: end position (CastInfo+0xD4)
     constexpr auto CastEndPos       = 0x3A4;        // [IDA] Vec3: cast end position (CastInfo+0xE4)
     constexpr auto CasterNetId      = 0x358;        // [IDA] int: source caster net id (CastInfo+0x98)
+    constexpr auto SrcIndex         = 0x358;        // [C] alias: caster index (same as CasterNetId)
     constexpr auto TargetNetId      = 0x35C;        // [IDA] int: target net id (CastInfo+0x9C)
     constexpr auto CI_TargetNetId2  = 0x360;        // [IDA] int: secondary target (CastInfo+0xA0)
     constexpr auto CI_MissileNetId  = 0x364;        // [IDA] int: missile net id (CastInfo+0xA4)
+    constexpr auto DestIndex        = 0x3C8;        // [C] [dest ptr] -> target dest index (CastInfo+0x108)
 
     // --- CastInfo relative offsets (for code that needs CI base + offset pattern) ---
     constexpr auto CI_REL_SpellData    = 0x00;      // [IDA] CastInfo+0x00
@@ -526,6 +528,7 @@ namespace Missile {
     constexpr auto CI_REL_CastEndPos   = 0xE4;      // [IDA] CastInfo+0xE4
     constexpr auto CI_REL_CasterNetId  = 0x98;      // [IDA] CastInfo+0x98
     constexpr auto CI_REL_MissileNetId = 0xA4;      // [IDA] CastInfo+0xA4
+    constexpr auto CI_REL_TargetIndex  = 0x108;     // [C]   CastInfo+0x108 (target dest index ptr)
 
     // --- Legacy aliases ---
     constexpr auto NetworkId        = MissileNetId; // 0x364
@@ -579,6 +582,7 @@ namespace SpellCastInfo {
     constexpr auto EndPos           = 0xE4;         // [C] Vec3 spell end position
     constexpr auto CastPos          = 0xF0;         // [C] Vec3 cast position
     constexpr auto TargetIndex      = 0x108;        // [C] target network index
+    constexpr auto DestIndex        = 0x108;        // [C] alias: [dest ptr] -> target dest index
     constexpr auto CastDelay        = 0x118;        // [C] float cast delay
     constexpr auto IsSpell          = 0x134;        // [C] bool is spell (not auto)
     constexpr auto IsSpecialAttack  = 0x13E;        // [C] bool is special attack
@@ -710,22 +714,35 @@ namespace JungleNames {
 // ================================================================
 namespace TypeFlags {
     constexpr auto ObfuscatedField  = 0x4C;          // [IDA] obj+76 in sub_29CD30
-    // Bit flags passed to CompareTypeFlags:
-    constexpr auto Minion           = 0x0400;         // [IDA] sub_3089A0: flag 1024
-    constexpr auto Hero             = 0x0800;         // [IDA] sub_308B50: flag 2048
-    constexpr auto JungleMonster    = 0x2000;         // [IDA] sub_3088A0: flag 8192 (IsJungleMonster)
+
+    // === PRIMARY TYPE FLAGS (IDA disasm VERIFIED 2026-03-17) ===
+    // These are the ACTUAL values from disassembly of check functions.
+    // Previous values (Hero=0x0800, Minion=0x0400) were WRONG!
+    constexpr auto IsObjectAI       = 0x0400;         // [IDA✓] sub_3085D0: mov edx,400h  (AIBaseClient)
+    constexpr auto Minion           = 0x0800;         // [IDA✓] sub_308760: mov edx,800h  (AIMinionClient)
+    constexpr auto Hero             = 0x1000;         // [IDA✓] sub_308700: mov edx,1000h (AIHeroClient)
+    constexpr auto Turret           = 0x2000;         // [IDA✓] sub_3088B0: mov edx,2000h (AITurretClient)
+    constexpr auto Plant            = 0x8000;         // [IDA✓] sub_308790: mov edx,8000h (Plant objects)
+    constexpr auto Unknown_10000    = 0x10000;        // [IDA✓] sub_308730: mov edx,10000h
+    constexpr auto Unknown_20000    = 0x20000;        // [IDA✓] sub_3088E0: checked in cast function
+    constexpr auto Unknown_40000    = 0x40000;        // [IDA✓] sub_3087C0: mov edx,40000h
+
+    // === SECONDARY FLAGS (from sub_345650 string registration) ===
+    // These may be a different flag system — verify before using!
     constexpr auto LargeMonster     = 0x0080;         // [IDA] sub_345650: "Monster_Large" flag
     constexpr auto BuffMonster      = 0x0100;         // [IDA] sub_345650: "Monster_Buff" flag
     constexpr auto MinionSummon     = 0x0100;         // [IDA] sub_345650: "Minion_Summon" flag (same bit)
-    constexpr auto Plant            = 0x8000;         // [IDA] sub_345650: "Plant" flag 32768
-    constexpr auto CampMonster      = 0x10000;        // [IDA] sub_345650: 0x10000 after Plant
-    constexpr auto Crab             = 0x2000;         // [IDA] sub_345650: "Monster_Crab" flag
     constexpr auto IsFleeing        = 0x0200;         // [IDA] sub_345650: fleeing check flag
     constexpr auto AttackableObj    = 0x0008;         // [IDA] sub_345650: attackable
     constexpr auto VisibleObj       = 0x0010;         // [IDA] sub_345650: visible flag
     constexpr auto RenderTarget     = 0x0020;         // [IDA] sub_345650: render target
     constexpr auto IsRecalling      = 0x4000;         // [IDA] sub_345650: recall check
-    constexpr auto HasUltimate      = 0x20000;        // [IDA] sub_345650: vtable+2552 check
+
+    // === DEPRECATED/RENAMED (kept for backward compatibility) ===
+    constexpr auto JungleMonster    = Turret;         // WRONG NAME! 0x2000 is Turret, not JungleMonster
+    constexpr auto Crab             = Turret;         // WRONG! Was same value (0x2000)
+    constexpr auto CampMonster      = Unknown_10000;  // Needs verify
+    constexpr auto HasUltimate      = Unknown_20000;  // Needs verify
 }
 
 // ================================================================

@@ -1,6 +1,7 @@
 #pragma once
 #include "core/Globals.h"
 #include "core/Offsets.h"
+#include "core/RuntimeAPI.h"
 #include "core/Vector.h"
 #include "Enums.h"
 #include "Game.h"
@@ -363,18 +364,12 @@ namespace SDK {
 
         bool IsDead() const {
             if (!IsValid()) return true;
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsDead;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return true; }
+            return !RuntimeAPI::IsAlive(address);
         }
 
         bool IsAlive() const {
             if (!IsValid()) return false;
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsAlive;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return false; }
+            return RuntimeAPI::IsAlive(address);
         }
 
         bool IsVisible() const {
@@ -588,123 +583,68 @@ namespace SDK {
         // ====================================================================
 
         bool IsHero() const {
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsHero;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return false; }
+            if (!IsValid()) return false;
+            return RuntimeAPI::IsHero(address);
         }
 
         bool IsTurret() const {
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsTurret;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return false; }
+            if (!IsValid()) return false;
+            return RuntimeAPI::IsTurret(address);
         }
 
+        // IsJungleMonster — RuntimeAPI: MinionClass byte + native fallback
         bool IsJungleMonster() const {
             if (!IsValid()) return false;
-            if (IsPlant()) return false;
-            
-            // Check native function first
-            bool nativeJungle = CallNativeIsJungleMonster();
-
-            if (GetTeam() != GameObjectTeam::Neutral)
-                return false;
-
-            const std::string objectName = GetName();
-            const std::string characterName = GetChampionName();
-            const char* objectNamePtr = objectName.c_str();
-            const char* characterNamePtr = characterName.c_str();
-
-            if (nativeJungle) return true;
-
-            return strstr(objectNamePtr, "SRU_") != nullptr ||
-                strstr(characterNamePtr, "SRU_") != nullptr ||
-                strstr(objectNamePtr, "Sru_Crab") != nullptr ||
-                strstr(characterNamePtr, "Sru_Crab") != nullptr ||
-                strstr(objectNamePtr, "TT_") != nullptr ||
-                strstr(characterNamePtr, "TT_") != nullptr;
+            return RuntimeAPI::IsJungleMonster(address);
         }
 
         bool CallNativeIsJungleMonster() const {
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsJungleMonster;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return false; }
+            return RuntimeAPI::IsJungleMonster(address);
         }
 
         bool IsDragon() const {
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsDragon;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return false; }
+            if (!IsValid()) return false;
+            return RuntimeAPI::IsDragon(address);
         }
 
         bool IsBaron() const {
-            typedef bool(__fastcall* Fn)(uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::IsBaron;
-            __try { return ((Fn)fn)(address); }
-            __except(1) { return false; }
+            if (!IsValid()) return false;
+            return RuntimeAPI::IsBaron(address);
         }
 
 
         // ====================================================================
-        // Object Classification using game-internal MinionType byte
-        // From sub_BBB10: 0=Unset,1=Pet,2=Jungle,3=Team,4=Melee,5=Ranged,6=Cannon,7=Super
-        // Offset: Minion::LaneType (0x4CC9) on the object
+        // Object Classification — delegates to RuntimeAPI (core/RuntimeAPI.h)
+        // All logic centralized in RuntimeAPI with correct calling conventions
+        // and fallbacks. See RuntimeAPI.h for implementation details.
         // ====================================================================
 
-        // CompareTypeFlags — calls game function sub_29CD30 to check obfuscated type flags
+        // CompareTypeFlags — delegate to RuntimeAPI (4-arg calling convention)
         bool CompareTypeFlags(int flag) const {
-            typedef bool(__fastcall* Fn)(uintptr_t, int, int, uintptr_t);
-            static uintptr_t fn = Globals::base + Offset::Function::CompareTypeFlags;
-            __try { return ((Fn)fn)(address, 0, flag, address); }
-            __except(1) { return false; }
+            return RuntimeAPI::CompareTypeFlags(address, flag);
         }
 
+        // IsMinion — RuntimeAPI with HP/Team fallback
         bool IsMinion() const {
             if (!IsValid()) return false;
-            float maxHP = GetMaxHealth();
-            GameObjectTeam team = GetTeam();
-            return (team == GameObjectTeam::Blue || team == GameObjectTeam::Red)
-                && maxHP > 0.0f && maxHP < 10000.0f && !IsHero() && !IsTurret();
+            return RuntimeAPI::IsMinion(address);
         }
 
+        // IsLaneMinion — RuntimeAPI: MinionClass byte 4-7 + fallback
         bool IsLaneMinion() const {
-            if (!IsMinion()) return false;
-            uint8_t laneType = Globals::Read<uint8_t>(address + Offset::Minion::LaneType);
-            return laneType >= 4 && laneType <= 7;
+            if (!IsValid()) return false;
+            return RuntimeAPI::IsLaneMinion(address);
         }
 
+        // IsPet — RuntimeAPI: MinionClass byte == 1
         bool IsPet() const {
             if (!IsValid()) return false;
-            // Primary: game-internal MinionType == Pet(1)
-            MinionType mt = GetMinionType();
-            if (mt == MinionType::Pet) return true;
-            // Fallback: string-based for edge cases
-            std::string name = GetName();
-            std::string lower = name;
-            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
-                return (char)std::tolower(c);
-            });
-            // Known pet names (traps, summons, clones)
-            static const char* const kPets[] = {
-                "annietibbers", "elisespiderling", "heimertyellow", "heimertblue",
-                "ivernminion", "malzaharvoidling", "shacobox", "teemomushroom",
-                "yorickghoulmelee", "yorickbigghoul", "yorickmistwalker",
-                "zyrathornplant", "zyragraspingplant", "illaoiminion",
-                "azirsoldierghost", "voidspawn", "jihnmine"
-            };
-            for (auto& p : kPets) {
-                if (lower == p) return true;
-            }
-            return false;
+            return RuntimeAPI::IsPet(address);
         }
 
         bool IsWard() const {
             if (!IsValid()) return false;
             std::string name = GetName();
-            // Check exact ward object names (fast)
             static const char* const kWards[] = {
                 "SightWard", "YellowTrinket", "BlueTrinket", "JammerDevice",
                 "YellowTrinketUpgrade", "VisionWard", "ControlWard"
@@ -712,34 +652,14 @@ namespace SDK {
             for (auto& w : kWards) {
                 if (name == w) return true;
             }
-            // Fallback substring check
             return name.find("Ward") != std::string::npos ||
                    name.find("ward") != std::string::npos;
         }
 
+        // IsPlant — RuntimeAPI: bitmask 0x8000 + name fallback
         bool IsPlant() const {
             if (!IsValid()) return false;
-            // Jungle plants are Neutral team only
-            if (GetTeam() != GameObjectTeam::Neutral) return false;
-            // Primary: use game type flags (TypeFlags::Plant = 0x8000)
-            if (CompareTypeFlags(0x8000)) return true;
-            
-            // Fallback: string-based for reliability
-            std::string name = GetName();
-            std::string champName = GetChampionName();
-            
-            std::string lowerName = name;
-            std::string lowerChamp = champName;
-            
-            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-            std::transform(lowerChamp.begin(), lowerChamp.end(), lowerChamp.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-            
-            if (lowerName.find("sru_plant") != std::string::npos || lowerChamp.find("sru_plant") != std::string::npos) return true;
-            if (lowerName.find("hiddenminionplantdemon") != std::string::npos || lowerChamp.find("hiddenminionplantdemon") != std::string::npos) return true;
-            if (lowerName.find("planthealthmirrored") != std::string::npos || lowerChamp.find("planthealthmirrored") != std::string::npos) return true;
-            if (lowerName.find("plantmasterminion") != std::string::npos || lowerChamp.find("plantmasterminion") != std::string::npos) return true;
-            
-            return false;
+            return RuntimeAPI::IsPlant(address);
         }
 
         bool IsBarrel() const {
@@ -800,12 +720,22 @@ namespace SDK {
             return Globals::Read<float>(address + Offset::Hero::VisionScore);
         }
 
-        // ====================================================================
-        // Minion type from LaneMinionType
-        // ====================================================================
-
+        // Minion type via RuntimeAPI (no raw offset read)
         MinionType GetMinionType() const {
-            return (MinionType)(int)Globals::Read<unsigned char>(address + Offset::Minion::LaneType);
+            if (!IsValid()) return MinionType::Unknown;
+            return (MinionType)(int)RuntimeAPI::GetMinionClass(address);
+        }
+
+        // Convenience: Is this a Siege/Cannon minion?
+        bool IsSiegeMinion() const {
+            MinionType mt = GetMinionType();
+            return mt == MinionType::Cannon;
+        }
+
+        // Convenience: Is this a Super minion?
+        bool IsSuperMinion() const {
+            MinionType mt = GetMinionType();
+            return mt == MinionType::Super;
         }
 
         // ====================================================================

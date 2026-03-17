@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -23,7 +23,7 @@
     <ProjectGuid>{04B17470-CB82-4724-904B-25445926AB86}</ProjectGuid>
     <RootNamespace>NightSharp</RootNamespace>
     <ProjectName>NightSharp</ProjectName>
-    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -172,7 +172,19 @@
     <ClCompile Include="kiero\minhook\src\hook.c" />
     <ClCompile Include="kiero\minhook\src\trampoline.c" />
     <ClCompile Include="main.cpp" />
-  </ItemGroup>
+  <ClCompile Include="sdk\EzEvade\Spells\ObjectTracker.cpp" />
+  <ClCompile Include="sdk\EzEvade\Spells\Spell.cpp" />
+  <ClCompile Include="sdk\EzEvade\Spells\SpellDetector.cpp" />
+  <ClCompile Include="sdk\EzEvade\Spells\SpellDrawer.cpp" />
+  <ClCompile Include="sdk\EzEvade\Core\Evade.cpp" />
+  <ClCompile Include="sdk\EzEvade\Core\EvadeHelper.cpp" />
+  <ClCompile Include="sdk\EzEvade\EvadeSpells\EvadeSpell.cpp" />
+  <ClCompile Include="sdk\EzEvade\EvadeSpells\SpecialEvadeSpell.cpp" />
+  <ClCompile Include="sdk\EzEvade\Helpers\ObjectCache.cpp" />
+  <ClCompile Include="sdk\EzEvade\Helpers\EvadeCommand.cpp" />
+  <ClCompile Include="sdk\EzEvade\Helpers\PositionInfo.cpp" />
+  <ClCompile Include="sdk\EzEvade\Utils\EvadeUtils.cpp" />
+</ItemGroup>
   <ItemGroup>
     <None Include="kiero\minhook\dll_resources\MinHook.def" />
   </ItemGroup>
@@ -196,11 +208,11 @@
     <ClInclude Include="menu\MenuConfig.h" />
     <ClInclude Include="menu\Menu.h" />
     <ClInclude Include="menu\NightSharpMenu.h" />
-    <!-- SDK Root -->
+    
     <ClInclude Include="sdk\SDK.h" />
     <ClInclude Include="sdk\Enums.h" />
     <ClInclude Include="sdk\Game.h" />
-    <!-- SDK\GameObjects -->
+    
     <ClInclude Include="sdk\GameObjects\AiManager.h" />
     <ClInclude Include="sdk\GameObjects\BuffManager.h" />
     <ClInclude Include="sdk\GameObjects\GameObject.h" />
@@ -208,7 +220,7 @@
     <ClInclude Include="sdk\GameObjects\Missile.h" />
     <ClInclude Include="sdk\GameObjects\ObjectManager.h" />
     <ClInclude Include="sdk\GameObjects\SpellBook.h" />
-    <!-- SDK\Events -->
+    
     <ClInclude Include="sdk\Events\Dash.h" />
     <ClInclude Include="sdk\Events\EventSystem.h" />
     <ClInclude Include="sdk\Events\Gapcloser.h" />
@@ -216,19 +228,19 @@
     <ClInclude Include="sdk\Events\Stealth.h" />
     <ClInclude Include="sdk\Events\Teleport.h" />
     <ClInclude Include="sdk\Events\TurretAggro.h" />
-    <!-- SDK\Math -->
+    
     <ClInclude Include="sdk\Math\Cluster.h" />
     <ClInclude Include="sdk\Math\Collisions.h" />
     <ClInclude Include="sdk\Math\GamePath.h" />
     <ClInclude Include="sdk\Math\MathUtils.h" />
     <ClInclude Include="sdk\Math\Polygon.h" />
     <ClInclude Include="sdk\Math\Prediction.h" />
-    <!-- SDK\Wrappers\Damages -->
+    
     <ClInclude Include="sdk\Wrappers\Damages\DamageCalc.h" />
     <ClInclude Include="sdk\Wrappers\Damages\DamageLibrary.h" />
     <ClInclude Include="sdk\Wrappers\Damages\DamageMastery.h" />
     <ClInclude Include="sdk\Wrappers\Damages\DamagePassives.h" />
-    <!-- SDK\Wrappers\Spells -->
+    
     <ClInclude Include="sdk\Wrappers\Spells\LastCast.h" />
     <ClInclude Include="sdk\Wrappers\Spells\LastCastedSpellEntry.h" />
     <ClInclude Include="sdk\Wrappers\Spells\LastCastPacketSentEntry.h" />
@@ -236,17 +248,17 @@
     <ClInclude Include="sdk\Wrappers\Spells\SpellDatabase.h" />
     <ClInclude Include="sdk\Wrappers\Spells\SpellDatabaseEntry.h" />
     <ClInclude Include="sdk\Wrappers\Spells\SpellTypes.h" />
-    <!-- SDK\Wrappers\Orbwalking -->
+    
     <ClInclude Include="sdk\Wrappers\Orbwalking\HealthPrediction.h" />
     <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h" />
-    <!-- SDK\Wrappers\TargetSelector -->
+    
     <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelector.h" />
-    <!-- SDK\UI -->
+    
     <ClInclude Include="sdk\UI\ConfigManager.h" />
     <ClInclude Include="sdk\UI\Drawing.h" />
     <ClInclude Include="sdk\UI\KeyConvert.h" />
     <ClInclude Include="sdk\UI\MenuUI.h" />
-    <!-- SDK\Utils -->
+    
     <ClInclude Include="sdk\Utils\ActionQueue.h" />
     <ClInclude Include="sdk\Utils\AutoAttackUtil.h" />
     <ClInclude Include="sdk\Utils\AutoLevel.h" />
@@ -260,7 +272,7 @@
     <ClInclude Include="sdk\Utils\SummonerTracker.h" />
     <ClInclude Include="sdk\Utils\TickOperation.h" />
     <ClInclude Include="sdk\Utils\WeightedRandom.h" />
-    <!-- Plugins -->
+    
     <ClInclude Include="plugins\IPlugin.h" />
     <ClInclude Include="plugins\PluginManager.h" />
     <ClInclude Include="plugins\core\OrbwalkerPlugin.h" />
@@ -279,7 +291,11 @@
     <ClInclude Include="kiero\minhook\src\hde\table64.h" />
     <ClInclude Include="kiero\minhook\src\trampoline.h" />
     <ClInclude Include="spoof\spoofcall.h" />
-  </ItemGroup>
+  <ClInclude Include="sdk\EzEvade\Spells\ObjectTracker.h" />
+  <ClInclude Include="sdk\EzEvade\Spells\Spell.h" />
+  <ClInclude Include="sdk\EzEvade\Helpers\ObjectCache.h" />
+  <ClInclude Include="sdk\EzEvade\Utils\EvadeUtils.h" />
+</ItemGroup>
   <ItemGroup>
     <MASM Include="spoof\spoof.asm" />
   </ItemGroup>

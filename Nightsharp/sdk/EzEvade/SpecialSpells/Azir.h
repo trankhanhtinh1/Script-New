@@ -1,6 +1,10 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+#include "../Spells/ObjectTracker.h"
+#include "../Utils/DelayAction.h"
+
+// Azir.h — C++ port of EzEvade/SpecialSpells/Azir.cs (117 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,84 +12,53 @@ namespace SpecialSpells {
 class Azir : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "AzirQWrapper")) {
-            return;
-        }
+        if (spellData.spellName == "AzirQWrapper") {
+            for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                if (hero.GetChampionName() == "Azir") {
+                    azirHero = &hero;
+                    ObjectTracker::ObjectTrackerInfo info;
+                    info.Name = "AzirQSoldier";
+                    info.OwnerNetworkID = hero.GetNetId();
+                    ObjectTracker::objTracker[hero.GetNetId()] = info;
 
-        auto hero = FindHeroByChampion("Azir", true);
-        if (!hero.IsValid()) {
-            return;
+                    SpellDetector::OnProcessSpecialSpell.push_back(
+                        [](SDK::GameObject* h, const Vec3& start, const Vec3& end,
+                           SpellData& sd, SpecialSpellEventArgs& sa) {
+                            ProcessSpell_AzirSoldier(h, start, end, sd, sa);
+                        });
+                    break;
+                }
+            }
         }
+    }
 
-        if (!s_updateRegistered) {
-            SDK::EventSystem::OnGameUpdate([](float) {
-                RefreshSoldiers();
-            });
-            s_updateRegistered = true;
-        }
+    static void ProcessSpell_AzirSoldier(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "AzirQWrapper") {
+            for (auto& entry : ObjectTracker::objTracker) {
+                auto& info = entry.second;
+                if (info.Name == "AzirQSoldier") {
+                    for (auto& objEntry : info.objList) {
+                        auto* soldier = objEntry.second;
+                        if (!soldier || !soldier->IsValid()) continue;
 
-        if (!s_spellRegistered) {
-            SpellDetector::RegisterOnProcessSpecialSpell(
-                [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                    if (!SpellNameIs(spellData, "AzirQWrapper")) {
-                        return;
+                        float maxRange = 875 + hero->GetPosition().Distance(soldier->GetPosition());
+                        Vec3 soldierPos = soldier->GetPosition();
+                        Vec3 endPos = end;
+                        if (soldierPos.Distance(endPos) > maxRange)
+                            endPos = soldierPos + (endPos - soldierPos).Normalized() * maxRange;
+
+                        SpellDetector::CreateSpellData(hero, soldierPos, endPos, spellData, soldier);
                     }
-
-                    RefreshSoldiers();
-                    for (const auto& kv : s_soldiers) {
-                        const auto& soldier = kv.second;
-                        if (!soldier.IsValid() || soldier.IsDead()) {
-                            continue;
-                        }
-
-                        const float maxSlideRange = 875.0f + args.Sender.GetPosition().Distance2D(soldier.GetPosition());
-                        const Vec3 start = soldier.GetPosition();
-                        const Vec3 end = ClipEndByRange(start, args.EndPos, maxSlideRange);
-                        SpellDetector::CreateSpellData(args.Sender, start, end, spellData, soldier);
-                    }
-
-                    specialSpellArgs.NoProcess = true;
-                });
-
-            s_spellRegistered = true;
+                }
+            }
+            specialArgs.noProcess = true;
         }
     }
 
 private:
-    static inline bool s_updateRegistered = false;
-    static inline bool s_spellRegistered = false;
-    static inline std::unordered_map<int, SDK::GameObject> s_soldiers = {};
-
-    static void RefreshSoldiers() {
-        std::unordered_set<int> alive;
-        for (const auto& minion : SDK::ObjectManager::GetMinions()) {
-            if (!minion.IsValid() || minion.IsDead()) {
-                continue;
-            }
-            if (!Situation::CheckTeam(minion)) {
-                continue;
-            }
-
-            const std::string lowerName = ToLower(minion.GetName());
-            if (lowerName != "azirsoldier") {
-                continue;
-            }
-
-            const int id = minion.GetNetId();
-            alive.insert(id);
-            s_soldiers[id] = minion;
-        }
-
-        std::vector<int> toRemove;
-        for (const auto& kv : s_soldiers) {
-            if (alive.find(kv.first) == alive.end()) {
-                toRemove.push_back(kv.first);
-            }
-        }
-        for (int id : toRemove) {
-            s_soldiers.erase(id);
-        }
-    }
+    SDK::GameObject* azirHero = nullptr;
 };
 
 } // namespace SpecialSpells

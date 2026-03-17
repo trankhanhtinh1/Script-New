@@ -1,6 +1,8 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Twitch.h — C++ port of EzEvade/SpecialSpells/Twitch.cs (47 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,38 +10,30 @@ namespace SpecialSpells {
 class Twitch : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "TwitchSprayandPrayAttack")) {
-            return;
+        if (spellData.spellName == "TwitchSprayandPrayAttack") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell(hero, start, end, sd, sa);
+                });
         }
-        if (s_registered) {
-            return;
-        }
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs&) {
-                if (!SpellNameIs(spellData, "TwitchSprayandPrayAttack")) {
-                    return;
-                }
-
-                auto target = FindObjectByNetId(args.TargetNetId);
-                if (!target.IsValid()) {
-                    return;
-                }
-
-                Vec3 start = args.Sender.GetServerPosition();
-                Vec3 end = args.Sender.GetServerPosition() + (target.GetPosition() - args.Sender.GetServerPosition()) * spellData->range;
-                auto data = std::make_shared<SpellData>(spellData->Clone());
-                data->spellDelay = args.Sender.AttackCastDelay() * 1000.0f;
-                SpellDetector::CreateSpellData(args.Sender, start, end, data);
-            });
-
-        s_registered = true;
     }
 
-private:
-    static inline bool s_registered = false;
+    // C# lines 29-44: TwitchR auto-attack as skillshot
+    static void ProcessSpell(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "TwitchSprayandPrayAttack") {
+            Vec3 heroPos = hero->GetPosition();
+            Vec3 endPos = heroPos + (end - heroPos) * spellData.range;
+
+            SpellData data = spellData;
+            data.spellDelay = hero->AttackCastDelay() * 1000;
+
+            SpellDetector::CreateSpellData(hero, heroPos, endPos, data);
+        }
+    }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

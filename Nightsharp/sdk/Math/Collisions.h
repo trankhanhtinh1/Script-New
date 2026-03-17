@@ -1,6 +1,8 @@
 #pragma once
 #include "GameObjects.h"
 #include "GameObject.h"
+// (removed stray '/re' that was causing syntax errors)
+
 #include "AiManager.h"
 #include "core/Vector.h"
 #include <vector>

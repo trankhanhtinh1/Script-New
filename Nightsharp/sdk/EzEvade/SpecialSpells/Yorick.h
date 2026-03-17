@@ -1,6 +1,8 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Yorick.h — C++ port of EzEvade/SpecialSpells/Yorick.cs (43 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,36 +10,35 @@ namespace SpecialSpells {
 class Yorick : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "YorickE")) {
-            return;
+        if (spellData.spellName == "YorickE") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell(hero, start, end, sd, sa);
+                });
         }
-        if (s_registered) {
-            return;
-        }
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                if (!SpellNameIs(spellData, "YorickE")) {
-                    return;
-                }
-
-                Vec3 end = ClipEndByRange(args.StartPos, args.EndPos, spellData->range);
-                Vec3 direction = (end - args.StartPos).Normalized2D();
-
-                Vec3 spellStart = end.Extend(args.Sender.GetServerPosition(), 100.0f);
-                Vec3 spellEnd = spellStart + direction * 1.0f;
-
-                SpellDetector::CreateSpellData(args.Sender, spellStart, spellEnd, spellData);
-                specialSpellArgs.NoProcess = true;
-            });
-
-        s_registered = true;
     }
 
-private:
-    static inline bool s_registered = false;
+    // C# lines 23-39: YorickE — splash at target location
+    static void ProcessSpell(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "YorickE") {
+            Vec3 endPos = end;
+            Vec3 startPos = start;
+            Vec3 direction = (endPos - startPos).Normalized();
+
+            if (startPos.Distance(endPos) > spellData.range)
+                endPos = startPos + (endPos - startPos).Normalized() * spellData.range;
+
+            Vec3 spellStart = endPos.Extend(hero->GetPosition(), 100);
+            Vec3 spellEnd = spellStart + direction * 1;
+
+            SpellDetector::CreateSpellData(hero, spellStart, spellEnd, spellData);
+            specialArgs.noProcess = true;
+        }
+    }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

@@ -1,114 +1,139 @@
 #pragma once
 #include <string>
 #include <vector>
-
-// ============================================================================
-// EzEvade::SpellData — Data structure for enemy skillshots to dodge.
-//
-// Ported from SpellDatabase.lua (NightSharp evade system).
-// Patch target: 26.5 (2026-03-03)
-//
-// Each entry represents a single skillshot or targeted spell that the
-// evade system should detect and dodge.
-// ============================================================================
+#include <cmath>
 
 namespace EzEvade {
 
-    // ========================================================================
-    // SkillshotType — The geometric shape of a skillshot.
-    // ========================================================================
-    enum class SkillshotType : int {
-        Line         = 0,   // Linear skillshot (Morgana Q)
-        Circle       = 1,   // Circular skillshot (Cho'Gath Q)
-        Cone         = 2,   // Cone skillshot (Annie W)
-        Ring         = 3,   // Ring skillshot (Veigar E)
-        Arc          = 4,   // Arc skillshot (Diana Q)
-        MissileLine  = 5,   // Line missile (Ezreal Q)
-        MissileArc   = 6,   // Arc missile
-        None         = -1,
+    enum class SpellType {
+        Line,
+        Circular,
+        Cone,
+        Arc,
+        None
     };
 
-    // ========================================================================
-    // CollisionType — What can block a spell missile.
-    // ========================================================================
-    enum CollisionType : int {
-        CollisionNone       = 0,
-        CollisionMinions    = 1 << 0,
-        CollisionHeroes     = 1 << 1,
-        CollisionYasuoWall  = 1 << 2,
-        CollisionBraumShield = 1 << 3,
-        CollisionWalls      = 1 << 4,
+    enum class SkillshotType {
+        Line,
+        MissileLine,
+        Circle,
+        Cone,
+        Ring,
+        Arc,
+        MissileArc,
+        None
     };
 
-    // ========================================================================
-    // DangerLevel — How dangerous/important a spell is to dodge.
-    // ========================================================================
-    enum class DangerLevel : int {
-        Low      = 1,
-        Medium   = 2,
-        High     = 3,
-        Extreme  = 4,
-        Ultimate = 5,
+    enum class SpellSlot {
+        Q, W, E, R, Unknown
     };
 
-    // ========================================================================
-    // SpellData — Describes a single spell entry.
-    // ========================================================================
+    enum CollisionObjectType {
+        EnemyChampions,
+        EnemyMinions,
+        YasuoWall
+    };
+
+    enum CollisionFlags {
+        CollisionNone = 0,
+        CollisionMinions = 1,
+        CollisionChampions = 2,
+        CollisionYasuoWall = 4
+    };
+
     struct SpellData {
-        // Identity
-        std::string charName;           // Champion name (e.g. "Morgana")
-        std::string spellName;          // Internal spell name (e.g. "MorganaQ")
-        std::string displayName;        // Display name for menu (e.g. "Q - Dark Binding")
+        // Core identification
+        std::string charName;
+        SpellSlot spellKey = SpellSlot::Q;
+        int dangerlevel = 1;
+        std::string spellName;
+        std::string name;
 
         // Geometry
+        float range = 0.0f;
+        float extraRange = 0.0f;
+        float radius = 0.0f;
+        float secondaryRadius = 0.0f;
+        float projectileSpeed = 3.402823466e+38F;
+        float speed = 0.0f;
+        float angle = 0.0f;
+        float sideRadius = 0.0f;
+
+        // Names
+        std::string missileName = "";
+        std::string missileSpellName = "";
+        std::string displayName = "";
+
+        // Type info
+        SpellType spellType = SpellType::None;
         SkillshotType type = SkillshotType::Line;
-        float range        = 0.0f;      // Max range of the spell
-        float radius       = 0.0f;      // Radius (circle) or half-width (line)
-        float speed        = 0.0f;      // Missile speed (0 = instant)
-        float castDelay    = 0.25f;     // Cast delay in seconds
-        float extraRange   = 0.0f;      // Extra range beyond listed range
-        int   angle        = 0;         // Cone angle (degrees)
 
-        // Flags
-        bool isMissile     = false;     // Whether this spell has a visible missile
-        bool isCC          = false;     // Does this spell apply crowd control?
-        bool fixedRange    = false;     // Is the range fixed?
-        bool canBeRemoved  = true;      // Can the spell zone be removed?
-        bool forceRemove   = false;     // Force remove on timeout
+        // Timing
+        float spellDelay = 250.0f;
+        float castDelay = 0.25f;
+        float extraDelay = 0.0f;
+        float extraEndTime = 0.0f;
 
-        // Collision
-        int  collisionObjects = CollisionNone;
+        // Behavior flags
+        bool fixedRange = false;
+        bool useEndPosition = false;
+        bool usePackets = false;
+        bool invert = false;
+        float extraDistance = 0.0f;
+        bool isThreeWay = false;
+        bool defaultOff = false;
+        bool noProcess = false;
+        bool isWall = false;
+        bool isPerpendicular = false;
+        bool hasEndExplosion = false;
+        bool hasTrap = false;
+        bool isSpecial = false;
+        bool updatePosition = true;
+        float extraDrawHeight = 0.0f;
 
-        // Danger assessment
-        int dangerLevel    = 3;         // 1-5 danger level
+        // Detection / Evade info
+        bool isMissile = false;
+        bool isCC = false;
+        int dangerLevel = 1;
+        int defaultEvadePct = 0;
+        bool defaultEnabled = true;
+        bool canBeRemoved = false;
+        int collisionObjectsMask = CollisionNone;
 
-        // Missile identification
-        std::string missileSpellName;                // Missile name if different
-        std::vector<std::string> extraMissileNames;  // Alternative missile names
-        std::vector<std::string> extraSpellNames;    // Alternative spell names
+        // Collections
+        std::vector<std::string> extraSpellNames;
+        std::vector<std::string> extraMissileNames;
+        std::vector<CollisionObjectType> collisionObjects;
+        std::string trapBaseName = "";
+        std::string trapTroyName = "";
 
-        // Menu evade settings
-        bool defaultEnabled   = true;   // Enabled by default
-        int  defaultEvadePct  = 100;    // Default dodge percentage (0=only-kill-me, 100=all)
-        bool defaultFow       = false;  // Dodge from fog of war
-
-        // ====================================================================
-        // Convenience
-        // ====================================================================
+        // Helper methods
         bool IsSkillshot() const {
-            return type != SkillshotType::None;
+            return spellType != SpellType::None || type != SkillshotType::None;
+        }
+
+        bool CollidesWithChampions() const {
+            if (collisionObjectsMask & CollisionChampions) return true;
+            for (auto obj : collisionObjects) {
+                if (obj == EnemyChampions) return true;
+            }
+            return false;
         }
 
         bool CollidesWithMinions() const {
-            return (collisionObjects & CollisionMinions) != 0;
+            if (collisionObjectsMask & CollisionMinions) return true;
+            for (auto obj : collisionObjects) {
+                if (obj == EnemyMinions) return true;
+            }
+            return false;
         }
 
         bool CanBeWindWalled() const {
-            return (collisionObjects & CollisionYasuoWall) != 0;
-        }
-
-        DangerLevel GetDangerLevel() const {
-            return static_cast<DangerLevel>(dangerLevel);
+            if (collisionObjectsMask & CollisionYasuoWall) return true;
+            for (auto obj : collisionObjects) {
+                if (obj == YasuoWall) return true;
+            }
+            return false;
         }
     };
 

@@ -1,6 +1,8 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Malzahar.h — C++ port of EzEvade/SpecialSpells/Malzahar.cs (50 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,41 +10,36 @@ namespace SpecialSpells {
 class Malzahar : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "MalzaharQ")) {
-            return;
+        if (spellData.spellName == "MalzaharQ") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell(hero, start, end, sd, sa);
+                });
         }
-        if (s_registered) {
-            return;
-        }
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                if (!SpellNameIs(spellData, "MalzaharQ")) {
-                    return;
-                }
-
-                const Vec2 direction = (args.EndPos.To2D() - args.StartPos.To2D()).Normalized();
-                const Vec2 pDirection = direction.Perpendicular();
-                const Vec2 targetPoint = args.EndPos.To2D();
-
-                const Vec2 pos1 = targetPoint - pDirection * spellData->sideRadius;
-                const Vec2 pos2 = targetPoint + pDirection * spellData->sideRadius;
-
-                SpellDetector::CreateSpellData(args.Sender, Vec3::From2D(pos1, args.EndPos.y), Vec3::From2D(pos2, args.EndPos.y),
-                                               spellData, SDK::GameObject(), 0.0f, false);
-                SpellDetector::CreateSpellData(args.Sender, Vec3::From2D(pos2, args.EndPos.y), Vec3::From2D(pos1, args.EndPos.y),
-                                               spellData, SDK::GameObject(), 0.0f);
-
-                specialSpellArgs.NoProcess = true;
-            });
-
-        s_registered = true;
     }
 
-private:
-    static inline bool s_registered = false;
+    // C# lines 30-47: MalzaharQ — two perpendicular lines
+    static void ProcessSpell(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "MalzaharQ") {
+            Vec2 direction = (end.To2D() - start.To2D()).Normalized();
+            Vec2 pDirection = direction.Perpendicular();
+            Vec2 targetPoint = end.To2D();
+
+            Vec2 pos1 = targetPoint - pDirection * spellData.sideRadius;
+            Vec2 pos2 = targetPoint + pDirection * spellData.sideRadius;
+
+            SpellDetector::CreateSpellData(hero,
+                Vec3(pos1.x, 0, pos1.y), Vec3(pos2.x, 0, pos2.y), spellData, nullptr, 0, false);
+            SpellDetector::CreateSpellData(hero,
+                Vec3(pos2.x, 0, pos2.y), Vec3(pos1.x, 0, pos1.y), spellData, nullptr, 0);
+
+            specialArgs.noProcess = true;
+        }
+    }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

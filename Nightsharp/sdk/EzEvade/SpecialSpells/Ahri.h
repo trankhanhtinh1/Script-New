@@ -1,6 +1,12 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+#include "../Utils/EvadeUtils.h"
+
+// ============================================================================
+// Ahri.h — C++ port of EzEvade/SpecialSpells/Ahri.cs (41 lines)
+//   Line-by-line, preserving original logic
+// ============================================================================
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,53 +14,45 @@ namespace SpecialSpells {
 class Ahri : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "AhriOrbofDeception2")) {
-            return;
+        if (spellData.spellName == "AhriOrbofDeception2") {
+            // Find Ahri in enemy heroes and store her NetId
+            for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                if (hero.GetChampionName() == "Ahri") {
+                    ahriNetId = hero.GetNetId();
+                    break;
+                }
+            }
         }
-        if (s_registered) {
-            return;
-        }
+    }
 
-        auto hero = FindHeroByChampion("Ahri", true);
-        if (!hero.IsValid()) {
-            return;
-        }
+    void OnUpdate() {
+        if (ahriNetId == 0) return;
 
-        s_heroNetId = hero.GetNetId();
-        SDK::EventSystem::OnGameUpdate([](float) {
-            OnGameUpdate();
-        });
-        s_registered = true;
+        // Find the live Ahri object each tick
+        SDK::GameObject* ahriHero = nullptr;
+        for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+            if (hero.GetNetId() == ahriNetId && hero.IsValid()) {
+                ahriHero = &hero;
+                break;
+            }
+        }
+        if (!ahriHero) return;
+
+        for (auto& entry : SpellDetector::detectedSpells) {
+            auto& spell = entry.second;
+            if (spell.heroID == ahriNetId) {
+                std::string lower = spell.info.spellName;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                if (lower == "ahriorbofdeception2") {
+                    spell.endPos = ahriHero->GetPosition().To2D();
+                }
+            }
+        }
     }
 
 private:
-    static inline bool s_registered = false;
-    static inline int s_heroNetId = 0;
-
-    static void OnGameUpdate() {
-        if (s_heroNetId <= 0) {
-            return;
-        }
-
-        auto hero = FindObjectByNetId(s_heroNetId);
-        if (!hero.IsValid()) {
-            return;
-        }
-
-        for (auto& entry : SpellDetector::DetectedSpells) {
-            auto& spell = entry.second;
-            if (spell.HeroID != s_heroNetId || !spell.Info) {
-                continue;
-            }
-            if (!EqualsI(spell.Info->spellName, "AhriOrbofDeception2")) {
-                continue;
-            }
-
-            spell.EndPos = hero.GetServerPosition().To2D();
-        }
-    }
+    int ahriNetId = 0;
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

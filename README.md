@@ -20,3 +20,7 @@ Changelog 12/3/2026
 - wrong method drawing skillshot
 - miss Safe Position Solver
 - bug don't doge
+
+Changelog 17/3/2026
+- Change GameObject from offset to runtime API
+- bug Ezreal fixed

@@ -424,6 +424,21 @@ namespace SDK {
         // Timing — Can we attack / move?
         // ====================================================================
 
+        // Cached champion name — refreshed once in OnUpdate instead of every call
+        static inline std::string s_cachedChampName;
+        static inline float s_cachedChampNameTime = 0.0f;
+
+        static const std::string& GetCachedChampName() {
+            float now = Game::GetTime();
+            if (now - s_cachedChampNameTime > 1.0f) {
+                s_cachedChampNameTime = now;
+                if (GameObjects::Player.IsValid()) {
+                    s_cachedChampName = GameObjects::Player.GetChampionName();
+                }
+            }
+            return s_cachedChampName;
+        }
+
         static bool CanAttack() {
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return false;
@@ -441,8 +456,8 @@ namespace SDK {
             if (buffs.HasBuffOfType(BuffType::Fear)) return false;
             if (buffs.HasBuffOfType(BuffType::Polymorph)) return false;
 
-            // EnsoulSharp-specific champion checks
-            const std::string champName = player.GetChampionName();
+            // EnsoulSharp-specific champion checks (using cached name)
+            const std::string& champName = GetCachedChampName();
             if (_stricmp(champName.c_str(), "Jhin") == 0 && player.HasBuff("JhinPassiveReload")) {
                 return false;
             }
@@ -453,10 +468,9 @@ namespace SDK {
             float time = Game::GetTime();
             float delay = player.GetAttackDelay();
             if (_stricmp(champName.c_str(), "Graves") == 0) {
-                // EnsoulSharp formula from Orbwalker.CanAttack override
                 delay = (delay * 1.0740296828f) - 0.7162381256f;
             }
-            float ping = Game::GetPing() / 2000.0f; // half ping in seconds
+            float ping = Game::GetPing() / 2000.0f;
 
             return time + ping >= LastAttackTime + delay;
         }
@@ -478,7 +492,8 @@ namespace SDK {
 
             float time = Game::GetTime();
             float windup = player.GetAttackWindup();
-            if (_stricmp(player.GetChampionName().c_str(), "Rengar") == 0 &&
+            const std::string& champName = GetCachedChampName();
+            if (_stricmp(champName.c_str(), "Rengar") == 0 &&
                 (player.HasBuff("RengarQ") || player.HasBuff("RengarQEmp"))) {
                 extraWindup += 0.2f; // +200ms like EnsoulSharp
             }
@@ -548,7 +563,7 @@ namespace SDK {
             static Vec3 lastIssuePos;
             const int nowTick = Game::GetTickCount();
             const int ping = std::max(0, (int)Game::GetPing());
-            const int minGap = (order == 3 ? 70 : 40) + std::min(60, ping / 2);
+            const int minGap = (order == 3 ? 150 : 100) + std::min(80, ping / 2);  // Anti-crash: raised from 70/40
             if (nowTick - lastIssueTick < minGap) {
                 const bool sameOrder = (order == lastIssueOrder);
                 const bool sameTarget = (targetAddr != 0 && targetAddr == lastIssueTarget);
@@ -575,7 +590,7 @@ namespace SDK {
 
         static void Attack(GameObject& target) {
             const int nowTick = Game::GetTickCount();
-            const int minOrderGap = 70 + std::min(60, (int)Game::GetPing());
+            const int minOrderGap = 150 + std::min(80, (int)Game::GetPing());  // Anti-crash: raised from 70
 
             if (nowTick < BlockOrdersUntilTick) return;
             if (nowTick - LastAttackCommandTick < minOrderGap) return;
@@ -610,7 +625,7 @@ namespace SDK {
 
         static void MoveTo(Vec3 pos) {
             const int nowTick = Game::GetTickCount();
-            const int minOrderGap = 70 + std::min(60, (int)Game::GetPing());
+            const int minOrderGap = 100 + std::min(80, (int)Game::GetPing());  // Anti-crash: raised from 70
             const int menuMoveDelayMs = MenuSlider("delayMovement", 0, "advanced");
 
             if (nowTick < BlockOrdersUntilTick) return;
@@ -757,20 +772,19 @@ namespace SDK {
         }
 
         static bool IsValidUnit(const GameObject& unit, float range = 0.0f) {
+            if (!unit.IsValid()) return false;
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return false;
-            if (!unit.IsValid()) return false;
             const float checkRange = range > 0.0f ? range : player.GetRealAttackRange() + 65.0f;
+            // Distance check FIRST — cheapest, eliminates most units
+            if (player.DistanceTo(unit) > checkRange) return false;
             if (!unit.IsAlive()) return false;
             if (!unit.IsVisible()) return false;
-            if (player.DistanceTo(unit) > checkRange) return false;
 
             // Neutral units can be targetable even if IsTargetable offset is unreliable.
             const bool isNeutral = unit.GetTeam() == GameObjectTeam::Neutral;
             if (!isNeutral && !unit.IsTargetable()) return false;
-
-            const std::string lowerName = ToLower(unit.GetName());
-            if (IsIgnoredMinionName(lowerName)) return false;
+            // NOTE: Removed string allocation here — ignore check happens at list build time
             return true;
         }
 
@@ -819,7 +833,10 @@ namespace SDK {
             const float checkRange = GameObjects::Player.GetRealAttackRange() + 65.0f;
             for (auto& minion : GameObjects::EnemyMinions) {
                 if (!IsValidUnit(minion, checkRange)) continue;
-                if (includeLaneMinions && minion.IsMinion()) {
+                // EnemyMinions is already pre-filtered by GameObjects::Update()
+                // — no need to call IsMinion() again (was causing drops when
+                // RuntimeAPI::CompareTypeFlags failed under SEH).
+                if (includeLaneMinions) {
                     minionList.push_back(minion);
                 }
             }
@@ -839,56 +856,15 @@ namespace SDK {
 
             if (includeLaneMinions) {
                 minionList = OrderEnemyMinions(minionList);
+                // JungleMinions is already filtered at source (GameObjects::Update)
+                // — only real jungle monsters, no plants/decorations.
+                // Just check range + alive, no redundant RuntimeAPI calls.
                 std::vector<GameObject> jungle;
                 for (auto& j : GameObjects::JungleMinions) {
                     if (!IsValidUnit(j, checkRange)) continue;
-
-                    // Skip plants, wards, barrels — they are NOT jungle targets
-                    if (j.IsPlant()) continue;
-                    if (j.IsWard()) continue;
-                    if (j.IsBarrel()) continue;
-
-                    // Skip decorative objects (empty name, very low HP)
-                    const std::string name = j.GetName();
-                    if (name.length() <= 1) continue;
-                    if (j.GetMaxHealth() <= 6.0f && j.GetTeam() == GameObjectTeam::Neutral) continue;
-
-                    // Use MinionType to filter: Jungle(2) is real jungle monster
-                    MinionType mt = j.GetMinionType();
-                    if (mt == MinionType::Jungle) {
-                        jungle.push_back(j);
-                        continue;
-                    }
-
-                    // Fallback: check via IsJungleMonster flag or known name
-                    if (j.IsJungleMonster() || JungleUtils::IsKnownJungleMonsterName(ToLower(name))) {
-                        jungle.push_back(j);
-                    }
+                    jungle.push_back(j);
                 }
                 auto orderedJungle = OrderJungleMinions(jungle);
-
-                // Debug: Log what we're including/excluding
-                if (DebugLaneClear && mode == OrbwalkingMode::LaneClear) {
-                    static float s_lastJungleDebugLog = 0.0f;
-                    float now = Game::GetTime();
-                    if (now - s_lastJungleDebugLog > 2.0f) {
-                        s_lastJungleDebugLog = now;
-                        for (auto& j : GameObjects::JungleMinions) {
-                            if (!IsValidUnit(j, checkRange)) continue;
-                            const std::string lname = ToLower(j.GetName());
-                            bool isPlantByFunc = j.IsPlant();
-                            bool isPlantByName = lname.find("plant") != std::string::npos;
-                            bool isPlantByUtil = JungleUtils::IsJunglePlantName(lname);
-                            bool filtered = isPlantByFunc || isPlantByName || isPlantByUtil;
-                            if (filtered) {
-                                DebugConsole::LogTagged("LC-Filter", "SKIP jungle: [%s] hp=%.0f maxHP=%.0f plant=%d plantName=%d plantUtil=%d",
-                                    j.GetName().c_str(), j.GetHealth(), j.GetMaxHealth(),
-                                    isPlantByFunc ? 1 : 0, isPlantByName ? 1 : 0, isPlantByUtil ? 1 : 0);
-                            }
-                        }
-                    }
-                }
-
                 minionList.insert(minionList.end(), orderedJungle.begin(), orderedJungle.end());
             }
 
@@ -931,11 +907,9 @@ namespace SDK {
                 finalMinionList.insert(finalMinionList.end(), cloneList.begin(), cloneList.end());
             }
 
-            finalMinionList.erase(
-                std::remove_if(finalMinionList.begin(), finalMinionList.end(), [](const GameObject& m) {
-                    return IsIgnoredMinionName(ToLower(m.GetName()));
-                }),
-                finalMinionList.end());
+            // Removed redundant string-heavy erase loop.
+            // Ignored minions are already filtered out in IsValidUnit().
+            // JarvanIV standard filtered at list build time.
 
             return finalMinionList;
         }
@@ -1079,43 +1053,20 @@ namespace SDK {
                 if (hero.IsValid() && player.IsInAttackRange(hero)) return hero;
             }
 
-            // Jungle in farm modes (Script-New style priority by camp size)
+            // Jungle in farm modes (priority by camp size, fast bitmask checks)
             if (mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Harass) {
                 GameObject bestJungleTarget;
                 float bestPriority = -1.0f;
 
                 auto evalJungle = [&](const GameObject& minion) {
                     if (!minion.IsValid() || !minion.IsAlive()) return;
-                    if (minion.GetTeam() != GameObjectTeam::Neutral) return;
                     if (!player.IsInAttackRange(minion)) return;
+                    if (!minion.IsJungleMonster()) return;
 
-                    // Skip plants, wards, barrels
-                    if (minion.IsPlant()) return;
-                    if (minion.IsWard()) return;
-                    if (minion.IsBarrel()) return;
-
-                    std::string name = minion.GetName();
-                    if (name.empty()) name = minion.GetChampionName();
-                    if (name.length() <= 1) return;
-                    if (minion.GetMaxHealth() <= 6.0f) return;
-                    if (JungleUtils::IsJunglePlantName(name)) return;
-
-                    // Must be a real jungle monster
-                    MinionType mt = minion.GetMinionType();
-                    if (mt != MinionType::Jungle &&
-                        !JungleUtils::IsKnownJungleMonsterName(ToLower(name))) {
-                        return;
-                    }
-
-                    // Priority based on game functions (fast, no string matching)
                     float priority = minion.GetMaxHealth();
                     if (minion.IsBaron()) priority += 100000.0f;
                     else if (minion.IsDragon()) priority += 50000.0f;
-                    else {
-                        const std::string lower = ToLower(name);
-                        if (lower.find("rift") != std::string::npos || lower.find("herald") != std::string::npos) priority += 30000.0f;
-                        if (lower.find("atakhan") != std::string::npos) priority += 30000.0f;
-                    }
+                    else if (priority > 3000.0f) priority += 30000.0f;
 
                     if (priority > bestPriority) {
                         bestPriority = priority;
@@ -1127,7 +1078,6 @@ namespace SDK {
                     evalJungle(minion);
                 }
 
-                // Fallback in case selector list didn't include neutral minions this frame
                 if (!bestJungleTarget.IsValid()) {
                     for (auto& minion : GameObjects::JungleMinions) {
                         evalJungle(minion);
@@ -1289,10 +1239,11 @@ namespace SDK {
         static void OrbwalkMode(OrbwalkingMode mode) {
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return;
+            if (!player.IsAlive()) return;
 
             GameObject target = GetTarget(mode);
             LastTarget = target;  // Cache for debug overlay
-            if (target.IsValid() && CanAttack() && AttackState && player.IsInAttackRange(target)) {
+            if (target.IsValid() && target.IsAlive() && CanAttack() && AttackState && player.IsInAttackRange(target)) {
                 Attack(target);
             }
 

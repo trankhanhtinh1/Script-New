@@ -436,6 +436,30 @@ private:
                                  (sdkEntry->Type == SDK::SpellType::SkillshotMissileArc);
             detected.HasCollision = (sdkEntry->CollisionObjects & SDK::CollisionMinions) != 0;
             detected.IsWindWallable = (sdkEntry->CollisionObjects & SDK::CollisionYasuoWall) != 0;
+
+            // Fix type from SDK DB (critical: EzEvade DB hardcodes Line for everything)
+            if (sdkEntry->IsSkillshot()) {
+                switch (sdkEntry->Type) {
+                case SDK::SpellType::SkillshotCircle:
+                case SDK::SpellType::SkillshotMissileCircle:
+                    detected.Type = SpellType::Circle;
+                    break;
+                case SDK::SpellType::SkillshotCone:
+                case SDK::SpellType::SkillshotMissileCone:
+                    detected.Type = SpellType::Cone;
+                    break;
+                case SDK::SpellType::SkillshotRing:
+                    detected.Type = SpellType::Ring;
+                    break;
+                case SDK::SpellType::SkillshotArc:
+                case SDK::SpellType::SkillshotMissileArc:
+                    detected.Type = SpellType::Arc;
+                    break;
+                default:
+                    detected.Type = SpellType::Line;
+                    break;
+                }
+            }
         }
 
         // Failsafe bounds
@@ -599,6 +623,30 @@ private:
 
                 if (detected.Speed <= 0.0f) detected.Speed = 99999.0f;
                 if (detected.Width <= 0.0f) detected.Width = 50.0f;
+
+                // Fix type from SDK DB for FoW missiles too
+                if (sdkEntry && sdkEntry->IsSkillshot()) {
+                    switch (sdkEntry->Type) {
+                    case SDK::SpellType::SkillshotCircle:
+                    case SDK::SpellType::SkillshotMissileCircle:
+                        detected.Type = SpellType::Circle;
+                        break;
+                    case SDK::SpellType::SkillshotCone:
+                    case SDK::SpellType::SkillshotMissileCone:
+                        detected.Type = SpellType::Cone;
+                        break;
+                    case SDK::SpellType::SkillshotRing:
+                        detected.Type = SpellType::Ring;
+                        break;
+                    case SDK::SpellType::SkillshotArc:
+                    case SDK::SpellType::SkillshotMissileArc:
+                        detected.Type = SpellType::Arc;
+                        break;
+                    default:
+                        detected.Type = SpellType::Line;
+                        break;
+                    }
+                }
 
                 detected.DangerLevel = spellData->dangerLevel;
 

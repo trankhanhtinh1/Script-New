@@ -1,5 +1,5 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
     <Filter Include="Source Files">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
@@ -19,7 +19,7 @@
     <Filter Include="imgui">
       <UniqueIdentifier>{3ba57e14-8ac2-485a-b12c-f06690c43d6e}</UniqueIdentifier>
     </Filter>
-    <!-- SDK Filters -->
+    
     <Filter Include="sdk">
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-000000000001}</UniqueIdentifier>
     </Filter>
@@ -56,15 +56,15 @@
     <Filter Include="sdk\Data">
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-00000000000C}</UniqueIdentifier>
     </Filter>
-    <!-- Core -->
+    
     <Filter Include="core">
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-00000000000D}</UniqueIdentifier>
     </Filter>
-    <!-- Menu -->
+    
     <Filter Include="menu">
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-00000000000E}</UniqueIdentifier>
     </Filter>
-    <!-- Plugins -->
+    
     <Filter Include="plugins">
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-00000000000F}</UniqueIdentifier>
     </Filter>
@@ -78,7 +78,7 @@
       <UniqueIdentifier>{A1B2C3D4-0001-0001-0001-000000000013}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
-  <!-- Source Files (.cpp/.c) -->
+  
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
@@ -119,14 +119,18 @@
     <ClCompile Include="imgui\imgui_widgets.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
-  </ItemGroup>
-  <!-- Header Files (.h) -->
+  <ClCompile Include="sdk\EzEvade\Spells\ObjectTracker.cpp"><Filter>sdk\EzEvade\Spells</Filter></ClCompile>
+  <ClCompile Include="sdk\EzEvade\Spells\Spell.cpp"><Filter>sdk\EzEvade\Spells</Filter></ClCompile>
+  <ClCompile Include="sdk\EzEvade\Helpers\ObjectCache.cpp"><Filter>sdk\EzEvade\Helpers</Filter></ClCompile>
+  <ClCompile Include="sdk\EzEvade\Utils\EvadeUtils.cpp"><Filter>sdk\EzEvade\Utils</Filter></ClCompile>
+</ItemGroup>
+  
   <ItemGroup>
-    <!-- Root -->
+    
     <ClInclude Include="includes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <!-- Core -->
+    
     <ClInclude Include="core\Globals.h">
       <Filter>core</Filter>
     </ClInclude>
@@ -139,7 +143,7 @@
     <ClInclude Include="core\Vector.h">
       <Filter>core</Filter>
     </ClInclude>
-    <!-- SDK Root -->
+    
     <ClInclude Include="sdk\SDK.h">
       <Filter>sdk</Filter>
     </ClInclude>
@@ -149,7 +153,7 @@
     <ClInclude Include="sdk\Game.h">
       <Filter>sdk</Filter>
     </ClInclude>
-    <!-- SDK\GameObjects -->
+    
     <ClInclude Include="sdk\GameObjects\AiManager.h">
       <Filter>sdk\GameObjects</Filter>
     </ClInclude>
@@ -171,7 +175,7 @@
     <ClInclude Include="sdk\GameObjects\SpellBook.h">
       <Filter>sdk\GameObjects</Filter>
     </ClInclude>
-    <!-- SDK\Events -->
+    
     <ClInclude Include="sdk\Events\Dash.h">
       <Filter>sdk\Events</Filter>
     </ClInclude>
@@ -193,7 +197,7 @@
     <ClInclude Include="sdk\Events\TurretAggro.h">
       <Filter>sdk\Events</Filter>
     </ClInclude>
-    <!-- SDK\Math -->
+    
     <ClInclude Include="sdk\Math\Cluster.h">
       <Filter>sdk\Math</Filter>
     </ClInclude>
@@ -212,7 +216,7 @@
     <ClInclude Include="sdk\Math\Prediction.h">
       <Filter>sdk\Math</Filter>
     </ClInclude>
-    <!-- SDK\Wrappers\Damages -->
+    
     <ClInclude Include="sdk\Wrappers\Damages\DamageCalc.h">
       <Filter>sdk\Wrappers\Damages</Filter>
     </ClInclude>
@@ -225,7 +229,7 @@
     <ClInclude Include="sdk\Wrappers\Damages\DamagePassives.h">
       <Filter>sdk\Wrappers\Damages</Filter>
     </ClInclude>
-    <!-- SDK\Wrappers\Spells -->
+    
     <ClInclude Include="sdk\Wrappers\Spells\LastCast.h">
       <Filter>sdk\Wrappers\Spells</Filter>
     </ClInclude>
@@ -247,18 +251,18 @@
     <ClInclude Include="sdk\Wrappers\Spells\SpellTypes.h">
       <Filter>sdk\Wrappers\Spells</Filter>
     </ClInclude>
-    <!-- SDK\Wrappers\Orbwalking -->
+    
     <ClInclude Include="sdk\Wrappers\Orbwalking\HealthPrediction.h">
       <Filter>sdk\Wrappers\Orbwalking</Filter>
     </ClInclude>
     <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h">
       <Filter>sdk\Wrappers\Orbwalking</Filter>
     </ClInclude>
-    <!-- SDK\Wrappers\TargetSelector -->
+    
     <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelector.h">
       <Filter>sdk\Wrappers\TargetSelector</Filter>
     </ClInclude>
-    <!-- SDK\UI -->
+    
     <ClInclude Include="sdk\UI\ConfigManager.h">
       <Filter>sdk\UI</Filter>
     </ClInclude>
@@ -271,7 +275,7 @@
     <ClInclude Include="sdk\UI\MenuUI.h">
       <Filter>sdk\UI</Filter>
     </ClInclude>
-    <!-- SDK\Utils -->
+    
     <ClInclude Include="sdk\Utils\ActionQueue.h">
       <Filter>sdk\Utils</Filter>
     </ClInclude>
@@ -311,7 +315,7 @@
     <ClInclude Include="sdk\Utils\WeightedRandom.h">
       <Filter>sdk\Utils</Filter>
     </ClInclude>
-    <!-- Menu -->
+    
     <ClInclude Include="menu\NightSharpMenu.h">
       <Filter>menu</Filter>
     </ClInclude>
@@ -321,7 +325,7 @@
     <ClInclude Include="menu\MenuConfig.h">
       <Filter>menu</Filter>
     </ClInclude>
-    <!-- Plugins -->
+    
     <ClInclude Include="plugins\IPlugin.h">
       <Filter>plugins</Filter>
     </ClInclude>
@@ -346,7 +350,7 @@
     <ClInclude Include="plugins\utility\evade\EvadePlugin.h">
       <Filter>plugins\utility\evade</Filter>
     </ClInclude>
-    <!-- imgui -->
+    
     <ClInclude Include="imgui\imconfig.h">
       <Filter>imgui</Filter>
     </ClInclude>
@@ -371,7 +375,7 @@
     <ClInclude Include="imgui\imstb_truetype.h">
       <Filter>imgui</Filter>
     </ClInclude>
-    <!-- kiero -->
+    
     <ClInclude Include="kiero\kiero.h">
       <Filter>kiero</Filter>
     </ClInclude>
@@ -399,44 +403,29 @@
     <ClInclude Include="kiero\minhook\src\trampoline.h">
       <Filter>kiero</Filter>
     </ClInclude>
-  </ItemGroup>
-  <!-- Data Files (JSON) -->
+    <ClInclude Include="spoof\spoofcall.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  <ClInclude Include="sdk\EzEvade\Spells\ObjectTracker.h"><Filter>sdk\EzEvade\Spells</Filter></ClInclude>
+  <ClInclude Include="sdk\EzEvade\Spells\Spell.h"><Filter>sdk\EzEvade\Spells</Filter></ClInclude>
+  <ClInclude Include="sdk\EzEvade\Helpers\ObjectCache.h"><Filter>sdk\EzEvade\Helpers</Filter></ClInclude>
+  <ClInclude Include="sdk\EzEvade\Utils\EvadeUtils.h"><Filter>sdk\EzEvade\Utils</Filter></ClInclude>
+</ItemGroup>
+  
   <ItemGroup>
-    <None Include="sdk\Data\Database.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\Gapclosers.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\GlobalInterruptableSpellsList.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\InterruptableSpells.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\Map.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\Priority.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\6.6.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\6.7.json">
-      <Filter>sdk\Data</Filter>
-    </None>
-    <None Include="sdk\Data\9.7.269.2391.json">
-      <Filter>sdk\Data</Filter>
-    </None>
     <None Include="kiero\minhook\dll_resources\MinHook.def">
       <Filter>kiero</Filter>
     </None>
   </ItemGroup>
-  <!-- Resource Files -->
+  
   <ItemGroup>
     <ResourceCompile Include="kiero\minhook\dll_resources\MinHook.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="spoof\spoof.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

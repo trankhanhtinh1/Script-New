@@ -67,6 +67,28 @@ namespace SDK {
             return Globals::Read<int>(address + Offset::Missile::TargetNetId);
         }
 
+        // Target destination index (CastInfo+0x108 → missile+0x3C8)
+        // This is a pointer to the target dest index — dereference to get the value.
+        // Used by EzEvade to identify which unit a targeted missile is aimed at.
+        int GetDestIndex() const {
+            if (!IsValid()) return 0;
+            uintptr_t destPtr = Globals::Read<uintptr_t>(address + Offset::Missile::DestIndex);
+            if (!Globals::IsValidPtr(destPtr)) return 0;
+            return Globals::Read<int>(destPtr);
+        }
+
+        // Check if this missile is targeting a specific network ID
+        bool IsTargeting(int netId) const {
+            if (netId <= 0) return false;
+            // Check primary target net ID first
+            int targetNet = GetTargetNetId();
+            if (targetNet == netId) return true;
+            // Fallback: check dest index (for some targeted spells)
+            int destIdx = GetDestIndex();
+            if (destIdx == netId) return true;
+            return false;
+        }
+
         // Missile network ID (CastInfo+0xA4 → missile+0x364)
         int GetNetworkId() const {
             if (!IsValid()) return 0;

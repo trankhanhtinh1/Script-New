@@ -1,118 +1,47 @@
 #pragma once
-#include "sdk/SDK.h"
-#include "sdk/EzEvade/Core/EvadeHelper.h"
-#include "sdk/EzEvade/Helpers/EvadeCommand.h"
-#include "sdk/EzEvade/Utils/DelayAction.h"
+#include <string>
+#include "EvadeSpellData.h"
+#include "../Core/EvadeHelper.h"
+#include "../../GameObjects/GameObjects.h"
 
 namespace EzEvade {
 
-class SpecialEvadeSpell {
-public:
-    static void LoadSpecialSpell(EvadeSpellData& spellData) {
-        if (spellData.spellName == "EkkoEAttack") {
-            spellData.useSpellFunc = UseEkkoE2;
-        } else if (spellData.spellName == "EkkoR") {
-            spellData.useSpellFunc = UseEkkoR;
-        } else if (spellData.spellName == "EliseSpiderEInitial") {
-            spellData.useSpellFunc = UseRappel;
-        } else if (spellData.spellName == "Pounce") {
-            spellData.useSpellFunc = UsePounce;
-        } else if (spellData.spellName == "RivenTriCleave") {
-            spellData.useSpellFunc = UseBrokenWings;
-        }
-    }
+    // Forward declarations
+    class EvadeSpell;
 
-    static bool UseRappel(const EvadeSpellData& evadeSpell, bool process = true) {
-        (void)process;
-        const auto& me = SDK::GameObjects::Player;
-        if (!me.IsValid()) return false;
+    // =========================================================================
+    // SpecialEvadeSpell
+    //   C# original: ezEvade.SpecialEvadeSpell (SpecialEvadeSpell.cs)
+    //   Contains champion-specific evade spell logic
+    //   Line-by-line port preserving original logic
+    // =========================================================================
+    class SpecialEvadeSpell {
+    public:
+        // Load special spell handler for the given spell
+        //   C# original: LoadSpecialSpell(EvadeSpellData spellData) (line 19-45)
+        static void LoadSpecialSpell(EvadeSpellData& spellData);
 
-        if (_stricmp(me.GetChampionName().c_str(), "Elise") != 0) {
-            EvadeCommand::CastSpell(evadeSpell, me);
-            return true;
-        }
+        // --- Champion-specific UseSpell functions ---
 
-        SDK::SpellCaster caster(ToSdkSlot(evadeSpell.spellKey), true, SDK::HitChance::Medium);
-        if (caster.IsReady()) {
-            caster.Cast();
-        }
-        return false;
-    }
+        // Elise: Rappel (E)
+        //   C# original: UseRappel(EvadeSpellData, bool) (line 47-62)
+        static bool UseRappel(const EvadeSpellData& evadeSpell, bool process = true);
 
-    static bool UsePounce(const EvadeSpellData& evadeSpell, bool process = true) {
-        (void)process;
-        const auto& me = SDK::GameObjects::Player;
-        if (!me.IsValid()) return false;
+        // Nidalee: Pounce (W spider form)
+        //   C# original: UsePounce(EvadeSpellData, bool) (line 64-77)
+        static bool UsePounce(const EvadeSpellData& evadeSpell, bool process = true);
 
-        if (_stricmp(me.GetChampionName().c_str(), "Nidalee") != 0) {
-            auto posInfo = EvadeHelper::GetBestPositionDash(evadeSpell);
-            if (!posInfo.Position.IsZero()) {
-                EvadeCommand::CastSpell(evadeSpell);
-                return true;
-            }
-        }
-        return false;
-    }
+        // Riven: Broken Wings (Q)
+        //   C# original: UseBrokenWings(EvadeSpellData, bool) (line 79-90)
+        static bool UseBrokenWings(const EvadeSpellData& evadeSpell, bool process = false);
 
-    static bool UseBrokenWings(const EvadeSpellData& evadeSpell, bool process = false) {
-        auto posInfo = EvadeHelper::GetBestPositionDash(evadeSpell);
-        if (!posInfo.Position.IsZero()) {
-            EvadeCommand::MoveTo(posInfo.Position);
-            DelayAction::Add(50, [evadeSpell, process]() {
-                if (process) {
-                    EvadeCommand::CastSpell(evadeSpell);
-                }
-            });
-            return true;
-        }
-        return false;
-    }
+        // Ekko: Phase Dive E attack (E2)
+        //   C# original: UseEkkoE2(EvadeSpellData, bool) (line 93-107)
+        static bool UseEkkoE2(const EvadeSpellData& evadeSpell, bool process = true);
 
-    static bool UseEkkoE2(const EvadeSpellData& evadeSpell, bool process = true) {
-        (void)process;
-        const auto& me = SDK::GameObjects::Player;
-        if (!me.IsValid()) return false;
-
-        if (me.HasBuff("ekkoeattackbuff")) {
-            auto posInfo = EvadeHelper::GetBestPositionTargetedDash(evadeSpell);
-            if (posInfo.Target.IsValid()) {
-                EvadeCommand::Attack(evadeSpell, posInfo.Target);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    static bool UseEkkoR(const EvadeSpellData& evadeSpell, bool process = true) {
-        (void)process;
-        const auto& me = SDK::GameObjects::Player;
-        if (!me.IsValid()) return false;
-        for (const auto& obj : SDK::GameObjects::AllMinions) {
-            if (!obj.IsValid() || obj.IsDead()) continue;
-            if (obj.GetTeam() != me.GetTeam()) continue;
-            if (_stricmp(obj.GetName().c_str(), "Ekko") != 0) continue;
-
-            Vec2 blinkPos = obj.GetServerPosition().To2D();
-            if (!Position::CheckDangerousPos(blinkPos, 10.0f)) {
-                EvadeCommand::CastSpell(evadeSpell);
-                return true;
-            }
-        }
-        return false;
-    }
-
-private:
-    static SDK::SpellSlotId ToSdkSlot(SpellSlotId slot) {
-        switch (slot) {
-        case SpellSlotId::Q: return SDK::SpellSlotId::Q;
-        case SpellSlotId::W: return SDK::SpellSlotId::W;
-        case SpellSlotId::E: return SDK::SpellSlotId::E;
-        case SpellSlotId::R: return SDK::SpellSlotId::R;
-        case SpellSlotId::F: return SDK::SpellSlotId::Summoner1;
-        case SpellSlotId::T: return SDK::SpellSlotId::Summoner2;
-        default: return SDK::SpellSlotId::Q;
-        }
-    }
-};
+        // Ekko: Chronobreak (R)
+        //   C# original: UseEkkoR(EvadeSpellData, bool) (line 109-127)
+        static bool UseEkkoR(const EvadeSpellData& evadeSpell, bool process = true);
+    };
 
 } // namespace EzEvade

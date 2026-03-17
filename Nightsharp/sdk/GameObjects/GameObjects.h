@@ -394,21 +394,35 @@ namespace SDK {
 
                 GameObjectTeam team = obj.GetTeam();
                 if (team == GameObjectTeam::Neutral) {
+                    // --- Classify Neutral objects: Plant vs Jungle Monster ---
+                    // Uses RuntimeAPI for accurate classification instead of raw offsets.
                     const std::string objName = obj.GetName();
                     const std::string champName = obj.GetChampionName();
-                    const std::string name = !objName.empty() ? objName : champName;
+
+                    // Normalize to lowercase ONCE for all comparisons
+                    const std::string lowerObjName = JungleUtils::ToLower(objName);
+                    const std::string lowerChampName = JungleUtils::ToLower(champName);
+                    const std::string lowerName = !lowerObjName.empty() ? lowerObjName : lowerChampName;
+
+                    // Comprehensive plant detection (RuntimeAPI + name + HP):
+                    const float maxHP = obj.GetMaxHealth();
                     const bool isPlant =
                         obj.IsPlant() ||
-                        JungleUtils::IsJunglePlantName(objName) ||
-                        JungleUtils::IsJunglePlantName(champName);
-                    const float maxHP = obj.GetMaxHealth();
-                    const MinionType mt = obj.GetMinionType();
-                    const bool isKnownJungle =
-                        !name.empty() && JungleUtils::IsKnownJungleMonsterName(JungleUtils::ToLower(name));
+                        JungleUtils::IsJunglePlantName(lowerObjName) ||
+                        JungleUtils::IsJunglePlantName(lowerChampName) ||
+                        (maxHP > 0.0f && maxHP <= 6.0f);
 
-                    if (!isPlant &&
-                        maxHP > 6.0f &&
-                        (mt == MinionType::Jungle || isKnownJungle)) {
+                    if (isPlant) {
+                        continue; // Plants go to JunglePlants via BuildExtraMinionCategories
+                    }
+
+                    // Jungle monster detection using RuntimeAPI (native game function)
+                    // + name database as fallback. No offset-based MinionType used.
+                    const bool isRuntimeJungle = obj.IsJungleMonster(); // RuntimeAPI native call
+                    const bool isKnownJungle =
+                        !lowerName.empty() && JungleUtils::IsKnownJungleMonsterName(lowerName);
+
+                    if (maxHP > 6.0f && (isRuntimeJungle || isKnownJungle)) {
                         JungleMinions.push_back(obj);
                     }
                     continue;

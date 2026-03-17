@@ -1,6 +1,8 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Ekko.h — C++ port of EzEvade/SpecialSpells/Ekko.cs (50 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,43 +10,30 @@ namespace SpecialSpells {
 class Ekko : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "EkkoR")) {
-            return;
+        if (spellData.spellName == "EkkoR") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell_EkkoR(hero, start, end, sd, sa);
+                });
         }
-        if (s_registered) {
-            return;
-        }
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                if (!SpellNameIs(spellData, "EkkoR")) {
-                    return;
-                }
-
-                for (const auto& minion : SDK::ObjectManager::GetMinions()) {
-                    if (!minion.IsValid() || minion.IsDead()) {
-                        continue;
-                    }
-                    if (!Situation::CheckTeam(minion)) {
-                        continue;
-                    }
-                    if (!EqualsI(minion.GetName(), "Ekko")) {
-                        continue;
-                    }
-
-                    SpellDetector::CreateSpellData(args.Sender, args.StartPos, minion.GetServerPosition(), spellData);
-                }
-
-                specialSpellArgs.NoProcess = true;
-            });
-
-        s_registered = true;
     }
 
-private:
-    static inline bool s_registered = false;
+    // C# lines 30-47: find Ekko ghost minion and create spell at its position
+    static void ProcessSpell_EkkoR(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "EkkoR") {
+            for (auto& obj : SDK::GameObjects::EnemyMinions) {
+                if (obj.IsValid() && obj.GetChampionName() == "Ekko") {
+                    Vec2 blinkPos = obj.GetPosition().To2D();
+                    SpellDetector::CreateSpellData(hero, start, Vec3(blinkPos.x, 0, blinkPos.y), spellData);
+                }
+            }
+            specialArgs.noProcess = true;
+        }
+    }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

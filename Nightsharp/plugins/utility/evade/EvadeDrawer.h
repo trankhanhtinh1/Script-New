@@ -1,5 +1,6 @@
 #pragma once
 #include "EvadeMenuData.h"
+#include "EvadeCore.h"
 #include "sdk/Events/EventSystem.h"
 #include "sdk/Game.h"
 #include "sdk/GameObjects/GameObjects.h"
@@ -8,6 +9,7 @@
 #include "sdk/UI/Drawing.h"
 #include "sdk/UI/MenuUI.h"
 #include "sdk/Utils/DebugConsole.h"
+#include "sdk/Wrappers/Spells/SpellDatabase.h"
 #include <algorithm>
 #include <cstdarg>
 #include <cmath>
@@ -310,6 +312,73 @@ namespace Plugins::Evade {
 
             if (s_drawDebugPanel) {
                 DrawDebugPanel();
+            }
+
+            // ==== Evade State / Position Drawing (from Debug menu) ====
+            const bool drawEvadePos   = GetDebugBool(rootMenu, "DrawEvadePosition");
+            const bool drawSafePos    = GetDebugBool(rootMenu, "DrawSafePosition");
+            const bool drawEvadeState = GetDebugBool(rootMenu, "DrawEvadeState");
+            const bool drawDodgeRes   = GetDebugBool(rootMenu, "DrawDodgeResult");
+
+            auto& evadeCore = ::Evade::EvadeCore::Instance();
+            auto evadeState = evadeCore.GetState();
+            auto& player = SDK::GameObjects::Player;
+            Vec3 playerPos = player.GetPosition();
+
+            // Draw Evade Position: show where we're dodging to
+            if (drawEvadePos && evadeState == ::Evade::EvadeState::Dodging) {
+                Vec2 dodgePoint = evadeCore.GetLastDodgePoint();
+                if (!dodgePoint.IsZero()) {
+                    Vec3 dp3D = Vec3::From2D(dodgePoint, playerPos.y);
+                    SDK::Drawing::DrawCircle(dp3D, 45.0f, IM_COL32(0, 255, 120, 230), 3.0f);
+                    SDK::Drawing::DrawLine3D(playerPos, dp3D, IM_COL32(0, 255, 120, 160), 2.0f);
+                    SDK::Drawing::DrawTextCentered(dp3D, "DODGE", IM_COL32(0, 255, 120, 255));
+                }
+            }
+
+            // Draw Safe Position: show safe zone around player
+            if (drawSafePos) {
+                const auto& skillshots = ::Evade::SpellDetector::Instance().GetActiveSkillshots();
+                if (!skillshots.empty()) {
+                    Vec2 heroPos = player.GetServerPosition().To2D();
+                    bool isSafe = ::Evade::EvadeGeometry::IsSafePoint(heroPos, skillshots, ::Evade::EvadeGeometry::BoundingRadius);
+                    ImU32 safeColor = isSafe ? IM_COL32(0, 255, 80, 180) : IM_COL32(255, 50, 50, 200);
+                    SDK::Drawing::DrawCircle(playerPos, 40.0f, safeColor, 3.0f);
+                    const char* safeText = isSafe ? "SAFE" : "DANGER";
+                    SDK::Drawing::DrawTextCentered(
+                        Vec3(playerPos.x, playerPos.y, playerPos.z - 60.0f),
+                        safeText, safeColor);
+                }
+            }
+
+            // Draw Evade State
+            if (drawEvadeState) {
+                const char* stateText = "Idle";
+                ImU32 stateColor = IM_COL32(150, 150, 150, 200);
+                switch (evadeState) {
+                case ::Evade::EvadeState::Dodging:
+                    stateText = "DODGING";
+                    stateColor = IM_COL32(255, 100, 50, 255);
+                    break;
+                case ::Evade::EvadeState::WaitingResume:
+                    stateText = "Resuming";
+                    stateColor = IM_COL32(255, 220, 50, 230);
+                    break;
+                default: break;
+                }
+                ImGui::GetBackgroundDrawList()->AddText(ImVec2(10.0f, 470.0f), stateColor, stateText);
+            }
+
+            // Draw Dodge Result
+            if (drawDodgeRes) {
+                int activeCount = ::Evade::SpellDetector::Instance().GetActiveCount();
+                char buf[128];
+                snprintf(buf, sizeof(buf), "Active: %d  State: %s  Enabled: %s",
+                    activeCount,
+                    evadeState == ::Evade::EvadeState::Dodging ? "Dodge" :
+                    evadeState == ::Evade::EvadeState::WaitingResume ? "Resume" : "Idle",
+                    evadeCore.GetConfig().Enabled ? "ON" : "OFF");
+                ImGui::GetBackgroundDrawList()->AddText(ImVec2(10.0f, 455.0f), IM_COL32(255, 200, 100, 230), buf);
             }
         }
 
@@ -707,6 +776,49 @@ namespace Plugins::Evade {
             tracked.MissileNetId = missile.GetNetworkId();
             tracked.HasMissile = true;
             tracked.Active = true;
+
+            // Augment radius from SDK DB if EzEvade DB has no radius
+            if (spell.radius <= 0.0f && SDK::SpellDatabase::IsInitialized()) {
+                const auto* sdkEntry = SDK::SpellDatabase::GetByName(spell.spellName);
+                if (!sdkEntry) sdkEntry = SDK::SpellDatabase::GetByMissileName(spell.spellName);
+                if (!sdkEntry) sdkEntry = SDK::SpellDatabase::GetByMissileName(
+                    missile.GetMissileName());
+                if (sdkEntry) {
+                    int realWidth = sdkEntry->GetRealWidth();
+                    if (realWidth > 0) {
+                        // Mutate the global DB entry so future lookups also get this
+                        const_cast<EzEvade::SpellData&>(spell).radius = (float)realWidth;
+                    }
+                    if (sdkEntry->Range > 0 && sdkEntry->Range < 30000 && spell.range <= 0.0f) {
+                        const_cast<EzEvade::SpellData&>(spell).range = (float)sdkEntry->Range;
+                    }
+                    if (sdkEntry->MissileSpeed > 0 && spell.speed <= 0.0f) {
+                        const_cast<EzEvade::SpellData&>(spell).speed = (float)sdkEntry->MissileSpeed;
+                    }
+                    // Fix type
+                    if (sdkEntry->IsSkillshot() && spell.type == EzEvade::SkillshotType::Line) {
+                        switch (sdkEntry->Type) {
+                        case SDK::SpellType::SkillshotCircle:
+                        case SDK::SpellType::SkillshotMissileCircle:
+                            const_cast<EzEvade::SpellData&>(spell).type = EzEvade::SkillshotType::Circle;
+                            break;
+                        case SDK::SpellType::SkillshotCone:
+                        case SDK::SpellType::SkillshotMissileCone:
+                            const_cast<EzEvade::SpellData&>(spell).type = EzEvade::SkillshotType::Cone;
+                            break;
+                        case SDK::SpellType::SkillshotRing:
+                            const_cast<EzEvade::SpellData&>(spell).type = EzEvade::SkillshotType::Ring;
+                            break;
+                        case SDK::SpellType::SkillshotArc:
+                        case SDK::SpellType::SkillshotMissileArc:
+                            const_cast<EzEvade::SpellData&>(spell).type = EzEvade::SkillshotType::Arc;
+                            break;
+                        default: break;
+                        }
+                    }
+                }
+            }
+
             return tracked;
         }
 
@@ -818,7 +930,20 @@ namespace Plugins::Evade {
         }
 
         static float ResolveRadius(const TrackedSkillshot& tracked, float extraRadius) {
-            return std::max(1.0f, tracked.Data->radius + extraRadius);
+            float r = tracked.Data->radius + extraRadius;
+
+            // If EzEvade DB has no radius, try SDK DB
+            if (r <= 1.0f && SDK::SpellDatabase::IsInitialized()) {
+                const auto* sdkEntry = SDK::SpellDatabase::GetByName(tracked.SpellName);
+                if (!sdkEntry) sdkEntry = SDK::SpellDatabase::GetByMissileName(tracked.SpellName);
+                if (sdkEntry) {
+                    int realWidth = sdkEntry->GetRealWidth();
+                    if (realWidth > 0) r = (float)realWidth + extraRadius;
+                }
+            }
+
+            // Minimum visible radius
+            return std::max(30.0f, r);
         }
 
         static float ResolveRange(const TrackedSkillshot& tracked) {

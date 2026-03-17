@@ -1,17 +1,20 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Jayce.h — C++ port of EzEvade/SpecialSpells/Jayce.cs (166 lines)
+// NOTE: In C# original, JayceShockBlastWall is commented out — preserving that.
 
 namespace EzEvade {
 namespace SpecialSpells {
 
-// C# source currently keeps Jayce special handling commented out.
 class Jayce : public ChampionPlugin {
 public:
-    void LoadSpecialSpell(SpellData&) override {
-        // Intentionally empty to preserve upstream behavior.
+    void LoadSpecialSpell(SpellData& spellData) override {
+        // C# line 24: commented out in original
+        /*if (spellData.spellName == "JayceShockBlastWall") { }*/
     }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

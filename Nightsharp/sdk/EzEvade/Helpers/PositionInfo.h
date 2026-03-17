@@ -1,171 +1,152 @@
 #pragma once
-#include "sdk/SDK.h"
-#include <algorithm>
-#include <cfloat>
-#include <functional>
-#include <unordered_set>
 #include <vector>
+#include <algorithm>
+#include <unordered_set>
+#include <cmath>
+#include <cfloat>
+#include "../../GameObjects/GameObjects.h"
+#include "../../Math/MathUtils.h"
+#include "ObjectCache.h"
+#include "../Utils/EvadeUtils.h"
+
+// ============================================================================
+// PositionInfo + PositionInfoExtensions
+//   C# original: ezEvade.PositionInfo (PositionInfo.cs, 201 lines)
+//   Line-by-line port preserving original logic
+// ============================================================================
 
 namespace EzEvade {
 
-struct ActiveSpellSnapshot {
-    int SpellId = 0;
-    int DangerLevel = 0;
-};
+    // Forward declarations — these classes will be implemented in their own files
+    class Spell;
+    class EvadeHelper;
 
-class PositionInfo {
-public:
-    int PosDangerLevel = 0;
-    int PosDangerCount = 0;
-    bool IsDangerousPos = false;
-    float DistanceToMouse = 0.0f;
-    std::vector<int> DodgeableSpells = {};
-    std::vector<int> UndodgeableSpells = {};
-    std::vector<int> SpellList = {};
-    Vec2 Position = Vec2();
-    float Timestamp = 0.0f;
-    float EndTime = 0.0f;
-    bool HasExtraDistance = false;
-    float ClosestDistance = FLT_MAX;
-    float IntersectionTime = FLT_MAX;
-    bool RejectPosition = false;
-    float PosDistToChamps = FLT_MAX;
-    bool HasComfortZone = true;
-    SDK::GameObject Target = SDK::GameObject();
-    bool RecalculatedPath = false;
-    float Speed = 0.0f;
+    // ========================================================================
+    // PositionInfo
+    //   C# lines 15-123
+    // ========================================================================
+    class PositionInfo {
+    public:
+        // C# line 17: private static AIHeroClient myHero
+        // → use SDK::GameObjects::Player
 
-    PositionInfo() = default;
+        int   posDangerLevel  = 0;                          // C# line 19
+        int   posDangerCount  = 0;                          // C# line 20
+        bool  isDangerousPos  = false;                      // C# line 21
+        float distanceToMouse = 0;                          // C# line 22
+        std::vector<int> dodgeableSpells;                   // C# line 23
+        std::vector<int> undodgeableSpells;                 // C# line 24
+        std::vector<int> spellList;                         // C# line 25
+        Vec2  position = { 0, 0 };                          // C# line 26
+        float timestamp = 0;                                // C# line 27
+        float endTime = 0;                                  // C# line 28
+        bool  hasExtraDistance = false;                      // C# line 29
+        float closestDistance = FLT_MAX;                     // C# line 30: float.MaxValue
+        float intersectionTime = FLT_MAX;                   // C# line 31: float.MaxValue
+        bool  rejectPosition = false;                       // C# line 32
+        float posDistToChamps = FLT_MAX;                    // C# line 33
+        bool  hasComfortZone = true;                        // C# line 34
+        SDK::GameObject* target = nullptr;                  // C# line 35
+        bool  recalculatedPath = false;                     // C# line 36
+        float speed = 0;                                    // C# line 37
 
-    PositionInfo(const Vec2& position,
-                 int posDangerLevel,
-                 int posDangerCount,
-                 bool isDangerousPos,
-                 float distanceToMouse,
-                 const std::vector<int>& dodgeableSpells,
-                 const std::vector<int>& undodgeableSpells)
-        : PosDangerLevel(posDangerLevel),
-          PosDangerCount(posDangerCount),
-          IsDangerousPos(isDangerousPos),
-          DistanceToMouse(distanceToMouse),
-          DodgeableSpells(dodgeableSpells),
-          UndodgeableSpells(undodgeableSpells),
-          Position(position),
-          Timestamp((float)SDK::Game::GetTickCount()) {}
+        // Default constructor
+        PositionInfo() = default;
 
-    PositionInfo(const Vec2& position,
-                 bool isDangerousPos,
-                 float distanceToMouse)
-        : IsDangerousPos(isDangerousPos),
-          DistanceToMouse(distanceToMouse),
-          Position(position),
-          Timestamp((float)SDK::Game::GetTickCount()) {}
-
-    static inline std::function<std::vector<ActiveSpellSnapshot>()> ActiveSpellsProvider = {};
-    static inline std::function<PositionInfo()> CurrentMovePositionProvider = {};
-
-    static PositionInfo SetAllDodgeable() {
-        const auto& me = SDK::GameObjects::Player;
-        return SetAllDodgeable(me.IsValid() ? me.GetPosition().To2D() : Vec2());
-    }
-
-    static PositionInfo SetAllDodgeable(const Vec2& position) {
-        std::vector<int> dodgeableSpells;
-        std::vector<int> undodgeableSpells;
-
-        if (ActiveSpellsProvider) {
-            for (const auto& snap : ActiveSpellsProvider()) {
-                dodgeableSpells.push_back(snap.SpellId);
-            }
+        // ====================================================================
+        // Constructor 1 (full)
+        //   C# lines 39-56
+        // ====================================================================
+        PositionInfo(
+            Vec2 position_,
+            int posDangerLevel_,
+            int posDangerCount_,
+            bool isDangerousPos_,
+            float distanceToMouse_,
+            std::vector<int> dodgeableSpells_,
+            std::vector<int> undodgeableSpells_)
+        {
+            this->position         = position_;                     // C# line 48
+            this->posDangerLevel   = posDangerLevel_;               // C# line 49
+            this->posDangerCount   = posDangerCount_;               // C# line 50
+            this->isDangerousPos   = isDangerousPos_;               // C# line 51
+            this->distanceToMouse  = distanceToMouse_;              // C# line 52
+            this->dodgeableSpells  = std::move(dodgeableSpells_);   // C# line 53
+            this->undodgeableSpells = std::move(undodgeableSpells_); // C# line 54
+            this->timestamp        = EvadeUtils::TickCount();       // C# line 55
         }
 
-        return PositionInfo(
-            position,
-            0,
-            0,
-            true,
-            0.0f,
-            dodgeableSpells,
-            undodgeableSpells
-        );
-    }
-
-    static PositionInfo SetAllUndodgeable() {
-        std::vector<int> dodgeableSpells;
-        std::vector<int> undodgeableSpells;
-        int posDangerLevel = 0;
-        int posDangerCount = 0;
-
-        if (ActiveSpellsProvider) {
-            for (const auto& snap : ActiveSpellsProvider()) {
-                undodgeableSpells.push_back(snap.SpellId);
-                posDangerLevel = std::max(posDangerLevel, snap.DangerLevel);
-                posDangerCount += snap.DangerLevel;
-            }
+        // ====================================================================
+        // Constructor 2 (simple)
+        //   C# lines 58-67
+        // ====================================================================
+        PositionInfo(
+            Vec2 position_,
+            bool isDangerousPos_,
+            float distanceToMouse_)
+        {
+            this->position        = position_;                      // C# line 63
+            this->isDangerousPos  = isDangerousPos_;                // C# line 64
+            this->distanceToMouse = distanceToMouse_;               // C# line 65
+            this->timestamp       = EvadeUtils::TickCount();        // C# line 66
         }
 
-        const auto& me = SDK::GameObjects::Player;
-        const Vec2 mePos = me.IsValid() ? me.GetPosition().To2D() : Vec2();
+        // ====================================================================
+        // SetAllDodgeable() — no args
+        //   C# lines 69-72
+        // ====================================================================
+        static PositionInfo SetAllDodgeable();
 
-        return PositionInfo(
-            mePos,
-            posDangerLevel,
-            posDangerCount,
-            true,
-            0.0f,
-            dodgeableSpells,
-            undodgeableSpells
-        );
-    }
-};
+        // ====================================================================
+        // SetAllDodgeable(position)
+        //   C# lines 74-93
+        // ====================================================================
+        static PositionInfo SetAllDodgeable(Vec2 position);
 
-namespace PositionInfoExtensions {
+        // ====================================================================
+        // SetAllUndodgeable()
+        //   C# lines 95-122
+        // ====================================================================
+        static PositionInfo SetAllUndodgeable();
 
-inline int GetHighestSpellID(const PositionInfo* posInfo) {
-    if (!posInfo) return 0;
+        // ====================================================================
+        // Extension methods (PositionInfoExtensions)
+        //   C# lines 125-197
+        // In C++ these become member functions
+        // ====================================================================
 
-    int highest = 0;
-    for (int spellID : posInfo->UndodgeableSpells) {
-        highest = std::max(highest, spellID);
-    }
-    for (int spellID : posInfo->DodgeableSpells) {
-        highest = std::max(highest, spellID);
-    }
-    return highest;
-}
+        // C# lines 129-147: GetHighestSpellID
+        int GetHighestSpellID() const {
+            int highest = 0;                                        // C# line 134
 
-inline bool IsSamePosInfo(const PositionInfo& a, const PositionInfo& b) {
-    std::unordered_set<int> sa(a.SpellList.begin(), a.SpellList.end());
-    std::unordered_set<int> sb(b.SpellList.begin(), b.SpellList.end());
-    return sa == sb;
-}
+            for (auto spellID : undodgeableSpells)                  // C# line 136
+            {
+                highest = std::max(highest, spellID);               // C# line 138
+            }
 
-inline bool IsBetterMovePos(const PositionInfo& newPosInfo) {
-    if (!PositionInfo::CurrentMovePositionProvider) {
-        return true;
-    }
+            for (auto spellID : dodgeableSpells)                    // C# line 141
+            {
+                highest = std::max(highest, spellID);               // C# line 143
+            }
 
-    PositionInfo currentPosInfo = PositionInfo::CurrentMovePositionProvider();
-    if (currentPosInfo.PosDangerCount < newPosInfo.PosDangerCount) {
-        return false;
-    }
+            return highest;                                         // C# line 146
+        }
 
-    return true;
-}
+        // C# lines 149-152: isSamePosInfo
+        bool IsSamePosInfo(const PositionInfo& other) const {
+            // C# line 151: new HashSet<int>(spellList).SetEquals(other.spellList)
+            std::unordered_set<int> set1(spellList.begin(), spellList.end());
+            std::unordered_set<int> set2(other.spellList.begin(), other.spellList.end());
+            return set1 == set2;
+        }
 
-inline PositionInfo CompareLastMovePos(const PositionInfo& newPosInfo) {
-    if (!PositionInfo::CurrentMovePositionProvider) {
-        return newPosInfo;
-    }
+        // C# lines 154-174: isBetterMovePos
+        // Requires EvadeHelper::CanHeroWalkToPos — forward declared, implemented externally
+        bool IsBetterMovePos() const;
 
-    PositionInfo currentPosInfo = PositionInfo::CurrentMovePositionProvider();
-    if (currentPosInfo.PosDangerCount < newPosInfo.PosDangerCount) {
-        return currentPosInfo;
-    }
-
-    return newPosInfo;
-}
-
-} // namespace PositionInfoExtensions
+        // C# lines 176-196: CompareLastMovePos
+        // Requires EvadeHelper::CanHeroWalkToPos — forward declared, implemented externally
+        PositionInfo CompareLastMovePos() const;
+    };
 
 } // namespace EzEvade

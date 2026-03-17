@@ -357,44 +357,6 @@ namespace Plugins {
                    EqualsIgnoreCase(buffName, "PykeQ");
         }
 
-        static std::string GetObjectNameSafe(const SDK::GameObject& obj) {
-            std::string name = obj.GetName();
-            if (name.empty()) {
-                name = obj.GetChampionName();
-            }
-            return name;
-        }
-
-        static bool IsPlantLike(const SDK::GameObject& obj) {
-            if (!obj.IsValid()) {
-                return false;
-            }
-
-            if (obj.IsPlant()) {
-                return true;
-            }
-
-            std::string name = GetObjectNameSafe(obj);
-            if (!name.empty()) {
-                const std::string lower = SDK::JungleUtils::ToLower(name);
-                if (lower.find("plant") != std::string::npos) {
-                    return true;
-                }
-                if (SDK::JungleUtils::IsJunglePlantName(lower)) {
-                    return true;
-                }
-            }
-
-            if (obj.GetTeam() == SDK::GameObjectTeam::Neutral) {
-                const float maxHP = obj.GetMaxHealth();
-                if (maxHP > 0.0f && maxHP <= 6.0f) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         void OnBuffAdd(const SDK::BuffChangeArgs& args) {
             const auto& player = SDK::GameObjects::Player;
             if (!player.IsValid() || !args.Unit.IsValid() || !args.Unit.IsMe() || !E.IsReady()) {
@@ -687,13 +649,10 @@ namespace Plugins {
                 return;
             }
 
+            // EnemyMinions is pre-filtered to Blue/Red team lane minions only
             auto minions = SDK::GameObjects::GetEnemyMinionsInRange(Q.Range, player.GetPosition());
             for (const auto& minion : minions) {
                 if (!minion.IsValid() || !minion.IsAlive()) {
-                    continue;
-                }
-
-                if (IsPlantLike(minion) || minion.GetTeam() == SDK::GameObjectTeam::Neutral) {
                     continue;
                 }
 
@@ -725,23 +684,15 @@ namespace Plugins {
         
             const bool useQ = m_jungleClearMenu->GetBoolValue("useQ", false);
             const bool useW = m_jungleClearMenu->GetBoolValue("useW", false);
+            const int mana = m_jungleClearMenu->GetSliderValue("ManaCL", 15);
         
+            if (player.GetManaPercent() < (float)mana) {
+                return;
+            }
+        
+            // JungleMinions is filtered at source (GameObjects::Update) using RuntimeAPI
+            // — guaranteed to contain only real jungle monsters, no plants/decorations.
             auto mobs = SDK::GameObjects::GetJungleMonstersInRange(Q.Range, player.GetPosition());
-        
-            // Remove invalid jungle objects (plants, wards, etc.)
-            mobs.erase(
-                std::remove_if(mobs.begin(), mobs.end(),
-                    [](const SDK::GameObject& obj) {
-                        if (!obj.IsValid() || !obj.IsAlive())
-                            return true;
-        
-                        if (SDK::JungleUtils::GetJungleType(obj) == SDK::JungleType::Unknown)
-                            return true;
-        
-                        return false;
-                    }),
-                mobs.end());
-        
             if (mobs.empty())
                 return;
         
@@ -769,8 +720,13 @@ namespace Plugins {
         
             if (useQ && Q.IsReady()) {
                 const auto& mob = mobs.front();
-                if (player.GetPosition().Distance2D(mob.GetPosition()) <= Q.Range) {
-                    Q.Cast(mob.GetPosition());
+                if (mob.IsValidTarget(Q.Range)) {
+                    // Use prediction with collision check — Ezreal Q collides with minions
+                    auto pred = Q.GetPrediction(mob, false, -1.0f, SDK::CollisionMinions);
+                    if ((int)pred.Hitchance >= (int)SDK::HitChance::Medium &&
+                        pred.Hitchance != SDK::HitChance::Collision) {
+                        Q.Cast(pred.CastPosition);
+                    }
                 }
             }
         }
@@ -794,11 +750,8 @@ namespace Plugins {
             std::vector<SDK::GameObject> candidates;
             candidates.reserve(minions.size());
 
+            // EnemyMinions is pre-filtered to Blue/Red team lane minions only
             for (const auto& minion : minions) {
-                if (IsPlantLike(minion) || minion.GetTeam() == SDK::GameObjectTeam::Neutral) {
-                    continue;
-                }
-
                 if (!minion.IsValidTarget(Q.Range) || !minion.IsMinion()) {
                     continue;
                 }

@@ -1,17 +1,20 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Jinx.h — C++ port of EzEvade/SpecialSpells/Jinx.cs (48 lines)
+// NOTE: JinxWMissile is commented out in original C# — preserving that.
 
 namespace EzEvade {
 namespace SpecialSpells {
 
-// C# source keeps Jinx special handling disabled (commented out).
 class Jinx : public ChampionPlugin {
 public:
-    void LoadSpecialSpell(SpellData&) override {
-        // Intentionally empty to preserve upstream behavior.
+    void LoadSpecialSpell(SpellData& spellData) override {
+        // C# line 24: commented out in original
+        /*if (spellData.spellName == "JinxWMissile") { }*/
     }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

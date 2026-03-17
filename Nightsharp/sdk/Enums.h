@@ -82,8 +82,8 @@ enum class DamageType {
     Mixed
 };
 
-// Minion types — matches game-internal values from sub_BBB10 (IDA)
-// Read from Offset::Minion::LaneType (obj+0x4CC9)
+// Minion types — matches game-internal MinionClass values (IDA sub_BBB10)
+// Accessed via RuntimeAPI::GetMinionClass() — no direct offset reads needed
 enum class MinionType : int {
     Unknown = 0,    // Unset / unclassified
     Pet     = 1,    // Champion pet (Annie Tibbers, Yorick ghouls, Zyra plants, Illaoi tentacles...)

@@ -1,124 +1,122 @@
 #pragma once
-#include "sdk/SDK.h"
-#include "sdk/EzEvade/Spells/SpellData.h"
-#include "sdk/EzEvade/Helpers/EvadeRuntimeState.h"
-#include "sdk/EzEvade/Helpers/Situation.h"
+#include <string>
+#include "../../GameObjects/GameObjects.h"
+#include "../../Math/MathUtils.h"
+#include "../Utils/EvadeUtils.h"
+#include "../EvadeSpells/EvadeSpellData.h"
+
+// ============================================================================
+// EvadeCommand
+//   C# original: ezEvade.EvadeCommand (EvadeCommand.cs, 116 lines)
+//   Line-by-line port preserving original logic
+//
+//   Represents a command issued by the evade system: move, attack, or cast spell.
+// ============================================================================
 
 namespace EzEvade {
 
-enum class EvadeOrderCommand {
-    None = 0,
-    MoveTo,
-    Attack,
-    CastSpell
-};
+    // Forward declarations
+    class Evade;
+    class EvadeSpell;
 
-class EvadeCommand {
-public:
-    EvadeOrderCommand Order = EvadeOrderCommand::None;
-    Vec2 TargetPosition = Vec2();
-    SDK::GameObject Target;
-    float Timestamp = 0.0f;
-    bool IsProcessed = false;
-    const EvadeSpellData* EvadeSpell = nullptr;
+    // ========================================================================
+    // EvadeOrderCommand enum
+    //   C# lines 14-20
+    // ========================================================================
+    enum class EvadeOrderCommand {
+        None     = 0,           // C# line 16
+        MoveTo   = 1,           // C# line 17
+        Attack   = 2,           // C# line 18
+        CastSpell = 3           // C# line 19
+    };
 
-    EvadeCommand()
-        : Timestamp((float)SDK::Game::GetTickCount()), IsProcessed(false) {}
+    // ========================================================================
+    // EvadeCommand class
+    //   C# lines 22-114
+    // ========================================================================
+    class EvadeCommand {
+    public:
+        // C# line 24: private static AIHeroClient myHero
+        // → SDK::GameObjects::Player
 
-    static EvadeCommand LastEvadeCommand;
-    static EvadeCommand LastSpellEvadeCommand;
+        EvadeOrderCommand order = EvadeOrderCommand::None;      // C# line 26
+        Vec2 targetPosition = { 0, 0 };                        // C# line 27
+        SDK::GameObject* target = nullptr;                      // C# line 28
+        float timestamp = 0;                                    // C# line 29
+        bool isProcessed = false;                               // C# line 30
+        EvadeSpellData evadeSpellData;                          // C# line 31
 
-private:
-    static SDK::SpellSlotId ToSdkSlot(SpellSlotId slot) {
-        switch (slot) {
-        case SpellSlotId::Q: return SDK::SpellSlotId::Q;
-        case SpellSlotId::W: return SDK::SpellSlotId::W;
-        case SpellSlotId::E: return SDK::SpellSlotId::E;
-        case SpellSlotId::R: return SDK::SpellSlotId::R;
-        case SpellSlotId::F: return SDK::SpellSlotId::Summoner1;
-        case SpellSlotId::T: return SDK::SpellSlotId::Summoner2;
-        default: return SDK::SpellSlotId::Q;
-        }
-    }
-
-    static SDK::SpellCaster MakeCaster(const EvadeSpellData& spellData) {
-        return SDK::SpellCaster(ToSdkSlot(spellData.spellKey), true, SDK::HitChance::Medium);
-    }
-
-public:
-    static void MoveTo(const Vec2& movePos) {
-        if (!Situation::ShouldDodge()) {
-            return;
+        // ====================================================================
+        // Default constructor
+        //   C# lines 33-37
+        // ====================================================================
+        EvadeCommand() {
+            this->timestamp = EvadeUtils::TickCount();          // C# line 35
+            this->isProcessed = false;                          // C# line 36
         }
 
-        LastEvadeCommand = EvadeCommand{};
-        LastEvadeCommand.Order = EvadeOrderCommand::MoveTo;
-        LastEvadeCommand.TargetPosition = movePos;
-        LastEvadeCommand.Timestamp = (float)SDK::Game::GetTickCount();
-        LastEvadeCommand.IsProcessed = false;
+        // ====================================================================
+        // static MoveTo(movePos)
+        //   C# lines 39-58
+        //   Checks ShouldDodge, creates command, issues MoveTo order
+        // ====================================================================
+        static void MoveTo(Vec2 movePos);
+        // Implementation: (in .cpp, requires Evade/Situation forward refs)
+        //
+        // C# logic:
+        // if (!Situation.ShouldDodge()) return;
+        //
+        // Evade.lastEvadeCommand = new EvadeCommand {
+        //     order = EvadeOrderCommand.MoveTo,
+        //     targetPosition = movePos,
+        //     timestamp = EvadeUtils.TickCount,
+        //     isProcessed = false
+        // };
+        // Evade.lastMoveToPosition = movePos;
+        // Evade.lastMoveToServerPos = myHero.ServerPosition.To2D();
+        // Player.IssueOrder(GameObjectOrder.MoveTo, movePos.To3D(), false);
 
-        const auto& player = SDK::GameObjects::Player;
-        if (player.IsValid()) {
-            EvadeRuntimeState::LastMoveToPosition = movePos;
-            EvadeRuntimeState::LastMoveToServerPos = player.GetServerPosition().To2D();
-            player.IssueOrder(SDK::OrderType::MoveTo, Vec3::From2D(movePos, player.GetPosition().y));
-        }
-    }
+        // ====================================================================
+        // static Attack(spellData, target)
+        //   C# lines 60-72
+        // ====================================================================
+        static void Attack(const EvadeSpellData& spellData, SDK::GameObject* target);
+        // C# logic:
+        // EvadeSpell.lastSpellEvadeCommand = new EvadeCommand {
+        //     order = EvadeOrderCommand.Attack,
+        //     target = target,
+        //     evadeSpellData = spellData,
+        //     timestamp = EvadeUtils.TickCount,
+        //     isProcessed = false
+        // };
+        // Player.IssueOrder(GameObjectOrder.AttackUnit, target, false);
 
-    static void Attack(const EvadeSpellData& spellData, const SDK::GameObject& target) {
-        LastSpellEvadeCommand = EvadeCommand{};
-        LastSpellEvadeCommand.Order = EvadeOrderCommand::Attack;
-        LastSpellEvadeCommand.Target = target;
-        LastSpellEvadeCommand.EvadeSpell = &spellData;
-        LastSpellEvadeCommand.Timestamp = (float)SDK::Game::GetTickCount();
-        LastSpellEvadeCommand.IsProcessed = false;
+        // ====================================================================
+        // static CastSpell(spellData, target)  — target overload
+        //   C# lines 74-86
+        // ====================================================================
+        static void CastSpell(const EvadeSpellData& spellData, SDK::GameObject* target);
+        // C# logic:
+        // EvadeSpell.lastSpellEvadeCommand = ...
+        // myHero.Spellbook.CastSpell(spellData.spellKey, target, false);
 
-        const auto& player = SDK::GameObjects::Player;
-        if (player.IsValid() && target.IsValid()) {
-            player.IssueOrder(SDK::OrderType::AttackUnit, target);
-        }
-    }
+        // ====================================================================
+        // static CastSpell(spellData, movePos) — position overload
+        //   C# lines 88-100
+        // ====================================================================
+        static void CastSpell(const EvadeSpellData& spellData, Vec2 movePos);
+        // C# logic:
+        // EvadeSpell.lastSpellEvadeCommand = ...
+        // myHero.Spellbook.CastSpell(spellData.spellKey, movePos.To3D(), false);
 
-    static void CastSpell(const EvadeSpellData& spellData, const SDK::GameObject& target) {
-        LastSpellEvadeCommand = EvadeCommand{};
-        LastSpellEvadeCommand.Order = EvadeOrderCommand::CastSpell;
-        LastSpellEvadeCommand.Target = target;
-        LastSpellEvadeCommand.EvadeSpell = &spellData;
-        LastSpellEvadeCommand.Timestamp = (float)SDK::Game::GetTickCount();
-        LastSpellEvadeCommand.IsProcessed = false;
-
-        if (!target.IsValid()) return;
-        auto caster = MakeCaster(spellData);
-        caster.Cast(target);
-    }
-
-    static void CastSpell(const EvadeSpellData& spellData, const Vec2& movePos) {
-        LastSpellEvadeCommand = EvadeCommand{};
-        LastSpellEvadeCommand.Order = EvadeOrderCommand::CastSpell;
-        LastSpellEvadeCommand.TargetPosition = movePos;
-        LastSpellEvadeCommand.EvadeSpell = &spellData;
-        LastSpellEvadeCommand.Timestamp = (float)SDK::Game::GetTickCount();
-        LastSpellEvadeCommand.IsProcessed = false;
-
-        const auto& player = SDK::GameObjects::Player;
-        if (!player.IsValid()) return;
-        auto caster = MakeCaster(spellData);
-        caster.Cast(Vec3::From2D(movePos, player.GetPosition().y));
-    }
-
-    static void CastSpell(const EvadeSpellData& spellData) {
-        LastSpellEvadeCommand = EvadeCommand{};
-        LastSpellEvadeCommand.Order = EvadeOrderCommand::CastSpell;
-        LastSpellEvadeCommand.EvadeSpell = &spellData;
-        LastSpellEvadeCommand.Timestamp = (float)SDK::Game::GetTickCount();
-        LastSpellEvadeCommand.IsProcessed = false;
-
-        auto caster = MakeCaster(spellData);
-        caster.Cast();
-    }
-};
-
-inline EvadeCommand EvadeCommand::LastEvadeCommand{};
-inline EvadeCommand EvadeCommand::LastSpellEvadeCommand{};
+        // ====================================================================
+        // static CastSpell(spellData) — self-cast overload
+        //   C# lines 102-113
+        // ====================================================================
+        static void CastSpell(const EvadeSpellData& spellData);
+        // C# logic:
+        // EvadeSpell.lastSpellEvadeCommand = ...
+        // myHero.Spellbook.CastSpell(spellData.spellKey, false);
+    };
 
 } // namespace EzEvade

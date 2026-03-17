@@ -1,6 +1,10 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+#include "../Spells/ObjectTracker.h"
+#include "../Utils/DelayAction.h"
+
+// Lulu.h — C++ port of EzEvade/SpecialSpells/Lulu.cs (80 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,73 +12,43 @@ namespace SpecialSpells {
 class Lulu : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "LuluQ")) {
-            return;
-        }
-
-        if (!s_registered) {
-            SpellDetector::RegisterOnProcessSpecialSpell(
-                [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs&) {
-                    if (!SpellNameIs(spellData, "LuluQ")) {
-                        return;
-                    }
-
-                    for (auto& entry : ObjectTracker::ObjTracker) {
-                        auto& info = entry.second;
-                        if (!EqualsI(info.Name, "RobotBuddy")) {
-                            continue;
-                        }
-                        if (!info.Obj.IsValid() || info.Obj.IsDead() || info.Obj.IsVisible()) {
-                            continue;
-                        }
-
-                        Vec3 endPos = info.Obj.GetPosition().Extend(args.EndPos, spellData->range);
-                        SpellDetector::CreateSpellData(args.Sender, info.Obj.GetPosition(), endPos, spellData, SDK::GameObject(), 0.0f, false);
-                    }
+        if (spellData.spellName == "LuluQ") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell_LuluQ(hero, start, end, sd, sa);
                 });
-            s_registered = true;
+            // C# line 27: GetLuluPix() — find pix minion
+            GetLuluPix();
         }
-
-        EnsureLuluPix();
     }
 
-private:
-    static inline bool s_registered = false;
-    static inline bool s_pendingRefresh = false;
-
-    static void EnsureLuluPix() {
-        bool found = false;
-        for (const auto& minion : SDK::ObjectManager::GetMinions()) {
-            if (!minion.IsValid() || minion.IsDead()) {
-                continue;
-            }
-            if (!Situation::CheckTeam(minion)) {
-                continue;
-            }
-
-            const std::string lowerName = ToLower(minion.GetName());
-            const std::string lowerBase = ToLower(minion.GetChampionName());
-            if (lowerName.find("lulufaerie") == std::string::npos && lowerBase.find("lulufaerie") == std::string::npos) {
-                continue;
-            }
-
-            found = true;
-            if (ObjectTracker::ObjTracker.find(minion.GetNetId()) == ObjectTracker::ObjTracker.end()) {
-                ObjectTracker::ObjTracker[minion.GetNetId()] = ObjectTrackerInfo(minion, "RobotBuddy");
-            } else {
-                auto& info = ObjectTracker::ObjTracker[minion.GetNetId()];
-                info.Obj = minion;
-                info.Name = "RobotBuddy";
-                info.UsePosition = false;
+    static void GetLuluPix() {
+        for (auto& obj : SDK::GameObjects::EnemyMinions) {
+            if (obj.IsValid() && obj.GetChampionName() == "lulufaerie") {
+                if (ObjectTracker::objTracker.find(obj.GetNetId()) == ObjectTracker::objTracker.end()) {
+                    ObjectTracker::ObjectTrackerInfo info;
+                    info.obj = &obj;
+                    info.Name = "RobotBuddy";
+                    ObjectTracker::objTracker[obj.GetNetId()] = info;
+                }
             }
         }
+    }
 
-        if (!found && !s_pendingRefresh) {
-            s_pendingRefresh = true;
-            DelayAction::Add(5000, []() {
-                s_pendingRefresh = false;
-                EnsureLuluPix();
-            });
+    static void ProcessSpell_LuluQ(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "LuluQ") {
+            for (auto& entry : ObjectTracker::objTracker) {
+                auto& info = entry.second;
+                if (info.Name == "RobotBuddy") {
+                    if (!info.obj || !info.obj->IsValid()) continue;
+                    Vec3 objPos = info.obj->GetPosition();
+                    Vec3 endPos2 = objPos.Extend(end, spellData.range);
+                    SpellDetector::CreateSpellData(hero, objPos, endPos2, spellData, nullptr, 0, false);
+                }
+            }
         }
     }
 };

@@ -64,7 +64,69 @@ struct Vec2 {
 
     bool IsZero() const { return x == 0 && y == 0; }
     bool IsValid() const { return !isnan(x) && !isnan(y); }
+
+    // Alias for DistanceSqr (used by EzEvade Spell.cpp)
+    float DistanceSquared(const Vec2& v) const { return DistanceSqr(v); }
+
+    // Rotate this point around another point by angle (radians)
+    Vec2 RotateAroundPoint(const Vec2& center, float angle) const {
+        float c = cosf(angle), s = sinf(angle);
+        Vec2 d = *this - center;
+        return Vec2(c * d.x - s * d.y + center.x,
+                    s * d.x + c * d.y + center.y);
+    }
 };
+
+// Projection result — defined after Vec2 is complete
+struct Vec2ProjectionInfo {
+    Vec2 segmentPoint;     // Closest point on segment
+    float lineParameter;   // t parameter [0,1] if on segment
+    bool isOnSegment;
+};
+
+// ProjectOn — free function (matches C# Vector2Extensions.ProjectOn)
+inline Vec2ProjectionInfo Vec2_ProjectOn(const Vec2& point, const Vec2& segStart, const Vec2& segEnd) {
+    Vec2ProjectionInfo result;
+    Vec2 seg = segEnd - segStart;
+    float segLenSqr = seg.LengthSqr();
+    if (segLenSqr < 1e-10f) {
+        result.segmentPoint = segStart;
+        result.lineParameter = 0.0f;
+        result.isOnSegment = false;
+        return result;
+    }
+    float t = (point - segStart).Dot(seg) / segLenSqr;
+    result.lineParameter = t;
+    result.isOnSegment = (t >= 0.0f && t <= 1.0f);
+    float clamped = t;
+    if (clamped < 0.0f) clamped = 0.0f;
+    if (clamped > 1.0f) clamped = 1.0f;
+    result.segmentPoint = segStart + seg * clamped;
+    return result;
+}
+
+// Segment intersection result
+struct Vec2IntersectionResult {
+    bool Intersects;
+    Vec2 Point;
+};
+
+// Segment-segment intersection
+inline Vec2IntersectionResult Vec2_SegmentIntersection(const Vec2& a1, const Vec2& b1, const Vec2& a2, const Vec2& b2) {
+    Vec2IntersectionResult result = { false, Vec2(0,0) };
+    Vec2 d1 = b1 - a1;
+    Vec2 d2 = b2 - a2;
+    float cross = d1.x * d2.y - d1.y * d2.x;
+    if (fabsf(cross) < 1e-10f) return result;
+    Vec2 d = a2 - a1;
+    float t = (d.x * d2.y - d.y * d2.x) / cross;
+    float u = (d.x * d1.y - d.y * d1.x) / cross;
+    if (t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f) {
+        result.Intersects = true;
+        result.Point = a1 + d1 * t;
+    }
+    return result;
+}
 
 struct Vec3 {
     float x, y, z;
@@ -222,3 +284,43 @@ namespace Geometry {
     // Radians to Degrees
     inline float RadToDeg(float rad) { return rad * 180.0f / (float)M_PI; }
 }
+
+// ============================================================================
+// SDK::Geometry — Compatibility layer used by EzEvade
+// ============================================================================
+namespace SDK {
+namespace Geometry {
+    using ProjectionInfo = Vec2ProjectionInfo;
+    using IntersectionResult = Vec2IntersectionResult;
+
+    inline ProjectionInfo ProjectOn(const Vec2& point, const Vec2& segStart, const Vec2& segEnd) {
+        return Vec2_ProjectOn(point, segStart, segEnd);
+    }
+
+    inline IntersectionResult SegmentIntersection(const Vec2& a1, const Vec2& b1, const Vec2& a2, const Vec2& b2) {
+        return Vec2_SegmentIntersection(a1, b1, a2, b2);
+    }
+
+    // Wrappers delegating to global Geometry namespace
+    inline float PointToSegmentDistance(const Vec2& point, const Vec2& segA, const Vec2& segB) {
+        return ::Geometry::PointToSegmentDistance(point, segA, segB);
+    }
+
+    inline Vec2 ClosestPointOnSegment(const Vec2& point, const Vec2& segA, const Vec2& segB) {
+        return ::Geometry::ClosestPointOnSegment(point, segA, segB);
+    }
+
+    inline bool LineCircleIntersects(const Vec2& lineStart, const Vec2& lineEnd,
+                                     const Vec2& center, float radius) {
+        return ::Geometry::LineCircleIntersects(lineStart, lineEnd, center, radius);
+    }
+
+    inline float PathLength(const std::vector<Vec3>& path) {
+        return ::Geometry::PathLength(path);
+    }
+
+    inline Vec3 PositionOnPath(const std::vector<Vec3>& path, float distance) {
+        return ::Geometry::PositionOnPath(path, distance);
+    }
+} // namespace Geometry
+} // namespace SDK

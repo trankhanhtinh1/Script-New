@@ -24,6 +24,7 @@ namespace EzEvade {
         WindWall,
         Shield,
         Stasis,
+        Invulnerability,
         Untargetable,
         Recall,
     };

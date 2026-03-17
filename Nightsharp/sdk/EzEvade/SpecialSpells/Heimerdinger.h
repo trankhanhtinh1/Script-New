@@ -1,6 +1,8 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Heimerdinger.h — C++ port of EzEvade/SpecialSpells/Heimerdinger.cs (58 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,35 +10,26 @@ namespace SpecialSpells {
 class Heimerdinger : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "HeimerdingerTurretEnergyBlast")
-            && !EqualsI(spellData.spellName, "HeimerdingerTurretBigEnergyBlast")) {
-            return;
+        if (spellData.spellName == "HeimerdingerTurretEnergyBlast"
+            || spellData.spellName == "HeimerdingerTurretBigEnergyBlast") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell(hero, start, end, sd, sa);
+                });
         }
-        if (s_registered) {
-            return;
-        }
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                if (!spellData) {
-                    return;
-                }
-                if (!EqualsI(spellData->spellName, "HeimerdingerTurretEnergyBlast")
-                    && !EqualsI(spellData->spellName, "HeimerdingerTurretBigEnergyBlast")) {
-                    return;
-                }
-
-                SpellDetector::CreateSpellData(args.Sender, args.StartPos, args.EndPos, spellData);
-                specialSpellArgs.NoProcess = true;
-            });
-
-        s_registered = true;
     }
 
-private:
-    static inline bool s_registered = false;
+    static void ProcessSpell(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "HeimerdingerTurretEnergyBlast"
+            || spellData.spellName == "HeimerdingerTurretBigEnergyBlast") {
+            SpellDetector::CreateSpellData(hero, start, end, spellData);
+            specialArgs.noProcess = true;
+        }
+    }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

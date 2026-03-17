@@ -1,6 +1,9 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+#include "../Utils/EvadeUtils.h"
+
+// Sion.h — C++ port of EzEvade/SpecialSpells/Sion.cs (64 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,70 +11,58 @@ namespace SpecialSpells {
 class Sion : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "SionR")) {
-            return;
-        }
-        if (s_registered) {
-            return;
-        }
-
-        auto hero = FindHeroByChampion("Sion", true);
-        if (!hero.IsValid()) {
-            return;
-        }
-        s_heroNetId = hero.GetNetId();
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                if (!SpellNameIs(spellData, "SionR")) {
-                    return;
+        if (spellData.spellName == "SionR") {
+            for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                if (hero.GetChampionName() == "Sion") {
+                    sionHero = &hero;
+                    SpellDetector::OnProcessSpecialSpell.push_back(
+                        [](SDK::GameObject* h, const Vec3& start, const Vec3& end,
+                           SpellData& sd, SpecialSpellEventArgs& sa) {
+                            ProcessSpell(h, start, end, sd, sa);
+                        });
+                    break;
                 }
+            }
+        }
+    }
 
-                auto data = std::make_shared<SpellData>(spellData->Clone());
-                data->projectileSpeed = args.Sender.GetMoveSpeed();
-                specialSpellArgs.Data = data;
-            });
+    // C# lines 35-41: set projectile speed to hero's move speed
+    static void ProcessSpell(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "SionR") {
+            spellData.projectileSpeed = hero->GetMoveSpeed();
+            specialArgs.spellData = spellData;
+        }
+    }
 
-        SDK::EventSystem::OnGameUpdate([](float) {
-            OnGameUpdate();
-        });
+    // C# lines 44-60: update SionR positions as he moves
+    void OnUpdate() {
+        if (!sionHero || !sionHero->IsValid()) return;
 
-        s_registered = true;
+        for (auto& entry : SpellDetector::detectedSpells) {
+            auto& spell = entry.second;
+            if (spell.heroID == sionHero->GetNetId() && spell.info.spellName == "SionR") {
+                Vec2 heroPos = sionHero->GetPosition().To2D();
+                Vec2 facingDir = sionHero->GetDirection().To2D().Perpendicular();
+                Vec2 endPos = heroPos + facingDir.Normalized() * 450;
+
+                spell.startPos = heroPos;
+                spell.endPos = endPos;
+
+                if (EvadeUtils::TickCount() - spell.startTime >= 1000) {
+                    SpellDetector::CreateSpellData(sionHero, sionHero->GetPosition(),
+                        Vec3(endPos.x, 0, endPos.y), spell.info, nullptr, 0, false, SpellType::Line, false);
+                    spell.startTime = EvadeUtils::TickCount();
+                    break;
+                }
+            }
+        }
     }
 
 private:
-    static inline bool s_registered = false;
-    static inline int s_heroNetId = 0;
-
-    static void OnGameUpdate() {
-        auto hero = FindObjectByNetId(s_heroNetId);
-        if (!hero.IsValid()) {
-            return;
-        }
-
-        for (auto& kv : SpellDetector::DetectedSpells) {
-            auto& spell = kv.second;
-            if (spell.HeroID != s_heroNetId || !spell.Info || !EqualsI(spell.Info->spellName, "SionR")) {
-                continue;
-            }
-
-            const Vec2 facingPos = hero.GetServerPosition().To2D() + hero.GetDirection().To2D().Perpendicular();
-            const Vec2 endPos = hero.GetServerPosition().To2D() + (facingPos - hero.GetServerPosition().To2D()).Normalized() * 450.0f;
-
-            spell.StartPos = hero.GetServerPosition().To2D();
-            spell.EndPos = endPos;
-
-            if (TickNow() - spell.StartTime >= 1000.0f) {
-                auto data = std::make_shared<SpellData>(spell.Info->Clone());
-                SpellDetector::CreateSpellData(hero, hero.GetServerPosition(), Vec3::From2D(endPos, hero.GetPosition().y),
-                                               data, SDK::GameObject(), 0.0f, false, SpellType::Line, false);
-                spell.StartTime = TickNow();
-                break;
-            }
-        }
-    }
+    SDK::GameObject* sionHero = nullptr;
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

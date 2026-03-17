@@ -1,6 +1,8 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+
+// Taric.h — C++ port of EzEvade/SpecialSpells/Taric.cs (76 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,89 +10,59 @@ namespace SpecialSpells {
 class Taric : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "TaricE")) {
-            return;
-        }
-        if (s_registered) {
-            return;
-        }
-
-        auto hero = FindHeroByChampion("Taric", true);
-        if (!hero.IsValid()) {
-            return;
-        }
-
-        s_taricNetId = hero.GetNetId();
-        SDK::EventSystem::OnGameUpdate([](float) {
-            OnGameUpdate();
-        });
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs&) {
-                if (!SpellNameIs(spellData, "TaricE")) {
-                    return;
-                }
-
-                for (const auto& hero : SDK::GameObjects::AllHeroes) {
-                    if (!hero.IsValid() || !Situation::CheckTeam(hero)) {
-                        continue;
-                    }
-                    if (EqualsI(hero.GetChampionName(), "Taric")) {
-                        continue;
-                    }
-                    if (!hero.HasBuff("taricwleashactive")) {
-                        continue;
-                    }
-
-                    Vec2 start = hero.GetServerPosition().To2D();
-                    Vec2 direction = (args.EndPos.To2D() - start).Normalized();
-                    Vec2 end = start + direction * spellData->range;
-                    SpellDetector::CreateSpellData(hero, Vec3::From2D(start, hero.GetPosition().y),
-                                                   Vec3::From2D(end, hero.GetPosition().y), spellData);
+        if (spellData.spellName == "TaricE") {
+            for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+                if (hero.GetChampionName() == "Taric") {
+                    taricHero = &hero;
+                    SpellDetector::OnProcessSpecialSpell.push_back(
+                        [](SDK::GameObject* h, const Vec3& start, const Vec3& end,
+                           SpellData& sd, SpecialSpellEventArgs& sa) {
+                            ProcessSpell(h, start, end, sd, sa);
+                        });
                     break;
                 }
-            });
+            }
+        }
+    }
 
-        s_registered = true;
+    // C# lines 31-57: OnUpdate — update TaricE position following hero + partner
+    void OnUpdate() {
+        if (!taricHero || !taricHero->IsValid()) return;
+
+        for (auto& entry : SpellDetector::detectedSpells) {
+            auto& spell = entry.second;
+            std::string lower = spell.info.spellName;
+            std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+            if (spell.heroID == taricHero->GetNetId() && lower == "tarice") {
+                spell.startPos = taricHero->GetPosition().To2D();
+                spell.endPos = taricHero->GetPosition().To2D() + spell.direction * spell.info.range;
+            }
+        }
+    }
+
+    // C# lines 59-73: ProcessSpell — also create TaricE from partner position
+    static void ProcessSpell(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "TaricE") {
+            // Find partner with taricwleashactive buff
+            for (auto& h : SDK::GameObjects::EnemyHeroes) {
+                if (h.GetChampionName() != "Taric" && h.HasBuff("taricwleashactive")) {
+                    Vec2 partnerStart = h.GetPosition().To2D();
+                    Vec2 direction = (end.To2D() - partnerStart).Normalized();
+                    Vec2 partnerEnd = partnerStart + direction * spellData.range;
+                    SpellDetector::CreateSpellData(&h,
+                        Vec3(partnerStart.x, 0, partnerStart.y),
+                        Vec3(partnerEnd.x, 0, partnerEnd.y), spellData);
+                    break;
+                }
+            }
+        }
     }
 
 private:
-    static inline bool s_registered = false;
-    static inline int s_taricNetId = 0;
-
-    static void OnGameUpdate() {
-        auto taric = FindObjectByNetId(s_taricNetId);
-        if (taric.IsValid() && Situation::CheckTeam(taric)) {
-            UpdateSpellsForUnit(taric);
-        }
-
-        for (const auto& hero : SDK::GameObjects::AllHeroes) {
-            if (!hero.IsValid() || !Situation::CheckTeam(hero)) {
-                continue;
-            }
-            if (!hero.HasBuff("taricwleashactive")) {
-                continue;
-            }
-            UpdateSpellsForUnit(hero);
-            break;
-        }
-    }
-
-    static void UpdateSpellsForUnit(const SDK::GameObject& unit) {
-        for (auto& kv : SpellDetector::DetectedSpells) {
-            auto& spell = kv.second;
-            if (spell.HeroID != unit.GetNetId() || !spell.Info) {
-                continue;
-            }
-            if (!EqualsI(spell.Info->spellName, "tarice")) {
-                continue;
-            }
-            spell.StartPos = unit.GetServerPosition().To2D();
-            spell.EndPos = unit.GetServerPosition().To2D() + spell.Direction * spell.Info->range;
-        }
-    }
+    SDK::GameObject* taricHero = nullptr;
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

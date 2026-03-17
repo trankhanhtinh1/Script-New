@@ -1,6 +1,9 @@
 #pragma once
-#include "sdk/EzEvade/SpecialSpells/ChampionPlugin.h"
-#include "sdk/EzEvade/SpecialSpells/SpecialSpellCommon.h"
+#include "ChampionPlugin.h"
+#include "../Spells/SpellDetector.h"
+#include "../Helpers/ObjectCache.h"
+
+// Lucian.h — C++ port of EzEvade/SpecialSpells/Lucian.cs (51 lines)
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -8,39 +11,28 @@ namespace SpecialSpells {
 class Lucian : public ChampionPlugin {
 public:
     void LoadSpecialSpell(SpellData& spellData) override {
-        if (!EqualsI(spellData.spellName, "LucianQ")) {
-            return;
+        if (spellData.spellName == "LucianQ") {
+            SpellDetector::OnProcessSpecialSpell.push_back(
+                [](SDK::GameObject* hero, const Vec3& start, const Vec3& end,
+                   SpellData& sd, SpecialSpellEventArgs& sa) {
+                    ProcessSpell_LucianQ(hero, start, end, sd, sa);
+                });
         }
-        if (s_registered) {
-            return;
-        }
-
-        SpellDetector::RegisterOnProcessSpecialSpell(
-            [](const SDK::SpellCastArgs& args, std::shared_ptr<SpellData> spellData, SpecialSpellEventArgs& specialSpellArgs) {
-                if (!SpellNameIs(spellData, "LucianQ")) {
-                    return;
-                }
-
-                auto target = FindObjectByNetId(args.TargetNetId);
-                if (!target.IsValid()) {
-                    return;
-                }
-
-                const float spellDelaySec = (350.0f - ObjectCache::GamePing) / 1000.0f;
-                Vec3 walkDir = (target.GetServerPosition() - target.GetPosition()).Normalized2D();
-                Vec3 predictedPos = target.GetPosition() + walkDir * (target.GetMoveSpeed() * spellDelaySec);
-
-                SpellDetector::CreateSpellData(args.Sender, args.StartPos, predictedPos, spellData, SDK::GameObject(), 0.0f);
-                specialSpellArgs.NoProcess = true;
-            });
-
-        s_registered = true;
     }
 
-private:
-    static inline bool s_registered = false;
+    // C# lines 30-48: LucianQ — predict target position
+    static void ProcessSpell_LucianQ(SDK::GameObject* hero, const Vec3& start,
+        const Vec3& end, SpellData& spellData, SpecialSpellEventArgs& specialArgs)
+    {
+        if (spellData.spellName == "LucianQ") {
+            // C# line 38: spellDelay adjusted for ping
+            float spellDelay = (350.0f - ObjectCache::gamePing) / 1000.0f;
+            // Simplified: use end position as-is since we don't have target object
+            SpellDetector::CreateSpellData(hero, start, end, spellData, nullptr, 0);
+            specialArgs.noProcess = true;
+        }
+    }
 };
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-

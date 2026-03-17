@@ -1,5 +1,5 @@
 #pragma once
-#include "sdk/EzEvade/Spells/SpellData.h"
+#include "../Spells/SpellData.h"
 
 namespace EzEvade {
 namespace SpecialSpells {
@@ -12,4 +12,3 @@ public:
 
 } // namespace SpecialSpells
 } // namespace EzEvade
-
