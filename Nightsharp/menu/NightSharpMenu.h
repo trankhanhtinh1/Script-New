@@ -56,7 +56,8 @@ namespace NightSharpMenu {
     constexpr float ITEM_H = 30.0f;
     constexpr float HEADER_H = 32.0f;
     constexpr float PANEL_GAP = 6.0f;
-    constexpr float MIN_CONTENT_H = 320.0f;
+    constexpr float MIN_CONTENT_H = 420.0f;
+    constexpr float MAX_CONTENT_H = 620.0f;
 
     inline ImU32 COL_BG = IM_COL32(8, 10, 18, 214);
     inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 128);
@@ -589,17 +590,9 @@ namespace NightSharpMenu {
         const float primaryHeight = HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, primaryEntries.size())) + 4.0f;
         const float secondaryHeight = showSecondary ? (HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, secondaryEntries.size())) + 4.0f) : 0.0f;
         const float sidebarHeight = std::max(primaryHeight, secondaryHeight > 0 ? secondaryHeight : primaryHeight);
-        int estimatedContentRows = 6;
-        if (showContent && activePrimary) {
-            if (activePrimary->key == "core") {
-                estimatedContentRows = EstimateCoreSectionRows(activeSecondary);
-            } else if (activePrimary->key == "orbwalker") {
-                estimatedContentRows = EstimateOrbwalkerSectionRows(activeSecondary);
-            } else {
-                estimatedContentRows = EstimatePluginSectionRows(activePrimary->plugin, activeSecondary);
-            }
-        }
-        const float contentHeight = std::max(HEADER_H + 18.0f + ITEM_H * static_cast<float>(estimatedContentRows), HEADER_H + 58.0f);
+
+        // Content panel: use generous fixed height with scrollbar for overflow
+        const float contentHeight = std::max(sidebarHeight, MAX_CONTENT_H);
 
         // Calculate title bar width based on visible panels
         float totalMenuWidth = PRIMARY_W;
@@ -702,7 +695,7 @@ namespace NightSharpMenu {
                 ImGuiWindowFlags_NoSavedSettings |
                 ImGuiWindowFlags_NoCollapse |
                 ImGuiWindowFlags_NoBackground);
-            ImGui::BeginChild("##nightsharp_secondary_scroll", ImVec2(0.0f, 0.0f), false);
+            ImGui::BeginChild("##nightsharp_secondary_scroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
             if (activePrimary->key == "orbwalker") {
                 DrawOrbwalkerPrimaryContent(activeSecondary);
             } else if (activePrimary->key == "core") {
@@ -754,7 +747,7 @@ namespace NightSharpMenu {
                     ImGuiWindowFlags_NoSavedSettings |
                     ImGuiWindowFlags_NoCollapse |
                     ImGuiWindowFlags_NoBackground);
-                ImGui::BeginChild("##nightsharp_content_scroll", ImVec2(0.0f, 0.0f), false);
+                ImGui::BeginChild("##nightsharp_content_scroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
                 if (activePrimary->key == "core") {
                     DrawCoreSectionContent(activeSecondary);

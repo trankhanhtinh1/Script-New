@@ -5,10 +5,10 @@
  *  
  *  Goal: Make our DLL completely invisible to Packman (stub.dll)
  *  
- *  ❌ DO NOT patch stub.dll (BLAKE2b integrity → crash)
  *  ❌ DO NOT overwrite ntdll hooks (scanner detects)
  *  ✅ HIDE ourselves: unlink PEB, erase PE header, wipe strings
  *  ✅ Direct syscalls for when we need to bypass hooks
+ *  ✅ stub.dll patching handled by PackmanPatcher.h (separate module)
  *
  *  STEALTH LAYERS:
  *  Layer 1: Clean PEB debug flags (anti Cases 0, 1, 4)

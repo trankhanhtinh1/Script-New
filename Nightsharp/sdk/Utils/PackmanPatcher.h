@@ -75,29 +75,30 @@ namespace PackmanPatcher {
 
     // ==================================================================
     // Stub.dll offsets (rebased to 0, added to actual module base)
-    // Updated 2026-03-12 for new stub.dll (0x1399000 size)
+    // Updated 2026-03-18 via IDA MCP on pd64 stub.dll dump
+    // Base: 0x7FF875AB0000 (all RVAs verified as function starts)
     // ==================================================================
     namespace StubOff {
         // --- Detection Engines ---
-        constexpr uintptr_t DetectionMain       = 0xC9A00;  // sub_C9A00
-        constexpr uintptr_t DetectionSecondary  = 0xEFC10;  // sub_EFC10
-        constexpr uintptr_t DetectionTertiary   = 0xF4C10;  // sub_F4C10
+        constexpr uintptr_t DetectionMain       = 0xC3420;  // [IDA] sub_7FF875B73420, size=0x930C, rdtsc anti-debug switch
+        constexpr uintptr_t DetectionSecondary  = 0xE7140;  // [IDA] sub_7FF875B97140, size=0x5DDC
+        constexpr uintptr_t DetectionTertiary   = 0xED1D0;  // [IDA] sub_7FF875B9D1D0, size=0x30B1
 
         // --- Report & Data Collection ---
-        constexpr uintptr_t ReportFunction      = 0x9B040;  // sub_9B040: PEB reporter (IDA xref verified)
-        constexpr uintptr_t ReportToProcess     = 0x31080;  // sub_31080: PEB data writer
+        constexpr uintptr_t ReportFunction      = 0x8F540;  // [IDA] sub_7FF875B3F540, size=0xA152, PEB reporter
+        constexpr uintptr_t ReportToProcess     = 0x2A930;  // [IDA] sub_7FF875ADA930, size=0x40E, PEB data writer
         // ReportChain: inlined by compiler in this build, no standalone function
-        constexpr uintptr_t ModuleEnumerator    = 0x2FF90;  // sub_2FF90 (unchanged)
+        constexpr uintptr_t ModuleEnumerator    = 0x297D0;  // [IDA] sub_7FF875AD97D0, size=0x1F0, NtQuerySystemInfo walker
 
         // --- Kill Functions (TerminateProcess) ---
-        constexpr uintptr_t KillMsgBox          = 0xC9750;  // sub_C9750
-        constexpr uintptr_t KillDirect          = 0x63B30;  // sub_63B30
-        constexpr uintptr_t KillCrashDump       = 0x7F7C0;  // sub_7F7C0
-        constexpr uintptr_t KillTimer           = 0x10E140; // TimerFunc: 0x10E140
+        constexpr uintptr_t KillMsgBox          = 0xC0DF0;  // [IDA] sub_7FF875B70DF0, size=0x2394
+        constexpr uintptr_t KillDirect          = 0x5D980;  // [IDA] sub_7FF875B0D980, size=0x372
+        constexpr uintptr_t KillCrashDump       = 0x60BF0;  // [IDA] sub_7FF875B10BF0, size=0x201B7
+        constexpr uintptr_t KillTimer           = 0x10D9D0; // [IDA] sub_7FF875BBD9D0, size=0x6D24, timer callback
 
         // --- INT3 / INT2C Trap Generators ---
-        constexpr uintptr_t TrapINT3            = 0x28700;  // sub_28700
-        constexpr uintptr_t TrapINT2C           = 0x28700;  // sub_28700
+        constexpr uintptr_t TrapINT3            = 0x22110;  // [IDA] sub_7FF875AD2110, size=0x336
+        constexpr uintptr_t TrapINT2C           = 0x22110;  // Same function handles both INT3/INT2C
     }
 
     // Find stub.dll base address by scanning loaded modules

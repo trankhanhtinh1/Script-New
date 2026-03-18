@@ -5,6 +5,7 @@
 #include "Enums.h"
 #include <string>
 #include <cmath>
+#include "sdk/Utils/DebugConsole.h"
 
 // ============================================================================
 // Game.h — Game State Utilities
@@ -136,7 +137,7 @@ namespace Game {
     inline bool IsChatOpenByKeyboard() {
         static bool chatIsOpen = false;
         static int lastToggleTick = 0;
-        int currentTick = ::GetTickCount(); // Windows API tick count
+        int currentTick = (int)::GetTickCount64(); // Windows API tick count (64-bit to avoid overflow)
 
         // Ensure game is focused before intercepting keys
         if (!IsGameFocused()) return false;
@@ -196,12 +197,25 @@ namespace Game {
     // All offsets verified via IDA Pro MCP decompilation:
     //   - ChatOpen: ChatClient(0x1D8D240)+0x10 — sub_3B4E00 confirmed
     //   - ShopOpen: OpenWindowsArray scan — sub_129FD80/sub_BC58F0 confirmed
+    //   - ChatOpen: DISABLED (ChatClient 0x1DB43E0 is WRONG — always reads non-zero at +0x10)
     inline bool ShouldProcessInput() {
         if (!IsInGame()) return false;
         if (!IsGameFocused()) return false;
-        // Check chat with both methods for robustness
-        if (IsChatOpen() || IsChatOpenByKeyboard()) return false;
-        if (IsShopOpen()) return false;
+        // NOTE: IsChatOpen() DISABLED — ChatClient offset is wrong, always returns true!
+        // Only use keyboard-based detection until correct ChatClient offset is found.
+        // bool chatMem = IsChatOpen();  // BROKEN: offset 0x1DB43E0 is not the real ChatClient
+        bool chatKb = IsChatOpenByKeyboard();
+        bool shopOpen = IsShopOpen();
+        if (chatKb || shopOpen) {
+            // Throttled debug
+            static int s_dbgTick = 0;
+            int nowT = (int)::GetTickCount64();
+            if (nowT - s_dbgTick > 2000) {
+                s_dbgTick = nowT;
+                DEBUG_LOG_TAG("INPUT", "ShouldProcessInput=FALSE: chatKb=%d shopOpen=%d", chatKb, shopOpen);
+            }
+            return false;
+        }
         return true;
     }
 

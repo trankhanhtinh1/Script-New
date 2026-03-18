@@ -11,6 +11,7 @@
 #include "GameObjects/ObjectManager.h"
 #include "GameObjects/GameObjects.h"
 #include "GameObjects/Missile.h"
+#include "GameObjects/MissileClassification.h"
 #include "Wrappers/Damages/DamageCalc.h"
 #include "TurretMissileManager.h"
 #include "Game.h"
@@ -41,6 +42,12 @@
 // ============================================================================
 
 namespace SDK {
+
+    // HealthPredictionType — matching C# EnsoulSharp.SDK
+    enum class HealthPredictionType {
+        Default = 0,    // Layer 1 (InDamage) + Layer 2 (missiles)
+        Simulated = 1   // Default + continuous DPS estimation (minion aggro)
+    };
 
     // Incoming attack record (Layer 2 — missile tracking)
     struct IncomingAttack {
@@ -103,7 +110,7 @@ namespace SDK {
                     ++it;
             }
 
-            // Track in-flight missiles
+            // Track in-flight missiles using new classification system
             auto missiles = MissileManager::GetMissiles();
             for (auto& m : missiles) {
                 if (!m.IsValid()) continue;
@@ -112,27 +119,34 @@ namespace SDK {
                 Vec3 mPos  = m.GetPosition();
                 Vec3 endPos = m.GetEndPos();
                 Vec3 startPos = m.GetStartPos();
-                bool isTurret = m.IsTurretShot();
-                bool isAA     = m.IsAutoAttack();
 
-                // Find target: closest alive unit to missile endpoint
-                int bestNetId = 0;
-                float bestDist = 180.0f; // search radius
-                auto checkList = [&](std::vector<GameObject>& list) {
-                    for (auto& u : list) {
-                        if (!u.IsValid() || !u.IsAlive()) continue;
-                        float d = u.GetPosition().Distance2D(endPos);
-                        if (d < bestDist) {
-                            bestDist = d;
-                            bestNetId = u.GetNetId();
+                // Use new missile classification system
+                MissileType mType = m.GetMissileType();
+                bool isTurret = (mType == MissileType::TurretShot);
+                bool isAA     = MissileClassifier::IsAnyAutoAttack(mType);
+
+                // Primary: use TargetNetId from CastInfo (direct, no guessing)
+                int bestNetId = m.GetTargetNetId();
+
+                // Fallback: if no direct target, find closest unit to endpoint
+                if (bestNetId <= 0) {
+                    float bestDist = 180.0f;
+                    auto checkList = [&](std::vector<GameObject>& list) {
+                        for (auto& u : list) {
+                            if (!u.IsValid() || !u.IsAlive()) continue;
+                            float d = u.GetPosition().Distance2D(endPos);
+                            if (d < bestDist) {
+                                bestDist = d;
+                                bestNetId = u.GetNetId();
+                            }
                         }
-                    }
-                };
-                checkList(GameObjects::EnemyMinions);
-                checkList(GameObjects::AllyMinions);
-                checkList(GameObjects::JungleMinions);
-                checkList(GameObjects::AllHeroes);
-                if (bestNetId == 0) continue;
+                    };
+                    checkList(GameObjects::EnemyMinions);
+                    checkList(GameObjects::AllyMinions);
+                    checkList(GameObjects::JungleMinions);
+                    checkList(GameObjects::AllHeroes);
+                }
+                if (bestNetId <= 0) continue;
 
                 // Already tracking this exact missile (same caster + launch point)?
                 bool alreadyTracked = false;
@@ -150,9 +164,13 @@ namespace SDK {
                 // Estimate damage from this missile
                 float dmg = EstimateMissileDamage(casterNetId, bestNetId, isTurret, isAA);
 
-                // Estimate arrival time from current missile position
+                // Use REAL missile speed from SpellDataResource instead of hardcoded values
                 float dist = mPos.Distance2D(endPos);
-                float speed = isTurret ? 1200.0f : (isAA ? 1600.0f : 1800.0f);
+                float speed = m.GetMissileSpeed();
+                // Fallback to reasonable defaults if SpellDataResource speed unavailable
+                if (speed <= 0.0f) {
+                    speed = isTurret ? 1200.0f : (isAA ? 1600.0f : 1800.0f);
+                }
                 float arrival = now + (dist / speed);
 
                 IncomingAttack atk;
@@ -170,36 +188,38 @@ namespace SDK {
 
         // ==================================================================
         // GetPrediction — predict health of a unit after `timeMs` milliseconds
+        // Matching C# signature: Health.GetPrediction(unit, time, farmDelay, type)
         //
         // Uses hybrid approach:
         //   - InDamage (game native) for imminent hits (0~300ms)
         //   - Missile tracking for later arrivals (>300ms)
+        //   - Simulated: adds continuous DPS estimation
         // ==================================================================
-        static float GetPrediction(const GameObject& unit, float timeMs) {
+        static float GetPrediction(const GameObject& unit, float timeMs,
+                                   int farmDelay = 0,
+                                   HealthPredictionType type = HealthPredictionType::Default) {
             if (!unit.IsValid()) return 0.0f;
 
-            float now         = unit.IsValid() ? Game::GetTime() : 0.0f;
+            // Add farm delay offset (matching C# — orbwalker passes farmDelay from menu)
+            float effectiveTimeMs = timeMs + (float)farmDelay;
+
+            float now         = Game::GetTime();
             float currentHP   = unit.GetHealth();
-            float predictTime = now + (timeMs / 1000.0f);
+            float predictTime = now + (effectiveTimeMs / 1000.0f);
 
             // -----------------------------------------------------------------
             // Layer 1: game-native InDamage — most accurate for imminent damage
-            // This is what the game itself uses to draw the "grey bar" on health.
             // -----------------------------------------------------------------
             float nativeDmg = ReadInDamage(unit);
 
             // -----------------------------------------------------------------
             // Layer 2: missile tracking — damage arriving in the prediction window
-            // Add missiles that arrive AFTER the native InDamage has already
-            // committed (roughly >150ms out), to avoid double-counting.
             // -----------------------------------------------------------------
             float missileDmg = 0.0f;
             int netId = unit.GetNetId();
             auto it = trackedMissiles.find(netId);
             if (it != trackedMissiles.end()) {
                 for (auto& atk : it->second) {
-                    // Only count missiles arriving within our prediction window
-                    // but not yet "committed" to InDamage (i.e., > 150ms out)
                     if (!atk.isTurretShot &&
                         atk.arrivalTime > now + 0.15f &&
                         atk.arrivalTime <= predictTime &&
@@ -210,21 +230,28 @@ namespace SDK {
             }
 
             // -----------------------------------------------------------------
-            // Layer 3: turret shot prediction + minion continuous DPS
+            // Layer 3: turret shot prediction
             // -----------------------------------------------------------------
             float turretDmg = 0.0f;
-            if (timeMs > 50.0f) {
-                turretDmg = TurretMissileManager::GetIncomingDamage(unit, timeMs, nullptr, nullptr, 150.0f);
+            if (effectiveTimeMs > 50.0f) {
+                turretDmg = TurretMissileManager::GetIncomingDamage(unit, effectiveTimeMs, nullptr, nullptr, 150.0f);
             }
 
+            // -----------------------------------------------------------------
+            // Layer 4: continuous DPS estimation (Simulated mode or long window)
+            // Simulated mode: always include DPS. Default: only >400ms.
+            // -----------------------------------------------------------------
             float continuousDmg = 0.0f;
-            if (timeMs > 400.0f) {
-                continuousDmg += GetMinionAggroDPS(unit) * (timeMs / 1000.0f);
+            if (type == HealthPredictionType::Simulated || effectiveTimeMs > 400.0f) {
+                continuousDmg += GetMinionAggroDPS(unit) * (effectiveTimeMs / 1000.0f);
             }
 
             float totalIncoming = nativeDmg + missileDmg + turretDmg + continuousDmg;
             return std::max(0.0f, currentHP - totalIncoming);
         }
+
+        // NOTE: 2-param GetPrediction(unit, timeMs) is handled by the 4-param
+        // overload above with default farmDelay=0, type=Default. No alias needed.
 
         // ==================================================================
         // CanLastHit — will unit die from our next auto attack?
@@ -332,6 +359,34 @@ namespace SDK {
         static bool HasTurretAggro(const GameObject& unit) {
             return TurretMissileManager::HasIncomingShot(unit) ||
                    TurretAggro::GetTurretTargetingUnit(unit).IsValid();
+        }
+
+        // ==================================================================
+        // GetAggroTurret — get the turret that's targeting this unit (C# match)
+        // ==================================================================
+        static GameObject GetAggroTurret(const GameObject& unit) {
+            // First check TurretMissileManager for active shots
+            TurretMissileManager::ShotInfo shot;
+            if (TurretMissileManager::GetIncomingShot(unit, shot)) {
+                return shot.Turret;
+            }
+            // Fallback: check TurretAggro
+            return TurretAggro::GetTurretTargetingUnit(unit);
+        }
+
+        // ==================================================================
+        // TurretAggroStartTick — when did the turret start targeting this unit?
+        // Returns system tick (ms) matching C#
+        // ==================================================================
+        static int TurretAggroStartTick(const GameObject& unit) {
+            TurretMissileManager::ShotInfo shot;
+            if (TurretMissileManager::GetIncomingShot(unit, shot)) {
+                // Estimate start time: current time minus how long ago the shot was fired
+                // ShotInfo does not have StartTime; use game time - remaining time as approximation
+                float estimatedStartTime = Game::GetTime() - (shot.RemainingTimeMs / 1000.0f);
+                return (int)(estimatedStartTime * 1000.0f);
+            }
+            return 0;
         }
 
         static bool HasMinionAggro(const GameObject& unit) {

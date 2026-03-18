@@ -13,8 +13,11 @@
 //   IsObjectAI = 0x400, Minion = 0x800, Hero = 0x1000,
 //   Turret = 0x2000, Plant = 0x8000
 //
-// CALLING CONVENTION (IDA VERIFIED):
-//   CompareTypeFlags = sub_29CD30(obj, 0, flag, obj) — 4 ARGS!
+// CALLING CONVENTION (IDA VERIFIED 2026-03-18, VA 0x7FF7D8082130):
+//   CompareTypeFlags = sub_2A2130(obj, flag) — 2 ARGS!
+//   RCX=obj (reads [obj+0x4C] obf array, [obj+0x63] obf index)
+//   EDX=flag (moved to ESI immediately: "mov esi, edx")
+//   R8/R9 are derived internally, NOT parameters.
 //
 // NOTE ON __try / C2712:
 //   MSVC forbids __try in functions that contain C++11 static locals
@@ -49,7 +52,7 @@ namespace RuntimeAPI {
     // ================================================================
     // Function pointer typedefs
     // ================================================================
-    typedef bool(__fastcall* fnCompareTypeFlags4)(uintptr_t, int, int, uintptr_t);
+    typedef bool(__fastcall* fnCompareTypeFlags)(uintptr_t obj, int flag);
     typedef bool(__fastcall* fnIsAlive)(uintptr_t);
     typedef bool(__fastcall* fnIsBuilding)(uintptr_t);
     typedef int (__fastcall* fnGetJungleType)(uintptr_t);
@@ -78,9 +81,10 @@ namespace RuntimeAPI {
 
     // ================================================================
     // Core: CompareTypeFlags
-    // IDA VERIFIED calling convention:
-    //   sub_29CD30(uintptr_t obj, int zero, int flag, uintptr_t obj)
-    //   4 parameters! NOT 2!
+    // IDA VERIFIED 2026-03-18 (sub_7FF7D8082130):
+    //   2 params: RCX=obj, EDX=flag
+    //   Reads obfuscated LeagueObfuscation array at [obj+0x4C]
+    //   Result: tests flag against deobfuscated dword
     // ================================================================
 
     // SEH wrapper — NO static locals, NO C++ objects
@@ -89,7 +93,7 @@ namespace RuntimeAPI {
         uintptr_t fn = ResolveFunc(Offset::Function::CompareTypeFlags);
         if (!fn) return false;
         __try {
-            return ((fnCompareTypeFlags4)fn)(objAddr, 0, flag, objAddr);
+            return ((fnCompareTypeFlags)fn)(objAddr, flag);
         }
         __except (1) { return false; }
     }
@@ -184,6 +188,8 @@ namespace RuntimeAPI {
     }
 
     // Helper: call native IsJungleMonster (NO static locals!)
+    // IDA VERIFIED 2026-03-18 (sub_7FF7D8081BD0):
+    //   1 arg: RCX=obj. Reads [obj+0x10] vtable → tree search pattern
     __declspec(noinline) inline bool CallNativeIsJungleMonster(uintptr_t obj) {
         uintptr_t fn = ResolveFunc(Offset::Function::IsJungleMonster);
         if (!fn) return false;
@@ -207,7 +213,9 @@ namespace RuntimeAPI {
     // ALL use ResolveFunc() instead of static locals to avoid C2712!
     // ================================================================
 
-    // Is alive?
+    // Is alive? IDA VERIFIED 2026-03-18 (sub_7FF7D80CCC50):
+    //   1 arg: RCX=obj. Calls vtable[0x138/8](obj) then vtable_at_obj+0x2A8[0x10/8]()
+    //   Returns true if vtable check passes AND obj+0x2A8 sub returns false
     __declspec(noinline) inline bool IsAlive(uintptr_t obj) {
         if (!obj) return false;
         uintptr_t fn = ResolveFunc(Offset::Function::IsAlive);
@@ -219,14 +227,13 @@ namespace RuntimeAPI {
     }
 
     // Is this a Structure? (Turret, Inhibitor, Nexus)
+    // WARNING: IDA shows 0x1C8C30 = AK::WriteBytesCount::Reserve stub (xor al,al; ret)
+    //          This always returns false! Use IsTurret() via CompareTypeFlags instead.
     __declspec(noinline) inline bool IsStructure(uintptr_t obj) {
         if (!obj) return false;
-        uintptr_t fn = ResolveFunc(Offset::Function::IsBuilding);
-        if (!fn) return false;
-        __try {
-            return ((fnIsBuilding)fn)(obj);
-        }
-        __except (1) { return false; }
+        // Native IsBuilding is a stub — always returns false
+        // Fall back to CompareTypeFlags for turret check
+        return IsTurret(obj);
     }
 
     // Is this a Clone? (Shaco, LeBlanc, Neeko, etc.)
@@ -240,7 +247,9 @@ namespace RuntimeAPI {
         __except (1) { return false; }
     }
 
-    // Is Dragon?
+    // Is Dragon? IDA VERIFIED 2026-03-18 (sub_7FF7D8081000):
+    //   1 arg: RCX=obj. Double LeagueObfuscation at [obj+0x4770] and [obj+0x4690]
+    //   Deobfuscates two floats, compares against constant range
     __declspec(noinline) inline bool IsDragon(uintptr_t obj) {
         if (!obj) return false;
         uintptr_t fn = ResolveFunc(Offset::Function::IsDragon);
@@ -251,7 +260,9 @@ namespace RuntimeAPI {
         __except (1) { return false; }
     }
 
-    // Is Baron?
+    // Is Baron? IDA VERIFIED 2026-03-18 (sub_7FF7D807FE90):
+    //   1 arg: RCX=obj. Reads [obj+0x40C8] → gets string ptr
+    //   Compares against "Worm" and "SRU_Baron" strings
     __declspec(noinline) inline bool IsBaron(uintptr_t obj) {
         if (!obj) return false;
         uintptr_t fn = ResolveFunc(Offset::Function::IsBaron);
@@ -434,6 +445,182 @@ namespace RuntimeAPI {
             return *(float*)(spellDataRes + Offset::SpellBook::ResLineWidth);
         }
         __except (1) { return 0.0f; }
+    }
+
+    // ================================================================
+    // MISSILE — CastEndPos (CastInfo+0xE4 → missile+0x3A4)
+    // ================================================================
+
+    __declspec(noinline) inline Vec3f GetMissileCastEndPos(uintptr_t missile) {
+        if (!missile) return { 0, 0, 0 };
+        __try { return *(Vec3f*)(missile + Offset::Missile::CastEndPos); }
+        __except (1) { return { 0, 0, 0 }; }
+    }
+
+    // ================================================================
+    // MISSILE — DestIndex (target dest pointer)
+    // ================================================================
+
+    __declspec(noinline) inline int GetMissileDestIndex(uintptr_t missile) {
+        if (!missile) return 0;
+        __try {
+            uintptr_t destPtr = *(uintptr_t*)(missile + Offset::Missile::DestIndex);
+            if (!destPtr) return 0;
+            return *(int*)destPtr;
+        }
+        __except (1) { return 0; }
+    }
+
+    // ================================================================
+    // MISSILE — SpellData pointer (missile+0x128)
+    // ================================================================
+
+    __declspec(noinline) inline uintptr_t GetMissileSpellData(uintptr_t missile) {
+        if (!missile) return 0;
+        __try {
+            uintptr_t ptr = *(uintptr_t*)(missile + Offset::Missile::SpellDataPtr);
+            if (ptr) return ptr;
+            return *(uintptr_t*)(missile + Offset::Missile::CI_SpellData);
+        }
+        __except (1) { return 0; }
+    }
+
+    // ================================================================
+    // MISSILE — MissileManager global address
+    // ================================================================
+
+    __declspec(noinline) inline uintptr_t GetMissileManager() {
+        if (!GetBase()) return 0;
+        __try {
+            return *(uintptr_t*)(GetBase() + Offset::Global::MissileManager);
+        }
+        __except (1) { return 0; }
+    }
+
+    // ================================================================
+    // MISSILE — Extended API (IDA verified 2026-03-18)
+    // CastInfo is INLINE at missile+0x2C0
+    // ================================================================
+
+    // IsAuto flag from CastInfo (CastInfo+0x141 → missile+0x401)
+    __declspec(noinline) inline bool GetMissileIsAuto(uintptr_t missile) {
+        if (!missile) return false;
+        __try {
+            return *(uint8_t*)(missile + Offset::Missile::CastInfoBase + Offset::SpellCastInfo::IsAuto) != 0;
+        }
+        __except (1) { return false; }
+    }
+
+    // Spell slot from CastInfo (CastInfo+0x14C → missile+0x40C)
+    __declspec(noinline) inline int GetMissileSpellSlot(uintptr_t missile) {
+        if (!missile) return -1;
+        __try {
+            return *(int*)(missile + Offset::Missile::CastInfoBase + Offset::SpellCastInfo::Slot);
+        }
+        __except (1) { return -1; }
+    }
+
+    // Cast range from SpellDataResource (rank 0)
+    __declspec(noinline) inline float GetMissileCastRange(uintptr_t missile) {
+        if (!missile) return 0.0f;
+        __try {
+            uintptr_t spellData = *(uintptr_t*)(missile + Offset::Missile::SpellDataPtr);
+            if (!spellData) return 0.0f;
+            uintptr_t spellDataRes = *(uintptr_t*)(spellData + Offset::SpellBook::DataResourceBase);
+            if (!spellDataRes) return 0.0f;
+            return *(float*)(spellDataRes + Offset::SpellBook::ResCastRange);
+        }
+        __except (1) { return 0.0f; }
+    }
+
+    // Missile name (from CastInfo MissileName SSO string)
+    __declspec(noinline) inline const char* GetMissileMissileName(uintptr_t missile) {
+        if (!missile) return nullptr;
+        __try {
+            uintptr_t strAddr = missile + Offset::Missile::MissileName;
+            size_t capacity = *(size_t*)(strAddr + 0x18);
+            if (capacity >= 0x10) return *(const char**)strAddr;
+            return (const char*)strAddr;
+        }
+        __except (1) { return nullptr; }
+    }
+
+    // ================================================================
+    // MISSILE CLASSIFICATION — 3-way using RuntimeAPI
+    // Classifies: 0=Unknown, 1=MinionAA, 2=TurretShot, 3=HeroAA, 4=Spell
+    // ================================================================
+
+    __declspec(noinline) inline int ClassifyMissile(uintptr_t missile) {
+        if (!missile) return 0;
+
+        __try {
+            // Resolve caster from NetId
+            int casterNetId = GetMissileCasterNetId(missile);
+            if (casterNetId <= 0) return 0;
+
+            // Get caster object address (search ObjectManager)
+            uintptr_t objTree = *(uintptr_t*)(GetBase() + Offset::Global::ObjectManager);
+            if (!objTree) return 0;
+
+            uintptr_t casterAddr = 0;
+
+            // Simple ObjectManager traversal to find caster
+            int maxObjCount = *(int*)(objTree + 0x08);
+            uintptr_t arrayBase = *(uintptr_t*)(objTree + 0x10);
+            if (!arrayBase || maxObjCount <= 0 || maxObjCount > 2000) {
+                // Fallback: classify by name only
+                goto classify_by_name;
+            }
+
+            for (int i = 0; i < maxObjCount && i < 2000; i++) {
+                uintptr_t obj = *(uintptr_t*)(arrayBase + i * sizeof(uintptr_t));
+                if (!obj) continue;
+                int netId = *(int*)(obj + Offset::GameObject::NetId);
+                if (netId == casterNetId) {
+                    casterAddr = obj;
+                    break;
+                }
+            }
+
+            if (!casterAddr) goto classify_by_name;
+
+            // Classify by caster type
+            if (IsTurret(casterAddr)) return 2;  // TurretShot
+
+            {
+                bool isAuto = GetMissileIsAuto(missile);
+                const char* name = GetMissileSpellName(missile);
+                bool isAAName = false;
+                if (name) {
+                    // Check for BasicAttack/CritAttack patterns (IDA verified sub_7FF7EB687DA0)
+                    for (const char* p = name; *p; ++p) {
+                        if ((*p == 'B' || *p == 'b') && _strnicmp(p, "BasicAttack", 11) == 0) { isAAName = true; break; }
+                        if ((*p == 'C' || *p == 'c') && _strnicmp(p, "CritAttack", 10) == 0) { isAAName = true; break; }
+                    }
+                }
+
+                if (IsMinion(casterAddr)) {
+                    return (isAAName || isAuto) ? 1 : 4;  // MinionAA or Spell
+                }
+
+                if (IsHero(casterAddr)) {
+                    return (isAAName || isAuto) ? 3 : 4;  // HeroAA or Spell
+                }
+            }
+
+classify_by_name:
+            {
+                const char* name = GetMissileSpellName(missile);
+                if (!name) return 0;
+                for (const char* p = name; *p; ++p) {
+                    if ((*p == 'B' || *p == 'b') && _strnicmp(p, "BasicAttack", 11) == 0) return 3;
+                    if ((*p == 'C' || *p == 'c') && _strnicmp(p, "CritAttack", 10) == 0) return 3;
+                    if ((*p == 'T' || *p == 't') && _strnicmp(p, "TurretAttack", 12) == 0) return 2;
+                }
+                return 4;  // Assume spell if unknown
+            }
+        }
+        __except (1) { return 0; }
     }
 
 } // namespace RuntimeAPI

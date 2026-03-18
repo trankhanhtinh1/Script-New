@@ -79,9 +79,9 @@ struct Vec2 {
 
 // Projection result — defined after Vec2 is complete
 struct Vec2ProjectionInfo {
-    Vec2 segmentPoint;     // Closest point on segment
-    float lineParameter;   // t parameter [0,1] if on segment
-    bool isOnSegment;
+    Vec2 segmentPoint;           // Closest point on segment
+    float lineParameter = 0.0f;  // t parameter [0,1] if on segment
+    bool isOnSegment = false;
 };
 
 // ProjectOn — free function (matches C# Vector2Extensions.ProjectOn)
@@ -322,5 +322,8 @@ namespace Geometry {
     inline Vec3 PositionOnPath(const std::vector<Vec3>& path, float distance) {
         return ::Geometry::PositionOnPath(path, distance);
     }
+
+    inline float DegToRad(float deg) { return ::Geometry::DegToRad(deg); }
+    inline float RadToDeg(float rad) { return ::Geometry::RadToDeg(rad); }
 } // namespace Geometry
 } // namespace SDK

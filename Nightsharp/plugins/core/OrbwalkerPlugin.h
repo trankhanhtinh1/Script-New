@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../IPlugin.h"
 #include "sdk/UI/MenuUI.h"
 #include "sdk/GameObjects/GameObject.h"
@@ -13,6 +13,7 @@
 #include "sdk/Wrappers/Orbwalking/HealthPrediction.h"
 #include "sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "sdk/Utils/MinionUtils.h"
+#include "sdk/Utils/CursorUtils.h"
 #include "sdk/Events/TurretAggro.h"
 #include "sdk/GameObjects/AiManager.h"
 #include "sdk/Enums.h"
@@ -27,6 +28,7 @@
 #include <unordered_set>
 #include <vector>
 #include <unordered_map>
+#include "sdk/Utils/DebugConsole.h"
 
 // ============================================================================
 // OrbwalkerPlugin advanced Ported from ImpulseAIO NewOrbwalker.cs (EnsoulSharp SDK)
@@ -68,42 +70,32 @@ namespace Plugins {
 			auto orbSettings = m_menu->AddSubMenu("Settings", "Orbwalker Settings");
 			orbSettings->Add<SDK::MenuUI::MenuSlider>("ExtraHold", "Extra Hold Position", 50, 0, 250);
 			orbSettings->Add<SDK::MenuUI::MenuBool>("MoveRandom", "Randomize Movement", false);
-			orbSettings->Add<SDK::MenuUI::MenuSlider>("WindupDelay", "Extra Windup Delay (ms)", 30, 0, 250);
+			orbSettings->Add<SDK::MenuUI::MenuSlider>("WindupDelay", "Extra Windup Delay (ms)", 60, 0, 250);
 			orbSettings->Add<SDK::MenuUI::MenuBool>("LimitAttack", "Don't Kite if AS > 2.5", false);
 			orbSettings->Add<SDK::MenuUI::MenuBool>("MissileCheck", "Use Missile Checks", true);
-			orbSettings->Add<SDK::MenuUI::MenuBool>("CalcItemDamage", "Calculate Item Damage", true);
+			orbSettings->Add<SDK::MenuUI::MenuBool>("CalcItemDamage", "Calculate Item Damage", false);
 			orbSettings->Add<SDK::MenuUI::MenuBool>("YasuoWallCheck", "Yasuo WindWall Check", true);
 			orbSettings->Add<SDK::MenuUI::MenuBool>("HighOrb", "High Frequency Walk", false);
-			orbSettings->Add<SDK::MenuUI::MenuBool>("CalculateRunaway", "Calculate Runaway Distance", false);
-			orbSettings->Add<SDK::MenuUI::MenuSlider>("MaxMoveDistance", "Max Move Distance", 0, 0, 1500);
-			orbSettings->Add<SDK::MenuUI::MenuSlider>("MoveDelay", "Move Delay (ms)", 50, 0, 500);
+			orbSettings->Add<SDK::MenuUI::MenuBool>("CalculateRunaway", "Calculate Runaway Distance", true);
+			orbSettings->Add<SDK::MenuUI::MenuBool>("SupportMode", "Support Mode", false);
 
 			// Farm sub-menu
 			auto farm = m_menu->AddSubMenu("Farm", "Farm");
 			farm->Add<SDK::MenuUI::MenuSlider>("FarmDelay", "Farm Delay", 30, 0, 200);
-			farm->Add<SDK::MenuUI::MenuSlider>("FastFarmDelay", "Fast Farm Delay", 0, 0, 1000);
+			farm->Add<SDK::MenuUI::MenuSlider>("FastFarmDelay", "Fast Farm Delay", 220, 0, 1000);
 			farm->Add<SDK::MenuUI::MenuList>("TurretFarm", "Turret Farm",
 				std::vector<std::string>{"Enabled", "Off"}, 0);
 			farm->Add<SDK::MenuUI::MenuSlider>("TurretFarmMaxLevel", "Turret Farm Max Level", 18, 1, 18);
 			farm->Add<SDK::MenuUI::MenuBool>("ShouldWait", "Wait for Last Hit", true);
 
-			// Misc sub-menu
-			auto misc = m_menu->AddSubMenu("Misc", "Misc");
-			misc->Add<SDK::MenuUI::MenuBool>("DrawChaseRange", "Draw Chase Range", false);
-			misc->Add<SDK::MenuUI::MenuBool>("ShowFakeClick", "Show Fake Click", false);
-			misc->Add<SDK::MenuUI::MenuSlider>("ForceChaseRange", "Force Chase Extra Range", 0, 0, 500);
-			misc->Add<SDK::MenuUI::MenuKeyBind>("FindKey", "Force Chase Key", 'F', SDK::MenuUI::KeyBindType::Press);
 
 			// Drawing sub-menu
 			auto draw = m_menu->AddSubMenu("Drawing", "Drawing");
 			draw->Add<SDK::MenuUI::MenuBool>("DrawAttackRange", "Draw Attack Range", true);
 			draw->Add<SDK::MenuUI::MenuBool>("DrawHoldPosition", "Draw Hold Position", false);
 			draw->Add<SDK::MenuUI::MenuBool>("DrawKillableMinion", "Draw Killable Minion", false);
-			draw->Add<SDK::MenuUI::MenuBool>("DrawActiveMode", "Draw Active Mode", true);
-			draw->Add<SDK::MenuUI::MenuBool>("DrawNonKillable", "Draw Non-Killable Minion", false);
-			draw->Add<SDK::MenuUI::MenuColor>("RangeColor", "Attack Range Color", 0.8f, 0.6f, 0.8f, 0.6f);
-			draw->Add<SDK::MenuUI::MenuColor>("KillableColor", "Killable Minion Color", 0.0f, 1.0f, 0.0f, 0.8f);
-			draw->Add<SDK::MenuUI::MenuColor>("NonKillableColor", "Non-Killable Color", 1.0f, 0.3f, 0.0f, 0.8f);
+			draw->Add<SDK::MenuUI::MenuBool>("ShowFakeClick", "Show Fake Click", true);
+			draw->Add<SDK::MenuUI::MenuBool>("FakeCursor", "Fake Cursor (Livestream)", false);
 
 			// Keybinds
 			m_menu->Add<SDK::MenuUI::MenuSeparator>("sep_keys", "--- Keybinds ---");
@@ -114,6 +106,31 @@ namespace Plugins {
 			m_menu->Add<SDK::MenuUI::MenuKeyBind>("Flee", "Flee", 'Z', SDK::MenuUI::KeyBindType::Press);
 			m_menu->Add<SDK::MenuUI::MenuKeyBind>("FastLaneClear", "Fast LaneClear", 'A', SDK::MenuUI::KeyBindType::Press);
 			m_menu->Add<SDK::MenuUI::MenuKeyBind>("ComboNoMove", "Combo (No Move)", 0, SDK::MenuUI::KeyBindType::Press);
+
+			// Cache champion flags for performance (NewOrbwalker.cs constructor)
+			std::string myChamp = SDK::GameObjects::Player.GetChampionName();
+			m_isAphelios = (_stricmp(myChamp.c_str(), "Aphelios") == 0);
+			m_isGraves = (_stricmp(myChamp.c_str(), "Graves") == 0);
+			m_isJhin = (_stricmp(myChamp.c_str(), "Jhin") == 0);
+			m_isKalista = (_stricmp(myChamp.c_str(), "Kalista") == 0);
+			m_isRengar = (_stricmp(myChamp.c_str(), "Rengar") == 0);
+			m_isSett = (_stricmp(myChamp.c_str(), "Sett") == 0);
+
+			// Check enemy team for special interactions
+			for (auto& hero : SDK::GameObjects::EnemyHeroes) {
+				if (!hero.IsValid()) continue;
+				std::string name = hero.GetChampionName();
+				if (_stricmp(name.c_str(), "Jax") == 0) m_jaxInGame = true;
+				if (_stricmp(name.c_str(), "Gangplank") == 0) m_gangplankInGame = true;
+			}
+			// Check all heroes for TahmKench
+			for (auto& hero : SDK::GameObjects::AllHeroes) {
+				if (!hero.IsValid()) continue;
+				std::string name = hero.GetChampionName();
+				if (_stricmp(name.c_str(), "TahmKench") == 0 && hero.GetNetId() != SDK::GameObjects::Player.GetNetId()) {
+					m_tahmKenchInGame = true;
+				}
+			}
 		}
 
 		void OnUnload() override {
@@ -144,23 +161,26 @@ namespace Plugins {
 				m_laneClearCachedHasValue = false;
 				m_laneClearCacheExpireTime = 0.0f;
 			}
-			if (m_activeMode == SDK::OrbwalkingMode::None) return;
 
-			// Update ForceChase state
-			m_forceChaseActive = false;
-			if (m_activeMode == SDK::OrbwalkingMode::Combo) {
-				auto* misc = m_menu->GetSubMenu("Misc");
-				if (misc) {
-					auto* findKey = misc->Get<SDK::MenuUI::MenuKeyBind>("FindKey");
-					auto* chaseRange = misc->Get<SDK::MenuUI::MenuSlider>("ForceChaseRange");
-					if (findKey && findKey->Active && chaseRange && chaseRange->Value > 0) {
-						m_forceChaseActive = true;
-						m_forceChaseExtraRange = (float)chaseRange->Value;
-					}
-				}
+			// === DEBUG ===
+			static int s_plugDbg = 0;
+			int nowT = SDK::Game::GetTickCount();
+			if (nowT - s_plugDbg > 1000 && m_activeMode != SDK::OrbwalkingMode::None) {
+				s_plugDbg = nowT;
+				const char* mn[] = {"None","Combo","LaneClear","Hybrid","LastHit","Flee"};
+				int mi = (int)m_activeMode; if(mi<0||mi>5) mi=0;
+				DEBUG_LOG_TAG("PLUG", "OnUpdate: mode=%s canAtk=%d canMv=%d", mn[mi], CanAttack(), CanMove());
 			}
 
+			if (m_activeMode == SDK::OrbwalkingMode::None) return;
+
 			SDK::GameObject target = GetTarget();
+
+			if (nowT - s_plugDbg < 50 && target.IsValid()) {
+				DEBUG_LOG_TAG("PLUG", "  target=0x%llX hp=%.0f inRange=%d",
+					(unsigned long long)target.address, target.GetHealth(), player.IsInAttackRange(target));
+			}
+
 			Orbwalk(target);
 		}
 
@@ -178,10 +198,9 @@ namespace Plugins {
 			// Draw attack range
 			auto* drawRange = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawAttackRange");
 			if (drawRange && drawRange->Enabled) {
-				auto* rangeCol = drawMenu->Get<SDK::MenuUI::MenuColor>("RangeColor");
-				ImU32 col = rangeCol ? rangeCol->GetImU32() : IM_COL32(200, 150, 200, 150);
+				// PaleVioletRed matching C# NewOrbwalker.cs
 				SDK::Drawing::DrawCircle(player.GetPosition(),
-					player.GetRealAttackRange(), col, 1.5f);
+					player.GetRealAttackRange(), IM_COL32(219, 112, 147, 180), 1.5f);
 			}
 
 			// Draw hold position
@@ -193,95 +212,34 @@ namespace Plugins {
 					player.GetBoundingRadius() + (float)holdDist, IM_COL32(128, 0, 200, 100), 1.0f);
 			}
 
-			// Draw killable minion â€” uses HealthPrediction for accuracy
+			// Draw killable minion — uses HealthPrediction for accuracy
 			auto* drawKill = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawKillableMinion");
 			if (drawKill && drawKill->Enabled) {
-				auto* killCol = drawMenu->Get<SDK::MenuUI::MenuColor>("KillableColor");
-				ImU32 killColor = killCol ? killCol->GetImU32() : IM_COL32(0, 255, 0, 200);
-				bool calcItems = true;
-				if (auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr)
-					if (auto* ci = settings->Get<SDK::MenuUI::MenuBool>("CalcItemDamage"))
-						calcItems = ci->Enabled;
+				bool calcItems = IsItemDamageCalculationEnabled();
 				for (auto& minion : SDK::GameObjects::EnemyMinions) {
 					if (!minion.IsAlive() || !minion.IsVisible()) continue;
 					float dist = player.DistanceTo(minion);
 					if (dist > player.GetRealAttackRange() * 2.0f) continue;
 
 					float dmg = SDK::DamageCalc::GetAutoAttackDamage(player, minion, false, calcItems);
-					float impactMs = GetAttackImpactTimeMs(minion);
-					float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactMs);
-					if (predictedHP > 0.0f && predictedHP <= dmg) {
+					if (minion.GetHealth() > 0.0f && minion.GetHealth() < dmg) {
+						// Green circle matching C# (0, 255, 0, 255)
 						SDK::Drawing::DrawCircle(minion.GetPosition(),
-							minion.GetBoundingRadius() * 2.0f, killColor, 2.0f);
+							minion.GetBoundingRadius() * 2.0f, IM_COL32(0, 255, 0, 200), 2.0f);
 					}
 				}
 			}
 
-			// Draw non-killable minions (minions that will die before AA lands)
-			auto* drawNonKill = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawNonKillable");
-			if (drawNonKill && drawNonKill->Enabled) {
-				auto* nkCol = drawMenu->Get<SDK::MenuUI::MenuColor>("NonKillableColor");
-				ImU32 nkColor = nkCol ? nkCol->GetImU32() : IM_COL32(255, 75, 0, 200);
-				bool calcItems = true;
-				if (auto* settings2 = m_menu ? m_menu->GetSubMenu("Settings") : nullptr)
-					if (auto* ci2 = settings2->Get<SDK::MenuUI::MenuBool>("CalcItemDamage"))
-						calcItems = ci2->Enabled;
-				for (auto& minion : SDK::GameObjects::EnemyMinions) {
-					if (!minion.IsAlive() || !minion.IsVisible()) continue;
-					if (!player.IsInAttackRange(minion)) continue;
+			// Native click indicators (green move / red attack) are triggered at the
+			// actual IssueOrder call sites (Move → ShowMoveClick, Attack → ShowAttackClick)
+			// using game VFX particles, NOT overlay drawing. No overlay fallback needed.
 
-					float dmg = SDK::DamageCalc::GetAutoAttackDamage(player, minion, false, calcItems);
-					float impactMs = GetAttackImpactTimeMs(minion);
-					float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactMs);
-
-					if (predictedHP <= 0.0f && minion.GetHealth() > 0.0f && minion.GetHealth() <= dmg) {
-						SDK::Drawing::DrawCircle(minion.GetPosition(),
-							minion.GetBoundingRadius() * 2.0f, nkColor, 2.0f);
-					}
-				}
-			}
-
-			// Draw chase range (ForceChase visualization) â€” rainbow when active
-			auto* miscMenu = m_menu->GetSubMenu("Misc");
-			if (miscMenu) {
-				auto* drawChase = miscMenu->Get<SDK::MenuUI::MenuBool>("DrawChaseRange");
-				auto* chaseRange = miscMenu->Get<SDK::MenuUI::MenuSlider>("ForceChaseRange");
-				if (drawChase && drawChase->Enabled && chaseRange && chaseRange->Value > 0) {
-					float totalRange = player.GetRealAttackRange() + (float)chaseRange->Value;
-					if (m_forceChaseActive) {
-						// Rainbow circle when ForceChase is active
-						float t = fmodf(SDK::Game::GetTime() * 2.0f, 1.0f);
-						int r = (int)(sinf(t * 6.2832f) * 127 + 128);
-						int g = (int)(sinf(t * 6.2832f + 2.094f) * 127 + 128);
-						int b = (int)(sinf(t * 6.2832f + 4.189f) * 127 + 128);
-						SDK::Drawing::DrawCircle(player.GetPosition(), totalRange,
-							IM_COL32(r, g, b, 200), 2.5f);
-					}
-					else {
-						SDK::Drawing::DrawCircle(player.GetPosition(), totalRange,
-							IM_COL32(100, 200, 255, 120), 1.0f);
-					}
-				}
-			}
-
-			// Draw active mode indicator
-			auto* drawActiveMode = drawMenu->Get<SDK::MenuUI::MenuBool>("DrawActiveMode");
-			if (drawActiveMode && drawActiveMode->Enabled && m_activeMode != SDK::OrbwalkingMode::None) {
-				ImDrawList* dl = ImGui::GetBackgroundDrawList();
-				if (dl) {
-					const char* modeNames[] = { "", "Combo", "Harass", "LastHit", "LaneClear", "Flee" };
-					ImU32 modeColors[] = { 0, IM_COL32(255, 100, 100, 220), IM_COL32(255, 200, 100, 220),
-						IM_COL32(100, 255, 100, 220), IM_COL32(100, 200, 255, 220), IM_COL32(200, 200, 200, 220) };
-					int idx = (int)m_activeMode;
-					if (idx >= 1 && idx <= 5) {
-						ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-						ImVec2 textSize = ImGui::CalcTextSize(modeNames[idx]);
-						float x = displaySize.x / 2 - textSize.x / 2;
-						float y = displaySize.y - 80;
-						// Shadow
-						dl->AddText(ImVec2(x + 1, y + 1), IM_COL32(0, 0, 0, 180), modeNames[idx]);
-						dl->AddText(ImVec2(x, y), modeColors[idx], modeNames[idx]);
-					}
+			// Fake Cursor for livestream protection
+			auto* fakeCursorMenu = drawMenu->Get<SDK::MenuUI::MenuBool>("FakeCursor");
+			if (fakeCursorMenu) {
+				SDK::FakeCursor::SetEnabled(fakeCursorMenu->Enabled);
+				if (fakeCursorMenu->Enabled) {
+					SDK::FakeCursor::OnRender();
 				}
 			}
 
@@ -368,110 +326,123 @@ namespace Plugins {
 		}
 
 		// ====================================================================
-		// Timing â€” Simplified approach matching Script-New-main (proven working)
-		// Uses m_lastAttackCommandTime (set when we send attack command)
-		// and optionally SDK::Orbwalker::LastAttackTime (set by OnProcessSpellCast event)
+		// Timing — TickCount-based matching NewOrbwalker.cs exactly
 		// ====================================================================
 
 		bool CanAttack(float extraWindup = 0.0f) const {
 			auto& player = SDK::GameObjects::Player;
 			if (!player.IsValid()) return false;
 
-			// Check buffs that prevent attacking
+			// Pause ticks
+			int tickNow = SDK::Game::GetTickCount();
+			if (m_allPauseTick > 0 && m_allPauseTick - tickNow > 0) return false;
+			if (m_attackPauseTick > 0 && m_attackPauseTick - tickNow > 0) return false;
+
+			// CC checks
 			SDK::BuffManager buffs(player.address);
-			if (buffs.HasBuff("tahmkenchwhasdevouredtarget")) return false;
+			if (m_tahmKenchInGame && buffs.HasBuff("tahmkenchwhasdevouredtarget")) return false;
 			if (buffs.HasBuffOfType(SDK::BuffType::Fear)) return false;
 			if (buffs.HasBuffOfType(SDK::BuffType::Polymorph)) return false;
-			if (buffs.HasBuffOfType(SDK::BuffType::Stun)) return false;
-			if (buffs.HasBuffOfType(SDK::BuffType::Charm)) return false;
-			if (buffs.HasBuffOfType(SDK::BuffType::Suppression)) return false;
 
-			// 1.1 Champion-specific: Jhin reload check
-			std::string champName = player.GetChampionName();
-			if (_stricmp(champName.c_str(), "Jhin") == 0) {
-				if (buffs.HasBuff("JhinPassiveReload")) return false;
+			// Blindingdart (non-Kalista)
+			if (!m_isKalista && buffs.HasBuff("blindingdart")) return false;
+
+			// Rengar Q bypass
+			if (m_isRengar && (buffs.HasBuff("RengarQ") || buffs.HasBuff("RengarQEmp"))) return true;
+
+			// Aphelios preload
+			if (m_isAphelios && buffs.HasBuff("apheliospreload")) return false;
+
+			// Jhin reload
+			if (m_isJhin && buffs.HasBuff("JhinPassiveReload")) return false;
+
+			// Calculate attack delay in ms
+			float num = player.GetAttackDelay() * 1000.0f;
+
+			// Graves special formula
+			if (m_isGraves) {
+				if (!buffs.HasBuff("gravesbasicattackammo1")) return false;
+				num = player.GetAttackDelay() * 1000.0f * 1.0740297f - 716.2381f;
+			}
+			// Sett passive — faster second punch
+			else if (m_isSett && m_nextAttackIsPassive) {
+				num = player.GetAttackDelay() * 1000.0f / 8.0f;
 			}
 
-			// 1.1 Champion-specific: Graves ammo check
-			if (_stricmp(champName.c_str(), "Graves") == 0) {
-				if (buffs.HasBuff("GravesBasicAttackAmmo1") == false &&
-					buffs.HasBuff("GravesBasicAttackAmmo2") == false) {
-					return false; // No ammo
-				}
-			}
-
-			float now = SDK::Game::GetTime();
-			float delay = player.GetAttackDelay();
-
-			// Simple timing: can attack when full attack delay has passed
-			// Same formula as Script-New-main (proven working)
-			return now >= m_lastAttackCommandTime + delay;
+			// Core: TickCount + Ping/2 + 25 >= LastAutoAttackTick + delay + extraWindup
+			return (float)(tickNow + (int)(SDK::Game::GetPing() / 2.0f) + 25) >=
+				(float)m_lastAutoAttackTick + num + extraWindup;
 		}
 
-		bool CanMove(float extraWindup = 0.0f) const {
+		bool CanMove(float extraWindup = 0.0f, bool disableMissileCheck = false) const {
 			auto& player = SDK::GameObjects::Player;
 			if (!player.IsValid()) return false;
 
-			std::string champName = player.GetChampionName();
+			// Pause ticks
+			int tickNow = SDK::Game::GetTickCount();
+			if (m_allPauseTick > 0 && m_allPauseTick - tickNow > 0) return false;
+			if (m_movePauseTick > 0 && m_movePauseTick - tickNow > 0) return false;
 
-			// 1.1 Kalista: can always move after attack
-			if (_stricmp(champName.c_str(), "Kalista") == 0) return true;
-
-			// Rengar special: extra windup during leap attack
-			if (_stricmp(champName.c_str(), "Rengar") == 0) {
+			// TahmKench devour
+			if (m_tahmKenchInGame) {
 				SDK::BuffManager buffs(player.address);
-				if (buffs.HasBuff("RengarR")) {
-					extraWindup += 0.05f; // Extra 50ms windup for leap attacks
-				}
+				if (buffs.HasBuff("tahmkenchwhasdevouredtarget")) return false;
 			}
 
-			float now = SDK::Game::GetTime();
-			float windup = player.GetAttackWindup();
+			// Kalista: can always move
+			if (m_isKalista) return true;
 
-			// Missile launched â€” allow movement immediately (ranged champions)
-			auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
-			bool missileCheck = settings ? settings->Get<SDK::MenuUI::MenuBool>("MissileCheck")->Enabled : true;
-			if (SDK::Orbwalker::MissileLaunched && missileCheck) return true;
+			// Missile launched — allow movement immediately
+			if (SDK::Orbwalker::MissileLaunched && !disableMissileCheck) {
+				auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
+				bool missileCheck = settings ? settings->Get<SDK::MenuUI::MenuBool>("MissileCheck")->Enabled : true;
+				if (missileCheck) return true;
+			}
 
-			// Get windup buffer from menu (in ms, convert to seconds)
-			float windupDelayMs = settings ? (float)(settings->Get<SDK::MenuUI::MenuSlider>("WindupDelay")->Value) : 30.0f;
-			float windupBuffer = windupDelayMs / 1000.0f;
+			// Rengar Q/QEmp: extra 200ms windup
+			int rengarExtra = 0;
+			if (m_isRengar) {
+				SDK::BuffManager buffs(player.address);
+				if (buffs.HasBuff("RengarQ") || buffs.HasBuff("RengarQEmp"))
+					rengarExtra = 200;
+			}
 
-			// Core timing: can move after windup + buffer
-			return now >= m_lastAttackCommandTime + windup + windupBuffer + extraWindup;
+			// GetAttackCastDelay — Sett passive reduces windup
+			float castDelay = player.GetAttackWindup();
+			if (m_isSett && m_nextAttackIsPassive) {
+				castDelay = castDelay - castDelay / 8.0f;
+			}
+
+			// Core: TickCount + Ping/2 >= LastAutoAttackTick + CastDelay*1000 + extra
+			return (float)(tickNow + (int)(SDK::Game::GetPing() / 2.0f)) >=
+				(float)m_lastAutoAttackTick + castDelay * 1000.0f + extraWindup + (float)rengarExtra;
 		}
 
 		void ResetAutoAttackTimer() {
-			auto& player = SDK::GameObjects::Player;
+			m_allPauseTick = 0;
+			m_attackPauseTick = 0;
+			m_lastAutoAttackTick = 0;
+			m_movePauseTick = 0;
 			m_lastAttackCommandTime = 0.0f;
 			SDK::Orbwalker::LastAttackTime = 0.0f;
+			SDK::Orbwalker::LastAutoAttackTick = 0;
 			SDK::Orbwalker::MissileLaunched = false;
-			if (!m_attackReadyEventFired && player.IsValid()) {
-				SDK::OrbwalkingActionArgs readyArgs;
-				readyArgs.Target = m_lastTarget;
-				readyArgs.Sender = player;
-				readyArgs.Type = SDK::OrbwalkingType::OnAttackReady;
-				readyArgs.Process = true;
-				SDK::Orbwalker::InvokeAction(readyArgs);
-			}
 			m_attackReadyEventFired = true;
 			m_moveReadyEventFired = true;
 		}
 
 		SDK::OrbwalkingMode ActiveMode() const { return m_activeMode; }
 
-		// ====================================================================
-		// ShouldWait â€” EnsoulSharp OrbwalkerSelector.ShouldWait
-		// Returns true if any minion will be last-hittable soon, so we
-		// should NOT push the wave (used in LaneClear to delay attacks)
-		// ====================================================================
+		// ShouldWait — matching NewOrbwalker.cs
 		bool ShouldWait(float range) {
 			return AnalyzeLaneFarm(range).shouldWait;
 		}
 
-		// ====================================================================
-		// BlockOrders â€” allow scripts to temporarily block attacks/moves
-		// ====================================================================
+		// Pause time API
+		void SetPauseTime(int ms) { m_allPauseTick = SDK::Game::GetTickCount() + ms; }
+		void SetAttackPauseTime(int ms) { m_attackPauseTick = SDK::Game::GetTickCount() + ms; }
+		void SetMovePauseTime(int ms) { m_movePauseTick = SDK::Game::GetTickCount() + ms; }
+
 		bool BlockAttack() const { return m_blockAttack; }
 		bool BlockMove() const { return m_blockMove; }
 		void SetBlockAttack(bool block) { m_blockAttack = block; }
@@ -484,13 +455,18 @@ namespace Plugins {
 		std::shared_ptr<SDK::MenuUI::Menu> m_menu;
 		SDK::OrbwalkingMode m_activeMode = SDK::OrbwalkingMode::None;
 		float m_lastAttackCommandTime = 0.0f;  // Game time when we SENT the attack command
+		int m_lastAutoAttackTick = 0;           // TickCount when attack confirmed (OnDoCast)
+		int m_lastLocalAttackTick = 0;          // TickCount when attack command issued
+		int m_lastMovementTick = 0;             // TickCount for move throttling
 		float m_lastMoveTime = 0.0f;            // Game time (seconds) for move throttling
 		int m_autoAttackCounter = 0;
+		int m_allPauseTick = 0;
+		int m_attackPauseTick = 0;
+		int m_movePauseTick = 0;
 		bool m_attackReadyEventFired = true;
 		bool m_afterAttackFired = true;
 		bool m_moveReadyEventFired = true;
-		bool m_forceChaseActive = false;
-		float m_forceChaseExtraRange = 0.0f;
+	
 		bool m_blockAttack = false;
 		bool m_blockMove = false;
 		Vec3 m_lastMoveDir = Vec3(0, 0, 0);     // For angle check
@@ -501,6 +477,19 @@ namespace Plugins {
 		float m_laneClearCacheRange = 0.0f;
 		bool m_laneClearCachedHasValue = false;
 		bool m_turretFarmWait = false;
+		int m_lastFakeClickTick = 0; // For ShowFakeClick rate limiting
+
+		// Champion flags — cached once at load for performance
+		bool m_isAphelios = false;
+		bool m_isGraves = false;
+		bool m_isJhin = false;
+		bool m_isKalista = false;
+		bool m_isRengar = false;
+		bool m_isSett = false;
+		bool m_nextAttackIsPassive = false; // Sett passive tracking
+		bool m_jaxInGame = false;
+		bool m_gangplankInGame = false;
+		bool m_tahmKenchInGame = false;
 
 		struct TurretShotInfo {
 			SDK::GameObject turret;
@@ -640,8 +629,96 @@ namespace Plugins {
 		}
 
 		// ====================================================================
+		// CanAttackWithWindWall -- checks if attack is blocked by Yasuo/Samira wall
+		// Matches NewOrbwalker.cs CanAttackWithWindWall()
+		// ====================================================================
+		bool CanAttackWithWindWall(const SDK::GameObject& target) const {
+			if (!m_menu) return true;
+			auto* settings = m_menu->GetSubMenu("Settings");
+			if (!settings) return true;
+			auto* ywc = settings->Get<SDK::MenuUI::MenuBool>("YasuoWallCheck");
+			if (!ywc || !ywc->Enabled) return true;
+
+			auto& player = SDK::GameObjects::Player;
+			if (!player.IsValid() || player.IsMelee()) return true; // Melee ignores windwall
+
+			// Check all enemy minions for windwall objects
+			for (auto& minion : SDK::GameObjects::EnemyMinions) {
+				if (!minion.IsValid() || !minion.IsAlive()) continue;
+				std::string name = minion.GetChampionName();
+				// Yasuo windwall or Samira blade whirl
+				if (_stricmp(name.c_str(), "yourcut") == 0 ||
+					_stricmp(name.c_str(), "yourcut2") == 0 ||
+					name.find("windwall") != std::string::npos) {
+					// Simple check: if windwall is between player and target
+					Vec3 wallPos = minion.GetPosition();
+					Vec3 playerPos = player.GetPosition();
+					Vec3 targetPos = target.GetPosition();
+
+					// Line-circle intersection: is the wall roughly between us and target?
+					float wallRadius = 350.0f; // approx windwall width
+					Vec3 dir = targetPos - playerPos;
+					Vec3 toWall = wallPos - playerPos;
+					float dirLen = sqrtf(dir.x * dir.x + dir.z * dir.z);
+					if (dirLen < 1.0f) continue;
+					float proj = (toWall.x * dir.x + toWall.z * dir.z) / dirLen;
+					if (proj < 0.0f || proj > dirLen) continue; // Wall not between
+
+					// Perpendicular distance from wall center to line
+					float perpDist = fabsf(toWall.x * dir.z - toWall.z * dir.x) / dirLen;
+					if (perpDist < wallRadius) {
+						return false; // Attack would be blocked
+					}
+				}
+			}
+			return true;
+		}
+
+		// ====================================================================
+		// CanOrbObj -- checks if target will still be in range when AA lands
+		// Matches NewOrbwalker.cs CanOrbObj() -- uses CalculateRunaway setting
+		// ====================================================================
+		bool CanOrbObj(const SDK::GameObject& target) const {
+			if (!target.IsValid() || !target.IsAlive()) return false;
+
+			auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
+			if (!settings) return true;
+			auto* calcRunaway = settings->Get<SDK::MenuUI::MenuBool>("CalculateRunaway");
+			if (!calcRunaway || !calcRunaway->Enabled) return true;
+
+			auto& player = SDK::GameObjects::Player;
+			if (!player.IsValid()) return true;
+
+			// Check if target is moving away and will be out of range when AA lands
+			float range = player.GetRealAttackRange();
+			float dist = player.DistanceTo(target);
+			if (dist > range + 50.0f) return false; // Already out of range
+
+			// Get target movement speed
+			float targetMS = target.GetMoveSpeed();
+			if (targetMS <= 0.0f) return true; // Not moving
+
+			// Calculate time for AA to reach target
+			float windupTime = player.GetAttackWindup(); // seconds
+			float projSpeed = GetProjectileSpeed(player);
+			float projTime = (projSpeed > 0.0f && projSpeed < FLT_MAX)
+				? (std::max)(0.0f, dist / projSpeed) : 0.0f;
+			float totalTime = windupTime + projTime;
+
+			// Estimate how far target can move in that time
+			float runawayDist = targetMS * totalTime;
+			float futureDistWorstCase = dist + runawayDist;
+
+			// If target will be out of range even in worst case, skip it
+			// Add 100 buffer to avoid edge cases
+			if (futureDistWorstCase > range + 100.0f) return false;
+
+			return true;
+		}
+
+		// ====================================================================
 		// Target selection (ported from NewOrbwalker.GetTarget)
-		// Enhanced: 1.10 ForceChase, 1.4 Jax check, 1.14 SpecialMinion
+		// Enhanced: 1.4 Jax check, 1.14 SpecialMinion, WindWall, Runaway
 		// ====================================================================
 		SDK::GameObject GetTarget() {
 			auto& player = SDK::GameObjects::Player;
@@ -685,11 +762,73 @@ namespace Plugins {
 				}
 			}
 
-			// 1.10 ForceChase extend attack range when key held
-			if (m_forceChaseActive)
-				range += m_forceChaseExtraRange;
 
-			// Priority 0: Special minions (GP barrels, wards, plants, pets) [1.14]
+
+			// ---- GP Barrel priority check (NewOrbwalker.cs line 1068-1103) ----
+			// Works in ALL modes including Combo
+			bool attackBarrels = true;
+			auto* attackable = m_menu->GetSubMenu("Attackable");
+			if (attackable)
+				if (auto* b = attackable->Get<SDK::MenuUI::MenuBool>("Barrels"))
+					attackBarrels = b->Enabled;
+
+			if (attackBarrels && m_gangplankInGame) {
+				// Search for GP barrels in jungle objects (barrels are classified as jungle)
+				for (auto& barrel : SDK::GameObjects::JungleMinions) {
+					if (!barrel.IsValid() || !barrel.IsAlive()) continue;
+					std::string charName = barrel.GetChampionName();
+					if (_stricmp(charName.c_str(), "gangplankbarrel") != 0) continue;
+					if (!player.IsInAttackRange(barrel)) continue;
+					if (barrel.GetHealth() <= 0.0f) continue;
+
+					// HP <= 1: always attackable (last tick)
+					if (barrel.GetHealth() <= 1.0f) {
+						return finalizeTarget(barrel);
+					}
+
+					// HP == 2 and has gangplankebarrelactive buff: check decay timing
+					if (barrel.GetHealth() <= 2.0f) {
+						auto buff = barrel.GetBuff("gangplankebarrelactive");
+						if (buff.IsActive()) {
+							// Get owner (GP) level to determine decay rate
+							// Level >= 13: 0.5s, Level >= 7: 1.0s, else 2.0s
+							int ownerLevel = 1;
+							for (auto& hero : SDK::GameObjects::AllHeroes) {
+								if (!hero.IsValid()) continue;
+								if (_stricmp(hero.GetChampionName().c_str(), "Gangplank") == 0 && hero.GetLevel() > 0) {
+									ownerLevel = hero.GetLevel();
+									break;
+								}
+							}
+
+							double decayRate = (ownerLevel >= 13) ? 0.5 :
+								((ownerLevel >= 7) ? 1.0 : 2.0);
+
+							// Calculate when barrel will decay to 1 HP
+							double buffStart = (double)buff.GetStartTime();
+							double nextDecayTime = buffStart + decayRate * 2.0;
+							if (buffStart + decayRate > (double)SDK::Game::GetTime()) {
+								nextDecayTime = buffStart + decayRate;
+							}
+
+							// Calculate time for our AA to reach the barrel
+							float projSpeed = GetProjectileSpeed(player);
+							float dist = player.DistanceTo(barrel) - player.GetBoundingRadius();
+							float projTimeMs = (projSpeed > 0.0f && projSpeed < FLT_MAX)
+								? 1000.0f * (std::max)(0.0f, dist / projSpeed) : 1.0f;
+							float impactTimeMs = player.GetAttackWindup() * 1000.0f +
+								SDK::Game::GetPing() / 2.0f + projTimeMs;
+
+							// If barrel will decay before our AA lands, attack it
+							if (nextDecayTime < (double)(SDK::Game::GetTime() + impactTimeMs / 1000.0f)) {
+								return finalizeTarget(barrel);
+							}
+						}
+					}
+				}
+			}
+
+			// Priority 0: Special minions (wards, plants, pets) [1.14]
 			bool prioritizeSpecial = false;
 			if (auto* p = m_menu->GetSubMenu("Prioritize"))
 				if (auto* sm = p->Get<SDK::MenuUI::MenuBool>("SpecialMinion"))
@@ -726,8 +865,8 @@ namespace Plugins {
 				if (m_turretFarmWait) return finalizeTarget(SDK::GameObject());
 			}
 
-			// Priority 2: Last-hittable minion (not in combo)
-			if (m_activeMode != SDK::OrbwalkingMode::Combo) {
+			// Priority 2: Last-hittable minion (not in combo, not support mode)
+			if (m_activeMode != SDK::OrbwalkingMode::Combo && !IsSupportMode()) {
 				auto lhMinion = laneFarmAnalysis.lastHitTarget;
 				if (lhMinion.IsValid()) return finalizeTarget(lhMinion);
 			}
@@ -820,7 +959,7 @@ namespace Plugins {
 			auto forced = SDK::TargetSelector::GetForcedTarget();
 			if (forced.IsValid() && forced.IsAlive() && forced.IsVisible()) {
 				if (player.DistanceTo(forced) <= range + forced.GetBoundingRadius()) {
-					if (!HasJaxCounterStrike(forced))
+					if (!HasJaxCounterStrike(forced) && CanAttackWithWindWall(forced) && CanOrbObj(forced))
 						return forced;
 				}
 				// "Only Attack Selected Target"
@@ -829,7 +968,7 @@ namespace Plugins {
 			}
 
 			// "Only Attack Selected Target" with a valid forced target that's
-			// dead/invisible â†’ still don't attack other targets
+			// dead/invisible -> still don't attack other targets
 			if (SDK::TargetSelector::OnlyAttackSelected &&
 				SDK::TargetSelector::ForcedTarget.IsValid())
 				return SDK::GameObject();
@@ -837,14 +976,16 @@ namespace Plugins {
 			// 2. Use SDK::TargetSelector for smart target selection
 			auto target = SDK::TargetSelector::GetTarget(range);
 
-			// 1.4 Jax CounterStrike â€” skip if target has it, try next
-			if (target.IsValid() && HasJaxCounterStrike(target)) {
-				auto targets = SDK::TargetSelector::GetTargets(range);
-				for (auto& t : targets) {
-					if (!HasJaxCounterStrike(t))
-						return t;
+			// Filter: Jax CounterStrike, WindWall, Runaway distance
+			if (target.IsValid()) {
+				if (HasJaxCounterStrike(target) || !CanAttackWithWindWall(target) || !CanOrbObj(target)) {
+					auto targets = SDK::TargetSelector::GetTargets(range);
+					for (auto& t : targets) {
+						if (!HasJaxCounterStrike(t) && CanAttackWithWindWall(t) && CanOrbObj(t))
+							return t;
+					}
+					return SDK::GameObject(); // All targets filtered out
 				}
-				return SDK::GameObject(); // All targets dodging
 			}
 
 			return target;
@@ -1018,9 +1159,14 @@ namespace Plugins {
 		}
 
 		static float GetMissileArrivalTimeMs(const SDK::Missile& missile) {
-			float speed = missile.IsTurretShot() ? 1200.0f : (missile.IsAutoAttack() ? 1600.0f : 1800.0f);
-			if (speed <= 0.0f) return FLT_MAX;
+			// Use missile's actual speed from RuntimeAPI instead of hardcoded values
+			float speed = missile.GetMissileSpeed();
+			if (speed <= 0.0f || speed >= FLT_MAX) {
+				// Fallback for missiles without speed data
+				speed = missile.IsTurretShot() ? 1200.0f : 1800.0f;
+			}
 			float dist = missile.GetPosition().Distance2D(missile.GetEndPos());
+			if (dist <= 0.0f) return 0.0f;
 			return (dist / speed) * 1000.0f;
 		}
 
@@ -1104,8 +1250,8 @@ namespace Plugins {
 				if (!turretInfo.isTargeted) continue;
 
 				float currentHp = minion.GetHealth();
-				float impactHp = SDK::HealthPrediction::GetPrediction(minion, impactTimeMs);
-				float nextHp = SDK::HealthPrediction::GetPrediction(minion, nextImpactTimeMs);
+				float impactHp = SDK::HealthPrediction::GetPrediction(minion, impactTimeMs, (int)farmDelayMs);
+				float nextHp = SDK::HealthPrediction::GetPrediction(minion, nextImpactTimeMs, (int)farmDelayMs);
 
 				if (impactHp > 0.0f && impactHp <= damage && impactHp < lowestKillHp) {
 					lowestKillHp = impactHp;
@@ -1135,6 +1281,26 @@ namespace Plugins {
 			return SDK::GameObject();
 		}
 
+		// IsSupportMode — matching NewOrbwalker.cs (line 566-595)
+		bool IsSupportMode() const {
+			auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
+			if (!settings) return false;
+			auto* sm = settings->Get<SDK::MenuUI::MenuBool>("SupportMode");
+			if (!sm || !sm->Enabled) return false;
+
+			auto& player = SDK::GameObjects::Player;
+			float aaRange = player.GetRealAttackRange();
+			float checkRange = (std::max)(1200.0f, aaRange * 2.0f);
+
+			// Check if any ally hero is nearby
+			for (auto& ally : SDK::GameObjects::AllyHeroes) {
+				if (!ally.IsValid() || !ally.IsAlive()) continue;
+				if (ally.GetNetId() == player.GetNetId()) continue;
+				if (ally.DistanceTo(player) <= checkRange) return true;
+			}
+			return false;
+		}
+
 		LaneFarmAnalysis AnalyzeLaneFarm(float range) const {
 			LaneFarmAnalysis analysis;
 			if (!m_menu) return analysis;
@@ -1150,9 +1316,6 @@ namespace Plugins {
 			const bool evaluatePush = (m_activeMode == SDK::OrbwalkingMode::LaneClear);
 			const bool calcItems = IsItemDamageCalculationEnabled();
 			const float farmDelayMs = GetFarmDelayMs();
-			const float shouldWaitDelayMs = IsFastLaneClear() ? GetFastFarmDelayMs() : farmDelayMs;
-			const bool shouldWaitUsesDefaultNextImpact =
-				fabsf(shouldWaitDelayMs - farmDelayMs) <= 0.001f;
 
 			std::vector<LaneFarmEntry> killable;
 			std::vector<LaneFarmEntry> entries;
@@ -1171,18 +1334,20 @@ namespace Plugins {
 
 				const float impactTimeMs = GetAttackImpactTimeMs(minion, farmDelayMs);
 				const float nextImpactTimeMs = GetNextAttackImpactTimeMs(minion, farmDelayMs);
-				entry.impactHp = SDK::HealthPrediction::GetPrediction(minion, impactTimeMs);
-				entry.nextImpactHp = SDK::HealthPrediction::GetPrediction(minion, nextImpactTimeMs);
+				entry.impactHp = SDK::HealthPrediction::GetPrediction(minion, impactTimeMs, (int)farmDelayMs);
+				entry.nextImpactHp = SDK::HealthPrediction::GetPrediction(minion, nextImpactTimeMs, (int)farmDelayMs);
 
 				if (shouldWaitEnabled) {
-					float shouldWaitNextImpactHp = entry.nextImpactHp;
-					if (!shouldWaitUsesDefaultNextImpact) {
-						shouldWaitNextImpactHp = SDK::HealthPrediction::GetPrediction(
-							minion, GetNextAttackImpactTimeMs(minion, shouldWaitDelayMs));
-					}
-					if (entry.currentHp > entry.damage &&
-						shouldWaitNextImpactHp > 0.0f &&
-						shouldWaitNextImpactHp <= entry.damage) {
+					// NewOrbwalker.cs ShouldWait (line 528-530):
+					// float num = !FastLne ? AttackDelay*1000*2 : AttackDelay*1000 + FastFarmDelay
+					// prediction = GetPrediction(m, (int)num, farmDelay, Simulated)
+					// if (prediction < damage) return true
+					float shouldWaitTimeMs = IsFastLaneClear()
+						? (player.GetAttackDelay() * 1000.0f + GetFastFarmDelayMs())
+						: (player.GetAttackDelay() * 1000.0f * 2.0f);
+					float shouldWaitPred = SDK::HealthPrediction::GetPrediction(
+						minion, shouldWaitTimeMs, (int)farmDelayMs);
+					if (shouldWaitPred > 0.0f && shouldWaitPred < entry.damage) {
 						analysis.shouldWait = true;
 					}
 				}
@@ -1395,10 +1560,18 @@ namespace Plugins {
 			auto& player = SDK::GameObjects::Player;
 			if (!player.IsValid()) return;
 
+			int tickNow = SDK::Game::GetTickCount();
+
+			// Sett passive timeout (2s) — matching NewOrbwalker.cs
+			if (m_isSett && m_nextAttackIsPassive && m_lastAutoAttackTick > 0 &&
+				tickNow - m_lastAutoAttackTick > 2000) {
+				m_nextAttackIsPassive = false;
+			}
+
 			float now = SDK::Game::GetTime();
-			// ---- AFTER ATTACK EVENT (fires when CanMove becomes true after attack) ----
+			// ---- AFTER ATTACK EVENT ----
 			if (!m_afterAttackFired &&
-				m_lastAttackCommandTime > 0.0f &&
+				m_lastAutoAttackTick > 0 &&
 				CanMove() &&
 				m_lastTarget.IsValid()) {
 				SDK::OrbwalkingActionArgs afterArgs;
@@ -1407,12 +1580,11 @@ namespace Plugins {
 				afterArgs.Type = SDK::OrbwalkingType::AfterAttack;
 				afterArgs.Process = true;
 				SDK::Orbwalker::InvokeAction(afterArgs);
-				// Fire dedicated AfterAttack callbacks (champion scripts like Ezreal subscribe here)
 				SDK::Orbwalker::InvokeAfterAttack(afterArgs);
 				m_afterAttackFired = true;
 			}
 			if (!m_attackReadyEventFired &&
-				m_lastAttackCommandTime > 0.0f &&
+				m_lastAutoAttackTick > 0 &&
 				CanAttack()) {
 				SDK::OrbwalkingActionArgs readyArgs;
 				readyArgs.Target = m_lastTarget;
@@ -1422,41 +1594,20 @@ namespace Plugins {
 				SDK::Orbwalker::InvokeAction(readyArgs);
 				m_attackReadyEventFired = true;
 			}
-			if (!m_moveReadyEventFired && !m_blockMove && CanMove()) {
-				auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
-				float moveDelay = 0.05f;
-				if (settings) {
-					if (auto* md = settings->Get<SDK::MenuUI::MenuSlider>("MoveDelay"))
-						moveDelay = (float)md->Value / 1000.0f;
-				}
-				if (now >= m_lastMoveTime + moveDelay) {
-					SDK::OrbwalkingActionArgs readyArgs;
-					readyArgs.Position = player.GetPosition();
-					readyArgs.Sender = player;
-					readyArgs.Type = SDK::OrbwalkingType::OnMoveReady;
-					readyArgs.Process = true;
-					SDK::Orbwalker::InvokeAction(readyArgs);
-					m_moveReadyEventFired = true;
-				}
-			}
 
-			// ---- EVADE CHECK: Cancel attack if dodge is urgent ----
+			// ---- EVADE CHECK ----
 			{
 				auto& evade = ::Evade::EvadeCore::Instance();
-				if (evade.GetState() == ::Evade::EvadeState::Dodging) {
-					// Evade is actively dodging — skip attack entirely
-					// Do NOT return here; fall through to let move phase
-					// be handled (but move phase also skips — evade handles movement)
-					return; // Let evade control everything
-				}
-				if (evade.ShouldCancelAttack(now)) {
-					// Urgent dodge needed — skip attack to dodge instead
-					return;
-				}
+				if (evade.GetState() == ::Evade::EvadeState::Dodging) return;
+				if (evade.ShouldCancelAttack(now)) return;
 			}
 
+			// ---- BlockOrders check (NewOrbwalker.cs line 1420) ----
+			if (tickNow - m_lastLocalAttackTick < 70 + (std::min)(60, (int)SDK::Game::GetPing()))
+				return;
+
 			// ---- ATTACK PHASE ----
-			if (CanAttack() && !m_blockAttack && target.IsValid() && player.IsInAttackRange(target)) {
+			if (!m_blockAttack && CanAttack() && target.IsValid() && player.IsInAttackRange(target)) {
 				// Fire BeforeAttack event — scripts can cancel by setting Process = false
 				SDK::OrbwalkingActionArgs beforeArgs;
 				beforeArgs.Target = target;
@@ -1496,19 +1647,21 @@ namespace Plugins {
 			}
 
 			// ---- MOVE PHASE ----
-			if (!CanMove()) return;
+			// Get WindupDelay from menu and pass to CanMove (NewOrbwalker.cs line 1428)
+			auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
+			float windupDelayMs = settings ? (float)(settings->Get<SDK::MenuUI::MenuSlider>("WindupDelay")->Value) : 60.0f;
+			if (!CanMove(windupDelayMs)) return;
 			if (m_blockMove) return;
 
-			// LimitAttack: skip kiting if AS > 2.5
+			// LimitAttack: skip kiting if AS > 2.5 (NewOrbwalker.cs line 1434)
 			bool limitAttack = false;
-			auto* settings = m_menu ? m_menu->GetSubMenu("Settings") : nullptr;
 			if (settings)
 				if (auto* la = settings->Get<SDK::MenuUI::MenuBool>("LimitAttack"))
 					limitAttack = la->Enabled;
 
 			if (limitAttack) {
 				float delay = player.GetAttackDelay();
-				if (delay < 0.3846f && m_autoAttackCounter % 3 != 0)
+				if (delay < 0.3846154f && m_autoAttackCounter % 3 != 0 && !CanMove(500.0f, true))
 					return; // Skip movement to maintain high AS kiting
 			}
 
@@ -1521,81 +1674,86 @@ namespace Plugins {
 				DetectNonKillableMinions();
 			}
 
-			// Movement delay from menu (in ms, convert to seconds)
-			float moveDelay = 0.05f; // default 50ms
+			// Read menu settings
 			bool moveRandom = false;
 			float holdDist = 50.0f;
-			int maxMoveDist = 0;
 			bool highOrb = false;
 
 			if (settings) {
-				if (auto* md = settings->Get<SDK::MenuUI::MenuSlider>("MoveDelay"))
-					moveDelay = (float)md->Value / 1000.0f;
 				if (auto* rnd = settings->Get<SDK::MenuUI::MenuBool>("MoveRandom"))
 					moveRandom = rnd->Enabled;
 				if (auto* hold = settings->Get<SDK::MenuUI::MenuSlider>("ExtraHold"))
 					holdDist = (float)hold->Value;
-				if (auto* mmd = settings->Get<SDK::MenuUI::MenuSlider>("MaxMoveDistance"))
-					maxMoveDist = mmd->Value;
 				if (auto* ho = settings->Get<SDK::MenuUI::MenuBool>("HighOrb"))
 					highOrb = ho->Enabled;
 			}
 
-			// High Frequency Walk: reduce delay
-			if (highOrb) moveDelay = (std::min)(moveDelay, 0.02f);
-
-			// Movement delay throttle
-			if (now < m_lastMoveTime + moveDelay) return;
-
 			Vec3 mousePos = SDK::Game::GetMouseWorldPos();
 			Vec3 playerPos = player.GetPosition();
-
-			// Hold position check
-			float distToCursor = playerPos.Distance2D(mousePos);
-			if (distToCursor < (std::max)(30.0f, holdDist + player.GetBoundingRadius()))
-				return;
-
-			// Calculate final move position
 			Vec3 finalPos = mousePos;
 
-			// Max move distance: limit the distance we move towards cursor
-			if (maxMoveDist > 0 && distToCursor > (float)maxMoveDist) {
-				Vec3 dir = Vec3(mousePos.x - playerPos.x, 0, mousePos.z - playerPos.z);
-				float dirLen = std::sqrt(dir.x * dir.x + dir.z * dir.z);
-				if (dirLen > 1.0f) {
-					dir = Vec3(dir.x / dirLen, 0, dir.z / dirLen);
-					finalPos = Vec3(playerPos.x + dir.x * (float)maxMoveDist,
+			// ==============================================================
+			// Hold position check (NewOrbwalker.cs line 1350-1358)
+			// ==============================================================
+			float holdThreshold = (std::max)(30.0f, holdDist);
+			float distSqToCursor = (playerPos.x - mousePos.x) * (playerPos.x - mousePos.x) +
+				(playerPos.z - mousePos.z) * (playerPos.z - mousePos.z);
+			if (distSqToCursor < holdThreshold * holdThreshold) {
+				// Stop if we have a path
+				// TODO: Issue stop order if player.HasPath()
+				return;
+			}
+
+			// ==============================================================
+			// MoveRandom check (NewOrbwalker.cs line 1359-1362)
+			// Only randomize when very close to cursor (< 150 units)
+			// ==============================================================
+			if (moveRandom && distSqToCursor < 150.0f * 150.0f) {
+				float distToCursor = std::sqrt(distSqToCursor);
+				float rndFactor = 0.6f + (float)(rand() % 40) / 100.0f + 0.2f;
+				float extendDist = rndFactor * 400.0f;
+				if (distToCursor > 1.0f) {
+					Vec3 dir = Vec3((mousePos.x - playerPos.x) / distToCursor, 0,
+						(mousePos.z - playerPos.z) / distToCursor);
+					finalPos = Vec3(playerPos.x + dir.x * extendDist,
 						mousePos.y,
-						playerPos.z + dir.z * (float)maxMoveDist);
+						playerPos.z + dir.z * extendDist);
 				}
 			}
 
-			// Randomize movement: slight random offset to make pattern less predictable
-			if (moveRandom && distToCursor > 100.0f) {
-				Vec3 moveDir = Vec3(finalPos.x - playerPos.x, 0, finalPos.z - playerPos.z);
-				float moveDirLen = std::sqrt(moveDir.x * moveDir.x + moveDir.z * moveDir.z);
-				if (moveDirLen > 1.0f) {
-					float rndFactor = 0.6f + (float)(rand() % 40) / 100.0f;
-					float rndDist = rndFactor * 400.0f;
-					Vec3 dir = Vec3(moveDir.x / moveDirLen, 0, moveDir.z / moveDirLen);
-					finalPos = Vec3(playerPos.x + dir.x * rndDist,
-						mousePos.y,
-						playerPos.z + dir.z * rndDist);
-				}
-			}
+			int tickNow2 = SDK::Game::GetTickCount();
+			int ping = (int)SDK::Game::GetPing();
 
-			// Angle check: don't issue movement if new direction is very close to current direction
-			// This prevents micro-jittering from too many redundant move commands
-			Vec3 newDir = Vec3(finalPos.x - playerPos.x, 0, finalPos.z - playerPos.z);
-			float newDirLen = std::sqrt(newDir.x * newDir.x + newDir.z * newDir.z);
-			if (newDirLen > 1.0f && m_lastMoveDir.x != 0.0f) {
-				newDir = Vec3(newDir.x / newDirLen, 0, newDir.z / newDirLen);
-				float dot = newDir.x * m_lastMoveDir.x + newDir.z * m_lastMoveDir.z;
-				// If angle < ~5 degrees and we moved recently, skip
-				if (dot > 0.996f && (now - m_lastMoveTime) < 0.15f) {
+			// ==============================================================
+			// Path angle + rate limit (NewOrbwalker.cs line 1363-1398)
+			// ==============================================================
+			if (!highOrb) {
+				// Compute angle between current path and new path
+				float angle = 0.0f;
+				Vec3 newDir = Vec3(finalPos.x - playerPos.x, 0, finalPos.z - playerPos.z);
+				float newDirLen = std::sqrt(newDir.x * newDir.x + newDir.z * newDir.z);
+
+				if (m_lastMoveDir.x != 0.0f || m_lastMoveDir.z != 0.0f) {
+					if (newDirLen > 1.0f) {
+						Vec3 normNew = Vec3(newDir.x / newDirLen, 0, newDir.z / newDirLen);
+						float dot = normNew.x * m_lastMoveDir.x + normNew.z * m_lastMoveDir.z;
+						dot = (std::max)(-1.0f, (std::min)(1.0f, dot));
+						angle = acosf(dot) * 57.29578f; // rad to deg
+					}
+				}
+
+				// Rate limit: match C# logic
+				if (tickNow2 - m_lastMovementTick < 70 + (std::min)(60, ping) && angle < 60.0f)
 					return;
-				}
+				if (angle >= 60.0f && tickNow2 - m_lastMovementTick < 60)
+					return;
 			}
+			else {
+				// HighOrb mode: simplified delay
+				if (tickNow2 - m_lastMovementTick < 50 + (std::min)(60, ping))
+					return;
+			}
+
 
 			// Fire Movement event
 			SDK::OrbwalkingActionArgs moveArgs;
@@ -1615,9 +1773,27 @@ namespace Plugins {
 				auto& evade = ::Evade::EvadeCore::Instance();
 				Vec2 movePos2D(finalPos.x, finalPos.z);
 				if (evade.ShouldBlockMovement(movePos2D, now)) {
-					// Save the blocked command so evade can resume it later
 					evade.SaveBlockedCommand(movePos2D);
-					return; // Don't walk into skillshot
+					return;
+				}
+			}
+
+			// ShowFakeClick — matching NewOrbwalker.cs line 1402-1406
+			// Shows green click indicator at the move position
+			{
+				auto* drawMenu = m_menu ? m_menu->GetSubMenu("Drawing") : nullptr;
+				if (drawMenu) {
+					auto* fakeClick = drawMenu->Get<SDK::MenuUI::MenuBool>("ShowFakeClick");
+					if (fakeClick && fakeClick->Enabled) {
+						int tickNow3 = SDK::Game::GetTickCount();
+						int ping = (int)SDK::Game::GetPing();
+						// Rate limit: 250ms - Ping*10 (matching C#)
+						int fakeClickDelay = (std::max)(50, 250 - ping * 10);
+						if (tickNow3 - m_lastFakeClickTick > fakeClickDelay) {
+							SDK::CursorUtils::ShowMoveClick(finalPos); // Green = native game VFX
+							m_lastFakeClickTick = tickNow3;
+						}
+					}
 				}
 			}
 
@@ -1625,15 +1801,34 @@ namespace Plugins {
 		}
 
 		void Attack(SDK::GameObject& target) {
+			// ShowFakeClick — red indicator at attack target
+			{
+				auto* drawMenu = m_menu ? m_menu->GetSubMenu("Drawing") : nullptr;
+				if (drawMenu) {
+					auto* fakeClick = drawMenu->Get<SDK::MenuUI::MenuBool>("ShowFakeClick");
+					if (fakeClick && fakeClick->Enabled) {
+						SDK::CursorUtils::ShowAttackClick(target.GetPosition()); // Red = native game VFX
+						m_lastFakeClickTick = SDK::Game::GetTickCount();
+					}
+				}
+			}
 			SDK::Orbwalker::IssueOrder(3, target.GetPosition(), &target);
 			float now = SDK::Game::GetTime();
+			int tickNow = SDK::Game::GetTickCount();
 			m_lastAttackCommandTime = now;
 			SDK::Orbwalker::LastAttackTime = now;
+			// Tick-based timing sync (NewOrbwalker.cs OnDoCast line 681)
+			m_lastAutoAttackTick = tickNow - (int)(SDK::Game::GetPing() / 2.0f);
+			m_lastLocalAttackTick = tickNow;
+			SDK::Orbwalker::LastAutoAttackTick = m_lastAutoAttackTick;
+			SDK::Orbwalker::LastAutoAttackCommandTick = tickNow;
 			SDK::Orbwalker::MissileLaunched = false;
+			if (m_isKalista) SDK::Orbwalker::MissileLaunched = false;
+			m_lastMovementTick = 0; // Reset movement tick on attack
 			m_attackReadyEventFired = false;
 			m_afterAttackFired = false;
 			m_autoAttackCounter++;
-			SDK::Orbwalker::AutoAttackCounter++;
+			SDK::Orbwalker::TotalAutoAttacks++;
 		}
 
 		void MoveTo(Vec3 pos) {
@@ -1646,6 +1841,7 @@ namespace Plugins {
 
 			SDK::Orbwalker::IssueOrder(2, pos);
 			m_lastMoveTime = SDK::Game::GetTime();
+			m_lastMovementTick = SDK::Game::GetTickCount(); // Tick-based for path angle check
 			m_moveReadyEventFired = false;
 		}
 
@@ -1667,7 +1863,7 @@ namespace Plugins {
 
 				float dmg = SDK::DamageCalc::GetAutoAttackDamage(player, minion, false, calcItems);
 				float impactMs = GetAttackImpactTimeMs(minion);
-				float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactMs);
+				float predictedHP = SDK::HealthPrediction::GetPrediction(minion, impactMs, (int)GetFarmDelayMs());
 
 				// Minion will die before our AA reaches it (unkillable)
 				if (predictedHP <= 0.0f) {

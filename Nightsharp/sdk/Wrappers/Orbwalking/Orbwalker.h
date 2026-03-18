@@ -156,28 +156,23 @@ namespace SDK {
         // ====================================================================
         // State (public — readable by plugins)
         // ====================================================================
-        static inline float LastAttackTime  = 0.0f;   // Game time of last AA start
-        static inline float LastMoveTime    = 0.0f;   // Game time of last move cmd
+        // C# OrbwalkerBase matching state:
+        static inline int LastAutoAttackTick = 0;      // TickCount of last AA (C# matching)
+        static inline int LastAutoAttackCommandTick = 0;
+        static inline int LastMovementOrderTick = 0;
+        static inline float LastMoveTime    = 0.0f;    // Game time of last move cmd
+        static inline float LastAttackTime  = 0.0f;    // Game time (legacy, kept for compat)
         static inline OrbwalkingMode ActiveMode = OrbwalkingMode::None;
 
-        // Last target that was attacked
         static inline GameObject LastTarget;
-        // Locked target to prevent switching mid-windup
         static inline GameObject LockedTarget;
-        // Forced target (set by plugin/script)
         static inline GameObject ForceTarget;
-        // Lane-clear cached minion (EnsoulSharp selector behavior)
         static inline GameObject LaneClearMinion;
 
-        // Missile launched flag — when true, movement can happen earlier (ranged AA)
         static inline bool MissileLaunched = false;
-
-        // Auto attack counter (for Sett / high AS limit logic)
-        static inline int AutoAttackCounter = 0;
-        // Temporary order lock after attack command (EnsoulSharp BlockOrdersUntilTick style)
+        static inline int TotalAutoAttacks = 0;         // C# TotalAutoAttacks
+        static inline int AutoAttackCounter = 0;        // Counter for AA tracking
         static inline int BlockOrdersUntilTick = 0;
-        static inline int LastAttackCommandTick = 0;
-        static inline int LastMovementOrderTick = 0;
 
         // Attack/Move state — set by scripts to block orbwalker actions
         static inline bool AttackState = true;   // false = don't attack
@@ -213,7 +208,7 @@ namespace SDK {
         static inline bool DrawExtraHoldPosition = false;
         static inline bool DrawKillableMinion = false;
         static inline bool DrawKillableMinionFade = false;
-        static inline bool DebugLaneClear = true;  // LaneClear target debug overlay
+        static inline bool DebugLaneClear = false;  // LaneClear target debug overlay (disabled for cleaner console)
 
         static MenuUI::Menu* GetMenuRoot() {
             return MenuRoot.get();
@@ -410,11 +405,12 @@ namespace SDK {
         }
 
         static void ResetAutoAttackTimer() {
+            LastAutoAttackTick = 0;
+            LastAutoAttackCommandTick = 0;
+            LastMovementOrderTick = 0;
             LastAttackTime = 0.0f;
             MissileLaunched = false;
             BlockOrdersUntilTick = 0;
-            LastAttackCommandTick = 0;
-            LastMovementOrderTick = 0;
             AllPauseTick = 0;
             AttackPauseTick = 0;
             MovePauseTick = 0;
@@ -439,16 +435,13 @@ namespace SDK {
             return s_cachedChampName;
         }
 
-        static bool CanAttack() {
+        static bool CanAttack(float extraWindup = 0.0f) {
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return false;
             if (!AttackEnabled) return false;
 
             ULONGLONG now = GetTickCount64();
-
-            // All pause active?
             if (AllPauseTick > 0 && now < AllPauseTick) return false;
-            // Attack pause active?
             if (AttackPauseTick > 0 && now < AttackPauseTick) return false;
 
             // CC checks
@@ -456,23 +449,23 @@ namespace SDK {
             if (buffs.HasBuffOfType(BuffType::Fear)) return false;
             if (buffs.HasBuffOfType(BuffType::Polymorph)) return false;
 
-            // EnsoulSharp-specific champion checks (using cached name)
+            // Champion-specific checks (matching C# Orbwalker.CanAttack)
             const std::string& champName = GetCachedChampName();
-            if (_stricmp(champName.c_str(), "Jhin") == 0 && player.HasBuff("JhinPassiveReload")) {
-                return false;
-            }
-            if (_stricmp(champName.c_str(), "Graves") == 0 && !player.HasBuff("gravesbasicattackammo1")) {
-                return false;
-            }
-
-            float time = Game::GetTime();
-            float delay = player.GetAttackDelay();
+            float extraAttackDelay = 0.0f;
             if (_stricmp(champName.c_str(), "Graves") == 0) {
-                delay = (delay * 1.0740296828f) - 0.7162381256f;
+                if (!player.HasBuff("gravesbasicattackammo1")) return false;
+                float attackDelay = player.GetAttackDelay() * 1000.0f;
+                extraAttackDelay = (attackDelay * 1.0740296828f) - 716.2381256f - attackDelay;
+            } else if (_stricmp(champName.c_str(), "Jhin") == 0 && player.HasBuff("JhinPassiveReload")) {
+                return false;
             }
-            float ping = Game::GetPing() / 2000.0f;
 
-            return time + ping >= LastAttackTime + delay;
+            // C# formula: TickCount + (Ping/2) + 25 >= LastAutoAttackTick + (AttackDelay*1000) + extra
+            int tickNow = Game::GetTickCount();
+            int ping = (int)Game::GetPing();
+            return tickNow + (ping / 2) + 25
+                   >= LastAutoAttackTick + (int)(player.GetAttackDelay() * 1000.0f)
+                      + (int)extraAttackDelay + (int)extraWindup;
         }
 
         static bool CanMove(float extraWindup = 0.0f, bool disableMissileCheck = false) {
@@ -481,25 +474,33 @@ namespace SDK {
             if (!MoveEnabled) return false;
 
             ULONGLONG now = GetTickCount64();
-
-            // All pause active?
             if (AllPauseTick > 0 && now < AllPauseTick) return false;
-            // Move pause active?
             if (MovePauseTick > 0 && now < MovePauseTick) return false;
 
-            // If missile already launched, allow movement immediately
-            if (MissileLaunched && MissileCheckEnabled && !disableMissileCheck) return true;
+            // C# OrbwalkerBase.CanMove: if MissileLaunched && !disableMissileCheck -> true
+            if (MissileLaunched && !disableMissileCheck) return true;
 
-            float time = Game::GetTime();
-            float windup = player.GetAttackWindup();
+            // C# OrbwalkerBase.CanMove: !Player.CanCancelAutoAttack() || timing check
             const std::string& champName = GetCachedChampName();
+            if (!AutoAttackUtil::CanCancelAutoAttack(champName)) return true;
+
+            // C# Orbwalker.CanMove: add Rengar extra + menu windup + missile check override
+            float localExtraWindup = 0.0f;
             if (_stricmp(champName.c_str(), "Rengar") == 0 &&
                 (player.HasBuff("RengarQ") || player.HasBuff("RengarQEmp"))) {
-                extraWindup += 0.2f; // +200ms like EnsoulSharp
+                localExtraWindup = 200.0f;
             }
-            float ping = Game::GetPing() / 2000.0f;
 
-            return time + ping >= LastAttackTime + windup + WindupBuffer + extraWindup;
+            float totalExtra = extraWindup + localExtraWindup + (WindupBuffer * 1000.0f);
+            bool missileDisabled = disableMissileCheck || !MissileCheckEnabled;
+
+            // If missile check active and launched, already returned true above
+            // C# base: TickCount + Ping/2 >= LastAutoAttackTick + AttackCastDelay*1000 + extra
+            int tickNow = Game::GetTickCount();
+            int ping = (int)Game::GetPing();
+            return tickNow + (ping / 2)
+                   >= LastAutoAttackTick + (int)(player.GetAttackWindup() * 1000.0f)
+                      + (int)totalExtra;
         }
 
         // ====================================================================
@@ -533,7 +534,10 @@ namespace SDK {
 
         static void IssueOrder(int order, Vec3 pos, GameObject* target = nullptr) {
             auto& player = GameObjects::Player;
-            if (!player.IsValid()) return;
+            if (!player.IsValid()) {
+                DEBUG_LOG_TAG("ORB", "IssueOrder: ABORT player invalid");
+                return;
+            }
 
             // Find trampoline gadget (FF 23 = jmp [rbx])
             static void* trampoline = nullptr;
@@ -541,8 +545,12 @@ namespace SDK {
                 trampoline = mem::ScanModInternal(
                     (char*)"\xFF\x23", (char*)"xx",
                     (char*)GetModuleHandleA(nullptr));
+                DEBUG_LOG_TAG("ORB", "IssueOrder: trampoline scan result = %p", trampoline);
             }
-            if (!trampoline) return;
+            if (!trampoline) {
+                DEBUG_LOG_TAG("ORB", "IssueOrder: ABORT no trampoline");
+                return;
+            }
 
             // Function signature: int64_t __cdecl(obj, order, pos*, target, isAttack, isNetworked)
             using fnIssueOrder = int64_t(__cdecl*)(
@@ -570,6 +578,9 @@ namespace SDK {
                 const bool samePos = (localPos.IsValid() && lastIssuePos.IsValid() &&
                                       localPos.Distance2D(lastIssuePos) <= 12.0f);
                 if (sameOrder && (sameTarget || samePos || order == (int)OrderType::Stop)) {
+                    // Throttled debug
+                    static int s_spamTick = 0;
+                    if (nowTick - s_spamTick > 2000) { s_spamTick = nowTick; DEBUG_LOG_TAG("ORB", "IssueOrder: ANTI-SPAM blocked order=%d gap=%dms", order, nowTick - lastIssueTick); }
                     return;
                 }
             }
@@ -577,7 +588,15 @@ namespace SDK {
             // Chimera pattern: run mainloop cleanup, then write IssueOrderFlag = order + 17.
             Bypass::PrepareIssueOrder(order);
 
+            DEBUG_LOG_TAG("ORB", "IssueOrder: CALLING order=%d pos=(%.0f,%.0f,%.0f) target=0x%llX fn=0x%llX tramp=%p player=0x%llX",
+                order, localPos.x, localPos.y, localPos.z,
+                (unsigned long long)targetAddr,
+                (unsigned long long)(Globals::base + Offset::Function::IssueOrderCore),
+                trampoline, (unsigned long long)player.address);
+
             IssueOrderExecute(trampoline, fn, player.address, order, &localPos, targetAddr, isAttack);
+
+            DEBUG_LOG_TAG("ORB", "IssueOrder: RETURNED (no crash)");
             lastIssueTick = nowTick;
             lastIssueOrder = order;
             lastIssueTarget = targetAddr;
@@ -590,112 +609,156 @@ namespace SDK {
 
         static void Attack(GameObject& target) {
             const int nowTick = Game::GetTickCount();
-            const int minOrderGap = 150 + std::min(80, (int)Game::GetPing());  // Anti-crash: raised from 70
 
-            if (nowTick < BlockOrdersUntilTick) return;
-            if (nowTick - LastAttackCommandTick < minOrderGap) return;
-            if (!CanAttack() || !target.IsValid()) return;
-            if (!AttackState) return; // BlockOrders: attack disabled by script
+            // C# matching: BlockOrdersUntilTick - TickCount > 0
+            if (BlockOrdersUntilTick - nowTick > 0) return;
 
-            // Fire BeforeAttack event — scripts can cancel by setting Process=false
+            auto gTarget = target.IsValid() ? target : GetTarget(ActiveMode);
+            if (!gTarget.IsValid()) return;
+            if (!GameObjects::Player.IsInAttackRange(gTarget)) return;
+
+            // BeforeAttack event — scripts can cancel
             OrbwalkingActionArgs beforeArgs;
             beforeArgs.Type = OrbwalkingType::BeforeAttack;
-            beforeArgs.Target = target;
-            beforeArgs.Sender = GameObjects::Player;
-            if (!InvokeBeforeAttack(beforeArgs)) return; // Cancelled
-            if (!InvokeAction(beforeArgs)) return; // Cancelled
+            beforeArgs.Target = gTarget;
+            beforeArgs.Position = gTarget.GetPosition();
+            beforeArgs.Process = true;
+            InvokeAction(beforeArgs);
 
-            // TargetSwitch event
-            if (LastTarget.IsValid() && LastTarget.GetNetId() != target.GetNetId()) {
-                OrbwalkingActionArgs switchArgs;
-                switchArgs.Type = OrbwalkingType::TargetSwitch;
-                switchArgs.Target = target;
-                switchArgs.Sender = GameObjects::Player;
-                InvokeAction(switchArgs);
+            if (beforeArgs.Process) {
+                // C# matching: if CanCancelAutoAttack -> reset missile
+                const std::string& champName = GetCachedChampName();
+                if (AutoAttackUtil::CanCancelAutoAttack(champName)) {
+                    MissileLaunched = false;
+                }
+
+                IssueOrder(3, gTarget.GetPosition(), &gTarget);
+                LastAutoAttackCommandTick = nowTick;
+                LastTarget = gTarget;
+
+                // C# matching: BlockOrdersUntilTick = TickCount + 70 + Min(60, Ping)
+                BlockOrdersUntilTick = nowTick + 70 + std::min(60, (int)Game::GetPing());
             }
-
-            IssueOrder(3, target.GetPosition(), &target);
-            LastAttackTime = Game::GetTime();
-            LastTarget = target;
-            LockedTarget = target;
-            MissileLaunched = false;
-            LastAttackCommandTick = nowTick;
-            BlockOrdersUntilTick = nowTick + minOrderGap;
         }
 
         static void MoveTo(Vec3 pos) {
             const int nowTick = Game::GetTickCount();
-            const int minOrderGap = 100 + std::min(80, (int)Game::GetPing());  // Anti-crash: raised from 70
-            const int menuMoveDelayMs = MenuSlider("delayMovement", 0, "advanced");
+            const int ping = (int)Game::GetPing();
 
-            if (nowTick < BlockOrdersUntilTick) return;
+            // C# matching: BlockOrdersUntilTick - TickCount > 0
+            if (BlockOrdersUntilTick - nowTick > 0) return;
+
+            if (!pos.IsValid()) return;
+
+            // C# matching: movement delay from menu
+            const int menuMoveDelayMs = MenuSlider("delayMovement", 0, "advanced");
             if (nowTick - LastMovementOrderTick < menuMoveDelayMs) return;
-            if (nowTick - LastMovementOrderTick < minOrderGap) return;
-            if (!CanMove()) return;
-            if (!MovementState) return; // BlockOrders: movement disabled by script
 
             auto& player = GameObjects::Player;
 
-            // EnsoulSharp: high-AS movement limiter
+            // C# matching: high-AS movement limiter
+            // if AttackSpeed > 2.5 && TotalAutoAttacks%3 != 0 && !CanMove(500,true) && !MovementState
             if (MenuBool("miscAttackSpeed", true, "advanced") &&
-                player.GetAttackDelay() < (1.0f / 2.6f) &&
-                (AutoAttackCounter % 3) != 0 &&
-                !CanMove(0.5f, true)) {
+                (player.GetAttackDelay() < 1.0f / 2.6f) &&
+                (TotalAutoAttacks % 3) != 0 &&
+                !CanMove(500.0f, true) && !MovementState) {
                 return;
             }
 
             Vec3 playerPos = player.GetPosition();
             Vec3 finalPos = pos;
-
-            // Hold position check: don't move if cursor very close
             float distToCursor = playerPos.Distance2D(finalPos);
-            if (distToCursor <= HoldRadius + player.GetBoundingRadius()) {
+
+            // C# matching: Extra hold position check
+            int extraHold = MenuSlider("movementExtraHold", 0, "advanced");
+            if (distToCursor < (float)extraHold) {
                 if (player.GetPathLength() > 0) {
                     OrbwalkingActionArgs stopArgs;
                     stopArgs.Type = OrbwalkingType::StopMovement;
-                    stopArgs.Sender = player;
                     stopArgs.Position = playerPos;
-                    if (InvokeAction(stopArgs)) {
+                    stopArgs.Process = true;
+                    InvokeAction(stopArgs);
+                    if (stopArgs.Process) {
                         IssueOrder((int)OrderType::Stop, stopArgs.Position);
-                        LastMoveTime = Game::GetTime() - 0.07f;
                         LastMovementOrderTick = nowTick - 70;
                     }
                 }
                 return;
             }
 
-            if (MovementMaximumDistance > 0.0f && distToCursor > MovementMaximumDistance) {
-                finalPos = playerPos.Extend(finalPos, MovementMaximumDistance);
-                distToCursor = playerPos.Distance2D(finalPos);
+            // C# matching: close position extend
+            // if distance < BoundingRadius + 100, extend to BoundingRadius + random*400
+            float boundRadius = player.GetBoundingRadius();
+            if (distToCursor < boundRadius + 100.0f) {
+                float randFactor = 0.6f + ((float)rand() / (float)RAND_MAX) * 0.6f; // 0.6~1.2
+                finalPos = playerPos.Extend(finalPos, boundRadius + randFactor * 400.0f);
             }
 
-            if (MovementRandomize && distToCursor > 350.0f) {
-                const float angle = ((float)rand() / (float)RAND_MAX) * 6.28318530718f;
-                const float radius = player.GetBoundingRadius() * 0.5f;
-                finalPos.x += radius * cosf(angle);
-                finalPos.z += radius * sinf(angle);
+            // C# matching: MaxDistance clamp with random offset
+            int maxDist = MenuSlider("movementMaximumDistance", 1500, "advanced");
+            if (playerPos.Distance2D(finalPos) > (float)maxDist) {
+                int randOffset = rand() % 51; // 0~50
+                finalPos = playerPos.Extend(finalPos, (float)(maxDist + 25 - randOffset));
             }
 
-            float time = Game::GetTime();
-            if (time < LastMoveTime + ClickDelay) return;
+            // C# matching: randomize position if far enough
+            if (MenuBool("movementRandomize", true, "advanced") &&
+                playerPos.Distance2D(finalPos) > 350.0f) {
+                float rAngle = ((float)rand() / (float)RAND_MAX) * 6.28318530718f;
+                float radius = boundRadius * 0.5f;
+                finalPos.x += radius * cosf(rAngle);
+                finalPos.z += radius * sinf(rAngle);
+                // Note: C# also sets Y from NavMesh height, but we skip for safety
+            }
+
+            // ---- C# matching: path angle check (CRITICAL for reducing move spam) ----
+            float angle = 0.0f;
+            int pathLen = player.GetPathLength();
+            if (pathLen > 1) {
+                Vec3 pathEnd = player.GetPathEnd();
+                float pathDist = playerPos.Distance2D(pathEnd);
+                if (pathDist > 100.0f) {
+                    // Direction vectors: current path vs new move
+                    Vec3 v1 = pathEnd - playerPos;
+                    Vec3 v2 = finalPos - playerPos;
+                    // Angle between (2D)
+                    float dot = v1.x * v2.x + v1.z * v2.z;
+                    float mag1 = sqrtf(v1.x * v1.x + v1.z * v1.z);
+                    float mag2 = sqrtf(v2.x * v2.x + v2.z * v2.z);
+                    if (mag1 > 0.001f && mag2 > 0.001f) {
+                        float cosA = dot / (mag1 * mag2);
+                        cosA = std::max(-1.0f, std::min(1.0f, cosA));
+                        angle = acosf(cosA) * (180.0f / 3.14159265f); // to degrees
+                    }
+                    // C# matching: small angle + close destination -> skip
+                    float endDist = finalPos.Distance2D(pathEnd);
+                    if ((angle < 10.0f && endDist < 500.0f) || endDist < 50.0f) {
+                        return;
+                    }
+                }
+            }
+
+            // C# matching: rate limit based on angle
+            // if angle < 60: wait 70 + Min(60, Ping)
+            // if angle >= 60: wait 60
+            if (nowTick - LastMovementOrderTick < 70 + std::min(60, ping) && angle < 60.0f) {
+                return;
+            }
+            if (angle >= 60.0f && nowTick - LastMovementOrderTick < 60) {
+                return;
+            }
 
             // Fire Movement event — scripts can cancel
             OrbwalkingActionArgs moveArgs;
             moveArgs.Type = OrbwalkingType::Movement;
             moveArgs.Position = finalPos;
-            moveArgs.Sender = player;
-            if (!InvokeAction(moveArgs)) {
-                // Cancelled — fire StopMovement event
-                OrbwalkingActionArgs stopArgs;
-                stopArgs.Type = OrbwalkingType::StopMovement;
-                stopArgs.Sender = player;
-                InvokeAction(stopArgs);
-                return;
-            }
+            moveArgs.Process = true;
+            InvokeAction(moveArgs);
 
-            IssueOrder(2, moveArgs.Position);
-            LastMoveTime = time;
-            LastMovementOrderTick = nowTick;
+            if (moveArgs.Process) {
+                IssueOrder(2, moveArgs.Position);
+                LastMovementOrderTick = nowTick;
+            }
         }
 
         static void MoveToMouse() {
@@ -703,12 +766,82 @@ namespace SDK {
         }
 
         // ====================================================================
-        // Notify: Missile launched (call from OnProcessSpell hook or update loop)
-        // For ranged champions, this allows earlier movement
+        // C# OrbwalkerBase — Event Handlers (matching exactly)
         // ====================================================================
 
+        // Called when player starts casting a spell (OnProcessSpellCast hook)
+        // C# OrbwalkerBase.OnObjAiBaseProcessSpellCast
+        static void OnProcessSpellCast(const std::string& spellName, GameObject& target) {
+            if (!Enabled) return;
+            auto& player = GameObjects::Player;
+            if (!player.IsValid()) return;
+
+            // Only care about our own auto-attacks
+            if (!AutoAttackUtil::IsAutoAttack(spellName)) return;
+
+            // C# matching: set LastAutoAttackTick = TickCount - Game.Ping/2
+            int tickNow = Game::GetTickCount();
+            LastAutoAttackTick = tickNow - (int)(Game::GetPing() / 2.0f);
+            LastAttackTime = Game::GetTime(); // legacy compat
+
+            // C# matching: MissileLaunched = false (reset before missile arrives)
+            MissileLaunched = false;
+            TotalAutoAttacks++;
+
+            // Fire OnAttack event
+            OrbwalkingActionArgs onArgs;
+            onArgs.Type = OrbwalkingType::OnAttack;
+            onArgs.Target = target;
+            onArgs.Process = true;
+            InvokeAction(onArgs);
+        }
+
+        // Called when missile is created (OnDoCast / missile created hook)
+        // C# OrbwalkerBase.OnObjAiBaseDoCast — fires AfterAttack
+        static void OnDoCast(const std::string& spellName, GameObject& target) {
+            if (!Enabled) return;
+            auto& player = GameObjects::Player;
+            if (!player.IsValid()) return;
+
+            if (!AutoAttackUtil::IsAutoAttack(spellName)) return;
+
+            // C# matching: missile launched = true (allows earlier movement for ranged)
+            MissileLaunched = true;
+
+            // Fire AfterAttack event
+            OrbwalkingActionArgs afterArgs;
+            afterArgs.Type = OrbwalkingType::AfterAttack;
+            afterArgs.Target = target.IsValid() ? target : LastTarget;
+            afterArgs.Process = true;
+            InvokeAction(afterArgs);
+
+            // C# matching: TargetSwitch event (in DoCast, not in Attack)
+            if (LastTarget.IsValid() && target.IsValid() &&
+                LastTarget.GetNetId() != target.GetNetId()) {
+                OrbwalkingActionArgs switchArgs;
+                switchArgs.Type = OrbwalkingType::TargetSwitch;
+                switchArgs.Target = target;
+                switchArgs.Process = true;
+                InvokeAction(switchArgs);
+            }
+        }
+
+        // Simple missile launched flag (legacy compat for hooks that can't get spell name)
         static void OnMissileLaunched() {
             MissileLaunched = true;
+        }
+
+        // C# matching: Sona passive reset
+        // Called from buff gain hook when player gets sonapassiveattack buff
+        static void OnBuffGain(const std::string& buffName) {
+            if (_stricmp(buffName.c_str(), "sonapassiveattack") == 0) {
+                ResetSwingTimer();
+            }
+        }
+
+        static void ResetSwingTimer() {
+            LastAutoAttackTick = 0;
+            LastAttackTime = 0.0f;
         }
 
         // ====================================================================
@@ -914,9 +1047,14 @@ namespace SDK {
             return finalMinionList;
         }
 
+        // ShouldWait — defined above at line ~510, not duplicated here.
+
+
+        // C# matching: ShouldWaitUnderTurret (OrbwalkerSelector.cs)
         static bool ShouldWaitUnderTurret(const GameObject* nonKillableMinion = nullptr) {
             auto& player = GameObjects::Player;
             if (!player.IsValid()) return false;
+            const int farmDelayMs = MenuSlider("delayFarm", 30, "advanced");
 
             for (auto& minion : GameObjects::EnemyMinions) {
                 if (!minion.IsValid() || !minion.IsAlive()) continue;
@@ -926,15 +1064,14 @@ namespace SDK {
                     continue;
                 }
 
-                const float predictMs = (player.GetAttackDelay() * 1000.0f) +
-                    AutoAttackUtil::GetTimeToHit(player, minion) +
-                    (FarmDelay * 1000.0f);
-                const float pred = HealthPrediction::GetPrediction(minion, predictMs);
+                float predictMs = (player.GetAttackDelay() * 1000.0f) +
+                    AutoAttackUtil::GetTimeToHit(player, minion);
+                float pred = HealthPrediction::GetPrediction(
+                    minion, predictMs, farmDelayMs, HealthPredictionType::Simulated);
                 if (pred < player.GetAutoAttackDamage(minion)) {
                     return true;
                 }
             }
-
             return false;
         }
 
@@ -965,46 +1102,21 @@ namespace SDK {
                 minions = GetMinions(mode);
             }
 
-            // ===============================
-            // FIX: sort minions by predicted hp
-            // ===============================
-            std::sort(minions.begin(), minions.end(),
-            [&](const GameObject& a, const GameObject& b)
-            {
-                if (!a.IsValid() || !b.IsValid())
-                    return false;
-
-                const float timeA =
-                    AutoAttackUtil::GetTimeToHit(GameObjects::Player, a) +
-                    (FarmDelay * 1000.0f);
-
-                const float timeB =
-                    AutoAttackUtil::GetTimeToHit(GameObjects::Player, b) +
-                    (FarmDelay * 1000.0f);
-
-                float hpA = HealthPrediction::GetPrediction(a, timeA);
-                float hpB = HealthPrediction::GetPrediction(b, timeB);
-
-                return hpA < hpB;
-            });
-
-            // Killable minion pass: LaneClear/Harass(=Hybrid)/LastHit
+            // C# matching: Killable minion (OrbwalkerSelector.cs:164-199)
             if (mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Harass || mode == OrbwalkingMode::LastHit) {
+                const int farmDelayMs = MenuSlider("delayFarm", 30, "advanced");
+                // Sort by health ascending (matching C# OrderBy(m => m.Health))
+                std::sort(minions.begin(), minions.end(),
+                    [](const GameObject& a, const GameObject& b) {
+                        return a.GetHealth() < b.GetHealth();
+                    });
+
                 for (auto& minion : minions) {
                     if (!minion.IsValid() || !minion.IsAlive()) continue;
                     if (!player.IsInAttackRange(minion)) continue;
 
-                    const float predictMs =
-                        AutoAttackUtil::GetTimeToHit(player, minion) +
-                        (FarmDelay * 1000.0f);
-
-                    const float predHp =
-                        HealthPrediction::GetPrediction(minion, predictMs);
-
-                    const float dmg =
-                        player.GetAutoAttackDamage(minion);
-
-                    if (predHp > 0.0f && predHp <= dmg) {
+                    // C# matching: quick kill if IsHPBarRendered && health < damage
+                    if (minion.IsVisible() && minion.GetHealth() < player.GetAutoAttackDamage(minion)) {
                         return minion;
                     }
 
@@ -1013,7 +1125,12 @@ namespace SDK {
                             return minion;
                         }
                     } else {
+                        // C# matching: GetPrediction(minion, timeToHit, farmDelay)
+                        float timeToHit = AutoAttackUtil::GetTimeToHit(player, minion);
+                        float predHp = HealthPrediction::GetPrediction(minion, timeToHit, farmDelayMs);
+
                         if (predHp <= 0.0f) {
+                            // Fire NonKillableMinion event
                             OrbwalkingActionArgs nonKillable;
                             nonKillable.Type = OrbwalkingType::NonKillableMinion;
                             nonKillable.Target = minion;
@@ -1021,7 +1138,8 @@ namespace SDK {
                             nonKillable.Process = true;
                             InvokeAction(nonKillable);
                         }
-                        if (predHp > 0.0f && predHp < dmg) {
+
+                        if (predHp > 0.0f && predHp < player.GetAutoAttackDamage(minion)) {
                             return minion;
                         }
                     }
@@ -1053,39 +1171,12 @@ namespace SDK {
                 if (hero.IsValid() && player.IsInAttackRange(hero)) return hero;
             }
 
-            // Jungle in farm modes (priority by camp size, fast bitmask checks)
+            // C# matching: Jungle — simple FirstOrDefault(team==Neutral)
             if (mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Harass) {
-                GameObject bestJungleTarget;
-                float bestPriority = -1.0f;
-
-                auto evalJungle = [&](const GameObject& minion) {
-                    if (!minion.IsValid() || !minion.IsAlive()) return;
-                    if (!player.IsInAttackRange(minion)) return;
-                    if (!minion.IsJungleMonster()) return;
-
-                    float priority = minion.GetMaxHealth();
-                    if (minion.IsBaron()) priority += 100000.0f;
-                    else if (minion.IsDragon()) priority += 50000.0f;
-                    else if (priority > 3000.0f) priority += 30000.0f;
-
-                    if (priority > bestPriority) {
-                        bestPriority = priority;
-                        bestJungleTarget = minion;
-                    }
-                };
-
                 for (auto& minion : minions) {
-                    evalJungle(minion);
-                }
-
-                if (!bestJungleTarget.IsValid()) {
-                    for (auto& minion : GameObjects::JungleMinions) {
-                        evalJungle(minion);
+                    if (minion.GetTeam() == GameObjectTeam::Neutral) {
+                        return minion;
                     }
-                }
-
-                if (bestJungleTarget.IsValid()) {
-                    return bestJungleTarget;
                 }
             }
 
@@ -1170,49 +1261,51 @@ namespace SDK {
                 }
             }
 
-            // Lane clear non-last-hit push target
+            // C# matching: LaneClear push target (OrbwalkerSelector.cs:383-428)
             if (mode == OrbwalkingMode::LaneClear) {
-                if (ShouldWait()) {
-                    if (HealthPrediction::LaneClearWait()) {
-                        return GameObject();
+                if (!ShouldWait()) {
+                    const int farmDelayMs = MenuSlider("delayFarm", 30, "advanced");
+                    const float LaneClearWaitTime = 2.0f;
+
+                    // Cached LaneClearMinion check
+                    if (LaneClearMinion.IsValid() && LaneClearMinion.IsAlive() &&
+                        player.IsInAttackRange(LaneClearMinion)) {
+                        if (LaneClearMinion.GetMaxHealth() <= 10.0f) {
+                            return LaneClearMinion;
+                        }
+                        float pred = HealthPrediction::GetPrediction(
+                            LaneClearMinion,
+                            player.GetAttackDelay() * 1000.0f * LaneClearWaitTime,
+                            farmDelayMs,
+                            HealthPredictionType::Simulated);
+                        float dmg = player.GetAutoAttackDamage(LaneClearMinion);
+                        if (pred >= 2.0f * dmg ||
+                            fabsf(pred - LaneClearMinion.GetHealth()) < 0.001f) {
+                            return LaneClearMinion;
+                        }
                     }
-                }
 
-                if (LaneClearMinion.IsValid() && player.IsInAttackRange(LaneClearMinion)) {
-                    if (LaneClearMinion.GetMaxHealth() <= 10.0f) {
-                        return LaneClearMinion;
-                    }
+                    // Search for best push target
+                    for (auto& minion : minions) {
+                        if (minion.GetTeam() == GameObjectTeam::Neutral) continue;
+                        if (!player.IsInAttackRange(minion)) continue;
 
-                    const float pred = HealthPrediction::GetPrediction(
-                        LaneClearMinion,
-                        (player.GetAttackDelay() * 2000.0f) + (FarmDelay * 1000.0f));
-                    if (pred >= 2.0f * player.GetAutoAttackDamage(LaneClearMinion) ||
-                        fabsf(pred - LaneClearMinion.GetHealth()) < 0.001f) {
-                        return LaneClearMinion;
-                    }
-                }
+                        if (minion.GetMaxHealth() <= 10.0f) {
+                            LaneClearMinion = minion;
+                            return minion;
+                        }
 
-                for (auto& minion : minions)
-                {
-                    if (minion.GetTeam() == GameObjectTeam::Neutral)
-                        continue;
-
-                    if (!GameObjects::Player.IsInAttackRange(minion))
-                        continue;
-
-                    float pred =
-                        HealthPrediction::GetPrediction(
+                        float pred = HealthPrediction::GetPrediction(
                             minion,
-                            (GameObjects::Player.GetAttackDelay() * 2000.0f) +
-                            (FarmDelay * 1000.0f));
-
-                    float dmg =
-                        GameObjects::Player.GetAutoAttackDamage(minion);
-
-                    if (pred >= 2.0f * dmg)
-                    {
-                        LaneClearMinion = minion;
-                        return minion;
+                            player.GetAttackDelay() * 1000.0f * LaneClearWaitTime,
+                            farmDelayMs,
+                            HealthPredictionType::Simulated);
+                        float dmg = player.GetAutoAttackDamage(minion);
+                        if (pred >= 2.0f * dmg ||
+                            fabsf(pred - minion.GetHealth()) < 0.001f) {
+                            LaneClearMinion = minion;
+                            return minion;
+                        }
                     }
                 }
             }
@@ -1241,13 +1334,38 @@ namespace SDK {
             if (!player.IsValid()) return;
             if (!player.IsAlive()) return;
 
+            // === DEBUG: throttled (once per 2 secs per mode) ===
+            static int s_orbDbgTick = 0;
+            int nowTick = Game::GetTickCount();
+            bool shouldLog = (nowTick - s_orbDbgTick > 2000);
+
             GameObject target = GetTarget(mode);
             LastTarget = target;  // Cache for debug overlay
-            if (target.IsValid() && target.IsAlive() && CanAttack() && AttackState && player.IsInAttackRange(target)) {
-                Attack(target);
+
+            bool tgtValid = target.IsValid();
+            bool tgtAlive = tgtValid && target.IsAlive();
+            bool canAtk = CanAttack();
+            bool inRange = tgtValid && player.IsInAttackRange(target);
+            bool canMv = CanMove();
+
+            if (shouldLog) {
+                s_orbDbgTick = nowTick;
+                DEBUG_LOG_TAG("ORB", "OrbwalkMode: target valid=%d alive=%d canAttack=%d inRange=%d attackState=%d | canMove=%d moveState=%d",
+                    tgtValid, tgtAlive, canAtk, inRange, AttackState, canMv, MovementState);
+                if (tgtValid) {
+                    Vec3 tPos = target.GetPosition();
+                    DEBUG_LOG_TAG("ORB", "  target addr=0x%llX hp=%.0f pos=(%.0f,%.0f,%.0f) dist=%.0f aaRange=%.0f",
+                        (unsigned long long)target.address, target.GetHealth(),
+                        tPos.x, tPos.y, tPos.z, player.DistanceTo(target), player.GetRealAttackRange());
+                }
             }
 
-            if (CanMove() && MovementState) {
+            if (tgtValid && tgtAlive && canAtk && AttackState && inRange) {
+                Attack(target);
+                return; // Attack issued — don't move this frame (match OrbwalkerPlugin behavior)
+            }
+
+            if (canMv && MovementState) {
                 MoveToMouse();
             }
         }
@@ -1433,23 +1551,46 @@ namespace SDK {
         // ====================================================================
 
         static void OnUpdate() {
+            // Tick rate limiter: minimum 15ms between ticks to prevent crash/FPS drops
+            static int lastUpdateTick = 0;
+            int nowTick = Game::GetTickCount();
+            if (nowTick - lastUpdateTick < 15) return;
+            lastUpdateTick = nowTick;
+
             EnsureMenu();
             SyncConfigFromMenu();
 
-            if (PluginOverrideActive) return;
+            // === DEBUG: throttled log (once per second) ===
+            static int s_dbgLastTick = 0;
+            const bool shouldDbgLog = (nowTick - s_dbgLastTick > 1000);
+
+            if (PluginOverrideActive) {
+                if (shouldDbgLog) { s_dbgLastTick = nowTick; DEBUG_LOG_TAG("ORB", "BLOCKED: PluginOverrideActive=true"); }
+                return;
+            }
 
             auto& player = GameObjects::Player;
             if (!player.IsValid() || !player.IsAlive()) {
+                if (shouldDbgLog) { s_dbgLastTick = nowTick; DEBUG_LOG_TAG("ORB", "BLOCKED: player invalid=%d alive=%d addr=0x%llX", !player.IsValid(), player.IsValid() ? !player.IsAlive() : 0, (unsigned long long)player.address); }
                 ActiveMode = OrbwalkingMode::None;
                 return;
             }
 
             if (!Enabled || !Game::ShouldProcessInput()) {
+                if (shouldDbgLog) { s_dbgLastTick = nowTick; DEBUG_LOG_TAG("ORB", "BLOCKED: Enabled=%d ShouldProcessInput=%d", Enabled, Game::ShouldProcessInput()); }
                 ActiveMode = OrbwalkingMode::None;
                 return;
             }
 
             ActiveMode = GetMode();
+
+            if (shouldDbgLog && ActiveMode != OrbwalkingMode::None) {
+                s_dbgLastTick = nowTick;
+                const char* modeNames[] = { "None", "Combo", "LaneClear", "Harass", "LastHit", "Flee" };
+                int mi = (int)ActiveMode; if (mi < 0 || mi > 5) mi = 0;
+                DEBUG_LOG_TAG("ORB", "Mode=%s CanAttack=%d CanMove=%d AttackState=%d MoveState=%d",
+                    modeNames[mi], CanAttack(), CanMove(), AttackState, MovementState);
+            }
 
             switch (ActiveMode) {
             case OrbwalkingMode::Combo:     Combo();       break;

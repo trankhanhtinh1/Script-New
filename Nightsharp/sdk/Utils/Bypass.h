@@ -88,11 +88,13 @@ namespace SDK::Bypass {
     inline bool MainloopCheck() {
         const uintptr_t detectionWatcher2 = ResolveDetectionWatcher2();
         if (!Globals::IsValidPtr(detectionWatcher2)) {
+            DEBUG_LOG_TAG("BYPASS", "MainloopCheck: DetectionWatcher2 ptr invalid (0x%llX)", (unsigned long long)detectionWatcher2);
             return false;
         }
 
         const uintptr_t detectionInst = Globals::Read<uintptr_t>(detectionWatcher2);
         if (!Globals::IsValidPtr(detectionInst)) {
+            DEBUG_LOG_TAG("BYPASS", "MainloopCheck: detectionInst invalid (0x%llX) from watcher2=0x%llX", (unsigned long long)detectionInst, (unsigned long long)detectionWatcher2);
             return false;
         }
 
@@ -101,18 +103,37 @@ namespace SDK::Bypass {
             encryptedFlag->ZeroCurrentValue();
             return true;
         } __except (1) {
+            DEBUG_LOG_TAG("BYPASS", "MainloopCheck: EXCEPTION in ZeroCurrentValue");
             return false;
         }
     }
 
     inline void PrepareIssueOrder(int order) {
-        MainloopCheck();
-        Globals::Write<int>(Globals::base + Offset::Flag::IssueOrderFlag, order + 17);
+        bool mlOk = MainloopCheck();
+        int flagVal = order + 17;
+        Globals::Write<int>(Globals::base + Offset::Flag::IssueOrderFlag, flagVal);
+        // Throttled debug
+        static int s_lastLogTick = 0;
+        int nowT = GetTickCount();
+        if (nowT - s_lastLogTick > 2000) {
+            s_lastLogTick = nowT;
+            int readBack = Globals::Read<int>(Globals::base + Offset::Flag::IssueOrderFlag);
+            DEBUG_LOG_TAG("BYPASS", "PrepareIssueOrder: order=%d flag=%d mainloop=%s readBack=%d flagAddr=0x%llX",
+                order, flagVal, mlOk ? "OK" : "FAIL", readBack,
+                (unsigned long long)(Globals::base + Offset::Flag::IssueOrderFlag));
+        }
     }
 
     inline void PrepareCastSpell() {
-        MainloopCheck();
+        bool mlOk = MainloopCheck();
         Globals::Write<uint8_t>(Globals::base + Offset::Flag::CastSpellFlag, 1);
+        static int s_lastLogTick2 = 0;
+        int nowT2 = GetTickCount();
+        if (nowT2 - s_lastLogTick2 > 2000) {
+            s_lastLogTick2 = nowT2;
+            DEBUG_LOG_TAG("BYPASS", "PrepareCastSpell: mainloop=%s flagAddr=0x%llX", mlOk ? "OK" : "FAIL",
+                (unsigned long long)(Globals::base + Offset::Flag::CastSpellFlag));
+        }
     }
 
 } // namespace SDK::Bypass
