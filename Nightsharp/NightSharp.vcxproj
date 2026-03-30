@@ -1,14 +1,6 @@
-<?xml version='1.0' encoding='utf-8'?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|Win32">
-      <Configuration>Debug</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|Win32">
-      <Configuration>Release</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
@@ -20,49 +12,30 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
-    <ProjectGuid>{04B17470-CB82-4724-904B-25445926AB86}</ProjectGuid>
+    <ProjectGuid>{7A8B2C3D-4E5F-6071-8293-A4B5C6D7E8F9}</ProjectGuid>
     <RootNamespace>NightSharp</RootNamespace>
     <ProjectName>NightSharp</ProjectName>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>MultiByte</CharacterSet>
-  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v145</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
-  </ImportGroup>
-  <ImportGroup Label="Shared">
-  </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
@@ -72,71 +45,32 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <TargetName>hid</TargetName>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x86;$(LibraryPath)</LibraryPath>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x86;$(LibraryPath)</LibraryPath>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
+    <TargetName>NightSharp</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
+    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LibraryPath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>C:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(IncludePath)</IncludePath>
+    <OutDir>$(ProjectDir)bin\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
-      <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-    </ClCompile>
-    <Link>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>MaxSpeed</Optimization>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <UseMultiToolTask>false</UseMultiToolTask>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -145,144 +79,342 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)sdk;$(ProjectDir)sdk\GameObjects;$(ProjectDir)sdk\Events;$(ProjectDir)sdk\Math;$(ProjectDir)sdk\Wrappers\Damages;$(ProjectDir)sdk\Wrappers\Spells;$(ProjectDir)sdk\Wrappers\Orbwalking;$(ProjectDir)sdk\Wrappers\TargetSelector;$(ProjectDir)sdk\UI;$(ProjectDir)sdk\Utils;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <ControlFlowGuard>false</ControlFlowGuard>
+      <DebugInformationFormat>OldStyle</DebugInformationFormat>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
+      <UseMultiToolTask>false</UseMultiToolTask>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateManifest>false</GenerateManifest>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="generated\DamageData.26_6.chunk00.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk01.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk02.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk03.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk04.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk05.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk06.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk07.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk08.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk09.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.26_6.chunk10.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="generated\DamageData.generated.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="imgui\imgui.cpp" />
-    <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
+    <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
-
-    <ClCompile Include="main.cpp" />
-  <ClCompile Include="sdk\EzEvade\Spells\ObjectTracker.cpp" />
-  <ClCompile Include="sdk\EzEvade\Spells\Spell.cpp" />
-  <ClCompile Include="sdk\EzEvade\Spells\SpellDetector.cpp" />
-  <ClCompile Include="sdk\EzEvade\Spells\SpellDrawer.cpp" />
-  <ClCompile Include="sdk\EzEvade\Core\Evade.cpp" />
-  <ClCompile Include="sdk\EzEvade\Core\EvadeHelper.cpp" />
-  <ClCompile Include="sdk\EzEvade\EvadeSpells\EvadeSpell.cpp" />
-  <ClCompile Include="sdk\EzEvade\EvadeSpells\SpecialEvadeSpell.cpp" />
-  <ClCompile Include="sdk\EzEvade\Helpers\ObjectCache.cpp" />
-  <ClCompile Include="sdk\EzEvade\Helpers\EvadeCommand.cpp" />
-  <ClCompile Include="sdk\EzEvade\Helpers\PositionInfo.cpp" />
-  <ClCompile Include="sdk\EzEvade\Utils\EvadeUtils.cpp" />
-</ItemGroup>
-  <ItemGroup>
+    <ClCompile Include="overlay\Overlay.cpp" />
+    <ClCompile Include="sdk\Data\26.6.cpp">
+      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="core\Globals.h" />
+    <ClInclude Include="core\CoreRuntime.h" />
+    <ClInclude Include="core\CoreAPI.h" />
+    <ClInclude Include="core\CoreGame.h" />
+    <ClInclude Include="core\CoreNavGrid.h" />
+    <ClInclude Include="core\CoreObjects.h" />
+    <ClInclude Include="core\LeagueObfuscation.h" />
+    <ClInclude Include="core\Offsets.generated.h" />
+    <ClInclude Include="core\Offsets.h" />
+    <ClInclude Include="core\RuntimeAPI.h" />
+    <ClInclude Include="core\CoreSpellCastInfo.h" />
+    <ClInclude Include="core\Vector.h" />
+    <ClInclude Include="core\spoof\spoofcall.h" />
+    <ClInclude Include="crt_shim.h" />
+    <ClInclude Include="generated\DamageData.generated.h" />
+    <ClInclude Include="generated\GapcloserData.generated.h" />
+    <ClInclude Include="generated\InterruptableSpellData.generated.h" />
+    <ClInclude Include="generated\MapData.generated.h" />
+    <ClInclude Include="generated\PriorityData.generated.h" />
+    <ClInclude Include="generated\SpellDatabaseData.generated.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_impl_dx11.h" />
+    <ClInclude Include="imgui\imgui_impl_dx9.h" />
     <ClInclude Include="imgui\imgui_impl_win32.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
     <ClInclude Include="imgui\imstb_rectpack.h" />
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
+    <ClInclude Include="imgui\stb_sprintf.h" />
     <ClInclude Include="includes.h" />
-    <ClInclude Include="core\Offsets.h" />
-    <ClInclude Include="core\LeagueObfuscation.h" />
-    <ClInclude Include="core\Vector.h" />
-    <ClInclude Include="core\Globals.h" />
     <ClInclude Include="menu\MenuConfig.h" />
-    <ClInclude Include="menu\Menu.h" />
+    <ClInclude Include="menu\MenuPersistence.h" />
+    <ClInclude Include="menu\MenuRendererImGui.h" />
+    <ClInclude Include="menu\MenuUI.h" />
     <ClInclude Include="menu\NightSharpMenu.h" />
-    
-    <ClInclude Include="sdk\SDK.h" />
-    <ClInclude Include="sdk\Enums.h" />
-    <ClInclude Include="sdk\Game.h" />
-    
-    <ClInclude Include="sdk\GameObjects\AiManager.h" />
-    <ClInclude Include="sdk\GameObjects\BuffManager.h" />
-    <ClInclude Include="sdk\GameObjects\GameObject.h" />
-    <ClInclude Include="sdk\GameObjects\GameObjects.h" />
-    <ClInclude Include="sdk\GameObjects\Missile.h" />
-    <ClInclude Include="sdk\GameObjects\ObjectManager.h" />
-    <ClInclude Include="sdk\GameObjects\SpellBook.h" />
-    
+    <ClInclude Include="menu\PluginHostBridge.h" />
+    <ClInclude Include="menu\PluginRegistry.h" />
+    <ClInclude Include="menu\SDKDiagnostics.h" />
+    <ClInclude Include="ns_sscanf.h" />
+    <ClInclude Include="ns_strtod.h" />
+    <ClInclude Include="overlay\Overlay.h" />
+    <ClInclude Include="sdk\Data\26.6.h" />
+    <ClInclude Include="sdk\Data\Database.h" />
+    <ClInclude Include="sdk\Data\Gapclosers.h" />
+    <ClInclude Include="sdk\Data\GlobalInterruptableSpellsList.h" />
+    <ClInclude Include="sdk\Data\InterruptableSpells.h" />
+    <ClInclude Include="sdk\Data\Map.h" />
+    <ClInclude Include="sdk\Data\Priority.h" />
+    <ClInclude Include="sdk\Data\SpellData.h" />
+    <ClInclude Include="sdk\Extensions\Enumerable.h" />
+    <ClInclude Include="sdk\Extensions\Extensions.h" />
+    <ClInclude Include="sdk\Extensions\Unit.h" />
+    <ClInclude Include="sdk\Extensions\SharpDX\Generic.h" />
+    <ClInclude Include="sdk\Extensions\SharpDX\Vector2Extensions.h" />
+    <ClInclude Include="sdk\Extensions\SharpDX\Vector3Extensions.h" />
+    <ClInclude Include="sdk\Core\Bootstrap.h" />
+    <ClInclude Include="sdk\Core\Constants.h" />
+    <ClInclude Include="sdk\Enumerations\DangerLevel.h" />
+    <ClInclude Include="sdk\Enumerations\CollisionableObjects.h" />
+    <ClInclude Include="sdk\Enumerations\CollisionObjects.h" />
+    <ClInclude Include="sdk\Enumerations\DamageType.h" />
+    <ClInclude Include="sdk\Enumerations\GameObjectOrder.h" />
+    <ClInclude Include="sdk\Enumerations\GapcloserType.h" />
+    <ClInclude Include="sdk\Enumerations\HealthPredictionType.h" />
+    <ClInclude Include="sdk\Enumerations\HitChance.h" />
+    <ClInclude Include="sdk\Enumerations\JungleType.h" />
+    <ClInclude Include="sdk\Enumerations\KeyBindType.h" />
+    <ClInclude Include="sdk\Enumerations\LogLevel.h" />
+    <ClInclude Include="sdk\Enumerations\MinionOrderTypes.h" />
+    <ClInclude Include="sdk\Enumerations\MinionTeam.h" />
+    <ClInclude Include="sdk\Enumerations\MinionTypes.h" />
+    <ClInclude Include="sdk\Enumerations\NotificationIconType.h" />
+    <ClInclude Include="sdk\Enumerations\OrbwalkerMode.h" />
+    <ClInclude Include="sdk\Enumerations\OrbwalkingMode.h" />
+    <ClInclude Include="sdk\Enumerations\OrbwalkingType.h" />
+    <ClInclude Include="sdk\Enumerations\PerformanceType.h" />
+    <ClInclude Include="sdk\Enumerations\SkillshotType.h" />
+    <ClInclude Include="sdk\Enumerations\SpellSlot.h" />
+    <ClInclude Include="sdk\Enumerations\SpellType.h" />
+    <ClInclude Include="sdk\Enumerations\TeleportStatus.h" />
+    <ClInclude Include="sdk\Enumerations\TeleportType.h" />
+    <ClInclude Include="sdk\Enumerations\TurretType.h" />
+    <ClInclude Include="sdk\Core\Game.h" />
+    <ClInclude Include="sdk\Core\GameObjects.h" />
+    <ClInclude Include="sdk\Core\MenuUI.h" />
+    <ClInclude Include="sdk\Core\Objects.h" />
+    <ClInclude Include="sdk\Core\Variables.h" />
+    <ClInclude Include="sdk\Events\AntiGapcloser.h" />
     <ClInclude Include="sdk\Events\Dash.h" />
-    <ClInclude Include="sdk\Events\EventSystem.h" />
+    <ClInclude Include="sdk\Events\Events.h" />
     <ClInclude Include="sdk\Events\Gapcloser.h" />
     <ClInclude Include="sdk\Events\InterruptableSpell.h" />
+    <ClInclude Include="sdk\Events\Interrupter.h" />
+    <ClInclude Include="sdk\Events\Load.h" />
     <ClInclude Include="sdk\Events\Stealth.h" />
     <ClInclude Include="sdk\Events\Teleport.h" />
-    <ClInclude Include="sdk\Events\TurretAggro.h" />
-    
-    <ClInclude Include="sdk\Math\Cluster.h" />
-    <ClInclude Include="sdk\Math\Collisions.h" />
-    <ClInclude Include="sdk\Math\GamePath.h" />
-    <ClInclude Include="sdk\Math\MathUtils.h" />
-    <ClInclude Include="sdk\Math\Polygon.h" />
+    <ClInclude Include="sdk\Events\Turret.h" />
+    <ClInclude Include="sdk\GameObjects\AIBaseClient.h" />
+    <ClInclude Include="sdk\GameObjects\AIHeroClient.h" />
+    <ClInclude Include="sdk\GameObjects\AIMinionClient.h" />
+    <ClInclude Include="sdk\GameObjects\AITurretClient.h" />
+    <ClInclude Include="sdk\GameObjects\AttackableUnit.h" />
+    <ClInclude Include="sdk\GameObjects\GameObject.h" />
+    <ClInclude Include="sdk\GameObjects\MissileClient.h" />
+    <ClInclude Include="sdk\GameObjects\ObjectManager.h" />
+    <ClInclude Include="sdk\GameObjects\SpellbookClient.h" />
+    <ClInclude Include="sdk\GameObjects\SpellDataInstClient.h" />
+    <ClInclude Include="sdk\Math\Collision.h" />
+    <ClInclude Include="sdk\Math\ConvexHull.h" />
+    <ClInclude Include="sdk\Math\Geometry.h" />
+    <ClInclude Include="sdk\Math\HealthPrediction.h" />
     <ClInclude Include="sdk\Math\Prediction.h" />
-    
-    <ClInclude Include="sdk\Wrappers\Damages\DamageCalc.h" />
+    <ClInclude Include="sdk\Math\Polygons\ArcPoly.h" />
+    <ClInclude Include="sdk\Math\Polygons\CirclePoly.h" />
+    <ClInclude Include="sdk\Math\Polygons\LinePoly.h" />
+    <ClInclude Include="sdk\Math\Polygons\Polygon.h" />
+    <ClInclude Include="sdk\Math\Polygons\RectanglePoly.h" />
+    <ClInclude Include="sdk\Math\Polygons\RingPoly.h" />
+    <ClInclude Include="sdk\Math\Polygons\SectorPoly.h" />
+    <ClInclude Include="sdk\Math\Prediction\Cluster.h" />
+    <ClInclude Include="sdk\Math\Prediction\GamePath.h" />
+    <ClInclude Include="sdk\Math\Prediction\Health.h" />
+    <ClInclude Include="sdk\Math\Prediction\Movement.h" />
+    <ClInclude Include="sdk\Math\Prediction\Types.h" />
+    <ClInclude Include="sdk\SDK.h" />
+    <ClInclude Include="sdk\Signals\Signal.h" />
+    <ClInclude Include="sdk\Signals\SignalManager.h" />
+    <ClInclude Include="sdk\Utils\ActionQueue.h" />
+    <ClInclude Include="sdk\Utils\AutoAttack.h" />
+    <ClInclude Include="sdk\Utils\BinarySerializer.h" />
+    <ClInclude Include="sdk\Utils\Cache.h" />
+    <ClInclude Include="sdk\Utils\CallbackPerformance.h" />
+    <ClInclude Include="sdk\Utils\Cursor.h" />
+    <ClInclude Include="sdk\Utils\DelayAction.h" />
+    <ClInclude Include="sdk\Utils\DynamicInitializer.h" />
+    <ClInclude Include="sdk\Utils\IFilter.h" />
+    <ClInclude Include="sdk\Utils\Invulnerable.h" />
+    <ClInclude Include="sdk\Utils\Jungle.h" />
+    <ClInclude Include="sdk\Utils\JsonFactory.h" />
+    <ClInclude Include="sdk\Utils\KeyConvert.h" />
+    <ClInclude Include="sdk\Utils\Logging.h" />
+    <ClInclude Include="sdk\Utils\MathUtils.h" />
+    <ClInclude Include="sdk\Utils\Minion.h" />
+    <ClInclude Include="sdk\Utils\Performance.h" />
+    <ClInclude Include="sdk\Utils\Render.h" />
+    <ClInclude Include="sdk\Utils\ResourceFactory.h" />
+    <ClInclude Include="sdk\Utils\ResourceImportAttribute.h" />
+    <ClInclude Include="sdk\Utils\ResourceLoader.h" />
+    <ClInclude Include="sdk\Utils\Storage.h" />
+    <ClInclude Include="sdk\Utils\TickOperation.h" />
+    <ClInclude Include="sdk\Utils\Utils.h" />
+    <ClInclude Include="sdk\Utils\WeightedRandom.h" />
+    <ClInclude Include="sdk\Utils\WindowsKeys.h" />
+    <ClInclude Include="sdk\UI\Cursor.h" />
+    <ClInclude Include="sdk\UI\Drawing.h" />
+    <ClInclude Include="sdk\UI\PermaShow.h" />
+    <ClInclude Include="sdk\UI\Utils.h" />
+    <ClInclude Include="sdk\UI\Notifications\ANotification.h" />
+    <ClInclude Include="sdk\UI\Notifications\Notification.h" />
+    <ClInclude Include="sdk\UI\Notifications\NotificationIcons.h" />
+    <ClInclude Include="sdk\UI\Notifications\Notifications.h" />
+    <ClInclude Include="sdk\UI\IMenu\IMenu.h" />
+    <ClInclude Include="sdk\UI\IMenu\Abstracts\AMenuComponent.h" />
+    <ClInclude Include="sdk\UI\IMenu\Customizer\MenuCustomizer.h" />
+    <ClInclude Include="sdk\UI\IMenu\ColorSpectrum.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\ADrawable.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\ADrawableAdapter.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\BlueTheme.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\BlueTheme2.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\ColoredTheme.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\DefaultTheme.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\ITheme.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\LightTheme.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\LightTheme2.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\MenuSettings.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\TechTheme.h" />
+    <ClInclude Include="sdk\UI\IMenu\Skins\ThemeManager.h" />
+    <ClInclude Include="sdk\UI\IMenu\Menu.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuBool.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuButton.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuColor.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuKeyBind.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuList.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuManager.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuItem.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuValueChangedEventArgs.h" />
+    <ClInclude Include="sdk\UI\IMenu\RadioMenu.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuSeparator.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuSlider.h" />
+    <ClInclude Include="sdk\UI\IMenu\MenuSliderF.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuBool.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuButton.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuColor.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuKeyBind.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuList.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuSeparator.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuSlider.h" />
+    <ClInclude Include="sdk\UI\IMenu\Values\MenuSliderButton.h" />
+    <ClInclude Include="sdk\UI\UI.h" />
+    <ClInclude Include="sdk\Wrappers\Damages\Damage.h" />
+    <ClInclude Include="sdk\Wrappers\Damages\DamageJson.h" />
     <ClInclude Include="sdk\Wrappers\Damages\DamageLibrary.h" />
     <ClInclude Include="sdk\Wrappers\Damages\DamageMastery.h" />
     <ClInclude Include="sdk\Wrappers\Damages\DamagePassives.h" />
-    
-    <ClInclude Include="sdk\Wrappers\Spells\LastCast.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\LastCastedSpellEntry.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\LastCastPacketSentEntry.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellCaster.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellDatabase.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellDatabaseEntry.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes.h" />
-    
-    <ClInclude Include="sdk\Wrappers\Orbwalking\HealthPrediction.h" />
+    <ClInclude Include="sdk\Wrappers\GameObjects.h" />
+    <ClInclude Include="sdk\Wrappers\Map.h" />
+    <ClInclude Include="sdk\Wrappers\Orbwalking\OrbwalkerBase.h" />
     <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h" />
-    
+    <ClInclude Include="sdk\Wrappers\Orbwalking\OrbwalkerSelector.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\Database\SpellDatabase.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\Database\SpellDatabaseEntry.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\LastCast.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\LastCastPacketSentEntry.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\LastCastedSpellEntry.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\Spell.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\BaseSpell.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\Skillshot.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotCircle.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotCone.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotLine.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissile.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileArc.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileCircle.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileCone.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileLine.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotRing.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\Tracker\Detector.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\Tracker\Skillshots\_ZiggsR.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\Tracker\Tracker.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\Targeted.h" />
+    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\TargetedMissile.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\HeroVisibleEntry.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\ITargetSelectorMode.h" />
     <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelector.h" />
-    
-    <ClInclude Include="sdk\UI\ConfigManager.h" />
-    <ClInclude Include="sdk\UI\Drawing.h" />
-    <ClInclude Include="sdk\UI\KeyConvert.h" />
-    <ClInclude Include="sdk\UI\MenuUI.h" />
-    
-    <ClInclude Include="sdk\Utils\ActionQueue.h" />
-    <ClInclude Include="sdk\Utils\AutoAttackUtil.h" />
-    <ClInclude Include="sdk\Utils\AutoLevel.h" />
-    <ClInclude Include="sdk\Utils\CursorUtils.h" />
-    <ClInclude Include="sdk\Utils\DelayAction.h" />
-    <ClInclude Include="sdk\Utils\Invulnerable.h" />
-    <ClInclude Include="sdk\Utils\JungleUtils.h" />
-    <ClInclude Include="sdk\Utils\Logging.h" />
-    <ClInclude Include="sdk\Utils\MinionUtils.h" />
-    <ClInclude Include="sdk\Utils\RecallTracker.h" />
-    <ClInclude Include="sdk\Utils\SummonerTracker.h" />
-    <ClInclude Include="sdk\Utils\TickOperation.h" />
-    <ClInclude Include="sdk\Utils\WeightedRandom.h" />
-    
-    <ClInclude Include="plugins\IPlugin.h" />
-    <ClInclude Include="plugins\PluginManager.h" />
-    <ClInclude Include="plugins\core\OrbwalkerPlugin.h" />
-    <ClInclude Include="plugins\core\TargetSelectorPlugin.h" />
-    <ClInclude Include="plugins\utility\evade\EvadeMenuData.h" />
-    <ClInclude Include="plugins\utility\evade\EvadeMenuBuilder.h" />
-    <ClInclude Include="plugins\utility\evade\EvadeDrawer.h" />
-    <ClInclude Include="plugins\utility\evade\EvadePlugin.h" />
-    <ClInclude Include="core\OverlayWindow.h" />
-    <ClInclude Include="core\OverlayRenderer.h" />
-    <ClInclude Include="core\AntiBan.h" />
-    <ClInclude Include="spoof\spoofcall.h" />
-  <ClInclude Include="sdk\EzEvade\Spells\ObjectTracker.h" />
-  <ClInclude Include="sdk\EzEvade\Spells\Spell.h" />
-  <ClInclude Include="sdk\EzEvade\Helpers\ObjectCache.h" />
-  <ClInclude Include="sdk\EzEvade\Utils\EvadeUtils.h" />
-</ItemGroup>
+    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorDrawing.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorHumanizer.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorMode.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorSelected.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Closest.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\IWeightItem.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\LeastHealth.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\LessAttacksToKill.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\LessCastsToKill.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\MostAbilityPower.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\MostAttackDamage.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\NearMouse.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Priority.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\PriorityCategory.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weight.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\WeightItemWrapper.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\AbilityPower.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\Aggro.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\AttackDamage.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\CrowdControl.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\FocusMe.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\Gold.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\Killable.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\LowHealth.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\LowResists.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\ShortDistanceCursor.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\ShortDistancePlayer.h" />
+    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\TeamFocus.h" />
+  </ItemGroup>
   <ItemGroup>
-    <MASM Include="spoof\spoof.asm" />
+    <MASM Include="core\spoof\spoof.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

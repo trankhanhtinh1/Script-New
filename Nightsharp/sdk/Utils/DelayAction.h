@@ -1,127 +1,134 @@
 #pragma once
-// ============================================================================
-// DelayAction.h — Delayed Action Queue (EnsoulSharp SDK Port)
-// ============================================================================
-// Port of EnsoulSharp.SDK/Core/Utils/DelayAction.cs
-// Provides:
-//   - DelayAction::Add(delayMs, callback) — execute after delay
-//   - DelayAction::Update() — process pending actions (call each frame)
-//   - Thread-safe, supports cancellation
-// ============================================================================
 
-#include "Game.h"
+#include "Logging.h"
+#include "../Core/Game.h"
 
 #include <functional>
+#include <memory>
+#include <new>
 #include <vector>
-#include <mutex>
-#include <algorithm>
 
-namespace SDK {
+namespace SDK::Utils::DelayAction {
 
-// ============================================================================
-// DelayActionItem — Single delayed action
-// ============================================================================
-struct DelayActionItem {
-    float ExecuteTime;          // Game time (seconds) when to execute
-    std::function<void()> Func; // Callback function
-    bool Cancelled = false;     // If true, skip execution
-
-    DelayActionItem() : ExecuteTime(0) {}
-    DelayActionItem(float execTime, std::function<void()> func)
-        : ExecuteTime(execTime), Func(std::move(func)) {}
-};
-
-// ============================================================================
-// DelayAction — Static delayed action manager
-// ============================================================================
-class DelayAction {
+class CancellationToken {
 public:
+    CancellationToken() = default;
+    explicit CancellationToken(std::shared_ptr<bool> state)
+        : m_state(std::move(state)) {}
 
-    // ---- Add a delayed action (delay in milliseconds) ----
-    static int Add(int delayMs, std::function<void()> func) {
-        return Add((float)delayMs, std::move(func));
-    }
-
-    static int Add(float delayMs, std::function<void()> func) {
-        float executeTime = Game::GetTime() + (delayMs / 1000.0f);
-
-        std::lock_guard<std::mutex> lock(s_mutex);
-        int id = s_nextId++;
-        s_actions.push_back({ executeTime, std::move(func) });
-        s_actionIds.push_back(id);
-        return id;
-    }
-
-    // ---- Cancel a pending action by ID ----
-    static void Cancel(int id) {
-        std::lock_guard<std::mutex> lock(s_mutex);
-        for (size_t i = 0; i < s_actionIds.size(); i++) {
-            if (s_actionIds[i] == id) {
-                s_actions[i].Cancelled = true;
-                break;
-            }
-        }
-    }
-
-    // ---- Process pending actions (call every frame) ----
-    static void Update() {
-        float now = Game::GetTime();
-
-        // Collect actions to execute
-        std::vector<std::function<void()>> toExecute;
-
-        {
-            std::lock_guard<std::mutex> lock(s_mutex);
-
-            // Find actions whose time has come
-            size_t i = 0;
-            while (i < s_actions.size()) {
-                if (s_actions[i].Cancelled) {
-                    // Remove cancelled
-                    s_actions.erase(s_actions.begin() + i);
-                    s_actionIds.erase(s_actionIds.begin() + i);
-                    continue;
-                }
-
-                if (now >= s_actions[i].ExecuteTime) {
-                    toExecute.push_back(std::move(s_actions[i].Func));
-                    s_actions.erase(s_actions.begin() + i);
-                    s_actionIds.erase(s_actionIds.begin() + i);
-                    continue;
-                }
-                i++;
-            }
-        }
-
-        // Execute outside lock
-        for (auto& func : toExecute) {
-            try {
-                if (func) func();
-            }
-            catch (...) {
-                // Silently ignore exceptions in delayed actions
-            }
-        }
-    }
-
-    // ---- Clear all pending actions ----
-    static void Clear() {
-        std::lock_guard<std::mutex> lock(s_mutex);
-        s_actions.clear();
-        s_actionIds.clear();
-    }
-
-    // ---- Get count of pending actions ----
-    static size_t PendingCount() {
-        std::lock_guard<std::mutex> lock(s_mutex);
-        return s_actions.size();
+    bool IsCancellationRequested() const {
+        return m_state && *m_state;
     }
 
 private:
-    static inline std::vector<DelayActionItem> s_actions;
-    static inline std::vector<int> s_actionIds;
-    static inline std::mutex s_mutex;
-    static inline int s_nextId = 1;
+    std::shared_ptr<bool> m_state = {};
 };
 
-} // namespace SDK
+class CancellationTokenSource {
+public:
+    CancellationTokenSource()
+        : m_state(std::make_shared<bool>(false)) {}
+
+    CancellationToken Token() const {
+        return CancellationToken(m_state);
+    }
+
+    void Cancel() const {
+        if (m_state) {
+            *m_state = true;
+        }
+    }
+
+private:
+    std::shared_ptr<bool> m_state = {};
+};
+
+struct DelayActionItem {
+    int Time = 0;
+    std::function<void()> Function = {};
+    CancellationToken Token = {};
+
+    DelayActionItem() = default;
+    DelayActionItem(int delayMs, std::function<void()> function, CancellationToken token = {})
+        : Time(Game::TickCount() + delayMs)
+        , Function(std::move(function))
+        , Token(std::move(token)) {}
+};
+
+namespace detail {
+    inline std::vector<DelayActionItem>*& Items() {
+        static auto* storage = new(std::nothrow) std::vector<DelayActionItem>();
+        return storage;
+    }
+
+    inline bool g_initialized = false;
+}
+
+inline void Update() {
+    auto* items = detail::Items();
+    if (!items) {
+        return;
+    }
+
+    const int now = Game::TickCount();
+    for (auto it = items->begin(); it != items->end();) {
+        if (it->Token.IsCancellationRequested()) {
+            it = items->erase(it);
+            continue;
+        }
+
+        if (now >= it->Time) {
+            try {
+                if (it->Function) {
+                    it->Function();
+                }
+            } catch (...) {
+                Logging::Write(true, true, "DelayAction::Update")(LogLevel::Error, "Delayed action threw.");
+            }
+            it = items->erase(it);
+            continue;
+        }
+        ++it;
+    }
+}
+
+inline void Initialize() {
+    if (detail::g_initialized) {
+        return;
+    }
+    detail::g_initialized = true;
+    Game::OnUpdate(Update);
+}
+
+inline void Reset() {
+    if (auto* items = detail::Items()) {
+        items->clear();
+    }
+}
+
+inline void Add(const DelayActionItem& item) {
+    auto* items = detail::Items();
+    if (!items) {
+        return;
+    }
+    items->push_back(item);
+}
+
+inline void Add(int timeMs, std::function<void()> function) {
+    Add(DelayActionItem(timeMs, std::move(function), {}));
+}
+
+inline void Add(float timeMs, std::function<void()> function) {
+    Add(static_cast<int>(timeMs), std::move(function));
+}
+
+inline void Add(int timeMs, std::function<void()> function, const CancellationToken& token) {
+    Add(DelayActionItem(timeMs, std::move(function), token));
+}
+
+inline void Add(float timeMs, std::function<void()> function, const CancellationToken& token) {
+    Add(static_cast<int>(timeMs), std::move(function), token);
+}
+
+} // namespace SDK::Utils::DelayAction
+

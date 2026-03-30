@@ -1,99 +1,143 @@
 //-----------------------------------------------------------------------------
-// COMPILE-TIME OPTIONS FOR DEAR IMGUI
-// Runtime options (clipboard callbacks, enabling various features, etc.) can generally be set via the ImGuiIO structure.
-// You can use ImGui::SetAllocatorFunctions() before calling ImGui::CreateContext() to rewire memory allocation functions.
-//-----------------------------------------------------------------------------
-// A) You may edit imconfig.h (and not overwrite it when updating Dear ImGui, or maintain a patch/branch with your modifications to imconfig.h)
-// B) or add configuration directives in your own file and compile with #define IMGUI_USER_CONFIG "myfilename.h"
-// If you do so you need to make sure that configuration settings are defined consistently _everywhere_ Dear ImGui is used, which include
-// the imgui*.cpp files but also _any_ of your code that uses Dear ImGui. This is because some compile-time options have an affect on data structures.
-// Defining those options in imconfig.h will ensure every compilation unit gets to see the same data structure layouts.
-// Call IMGUI_CHECKVERSION() from your .cpp files to verify that the data structures your files are using are matching the ones imgui.cpp is using.
+// NightSharp v2.0 — Custom ImGui Configuration
+//
+// CRT-safe settings for manual-mapped DLL:
+//   - Custom allocator (HeapAlloc, set at runtime)
+//   - stb_sprintf for printf (avoids CRT locale state)
+//   - sscanf patched directly in ImGui source (no macro)
+//   - qsort/atof replaced with inline implementations (no CRT)
+//   - No file I/O (no ini save/load)
+//   - No demo windows / debug tools
+//   - Assert disabled (avoid abort())
+//
+// CRT elimination strategy (review #21, #22, #23):
+//   sscanf:  patched directly in imgui.cpp, imgui_widgets.cpp, imgui_tables.cpp
+//   strtod:  not used by ImGui (confirmed by grep)
+//   qsort:   replaced below via #define ImQsort
+//   atof:    replaced below via IMGUI_DISABLE_DEFAULT_MATH_FUNCTIONS
+//   printf:  stb_sprintf
+//   malloc:  HeapAlloc via SetAllocatorFunctions()
 //-----------------------------------------------------------------------------
 
 #pragma once
 
-//---- Define assertion handler. Defaults to calling assert().
-//#define IM_ASSERT(_EXPR)  MyAssert(_EXPR)
-//#define IM_ASSERT(_EXPR)  ((void)(_EXPR))     // Disable asserts
+// Disable asserts (avoid pulling in CRT abort())
+#define IM_ASSERT(_EXPR)  ((void)(_EXPR))
 
-//---- Define attributes of all API symbols declarations, e.g. for DLL under Windows
-// Using dear imgui via a shared library is not recommended, because of function call overhead and because we don't guarantee backward nor forward ABI compatibility.
-//#define IMGUI_API __declspec( dllexport )
-//#define IMGUI_API __declspec( dllimport )
+// Use HeapAlloc-based allocator — set via ImGui::SetAllocatorFunctions()
+#define IMGUI_DISABLE_DEFAULT_ALLOCATORS
 
-//---- Don't define obsolete functions/enums/behaviors. Consider enabling from time to time after updating to avoid using soon-to-be obsolete function/names.
-//#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+// Use stb_sprintf instead of CRT vsnprintf (avoids locale dependency)
+#define IMGUI_USE_STB_SPRINTF
 
-//---- Don't implement demo windows functionality (ShowDemoWindow()/ShowStyleEditor()/ShowUserGuide() methods will be empty)
-// It is very strongly recommended to NOT disable the demo windows during development. Please read the comments in imgui_demo.cpp.
-//#define IMGUI_DISABLE_DEMO_WINDOWS
-//#define IMGUI_DISABLE_METRICS_WINDOW
+// Disable file I/O entirely
+#define IMGUI_DISABLE_FILE_FUNCTIONS
 
-//---- Don't implement some functions to reduce linkage requirements.
-//#define IMGUI_DISABLE_WIN32_DEFAULT_CLIPBOARD_FUNCTIONS   // [Win32] Don't implement default clipboard handler. Won't use and link with OpenClipboard/GetClipboardData/CloseClipboard etc.
-//#define IMGUI_DISABLE_WIN32_DEFAULT_IME_FUNCTIONS         // [Win32] Don't implement default IME handler. Won't use and link with ImmGetContext/ImmSetCompositionWindow.
-//#define IMGUI_DISABLE_WIN32_FUNCTIONS                     // [Win32] Won't use and link with any Win32 function (clipboard, ime).
-//#define IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS      // [OSX] Implement default OSX clipboard handler (need to link with '-framework ApplicationServices', this is why this is not the default).
-//#define IMGUI_DISABLE_DEFAULT_FORMAT_FUNCTIONS            // Don't implement ImFormatString/ImFormatStringV so you can implement them yourself (e.g. if you don't want to link with vsnprintf)
-//#define IMGUI_DISABLE_DEFAULT_MATH_FUNCTIONS              // Don't implement ImFabs/ImSqrt/ImPow/ImFmod/ImCos/ImSin/ImAcos/ImAtan2 so you can implement them yourself.
-//#define IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS              // Don't implement ImFileOpen/ImFileClose/ImFileRead/ImFileWrite so you can implement them yourself if you don't want to link with fopen/fclose/fread/fwrite. This will also disable the LogToTTY() function.
-//#define IMGUI_DISABLE_DEFAULT_ALLOCATORS                  // Don't implement default allocators calling malloc()/free() to avoid linking with them. You will need to call ImGui::SetAllocatorFunctions().
+// Disable demo windows (reduces code size and CRT surface)
+#define IMGUI_DISABLE_DEMO_WINDOWS
 
-//---- Include imgui_user.h at the end of imgui.h as a convenience
-//#define IMGUI_INCLUDE_IMGUI_USER_H
+// Disable debug tools (reduces code size, also eliminates sscanf at imgui.cpp:14497)
+#define IMGUI_DISABLE_DEBUG_TOOLS
 
-//---- Pack colors to BGRA8 instead of RGBA8 (to avoid converting from one to another)
-//#define IMGUI_USE_BGRA_PACKED_COLOR
+// Disable obsolete functions
+#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+#define IMGUI_DISABLE_OBSOLETE_KEYIO
 
-//---- Avoid multiple STB libraries implementations, or redefine path/filenames to prioritize another version
-// By default the embedded implementations are declared static and not available outside of imgui cpp files.
-//#define IMGUI_STB_TRUETYPE_FILENAME   "my_folder/stb_truetype.h"
-//#define IMGUI_STB_RECT_PACK_FILENAME  "my_folder/stb_rect_pack.h"
-//#define IMGUI_DISABLE_STB_TRUETYPE_IMPLEMENTATION
-//#define IMGUI_DISABLE_STB_RECT_PACK_IMPLEMENTATION
+// Enable math operators for ImVec2/ImVec4
+#define IMGUI_DEFINE_MATH_OPERATORS
 
-//---- Define constructor and implicit cast operators to convert back<>forth between your math types and ImVec2/ImVec4.
-// This will be inlined as part of ImVec2 and ImVec4 class declarations.
-/*
-#define IM_VEC2_CLASS_EXTRA                                                 \
-        ImVec2(const MyVec2& f) { x = f.x; y = f.y; }                       \
-        operator MyVec2() const { return MyVec2(x,y); }
+// =========================================================================
+// CRT-free qsort replacement (review #23: ImQsort → qsort crash)
+// =========================================================================
+// ImGui checks #ifndef ImQsort before defining the CRT-backed default.
+// We provide a simple insertion sort — sufficient for the small arrays
+// ImGui uses (font atlas rect packing, table column sorting, etc.)
 
-#define IM_VEC4_CLASS_EXTRA                                                 \
-        ImVec4(const MyVec4& f) { x = f.x; y = f.y; z = f.z; w = f.w; }     \
-        operator MyVec4() const { return MyVec4(x,y,z,w); }
-*/
-
-//---- Use 32-bit vertex indices (default is 16-bit) is one way to allow large meshes with more than 64K vertices.
-// Your renderer back-end will need to support it (most example renderer back-ends support both 16/32-bit indices).
-// Another way to allow large meshes while keeping 16-bit indices is to handle ImDrawCmd::VtxOffset in your renderer.
-// Read about ImGuiBackendFlags_RendererHasVtxOffset for details.
-//#define ImDrawIdx unsigned int
-
-//---- Override ImDrawCallback signature (will need to modify renderer back-ends accordingly)
-//struct ImDrawList;
-//struct ImDrawCmd;
-//typedef void (*MyImDrawCallback)(const ImDrawList* draw_list, const ImDrawCmd* cmd, void* my_renderer_user_data);
-//#define ImDrawCallback MyImDrawCallback
-
-//---- Debug Tools: Macro to break in Debugger
-// (use 'Metrics->Tools->Item Picker' to pick widgets with the mouse and break into them for easy debugging.)
-//#define IM_DEBUG_BREAK  IM_ASSERT(0)
-//#define IM_DEBUG_BREAK  __debugbreak()
-
-//---- Debug Tools: Have the Item Picker break in the ItemAdd() function instead of ItemHoverable(),
-// (which comes earlier in the code, will catch a few extra items, allow picking items other than Hovered one.)
-// This adds a small runtime cost which is why it is not enabled by default.
-//#define IMGUI_DEBUG_TOOL_ITEM_PICKER_EX
-
-//---- Debug Tools: Enable slower asserts
-//#define IMGUI_DEBUG_PARANOID
-
-//---- Tip: You can add extra functions within the ImGui:: namespace, here or in your own headers files.
-/*
-namespace ImGui
+static inline void NsQsort(void* base, size_t count, size_t size, int(__cdecl* cmp)(const void*, const void*))
 {
-    void MyFunction(const char* name, const MyMatrix44& v);
+    unsigned char* arr = (unsigned char*)base;
+    // Insertion sort — O(n^2) but safe and CRT-free.
+    // Arrays sorted by ImGui are typically small (<100 elements).
+    for (size_t i = 1; i < count; i++)
+    {
+        // Save arr[i] into a small stack buffer (max element size = 256 bytes, safe for ImGui structs)
+        unsigned char tmp[256];
+        // Copy element i to tmp
+        for (size_t b = 0; b < size; b++)
+            tmp[b] = arr[i * size + b];
+
+        size_t j = i;
+        while (j > 0 && cmp(arr + (j - 1) * size, tmp) > 0)
+        {
+            // Shift element j-1 to j
+            for (size_t b = 0; b < size; b++)
+                arr[j * size + b] = arr[(j - 1) * size + b];
+            j--;
+        }
+        // Place tmp at position j
+        for (size_t b = 0; b < size; b++)
+            arr[j * size + b] = tmp[b];
+    }
 }
-*/
+
+#define ImQsort NsQsort
+
+// =========================================================================
+// CRT-free math function replacements (review #23, #24)
+// =========================================================================
+// IMGUI_DISABLE_DEFAULT_MATH_FUNCTIONS: we provide all Im* math wrappers.
+//
+// Strategy:
+//  - sqrtf/fabsf/sinf/cosf/ceilf: force intrinsic via #pragma intrinsic
+//  - powf/logf/fmodf/acosf/atan2f: these are NOT intrinsics on MSVC —
+//    but on x64 they are stateless CRT library calls that do NOT require
+//    _initterm. They only use the FPU/SSE registers which the OS
+//    initializes when creating the thread.
+//  - ImAtof: replaced with ns_strtod (CRT-free)
+//
+// Note: <math.h> functions on x64 MSVC are stateless — they do NOT
+// access CRT heap, locale, or any global state initialized by _initterm.
+// They are safe to call from a manual-mapped DLL with /MT + no CRT init.
+
+#define IMGUI_DISABLE_DEFAULT_MATH_FUNCTIONS
+
+#include <math.h>
+
+// Force compiler intrinsics for functions that support it
+#ifdef _MSC_VER
+#pragma intrinsic(sin, cos, sqrt, fabs, ceil)
+#pragma intrinsic(memset, memcpy, memcmp, strcmp, strlen)
+#endif
+
+// Include our CRT-free strtod for ImAtof
+#include "../ns_strtod.h"
+
+#define ImFabs(X)           fabsf(X)
+#define ImSqrt(X)           sqrtf(X)
+#define ImFmod(X, Y)        fmodf((X), (Y))
+#define ImCos(X)            cosf(X)
+#define ImSin(X)            sinf(X)
+#define ImAcos(X)           acosf(X)
+#define ImAtan2(Y, X)       atan2f((Y), (X))
+#define ImAtof(STR)         ((float)ns_strtod((STR), 0))
+#define ImCeil(X)           ceilf(X)
+
+static inline float  ImPow(float x, float y)    { return powf(x, y); }
+static inline double ImPow(double x, double y)  { return pow(x, y); }
+static inline float  ImLog(float x)             { return logf(x); }
+static inline double ImLog(double x)            { return log(x); }
+static inline int    ImAbs(int x)               { return x < 0 ? -x : x; }
+static inline float  ImAbs(float x)             { return fabsf(x); }
+static inline double ImAbs(double x)            { return fabs(x); }
+static inline float  ImSign(float x)            { return (x < 0.0f) ? -1.0f : (x > 0.0f) ? 1.0f : 0.0f; }
+static inline double ImSign(double x)           { return (x < 0.0) ? -1.0 : (x > 0.0) ? 1.0 : 0.0; }
+
+// SSE detection — same condition as imgui_internal.h
+#if (defined __SSE__ || defined __x86_64__ || defined _M_X64 || (defined(_M_IX86_FP) && (_M_IX86_FP >= 1))) && !defined(IMGUI_DISABLE_SSE)
+#include <immintrin.h>
+static inline float  ImRsqrt(float x)           { return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(x))); }
+#else
+static inline float  ImRsqrt(float x)           { return 1.0f / sqrtf(x); }
+#endif
+static inline double ImRsqrt(double x)          { return 1.0 / sqrt(x); }
+

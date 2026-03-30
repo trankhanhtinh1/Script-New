@@ -1,169 +1,144 @@
 #pragma once
-#include "GameObjects.h"
-#include "Game.h"
-#include <functional>
-#include <vector>
+
+#include "../../menu/MenuUI.h"
+#include "../Core/Game.h"
+#include "../Core/Objects.h"
+
+#include <new>
 #include <unordered_map>
 
-// ============================================================================
-// Stealth — Detects when a hero goes invisible / comes out of stealth
-// Reference: EnsoulSharp.SDK/Core/Events/Stealth.cs
-//
-// Detection method: Poll IsVisible() each frame,
-// detect state transition visible → invisible and back.
-// ============================================================================
+namespace SDK::Events::Stealth {
 
-namespace SDK {
+struct OnStealthEventArgs {
+    bool IsStealthed = false;
+    Vector3 LastPosition = {};
+    AIHeroClient Sender = {};
+    float Time = 0.0f;
 
-    // ========================================================================
-    // Stealth Event Args
-    // ========================================================================
-    struct StealthEventArgs {
-        GameObject  Sender;
-        bool        IsStealthed;    // true = entered stealth, false = revealed
-        float       Time;           // game time when state changed
-        Vec3        LastPosition;   // last known position before stealth
+    bool IsValid() const {
+        return Sender.IsValid();
+    }
+};
+
+using StealthHandler = void(*)(const OnStealthEventArgs&);
+
+namespace detail {
+    struct StealthState {
+        bool Initialized = false;
+        bool WasVisible = true;
+        Vector3 LastVisiblePosition = {};
+        float StealthStartTime = 0.0f;
     };
 
-    // ========================================================================
-    // Callback type
-    // ========================================================================
-    using OnStealthFn = std::function<void(const StealthEventArgs&)>;
+    inline std::unordered_map<int, StealthState>* g_stealthStates = nullptr;
+    inline MenuUI::FixedList<StealthHandler, 64> g_stealthHandlers = {};
 
-    // ========================================================================
-    // StealthDetector — Main class
-    // ========================================================================
-    class StealthDetector {
-    public:
-        // Register a callback for stealth events
-        static void OnStealth(OnStealthFn callback) {
-            s_callbacks.push_back(callback);
+    inline bool EnsureStealthStorage() {
+        if (!g_stealthStates) {
+            g_stealthStates = new(std::nothrow) std::unordered_map<int, StealthState>();
+        }
+        return g_stealthStates != nullptr;
+    }
+}
+
+inline void Initialize() {
+    detail::EnsureStealthStorage();
+}
+
+inline bool AddOnStealth(StealthHandler handler) {
+    return handler && detail::g_stealthHandlers.push_back(handler);
+}
+
+inline bool OnStealth(StealthHandler handler) {
+    return AddOnStealth(handler);
+}
+
+inline Vector3 GetLastVisiblePosition(const AIHeroClient& hero) {
+    if (!detail::g_stealthStates || !hero.IsValid()) {
+        return {};
+    }
+
+    const auto it = detail::g_stealthStates->find(hero.NetworkId());
+    return (it != detail::g_stealthStates->end()) ? it->second.LastVisiblePosition : Vector3{};
+}
+
+inline float GetStealthDuration(const AIHeroClient& hero) {
+    if (!detail::g_stealthStates || !hero.IsValid()) {
+        return 0.0f;
+    }
+
+    const auto it = detail::g_stealthStates->find(hero.NetworkId());
+    if (it == detail::g_stealthStates->end() || it->second.WasVisible) {
+        return 0.0f;
+    }
+
+    return Game::Time() - it->second.StealthStartTime;
+}
+
+inline void Update() {
+    if (!detail::EnsureStealthStorage()) {
+        return;
+    }
+
+    const float now = Game::Time();
+    for (const auto& hero : ObjectManager::Heroes()) {
+        const int netId = hero.NetworkId();
+        if (!hero.IsValid() || netId == 0 || hero.IsDead()) {
+            if (netId != 0) {
+                detail::g_stealthStates->erase(netId);
+            }
+            continue;
         }
 
-        // Call once per frame after GameObjects::Update()
-        static void Update() {
-            if (s_callbacks.empty()) return;
+        const bool isVisible = hero.IsVisible();
+        auto& state = (*detail::g_stealthStates)[netId];
+        if (!state.Initialized) {
+            state.Initialized = true;
+            state.WasVisible = isVisible;
+            state.LastVisiblePosition = hero.Position();
+            continue;
+        }
 
-            float now = Game::GetTime();
-            if (now <= 0.0f) return;
+        if (state.WasVisible && !isVisible) {
+            state.StealthStartTime = now;
 
-            // Track all heroes (enemy primarily, but also allies for completeness)
-            for (auto& hero : GameObjects::AllHeroes) {
-                if (!hero.IsValid() || !hero.IsAlive()) continue;
+            OnStealthEventArgs args = {};
+            args.Sender = hero;
+            args.IsStealthed = true;
+            args.Time = now;
+            args.LastPosition = state.LastVisiblePosition;
 
-                int netId = hero.GetNetId();
-                if (netId == 0) continue;
-
-                bool isVisible = hero.IsVisible();
-                auto& state = s_visibleStates[netId];
-
-                // First time seeing this hero — initialize
-                if (!state.initialized) {
-                    state.initialized = true;
-                    state.wasVisible = isVisible;
-                    state.lastVisiblePos = hero.GetPosition();
-                    continue;
+            for (const auto& handler : detail::g_stealthHandlers) {
+                if (handler) {
+                    handler(args);
                 }
+            }
+        } else if (!state.WasVisible && isVisible) {
+            OnStealthEventArgs args = {};
+            args.Sender = hero;
+            args.IsStealthed = false;
+            args.Time = now;
+            args.LastPosition = hero.Position();
 
-                // State transition: visible → invisible (entered stealth)
-                if (state.wasVisible && !isVisible) {
-                    state.stealthStartTime = now;
-
-                    StealthEventArgs args;
-                    args.Sender = hero;
-                    args.IsStealthed = true;
-                    args.Time = now;
-                    args.LastPosition = state.lastVisiblePos;
-
-                    for (auto& cb : s_callbacks) {
-                        cb(args);
-                    }
-                }
-                // State transition: invisible → visible (revealed)
-                else if (!state.wasVisible && isVisible) {
-                    StealthEventArgs args;
-                    args.Sender = hero;
-                    args.IsStealthed = false;
-                    args.Time = now;
-                    args.LastPosition = hero.GetPosition();
-
-                    for (auto& cb : s_callbacks) {
-                        cb(args);
-                    }
-                }
-
-                // Update state
-                state.wasVisible = isVisible;
-                if (isVisible) {
-                    state.lastVisiblePos = hero.GetPosition();
+            for (const auto& handler : detail::g_stealthHandlers) {
+                if (handler) {
+                    handler(args);
                 }
             }
         }
 
-        // ====================================================================
-        // Utility: Get last known position of a stealthed hero
-        // ====================================================================
-        static Vec3 GetLastVisiblePosition(int netId) {
-            auto it = s_visibleStates.find(netId);
-            if (it != s_visibleStates.end()) return it->second.lastVisiblePos;
-            return Vec3();
+        state.WasVisible = isVisible;
+        if (isVisible) {
+            state.LastVisiblePosition = hero.Position();
         }
+    }
+}
 
-        // Get time since a hero went invisible (0 if visible)
-        static float GetStealthDuration(int netId) {
-            auto it = s_visibleStates.find(netId);
-            if (it != s_visibleStates.end() && !it->second.wasVisible) {
-                return Game::GetTime() - it->second.stealthStartTime;
-            }
-            return 0.0f;
-        }
+inline void Reset() {
+    if (detail::g_stealthStates) {
+        detail::g_stealthStates->clear();
+    }
+    detail::g_stealthHandlers.clear();
+}
 
-        // Check if any enemy is currently stealthed
-        static bool AnyEnemyStealthed() {
-            auto* localPlayer = &GameObjects::Player;
-            if (!localPlayer->IsValid()) return false;
-            auto myTeam = localPlayer->GetTeam();
-
-            for (auto& hero : GameObjects::EnemyHeroes) {
-                if (!hero.IsValid() || !hero.IsAlive()) continue;
-                int netId = hero.GetNetId();
-                auto it = s_visibleStates.find(netId);
-                if (it != s_visibleStates.end() && !it->second.wasVisible)
-                    return true;
-            }
-            return false;
-        }
-
-        // List all currently stealthed enemies
-        static std::vector<GameObject> GetStealthedEnemies() {
-            std::vector<GameObject> result;
-            for (auto& hero : GameObjects::EnemyHeroes) {
-                if (!hero.IsValid() || !hero.IsAlive()) continue;
-                int netId = hero.GetNetId();
-                auto it = s_visibleStates.find(netId);
-                if (it != s_visibleStates.end() && !it->second.wasVisible)
-                    result.push_back(hero);
-            }
-            return result;
-        }
-
-        // Clear all state
-        static void Clear() {
-            s_visibleStates.clear();
-            s_callbacks.clear();
-        }
-
-    private:
-        static inline std::vector<OnStealthFn> s_callbacks;
-
-        struct VisibleState {
-            bool  initialized = false;
-            bool  wasVisible = true;
-            Vec3  lastVisiblePos;
-            float stealthStartTime = 0.0f;
-        };
-
-        static inline std::unordered_map<int, VisibleState> s_visibleStates;
-    };
-
-} // namespace SDK
+} // namespace SDK::Events::Stealth

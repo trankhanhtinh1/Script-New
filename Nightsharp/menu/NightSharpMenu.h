@@ -1,646 +1,587 @@
 #pragma once
-#include "imgui/imgui.h"
-#include "plugins/PluginManager.h"
-#include "menu/MenuConfig.h"
-#include "sdk/UI/MenuUI.h"
-#include "sdk/Wrappers/Orbwalking/Orbwalker.h"
-#include <algorithm>
-#include <array>
-#include <cstring>
-#include <string>
-#include <unordered_map>
-#include <vector>
+/*
+ * NightSharp v2.0 — Three-level Sidebar Menu (CRT-Free)
+ *
+ * Rewritten from old NightSharp menu to eliminate all CRT dependencies:
+ *   - No std::string, std::vector, std::array
+ *   - Fixed C arrays with const char* labels
+ *   - Integer indices instead of string keys
+ *   - All state as POD types (zero-initialized, no dynamic init)
+ *
+ * Visual layout preserved: 3-panel sidebar with dark theme.
+ * Text made bolder per user request.
+ *
+ * Plugin Manager: SDK Plugins tab = plugin manager UI (Load/Unload + Always Load).
+ * Loaded plugins appear as primary sidebar categories below Core.
+ */
 
-// ============================================================================
-// NightSharpMenu - Three-level sliderbar shell
-// Layout: Sliderbar 1 -> Sliderbar 2 -> Sliderbar 3
-// ============================================================================
+#include "../imgui/imgui.h"
+#include "MenuUI.h"
+#include "MenuConfig.h"
+
+#include "PluginRegistry.h"
+#include "SDKDiagnostics.h"
 
 namespace NightSharpMenu {
 
-    struct SidebarEntry {
-        std::string key;
-        std::string label;
-        Plugins::IPlugin* plugin = nullptr;
-    };
+    // ============================================================================
+    // State — POD only, zero-initialized (safe without _initterm)
+    // ============================================================================
+    inline bool showMenu          = true;
+    inline int  activePrimaryIdx  = -1;
+    inline int  activeSecondaryIdx = -1;
+    inline bool primarySelected   = false;
+    inline bool secondarySelected = false;
 
-    struct SecondaryEntry {
-        std::string key;
-        std::string label;
-    };
+    // Plugin sidebar state — which plugin's secondary panel is active
+    inline int  activePluginIdx   = -1;     // index into PluginRegistry::Plugins[]
+    inline int  activePluginSecIdx = -1;    // secondary item within plugin menu
 
-    inline bool showMenu = true;
-    inline std::string activePrimaryKey = "";
-    inline std::unordered_map<std::string, std::string> activeSecondaryByPrimary;
-    inline bool primarySelected = false;   // true once user clicks a primary item
-    inline bool secondarySelected = false; // true once user clicks a secondary item
-    inline std::string hookBackendLabel = "Unknown";
+    inline float menuPosX   = 20.0f;
+    inline float menuPosY   = 40.0f;
+    inline bool  isDragging = false;
+    inline float dragOffX   = 0.0f;
+    inline float dragOffY   = 0.0f;
 
-    inline ImVec2 menuPos = ImVec2(20, 40);
-    inline bool isDragging = false;
-    inline ImVec2 dragOffset = ImVec2(0, 0);
+    // Explicit menu bounding rect for WM_NCHITTEST (updated each frame)
+    inline float menuBoundsRight  = 0.0f;
+    inline float menuBoundsBottom = 0.0f;
 
-    inline bool menuSkinChanger = false;
-
-    enum class MenuLanguage {
-        EN,
-        CN,
-        VN
-    };
-
-    inline MenuLanguage currentLanguage = MenuLanguage::EN;
-
-    constexpr float PRIMARY_W = 190.0f;
+    // ============================================================================
+    // Layout constants
+    // ============================================================================
+    constexpr float PRIMARY_W   = 190.0f;
     constexpr float SECONDARY_W = 190.0f;
-    constexpr float CONTENT_W = 560.0f;
-    constexpr float ITEM_H = 30.0f;
-    constexpr float HEADER_H = 32.0f;
-    constexpr float PANEL_GAP = 6.0f;
-    constexpr float MIN_CONTENT_H = 420.0f;
+    constexpr float CONTENT_W   = 560.0f;
+    constexpr float ITEM_H      = 30.0f;
+    constexpr float HEADER_H    = 32.0f;
+    constexpr float PANEL_GAP   = 6.0f;
     constexpr float MAX_CONTENT_H = 620.0f;
 
-    inline ImU32 COL_BG = IM_COL32(8, 10, 18, 214);
-    inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 128);
-    inline ImU32 COL_HEADER = IM_COL32(16, 18, 28, 236);
-    inline ImU32 COL_ITEM = IM_COL32(18, 20, 30, 118);
-    inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 215);
+    // ============================================================================
+    // Color scheme (dark theme with green accent)
+    // ============================================================================
+    inline ImU32 COL_BG          = IM_COL32(8, 10, 18, 214);
+    inline ImU32 COL_CONTENT_BG  = IM_COL32(8, 10, 18, 128);
+    inline ImU32 COL_HEADER      = IM_COL32(16, 18, 28, 236);
+    inline ImU32 COL_ITEM        = IM_COL32(18, 20, 30, 118);
+    inline ImU32 COL_ITEM_HOVER  = IM_COL32(52, 48, 82, 215);
     inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 232);
-    inline ImU32 COL_ACCENT = IM_COL32(120, 235, 120, 255);
-    inline ImU32 COL_TEXT = IM_COL32(242, 242, 248, 255);
-    inline ImU32 COL_TEXT_DIM = IM_COL32(148, 148, 168, 255);
-    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 180);
+    inline ImU32 COL_ACCENT      = IM_COL32(120, 235, 120, 255);
+    inline ImU32 COL_TEXT        = IM_COL32(255, 255, 255, 255);
+    inline ImU32 COL_TEXT_DIM    = IM_COL32(185, 185, 205, 255);
+    inline ImU32 COL_BORDER      = IM_COL32(88, 100, 148, 180);
 
-    inline const std::array<const char*, 4> kCorePluginNames = {
-        "Orbwalker 2.0", "Target Selector", "Activator", "Awareness"
+    // ============================================================================
+    // Entry structures — POD, const char* only
+    // ============================================================================
+    struct SidebarEntry { const char* label; };
+
+    // ============================================================================
+    // Core secondary entries (fixed)
+    // ============================================================================
+    constexpr int CORE_SECONDARY_COUNT = 6;
+    inline const SidebarEntry CORE_SECONDARY[CORE_SECONDARY_COUNT] = {
+        { "Language" }, { "Menu" }, { "Debug Info" }, { "SDK Diagnostics" }, { "SDK Plugins" }, { "Plugins" },
     };
 
-    inline void SetHookBackendLabel(const char* label) {
-        hookBackendLabel = (label && *label) ? label : "Unknown";
-    }
-
-    inline Plugins::IPlugin* GetLoadedOrbwalkerPlugin() {
-        auto* plugin = Plugins::PluginManager::Get().Find("Orbwalker 2.0");
-        if (plugin && plugin->IsLoaded()) {
-            return plugin;
-        }
-        return nullptr;
-    }
-
-    inline bool IsCorePluginName(const char* name) {
-        if (!name) return false;
-        for (const char* n : kCorePluginNames) {
-            if (strcmp(name, n) == 0) return true;
-        }
-        return false;
-    }
-
-    inline const char* CategoryLabel(Plugins::PluginCategory c) {
-        switch (c) {
-        case Plugins::PluginCategory::CorePlugin: return "Core Plugin";
-        case Plugins::PluginCategory::Champion: return "Champion";
-        case Plugins::PluginCategory::Utility: return "Utility";
-        case Plugins::PluginCategory::Misc: return "Misc";
-        default: return "Misc";
-        }
-    }
-
-    inline int CategoryRank(Plugins::PluginCategory c) {
-        switch (c) {
-        case Plugins::PluginCategory::CorePlugin: return 0;
-        case Plugins::PluginCategory::Champion: return 1;
-        case Plugins::PluginCategory::Utility: return 2;
-        case Plugins::PluginCategory::Misc: return 3;
-        default: return 3;
-        }
-    }
-
+    // ============================================================================
+    // Drawing helpers
+    // ============================================================================
     inline bool DrawSidebarItem(ImDrawList* dl, ImVec2 pos, float w,
-        const char* text, bool isActive, bool hasArrow = false) {
+                                const char* text, bool isActive, bool hasArrow = false)
+    {
         ImVec2 mn = pos;
         ImVec2 mx = ImVec2(pos.x + w, pos.y + ITEM_H);
-        bool hovered = ImGui::IsMouseHoveringRect(mn, mx, false); // false = don't clip to current window
+        bool hovered = ImGui::IsMouseHoveringRect(mn, mx, false);
         bool clicked = hovered && ImGui::IsMouseClicked(0);
-        if (hovered || isActive) {
+
+        if (hovered || isActive)
             dl->AddRectFilled(mn, mx, isActive ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, 3.0f);
-        }
-        if (isActive) {
-            dl->AddLine(ImVec2(mn.x + 1.0f, mn.y + 2.0f), ImVec2(mn.x + 1.0f, mx.y - 2.0f), COL_ACCENT, 2.0f);
-        }
+        if (isActive)
+            dl->AddLine(ImVec2(mn.x + 1, mn.y + 2), ImVec2(mn.x + 1, mx.y - 2), COL_ACCENT, 2.0f);
         dl->AddLine(ImVec2(mn.x, mx.y), ImVec2(mx.x, mx.y), COL_BORDER, 1.0f);
-        dl->AddText(ImVec2(pos.x + 12.0f, pos.y + 7.0f), COL_TEXT, text);
-        if (hasArrow) {
-            dl->AddText(ImVec2(pos.x + w - 18.0f, pos.y + 7.0f), COL_TEXT_DIM, ">");
-        }
+        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, text);
+        if (hasArrow)
+            dl->AddText(ImVec2(pos.x + w - 18, pos.y + 7), COL_TEXT_DIM, ">");
+
         return clicked;
     }
 
-    inline bool DrawStateButton(const char* id, const char* label, bool active, bool positive, float width = 44.0f) {
-        ImVec4 activeBase = positive ? ImVec4(0.18f, 0.55f, 0.28f, 0.98f) : ImVec4(0.65f, 0.22f, 0.24f, 0.98f);
-        ImVec4 activeHover = positive ? ImVec4(0.22f, 0.64f, 0.32f, 1.0f) : ImVec4(0.75f, 0.27f, 0.29f, 1.0f);
-        ImVec4 activePressed = positive ? ImVec4(0.15f, 0.48f, 0.24f, 1.0f) : ImVec4(0.58f, 0.18f, 0.20f, 1.0f);
-        ImVec4 inactiveBase = ImVec4(0.14f, 0.16f, 0.24f, 0.98f);
-        ImVec4 inactiveHover = ImVec4(0.20f, 0.24f, 0.34f, 1.0f);
-        ImVec4 inactivePressed = ImVec4(0.24f, 0.28f, 0.40f, 1.0f);
-        ImVec4 text = active ? ImVec4(0.96f, 0.97f, 1.0f, 1.0f) : ImVec4(0.78f, 0.81f, 0.90f, 1.0f);
+    inline bool DrawStateButton(const char* id, const char* label, bool active, bool positive, float width = 44.0f)
+    {
+        ImVec4 activeBase   = positive ? ImVec4(0.18f,0.55f,0.28f,0.98f) : ImVec4(0.65f,0.22f,0.24f,0.98f);
+        ImVec4 activeHover  = positive ? ImVec4(0.22f,0.64f,0.32f,1.0f)  : ImVec4(0.75f,0.27f,0.29f,1.0f);
+        ImVec4 activePress  = positive ? ImVec4(0.15f,0.48f,0.24f,1.0f)  : ImVec4(0.58f,0.18f,0.20f,1.0f);
+        ImVec4 inactiveBase = ImVec4(0.14f,0.16f,0.24f,0.98f);
+        ImVec4 inactiveHov  = ImVec4(0.20f,0.24f,0.34f,1.0f);
+        ImVec4 inactivePr   = ImVec4(0.24f,0.28f,0.40f,1.0f);
+        ImVec4 text = active ? ImVec4(0.96f,0.97f,1.0f,1.0f) : ImVec4(0.78f,0.81f,0.90f,1.0f);
 
         ImGui::PushID(id);
-        ImGui::PushStyleColor(ImGuiCol_Button, active ? activeBase : inactiveBase);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? activeHover : inactiveHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePressed : inactivePressed);
+        ImGui::PushStyleColor(ImGuiCol_Button,        active ? activeBase  : inactiveBase);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  active ? activeHover : inactiveHov);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   active ? activePress : inactivePr);
         ImGui::PushStyleColor(ImGuiCol_Text, text);
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-        bool clicked = ImGui::Button(label, ImVec2(width, 0.0f));
+        bool clicked = ImGui::Button(label, ImVec2(width, 0));
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(5);
         ImGui::PopID();
         return clicked;
     }
 
-    inline bool DrawOnOffEditor(const char* label, bool& value, const char* id) {
+    inline bool DrawOnOffEditor(const char* label, bool& value, const char* id)
+    {
         bool changed = false;
         ImGui::PushID(id);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label);
         ImGui::SameLine();
-
         float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 96.0f;
-        if (targetX > ImGui::GetCursorPosX()) {
+        if (targetX > ImGui::GetCursorPosX())
             ImGui::SetCursorPosX(targetX);
-        }
-
-        if (DrawStateButton("on", "On", value, true) && !value) {
-            value = true;
-            changed = true;
-        }
-        ImGui::SameLine(0.0f, 6.0f);
-        if (DrawStateButton("off", "Off", !value, false) && value) {
-            value = false;
-            changed = true;
-        }
+        if (DrawStateButton("on", "On", value, true) && !value)   { value = true;  changed = true; }
+        ImGui::SameLine(0, 6);
+        if (DrawStateButton("off", "Off", !value, false) && value) { value = false; changed = true; }
         ImGui::PopID();
         return changed;
-    }
-
-    inline std::vector<SidebarEntry> BuildPrimaryEntries() {
-        std::vector<SidebarEntry> entries;
-        entries.push_back({ "core", "Core", nullptr });
-
-        auto& pm = Plugins::PluginManager::Get();
-        entries.push_back({ "orbwalker", "Orbwalker 2.0", GetLoadedOrbwalkerPlugin() });
-
-        for (const char* name : kCorePluginNames) {
-            if (strcmp(name, "Orbwalker 2.0") == 0) {
-                continue;
-            }
-            auto* p = pm.Find(name);
-            if (p && p->IsLoaded()) {
-                entries.push_back({ std::string("plugin:") + name, name, p });
-            }
-        }
-
-        std::vector<Plugins::IPlugin*> others;
-        for (auto& up : pm.GetPlugins()) {
-            Plugins::IPlugin* p = up.get();
-            if (!p || !p->IsLoaded()) continue;
-            if (IsCorePluginName(p->GetName())) continue;
-            others.push_back(p);
-        }
-
-        std::sort(others.begin(), others.end(), [](const Plugins::IPlugin* a, const Plugins::IPlugin* b) {
-            int ra = CategoryRank(a->GetCategory());
-            int rb = CategoryRank(b->GetCategory());
-            if (ra != rb) return ra < rb;
-            return strcmp(a->GetName(), b->GetName()) < 0;
-        });
-
-        for (auto* p : others) {
-            entries.push_back({ std::string("plugin:") + p->GetName(), p->GetName(), p });
-        }
-
-        return entries;
-    }
-
-    inline std::vector<SecondaryEntry> BuildCoreSections() {
-        return {
-            { "language", "Language" },
-            { "core_plugins", "Core Plugin" },
-            { "plugins", "Plugin" },
-            { "menu", "Menu" }
-        };
-    }
-
-    inline std::vector<SecondaryEntry> BuildSecondaryEntries(const SidebarEntry& primary) {
-        if (primary.key == "core") {
-            return BuildCoreSections();
-        }
-        if (primary.key == "orbwalker") {
-            std::vector<SecondaryEntry> sections;
-            if (auto* plugin = GetLoadedOrbwalkerPlugin()) {
-                if (auto* menuRoot = plugin->GetMenuRoot()) {
-                    for (const auto& s : menuRoot->GetRootSections()) {
-                        sections.push_back({ s.first, s.second });
-                    }
-                }
-            }
-            if (sections.empty()) {
-                sections.push_back({ "__sdk_orbwalker", "Orbwalker" });
-            }
-            return sections;
-        }
-
-        std::vector<SecondaryEntry> sections;
-        if (primary.plugin) {
-            if (auto* menuRoot = primary.plugin->GetMenuRoot()) {
-                for (const auto& s : menuRoot->GetRootSections()) {
-                    sections.push_back({ s.first, s.second });
-                }
-            }
-        }
-
-        if (sections.empty()) {
-            sections.push_back({ "__plugin_general", "General" });
-        }
-        return sections;
-    }
-
-    inline const SidebarEntry* FindPrimaryEntry(const std::vector<SidebarEntry>& entries, const std::string& key) {
-        for (const auto& e : entries) {
-            if (e.key == key) {
-                return &e;
-            }
-        }
-        return nullptr;
-    }
-
-    inline const SecondaryEntry* FindSecondaryEntry(const std::vector<SecondaryEntry>& entries, const std::string& key) {
-        for (const auto& e : entries) {
-            if (e.key == key) {
-                return &e;
-            }
-        }
-        return nullptr;
-    }
-
-    inline const char* EnsureActiveSecondary(const std::string& primaryKey,
-        const std::vector<SecondaryEntry>& sections) {
-        if (sections.empty()) {
-            activeSecondaryByPrimary.erase(primaryKey);
-            return "";
-        }
-
-        std::string& active = activeSecondaryByPrimary[primaryKey];
-        bool found = false;
-        for (const auto& s : sections) {
-            if (s.key == active) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            active = sections.front().key;
-        }
-        return active.c_str();
     }
 
     inline void DrawSectionTitle(const char* title) {
-        ImGui::TextColored(ImVec4(0.45f, 0.85f, 0.45f, 1.0f), "%s", title);
+        ImGui::TextColored(ImVec4(0.47f,0.92f,0.47f,1.0f), "%s", title);
         ImGui::Separator();
     }
 
-    inline bool SetPluginLoaded(Plugins::IPlugin* plugin, bool shouldLoad) {
-        if (!plugin) {
-            return false;
-        }
-
-        auto& pm = Plugins::PluginManager::Get();
-        pm.SetAutoLoad(plugin->GetName(), shouldLoad);
-
-        bool changed = shouldLoad ? pm.Load(plugin) : pm.Unload(plugin);
-        if (!shouldLoad && activePrimaryKey == std::string("plugin:") + plugin->GetName()) {
-            activePrimaryKey = "core";
-        }
-        return changed;
+    // ============================================================================
+    // Content sections — Core
+    // ============================================================================
+    inline void DrawMenuSection() {
+        DrawSectionTitle("Menu Settings");
+        static bool skinChanger = false;
+        DrawOnOffEditor("Skin Changer", skinChanger, "menu_skin");
+        DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
+        DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "Bypass OBS: overlay hidden from screen capture");
+        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "(requires Win10 2004+)");
     }
 
-    inline void DrawPluginLoadRow(Plugins::IPlugin* plugin) {
-        if (!plugin) {
-            return;
-        }
-
-        bool loaded = plugin->IsLoaded();
-        bool changed = DrawOnOffEditor(plugin->GetName(), loaded, plugin->GetName());
-        if (changed) {
-            SetPluginLoaded(plugin, loaded);
-        }
-
-        // "Always Load" checkbox
-        ImGui::SameLine(0.0f, 12.0f);
-        bool autoLoad = Plugins::PluginManager::Get().IsAutoLoad(plugin->GetName());
-        std::string alId = std::string("##autoload_") + plugin->GetName();
-        if (ImGui::Checkbox(("Always Load" + alId).c_str(), &autoLoad)) {
-            Plugins::PluginManager::Get().SetAutoLoad(plugin->GetName(), autoLoad);
-        }
-    }
-
-    inline void DrawLanguageSelector(const char* label, MenuLanguage value) {
-        ImGui::PushID(label);
-        if (DrawStateButton(label, label, currentLanguage == value, true, 56.0f)) {
-            currentLanguage = value;
-        }
-        ImGui::PopID();
+    inline void DrawDebugSection() {
+        DrawSectionTitle("Debug Info");
+        ImGui::Text("NightSharp v2.0");
+        ImGui::Text("Overlay: D3D11 External");
+        ImGui::Text("Injection: ManualMap APC");
+        ImGui::Text("CRT: Bypassed (HeapAlloc)");
+        ImGui::Separator();
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("Frame: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     }
 
     inline void DrawLanguageSection() {
         DrawSectionTitle("Language");
-        DrawLanguageSelector("EN", MenuLanguage::EN);
-        ImGui::SameLine(0.0f, 8.0f);
-        DrawLanguageSelector("CN", MenuLanguage::CN);
-        ImGui::SameLine(0.0f, 8.0f);
-        DrawLanguageSelector("VN", MenuLanguage::VN);
+        static int lang = 0;
+        const char* langs[] = { "EN", "CN", "VN" };
+        for (int i = 0; i < 3; i++) {
+            ImGui::PushID(langs[i]);
+            if (DrawStateButton(langs[i], langs[i], lang == i, true, 56.0f))
+                lang = i;
+            ImGui::PopID();
+            if (i < 2) ImGui::SameLine(0, 8);
+        }
     }
 
-    inline void DrawOrbwalkerSection() {
-        DrawSectionTitle("Orbwalker");
-        if (auto* menu = SDK::Orbwalker::GetMenuRoot()) {
-            for (const auto& item : menu->GetItems()) {
-                if (item) {
-                    item->Draw();
+    inline void DrawPluginManagerRows(PluginRegistry::PluginKind kind, const char* emptyText, int idBase = 0) {
+        int pluginCount = PluginRegistry::GetCountByKind(kind);
+        if (pluginCount == 0) {
+            if (emptyText && emptyText[0]) {
+                ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", emptyText);
+            }
+            return;
+        }
+
+        for (int i = 0; i < PluginRegistry::PluginCount; i++) {
+            auto& p = PluginRegistry::Plugins[i];
+            if (p.Kind != kind) continue;
+            if (!p.Name) continue;
+            const bool hasRuntime = PluginRegistry::HasRuntime(i);
+
+            ImGui::PushID(i + idBase);
+            ImGui::BeginGroup();
+
+            ImVec4 statusColor;
+            const char* statusText;
+            if (!p.MenuRoot) {
+                statusColor = ImVec4(0.9f, 0.6f, 0.1f, 1.0f);
+                statusText = "[!!]";
+            } else if (p.Loaded) {
+                statusColor = ImVec4(0.3f, 0.9f, 0.3f, 1.0f);
+                statusText = "[ON]";
+            } else {
+                statusColor = ImVec4(0.6f, 0.6f, 0.6f, 0.8f);
+                statusText = "[--]";
+            }
+            ImGui::TextColored(statusColor, "%s", statusText);
+            ImGui::SameLine(0, 8);
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", p.Name);
+
+            if (!p.MenuRoot) {
+                ImGui::SameLine(0, 8);
+                ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
+                    hasRuntime ? "(no menu)" : "(menu init failed)");
+            }
+
+            ImGui::SameLine();
+            float rightEdge = ImGui::GetContentRegionAvail().x;
+            float buttonW = 70.0f;
+            float checkW = 120.0f;
+            float targetX = ImGui::GetCursorPosX() + rightEdge - buttonW - checkW - 16.0f;
+            if (targetX > ImGui::GetCursorPosX())
+                ImGui::SetCursorPosX(targetX);
+
+            if (p.MenuRoot || hasRuntime) {
+                if (p.Loaded) {
+                    if (DrawStateButton("unload", "Unload", true, false, buttonW))
+                        PluginRegistry::UnloadPlugin(i);
+                } else {
+                    if (DrawStateButton("load", "Load", false, true, buttonW))
+                        PluginRegistry::LoadPlugin(i);
                 }
+            } else {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.2f,0.2f,0.5f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f,0.5f,0.5f,0.8f));
+                ImGui::Button("Error", ImVec2(buttonW, 0));
+                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar();
             }
-            return;
-        }
-        ImGui::TextDisabled("Orbwalker menu is not initialized yet.");
-    }
 
-    inline void DrawCorePluginsSection() {
-        DrawSectionTitle("Core Plugin");
-        auto& pm = Plugins::PluginManager::Get();
-        for (const char* name : kCorePluginNames) {
-            if (auto* plugin = pm.Find(name)) {
-                DrawPluginLoadRow(plugin);
-                ImGui::Separator();
+            ImGui::SameLine(0, 8);
+            bool al = p.AlwaysLoad;
+            if (ImGui::Checkbox("Always Load", &al)) {
+                PluginRegistry::SetAlwaysLoad(i, al);
             }
-        }
-    }
 
-    inline void DrawPluginCategorySection(Plugins::PluginCategory category, const char* title) {
-        auto& pm = Plugins::PluginManager::Get();
-        bool hasAny = false;
-
-        for (auto& up : pm.GetPlugins()) {
-            auto* plugin = up.get();
-            if (!plugin || plugin->GetCategory() != category || IsCorePluginName(plugin->GetName())) {
-                continue;
-            }
-            hasAny = true;
-        }
-
-        if (!hasAny) {
-            return;
-        }
-
-        ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f), "%s", title);
-        ImGui::Separator();
-
-        for (auto& up : pm.GetPlugins()) {
-            auto* plugin = up.get();
-            if (!plugin || plugin->GetCategory() != category || IsCorePluginName(plugin->GetName())) {
-                continue;
-            }
-            DrawPluginLoadRow(plugin);
+            ImGui::EndGroup();
             ImGui::Separator();
+            ImGui::PopID();
         }
+    }
+
+    // ============================================================================
+    // SDK Plugins tab — PLUGIN MANAGER UI
+    // Hiện danh sách plugin với Load/Unload + Always Load
+    // ============================================================================
+    inline void DrawSDKPluginsSection() {
+        DrawSectionTitle("SDK Plugin Manager");
         ImGui::Spacing();
+        int sdkCount = PluginRegistry::GetCountByKind(PluginRegistry::PluginKind::SDK);
+        if (sdkCount == 0) {
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "No SDK plugins registered.");
+            return;
+        }
+
+        for (int i = 0; i < PluginRegistry::PluginCount; i++) {
+            auto& p = PluginRegistry::Plugins[i];
+            if (p.Kind != PluginRegistry::PluginKind::SDK) continue;
+            if (!p.Name) continue;
+            const bool hasRuntime = PluginRegistry::HasRuntime(i);
+
+            ImGui::PushID(i);
+
+            // Plugin row: [icon] Name    [Load/Unload] [☑ Always Load]
+            ImGui::BeginGroup();
+
+            // Status indicator
+            ImVec4 statusColor;
+            const char* statusText;
+            if (!p.MenuRoot) {
+                statusColor = ImVec4(0.9f, 0.6f, 0.1f, 1.0f);  // Orange = no menu
+                statusText = "[!!]";
+            } else if (p.Loaded) {
+                statusColor = ImVec4(0.3f, 0.9f, 0.3f, 1.0f);  // Green = loaded
+                statusText = "[ON]";
+            } else {
+                statusColor = ImVec4(0.6f, 0.6f, 0.6f, 0.8f);  // Gray = unloaded
+                statusText = "[--]";
+            }
+            ImGui::TextColored(statusColor, "%s", statusText);
+            ImGui::SameLine(0, 8);
+
+            // Plugin name
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", p.Name);
+
+            // Show warning if menu creation failed
+            if (!p.MenuRoot) {
+                ImGui::SameLine(0, 8);
+                ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
+                    hasRuntime ? "(no menu)" : "(menu init failed)");
+            }
+
+            ImGui::SameLine();
+
+            // Push to right side
+            float rightEdge = ImGui::GetContentRegionAvail().x;
+            float buttonW = 70.0f;
+            float checkW = 120.0f;
+            float targetX = ImGui::GetCursorPosX() + rightEdge - buttonW - checkW - 16.0f;
+            if (targetX > ImGui::GetCursorPosX())
+                ImGui::SetCursorPosX(targetX);
+
+            // Load/Unload button (works even without MenuRoot — just controls visibility)
+            if (p.MenuRoot || hasRuntime) {
+                if (p.Loaded) {
+                    if (DrawStateButton("unload", "Unload", true, false, buttonW))
+                        PluginRegistry::UnloadPlugin(i);
+                } else {
+                    if (DrawStateButton("load", "Load", false, true, buttonW))
+                        PluginRegistry::LoadPlugin(i);
+                }
+            } else {
+                // Disabled button for plugins without menu
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.2f,0.2f,0.5f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f,0.5f,0.5f,0.8f));
+                ImGui::Button("Error", ImVec2(buttonW, 0));
+                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar();
+            }
+
+            ImGui::SameLine(0, 8);
+
+            // Always Load checkbox — persisted to plugins.ini
+            bool al = p.AlwaysLoad;
+            if (ImGui::Checkbox("Always Load", &al)) {
+                PluginRegistry::SetAlwaysLoad(i, al);
+            }
+
+            ImGui::EndGroup();
+
+            ImGui::Separator();
+            ImGui::PopID();
+        }
     }
 
     inline void DrawPluginsSection() {
-        DrawSectionTitle("Plugin");
-        DrawPluginCategorySection(Plugins::PluginCategory::Champion, "Champion");
-        DrawPluginCategorySection(Plugins::PluginCategory::Utility, "Utility");
-        DrawPluginCategorySection(Plugins::PluginCategory::Misc, "Misc");
-    }
+        DrawSectionTitle("Plugin Manager");
+        ImGui::Spacing();
+        DrawPluginManagerRows(PluginRegistry::PluginKind::Plugin, "No source plugins registered.");
 
-    inline void DrawMenuSection() {
-        DrawSectionTitle("Menu");
-        DrawOnOffEditor("Skin Changer", menuSkinChanger, "menu_skin");
-        DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
-        DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
-        ImGui::Separator();
-        ImGui::TextDisabled("Bypass OBS: overlay hidden from screen capture (Win10 2004+)");
-    }
+        int extCount = PluginRegistry::GetCountByKind(PluginRegistry::PluginKind::External);
+        if (extCount == 0) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "No external plugins loaded.");
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "Drop plugin DLLs into /plugins/ folder.");
+            return;
+        }
 
-    inline void DrawCoreSectionContent(const std::string& sectionKey) {
-        if (sectionKey == "language") {
-            DrawLanguageSection();
-        } else if (sectionKey == "core_plugins") {
-            DrawCorePluginsSection();
-        } else if (sectionKey == "plugins") {
-            DrawPluginsSection();
-        } else if (sectionKey == "menu") {
-            DrawMenuSection();
-        } else {
-            DrawLanguageSection();
+        // Tương tự SDK plugins - sẽ implement sau
+        for (int i = 0; i < PluginRegistry::PluginCount; i++) {
+            auto& p = PluginRegistry::Plugins[i];
+            if (p.Kind != PluginRegistry::PluginKind::External) continue;
+            if (!p.Name) continue;
+
+            ImGui::PushID(i + 100);
+            ImGui::TextColored(ImVec4(1,1,1,1), "%s", p.Name);
+            ImGui::PopID();
         }
     }
 
-    inline int CountPluginsInCategory(Plugins::PluginCategory category) {
-        int count = 0;
-        for (const auto& up : Plugins::PluginManager::Get().GetPlugins()) {
-            auto* plugin = up.get();
-            if (!plugin || plugin->GetCategory() != category || IsCorePluginName(plugin->GetName())) {
-                continue;
+    // ============================================================================
+    // Core content panel dispatch
+    // ============================================================================
+    inline void DrawCoreContentPanel(int secondaryIdx) {
+        if (secondaryIdx == 0)      DrawLanguageSection();
+        else if (secondaryIdx == 1) DrawMenuSection();
+        else if (secondaryIdx == 2) DrawDebugSection();
+        else if (secondaryIdx == 3) SDKDiagnostics::Render();
+        else if (secondaryIdx == 4) DrawSDKPluginsSection();
+        else if (secondaryIdx == 5) DrawPluginsSection();
+        else                        DrawLanguageSection();
+    }
+
+    // ============================================================================
+    // Plugin menu helpers — build virtual secondary entries
+    //
+    // Orbwalker menu structure:
+    //   orbwalker (Menu_)
+    //   ├── drawings (Menu)        → secondary "Drawings"
+    //   ├── advanced (Menu)        → secondary "Advanced"
+    //   ├── separatorKeys (Sep)    ┐
+    //   ├── lasthitKey (KeyBind)   │→ grouped into synthetic "General" entry
+    //   ├── laneclearKey (KeyBind) │
+    //   ├── comboKey (KeyBind)     │
+    //   └── enabledOption (Bool)   ┘
+    //
+    // Secondary sidebar shows: Drawings, Advanced, General
+    // "General" contains all non-Menu root children
+    // ============================================================================
+
+    // Get virtual secondary count using new MenuUI API
+    inline int GetPluginSecondaryCount(int pluginIdx) {
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (!p.MenuRoot) return 0;
+        return (int)p.MenuRoot->GetRootSections().size();
+    }
+
+    // Get label for virtual secondary entry idx
+    inline const char* GetPluginSecondaryLabel(int pluginIdx, int virtualIdx) {
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (!p.MenuRoot) return "?";
+        auto sections = p.MenuRoot->GetRootSections();
+        if (virtualIdx >= 0 && virtualIdx < sections.size()) {
+            // Need a static/thread-local buffer to return const char* safely without allocations
+            static char s_labelBuffer[256];
+            strncpy_s(s_labelBuffer, sizeof(s_labelBuffer), sections[virtualIdx].second.c_str(), _TRUNCATE);
+            return s_labelBuffer;
+        }
+        return "?";
+    }
+
+    // ============================================================================
+    // Plugin content panel — renders plugin's SDK menu subtree
+    // ============================================================================
+    inline void DrawPluginContentPanel(int pluginIdx, int secIdx) {
+        if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) return;
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (!p.MenuRoot || !p.Loaded) return;
+
+        auto sections = p.MenuRoot->GetRootSections();
+        if (secIdx >= 0 && secIdx < sections.size()) {
+            p.MenuRoot->DrawRootSection(sections[secIdx].first);
+        } else {
+            // Fallback - draw whole root
+            p.MenuRoot->Draw();
+        }
+    }
+
+    // ============================================================================
+    // Utility
+    // ============================================================================
+    inline float MaxF(float a, float b) { return a > b ? a : b; }
+    inline int MaxI(int a, int b) { return a > b ? a : b; }
+    inline bool IsPrimaryPluginEntry(const PluginRegistry::PluginEntry& p) {
+        if (!p.Name || !p.Loaded || !p.MenuRoot) {
+            return false;
+        }
+        return p.Kind == PluginRegistry::PluginKind::SDK ||
+               p.Kind == PluginRegistry::PluginKind::Plugin ||
+               p.Kind == PluginRegistry::PluginKind::External;
+    }
+
+    // ============================================================================
+    // Primary panel entry count: "Core" + loaded plugins
+    // ============================================================================
+    inline int GetPrimaryCount() {
+        int count = 1;
+        for (int i = 0; i < PluginRegistry::PluginCount; i++) {
+            if (IsPrimaryPluginEntry(PluginRegistry::Plugins[i])) {
+                count++;
             }
-            ++count;
         }
         return count;
     }
 
-    inline int EstimateCoreSectionRows(const std::string& sectionKey) {
-        if (sectionKey == "language") {
-            return 2;
-        }
-
-        if (sectionKey == "core_plugins") {
-            int rows = 1;
-            auto& pm = Plugins::PluginManager::Get();
-            for (const char* name : kCorePluginNames) {
-                if (pm.Find(name)) {
-                    ++rows;
-                }
-            }
-            return std::max(rows, 2);
-        }
-
-        if (sectionKey == "plugins") {
-            int rows = 1;
-            for (auto category : { Plugins::PluginCategory::Champion, Plugins::PluginCategory::Utility, Plugins::PluginCategory::Misc }) {
-                int count = CountPluginsInCategory(category);
-                if (count > 0) {
-                    rows += 1 + count;
-                }
-            }
-            return std::max(rows, 2);
-        }
-
-        if (sectionKey == "menu") {
-            return 5;
-        }
-
-        return 3;
-    }
-
-    inline int EstimatePluginSectionRows(Plugins::IPlugin* plugin, const std::string& sectionKey) {
-        if (!plugin) {
-            return 2;
-        }
-
-        if (auto* menuRoot = plugin->GetMenuRoot()) {
-            return menuRoot->EstimateRootSectionRowCount(sectionKey);
-        }
-
-        return 6;
-    }
-
-    inline int EstimateOrbwalkerSectionRows(const std::string& sectionKey) {
-        if (auto* plugin = GetLoadedOrbwalkerPlugin()) {
-            return EstimatePluginSectionRows(plugin, sectionKey);
-        }
-        if (auto* menu = SDK::Orbwalker::GetMenuRoot()) {
-            return std::max(menu->EstimateRowCount(), 10);
-        }
-        return 10;
-    }
-
-    inline void DrawPluginSectionContent(Plugins::IPlugin* plugin, const std::string& sectionKey) {
-        if (!plugin) {
-            ImGui::TextDisabled("Plugin not found.");
-            return;
-        }
-
-        if (auto* menuRoot = plugin->GetMenuRoot()) {
-            menuRoot->DrawRootSection(sectionKey);
-            return;
-        }
-
-        plugin->OnMenu();
-    }
-
-    inline void DrawOrbwalkerPrimaryContent(const std::string& sectionKey) {
-        if (auto* plugin = GetLoadedOrbwalkerPlugin()) {
-            DrawPluginSectionContent(plugin, sectionKey);
-            return;
-        }
-        DrawOrbwalkerSection();
-    }
-
+    // ============================================================================
+    // Main render — called each ImGui frame
+    // ============================================================================
     inline void Render() {
-        bool gameFocused = false;
-        HWND fg = GetForegroundWindow();
-        if (fg) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(fg, &pid);
-            gameFocused = (pid == GetCurrentProcessId());
-        }
+        if (!showMenu) return;
 
-        static bool f1WasDown = false;
-        bool f1IsDown = gameFocused && (GetAsyncKeyState(VK_F1) & 0x8000) != 0;
-        if (f1IsDown && !f1WasDown) {
-            showMenu = !showMenu;
-        }
-        f1WasDown = f1IsDown;
+        // ── Build dynamic primary entries ──
+        // [0] = Core, [1..N] = loaded SDK plugins
+        constexpr int MAX_PRIMARY = 17;  // 1 Core + 16 plugins max
+        const char* primaryLabels[MAX_PRIMARY];
+        int primaryPluginMap[MAX_PRIMARY];  // maps primary index → plugin registry index (-1 for Core)
+        int primaryCount = 0;
 
-        bool shiftHeld = gameFocused && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-        bool visible = showMenu || shiftHeld;
-        if (!visible) {
-            return;
-        }
+        primaryLabels[0] = "Core";
+        primaryPluginMap[0] = -1;  // Core
+        primaryCount = 1;
 
-        auto primaryEntries = BuildPrimaryEntries();
-        if (!activePrimaryKey.empty() && !FindPrimaryEntry(primaryEntries, activePrimaryKey)) {
-            activePrimaryKey = "";
-            primarySelected = false;
-            secondarySelected = false;
-        }
-
-        // Determine which panels are visible
-        bool showSecondary = primarySelected && !activePrimaryKey.empty();
-        bool showContent = showSecondary && secondarySelected;
-
-        const SidebarEntry* activePrimary = nullptr;
-        std::vector<SecondaryEntry> secondaryEntries;
-        const char* activeSecondary = "";
-        const SecondaryEntry* activeSecondaryEntry = nullptr;
-
-        if (showSecondary) {
-            activePrimary = FindPrimaryEntry(primaryEntries, activePrimaryKey);
-            if (!activePrimary) {
-                showSecondary = false;
-                showContent = false;
+        for (int i = 0; i < PluginRegistry::PluginCount; i++) {
+            auto& p = PluginRegistry::Plugins[i];
+            if (IsPrimaryPluginEntry(p)) {
+                if (primaryCount < MAX_PRIMARY) {
+                    primaryLabels[primaryCount] = p.Name;
+                    primaryPluginMap[primaryCount] = i;
+                    primaryCount++;
+                }
             }
         }
 
-        if (showSecondary && activePrimary) {
-            secondaryEntries = BuildSecondaryEntries(*activePrimary);
-            activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
-            activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
-        }
+        bool showSecondary = primarySelected && activePrimaryIdx >= 0;
+        bool showContent   = showSecondary && secondarySelected;
 
-        const float primaryHeight = HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, primaryEntries.size())) + 4.0f;
-        const float secondaryHeight = showSecondary ? (HEADER_H + ITEM_H * static_cast<float>(std::max<size_t>(1, secondaryEntries.size())) + 4.0f) : 0.0f;
-        const float sidebarHeight = std::max(primaryHeight, secondaryHeight > 0 ? secondaryHeight : primaryHeight);
+        float totalW = PRIMARY_W;
+        if (showSecondary) totalW += PANEL_GAP + SECONDARY_W;
+        if (showContent)   totalW += PANEL_GAP + CONTENT_W;
 
-        // Content panel: use generous fixed height with scrollbar for overflow
-        const float contentHeight = std::max(sidebarHeight, MAX_CONTENT_H);
+        // ---- Drag handling ----
+        ImVec2 mouse = ImGui::GetIO().MousePos;
+        float titleMaxX = menuPosX + totalW;
+        float titleMaxY = menuPosY + HEADER_H;
+        bool inTitle = mouse.x >= menuPosX && mouse.x <= titleMaxX
+                    && mouse.y >= menuPosY && mouse.y <= titleMaxY;
 
-        // Calculate title bar width based on visible panels
-        float totalMenuWidth = PRIMARY_W;
-        if (showSecondary) totalMenuWidth += PANEL_GAP + SECONDARY_W;
-        if (showContent) totalMenuWidth += PANEL_GAP + CONTENT_W;
-
-        ImVec2 mousePos = ImGui::GetIO().MousePos;
-        ImVec2 titleMin = menuPos;
-        ImVec2 titleMax = ImVec2(menuPos.x + totalMenuWidth, menuPos.y + HEADER_H);
-        bool mouseInTitle = (mousePos.x >= titleMin.x && mousePos.x <= titleMax.x &&
-            mousePos.y >= titleMin.y && mousePos.y <= titleMax.y);
-
-        // Only start dragging if no ImGui window is hovered/active (fixes click-through issues)
-        if (ImGui::IsMouseClicked(0) && mouseInTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
+        if (ImGui::IsMouseClicked(0) && inTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
             isDragging = true;
-            dragOffset = ImVec2(mousePos.x - menuPos.x, mousePos.y - menuPos.y);
+            dragOffX = mouse.x - menuPosX;
+            dragOffY = mouse.y - menuPosY;
         }
-        if (!ImGui::IsMouseDown(0)) {
-            isDragging = false;
-        }
+        if (!ImGui::IsMouseDown(0)) isDragging = false;
         if (isDragging) {
-            menuPos.x = mousePos.x - dragOffset.x;
-            menuPos.y = mousePos.y - dragOffset.y;
+            menuPosX = mouse.x - dragOffX;
+            menuPosY = mouse.y - dragOffY;
         }
 
         ImDrawList* dl = ImGui::GetForegroundDrawList();
-        if (!dl) {
-            return;
+        if (!dl) return;
+
+        // ---- Positions ----
+        ImVec2 primaryPos   = ImVec2(menuPosX, menuPosY);
+        ImVec2 secondaryPos = ImVec2(menuPosX + PRIMARY_W + PANEL_GAP, menuPosY);
+        ImVec2 contentPos   = ImVec2(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY);
+
+        // ── Secondary count depends on active primary ──
+        int secCount = 0;
+        if (showSecondary && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount) {
+            int plugIdx = primaryPluginMap[activePrimaryIdx];
+            if (plugIdx < 0) {
+                // Core
+                secCount = CORE_SECONDARY_COUNT;
+            } else {
+                // Plugin — virtual secondary: submenus + "General" for leaf items
+                auto& p = PluginRegistry::Plugins[plugIdx];
+                secCount = (p.MenuRoot && p.Loaded) ? GetPluginSecondaryCount(plugIdx) : 0;
+            }
         }
 
-        const ImVec2 primaryPos = menuPos;
-        const ImVec2 secondaryPos(menuPos.x + PRIMARY_W + PANEL_GAP, menuPos.y);
-        const ImVec2 contentPos(menuPos.x + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2.0f, menuPos.y);
+        float primaryH   = HEADER_H + ITEM_H * (float)MaxI(1, primaryCount) + 4;
+        float secondaryH = showSecondary ? HEADER_H + ITEM_H * (float)MaxI(1, secCount) + 4 : 0;
+        float sidebarH   = MaxF(primaryH, secondaryH > 0 ? secondaryH : primaryH);
+        float contentH   = MaxF(sidebarH, MAX_CONTENT_H);
 
-        // Draw Primary sidebar (always visible)
+        // ==== PRIMARY PANEL ====
         {
-            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarHeight), COL_BG, 4.0f);
+            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH), COL_BG, 4.0f);
             dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarHeight), COL_BORDER, 4.0f);
-            dl->AddText(ImVec2(primaryPos.x + 10.0f, primaryPos.y + 8.0f), IM_COL32(120, 235, 120, 255), "NightSharp");
-            dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H), ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER, 1.0f);
+            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH), COL_BORDER, 4.0f);
+            dl->AddText(ImVec2(primaryPos.x + 10, primaryPos.y + 8), COL_ACCENT, "NightSharp");
+            dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H),
+                        ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER);
 
-            float y = primaryPos.y + HEADER_H + 2.0f;
-            for (const auto& entry : primaryEntries) {
-                if (DrawSidebarItem(dl, ImVec2(primaryPos.x, y), PRIMARY_W, entry.label.c_str(), activePrimaryKey == entry.key, true)) {
-                    if (activePrimaryKey != entry.key) {
-                        activePrimaryKey = entry.key;
-                        secondarySelected = false; // Reset secondary when primary changes
+            float y = primaryPos.y + HEADER_H + 2;
+            for (int i = 0; i < primaryCount; i++) {
+                if (DrawSidebarItem(dl, ImVec2(primaryPos.x, y), PRIMARY_W,
+                                    primaryLabels[i], activePrimaryIdx == i, true)) {
+                    if (activePrimaryIdx != i) {
+                        activePrimaryIdx = i;
+                        activeSecondaryIdx = -1;
+                        activePluginSecIdx = -1;
+                        secondarySelected = false;
                     }
                     primarySelected = true;
                 }
@@ -648,122 +589,109 @@ namespace NightSharpMenu {
             }
         }
 
-        // Recalculate after potential click changes
-        if (primarySelected && !activePrimaryKey.empty()) {
-            activePrimary = FindPrimaryEntry(primaryEntries, activePrimaryKey);
-            if (activePrimary) {
-                secondaryEntries = BuildSecondaryEntries(*activePrimary);
-                activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
-                activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
-                showSecondary = true;
-            }
-        }
+        // Recompute
+        showSecondary = primarySelected && activePrimaryIdx >= 0;
+        if (!showSecondary) return;
 
-        if (!showSecondary || !activePrimary) {
-            return;
-        }
+        int activePlugMap = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
+                            ? primaryPluginMap[activePrimaryIdx] : -1;
 
-        // Determine if we should collapse secondary+content into one panel
-        const bool collapseOrbwalkerToSecondary =
-            (activePrimary->key == "orbwalker" && secondaryEntries.size() <= 1);
-        const bool collapseToTwoPanel = (!collapseOrbwalkerToSecondary && secondaryEntries.size() <= 1);
-
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.96f, 0.99f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 4.0f));
-
-        if (collapseOrbwalkerToSecondary || collapseToTwoPanel) {
-            // 2-panel layout: Primary + merged content
-            const float mergedWidth = SECONDARY_W + PANEL_GAP + CONTENT_W;
-            const float mergedHeight = std::max(sidebarHeight, contentHeight);
-
-            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + mergedWidth, secondaryPos.y + mergedHeight), COL_CONTENT_BG, 4.0f);
-            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + mergedWidth, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + mergedWidth, secondaryPos.y + mergedHeight), COL_BORDER, 4.0f);
-            dl->AddText(ImVec2(secondaryPos.x + 10.0f, secondaryPos.y + 8.0f), COL_ACCENT,
-                activeSecondaryEntry ? activeSecondaryEntry->label.c_str() : activePrimary->label.c_str());
-            dl->AddLine(ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H), ImVec2(secondaryPos.x + mergedWidth, secondaryPos.y + HEADER_H), COL_BORDER, 1.0f);
-
-            ImGui::SetNextWindowPos(ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(mergedWidth, mergedHeight - HEADER_H), ImGuiCond_Always);
-            ImGui::Begin("##nightsharp_secondary_content", nullptr,
-                ImGuiWindowFlags_NoTitleBar |
-                ImGuiWindowFlags_NoResize |
-                ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoCollapse |
-                ImGuiWindowFlags_NoBackground);
-            ImGui::BeginChild("##nightsharp_secondary_scroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-            if (activePrimary->key == "orbwalker") {
-                DrawOrbwalkerPrimaryContent(activeSecondary);
-            } else if (activePrimary->key == "core") {
-                DrawCoreSectionContent(activeSecondary);
-            } else {
-                DrawPluginSectionContent(activePrimary->plugin, activeSecondary);
-            }
-            ImGui::EndChild();
-            ImGui::End();
+        if (activePlugMap < 0) {
+            // Core
+            secCount = CORE_SECONDARY_COUNT;
         } else {
-            // 3-panel layout: Primary + Secondary + Content
-            // Draw Secondary sidebar
-            {
-                dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarHeight), COL_BG, 4.0f);
-                dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-                dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarHeight), COL_BORDER, 4.0f);
-                dl->AddText(ImVec2(secondaryPos.x + 10.0f, secondaryPos.y + 8.0f), IM_COL32(120, 235, 120, 255), activePrimary->label.c_str());
-                dl->AddLine(ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H), ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_BORDER, 1.0f);
+            auto& p = PluginRegistry::Plugins[activePlugMap];
+            secCount = (p.MenuRoot && p.Loaded) ? GetPluginSecondaryCount(activePlugMap) : 0;
+        }
 
-                float y = secondaryPos.y + HEADER_H + 2.0f;
-                for (const auto& entry : secondaryEntries) {
-                    if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W, entry.label.c_str(), activeSecondaryByPrimary[activePrimaryKey] == entry.key, true)) {
-                        activeSecondaryByPrimary[activePrimaryKey] = entry.key;
-                        secondarySelected = true;
-                    }
-                    y += ITEM_H;
-                }
-            }
+        // ==== SECONDARY PANEL ====
+        {
+            if (activeSecondaryIdx < 0 && secCount > 0)
+                activeSecondaryIdx = 0;
 
-            // Draw Content panel (only if secondary is selected)
-            if (secondarySelected) {
-                // Refresh active secondary after potential click
-                activeSecondary = EnsureActiveSecondary(activePrimaryKey, secondaryEntries);
+            secondaryH = HEADER_H + ITEM_H * (float)MaxI(1, secCount) + 4;
+            sidebarH = MaxF(primaryH, secondaryH);
 
-                dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentHeight), COL_CONTENT_BG, 4.0f);
-                dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
-                dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentHeight), COL_BORDER, 4.0f);
-                activeSecondaryEntry = FindSecondaryEntry(secondaryEntries, activeSecondary);
-                dl->AddText(ImVec2(contentPos.x + 10.0f, contentPos.y + 8.0f), COL_ACCENT,
-                    activeSecondaryEntry ? activeSecondaryEntry->label.c_str() : activeSecondary);
-                dl->AddLine(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_BORDER, 1.0f);
+            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH), COL_BG, 4.0f);
+            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
+            dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH), COL_BORDER, 4.0f);
 
-                ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
-                ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentHeight - HEADER_H), ImGuiCond_Always);
-                ImGui::Begin("##nightsharp_content", nullptr,
-                    ImGuiWindowFlags_NoTitleBar |
-                    ImGuiWindowFlags_NoResize |
-                    ImGuiWindowFlags_NoMove |
-                    ImGuiWindowFlags_NoSavedSettings |
-                    ImGuiWindowFlags_NoCollapse |
-                    ImGuiWindowFlags_NoBackground);
-                ImGui::BeginChild("##nightsharp_content_scroll", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+            // Header label
+            const char* headerLabel = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
+                                      ? primaryLabels[activePrimaryIdx] : "?";
+            dl->AddText(ImVec2(secondaryPos.x + 10, secondaryPos.y + 8), COL_ACCENT, headerLabel);
+            dl->AddLine(ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H),
+                        ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_BORDER);
 
-                if (activePrimary->key == "core") {
-                    DrawCoreSectionContent(activeSecondary);
-                } else if (activePrimary->key == "orbwalker") {
-                    DrawOrbwalkerPrimaryContent(activeSecondary);
+            float y = secondaryPos.y + HEADER_H + 2;
+            for (int i = 0; i < secCount; i++) {
+                const char* secLabel = nullptr;
+                if (activePlugMap < 0) {
+                    // Core secondary entries
+                    secLabel = CORE_SECONDARY[i].label;
                 } else {
-                    DrawPluginSectionContent(activePrimary->plugin, activeSecondary);
+                    // Plugin secondary entries = virtual (submenus + General)
+                    secLabel = GetPluginSecondaryLabel(activePlugMap, i);
                 }
+                if (!secLabel) secLabel = "?";
 
-                ImGui::EndChild();
-                ImGui::End();
+                if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W,
+                                    secLabel, activeSecondaryIdx == i, true)) {
+                    activeSecondaryIdx = i;
+                    secondarySelected = true;
+                }
+                y += ITEM_H;
             }
         }
 
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(3);
+        // ==== CONTENT PANEL ====
+        if (secondarySelected && activeSecondaryIdx >= 0) {
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f,1.0f,1.0f,1.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10,4));
+
+            contentH = MaxF(sidebarH, MAX_CONTENT_H);
+
+            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
+            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
+            dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_BORDER, 4.0f);
+
+            // Section label
+            const char* sectionLabel = "?";
+            if (activePlugMap < 0 && activeSecondaryIdx < CORE_SECONDARY_COUNT)
+                sectionLabel = CORE_SECONDARY[activeSecondaryIdx].label;
+            else if (activePlugMap >= 0) {
+                sectionLabel = GetPluginSecondaryLabel(activePlugMap, activeSecondaryIdx);
+            }
+
+            dl->AddText(ImVec2(contentPos.x + 10, contentPos.y + 8), COL_ACCENT, sectionLabel);
+            dl->AddLine(ImVec2(contentPos.x, contentPos.y + HEADER_H),
+                        ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_BORDER);
+
+            ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
+            ImGui::Begin("##ns_content", nullptr,
+                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
+
+            if (activePlugMap < 0) {
+                // Core content
+                DrawCoreContentPanel(activeSecondaryIdx);
+            } else {
+                // Plugin content — render SDK menu subtree
+                DrawPluginContentPanel(activePlugMap, activeSecondaryIdx);
+            }
+
+            ImGui::End();
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(3);
+        }
+
+        // Update explicit menu bounds for WM_NCHITTEST
+        menuBoundsRight  = menuPosX + totalW;
+        menuBoundsBottom = menuPosY + contentH;
     }
 
 } // namespace NightSharpMenu

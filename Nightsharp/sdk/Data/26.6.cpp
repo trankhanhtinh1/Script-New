@@ -1,0 +1,33971 @@
+#include "26.6.h"
+
+namespace SDK::Data::Patch26_6 {
+
+const std::size_t kJsonSize = 971452;
+
+namespace detail {
+static const char kChunk_000[] = R"NS_26_6_000(
+{
+  "Aatrox": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            25.0,
+            25.0,
+            25.0,
+            25.0,
+            25.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5249999761581421,
+                0.6000000238418579,
+                0.675000011920929,
+                0.75,
+                0.824999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            25.0,
+            40.0,
+            55.0,
+            70.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6875,
+                0.75,
+                0.8125,
+                0.875,
+                0.9375
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            12.5,
+            31.25,
+            50,
+            68.75,
+            87.5
+          ],
+          "DamagesReductionPerLvlOnSoldier": [
+            0.5,
+            0.4706,
+            0.4412,
+            0.4118,
+            0.3824,
+            0.3529,
+            0.3235,
+            0.2941,
+            0.2647,
+            0.2353,
+            0.2059,
+            0.1765,
+            0.1471,
+            0.1176,
+            0.0882,
+            0.0588,
+            0.0294,
+            0
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondCast"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.825,
+                0.9,
+                0.975,
+                1.05,
+                1.125
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15,
+            37.5,
+            100,
+            137.5,
+            175
+          ],
+          "DamagesReductionPerLvlOnSoldier": [
+            0.5,
+            0.4706,
+            0.4412,
+            0.4118,
+            0.3824,
+            0.3529,
+            0.3235,
+            0.2941,
+            0.2647,
+            0.2353,
+            0.2059,
+            0.1765,
+            0.1471,
+            0.1176,
+            0.0882,
+            0.0588,
+            0.0294,
+            0
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "ThirdCast"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            30.0,
+            40.0,
+            50.0,
+            60.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 2,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ahri": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            35.0,
+            60.0,
+            85.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            40,
+            65,
+            90,
+            115,
+            140
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "WayBack"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            75.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0
+          ],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+   )NS_26_6_000";
+
+static const char kChunk_001[] = R"NS_26_6_001(
+       "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.48,
+                0.48,
+                0.48,
+                0.48,
+                0.48
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            64,
+            104,
+            144,
+            184,
+            224
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "SingleTotal"
+      }
+    ]
+  },
+  "Akali": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            70.0,
+            140.0,
+            210.0,
+            280.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.7,
+                0.7,
+                0.7,
+                0.7,
+                0.7
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50,
+            80,
+            110,
+            140,
+            170
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "SecondCast"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 1.33,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            110.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            85,
+            150,
+            215
+          ],
+          "MaxScaleTargetMissHealth": 0.7,
+          "ScalePerTargetMissHealth": [
+            2.85,
+            2.85,
+            2.85
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondCast"
+      }
+    ]
+  },
+  "Akshan": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            8.0,
+            16.0,
+            24.0,
+            32.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15.0,
+            45.0,
+            75.0,
+            105.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15.0,
+            25.0,
+            35.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier":)NS_26_6_001";
+
+static const char kChunk_002[] = R"NS_26_6_002(
+ [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.46000000834465027,
+                0.5199999809265137,
+                0.5799999833106995,
+                0.6399999856948853
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Alistar": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.04,
+                0.04,
+                0.04,
+                0.04,
+                0.04
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            8,
+            11,
+            14,
+            17,
+            20
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerHalfSecond"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            60.0,
+            100.0,
+            140.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            55.0,
+            110.0,
+            165.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ambessa": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Dam)NS_26_6_002";
+
+static const char kChunk_003[] = R"NS_26_6_003(
+ages": [
+            25.0,
+            50.0,
+            75.0,
+            100.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Amumu": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                3,
+                3.75,
+                4.5,
+                5.25,
+                6
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.03,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30,
+            45,
+            60,
+            75,
+            90
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.625,
+                0.75,
+                0.875,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.005,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            5,
+            7.5,
+            10,
+            12.5,
+            15
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerHalfSecond"
+      }
+    ]
+  },
+  "Anivia": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            55.0,
+            80.0,
+            105.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.125,
+                0.125,
+                0.125
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            30.0,
+            45.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Annie": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            25.0,
+            35.0,
+            45.0,
+            55.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductio)NS_26_6_003";
+
+static const char kChunk_004[] = R"NS_26_6_004(
+nPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            150.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Aphelios": {
+    "E": [],
+    "Q": [],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            75.0,
+            125.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Ashe": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.024999976158142,
+                1.100000023841858,
+                1.1749999523162842,
+                1.25,
+                1.3250000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": true,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            200.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "AurelionSol": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0
+          ],
+          "BonusDamageOnMonster": [
+            2.0,
+            2.0,
+            2.0,
+            2.0,
+            2.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099
+              ],
+              "DamageType": "Magical",
+    )NS_26_6_004";
+
+static const char kChunk_005[] = R"NS_26_6_005(
+          "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            5.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            60.0,
+            70.0,
+            80.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            300,
+            300,
+            300,
+            300,
+            300
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.9375,
+                0.9375,
+                0.9375
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            62.5,
+            187.5,
+            312.5
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Aurora": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            175.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Azir": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.3499999940395355,
+                0.4000000059604645,
+                0.44999998807907104,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            60.0,
+            80.0,
+            100.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+           )NS_26_6_005";
+
+static const char kChunk_006[] = R"NS_26_6_006(
+   "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            200.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2750000059604645,
+                0.3499999940395355,
+                0.42500001192092896,
+                0.5,
+                0.574999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            50.0,
+            65.0,
+            80.0,
+            95.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            8.0,
+            16.0,
+            24.0,
+            32.0,
+            40.0,
+            48.0,
+            56.0,
+            64.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Bard": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Belveth": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.07999999821186066,
+                0.07999999821186066,
+                0.07999999821186066,
+                0.07999999821186066,
+                0.07999999821186066
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            6.0,
+            7.0,
+            8.0,
+            9.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            5.0,
+            10.0,
+            15.0,
+            20.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            2.0,
+            6.0,
+            10.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.25,
+                1.25,
+                1.25,
+                1.25,
+                1.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Blitzcrank": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.0,
+                2.0,
+                2.0,
+                2.0,
+                2.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [)NS_26_6_006";
+
+static const char kChunk_007[] = R"NS_26_6_007(
+],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            110.0,
+            160.0,
+            210.0,
+            260.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            150.0,
+            275.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Brand": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            55.0,
+            80.0,
+            105.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            100.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8749999850988388,
+                0.8749999850988388,
+                0.8749999850988388,
+                0.8749999850988388,
+                0.8749999850988388
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            37.5,
+            93.75,
+            150.0,
+            206.25,
+            262.5
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Braum": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            75.0,
+            120.0,
+            165.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissH)NS_26_6_007";
+
+static const char kChunk_008[] = R"NS_26_6_008(
+ealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Briar": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            20.0,
+            35.0,
+            50.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Caitlyn": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            50.0,
+            90.0,
+            130.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            125.0,
+            300.0,
+            475.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            35.0,
+            80.0,
+            125.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "Dam)NS_26_6_008";
+
+static const char kChunk_009[] = R"NS_26_6_009(
+agesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Camille": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.20000000298023224,
+                0.25,
+                0.30000001192092896,
+                0.3499999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Cassiopeia": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            20.0,
+            43.0,
+            66.0,
+            89.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10,
+            30,
+            50,
+            70,
+            90
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            75.0,
+            110.0,
+            145.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25,
+            36.67,
+            48.33,
+            60,
+            71.67
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            20.0,
+            25.0,
+            30.0,
+            35.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsM)NS_26_6_009";
+
+static const char kChunk_010[] = R"NS_26_6_010(
+odifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15,
+                0.15,
+                0.15,
+                0.15,
+                0.15
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20,
+            25,
+            30,
+            35,
+            40
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ]
+  },
+  "Chogath": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            20.0,
+            40.0,
+            60.0,
+            80.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05,
+                0.05,
+                0.05,
+                0.05,
+                0.05
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMinion": [
+                60,
+                80,
+                100,
+                120,
+                140
+              ],
+              "ScalingBuff": "Feast",
+              "ScalingBuffTarget": "Source",
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            80.0,
+            135.0,
+            190.0,
+            245.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            125.0,
+            300.0,
+            475.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusHealth"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            1000,
+            1000,
+            1000
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Corki": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.4000000953674316,
+                2.4000000953674316,
+                2.4000000953674316,
+                2.4000000953674316,
+                2.4000000953674316
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Mixed",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Mixed",
+          "Damages": [
+            7.5,
+            10.625,
+            13.75,
+            16.875,
+            20
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerQuarterSecond"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.25,
+                1.25,
+                1.25,
+                1.25,
+                1.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+)NS_26_6_010";
+
+static const char kChunk_011[] = R"NS_26_6_011(
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            60.0,
+            105.0,
+            150.0,
+            195.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            90.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.9,
+                1.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            180,
+            230,
+            280
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                2.0,
+                2.0,
+                2.0,
+                2.0,
+                2.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            150.0,
+            225.0,
+            300.0,
+            375.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15,
+            22.5,
+            30,
+            37.5,
+            45
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerQuarterSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                7.5,
+                7.5,
+                7.5,
+                7.5,
+                7.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            150,
+            150,
+            150,
+            150,
+            150,
+            150,
+            150,
+            175,
+            200,
+            225,
+            250,
+            275,
+            300,
+            325,
+            350,
+            400,
+            450,
+            500
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.375,
+                0.375,
+                0.375,
+                0.375,
+                0.375
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.05,
+                0.05,
+                0.05,
+                0.05,
+                0.05
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            7.5,
+            7.5,
+            7.5,
+            7.5,
+            7.5,
+            7.5,
+            7.5,
+            8.75,
+            10,
+            11.25,
+            12.5,
+            13.75,
+            15,
+            16.25,
+            17.5,
+            20,
+            22.5,
+            25
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "EmpoweredDamagePerQuarterSecond"
+      }
+    ]
+  },
+  "Darius": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1.1,
+                1.2,
+                1.3,
+                1.4
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40,
+            70,
+            100,
+            130,
+            160
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            0.0,
+            125.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15,
+                0.15,
+                0.15
+              ],
+              "DamageType": "True",
+              "ScalingBuff": "DariusHemo",
+              "ScalingBuffTarget": "Target",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            20,
+            40,
+            60
+          ],
+          "ScalingBuff": "DariusHemo",
+          "ScalingBuffTarget": "Target",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.55,
+                0.6,
+                0.65,
+                0.7
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Diana": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+             )NS_26_6_011";
+
+static const char kChunk_012[] = R"NS_26_6_012(
+   0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            50.0,
+            70.0,
+            90.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.18000000715255737,
+                0.18000000715255737,
+                0.18000000715255737,
+                0.18000000715255737,
+                0.18000000715255737
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            8.0,
+            20.0,
+            32.0,
+            44.0,
+            56.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "DrMundo": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusHealth"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            15.0,
+            25.0,
+            35.0,
+            45.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2,
+                0.225,
+                0.25,
+                0.275,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMinion": [
+                300,
+                350,
+                400,
+                450,
+                500
+              ],
+              "MinDamage": {
+                "Damages": [
+                  80,
+                  130,
+                  180,
+                  230,
+                  280
+                ]
+              },
+              "ScalingTarget": "Target",
+              "ScalingType": "CurrentHealth"
+            }
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.07000000029802322,
+                0.07000000029802322,
+                0.07000000029802322,
+                0.07000000029802322,
+                0.07000000029802322
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            5.0,
+            20.0,
+            35.0,
+            50.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Draven": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            75.0,
+            110.0,
+            145.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.75,
+                0.8500000238418579,
+                0.949999988079071,
+                1.0499999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+  )NS_26_6_012";
+
+static const char kChunk_013[] = R"NS_26_6_013(
+          35.0,
+            40.0,
+            45.0,
+            50.0,
+            55.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                1.100000023841858,
+                1.2999999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ekko": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            65.0,
+            80.0,
+            95.0,
+            110.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40,
+            65,
+            90,
+            115,
+            140
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "WayBack"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.75,
+                1.75,
+                1.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            200.0,
+            350.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.03,
+                0.03,
+                0.03,
+                0.03,
+                0.03
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMinion": [
+                150,
+                150,
+                150,
+                150,
+                150
+              ],
+              "MinDamage": {
+                "Damages": [
+                  15,
+                  15,
+                  15,
+                  15,
+                  15
+                ]
+              },
+              "ScalePer100Ap": 0.03,
+              "ScalingTarget": "Target",
+              "ScalingType": "MissingHealth"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Elise": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            65.0,
+            85.0,
+            105.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            45,
+            65,
+            85,
+            105,
+            125
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.08,
+                0.08,
+                0.08,
+                0.08,
+                0.08
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                75,
+                100,
+                125,
+                150,
+                175
+              ],
+              "ScalePer100Ap": 0.03,
+              "ScalingTarget": "Target",
+              "ScalingType": "MissingHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70,
+            110,
+            150,
+            190,
+            230
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            10.0,
+            20.0,
+            30.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "Sc)NS_26_6_013";
+
+static const char kChunk_014[] = R"NS_26_6_014(
+alePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10,
+            20,
+            30,
+            40
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            60.0,
+            100.0,
+            140.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Evelynn": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.03,
+                0.03,
+                0.03,
+                0.03,
+                0.03
+              ],
+              "DamageType": "Magical",
+              "MinDamage": {
+                "Damages": [
+                  25,
+                  25,
+                  25,
+                  25,
+                  25
+                ]
+              },
+              "ScalePer100Ap": 0.015,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            55,
+            70,
+            85,
+            100,
+            115
+          ],
+          "IsApplyOnHit": true,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.04,
+                0.04,
+                0.04,
+                0.04,
+                0.04
+              ],
+              "DamageType": "Magical",
+              "MinDamage": {
+                "Damages": [
+                  25,
+                  25,
+                  25,
+                  25,
+                  25
+                ]
+              },
+              "ScalePer100Ap": 0.025,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75,
+            100,
+            125,
+            150,
+            175
+          ],
+          "IsApplyOnHit": true,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            25.0,
+            30.0,
+            35.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25,
+            30,
+            35,
+            40,
+            45
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.8000000715255737,
+                1.8000000715255737,
+                1.8000000715255737
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            250,
+            500,
+            750
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            200.0,
+            250.0,
+            300.0,
+            350.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ezreal": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSol)NS_26_6_014";
+
+static const char kChunk_015[] = R"NS_26_6_015(
+dier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            150.0,
+            350.0,
+            550.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.699999988079071,
+                0.75,
+                0.800000011920929,
+                0.8500000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            80.0,
+            135.0,
+            190.0,
+            245.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "FiddleSticks": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.5,
+                2.5,
+                2.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            250.0,
+            750.0,
+            1250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.45,
+                0.45,
+                0.45
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            125,
+            225,
+            325
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.45,
+                0.45,
+                0.45,
+                0.45,
+                0.45
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            80,
+            105,
+            130,
+            155,
+            180
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ]
+  },
+  "Fiora": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Physical",
+          "Damages": [
+            60.0,
+            70.0,
+            80.0,
+            90.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+    )NS_26_6_015";
+
+static const char kChunk_016[] = R"NS_26_6_016(
+      "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70.0,
+            110.0,
+            150.0,
+            190.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Fizz": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            180.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            225,
+            325,
+            425
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2,
+                1.2,
+                1.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            300,
+            400,
+            500
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "ThirdForm"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            90.0,
+            90.0,
+            90.0,
+            90.0,
+            90.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            20.0,
+            25.0,
+            30.0,
+            35.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50,
+            70,
+            90,
+            110,
+            130
+          ],
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Galio": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            90.0,
+            130.0,
+            170.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+   )NS_26_6_016";
+
+static const char kChunk_017[] = R"NS_26_6_017(
+       "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                50,
+                50,
+                50,
+                50,
+                50
+              ],
+              "ScalePer100Ap": 0.0067,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerHalfSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.06,
+                0.06,
+                0.06,
+                0.06,
+                0.06
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                150,
+                150,
+                150,
+                150,
+                150
+              ],
+              "ScalePer100Ap": 0.02,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Gangplank": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            40.0,
+            70.0,
+            100.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            120.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Garen": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3700000047683716,
+                0.4000000059604645,
+                0.4300000071525574,
+                0.46000000834465027,
+                0.49000000953674316
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            1.0,
+            4.0,
+            7.0,
+            10.0,
+            13.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.48,
+                0.493,
+                0.506,
+                0.52,
+                0.533
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            18.6,
+            24,
+            29.3,
+            34.6,
+            40
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SingleTotal"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            30.0,
+            60.0,
+            90.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.286,
+                0.333,
+                0.4
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Target",
+              "ScalingType": "MissingHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            175,
+            350,
+            525
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+     )NS_26_6_017";
+
+static const char kChunk_018[] = R"NS_26_6_018(
+ {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.286,
+                0.333,
+                0.4
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Target",
+              "ScalingType": "MissingHealth"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            175,
+            350,
+            525
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Gnar": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.06,
+                0.06,
+                0.06,
+                0.06,
+                0.06
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50,
+            85,
+            120,
+            155,
+            190
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            45.0,
+            90.0,
+            135.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2,
+                1.2,
+                1.2,
+                1.2,
+                1.2
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5,
+            45,
+            85,
+            125,
+            165
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.4999999664723873,
+                1.4999999664723873,
+                1.4999999664723873
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.7499999832361937,
+                0.7499999832361937,
+                0.7499999832361937
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            149.99999664723873,
+            299.99999329447746,
+            449.9999899417162
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            0.0,
+            10.0,
+            20.0,
+            30.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            300,
+            300,
+            300,
+            300,
+            300
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            25,
+            45,
+            65,
+            85,
+            105
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ]
+  },
+  "Gragas": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+  )NS_26_6_018";
+
+static const char kChunk_019[] = R"NS_26_6_019(
+        "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            50.0,
+            80.0,
+            110.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            300,
+            300,
+            300,
+            300,
+            300
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Graves": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.550000011920929,
+                0.699999988079071,
+                0.8500000238418579,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.7,
+                1,
+                1.3,
+                1.6
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            85,
+            115,
+            145,
+            175,
+            205
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "WayBack"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            125.0,
+            275.0,
+            425.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            60.0,
+            110.0,
+            160.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Gwen": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            15.0,
+            15.0,
+            15.0,
+            15.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+           )NS_26_6_019";
+
+static const char kChunk_020[] = R"NS_26_6_020(
+ }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            30.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Hecarim": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [
+            90,
+            120,
+            150,
+            180,
+            210
+          ],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2,
+                0.2,
+                0.2,
+                0.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20,
+            30,
+            40,
+            50,
+            60
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ]
+  },
+  "Heimerdinger": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            60.0,
+            100.0,
+            140.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            150,
+            250,
+            350
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            3.0,
+            7.0,
+            11.0,
+            15.0,
+            19.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages":)NS_26_6_020";
+
+static const char kChunk_021[] = R"NS_26_6_021(
+ [
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0299999713897705,
+                1.0299999713897705,
+                1.0299999713897705,
+                1.0299999713897705,
+                1.0299999713897705
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            90.0,
+            135.0,
+            180.0,
+            225.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.83,
+                1.83,
+                1.83
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            503,
+            697.5,
+            892
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Hwei": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            50.0,
+            80.0,
+            110.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            200.0,
+            325.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Illaoi": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            9.0,
+            19.058823529411764,
+            29.11764705882353,
+            39.1764705882353,
+            49.23529411764706,
+            59.294117647058826,
+            69.3529411764706,
+            79.41176470588235,
+            89.47058823529412,
+            99.52941176470588,
+            109.58823529411765,
+            119.64705882352942,
+            129.7058823529412,
+            139.76470588235293,
+            149.8235294117647,
+            159.88235294117646,
+            169.94117647058823,
+            180.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+      )NS_26_6_021";
+
+static const char kChunk_022[] = R"NS_26_6_022(
+      }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.03,
+                0.035,
+                0.04,
+                0.045,
+                0.05
+              ],
+              "DamageType": "Physical",
+              "MaxDamageOnMinion": [
+                300,
+                300,
+                300,
+                300,
+                300
+              ],
+              "ScalePer100Ad": 0.02,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Irelia": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [
+            55,
+            75,
+            95,
+            115,
+            135
+          ],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            25.0,
+            45.0,
+            65.0,
+            85.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            50.0,
+            61.0,
+            72.0,
+            83.0,
+            94.0,
+            105.0,
+            116.0,
+            127.0,
+            138.0,
+            149.0,
+            160.0,
+            171.0,
+            182.0,
+            193.0,
+            204.0,
+            215.0,
+            226.0,
+            237.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            125.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ivern": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            70.0,
+            90.0,
+            110.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingT)NS_26_6_022";
+
+static const char kChunk_023[] = R"NS_26_6_023(
+ype": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            90.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            12.5,
+            20.0,
+            27.5,
+            35.0,
+            42.5
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Janna": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            55.0,
+            90.0,
+            125.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15,
+            20,
+            25,
+            30,
+            35
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            55.0,
+            85.0,
+            115.0,
+            145.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "JarvanIV": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.4500000476837158,
+                1.4500000476837158,
+                1.4500000476837158,
+                1.4500000476837158,
+                1.4500000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            90.0,
+            130.0,
+            170.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.7999999523162842,
+                1.7999999523162842,
+                1.7999999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            75.0,
+            200.0,
+            325.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Jax": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            40.0,
+            70.0,
+            100.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffT)NS_26_6_023";
+
+static const char kChunk_024[] = R"NS_26_6_024(
+arget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            25.0,
+            65.0,
+            105.0,
+            145.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            100.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            50.0,
+            85.0,
+            120.0,
+            155.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Jayce": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            100,
+            200,
+            300,
+            400,
+            500,
+            600
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            60.0,
+            110.0,
+            160.0,
+            210.0,
+            260.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2,
+                1.2,
+                1.2,
+                1.2,
+                1.2,
+                1.2
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            70,
+            120,
+            170,
+            220,
+            270,
+            320
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            25.0,
+            25.0,
+            25.0,
+            25.0,
+            25.0,
+            60.0,
+            60.0,
+            60.0,
+            60.0,
+            60.0,
+            95.0,
+            95.0,
+            95.0,
+            95.0,
+            95.0,
+            130.0,
+            130.0,
+            130.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            80.0,
+            140.0,
+            200.0,
+            260.0,
+            320.0,
+            380.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.7,
+                0.78,
+                0.86,
+                0.94,
+                1.02,
+                1.1
+              ],
+              "DamageType": "Physical")NS_26_6_024";
+
+static const char kChunk_025[] = R"NS_26_6_025(
+,
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "IsModifiedDamage": true,
+          "SpellEffectType": "None"
+        },
+        "Stage": "SecondForm"
+      }
+    ]
+  },
+  "Jhin": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            80.0,
+            140.0,
+            200.0,
+            260.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.78,
+                0.78,
+                0.78,
+                0.78,
+                0.78
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.65,
+                0.65,
+                0.65,
+                0.65,
+                0.65
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            13,
+            52,
+            91,
+            130,
+            169
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.36500000953674316,
+                0.4399999976158142,
+                0.5149999856948853,
+                0.5899999737739563,
+                0.6650000214576721
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            19.0,
+            44.0,
+            69.0,
+            94.0,
+            119.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            64.0,
+            128.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 1,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [
+            2.5,
+            2.5,
+            2.5
+          ],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100,
+            250,
+            400
+          ],
+          "MaxScaleTargetMissHealth": 1,
+          "ScalePerTargetMissHealth": [
+            2.5,
+            2.5,
+            2.5
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.375,
+                0.375,
+                0.375,
+                0.375,
+                0.375
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            37.5,
+            63.75,
+            90,
+            116.25,
+            142.5
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ]
+  },
+  "Jinx": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            90.0,
+            140.0,
+            190.0,
+            240.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+     )NS_26_6_025";
+
+static const char kChunk_026[] = R"NS_26_6_026(
+     "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            20.0,
+            35.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            60.0,
+            110.0,
+            160.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "KSante": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "Armor"
+            },
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "Armor"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Kaisa": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            25.0,
+            40.0,
+            55.0,
+            70.0,
+            85.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Kalista": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            15.0,
+            25.0,
+            35.0,
+            45.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+    )NS_26_6_026";
+
+static const char kChunk_027[] = R"NS_26_6_027(
+      "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2375,
+                0.275,
+                0.3125,
+                0.35
+              ],
+              "DamageType": "Physical",
+              "ScalingBuff": "kalistaexpungemarker",
+              "ScalingBuffOffset": -1,
+              "ScalingBuffTarget": "Target",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10,
+            14,
+            19,
+            25,
+            32
+          ],
+          "ScalingBuff": "kalistaexpungemarker",
+          "ScalingBuffOffset": -1,
+          "ScalingBuffTarget": "Target",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            75.0,
+            140.0,
+            205.0,
+            270.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05,
+                0.075,
+                0.1,
+                0.125,
+                0.15
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMinion": [
+                75,
+                125,
+                150,
+                175,
+                200
+              ],
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Karma": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            60.0,
+            110.0,
+            160.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25,
+            75,
+            125,
+            175
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35,
+            140,
+            245,
+            350
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            100.0,
+            160.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            40.0,
+            65.0,
+            90.0,
+            115.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Karthus": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2,
+                0.2,
+                0.2,
+                0.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30,
+            50,
+            70,
+            90,
+            110
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            21.0,
+            40.0,
+            59.0,
+            78.0,
+            97.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": )NS_26_6_027";
+
+static const char kChunk_028[] = R"NS_26_6_028(
+[
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            200.0,
+            350.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Kassadin": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            65.0,
+            95.0,
+            125.0,
+            155.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70.0,
+            70.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingBuff": "",
+              "ScalingBuffTarget": "Source",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.01,
+                0.01,
+                0.01
+              ],
+              "DamageType": "Magical",
+              "ScalingBuff": "RiftWalk",
+              "ScalingBuffTarget": "Source",
+              "ScalingTarget": "Source",
+              "ScalingType": "MaxMana"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40,
+            50,
+            60
+          ],
+          "ScalingBuff": "RiftWalk",
+          "ScalingBuffTarget": "Source",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            20.0,
+            20.0,
+            20.0,
+            20.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40,
+            65,
+            90,
+            115,
+            140
+          ],
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Katarina": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+         )NS_26_6_028";
+
+static const char kChunk_029[] = R"NS_26_6_029(
+ "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1899999976158142,
+                0.1899999976158142,
+                0.1899999976158142
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            12.5,
+            25.0,
+            37.5
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                3.3,
+                3.3,
+                3.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                2.85,
+                2.85,
+                2.85
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            375,
+            562.5,
+            750
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SingleTotal"
+      }
+    ]
+  },
+  "Kayle": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            15.0,
+            20.0,
+            25.0,
+            30.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.08,
+                0.1,
+                0.12,
+                0.14,
+                0.16
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.01,
+              "ScalingTarget": "Target",
+              "ScalingType": "MissingHealth"
+            }
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Kayn": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            55,
+            55,
+            55,
+            55,
+            55
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.03500000014901161,
+                0.03500000014901161,
+                0.03500000014901161,
+                0.03500000014901161,
+                0.03500000014901161
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            6.0,
+            6.0,
+            6.0,
+            6.0,
+            6.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamageOnMonster": [
+            55,
+            55,
+            55,
+            55,
+            55
+          ],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.05,
+                0.05,
+                0.05,
+                0.05,
+                0.05
+              ],
+              "DamageType": "Physical",
+              "ScalePer100BonusAd": 0.04,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Physical",
+          "MaxDamageOnMonster": [
+            200,
+            250,
+            300,
+            350,
+            400
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+      )NS_26_6_029";
+
+static const char kChunk_030[] = R"NS_26_6_030(
+          1.5,
+                1.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Physical",
+              "ScalePer100BonusAd": 0.13,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Kennen": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.22499999403953552,
+                0.22499999403953552,
+                0.22499999403953552
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            5.0,
+            40.0,
+            75.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            300,
+            562.5,
+            825
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SingleTotal"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            35.0,
+            45.0,
+            55.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60,
+            85,
+            110,
+            135,
+            160
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Khazix": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0499999523162842,
+                1.0499999523162842,
+                1.04)NS_26_6_030";
+
+static const char kChunk_031[] = R"NS_26_6_031(
+99999523162842,
+                1.0499999523162842,
+                1.0499999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.6,
+                2.6,
+                2.6,
+                2.6,
+                2.6
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100,
+            150,
+            200,
+            250,
+            300
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Kindred": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            80.0,
+            110.0,
+            140.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            25.0,
+            30.0,
+            35.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Kled": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            35.0,
+            60.0,
+            85.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            35.0,
+            50.0,
+            65.0,
+            80.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.9,
+                0.9,
+                0.9,
+                0.9,
+                0.9
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45,
+            82.5,
+            120,
+            157.5,
+            195
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2,
+                1.2,)NS_26_6_031";
+
+static const char kChunk_032[] = R"NS_26_6_032(
+
+                1.2,
+                1.2,
+                1.2
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            60,
+            110,
+            160,
+            210,
+            260
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Detonation"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35,
+            50,
+            65,
+            80,
+            95
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.44,
+                1.44,
+                1.44,
+                1.44,
+                1.44
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            63,
+            90,
+            117,
+            144,
+            171
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SingleTotal"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            2.0,
+            4.0,
+            6.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                4.0,
+                4.5,
+                5.0,
+                5.5,
+                6.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            },
+            {
+              "DamagePercentages": [
+                0.019999999552965164,
+                0.019999999552965164,
+                0.019999999552965164,
+                0.019999999552965164,
+                0.019999999552965164
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.004000000189989805,
+                0.004000000189989805,
+                0.004000000189989805,
+                0.004000000189989805,
+                0.004000000189989805
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "KogMaw": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            100.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0.6,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [
+            0.833,
+            0.833,
+            0.833
+          ],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.3,
+                1.3,
+                1.3
+              ],
+              "DamageType": "Magical",
+              "ScalignType": "BonusAttackPoints",
+              "ScalingTarget": "Source"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            200,
+            280,
+            360
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.03,
+                0.0375,
+                0.045,
+                0.0525,
+                0.06
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.01,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Leblanc": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster)NS_26_6_032";
+
+static const char kChunk_033[] = R"NS_26_6_033(
+": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            50.0,
+            70.0,
+            90.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.7,
+                0.7,
+                0.7,
+                0.7,
+                0.7
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60,
+            90,
+            120,
+            150,
+            180
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Detonation"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70,
+            140,
+            210
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            65.0,
+            90.0,
+            115.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70,
+            140,
+            210
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            70.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            75.0,
+            115.0,
+            155.0,
+            195.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            150,
+            300,
+            450
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "LeeSin": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            35.0,
+            60.0,
+            85.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            65.0,
+            95.0,
+            125.0,
+            155.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50,
+            75,
+            100,
+            125,
+            150
+          ],
+          "MaxScaleTargetMissHealth": 1,
+          "ScalePerTargetMissHealth": [
+            0.01,
+            0.01,
+            0.01,
+            0.01,
+            0.01
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "SecondCast"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageO)NS_26_6_033";
+
+static const char kChunk_034[] = R"NS_26_6_034(
+nMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.0,
+                2.0,
+                2.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            175.0,
+            400.0,
+            625.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Leona": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            150.0,
+            225.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15,
+                0.15,
+                0.15
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30,
+            40,
+            50
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Lillia": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            35.0,
+            45.0,
+            55.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            100.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+  )NS_26_6_034";
+
+static const char kChunk_035[] = R"NS_26_6_035(
+        "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            80.0,
+            100.0,
+            120.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Lissandra": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Lucian": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            15.0,
+            30.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 2,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            75.0,
+            110.0,
+            145.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+)NS_26_6_035";
+
+static const char kChunk_036[] = R"NS_26_6_036(
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Lulu": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Lux": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            200.0,
+            300.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Malphite": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "Armor"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            70.0,
+            120.0,
+            170.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+    )NS_26_6_036";
+
+static const char kChunk_037[] = R"NS_26_6_037(
+      "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            30.0,
+            40.0,
+            50.0,
+            60.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Malzahar": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            125.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            120,
+            120,
+            120
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.15,
+                0.2
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.025,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            12.0,
+            14.0,
+            16.0,
+            18.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            5.0,
+            8.5,
+            12.0,
+            15.5,
+            19.0,
+            22.5,
+            26.0,
+            29.5,
+            33.0,
+            36.5,
+            40.0,
+            43.5,
+            47.0,
+            50.5,
+            54.0,
+            57.5,
+            61.0,
+            64.5
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Maokai": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            50.0,
+            75.0,
+            100.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [
+            300,
+            300,
+            300,
+            300,
+            300
+          ],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.14,
+                0.145,
+                0.15,
+                0.155,
+                0.16
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.02,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50,
+            100,)NS_26_6_037";
+
+static const char kChunk_038[] = R"NS_26_6_038(
+
+            150,
+            200,
+            250
+          ],
+          "MaxDamageOnMinion": [
+            600,
+            600,
+            600,
+            600,
+            600
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            130.0,
+            140.0,
+            150.0,
+            160.0,
+            170.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            75.0,
+            120.0,
+            165.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            150.0,
+            225.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "MasterYi": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            15.0,
+            20.0,
+            25.0,
+            30.0,
+            35.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            20.0,
+            40.0,
+            60.0,
+            80.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Mel": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            60.0,
+            105.0,
+            150.0,
+            195.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            3.0,
+            5.0,
+            7.0,
+            9.0,
+            11.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.007499999832361937,
+                0.007499999832361937,
+                0.007499999832361937
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            2.0,
+            3.0,
+            4.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSo)NS_26_6_038";
+
+static const char kChunk_039[] = R"NS_26_6_039(
+ldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.0005000000237487257,
+                0.0005000000237487257,
+                0.0005000000237487257,
+                0.0005000000237487257,
+                0.0005000000237487257
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.3499999940395355,
+            0.4000000059604645,
+            0.44999998807907104,
+            0.5,
+            0.550000011920929
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Milio": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            80.0,
+            140.0,
+            200.0,
+            260.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [],
+    "W": []
+  },
+  "MissFortune": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2,
+                2,
+                2,
+                2,
+                2
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.7,
+                0.7,
+                0.7,
+                0.7,
+                0.7
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40,
+            80,
+            120,
+            160,
+            200
+          ],
+          "IsApplyOnHit": true,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "MonkeyKing": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",)NS_26_6_039";
+
+static const char kChunk_040[] = R"NS_26_6_040(
+
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.375,
+                1.375,
+                1.375
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70,
+            115,
+            160,
+            205,
+            250
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Mordekaiser": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            5.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0,
+            30.0,
+            35.0,
+            40.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1.2,
+                1.4,
+                1.6,
+                1.8
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DaamgePercentages": [
+                1.2,
+                1.2,
+                1.2,
+                1.2,
+                1.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20,
+            40,
+            60,
+            80,
+            100
+          ],
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.0625,
+                0.075,
+                0.0875
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.01,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.01875,
+                0.0225,
+                0.02625
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.003,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.9,
+                0.9,
+                0.9,
+                0.9,
+                0.9
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            140,
+            180,
+            220,
+            260,
+            300
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50,
+            85,
+            120,
+            155,
+            190
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondCast"
+      }
+    ]
+  },
+  "Morgana": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            80.0,
+            135.0,
+            190.0,
+            245.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+         )NS_26_6_040";
+
+static const char kChunk_041[] = R"NS_26_6_041(
+     "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            125.0,
+            200.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            36.0,
+            62.0,
+            88.0,
+            114.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 1,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [
+            1.7,
+            1.7,
+            1.7,
+            1.7,
+            1.7
+          ],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.07,
+                0.07,
+                0.07,
+                0.07,
+                0.07
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            6,
+            12,
+            18,
+            24,
+            30
+          ],
+          "MaxScaleTargetMissHealth": 1,
+          "ScalePerTargetMissHealth": [
+            1.7,
+            1.7,
+            1.7,
+            1.7,
+            1.7
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerHalfSecond"
+      }
+    ]
+  },
+  "Naafiri": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            15.0,
+            25.0,
+            35.0,
+            45.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            35.0,
+            40.0,
+            45.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Nami": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            90.0,
+            145.0,
+            200.0,
+            255.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          )NS_26_6_041";
+
+static const char kChunk_042[] = R"NS_26_6_042(
+"MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Nasus": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099,
+                0.11999999731779099
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.12,
+                0.12,
+                0.12,
+                0.12,
+                0.12
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            11,
+            19,
+            27,
+            35,
+            43
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                9.999999747378752e-05,
+                9.999999747378752e-05,
+                9.999999747378752e-05
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.019999999552965164,
+            0.029999999329447746,
+            0.03999999910593033
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Nautilus": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            85.0,
+            125.0,
+            165.0,
+            205.0,
+            245.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            55.0,
+            90.0,
+            125.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            85.0,
+            130.0,
+            175.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            150.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageT)NS_26_6_042";
+
+static const char kChunk_043[] = R"NS_26_6_043(
+ype": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            30.0,
+            40.0,
+            50.0,
+            60.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2,
+                0.2,
+                0.2,
+                0.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15,
+            20,
+            25,
+            30,
+            35
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ]
+  },
+  "Neeko": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            20.0,
+            35.0,
+            50.0,
+            65.0,
+            80.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            60.0,
+            110.0,
+            160.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2,
+                0.2,
+                0.2,
+                0.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35,
+            55,
+            75,
+            95,
+            115
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            150.0,
+            350.0,
+            550.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            75.0,
+            75.0,
+            75.0,
+            75.0,
+            75.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            65.0,
+            100.0,
+            135.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Nidalee": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.45,
+                0.45,
+                0.45,
+                0.45
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70,
+            130,
+            190,
+            250
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            70.0,
+            90.0,
+            110.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            5,
+            30,
+            55,
+            80
+          ],
+          "IsModifiedDamage": true,
+          "MaxScaleTargetMissHealth": 1,
+          "ScalePerTargetMissHealth": [
+            1,
+            1.25,
+            1.5,
+            1.75
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "SecondForm"
+      },
+)NS_26_6_043";
+
+static const char kChunk_044[] = R"NS_26_6_044(
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.05,
+                1.05,
+                1.05,
+                1.05
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.56,
+                0.56,
+                0.56,
+                0.56
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            7,
+            42,
+            77,
+            136
+          ],
+          "IsModifiedDamage": true,
+          "MaxScaleTargetMissHealth": 1,
+          "ScalePerTargetMissHealth": [
+            1,
+            1.25,
+            1.5,
+            1.75
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            55.0,
+            100.0,
+            145.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05,
+                0.05,
+                0.05,
+                0.05,
+                0.05
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10,
+            20,
+            30,
+            40,
+            50
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60,
+            110,
+            160,
+            210
+          ],
+          "ScaleSlot": "R",
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ]
+  },
+  "Nilah": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            60.0,
+            70.0,
+            80.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            15.0,
+            25.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Nocturne": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+   )NS_26_6_044";
+
+static const char kChunk_045[] = R"NS_26_6_045(
+             0.8500000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            65.0,
+            110.0,
+            155.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            150.0,
+            150.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Nunu": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            20.0,
+            60.0,
+            100.0,
+            140.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "DamageType": "True",
+          "Damages": [
+            340,
+            500,
+            660,
+            820,
+            980
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                3.0,
+                3.0,
+                3.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            625.0,
+            625.0,
+            925.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.49950000643730164,
+                0.49950000643730164,
+                0.49950000643730164,
+                0.49950000643730164,
+                0.49950000643730164
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            44.95500057935715,
+            59.940000772476196,
+            74.92500096559525,
+            89.9100011587143,
+            104.89500135183334
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            36,
+            45,
+            54,
+            63,
+            72
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Olaf": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+  )NS_26_6_045";
+
+static const char kChunk_046[] = R"NS_26_6_046(
+        "Damages": [
+            20.0,
+            70.0,
+            120.0,
+            170.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Orianna": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.949999988079071,
+                0.949999988079071,
+                0.949999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            250.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ornn": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "Armor"
+            },
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "Armor"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            125.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+         )NS_26_6_046";
+
+static const char kChunk_047[] = R"NS_26_6_047(
+   30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            40,
+            52,
+            64,
+            76,
+            88
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "DamageType": "Magical",
+          "Damages": [
+            80,
+            130,
+            180,
+            230,
+            280
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ]
+  },
+  "Pantheon": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.149999976158142,
+                1.149999976158142,
+                1.149999976158142,
+                1.149999976158142,
+                1.149999976158142
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            300.0,
+            500.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            400,
+            700,
+            1000
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            150,
+            150,
+            150,
+            150,
+            150
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Poppy": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            120,
+            160,
+            200,
+            240,
+            280
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+       )NS_26_6_047";
+
+static const char kChunk_048[] = R"NS_26_6_048(
+       "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            200.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Pyke": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            100.0,
+            150.0,
+            200.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            100.0,
+            150.0,
+            200.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.69,
+                0.69,
+                0.69,
+                0.69,
+                0.69
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            86.25,
+            143.75,
+            201.25,
+            258.75,
+            316.25
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            250.0,
+            250.0,
+            250.0,
+            250.0,
+            250.0,
+            250.0,
+            250.0,
+            290.0,
+            330.0,
+            370.0,
+            400.0,
+            430.0,
+            450.0,
+            470.0,
+            490.0,
+            510.0,
+            530.0,
+            540.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "PhysicalLethality"
+            }
+          ],
+          "DamageType": "True",
+          "DamagesPerLvl": [
+            250,
+            250,
+            250,
+            250,
+            250,
+            250,
+            290,
+            330,
+            370,
+            400,
+            430,
+            450,
+            470,
+            490,
+            510,
+            530,
+            540,
+            550
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Qiyana": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            50.0,
+            90.0,
+            130.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R")NS_26_6_048";
+
+static const char kChunk_049[] = R"NS_26_6_049(
+: [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.25,
+                1.25,
+                1.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            100.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            250,
+            500,
+            750
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            8.0,
+            16.0,
+            24.0,
+            32.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Quinn": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.800000011920929,
+                0.8500000238418579,
+                0.8999999761581421,
+                0.949999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            65.0,
+            100.0,
+            135.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Rakan": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            70.0,
+            115.0,
+            160.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            70.0,
+            120.0,
+            170.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",)NS_26_6_049";
+
+static const char kChunk_050[] = R"NS_26_6_050(
+
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Rammus": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            80.0,
+            100.0,
+            120.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "RekSai": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            65.0,
+            100.0,
+            135.0,
+            170.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.7,
+                1.7,
+                1.7,
+                1.7,
+                1.7
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            110,
+            130,
+            150,
+            170,
+            190
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            50.0,
+            80.0,
+            110.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.7,
+                0.7,
+                0.7,
+                0.7,
+                0.7
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            60,
+            90,
+            120,
+            150,
+            180
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            30.0,
+            55.0,
+            80.0,
+            105.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductio)NS_26_6_050";
+
+static const char kChunk_051[] = R"NS_26_6_051(
+nPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Rell": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            60.0,
+            100.0,
+            140.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            60.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Renata": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            65.0,
+            95.0,
+            125.0,
+            155.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [],
+    "W": []
+  },
+  "Renekton": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858,
+                1.350000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            25.0,
+            70.0,
+            115.0,
+            160.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.35,
+                1.35,
+                1.35,
+                1.35,
+                1.35
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            70,
+            115,
+            160,
+            205,
+            250
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142,
+                1.399999976158142
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            90.0,
+            135.0,
+            180.0,
+            225.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+        )NS_26_6_051";
+
+static const char kChunk_052[] = R"NS_26_6_052(
+  "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamaegPercentages": [
+                1.2,
+                1.2,
+                1.2,
+                1.2,
+                1.2
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100,
+            150,
+            200,
+            250,
+            300
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            150.0,
+            240.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20,
+            40,
+            60
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerHalfSecond"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            20.0,
+            35.0,
+            50.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": true,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.25,
+                2.25,
+                2.25,
+                2.25,
+                2.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15,
+            45,
+            75,
+            105,
+            135
+          ],
+          "IsModifiedDamage": true,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Rengar": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            55.0,
+            100.0,
+            145.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "DamagesPerLvl": [
+            50,
+            65,
+            80,
+            95,
+            110,
+            125,
+            140,
+            155,
+            170,
+            185,
+            200,
+            215,
+            230,
+            245,
+            260,
+            275,
+            290,
+            305
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            55.0,
+            90.0,
+            125.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "DamagesPerLvl": [
+            30,
+            45,
+            60,
+            75,
+            90,
+            105,
+            120,
+            135,
+            150,
+            160,
+            170,
+            180,
+            190,
+            200,
+            210,
+            220,
+            230,
+            240
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType")NS_26_6_052";
+
+static const char kChunk_053[] = R"NS_26_6_053(
+: "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            50.0,
+            80.0,
+            110.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            50,
+            60,
+            70,
+            80,
+            90,
+            100,
+            110,
+            120,
+            130,
+            140,
+            150,
+            160,
+            170,
+            180,
+            190,
+            200,
+            210,
+            220
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Riven": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.6000000238418579,
+                0.6499999761581421,
+                0.699999988079071,
+                0.75
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15.0,
+            45.0,
+            75.0,
+            105.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            100.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0.75,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [
+            2.667,
+            2.667,
+            2.667
+          ],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Rumble": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            55.0,
+            80.0,
+            105.0,
+            130.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            90,
+            127.5,
+            165,
+            202.5,
+            240
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            52.5,
+            90.0,
+            127.5,
+            165.0,
+            202.5
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.65,
+                1.65,
+                1.65,
+                1.65,
+                1.65
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            262.5,
+            315,
+            367.5,
+            420,
+            472.5
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5749999731779099,
+                1.5749999731779099,
+                1.5749999731779099
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            180.0,
+            540.0,
+            900.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+   )NS_26_6_053";
+
+static const char kChunk_054[] = R"NS_26_6_054(
+       "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.175,
+                0.175,
+                0.175
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            70,
+            105,
+            140
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerHalfSecond"
+      }
+    ]
+  },
+  "Ryze": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            55.0,
+            75.0,
+            95.0,
+            115.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Samira": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            50.0,
+            60.0,
+            70.0,
+            80.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            5.0,
+            10.0,
+            15.0,
+            20.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            20.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            20.0,
+            35.0,
+            50.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Sejuani": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Da)NS_26_6_054";
+
+static const char kChunk_055[] = R"NS_26_6_055(
+mages": [
+            5.0,
+            55.0,
+            105.0,
+            155.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            90.0,
+            140.0,
+            190.0,
+            240.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8,
+                0.8,
+                0.8
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            150,
+            250,
+            350
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.03999999910593033,
+                0.03999999910593033,
+                0.03999999910593033,
+                0.03999999910593033,
+                0.03999999910593033
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            15.0,
+            25.0,
+            35.0,
+            45.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.045,
+                0.045,
+                0.045,
+                0.045,
+                0.045
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30,
+            70,
+            110,
+            150,
+            190
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Senna": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            30.0,
+            55.0,
+            80.0,
+            105.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.149999976158142,
+                1.149999976158142,
+                1.149999976158142
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            250.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTa)NS_26_6_055";
+
+static const char kChunk_056[] = R"NS_26_6_056(
+rget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Seraphine": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            150.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Sett": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            50.0,
+            70.0,
+            90.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.0024999999441206455,
+                0.0024999999441206455,
+                0.0024999999441206455,
+                0.0024999999441206455,
+                0.0024999999441206455
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            0.25,
+            0.25,
+            0.25,
+            0.25,
+            0.25
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Shaco": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            70.0,
+            95.0,
+            120.0,
+            145.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 1,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15.0,
+            25.0,
+            35.0,
+            45.0,
+            55.0
+        )NS_26_6_056";
+
+static const char kChunk_057[] = R"NS_26_6_057(
+  ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            150.0,
+            225.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            5.0,
+            20.0,
+            35.0,
+            50.0,
+            65.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.18000000715255737,
+                0.18000000715255737,
+                0.18000000715255737,
+                0.18000000715255737,
+                0.18000000715255737
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            25.0,
+            40.0,
+            55.0,
+            70.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Shen": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10999999940395355,
+                0.10999999940395355,
+                0.10999999940395355,
+                0.10999999940395355,
+                0.10999999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            10.0,
+            10.0,
+            10.0,
+            16.0,
+            16.0,
+            16.0,
+            22.0,
+            22.0,
+            22.0,
+            28.0,
+            28.0,
+            28.0,
+            34.0,
+            34.0,
+            34.0,
+            40.0,
+            40.0,
+            40.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.04,
+                0.045,
+                0.05,
+                0.055,
+                0.06
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.02,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            10,
+            10,
+            10,
+            16,
+            16,
+            16,
+            22,
+            22,
+            22,
+            28,
+            28,
+            28,
+            34,
+            34,
+            34,
+            40,
+            40,
+            40
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.04,
+                0.05,
+                0.06,
+                0.07,
+                0.08
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                75,
+                100,
+                125,
+                150,
+                175
+              ],
+              "ScalePer100Ap": 0.03,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            20,
+            20,
+            20,
+            32,
+            32,
+            32,
+            44,
+            44,
+            44,
+            56,
+            56,
+            56,
+            68,
+            68,
+            68,
+            80,
+            80,
+            80
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "SecondForm"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.08,
+                0.09,
+                0.1,
+                0.11,
+                0.12
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                75,
+                100,
+                125,
+                150,
+                175
+              ],
+              "ScalePer100Ap": 0.04,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            20,
+            20,
+            20,
+            32,
+            32,
+            32,
+            44,
+            44,
+            44,
+            56,
+            56,
+            56,
+            68,
+            68,
+            68,
+            80,
+            80,
+            80
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "ThirdForm"
+      }
+    ]
+  },
+  "Shyvana": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            80.0,
+            110.0,
+            140.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                )NS_26_6_057";
+
+static const char kChunk_058[] = R"NS_26_6_058(
+0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            100,
+            100,
+            100,
+            100,
+            100,
+            100,
+            105,
+            110,
+            115,
+            120,
+            125,
+            130,
+            135,
+            140,
+            145,
+            150,
+            155,
+            160
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2,
+                0.2,
+                0.2,
+                0.2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "DamagesPerLvl": [
+            60,
+            60,
+            60,
+            60,
+            60,
+            60,
+            65,
+            70,
+            75,
+            80,
+            85,
+            90,
+            95,
+            100,
+            105,
+            110,
+            115,
+            120
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.0325,
+                0.0325,
+                0.0325,
+                0.0325,
+                0.0325
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                100,
+                100,
+                100,
+                100,
+                100
+              ],
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            10.0,
+            10.0,
+            10.0,
+            10.0,
+            10.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60.0,
+            80.0,
+            100.0,
+            120.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Singed": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [
+            350,
+            365,
+            380,
+            395,
+            410
+          ],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                2.0187500566244125,
+                2.0187500566244125,
+                2.0187500566244125,
+                2.0187500566244125,
+                2.0187500566244125
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            47.5,
+            95.0,
+            142.5,
+            190.0,
+            237.5
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            5,
+            7.5,
+            10,
+            12.5,
+            15
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerQuarterSecond"
+      }
+    ]
+  },
+  "Sion": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.5500000119)NS_26_6_058";
+
+static const char kChunk_059[] = R"NS_26_6_059(
+20929,
+                0.550000011920929,
+                0.550000011920929,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            65.0,
+            100.0,
+            135.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.4000000059604645,
+                0.5,
+                0.6000000238418579,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.36,
+                0.42,
+                0.48,
+                0.54,
+                0.6
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            16,
+            32,
+            48,
+            64,
+            80
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondForm"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.27,
+                0.315,
+                0.36,
+                0.405,
+                0.45
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            12,
+            24,
+            36,
+            48,
+            60
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "ThirdForm"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            150.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [
+            400,
+            400,
+            400,
+            400,
+            400
+          ],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Sivir": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.375,
+                0.4000000059604645,
+                0.42500001192092896,
+                0.44999998807907104,
+                0.4749999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Skarner": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            30.0,
+            60.0,
+            90.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMin)NS_26_6_059";
+
+static const char kChunk_060[] = R"NS_26_6_060(
+ion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "DamageType": "Physical",
+          "Damages": [
+            30,
+            50,
+            70,
+            90,
+            110
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusHealth"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            100,
+            150,
+            200,
+            250,
+            300
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.33,
+                0.36,
+                0.39,
+                0.42,
+                0.45
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.33,
+                0.36,
+                0.39,
+                0.42,
+                0.45
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            50.0,
+            70.0,
+            90.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Smolder": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            10.0,
+            15.0,
+            20.0,
+            25.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842,
+                1.2999999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            65.0,
+            80.0,
+            95.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            300,
+            300,
+            300,
+            300,
+            300
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+     )NS_26_6_060";
+
+static const char kChunk_061[] = R"NS_26_6_061(
+       {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            60.0,
+            70.0,
+            80.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Sona": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            50.0,
+            85.0,
+            120.0,
+            155.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10,
+            15,
+            20,
+            25,
+            30
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Soraka": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            70.0,
+            95.0,
+            120.0,
+            145.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            85.0,
+            120.0,
+            155.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Swain": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            90.0,
+            130.0,
+            170.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35,
+            45,
+            55,
+            65,
+            75
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.64,
+            )NS_26_6_061";
+
+static const char kChunk_062[] = R"NS_26_6_062(
+    0.72,
+                0.8,
+                0.88,
+                0.96
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            88,
+            135,
+            190,
+            253,
+            324
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SingleTotal"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.14167,
+                0.14167,
+                0.14167
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35,
+            50,
+            65
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.21,
+                0.21,
+                0.21
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45,
+            60,
+            75
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondCast"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Sylas": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45,
+            70,
+            95,
+            120,
+            145
+          ],
+          "DamagesReductionOnSoldier": [
+            0.45,
+            0.45,
+            0.45,
+            0.45,
+            0.45
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            75.0,
+            110.0,
+            145.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.975,
+                0.975,
+                0.975,
+                0.975,
+                0.975
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75,
+            112.5,
+            150,
+            187.5,
+            225
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Syndra": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSold)NS_26_6_062";
+
+static const char kChunk_063[] = R"NS_26_6_063(
+ier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            80.0,
+            115.0,
+            150.0,
+            185.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0,
+                0,
+                0,
+                0,
+                0.7475
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0,
+            0,
+            0,
+            0,
+            264.5
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0,
+                0,
+                0,
+                0,
+                0.14
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            0,
+            0,
+            0,
+            0,
+            46
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "TahmKench": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            75.0,
+            120.0,
+            165.0,
+            210.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.000699999975040555,
+                0.000699999975040555,
+                0.000699999975040555
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.15000000596046448,
+            0.15000000596046448,
+            0.15000000596046448
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            65.0,
+            100.0,
+            135.0,
+            170.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100,
+            150,
+            200,
+            250,
+            300
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SecondCast"
+      }
+    ]
+  },
+  "Taliyah": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            6)NS_26_6_063";
+
+static const char kChunk_064[] = R"NS_26_6_064(
+0.0,
+            105.0,
+            150.0,
+            195.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50,
+            60,
+            70,
+            80,
+            90
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            18.0,
+            23.0,
+            28.0,
+            33.0,
+            38.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.0,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            89.99999761581421,
+            121.49999678134918,
+            152.99999594688416,
+            184.49999511241913
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            60,
+            80,
+            100,
+            120,
+            140
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Talon": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            65.0,
+            85.0,
+            105.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.65,
+                1.65,
+                1.65,
+                1.65,
+                1.65
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            97.5,
+            135,
+            172.5,
+            210,
+            247.5
+          ],
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            90.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            50.0,
+            60.0,
+            70.0,
+            80.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6,
+                0.6,
+                0.6,
+                0.6,
+                0.6
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            70,
+            85,
+            100,
+            115,
+            130
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "WayBack"
+      }
+    ]
+  },
+  "Taric": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "Armor"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Teemo": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            9.0,
+            23.0,
+            37.0,
+            51.0,
+            65.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamage)NS_26_6_064";
+
+static const char kChunk_065[] = R"NS_26_6_065(
+OnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            6,
+            12,
+            18,
+            24,
+            30
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.7,
+                0.7,
+                0.7,
+                0.7,
+                0.7
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damgaes": [
+            34,
+            68,
+            102,
+            136,
+            170
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "SingleTotal"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            80.0,
+            125.0,
+            170.0,
+            215.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            75.0,
+            200.0,
+            325.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.125,
+                0.125,
+                0.125
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50,
+            81.25,
+            112.5
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ]
+  },
+  "Thresh": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1.25,
+                1.5,
+                1.75,
+                2
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            100.0,
+            150.0,
+            200.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Tristana": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            60.0,
+            85.0,
+            110.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15,
+                0.21,
+                0.27,
+                0.33,
+                0.39
+              ],
+              "DamageType": "Physical",
+              "ScalingBuff": "",
+              "ScalingBuffTarget": "Target",)NS_26_6_065";
+
+static const char kChunk_066[] = R"NS_26_6_066(
+
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.15,
+                0.15,
+                0.15,
+                0.15,
+                0.15
+              ],
+              "DamageType": "Physical",
+              "ScalingBuff": "tristanaecharge",
+              "ScalingBuffTarget": "Target",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            21,
+            24,
+            27,
+            30,
+            33
+          ],
+          "ScalingBuff": "tristanaecharge",
+          "ScalingBuffTarget": "Target",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            175.0,
+            225.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Trundle": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0499999523162842,
+                1.149999976158142,
+                1.25,
+                1.350000023841858,
+                1.4500000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            30.0,
+            50.0,
+            70.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.00019999999494757503,
+                0.00019999999494757503,
+                0.00019999999494757503
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.15000000596046448,
+            0.20000000298023224,
+            0.25
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.025,
+                0.034375,
+                0.04375
+              ],
+              "DamageType": "Magical",
+              "ScalePer100Ap": 0.0025,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerSecond"
+      }
+    ]
+  },
+  "Tryndamere": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "TwistedFate": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            65.0,
+            90.0,
+            115.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDama)NS_26_6_066";
+
+static const char kChunk_067[] = R"NS_26_6_067(
+ges": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            60.0,
+            105.0,
+            150.0,
+            195.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": true,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30,
+            45,
+            60,
+            75,
+            90
+          ],
+          "IsModifiedDamage": true,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Detonation"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15,
+            22.5,
+            30,
+            37.5,
+            45
+          ],
+          "IsModifiedDamage": true,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Twitch": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            15.0,
+            20.0,
+            25.0,
+            30.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.35,
+                0.35,
+                0.35,
+                0.35,
+                0.35
+              ],
+              "DamageType": "Physical",
+              "ScalingBuff": "TwitchDeadlyVenom",
+              "ScalingBuffTarget": "Target",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.2,
+                0.2,
+                0.2,
+                0.2,
+                0.2
+              ],
+              "DamageType": "Physical",
+              "ScalingBuff": "TwitchDeadlyVenom",
+              "ScalingBuffTarget": "Target",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15,
+            20,
+            25,
+            30,
+            35
+          ],
+          "ScalingBuff": "",
+          "ScalingBuffTarget": "Target",
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ]
+  },
+  "Udyr": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.000699999975040555,
+                0.000699999975040555,
+                0.000699999975040555,
+                0.000699999975040555,
+                0.000699999975040555,
+                0.000699999975040555
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.019999999552965164,
+            0.029999999329447746,
+            0.03999999910593033,
+            0.05000000074505806,
+            0.05999999865889549,
+            0.07000000029802322
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            0.019999999552965164,
+            0.02117647011490429,
+            0.02235294067684342,
+            0.023529411238782546,
+            0.024705881800721675,
+            0.0258823523626608,
+            0.027058822924599928,
+            0.028235293486539054,
+            0.029411764048478183,
+            0.03058823461041731,
+            0.03176470517235644,
+            0.032941175734295565,
+            0.03411764629623469,
+            0.03529411685817382,
+            0.03647058742011294,
+            0.037647057982052076,
+            0.0388235285439912,
+            0.03999999910593033
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3375,
+                0.375,
+                0.4125,
+                0.45
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            7.5,
+            15,
+            22.5,
+            30,
+            37.5
+          ],
+          "SpellEffectType": "OverTime"
+        },
+        "Stage": "DamagePerHalfSecond"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageTy)NS_26_6_067";
+
+static const char kChunk_068[] = R"NS_26_6_068(
+pe": "Magical",
+          "Damages": [
+            4.0,
+            20.0,
+            36.0,
+            52.0,
+            68.0,
+            84.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40,
+            80,
+            120,
+            160,
+            200
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10,
+            20,
+            30,
+            40,
+            50
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "EmpoweredDamagePerSecond"
+      }
+    ]
+  },
+  "Urgot": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            60.0,
+            90.0,
+            120.0,
+            150.0,
+            180.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            25.0,
+            70.0,
+            115.0,
+            160.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            100.0,
+            225.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.16500000655651093,
+                0.20000000298023224,
+                0.23499999940395355,
+                0.27000001072883606,
+                0.3050000071525574
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            12.0,
+            12.0,
+            12.0,
+            12.0,
+            12.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": true,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [
+            50,
+            50,
+            50,
+            50,
+            50
+          ],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Varus": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            80.0,
+            150.0,
+            220.0,
+            290.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+     )NS_26_6_068";
+
+static const char kChunk_069[] = R"NS_26_6_069(
+     ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            8.0,
+            17.0,
+            26.0,
+            35.0,
+            44.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            360,
+            360,
+            360,
+            360,
+            360
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.03,
+                0.035,
+                0.04,
+                0.045,
+                0.05
+              ],
+              "DamageType": "Magical",
+              "MaxDamageOnMonster": [
+                360,
+                360,
+                360,
+                360,
+                360
+              ],
+              "ScalePer100Ap": 0.02,
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Buff"
+      }
+    ]
+  },
+  "Vayne": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            15.0,
+            50.0,
+            85.0,
+            120.0,
+            155.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.55,
+                0.6,
+                0.65,
+                0.7
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.05000000074505806,
+                0.05999999865889549,
+                0.07000000029802322,
+                0.07999999821186066,
+                0.09000000357627869
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Veigar": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.5,
+                0.550000011920929,
+                0.6000000238418579,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6499999761581421,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            175.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0.6667,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [
+            1.5,
+            1.5,
+            1.5
+          ],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.699999988079071,
+                0.800000011920929,
+                0.8999999761581421,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            85.0,
+            140.0,
+            195.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Velkoz": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageTy)NS_26_6_069";
+
+static const char kChunk_070[] = R"NS_26_6_070(
+pe": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            70.0,
+            100.0,
+            130.0,
+            160.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.25,
+                1.25,
+                1.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.125,
+                0.125,
+                0.125
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45,
+            62.5,
+            80
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerQuarterSecond"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.25,
+                1.25,
+                1.25
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            450,
+            625,
+            800
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.125,
+                0.125,
+                0.125
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            45,
+            62.5,
+            80
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "EmpoweredDamagePerQuarterSecond"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            45.0,
+            75.0,
+            105.0,
+            135.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45,
+            75,
+            105,
+            135,
+            165
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Detonation"
+      }
+    ]
+  },
+  "Vex": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.4000000059604645,
+                0.44999998807907104,
+                0.5,
+                0.550000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            50.0,
+            70.0,
+            90.0,
+            110.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            70.0,
+            115.0,
+            160.0,
+            205.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            75.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+     )NS_26_6_070";
+
+static const char kChunk_071[] = R"NS_26_6_071(
+     "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Vi": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            30.0,
+            50.0,
+            70.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                3.0,
+                4.0,
+                5.0,
+                6.0,
+                7.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Target",
+              "ScalingType": "MaxHealth"
+            },
+            {
+              "DamagePercentages": [
+                0.03500000014901161,
+                0.03500000014901161,
+                0.03500000014901161,
+                0.03500000014901161,
+                0.03500000014901161
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            300,
+            300,
+            300,
+            300,
+            300
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Viego": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            25.0,
+            40.0,
+            55.0,
+            70.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            80,
+            80,
+            80,
+            80,
+            80
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+)NS_26_6_071";
+
+static const char kChunk_072[] = R"NS_26_6_072(
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            80.0,
+            135.0,
+            190.0,
+            245.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Viktor": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.7,
+                0.7,
+                0.7,
+                0.7,
+                0.7
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20,
+            60,
+            100,
+            140,
+            180
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            45.0,
+            60.0,
+            75.0,
+            90.0,
+            105.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.55,
+                0.55,
+                0.55,
+                0.55,
+                0.55
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20,
+            45,
+            70,
+            95,
+            120
+          ],
+          "IsModifiedDamage": true,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            100.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.85,
+                0.85,
+                0.85
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            130,
+            210,
+            290
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "DamagePerTime"
+      }
+    ]
+  },
+  "Vladimir": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.014999999664723873,
+                0.014999999664723873,
+                0.014999999664723873,
+                0.014999999664723873,
+                0.014999999664723873
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355,
+                0.3499999940395355
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.11,
+                1.11,
+                1.11,
+                1.11,
+                1.11
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            148,
+            185,
+            222,
+            259,
+            296
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDama)NS_26_6_072";
+
+static const char kChunk_073[] = R"NS_26_6_073(
+geOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            80.0,
+            135.0,
+            190.0,
+            245.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Volibear": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            80.0,
+            110.0,
+            140.0,
+            170.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            35,
+            150,
+            265,
+            380,
+            495
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.600000023841858,
+                1.600000023841858,
+                1.600000023841858,
+                1.600000023841858,
+                1.600000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.25,
+                1.25,
+                1.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                2.5,
+                2.5,
+                2.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            300.0,
+            500.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549,
+                0.05999999865889549
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusHealth"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            5.0,
+            30.0,
+            55.0,
+            80.0,
+            105.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Warwick": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.66999)NS_26_6_073";
+
+static const char kChunk_074[] = R"NS_26_6_074(
+99570846558,
+                1.6699999570846558,
+                1.6699999570846558
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            175.0,
+            350.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Xayah": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            35.0,
+            50.0,
+            65.0,
+            80.0,
+            95.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0.5,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            45.0,
+            60.0,
+            75.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            90,
+            130,
+            170,
+            210,
+            250
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "SingleTotal"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            200.0,
+            300.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Xerath": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            75.0,
+            115.0,
+            155.0,
+            195.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            120.0,
+            170.0,
+            220.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0835499962091433,
+                1.0835499962091433,
+                1.0835499962091433,
+                1.0835499962091433,
+                1.0835499962091433
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.005000829696655,
+            83.35000276565552,
+            141.69500470161438,
+            200.04000663757324,
+            258.3850085735321
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+        )NS_26_6_074";
+
+static const char kChunk_075[] = R"NS_26_6_075(
+  "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "XinZhao": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            75.0,
+            175.0,
+            275.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            600,
+            600,
+            600
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            30.0,
+            40.0,
+            50.0,
+            60.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.75,
+                0.75,
+                0.75,
+                0.75,
+                0.75
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30,
+            65,
+            100,
+            135,
+            170
+          ],
+          "DamagesReductionOnSoldier": [
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      }
+    ]
+  },
+  "Yasuo": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            55.0,
+            70.0,
+            85.0,
+            100.0,
+            115.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842,
+                1.0499999523162842
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            45.0,
+            70.0,
+            95.0,
+            120.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.5,
+                1.5,
+                1.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            50.0,
+            200.0,
+            350.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          ")NS_26_6_075";
+
+static const char kChunk_076[] = R"NS_26_6_076(
+ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Yone": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            25.0,
+            50.0,
+            75.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            200.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "None"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Yorick": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            50.0,
+            75.0,
+            100.0,
+            125.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            10.0,
+            30.0,
+            50.0,
+            70.0,
+            90.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            50.0,
+            75.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Yunara": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            5.0,
+            10.0,
+            15.0,
+            20.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Magical",
+          "Damages": [
+            160.0,
+            160.0,
+            320.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579,
+                0.8500000238418579
+              ],
+      )NS_26_6_076";
+
+static const char kChunk_077[] = R"NS_26_6_077(
+        "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            55.0,
+            95.0,
+            135.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Yuumi": {
+    "E": [],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            150.0,
+            250.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": []
+  },
+  "Zaahen": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [
+            50.0,
+            50.0,
+            50.0,
+            50.0,
+            50.0
+          ],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [
+            400,
+            400,
+            400,
+            400,
+            400
+          ],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.20000000298023224,
+                0.25,
+                0.30000001192092896,
+                0.3499999940395355
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            0.0,
+            15.0,
+            30.0,
+            45.0,
+            60.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [],
+          "DamageType": "Physical",
+          "Damages": [
+            100.0,
+            250.0,
+            400.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            20.0,
+            40.0,
+            60.0,
+            80.0,
+            100.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Zac": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+        )NS_26_6_077";
+
+static const char kChunk_078[] = R"NS_26_6_078(
+        0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896,
+                0.30000001192092896
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            60.0,
+            90.0,
+            120.0,
+            150.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.025,
+                0.025,
+                0.025,
+                0.025,
+                0.025
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40,
+            55,
+            70,
+            85,
+            100
+          ],
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Empowered"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.3,
+                0.3,
+                0.3,
+                0.3,
+                0.3
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.025,
+                0.025,
+                0.025,
+                0.025,
+                0.025
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "MaxHealth"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            40,
+            55,
+            70,
+            85,
+            100
+          ],
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Detonation"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4000000059604645,
+                0.4000000059604645,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            50.0,
+            120.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746,
+                0.029999999329447746
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            3.0,
+            4.0,
+            5.0,
+            6.0,
+            7.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Zed": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929,
+                0.800000011920929
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            45.0,
+            70.0,
+            95.0,
+            120.0,
+            145.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            40.0,
+            80.0,
+            120.0,
+            160.0,
+            200.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Zeri": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "BonusAttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+        )NS_26_6_078";
+
+static const char kChunk_079[] = R"NS_26_6_079(
+      "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            15.0,
+            17.0,
+            19.0,
+            21.0,
+            23.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": true,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "Attack"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0399999618530273,
+                1.0800000429153442,
+                1.1200000047683716,
+                1.159999966621399
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            13.0,
+            15.0,
+            17.0,
+            19.0,
+            21.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            0.0,
+            5.0,
+            10.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158,
+                1.2000000476837158
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AttackPoints"
+            },
+            {
+              "DamagePercentages": [
+                0.25,
+                0.25,
+                0.25,
+                0.25,
+                0.25
+              ],
+              "DamageType": "Physical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Physical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Ziggs": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.20000000298023224,
+                0.25,
+                0.30000001192092896,
+                0.3499999940395355,
+                0.4000000059604645
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.550000011920929,
+                0.6000000238418579,
+                0.6499999761581421,
+                0.699999988079071,
+                0.75
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            80.0,
+            130.0,
+            180.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                1.0,
+                1.0,
+                1.0
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            100.0,
+            300.0,
+            500.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            35.0,
+            70.0,
+            105.0,
+            140.0,
+            175.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Zilean": {
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSold)NS_26_6_079";
+
+static const char kChunk_080[] = R"NS_26_6_080(
+ier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421,
+                0.8999999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            75.0,
+            115.0,
+            165.0,
+            230.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Zoe": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104,
+                0.44999998807907104
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            30.0,
+            70.0,
+            110.0,
+            150.0,
+            190.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      },
+      {
+        "SpellData": {
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.4,
+                0.4,
+                0.4,
+                0.4,
+                0.4
+              ],
+              "DamageType": "True",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "True",
+          "Damages": [
+            60,
+            100,
+            140,
+            180,
+            220
+          ],
+          "SpellEffectType": "Single"
+        },
+        "Stage": "Empowered"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            20.0,
+            50.0,
+            80.0,
+            110.0,
+            140.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [
+            2.0,
+            4.0,
+            6.0,
+            8.0,
+            10.0,
+            12.0,
+            14.0,
+            16.0,
+            18.0,
+            20.0,
+            23.0,
+            26.0,
+            29.0,
+            32.0,
+            36.0,
+            40.0,
+            44.0,
+            48.0
+          ],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "W": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448,
+                0.15000000596046448
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+            50.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "W",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  },
+  "Zyra": {
+    "E": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579,
+                0.6000000238418579
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [
+            25.0,
+            60.0,
+            95.0,
+            130.0,
+            165.0
+          ],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "E",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "Q": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421,
+                0.6499999761581421
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "Q",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ],
+    "R": [
+      {
+        "SpellData": {
+          "BonusDamageOnMinion": [],
+          "BonusDamageOnMonster": [],
+          "BonusDamageOnSoldier": [],
+          "BonusDamages": [
+            {
+              "DamagePercentages": [
+                0.699999988079071,
+                0.699999988079071,
+                0.699999988079071
+              ],
+              "DamageType": "Magical",
+              "ScalingTarget": "Source",
+              "ScalingType": "AbilityPoints"
+            }
+          ],
+          "DamageType": "Magical",
+          "Damages": [],
+          "DamagesOnMonster": [],
+          "DamagesPerLvl": [],
+          "DamagesReductionOnSoldier": [],
+          "DamagesReductionPerLvlOnSoldier": [],
+          "IsApplyOnHit": false,
+          "IsModifiedDamage": false,
+          "MaxDamageOnMinion": [],
+          "MaxDamageOnMonster": [],
+          "MaxLevelScalingValueOnMinion": 0,
+          "MaxScaleTargetMissHealth": 0,
+          "MinDamageOnSoldier": [],
+          "ScalePerCritChance": 0,
+          "ScalePerTargetMissHealth": [],
+          "ScaleSlot": "R",
+          "ScalingBuff": "",
+          "ScalingBuffOffset": 0,
+          "ScalingBuffTarget": "Source",
+          "ScalingValueOnSoldier": 0,
+          "SpellEffectType": "AoE"
+        },
+        "Stage": "Default"
+      }
+    ]
+  }
+})NS_26_6_080";
+
+} // namespace detail
+
+const std::string& Json() {
+    static const std::string value = []() {
+        std::string json;
+        json.reserve(kJsonSize);
+        json += detail::kChunk_000;
+        json += detail::kChunk_001;
+        json += detail::kChunk_002;
+        json += detail::kChunk_003;
+        json += detail::kChunk_004;
+        json += detail::kChunk_005;
+        json += detail::kChunk_006;
+        json += detail::kChunk_007;
+        json += detail::kChunk_008;
+        json += detail::kChunk_009;
+        json += detail::kChunk_010;
+        json += detail::kChunk_011;
+        json += detail::kChunk_012;
+        json += detail::kChunk_013;
+        json += detail::kChunk_014;
+        json += detail::kChunk_015;
+        json += detail::kChunk_016;
+        json += detail::kChunk_017;
+        json += detail::kChunk_018;
+        json += detail::kChunk_019;
+        json += detail::kChunk_020;
+        json += detail::kChunk_021;
+        json += detail::kChunk_022;
+        json += detail::kChunk_023;
+        json += detail::kChunk_024;
+        json += detail::kChunk_025;
+        json += detail::kChunk_026;
+        json += detail::kChunk_027;
+        json += detail::kChunk_028;
+        json += detail::kChunk_029;
+        json += detail::kChunk_030;
+        json += detail::kChunk_031;
+        json += detail::kChunk_032;
+        json += detail::kChunk_033;
+        json += detail::kChunk_034;
+        json += detail::kChunk_035;
+        json += detail::kChunk_036;
+        json += detail::kChunk_037;
+        json += detail::kChunk_038;
+        json += detail::kChunk_039;
+        json += detail::kChunk_040;
+        json += detail::kChunk_041;
+        json += detail::kChunk_042;
+        json += detail::kChunk_043;
+        json += detail::kChunk_044;
+        json += detail::kChunk_045;
+        json += detail::kChunk_046;
+        json += detail::kChunk_047;
+        json += detail::kChunk_048;
+        json += detail::kChunk_049;
+        json += detail::kChunk_050;
+        json += detail::kChunk_051;
+        json += detail::kChunk_052;
+        json += detail::kChunk_053;
+        json += detail::kChunk_054;
+        json += detail::kChunk_055;
+        json += detail::kChunk_056;
+        json += detail::kChunk_057;
+        json += detail::kChunk_058;
+        json += detail::kChunk_059;
+        json += detail::kChunk_060;
+        json += detail::kChunk_061;
+        json += detail::kChunk_062;
+        json += detail::kChunk_063;
+        json += detail::kChunk_064;
+        json += detail::kChunk_065;
+        json += detail::kChunk_066;
+        json += detail::kChunk_067;
+        json += detail::kChunk_068;
+        json += detail::kChunk_069;
+        json += detail::kChunk_070;
+        json += detail::kChunk_071;
+        json += detail::kChunk_072;
+        json += detail::kChunk_073;
+        json += detail::kChunk_074;
+        json += detail::kChunk_075;
+        json += detail::kChunk_076;
+        json += detail::kChunk_077;
+        json += detail::kChunk_078;
+        json += detail::kChunk_079;
+        json += detail::kChunk_080;
+        return json;
+    }();
+    return value;
+}
+
+} // namespace SDK::Data::Patch26_6

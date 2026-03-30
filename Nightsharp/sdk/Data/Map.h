@@ -1,0 +1,48 @@
+#pragma once
+
+#include <cstddef>
+
+namespace SDK::Data::Map {
+
+inline constexpr char kJson[] = R"NS_MAP_JSON({
+  "10": {
+    "Grid": {
+      "X": 7700.0,
+      "Y": 7237.0,
+      "IsNormalized": false,
+      "IsZero": false
+    },
+    "MapId": "TwistedTreeline",
+    "Name": "The Twisted Treeline",
+    "ShortName": "twistedTreeline",
+    "StartingLevel": 1
+  },
+  "11": {
+    "Grid": {
+      "X": 7410.0,
+      "Y": 7318.0,
+      "IsNormalized": false,
+      "IsZero": false
+    },
+    "MapId": "SummonersRift",
+    "Name": "Summoner's Rift",
+    "ShortName": "summonerRift",
+    "StartingLevel": 1
+  },
+  "12": {
+    "Grid": {
+      "X": 6560.0,
+      "Y": 6309.0,
+      "IsNormalized": false,
+      "IsZero": false
+    },
+    "MapId": "HowlingAbyss",
+    "Name": "Howling Abyss",
+    "ShortName": "howlingAbyss",
+    "StartingLevel": 3
+  }
+})NS_MAP_JSON";
+
+inline constexpr std::size_t kJsonSize = sizeof(kJson) - 1;
+
+} // namespace SDK::Data::Map

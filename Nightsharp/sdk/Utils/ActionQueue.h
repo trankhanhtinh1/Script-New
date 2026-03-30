@@ -1,129 +1,105 @@
 #pragma once
-// ============================================================================
-// ActionQueue.h — Conditional action queue system
-// Ported from EnsoulSharp.SDK/Core/Utils/ActionQueue.cs
-// ============================================================================
 
-#include <functional>
-#include <vector>
-#include <string>
-#include <mutex>
-#include <atomic>
+#include "Logging.h"
+#include "../Core/Game.h"
+
 #include <algorithm>
+#include <cstdint>
+#include <functional>
+#include <new>
+#include <vector>
 
-namespace SDK {
+namespace SDK::Utils::ActionQueue {
 
-    // ========================================================================
-    // ActionQueue — queues actions that execute when conditions are met
-    //   Items stay in the queue until their RemoveCondition returns true.
-    //   Call ActionQueue::Update() once per frame to process.
-    // ========================================================================
-    class ActionQueue {
-    public:
-        // An item in the action queue
-        struct Item {
-            uint32_t                id = 0;              // auto-assigned unique ID
-            std::function<void()>   action;              // action to execute
-            std::function<bool()>   condition;            // returns true → execute action
-            std::function<bool()>   removeCondition;      // returns true → remove item
-        };
+using QueueId = uint64_t;
 
-        // Enqueue an action item, returns its unique ID
-        static uint32_t Enqueue(const Item& item) {
-            std::lock_guard<std::mutex> lock(GetMutex());
-            uint32_t id = s_nextId++;
-            Item copy = item;
-            copy.id = id;
-            GetItems().push_back(std::move(copy));
-            return id;
-        }
+struct Item {
+    QueueId Id = 0;
+    std::function<void()> Action = {};
+    std::function<bool()> Condition = {};
+    std::function<bool()> RemoveCondition = {};
+};
 
-        // Convenience: enqueue with lambdas
-        static uint32_t Enqueue(
-            std::function<void()> action,
-            std::function<bool()> condition,
-            std::function<bool()> removeCondition)
-        {
-            Item item;
-            item.action = std::move(action);
-            item.condition = std::move(condition);
-            item.removeCondition = std::move(removeCondition);
-            return Enqueue(item);
-        }
+namespace detail {
+    inline std::vector<Item>*& Queue() {
+        static auto* storage = new(std::nothrow) std::vector<Item>();
+        return storage;
+    }
 
-        // Dequeue by ID
-        static bool Dequeue(uint32_t id) {
-            std::lock_guard<std::mutex> lock(GetMutex());
-            auto& items = GetItems();
-            auto it = std::find_if(items.begin(), items.end(),
-                [id](const Item& i) { return i.id == id; });
-            if (it != items.end()) {
-                items.erase(it);
-                return true;
+    inline QueueId& NextId() {
+        static QueueId value = 1;
+        return value;
+    }
+
+    inline bool g_initialized = false;
+}
+
+inline void Update() {
+    auto* queue = detail::Queue();
+    if (!queue) {
+        return;
+    }
+
+    for (auto it = queue->begin(); it != queue->end();) {
+        bool shouldRemove = false;
+        try {
+            const bool shouldRun = !it->Condition || it->Condition();
+            if (shouldRun && it->Action) {
+                it->Action();
             }
-            return false;
+            shouldRemove = !it->RemoveCondition || it->RemoveCondition();
+        } catch (...) {
+            Logging::Write(true, true, "ActionQueue::Update")(LogLevel::Error, "Queued item threw.");
+            shouldRemove = true;
         }
 
-        // Clear all items
-        static void Clear() {
-            std::lock_guard<std::mutex> lock(GetMutex());
-            GetItems().clear();
+        if (shouldRemove) {
+            it = queue->erase(it);
+        } else {
+            ++it;
         }
+    }
+}
 
-        // Get current queue size
-        static size_t Size() {
-            std::lock_guard<std::mutex> lock(GetMutex());
-            return GetItems().size();
-        }
+inline void Initialize() {
+    if (detail::g_initialized) {
+        return;
+    }
+    detail::g_initialized = true;
+    Game::OnUpdate(Update);
+}
 
-        // ====================================================================
-        // Update — process all queued items (call once per frame)
-        // ====================================================================
-        static void Update() {
-            std::lock_guard<std::mutex> lock(GetMutex());
-            auto& items = GetItems();
+inline void Reset() {
+    if (auto* queue = detail::Queue()) {
+        queue->clear();
+    }
+}
 
-            // Process and collect indices to remove
-            std::vector<size_t> toRemove;
+inline QueueId Enqueue(Item item) {
+    auto* queue = detail::Queue();
+    if (!queue) {
+        return 0;
+    }
+    item.Id = detail::NextId()++;
+    queue->push_back(std::move(item));
+    return queue->back().Id;
+}
 
-            for (size_t i = 0; i < items.size(); ++i) {
-                auto& item = items[i];
-                try {
-                    // Check condition and execute
-                    if (item.condition && item.condition()) {
-                        if (item.action) item.action();
-                    }
-                    // Check remove condition
-                    if (item.removeCondition && item.removeCondition()) {
-                        toRemove.push_back(i);
-                    }
-                }
-                catch (...) {
-                    // Remove broken items
-                    toRemove.push_back(i);
-                }
-            }
+inline bool Dequeue(QueueId id) {
+    auto* queue = detail::Queue();
+    if (!queue) {
+        return false;
+    }
+    const auto size = queue->size();
+    queue->erase(std::remove_if(queue->begin(), queue->end(), [id](const Item& item) {
+        return item.Id == id;
+    }), queue->end());
+    return queue->size() != size;
+}
 
-            // Remove in reverse order to keep indices valid
-            for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it) {
-                if (*it < items.size()) {
-                    items.erase(items.begin() + *it);
-                }
-            }
-        }
+inline std::vector<Item> GetItems() {
+    return detail::Queue() ? *detail::Queue() : std::vector<Item>{};
+}
 
-    private:
-        static inline std::atomic<uint32_t> s_nextId{ 1 };
+} // namespace SDK::Utils::ActionQueue
 
-        static std::vector<Item>& GetItems() {
-            static std::vector<Item> items;
-            return items;
-        }
-
-        static std::mutex& GetMutex() {
-            static std::mutex mtx;
-            return mtx;
-        }
-    };
-
-} // namespace SDK

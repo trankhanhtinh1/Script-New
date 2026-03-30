@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <type_traits>
 #include <Windows.h>
 
 // ============================================================================
@@ -12,14 +13,18 @@ namespace Globals {
 
     // Initialize module base
     inline bool Init() {
-        base = (uintptr_t)GetModuleHandleA("League of Legends.exe");
-        if (!base) base = (uintptr_t)GetModuleHandleA(nullptr);
+        base = (uintptr_t)GetModuleHandleW(nullptr);
+        if (!base) {
+            base = (uintptr_t)GetModuleHandleA("League of Legends.exe");
+        }
         return base != 0;
     }
 
     // Safe memory read
     template<typename T>
     inline T Read(uintptr_t addr) {
+        static_assert(std::is_trivially_copyable_v<T>,
+            "Globals::Read<T> only works with trivially-copyable types");
         __try {
             return *(T*)(addr);
         }
@@ -31,6 +36,8 @@ namespace Globals {
     // Safe memory write
     template<typename T>
     inline bool Write(uintptr_t addr, T value) {
+        static_assert(std::is_trivially_copyable_v<T>,
+            "Globals::Write<T> only works with trivially-copyable types");
         __try {
             *(T*)(addr) = value;
             return true;
@@ -45,9 +52,12 @@ namespace Globals {
         return Read<uintptr_t>(addr);
     }
 
-    // Check if address is valid
+    // Check if address is valid (works for both x86 and x64)
     inline bool IsValidPtr(uintptr_t addr) {
-        return addr > 0x10000 && addr < 0x7FFFFFFFFFFF;
+        if constexpr (sizeof(void*) == 8)
+            return addr > 0x10000 && addr < 0x7FFFFFFFFFFF;
+        else
+            return addr > 0x10000 && addr < 0x7FFFFFFF;
     }
 
     // ====================================================================
@@ -116,9 +126,9 @@ namespace Globals {
     inline int ReadPtrArray(uintptr_t listAddr, int count, uintptr_t* out, int maxOut) {
         __try {
             if (count <= 0 || count > maxOut) return 0;
-            if (listAddr < 0x10000 || listAddr > 0x7FFFFFFFFFFF) return 0;
+            if (!IsValidPtr(listAddr)) return 0;
             for (int i = 0; i < count; i++) {
-                out[i] = *(uintptr_t*)(listAddr + i * 8);
+                out[i] = *(uintptr_t*)(listAddr + i * sizeof(uintptr_t));
             }
             return count;
         } __except(1) { return 0; }

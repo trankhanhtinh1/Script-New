@@ -1,156 +1,171 @@
 #pragma once
-#include "GameObjects.h"
-#include "AiManager.h"
-#include "Game.h"
-#include <functional>
-#include <vector>
+
+#include "../../menu/MenuUI.h"
+#include "../Core/Game.h"
+#include "../Core/Objects.h"
+
+#include <new>
 #include <unordered_map>
+#include <vector>
 
-// ============================================================================
-// Dash — Detects when any hero starts a dash
-// Reference: EnsoulSharp.SDK/Core/Events/Dash.cs
-//
-// Detection method: Poll AiManager::IsDashing() each frame,
-// detect state transition from not-dashing to dashing.
-// ============================================================================
+namespace SDK::Events::Dash {
 
-namespace SDK {
+struct DashArgs {
+    int Duration = 0;
+    Vector2 EndPos = {};
+    int EndTick = 0;
+    bool IsBlink = false;
+    std::vector<Vector2> Path = {};
+    float Speed = 0.0f;
+    Vector2 StartPos = {};
+    int StartTick = 0;
+    AIBaseClient Unit = {};
 
-    // ========================================================================
-    // Dash Event Args
-    // ========================================================================
-    struct DashEventArgs {
-        GameObject  Sender;
-        Vec3        StartPos;
-        Vec3        EndPos;
-        float       Speed;
-        float       Duration;     // estimated duration (distance / speed)
-        float       StartTime;    // game time when dash started
-        float       EndTime;      // estimated end time
-        bool        IsBlink;      // true = instant blink (e.g. Ezreal E, Kassadin R)
+    bool IsValid() const {
+        return Unit.IsValid() && EndTick > StartTick;
+    }
+};
+
+using DashHandler = void(*)(const DashArgs&);
+
+namespace detail {
+    struct DashState {
+        DashArgs Args = {};
+        Vector2 LastEnd = {};
     };
 
-    // ========================================================================
-    // Callback type
-    // ========================================================================
-    using OnDashFn = std::function<void(const DashEventArgs&)>;
+    inline std::unordered_map<int, DashState>* g_dashStates = nullptr;
+    inline MenuUI::FixedList<DashHandler, 64> g_dashHandlers = {};
 
-    // ========================================================================
-    // Dash — Main class
-    // ========================================================================
-    class DashDetector {
-    public:
-        // Register a callback for dash events
-        static void OnDash(OnDashFn callback) {
-            s_callbacks.push_back(callback);
+    inline bool EnsureDashStorage() {
+        if (!g_dashStates) {
+            g_dashStates = new(std::nothrow) std::unordered_map<int, DashState>();
+        }
+        return g_dashStates != nullptr;
+    }
+
+    inline Vector2 ResolveDashStart(const AIBaseClient& hero) {
+        Vector3 start = hero.PreviousPosition();
+        if (start.IsZero()) {
+            start = hero.Position();
+        }
+        return start.To2D();
+    }
+
+    inline Vector2 ResolveDashEnd(const AIBaseClient& hero) {
+        Vector3 end = hero.PathEnd();
+        if (end.IsZero()) {
+            end = hero.OrderPosition();
+        }
+        if (end.IsZero()) {
+            end = hero.Position();
+        }
+        return end.To2D();
+    }
+
+    inline float ResolveDashSpeed(const AIBaseClient& hero) {
+        const Vector3 velocity = hero.Velocity();
+        const float speed = velocity.Length2D();
+        if (speed > 50.0f) {
+            return speed;
         }
 
-        // Call once per frame after GameObjects::Update()
-        static void Update() {
-            if (s_callbacks.empty()) return;
+        const float moveSpeed = hero.MoveSpeed();
+        return moveSpeed > 0.0f ? moveSpeed * 2.0f : 0.0f;
+    }
 
-            float now = Game::GetTime();
-            if (now <= 0.0f) return;
+    inline bool DashPathChanged(const DashState& state, const DashArgs& next) {
+        return state.Args.EndTick == 0 ||
+               state.Args.EndPos.Distance(next.EndPos) > 20.0f ||
+               state.Args.StartPos.Distance(next.StartPos) > 20.0f;
+    }
+}
 
-            for (auto& hero : GameObjects::AllHeroes) {
-                if (!hero.IsValid() || !hero.IsAlive()) continue;
+inline void Initialize() {
+    detail::EnsureDashStorage();
+}
 
-                int netId = hero.GetNetId();
-                if (netId == 0) continue;
+inline bool AddOnDash(DashHandler handler) {
+    return handler && detail::g_dashHandlers.push_back(handler);
+}
 
-                AiManager ai(hero.address);
-                bool isDashing = ai.IsValid() && ai.IsDashing();
+inline bool OnDash(DashHandler handler) {
+    return AddOnDash(handler);
+}
 
-                auto& state = s_dashStates[netId];
+inline DashArgs GetDashInfo(const AIBaseClient& unit) {
+    if (!detail::g_dashStates || !unit.IsValid()) {
+        return {};
+    }
 
-                if (isDashing && !state.wasDashing) {
-                    // Dash just started!
-                    state.wasDashing = true;
-                    state.startPos = hero.GetPosition();
-                    state.startTime = now;
+    const auto it = detail::g_dashStates->find(unit.NetworkId());
+    return (it != detail::g_dashStates->end()) ? it->second.Args : DashArgs{};
+}
 
-                    Vec3 endPos = ai.GetPathEnd();
-                    float speed = ai.GetDashSpeed();
-                    if (speed < 100.0f) speed = hero.GetMoveSpeed() * 2.0f; // fallback
+inline bool IsDashing(const AIBaseClient& unit) {
+    const DashArgs info = GetDashInfo(unit);
+    return info.IsValid() && Game::TickCount() <= info.EndTick;
+}
 
-                    float dist = state.startPos.Distance(endPos);
-                    float duration = (speed > 0.0f) ? (dist / speed) : 0.0f;
+inline void Update() {
+    if (!detail::EnsureDashStorage()) {
+        return;
+    }
 
-                    // Detect blink: if distance is large and speed is very high, it's likely a blink
-                    bool isBlink = (speed > 5000.0f || duration < 0.01f);
+    const int now = Game::TickCount();
+    for (const auto& hero : ObjectManager::Heroes()) {
+        if (!hero.IsValid() || hero.IsDead()) {
+            if (hero.NetworkId() != 0) {
+                detail::g_dashStates->erase(hero.NetworkId());
+            }
+            continue;
+        }
 
-                    DashEventArgs args;
-                    args.Sender    = hero;
-                    args.StartPos  = state.startPos;
-                    args.EndPos    = endPos;
-                    args.Speed     = speed;
-                    args.Duration  = duration;
-                    args.StartTime = now;
-                    args.EndTime   = now + duration;
-                    args.IsBlink   = isBlink;
+        if (!hero.IsDashing()) {
+            detail::g_dashStates->erase(hero.NetworkId());
+            continue;
+        }
 
-                    for (auto& cb : s_callbacks) {
-                        cb(args);
-                    }
-                }
-                else if (!isDashing && state.wasDashing) {
-                    // Dash ended
-                    state.wasDashing = false;
+        DashArgs next = {};
+        next.Unit = hero;
+        next.StartPos = detail::ResolveDashStart(hero);
+        next.EndPos = detail::ResolveDashEnd(hero);
+        next.Speed = detail::ResolveDashSpeed(hero);
+        next.StartTick = now - (Game::Ping() / 2);
+        const float distance = next.StartPos.Distance(next.EndPos);
+        next.Duration = (next.Speed > 1.0f) ? static_cast<int>((distance / next.Speed) * 1000.0f) : 0;
+        if (next.Duration <= 0) {
+            next.Duration = 50;
+        }
+        next.EndTick = next.StartTick + next.Duration;
+        next.IsBlink = next.Speed > 5000.0f || next.Duration <= 10;
+        next.Path.clear();
+        next.Path.push_back(next.StartPos);
+        next.Path.push_back(next.EndPos);
+
+        auto& state = (*detail::g_dashStates)[hero.NetworkId()];
+        if (detail::DashPathChanged(state, next)) {
+            state.Args = next;
+            state.LastEnd = next.EndPos;
+
+            for (const auto& handler : detail::g_dashHandlers) {
+                if (handler) {
+                    handler(state.Args);
                 }
             }
+        } else {
+            state.Args.EndTick = next.EndTick;
+            state.Args.Duration = next.Duration;
+            state.Args.Speed = next.Speed;
         }
+    }
+}
 
-        // ====================================================================
-        // Utility: check if a hero is currently dashing
-        // ====================================================================
-        static bool IsDashing(const GameObject& hero) {
-            if (!hero.IsValid()) return false;
-            AiManager ai(hero.address);
-            return ai.IsValid() && ai.IsDashing();
-        }
+inline void Reset() {
+    if (detail::g_dashStates) {
+        detail::g_dashStates->clear();
+    }
+    detail::g_dashHandlers.clear();
+}
 
-        // Get dash info for a currently dashing hero
-        static DashEventArgs GetDashInfo(const GameObject& hero) {
-            DashEventArgs args = {};
-            if (!hero.IsValid()) return args;
-
-            int netId = hero.GetNetId();
-            auto it = s_dashStates.find(netId);
-            if (it == s_dashStates.end() || !it->second.wasDashing) return args;
-
-            AiManager ai(hero.address);
-            if (!ai.IsValid() || !ai.IsDashing()) return args;
-
-            args.Sender    = hero;
-            args.StartPos  = it->second.startPos;
-            args.EndPos    = ai.GetPathEnd();
-            args.Speed     = ai.GetDashSpeed();
-            args.StartTime = it->second.startTime;
-
-            float dist = args.StartPos.Distance(args.EndPos);
-            args.Duration = (args.Speed > 0.0f) ? (dist / args.Speed) : 0.0f;
-            args.EndTime = args.StartTime + args.Duration;
-            args.IsBlink = (args.Speed > 5000.0f || args.Duration < 0.01f);
-
-            return args;
-        }
-
-        // Clear all state (e.g. on game reset)
-        static void Clear() {
-            s_dashStates.clear();
-            s_callbacks.clear();
-        }
-
-    private:
-        static inline std::vector<OnDashFn> s_callbacks;
-
-        struct DashState {
-            bool  wasDashing = false;
-            Vec3  startPos;
-            float startTime = 0.0f;
-        };
-
-        static inline std::unordered_map<int, DashState> s_dashStates;
-    };
-
-} // namespace SDK
+} // namespace SDK::Events::Dash

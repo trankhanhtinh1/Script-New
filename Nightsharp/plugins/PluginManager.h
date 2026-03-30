@@ -1,237 +1,142 @@
 #pragma once
-#include "IPlugin.h"
-#include "imgui/imgui.h"
-#include <vector>
-#include <memory>
-#include <algorithm>
-#include <unordered_set>
-#include <string>
 
-// ============================================================================
-// PluginManager — Manages plugin lifecycle, loading, and rendering
-// Plugins are registered at startup, user chooses which to load via menu
-// ============================================================================
+#include "IPlugin.h"
+#include "../menu/PluginRegistry.h"
+
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace Plugins {
 
     class PluginManager {
     public:
-        // ====================================================================
-        // Singleton
-        // ====================================================================
         static PluginManager& Get() {
             static PluginManager instance;
             return instance;
         }
 
-        // ====================================================================
-        // Registration — call at startup to register available plugins
-        // ====================================================================
         template<typename T, typename... Args>
         T* Register(Args&&... args) {
             auto plugin = std::make_unique<T>(std::forward<Args>(args)...);
-            T* ptr = plugin.get();
+            T* raw = plugin.get();
+
+            int idx = PluginRegistry::FindByInternalId(raw->GetInternalId());
+            if (idx < 0) {
+                idx = PluginRegistry::Register(
+                    raw->GetName(),
+                    raw->GetInternalId(),
+                    PluginRegistry::PluginKind::Plugin,
+                    raw->GetMenuRoot(),
+                    raw->AutoLoadByDefault());
+            } else {
+                auto& entry = PluginRegistry::Plugins[idx];
+                entry.Name = raw->GetName();
+                entry.InternalId = raw->GetInternalId();
+                entry.Kind = PluginRegistry::PluginKind::Plugin;
+                entry.MenuRoot = raw->GetMenuRoot();
+                entry.AlwaysLoad = raw->AutoLoadByDefault();
+            }
+
+            raw->m_registryIndex = idx;
+            PluginRegistry::BindRuntime(idx, raw, &PluginManager::LoadThunk,
+                &PluginManager::UnloadThunk, &PluginManager::MenuRootThunk);
+
             m_plugins.push_back(std::move(plugin));
-            return ptr;
+            SyncRegistry(raw);
+            return raw;
         }
 
-        // ====================================================================
-        // Load / Unload
-        // ====================================================================
         bool Load(IPlugin* plugin) {
-            if (!plugin || plugin->m_loaded || !plugin->CanLoad()) return false;
+            if (!plugin) return false;
+            if (plugin->m_loaded) return true;
+            if (!plugin->CanLoad()) return false;
+
             plugin->OnLoad();
             plugin->m_loaded = true;
+            SyncRegistry(plugin);
             return true;
         }
 
         bool Unload(IPlugin* plugin) {
-            if (!plugin || !plugin->m_loaded) return false;
+            if (!plugin) return false;
+            if (!plugin->m_loaded) return true;
+
             plugin->OnUnload();
             plugin->m_loaded = false;
+            SyncRegistry(plugin);
             return true;
         }
 
-        void LoadAll() {
-            for (auto& p : m_plugins) Load(p.get());
-        }
-
         void LoadAuto() {
-            for (auto& p : m_plugins) {
-                if (IsAutoLoad(p->GetName()))
-                    Load(p.get());
+            for (auto& plugin : m_plugins) {
+                const int idx = plugin->m_registryIndex;
+                if (idx < 0) continue;
+
+                if (PluginRegistry::Plugins[idx].AlwaysLoad) {
+                    Load(plugin.get());
+                } else {
+                    Unload(plugin.get());
+                }
             }
         }
 
         void UnloadAll() {
-            for (auto& p : m_plugins) Unload(p.get());
+            for (auto& plugin : m_plugins) {
+                Unload(plugin.get());
+            }
         }
 
-        bool LoadByName(const char* name) {
-            IPlugin* p = Find(name);
-            return p ? Load(p) : false;
+        void RefreshRegistryViews() {
+            for (auto& plugin : m_plugins) {
+                SyncRegistry(plugin.get());
+            }
         }
 
-        bool UnloadByName(const char* name) {
-            IPlugin* p = Find(name);
-            return p ? Unload(p) : false;
-        }
-
-        // ====================================================================
-        // Per-frame — call from main render loop
-        // ====================================================================
         void OnUpdate() {
-            for (auto& p : m_plugins) {
-                if (p->m_loaded && p->m_enabled)
-                    p->OnUpdate();
+            RefreshRegistryViews();
+            for (auto& plugin : m_plugins) {
+                if (plugin->m_loaded && plugin->m_enabled) {
+                    plugin->OnUpdate();
+                }
             }
         }
 
         void OnRender() {
-            for (auto& p : m_plugins) {
-                if (p->m_loaded && p->m_enabled)
-                    p->OnRender();
+            RefreshRegistryViews();
+            for (auto& plugin : m_plugins) {
+                if (plugin->m_loaded && plugin->m_enabled) {
+                    plugin->OnRender();
+                }
             }
-        }
-
-        // ====================================================================
-        // Menu — Draw plugin management UI
-        // ====================================================================
-        void OnMenu() {
-            DrawMenuInternal(nullptr);
-        }
-
-        void OnMenu(PluginCategory category) {
-            DrawMenuInternal(&category);
-        }
-
-        // ====================================================================
-        // Accessors
-        // ====================================================================
-        const std::vector<std::unique_ptr<IPlugin>>& GetPlugins() const { return m_plugins; }
-
-        int CountLoaded() const {
-            int n = 0;
-            for (auto& p : m_plugins) if (p->m_loaded) n++;
-            return n;
-        }
-
-        void SetAutoLoad(const std::string& pluginName, bool enabled) {
-            if (enabled) m_autoLoadNames.insert(pluginName);
-            else m_autoLoadNames.erase(pluginName);
-        }
-
-        bool IsAutoLoad(const std::string& pluginName) const {
-            return m_autoLoadNames.find(pluginName) != m_autoLoadNames.end();
-        }
-
-        // Find plugin by name
-        IPlugin* Find(const char* name) {
-            for (auto& p : m_plugins)
-                if (strcmp(p->GetName(), name) == 0) return p.get();
-            return nullptr;
         }
 
     private:
-        static const char* GetCategoryName(PluginCategory category) {
-            switch (category) {
-            case PluginCategory::CorePlugin: return "Core Plugin";
-            case PluginCategory::Champion:   return "Champion";
-            case PluginCategory::Utility:    return "Utility";
-            case PluginCategory::Misc:       return "Misc";
-            default:                         return "Unknown";
-            }
+        static bool LoadThunk(void* userData) {
+            return Get().Load(static_cast<IPlugin*>(userData));
         }
 
-        void DrawPluginEntry(IPlugin* plugin) {
-            ImGui::PushID(plugin);
-
-            bool loaded = plugin->m_loaded;
-            if (ImGui::Checkbox("##load", &loaded)) {
-                if (loaded) Load(plugin);
-                else Unload(plugin);
-            }
-            ImGui::SameLine();
-
-            if (plugin->m_loaded) {
-                bool enabled = plugin->m_enabled;
-                ImGui::Checkbox(plugin->GetName(), &enabled);
-                plugin->m_enabled = enabled;
-
-                ImGui::SameLine();
-                ImGui::TextDisabled("(%s)", plugin->GetAuthor());
-                if (const char* requiredChampion = plugin->GetRequiredChampion()) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("[%s]", requiredChampion);
-                }
-
-                if (plugin->m_enabled) {
-                    ImGui::Indent(20.0f);
-                    plugin->OnMenu();
-                    ImGui::Unindent(20.0f);
-                }
-            } else {
-                ImGui::TextDisabled("%s", plugin->GetName());
-                ImGui::SameLine();
-                ImGui::TextDisabled("(%s) [not loaded]", plugin->GetAuthor());
-                if (const char* requiredChampion = plugin->GetRequiredChampion()) {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("[%s]", requiredChampion);
-                }
-            }
-
-            ImGui::PopID();
+        static bool UnloadThunk(void* userData) {
+            return Get().Unload(static_cast<IPlugin*>(userData));
         }
 
-        void DrawMenuInternal(const PluginCategory* filter) {
-            ImGui::Text("Loaded Plugins: %d / %d",
-                CountLoaded(), (int)m_plugins.size());
-            ImGui::Separator();
-
-            if (filter != nullptr) {
-                ImGui::TextDisabled("%s", GetCategoryName(*filter));
-                ImGui::Separator();
-
-                bool hasAny = false;
-                for (auto& p : m_plugins) {
-                    if (!p->ShouldAppearInMenu() || p->GetCategory() != *filter) {
-                        continue;
-                    }
-
-                    hasAny = true;
-                    DrawPluginEntry(p.get());
-                    ImGui::Spacing();
-                    ImGui::Separator();
-                }
-
-                if (!hasAny) {
-                    ImGui::TextDisabled("No plugins registered in this category.");
-                }
-                return;
-            }
-
-            // Group by category
-            const char* catNames[] = { "Core Plugin", "Champion", "Utility", "Misc" };
-
-            for (int cat = 0; cat < 4; cat++) {
-                auto category = (PluginCategory)cat;
-                bool hasAny = false;
-                for (auto& p : m_plugins)
-                    if (p->ShouldAppearInMenu() && p->GetCategory() == category) { hasAny = true; break; }
-                if (!hasAny) continue;
-
-                if (ImGui::CollapsingHeader(catNames[cat], ImGuiTreeNodeFlags_DefaultOpen)) {
-                    for (auto& p : m_plugins) {
-                        if (!p->ShouldAppearInMenu()) continue;
-                        if (p->GetCategory() != category) continue;
-                        DrawPluginEntry(p.get());
-                    }
-                }
-            }
+        static SDK::MenuUI::Menu* MenuRootThunk(void* userData) {
+            auto* plugin = static_cast<IPlugin*>(userData);
+            return plugin ? plugin->GetMenuRoot() : nullptr;
         }
+
+        void SyncRegistry(IPlugin* plugin) {
+            if (!plugin) return;
+            const int idx = plugin->m_registryIndex;
+            if (idx < 0 || idx >= PluginRegistry::PluginCount) return;
+
+            auto& entry = PluginRegistry::Plugins[idx];
+            entry.Loaded = plugin->m_loaded;
+            entry.MenuRoot = plugin->GetMenuRoot();
+        }
+
         PluginManager() = default;
         std::vector<std::unique_ptr<IPlugin>> m_plugins;
-        std::unordered_set<std::string> m_autoLoadNames;
     };
 
 } // namespace Plugins

@@ -1,339 +1,173 @@
 #pragma once
-// ============================================================================
-// Invulnerable.h — Invulnerable Database (EnsoulSharp SDK Port)
-// ============================================================================
-// Full port of EnsoulSharp.SDK/Core/Utils/Invulnerable.cs
-// Checks if a target hero is invulnerable to a given damage type.
-// Supports custom entries with per-champion conditions.
-// ============================================================================
 
-#include "core/Vector.h"
-#include "Enums.h"
-#include "GameObject.h"
-#include "BuffManager.h"
-#include "GameObjects.h"
+#include "Logging.h"
+#include "../Core/Objects.h"
+#include "../Enumerations/DamageType.h"
 
+#include <algorithm>
+#include <functional>
+#include <new>
 #include <string>
 #include <vector>
-#include <functional>
-#include <algorithm>
 
-namespace SDK {
+namespace SDK::Utils {
 
-// ============================================================================
-// DamageType enum (for invulnerability checks)
-// ============================================================================
-enum class InvDamageType {
-    Physical,
-    Magical,
-    True_,
-    Any         // Matches all types
-};
-
-// ============================================================================
-// InvulnerableEntry — Single invulnerability entry
-// ============================================================================
 struct InvulnerableEntry {
-    std::string BuffName;
-    std::string ChampionName;       // Empty = any champion
-    InvDamageType DamageType = InvDamageType::Any;
+    std::string BuffName = {};
+    std::string ChampionName = {};
+    std::function<bool(const AIBaseClient&, DamageType)> CheckFunction = {};
+    bool HasDamageType = false;
+    DamageType EntryDamageType = DamageType::True;
     bool IsShield = false;
     int MinHealthPercent = 0;
-
-    // Optional check function: (target, damageType) -> bool
-    // If set, invulnerability only applies when this returns true
-    std::function<bool(const GameObject&, InvDamageType)> CheckFunction;
-
-    InvulnerableEntry() = default;
-    InvulnerableEntry(const std::string& buffName) : BuffName(buffName) {}
 };
 
-// ============================================================================
-// Invulnerable — Static database and check system
-// ============================================================================
-class Invulnerable {
-public:
-    // ---- Initialize with default entries ----
-    static void Init() {
-        if (s_initialized) return;
-        s_initialized = true;
+namespace Invulnerable {
 
-        // Alistar R — only when > 1 enemy nearby
-        {
-            InvulnerableEntry e("FerociousHowl");
-            e.ChampionName = "Alistar";
-            e.CheckFunction = [](const GameObject& target, InvDamageType) -> bool {
-                auto& player = GameObjects::Player;
-                if (!player.IsValid()) return false;
-                int count = 0;
-                for (auto& enemy : GameObjects::EnemyHeroes) {
-                    if (enemy.IsValid() && enemy.IsAlive() && player.GetPosition().Distance(enemy.GetPosition()) <= 600.0f)
-                        count++;
-                }
-                return count > 1;
-            };
-            Register(e);
-        }
-
-        // Fiora W
-        Register(InvulnerableEntry("FioraW"));
-        s_entries.back().ChampionName = "Fiora";
-
-        // Jax E — only blocks physical
-        {
-            InvulnerableEntry e("JaxCounterStrike");
-            e.ChampionName = "Jax";
-            e.DamageType = InvDamageType::Physical;
-            Register(e);
-        }
-
-        // Kayle R — shield (can be ignored if ignoreShields)
-        {
-            InvulnerableEntry e("KayleR");
-            e.IsShield = true;
-            Register(e);
-        }
-
-        // Kindred R — only when target health <= 10%
-        {
-            InvulnerableEntry e("KindredRNoDeathBuff");
-            e.MinHealthPercent = 10;
-            e.CheckFunction = [](const GameObject& target, InvDamageType) -> bool {
-                float healthPct = (target.GetHealth() / target.GetMaxHealth()) * 100.0f;
-                return healthPct <= 10.0f;
-            };
-            Register(e);
-        }
-
-        // Malzahar passive — magic shield
-        {
-            InvulnerableEntry e("malzaharpassiveshield");
-            e.ChampionName = "Malzahar";
-            e.IsShield = true;
-            e.DamageType = InvDamageType::Magical;
-            Register(e);
-        }
-
-        // Master Yi W — only when > 1 enemy nearby
-        {
-            InvulnerableEntry e("Meditate");
-            e.ChampionName = "MasterYi";
-            e.CheckFunction = [](const GameObject& target, InvDamageType) -> bool {
-                auto& player = GameObjects::Player;
-                if (!player.IsValid()) return false;
-                int count = 0;
-                for (auto& enemy : GameObjects::EnemyHeroes) {
-                    if (enemy.IsValid() && enemy.IsAlive() && player.GetPosition().Distance(enemy.GetPosition()) <= 600.0f)
-                        count++;
-                }
-                return count > 1;
-            };
-            Register(e);
-        }
-
-        // Morgana E — magic shield
-        {
-            InvulnerableEntry e("MorganaE");
-            e.IsShield = true;
-            e.DamageType = InvDamageType::Magical;
-            Register(e);
-        }
-
-        // Nocturne W
-        Register(InvulnerableEntry("NocturneShroudofDarkness"));
-        s_entries.back().ChampionName = "Nocturne";
-
-        // Shen W — physical only
-        {
-            InvulnerableEntry e("ShenWBuff");
-            e.DamageType = InvDamageType::Physical;
-            Register(e);
-        }
-
-        // Sivir E — spell shield
-        {
-            InvulnerableEntry e("SivirE");
-            e.ChampionName = "Sivir";
-            e.IsShield = true;
-            Register(e);
-        }
-
-        // Taric R
-        Register(InvulnerableEntry("TaricR"));
-
-        // Tryndamere R — only when health is low
-        {
-            InvulnerableEntry e("UndyingRage");
-            e.ChampionName = "Tryndamere";
-            e.CheckFunction = [](const GameObject& target, InvDamageType) -> bool {
-                return target.GetHealth() <= 70.0f;  // Simplified: R prevents dying
-            };
-            Register(e);
-        }
-
-        // Xin Zhao R — ranged physical immunity
-        {
-            InvulnerableEntry e("XinZhaoRRangedImmunity");
-            e.ChampionName = "XinZhao";
-            e.DamageType = InvDamageType::Physical;
-            Register(e);
-        }
-
-        // Banshee's Veil — magic spell shield
-        {
-            InvulnerableEntry e("bansheesveil");
-            e.IsShield = true;
-            e.DamageType = InvDamageType::Magical;
-            Register(e);
-        }
-
-        // Edge of Night — spell shield
-        {
-            InvulnerableEntry e("itemmagekillerveil");
-            e.IsShield = true;
-            e.DamageType = InvDamageType::Magical;
-            Register(e);
-        }
-
-        // ---- Season 2026 additions ----
-
-        // Bard R (Tempered Fate)
-        Register(InvulnerableEntry("BardRStasis"));
-
-        // Zhonya's Hourglass
-        Register(InvulnerableEntry("ZhonyasRingShield"));
-        Register(InvulnerableEntry("zhonyasringshield"));
-
-        // Stopwatch
-        Register(InvulnerableEntry("ChronoShift"));
-
-        // Guardian Angel revive
-        Register(InvulnerableEntry("intomingGuardianAngel"));
-
-        // Sion Passive (Glory in Death)
-        {
-            InvulnerableEntry e("SionPassiveZombie");
-            e.ChampionName = "Sion";
-            Register(e);
-        }
-
-        // Karthus Passive (Death Defied)
-        {
-            InvulnerableEntry e("KarthusDeathDefiedBuff");
-            e.ChampionName = "Karthus";
-            Register(e);
-        }
-
-        // Kog'Maw Passive (Icathian Surprise)
-        {
-            InvulnerableEntry e("KogMawIcathianSurprise");
-            e.ChampionName = "KogMaw";
-            Register(e);
-        }
-
-        // K'Sante R armor (All Out) — could be treated as damage reduction not invuln
-        // Gwen W (Hallowed Mist) — outside-only protection
-        // Nilah W — special dodge, not a buff-based invuln
+namespace detail {
+    inline std::vector<InvulnerableEntry>*& Entries() {
+        static auto* storage = new(std::nothrow) std::vector<InvulnerableEntry>();
+        return storage;
     }
 
-    // ---- Check if hero is invulnerable ----
-    static bool Check(
-        const GameObject& hero,
-        InvDamageType damageType = InvDamageType::Any,
-        bool ignoreShields = true,
-        float damage = -1.0f)
-    {
-        if (!hero.IsValid() || !hero.IsAlive()) return false;
+    inline bool g_initialized = false;
+}
 
-        // Check game-level invulnerability flag
-        if (hero.IsInvulnerable()) {
-            return true;
-        }
+inline void Initialize() {
+    if (detail::g_initialized) {
+        return;
+    }
+    detail::g_initialized = true;
 
-        BuffManager buffMgr(hero.address);
+    auto* entries = detail::Entries();
+    if (!entries || !entries->empty()) {
+        return;
+    }
 
-        // Check each registered entry
-        for (auto& entry : s_entries) {
-            // Champion filter
-            if (!entry.ChampionName.empty()) {
-                std::string charName = hero.GetChampionName();
-                if (charName != entry.ChampionName)
-                    continue;
-            }
+    entries->push_back({ "FerociousHowl", "Alistar", [](const AIBaseClient&, DamageType) {
+        return ObjectManager::Player().CountEnemyHeroesInRange(ObjectManager::Player().GetRealAutoAttackRange()) > 1;
+    }, false, DamageType::True, false, 0 });
+    entries->push_back({ "FioraW", "Fiora", {}, false, DamageType::True, false, 0 });
+    entries->push_back({ "JaxCounterStrike", "Jax", {}, true, DamageType::Physical, false, 0 });
+    entries->push_back({ "KayleR", "Kayle", {}, false, DamageType::True, true, 0 });
+    entries->push_back({ "KindredRNoDeathBuff", "Kindred", [](const AIBaseClient& target, DamageType) {
+        return target.HealthPercent() <= 10.0f;
+    }, false, DamageType::True, false, 10 });
+    entries->push_back({ "malzaharpassiveshield", "Malzahar", {}, true, DamageType::Magical, true, 0 });
+    entries->push_back({ "MorganaE", "Morgana", {}, true, DamageType::Magical, true, 0 });
+    entries->push_back({ "SivirE", "Sivir", {}, false, DamageType::True, true, 0 });
+    entries->push_back({ "TaricR", "Taric", {}, false, DamageType::True, false, 0 });
+    entries->push_back({ "XinZhaoRRangedImmunity", "XinZhao", {}, true, DamageType::Physical, false, 0 });
+    entries->push_back({ "bansheesveil", "", {}, true, DamageType::Magical, true, 0 });
+    entries->push_back({ "itemmagekillerveil", "", {}, true, DamageType::Magical, true, 0 });
+}
 
-            // Damage type filter
-            if (entry.DamageType != InvDamageType::Any && entry.DamageType != damageType)
-                continue;
+inline void Register(const InvulnerableEntry& entry) {
+    Initialize();
+    auto* entries = detail::Entries();
+    if (!entries || entry.BuffName.empty()) {
+        return;
+    }
 
-            // Check if hero has this buff
-            if (!buffMgr.HasBuff(entry.BuffName.c_str()))
-                continue;
+    const auto it = std::find_if(entries->begin(), entries->end(), [&entry](const InvulnerableEntry& current) {
+        return _stricmp(current.BuffName.c_str(), entry.BuffName.c_str()) == 0;
+    });
 
-            // Shield filter
-            if (ignoreShields && entry.IsShield)
-                continue;
+    if (it == entries->end()) {
+        entries->push_back(entry);
+    }
+}
 
-            // Custom check function
-            if (entry.CheckFunction) {
-                try {
-                    if (!entry.CheckFunction(hero, damageType))
-                        continue;
-                }
-                catch (...) {
-                    continue;
-                }
-            }
+inline void Deregister(const InvulnerableEntry& entry) {
+    auto* entries = detail::Entries();
+    if (!entries) {
+        return;
+    }
 
-            // Min health percent check
-            if (damage > 0 && entry.MinHealthPercent > 0) {
-                float afterDmgPct = (hero.GetHealth() - damage) / hero.GetMaxHealth() * 100.0f;
-                if (afterDmgPct >= entry.MinHealthPercent)
-                    continue;
-            }
+    entries->erase(std::remove_if(entries->begin(), entries->end(), [&entry](const InvulnerableEntry& current) {
+        return _stricmp(current.BuffName.c_str(), entry.BuffName.c_str()) == 0;
+    }), entries->end());
+}
 
-            return true;
-        }
+inline const InvulnerableEntry* GetItem(const std::string& buffName) {
+    Initialize();
+    auto* entries = detail::Entries();
+    if (!entries) {
+        return nullptr;
+    }
 
+    const auto it = std::find_if(entries->begin(), entries->end(), [&buffName](const InvulnerableEntry& current) {
+        return _stricmp(current.BuffName.c_str(), buffName.c_str()) == 0;
+    });
+
+    return it == entries->end() ? nullptr : &*it;
+}
+
+inline std::vector<InvulnerableEntry> Entries() {
+    Initialize();
+    return detail::Entries() ? *detail::Entries() : std::vector<InvulnerableEntry>{};
+}
+
+inline bool Check(const AIHeroClient& hero,
+                  DamageType damageType = DamageType::True,
+                  bool ignoreShields = true,
+                  float damage = -1.0f) {
+    Initialize();
+    if (!hero.IsValid()) {
         return false;
     }
 
-    // ---- Register / Deregister custom entries ----
-    static void Register(const InvulnerableEntry& entry) {
-        if (entry.BuffName.empty()) return;
-        // Don't add duplicates
-        for (auto& existing : s_entries) {
-            if (existing.BuffName == entry.BuffName) return;
+    if (hero.IsInvulnerable()) {
+        return true;
+    }
+
+    auto* entries = detail::Entries();
+    if (!entries) {
+        return false;
+    }
+
+    for (const auto& entry : *entries) {
+        if (!entry.ChampionName.empty() && _stricmp(entry.ChampionName.c_str(), hero.CharacterName().c_str()) != 0) {
+            continue;
         }
-        s_entries.push_back(entry);
+        if (entry.HasDamageType && entry.EntryDamageType != damageType) {
+            continue;
+        }
+        if (!hero.HasBuff(entry.BuffName.c_str())) {
+            continue;
+        }
+        if (ignoreShields && entry.IsShield) {
+            continue;
+        }
+
+        bool passed = true;
+        if (entry.CheckFunction) {
+            try {
+                passed = entry.CheckFunction(hero, damageType);
+            } catch (...) {
+                Logging::Write(true, true, "Invulnerable::Check")(LogLevel::Error, "Entry check threw.");
+                passed = false;
+            }
+        }
+
+        if (!passed) {
+            continue;
+        }
+
+        if (damage > 0.0f && entry.MinHealthPercent > 0) {
+            const float hpAfter = hero.Health() - damage;
+            const float hpPercent = hero.MaxHealth() > 0.0f ? (hpAfter / hero.MaxHealth()) * 100.0f : 0.0f;
+            if (hpPercent >= entry.MinHealthPercent) {
+                continue;
+            }
+        }
+
+        return true;
     }
 
-    static void Deregister(const std::string& buffName) {
-        s_entries.erase(
-            std::remove_if(s_entries.begin(), s_entries.end(),
-                [&](const InvulnerableEntry& e) { return e.BuffName == buffName; }),
-            s_entries.end()
-        );
-    }
+    return false;
+}
 
-    // ---- Access entries ----
-    static const std::vector<InvulnerableEntry>& GetEntries() { return s_entries; }
+} // namespace Invulnerable
+} // namespace SDK::Utils
 
-    // ---- Quick helpers ----
-    static bool IsInvulnerable(const GameObject& target) {
-        return Check(target, InvDamageType::Any, false);
-    }
-
-    static bool IsPhysicalInvulnerable(const GameObject& target) {
-        return Check(target, InvDamageType::Physical, true);
-    }
-
-    static bool IsMagicalInvulnerable(const GameObject& target) {
-        return Check(target, InvDamageType::Magical, true);
-    }
-
-private:
-    static inline std::vector<InvulnerableEntry> s_entries;
-    static inline bool s_initialized = false;
-};
-
-} // namespace SDK

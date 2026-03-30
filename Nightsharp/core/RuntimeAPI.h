@@ -33,7 +33,7 @@
 // ================================================================
 // MinionClass byte offset (IDA VERIFIED 2026-03-17)
 // ================================================================
-constexpr uintptr_t MinionClassOffset = 0x4C79;
+constexpr uintptr_t MinionClassOffset = Offset::MinionClass::TypeOffset;
 
 // MinionClass enum values
 enum MinionClassValue : uint8_t {
@@ -565,8 +565,8 @@ namespace RuntimeAPI {
             uintptr_t casterAddr = 0;
 
             // Simple ObjectManager traversal to find caster
-            int maxObjCount = *(int*)(objTree + 0x08);
-            uintptr_t arrayBase = *(uintptr_t*)(objTree + 0x10);
+            int maxObjCount = *(int*)(objTree + Offset::ObjectManagerRuntime::ManagerListSize);
+            uintptr_t arrayBase = *(uintptr_t*)(objTree + Offset::ObjectManagerRuntime::ManagerListItems);
             if (!arrayBase || maxObjCount <= 0 || maxObjCount > 2000) {
                 // Fallback: classify by name only
                 goto classify_by_name;

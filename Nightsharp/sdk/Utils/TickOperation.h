@@ -1,116 +1,122 @@
 #pragma once
-// ============================================================================
-// TickOperation.h — Throttled periodic action execution
-// Ported from EnsoulSharp.SDK/Core/Utils/TickOperation.cs
-// ============================================================================
 
-#include <functional>
-#include <vector>
+#include "../Core/Game.h"
+
 #include <algorithm>
-#include <Windows.h>
+#include <functional>
+#include <new>
+#include <vector>
 
-namespace SDK {
+namespace SDK::Utils {
 
-    // ========================================================================
-    // TickOperation — executes an action every N milliseconds
-    //   Call TickOperation::UpdateAll() once per frame to process all operations
-    // ========================================================================
-    class TickOperation {
-    public:
-        using Action = std::function<void()>;
+class TickOperation {
+public:
+    TickOperation(int tickDelay, std::function<void()> action, bool runOnce = false)
+        : Action(std::move(action))
+        , IsRunning(true)
+        , TickDelay(tickDelay)
+        , m_nextTick(runOnce ? Variables::TickCount() : Variables::TickCount() + tickDelay) {
+        Initialize();
+        Register(this);
+    }
 
-        // Create a new tick operation
-        // tickDelayMs: delay between executions in milliseconds
-        // action:      function to call
-        // runOnce:     if true, runs immediately on first Update
-        TickOperation(int tickDelayMs, Action action, bool runOnce = false)
-            : m_tickDelay(tickDelayMs)
-            , m_action(std::move(action))
-            , m_isRunning(true)
-        {
-            DWORD now = static_cast<DWORD>(GetTickCount64());
-            m_nextTick = runOnce ? now : (now + tickDelayMs);
+    ~TickOperation() {
+        Dispose();
+    }
 
-            // Auto-register
-            GetOperations().push_back(this);
+    TickOperation* Start(bool runOnce = false) {
+        if (!IsRunning) {
+            IsRunning = true;
+            m_nextTick = runOnce ? Variables::TickCount() : Variables::TickCount() + TickDelay;
+            Register(this);
         }
+        return this;
+    }
 
-        ~TickOperation() {
+    TickOperation* Stop() {
+        if (IsRunning) {
+            IsRunning = false;
+            Unregister(this);
+        }
+        return this;
+    }
+
+    void Dispose() {
+        if (!m_disposed) {
+            m_disposed = true;
             Stop();
-            // Remove from global list
-            auto& ops = GetOperations();
-            ops.erase(std::remove(ops.begin(), ops.end(), this), ops.end());
+            Action = {};
+            TickDelay = 0;
+            m_nextTick = 0;
         }
+    }
 
-        // Non-copyable
-        TickOperation(const TickOperation&) = delete;
-        TickOperation& operator=(const TickOperation&) = delete;
-
-        // Move OK
-        TickOperation(TickOperation&& other) noexcept
-            : m_tickDelay(other.m_tickDelay)
-            , m_nextTick(other.m_nextTick)
-            , m_action(std::move(other.m_action))
-            , m_isRunning(other.m_isRunning)
-        {
-            // Replace in global list
-            auto& ops = GetOperations();
-            for (auto& op : ops) {
-                if (op == &other) { op = this; break; }
-            }
-            other.m_isRunning = false;
+    static void Initialize() {
+        if (detail::g_initialized) {
+            return;
         }
+        detail::g_initialized = true;
+        Game::OnUpdate(DispatchUpdate);
+    }
 
-        // Start the operation (if stopped)
-        void Start(bool runOnce = false) {
-            if (!m_isRunning) {
-                m_isRunning = true;
-                DWORD now = static_cast<DWORD>(GetTickCount64());
-                m_nextTick = runOnce ? now : (now + m_tickDelay);
-            }
+    static void Reset() {
+        if (auto* ops = detail::Operations()) {
+            ops->clear();
         }
+    }
 
-        // Stop the operation
-        void Stop() {
-            m_isRunning = false;
+    std::function<void()> Action = {};
+    bool IsRunning = false;
+    int TickDelay = 0;
+
+private:
+    struct detail {
+        static inline std::vector<TickOperation*>*& Operations() {
+            static auto* storage = new(std::nothrow) std::vector<TickOperation*>();
+            return storage;
         }
-
-        // Check if running
-        bool IsRunning() const { return m_isRunning; }
-
-        // Get/set tick delay
-        int  GetTickDelay() const { return m_tickDelay; }
-        void SetTickDelay(int ms) { m_tickDelay = ms; }
-
-        // Set a new action
-        void SetAction(Action action) { m_action = std::move(action); }
-
-        // ====================================================================
-        // Static: Update all registered TickOperations (call once per frame)
-        // ====================================================================
-        static void UpdateAll() {
-            DWORD now = static_cast<DWORD>(GetTickCount64());
-            for (auto* op : GetOperations()) {
-                if (op && op->m_isRunning && op->m_action) {
-                    if (now >= op->m_nextTick) {
-                        op->m_action();
-                        op->m_nextTick = now + op->m_tickDelay;
-                    }
-                }
-            }
-        }
-
-    private:
-        int      m_tickDelay;   // ms between executions
-        DWORD    m_nextTick;    // next tick to execute
-        Action   m_action;      // function to call
-        bool     m_isRunning;   // is this operation active
-
-        // Global registry of all active tick operations
-        static std::vector<TickOperation*>& GetOperations() {
-            static std::vector<TickOperation*> ops;
-            return ops;
-        }
+        static inline bool g_initialized = false;
     };
 
-} // namespace SDK
+    static void Register(TickOperation* operation) {
+        auto* ops = detail::Operations();
+        if (!ops || !operation) {
+            return;
+        }
+        if (std::find(ops->begin(), ops->end(), operation) == ops->end()) {
+            ops->push_back(operation);
+        }
+    }
+
+    static void Unregister(TickOperation* operation) {
+        auto* ops = detail::Operations();
+        if (!ops) {
+            return;
+        }
+        ops->erase(std::remove(ops->begin(), ops->end(), operation), ops->end());
+    }
+
+    static void DispatchUpdate() {
+        auto* ops = detail::Operations();
+        if (!ops) {
+            return;
+        }
+
+        const int now = Variables::TickCount();
+        for (auto* operation : *ops) {
+            if (!operation || !operation->IsRunning || !operation->Action) {
+                continue;
+            }
+            if (operation->m_nextTick <= now) {
+                operation->Action();
+                operation->m_nextTick = now + operation->TickDelay;
+            }
+        }
+    }
+
+    int m_nextTick = 0;
+    bool m_disposed = false;
+};
+
+} // namespace SDK::Utils
+

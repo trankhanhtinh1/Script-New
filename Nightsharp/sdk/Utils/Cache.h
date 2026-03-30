@@ -1,297 +1,263 @@
 #pragma once
+
+#include "../Core/Game.h"
+
+#include <any>
+#include <cstdint>
+#include <functional>
+#include <limits>
+#include <new>
 #include <string>
 #include <unordered_map>
-#include <any>
-#include <functional>
-#include <chrono>
-#include <mutex>
 #include <vector>
-#include <algorithm>
 
-// ============================================================================
-// Cache — Generic timed key-value cache with optional expiration
-// Source: EnsoulSharp.SDK/Core/Utils/Cache.cs
-//
-// Usage:
-//   SDK::Cache::Instance().Set("myKey", 42);              // No expiration
-//   SDK::Cache::Instance().Set("temp", 100, 5000);        // Expires in 5 seconds
-//   int val = SDK::Cache::Instance().Get<int>("myKey");    // Get value
-//   bool has = SDK::Cache::Instance().Contains("myKey");   // Check existence
-//   SDK::Cache::Instance().Remove("myKey");                // Remove
-//   SDK::Cache::Instance().Update();                       // Call each frame to expire entries
-//
-// Regions:
-//   SDK::Cache::Instance().Set("key", val, 0, "MyRegion");
-//   SDK::Cache::Instance().Get<int>("key", "MyRegion");
-// ============================================================================
+namespace SDK::Utils::Cache {
 
-namespace SDK {
+using Tick = uint64_t;
+inline constexpr Tick InfiniteAbsoluteExpiration = std::numeric_limits<Tick>::max();
 
-    // ========================================================================
-    // Cache entry (internal)
-    // ========================================================================
-    struct CacheEntry {
-        std::any Value;
-        std::chrono::steady_clock::time_point ExpiresAt;
-        bool HasExpiration = false;
+struct Entry {
+    std::any Value = {};
+    Tick Expiration = InfiniteAbsoluteExpiration;
+};
 
-        CacheEntry() = default;
-        CacheEntry(std::any val)
-            : Value(std::move(val)), HasExpiration(false) {}
-        CacheEntry(std::any val, int expirationMs)
-            : Value(std::move(val)), HasExpiration(expirationMs > 0) {
-            if (HasExpiration) {
-                ExpiresAt = std::chrono::steady_clock::now()
-                    + std::chrono::milliseconds(expirationMs);
-            }
-        }
+struct EntryAddedArgs {
+    std::string Key = {};
+    std::string RegionName = {};
+    std::any Value = {};
+};
 
-        bool IsExpired() const {
-            if (!HasExpiration) return false;
-            return std::chrono::steady_clock::now() >= ExpiresAt;
-        }
+struct ValueChangedArgs {
+    std::string Key = {};
+    std::string RegionName = {};
+    std::any OldValue = {};
+    std::any NewValue = {};
+};
+
+using OnEntryAddedDelegate = std::function<void(const EntryAddedArgs&)>;
+using OnValueChangedDelegate = std::function<void(const ValueChangedArgs&)>;
+
+namespace detail {
+    struct State {
+        std::unordered_map<std::string, std::unordered_map<std::string, Entry>> Regions = {};
+        std::vector<OnEntryAddedDelegate> EntryAddedCallbacks = {};
+        std::vector<OnValueChangedDelegate> ValueChangedCallbacks = {};
     };
 
-    // ========================================================================
-    // Cache event args
-    // ========================================================================
-    struct CacheValueChangedArgs {
-        std::string Key;
-        std::string RegionName;
-    };
+    inline State*& GetState() {
+        static auto* state = new(std::nothrow) State();
+        return state;
+    }
+}
 
-    struct CacheEntryAddedArgs {
-        std::string Key;
-        std::string RegionName;
-    };
+inline void CreateRegion(const std::string& regionName = "Default") {
+    auto* state = detail::GetState();
+    if (!state) {
+        return;
+    }
 
-    // ========================================================================
-    // Cache — Singleton timed cache
-    // ========================================================================
-    class Cache {
-    public:
-        using OnEntryAddedFn = std::function<void(const CacheEntryAddedArgs&)>;
-        using OnValueChangedFn = std::function<void(const CacheValueChangedArgs&)>;
+    if (!state->Regions.contains(regionName)) {
+        state->Regions[regionName] = {};
+    }
+}
 
-        // Singleton access
-        static Cache& Instance() {
-            static Cache s_instance;
-            return s_instance;
-        }
+inline void Reset() {
+    if (auto* state = detail::GetState()) {
+        state->Regions.clear();
+        state->EntryAddedCallbacks.clear();
+        state->ValueChangedCallbacks.clear();
+    }
+}
 
-        // ====================================================================
-        // Set — Add or update a key with optional expiration (ms, 0 = infinite)
-        // ====================================================================
-        void Set(const std::string& key, std::any value,
-                 int expirationMs = 0, const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            EnsureRegion(regionName);
+inline void OnEntryAdded(OnEntryAddedDelegate callback) {
+    auto* state = detail::GetState();
+    if (!state || !callback) {
+        return;
+    }
+    state->EntryAddedCallbacks.push_back(std::move(callback));
+}
 
-            bool existed = m_regions[regionName].count(key) > 0;
-            m_regions[regionName][key] = CacheEntry(std::move(value), expirationMs);
+inline void OnValueChanged(OnValueChangedDelegate callback) {
+    auto* state = detail::GetState();
+    if (!state || !callback) {
+        return;
+    }
+    state->ValueChangedCallbacks.push_back(std::move(callback));
+}
 
-            if (existed) {
-                CacheValueChangedArgs args{key, regionName};
-                for (auto& cb : m_onValueChanged) cb(args);
+inline void Update() {
+    auto* state = detail::GetState();
+    if (!state) {
+        return;
+    }
+
+    const Tick now = static_cast<Tick>(Game::TickCount());
+    for (auto& [regionName, region] : state->Regions) {
+        (void)regionName;
+        for (auto it = region.begin(); it != region.end();) {
+            if (it->second.Expiration != InfiniteAbsoluteExpiration && now >= it->second.Expiration) {
+                it = region.erase(it);
             } else {
-                CacheEntryAddedArgs args{key, regionName};
-                for (auto& cb : m_onEntryAdded) cb(args);
+                ++it;
             }
         }
+    }
+}
 
-        // ====================================================================
-        // Get — Get a value by key, returns default if not found or expired
-        // ====================================================================
-        template<typename T>
-        T Get(const std::string& key, const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto regionIt = m_regions.find(regionName);
-            if (regionIt == m_regions.end()) return T{};
+inline bool Contains(const std::string& key, const std::string& regionName = "Default") {
+    CreateRegion(regionName);
+    auto* state = detail::GetState();
+    return state && state->Regions.contains(regionName) && state->Regions[regionName].contains(key);
+}
 
-            auto it = regionIt->second.find(key);
-            if (it == regionIt->second.end()) return T{};
-            if (it->second.IsExpired()) {
-                regionIt->second.erase(it);
-                return T{};
-            }
+template<typename T>
+inline T Get(const std::string& key, const std::string& regionName = "Default", const T& fallback = T{}) {
+    Update();
+    auto* state = detail::GetState();
+    if (!state || !Contains(key, regionName)) {
+        return fallback;
+    }
+    try {
+        return std::any_cast<T>(state->Regions[regionName][key].Value);
+    } catch (...) {
+        return fallback;
+    }
+}
 
-            try {
-                return std::any_cast<T>(it->second.Value);
-            } catch (...) {
-                return T{};
-            }
-        }
+template<typename T>
+inline bool TryGetValue(const std::string& key, T& value, const std::string& regionName = "Default") {
+    if (!Contains(key, regionName)) {
+        return false;
+    }
 
-        // ====================================================================
-        // TryGet — Try to get a value, returns true if found and not expired
-        // ====================================================================
-        template<typename T>
-        bool TryGet(const std::string& key, T& outValue,
-                    const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto regionIt = m_regions.find(regionName);
-            if (regionIt == m_regions.end()) return false;
+    try {
+        value = std::any_cast<T>(detail::GetState()->Regions[regionName][key].Value);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
 
-            auto it = regionIt->second.find(key);
-            if (it == regionIt->second.end()) return false;
-            if (it->second.IsExpired()) {
-                regionIt->second.erase(it);
-                return false;
-            }
-
-            try {
-                outValue = std::any_cast<T>(it->second.Value);
-                return true;
-            } catch (...) {
-                return false;
-            }
-        }
-
-        // ====================================================================
-        // AddOrGetExisting — Add if not exists, return existing if it does
-        // ====================================================================
-        template<typename T>
-        T AddOrGetExisting(const std::string& key, const T& value,
-                          int expirationMs = 0,
+template<typename T>
+inline T AddOrGetExisting(const std::string& key,
+                          std::function<T()> function,
                           const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            EnsureRegion(regionName);
+    Update();
+    if (Contains(key, regionName)) {
+        return Get<T>(key, regionName);
+    }
 
-            auto it = m_regions[regionName].find(key);
-            if (it != m_regions[regionName].end() && !it->second.IsExpired()) {
-                try {
-                    return std::any_cast<T>(it->second.Value);
-                } catch (...) {}
-            }
+    const T value = function ? function() : T{};
+    CreateRegion(regionName);
+    detail::GetState()->Regions[regionName][key] = Entry{ value, InfiniteAbsoluteExpiration };
 
-            m_regions[regionName][key] = CacheEntry(std::any(value), expirationMs);
-            CacheEntryAddedArgs args{key, regionName};
-            for (auto& cb : m_onEntryAdded) cb(args);
-            return value;
+    const EntryAddedArgs args{ key, regionName, value };
+    for (const auto& callback : detail::GetState()->EntryAddedCallbacks) {
+        if (callback) {
+            callback(args);
         }
+    }
 
-        // ====================================================================
-        // AddOrGetExisting — Lazy evaluation version (function called only if key doesn't exist)
-        // ====================================================================
-        template<typename T>
-        T AddOrGetExisting(const std::string& key, std::function<T()> factory,
-                          int expirationMs = 0,
+    return value;
+}
+
+template<typename T>
+inline T AddOrGetExisting(const std::string& key,
+                          const T& value,
+                          Tick absoluteExpiration = InfiniteAbsoluteExpiration,
                           const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            EnsureRegion(regionName);
+    Update();
+    if (Contains(key, regionName)) {
+        return Get<T>(key, regionName);
+    }
 
-            auto it = m_regions[regionName].find(key);
-            if (it != m_regions[regionName].end() && !it->second.IsExpired()) {
-                try {
-                    return std::any_cast<T>(it->second.Value);
-                } catch (...) {}
-            }
-
-            T result = factory();
-            m_regions[regionName][key] = CacheEntry(std::any(result), expirationMs);
-            CacheEntryAddedArgs args{key, regionName};
-            for (auto& cb : m_onEntryAdded) cb(args);
-            return result;
-        }
-
-        // ====================================================================
-        // Contains — Check if key exists and is not expired
-        // ====================================================================
-        bool Contains(const std::string& key,
-                      const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto regionIt = m_regions.find(regionName);
-            if (regionIt == m_regions.end()) return false;
-            auto it = regionIt->second.find(key);
-            if (it == regionIt->second.end()) return false;
-            if (it->second.IsExpired()) {
-                regionIt->second.erase(it);
-                return false;
-            }
-            return true;
-        }
-
-        // ====================================================================
-        // Remove — Remove a key from cache
-        // ====================================================================
-        bool Remove(const std::string& key,
-                    const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto regionIt = m_regions.find(regionName);
-            if (regionIt == m_regions.end()) return false;
-            return regionIt->second.erase(key) > 0;
-        }
-
-        // ====================================================================
-        // CreateRegion — Create a new named region
-        // ====================================================================
-        void CreateRegion(const std::string& regionName) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            EnsureRegion(regionName);
-        }
-
-        // ====================================================================
-        // GetCount — Get number of entries in a region
-        // ====================================================================
-        size_t GetCount(const std::string& regionName = "Default") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            auto it = m_regions.find(regionName);
-            if (it == m_regions.end()) return 0;
-            return it->second.size();
-        }
-
-        // ====================================================================
-        // Clear — Remove all entries from a region (or all regions)
-        // ====================================================================
-        void Clear(const std::string& regionName = "") {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            if (regionName.empty()) {
-                m_regions.clear();
-                EnsureRegion("Default");
-            } else {
-                auto it = m_regions.find(regionName);
-                if (it != m_regions.end()) it->second.clear();
-            }
-        }
-
-        // ====================================================================
-        // Update — Call each frame to clean up expired entries
-        // ====================================================================
-        void Update() {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            for (auto& [regionName, entries] : m_regions) {
-                for (auto it = entries.begin(); it != entries.end(); ) {
-                    if (it->second.IsExpired()) {
-                        it = entries.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-            }
-        }
-
-        // ====================================================================
-        // Event registration
-        // ====================================================================
-        void OnEntryAdded(OnEntryAddedFn callback) { m_onEntryAdded.push_back(callback); }
-        void OnValueChanged(OnValueChangedFn callback) { m_onValueChanged.push_back(callback); }
-
-    private:
-        Cache() {
-            EnsureRegion("Default");
-        }
-
-        void EnsureRegion(const std::string& name) {
-            if (m_regions.find(name) == m_regions.end()) {
-                m_regions[name] = {};
-            }
-        }
-
-        std::mutex m_mutex;
-        std::unordered_map<std::string,
-            std::unordered_map<std::string, CacheEntry>> m_regions;
-        std::vector<OnEntryAddedFn> m_onEntryAdded;
-        std::vector<OnValueChangedFn> m_onValueChanged;
+    CreateRegion(regionName);
+    detail::GetState()->Regions[regionName][key] = Entry{
+        value,
+        absoluteExpiration == InfiniteAbsoluteExpiration
+            ? InfiniteAbsoluteExpiration
+            : (static_cast<Tick>(Game::TickCount()) + absoluteExpiration)
     };
 
-} // namespace SDK
+    const EntryAddedArgs args{ key, regionName, value };
+    for (const auto& callback : detail::GetState()->EntryAddedCallbacks) {
+        if (callback) {
+            callback(args);
+        }
+    }
+
+    return value;
+}
+
+template<typename T>
+inline void Set(const std::string& key,
+                const T& value,
+                Tick absoluteExpiration = InfiniteAbsoluteExpiration,
+                const std::string& regionName = "Default") {
+    CreateRegion(regionName);
+    auto* state = detail::GetState();
+    if (!state) {
+        return;
+    }
+
+    if (state->Regions[regionName].contains(key)) {
+        const ValueChangedArgs args{
+            key,
+            regionName,
+            state->Regions[regionName][key].Value,
+            std::any(value)
+        };
+        for (const auto& callback : state->ValueChangedCallbacks) {
+            if (callback) {
+                callback(args);
+            }
+        }
+    } else {
+        const EntryAddedArgs args{ key, regionName, value };
+        for (const auto& callback : state->EntryAddedCallbacks) {
+            if (callback) {
+                callback(args);
+            }
+        }
+    }
+
+    state->Regions[regionName][key] = Entry{
+        value,
+        absoluteExpiration == InfiniteAbsoluteExpiration
+            ? InfiniteAbsoluteExpiration
+            : (static_cast<Tick>(Game::TickCount()) + absoluteExpiration)
+    };
+}
+
+inline size_t GetCount(const std::string& regionName = "Default") {
+    CreateRegion(regionName);
+    auto* state = detail::GetState();
+    return state ? state->Regions[regionName].size() : 0U;
+}
+
+inline std::unordered_map<std::string, std::any> GetValues(const std::vector<std::string>& keys,
+                                                           const std::string& regionName = "Default") {
+    std::unordered_map<std::string, std::any> values = {};
+    auto* state = detail::GetState();
+    if (!state || !state->Regions.contains(regionName)) {
+        return values;
+    }
+
+    for (const auto& key : keys) {
+        auto it = state->Regions[regionName].find(key);
+        if (it != state->Regions[regionName].end()) {
+            values[key] = it->second.Value;
+        }
+    }
+    return values;
+}
+
+inline bool Remove(const std::string& key, const std::string& regionName = "Default") {
+    auto* state = detail::GetState();
+    if (!state || !Contains(key, regionName)) {
+        return false;
+    }
+    return state->Regions[regionName].erase(key) > 0;
+}
+
+} // namespace SDK::Utils::Cache
