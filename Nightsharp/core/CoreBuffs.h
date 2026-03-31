@@ -15,7 +15,7 @@ namespace CoreBuffs {
         }
 
         int GetType() const {
-            return Globals::Read<int>(address + Offset::BuffManager::BuffType);
+            return static_cast<int>(Globals::Read<unsigned char>(address + Offset::BuffManager::BuffType));
         }
 
         int GetStacks() const {
@@ -40,7 +40,8 @@ namespace CoreBuffs {
         }
 
         bool IsActive(float gameTime) const {
-            return IsValid() && GetEndTime() > gameTime;
+            // Script-New-main: StackCount > 0 && EndTime > gameTime
+            return IsValid() && GetStacks() > 0 && GetEndTime() > gameTime;
         }
 
         bool ReadName(char* out, int maxOut) const {
@@ -49,13 +50,35 @@ namespace CoreBuffs {
                 return false;
             }
 
-            const auto namePtr = Globals::Read<uintptr_t>(address + Offset::BuffManager::BuffNamePtr);
-            if (!Globals::IsValidPtr(namePtr)) {
+            const auto nameWrapper = Globals::Read<uintptr_t>(address + Offset::BuffManager::BuffNamePtr);
+            if (!Globals::IsValidPtr(nameWrapper)) {
                 out[0] = 0;
                 return false;
             }
 
-            return Globals::ReadGameString(namePtr + Offset::BuffManager::BuffNameStr, out, maxOut);
+            const auto dataPtr = Globals::Read<uintptr_t>(nameWrapper + Offset::BuffManager::BuffNameData);
+            const int len = Globals::Read<int>(nameWrapper + Offset::BuffManager::BuffNameLength);
+            const int capacity = Globals::Read<int>(nameWrapper + Offset::BuffManager::BuffNameCapacity);
+            if (!Globals::IsValidPtr(dataPtr) || len <= 0 || len >= maxOut) {
+                out[0] = 0;
+                return false;
+            }
+            if (capacity < len || capacity > 0x10000) {
+                out[0] = 0;
+                return false;
+            }
+
+            __try {
+                const auto src = reinterpret_cast<const char*>(dataPtr);
+                for (int i = 0; i < len; ++i) {
+                    out[i] = src[i];
+                }
+                out[len] = 0;
+                return true;
+            } __except(1) {
+                out[0] = 0;
+                return false;
+            }
         }
     };
 
@@ -76,21 +99,23 @@ namespace CoreBuffs {
             return 0;
         }
 
-        const auto begin = Globals::Read<uintptr_t>(manager);
+        const auto begin = Globals::Read<uintptr_t>(manager + Offset::BuffManager::EntriesStart);
         const auto end = Globals::Read<uintptr_t>(manager + Offset::BuffManager::EntriesEnd);
         if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end < begin) {
             return 0;
         }
 
+        // Live layout is a 16-byte entry array: [buff*, aux*]
         const auto bytes = static_cast<size_t>(end - begin);
-        const auto count = static_cast<int>(bytes / 0x18);
-        if (count <= 0 || count > maxOut || count > 512) {
+        const auto count = static_cast<int>(bytes / Offset::BuffManager::EntryStride);
+        if (count <= 0 || count > 512) {
             return 0;
         }
 
         int written = 0;
-        for (int i = 0; i < count; ++i) {
-            const auto entry = begin + static_cast<uintptr_t>(i * 0x18);
+        for (int i = 0; i < count && written < maxOut; ++i) {
+            // Direct pointer to buff instance — no intermediate entry struct
+            const auto entry = begin + static_cast<uintptr_t>(i * Offset::BuffManager::EntryStride);
             const auto buff = Globals::Read<uintptr_t>(entry + Offset::BuffManager::EntryBuff);
             if (!Globals::IsValidPtr(buff)) {
                 continue;

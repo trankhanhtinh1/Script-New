@@ -120,7 +120,7 @@ public:
 
     advanced.AddSeparator("separatorDelay", "Delay");
     advanced.AddSlider("delayMovement", "Movement", 0, 0, 500);
-    advanced.AddSlider("delayWindup", "Windup", 80, 0, 200);
+    advanced.AddSlider("delayWindup", "Windup %", 80, 0, 200);
     advanced.AddSlider("delayFarm", "Farm", 30, 0, 200);
 
     advanced.AddSeparator("separatorPrioritization", "Prioritization");
@@ -410,9 +410,14 @@ private:
     return OrbwalkerBase::CanAttack(extraDelay);
   }
 
-  // ── CanMoveFull – matching old NightSharp OrbwalkerPlugin::CanMove exactly ──
-  // Pure timing-based. No MissileLaunched (unreliable with polling).
-  // Formula: now + ping/2 >= LastAutoAttackTick + windupMs + extraWindup
+  // ── CanMoveFull – percentage-based windup buffer ──
+  // Slider "delayWindup" (0-200) is treated as a PERCENTAGE of windupMs.
+  // This scales the safety buffer with attack speed:
+  //   - lv1 (windupMs≈400ms), slider 80 → buffer=160ms → total wait 560ms (safe)
+  //   - high AS (windupMs≈200ms), slider 80 → buffer=80ms → total wait 280ms (responsive)
+  //   - slider 0 → no buffer (risky, may cancel AA)
+  //   - slider 20 → 10% buffer (fast kite, still mostly safe)
+  // Formula: now + ping/2 >= LastAutoAttackTick + windupMs + windupMs*(slider/200) + extra
   bool CanMoveFull(float extra = 0.0f) const {
     const auto player = ObjectManager::Player();
     if (!player.IsValid()) return false;
@@ -430,16 +435,22 @@ private:
       localExtra += 200.0f;
     }
 
-    // delayWindup from menu (matching old NightSharp WindupBuffer)
-    auto* advanced = s_menu ? s_menu->GetSubMenu("advanced") : nullptr;
-    if (advanced) {
-      localExtra += static_cast<float>(advanced->GetSliderValue("delayWindup", 80));
-    }
-
-    // Pure timing: now + ping/2 >= LastAutoAttackTick + windupMs + extra
+    // Pure timing: now + ping/2 >= LastAutoAttackTick + windupMs + buffer + extra
     const int now = Game::TickCount();
     const int ping = CoreAPI::Control::GetPing();
     const float windupMs = CoreAPI::Control::GetAttackWindup() * 1000.0f;
+
+    // Percentage-based windup buffer from menu slider
+    // slider/200 gives 0.0 to 1.0 ratio, applied to windupMs
+    auto* advanced = s_menu ? s_menu->GetSubMenu("advanced") : nullptr;
+    const int sliderVal = advanced ? advanced->GetSliderValue("delayWindup", 80) : 80;
+    const float pctBuffer = windupMs * (static_cast<float>(sliderVal) / 200.0f);
+    // Add a small flat minimum (20ms) when slider > 0 to cover poll/tick imprecision
+    const float windupBuffer = (sliderVal > 0)
+        ? (std::max)(pctBuffer, 20.0f)
+        : 0.0f;
+    localExtra += windupBuffer;
+
     return (now + (ping / 2)) >= (LastAutoAttackTick + static_cast<int>(windupMs + localExtra));
   }
 
@@ -556,9 +567,12 @@ private:
       const float diagAtkDelay = CoreAPI::Control::GetAttackDelay() * 1000.0f;
       const float diagWindup = CoreAPI::Control::GetAttackWindup() * 1000.0f;
       const int diagTimeSince = diagNow - LastAutoAttackTick;
-      char buf[384] = {};
+      auto* advanced = s_menu ? s_menu->GetSubMenu("advanced") : nullptr;
+      const int diagSlider = advanced ? advanced->GetSliderValue("delayWindup", 80) : 80;
+      const float diagBuffer = diagWindup * (static_cast<float>(diagSlider) / 200.0f);
+      char buf[512] = {};
       std::snprintf(buf, sizeof(buf),
-        "[NightSharp][PollAA] missile=%d lastAATick=%d total=%d now=%d ping=%d atkDelay=%.0f windup=%.0f sinceAA=%d\r\n",
+        "[NightSharp][PollAA] missile=%d lastAATick=%d total=%d now=%d ping=%d atkDelay=%.0f windup=%.0f buffer=%.0f(slider=%d) sinceAA=%d\r\n",
         MissileLaunched ? 1 : 0,
         LastAutoAttackTick,
         TotalAutoAttacks,
@@ -566,6 +580,8 @@ private:
         diagPing,
         diagAtkDelay,
         diagWindup,
+        diagBuffer,
+        diagSlider,
         diagTimeSince);
       CoreControl::AppendIssueOrderDebug(buf);
     }
@@ -573,10 +589,11 @@ private:
     // ── Phase 1: Detect AA START (windup began) ──
     // Transition: was NOT attacking → IS attacking
     if (isCurrentlyAAing && !s_wasAttacking) {
-      // AA just started — update LastAutoAttackTick
+      // AA just started. Keep the confirmed local tick instead of backdating by
+      // ping/2, otherwise CanMoveFull effectively gets ping/2 twice and opens
+      // movement too early, which cancels autos.
       const int now = Game::TickCount();
-      const int ping = CoreAPI::Control::GetPing();
-      s_lastConfirmedAutoAttackTick = now - (ping / 2);
+      s_lastConfirmedAutoAttackTick = now;
       LastAutoAttackTick = s_lastConfirmedAutoAttackTick;
       MissileLaunched = false;
       LastMovementOrderTick = 0; // allow immediate move after windup

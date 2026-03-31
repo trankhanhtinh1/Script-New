@@ -460,22 +460,45 @@ inline PredictionOutput GetAdvancedPrediction(PredictionInput input, float addit
     }
 
     const AIBaseClient target = input.Unit;
+
+    // Target standing still → cast at current position (EnsoulSharp parity)
+    if (!target.IsMoving()) {
+        result.Input = input;
+        result.CastPosition = target.Position();
+        result.UnitPosition = target.Position();
+        result.Hitchance = HitChance::VeryHigh;
+        return result;
+    }
+
+    // Target moving: predict future position
     float speed = std::fabs(additionalSpeed) < FLT_EPSILON ? input.Speed : (input.Speed * additionalSpeed);
     if (detail::IsInstantSpeed(speed)) {
         speed = 90000.0f;
     }
 
-    const Vector2 position = detail::PositionAfter(target, 1.0f, std::max(target.MoveSpeed() - 100.0f, 0.0f));
-    Vector2 prediction = position;
     const auto path = detail::BuildCurrentPath(target);
     if (path.size() > 1) {
-        const Vector2 dir = (path[1].To2D() - path[0].To2D()).Normalized();
-        prediction = position + (dir * (speed * (input.Delay / 1000.0f)));
+        // Delay is already in seconds — do NOT divide by 1000
+        const float travelDist = target.MoveSpeed() * input.Delay;
+        const Vector2 position = SDK::Geometry::PositionAlongPath(
+            [&]() {
+                std::vector<Vector2> p;
+                p.reserve(path.size());
+                for (const auto& pt : path) p.push_back(pt.To2D());
+                return p;
+            }(),
+            travelDist);
+
+        result.Input = input;
+        result.UnitPosition = Vector3(position.x, target.Position().y, position.y);
+        result.CastPosition = result.UnitPosition;
+        result.Hitchance = HitChance::High;
+        return result;
     }
 
     result.Input = input;
-    result.UnitPosition = Vector3(position.x, target.Position().y, position.y);
-    result.CastPosition = Vector3(prediction.x, target.Position().y, prediction.y);
+    result.CastPosition = target.Position();
+    result.UnitPosition = target.Position();
     result.Hitchance = HitChance::High;
     return result;
 }

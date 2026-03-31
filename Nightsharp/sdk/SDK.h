@@ -182,7 +182,6 @@ namespace Bootstrap {
         Utils::ResourceLoader::Reset();
         Utils::ResourceFactory::Reset();
         Utils::DynamicInitializer::Reset();
-        DamageLibrary::Shutdown();
         UI::PermaShow::Reset();
         g_initialized = false;
     }

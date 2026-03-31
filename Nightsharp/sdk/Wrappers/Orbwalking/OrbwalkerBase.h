@@ -108,7 +108,9 @@ protected:
         if (!sender.IsValid() || !sender.IsMe()) return;
 
         if (target.IsValid() && AutoAttack::IsAutoAttack(spellName)) {
-            LastAutoAttackTick = Game::TickCount() - (CoreAPI::Control::GetPing() / 2);
+            // Keep the actual local detection tick. Backdating by ping/2 makes
+            // the movement gate open too early and can cancel the auto.
+            LastAutoAttackTick = Game::TickCount();
             MissileLaunched = false;
             LastMovementOrderTick = 0;
             TotalAutoAttacks++;

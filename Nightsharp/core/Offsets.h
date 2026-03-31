@@ -3,8 +3,10 @@
 // Compatibility shim for old NightSharp core logic.
 // Rule:
 // - Prefer Offsets.generated.h whenever a current generated equivalent exists.
-// - Preserve legacy literals only for names that do not exist in Offsets.generated.h yet.
-//   Those are intentionally kept visible so they can be audited and removed later.
+// - Preserve legacy literals only for names that do not exist in
+// Offsets.generated.h yet.
+//   Those are intentionally kept visible so they can be audited and removed
+//   later.
 
 #include "Offsets.generated.h"
 
@@ -70,7 +72,9 @@ namespace Function {
 constexpr auto IssueOrderCore = ControlRuntime::IssueOrder;
 constexpr auto IssueOrder = IssueOrderCore;
 constexpr auto WorldToScreen = DrawingRuntime::WorldToScreen;
-constexpr auto CastSpellSafe = ControlRuntime::CastSpellWrap;
+constexpr auto CastSpellSafe = ControlRuntime::CastSpellSafe;
+constexpr auto CastSpellWrap =
+    ControlRuntime::CastSpellWrap; // 0xBB8810 = actual function entry
 constexpr auto PrintChat = GameRuntime::PrintChat;
 constexpr auto GetBoundingRadius = ControlRuntime::GetBoundingRadius;
 constexpr auto GetAttackDelay = ControlRuntime::GetAttackDelay;
@@ -135,15 +139,23 @@ constexpr auto IsRecalling = TypeFlagsRuntime::IsRecalling;
 
 namespace BuffManager {
 constexpr auto Offset = BuffManagerRuntime::BuffManagerOffset;
+constexpr auto EntriesStart = BuffManagerLayout::EntriesStart;
 constexpr auto EntriesEnd = BuffManagerLayout::EntriesEnd;
+constexpr auto EntriesCapacityEnd = BuffManagerLayout::EntriesCapacityEnd;
+constexpr auto EntryStride = BuffEntryLayout::EntryStride;
 constexpr auto EntryBuff = BuffEntryLayout::EntryBuff;
+constexpr auto EntryAux = BuffEntryLayout::EntryAux;
 constexpr auto BuffType = BuffDataLayout::BuffType;
 constexpr auto BuffNamePtr = BuffDataLayout::BuffNamePtr;
+constexpr auto BuffRemainingTime = BuffDataLayout::BuffRemainingTime;
 constexpr auto BuffStartTime = BuffDataLayout::BuffStartTime;
 constexpr auto BuffEndTime = BuffDataLayout::BuffEndTime;
-constexpr auto BuffStacksAlt = BuffDataLayout::BuffStacksAlt;
 constexpr auto BuffStacks = BuffDataLayout::BuffStacks;
-constexpr auto BuffNameStr = BuffNameLayout::BuffNameStr;
+constexpr auto BuffStacksAlt = BuffDataLayout::BuffStacksAlt;
+constexpr auto BuffNameData = BuffNameLayout::BuffNameData;
+constexpr auto BuffNameLength = BuffNameLayout::BuffNameLength;
+constexpr auto BuffNameCapacity = BuffNameLayout::BuffNameCapacity;
+// constexpr auto BuffNameStr = BuffNameLayout::BuffNameStr;
 } // namespace BuffManager
 
 namespace GameObject {
@@ -305,14 +317,16 @@ constexpr auto SegmentsCount = AiManagerInnerCompatLayout::SegmentsCount;
 constexpr auto HasPath = AiManagerInnerCompatLayout::HasPath;
 constexpr auto DashSpeed = AiManagerInnerCompatLayout::DashSpeed;
 constexpr auto DashMaxRangeSq = AiManagerInnerCompatLayout::DashMaxRangeSq;
-constexpr auto DashDistRemaining = AiManagerInnerCompatLayout::DashDistRemaining;
+constexpr auto DashDistRemaining =
+    AiManagerInnerCompatLayout::DashDistRemaining;
 constexpr auto DashDuration = AiManagerInnerCompatLayout::DashDuration;
 constexpr auto IsDashing = AiManagerInnerCompatLayout::IsDashing;
 constexpr auto DashEndPos = AiManagerInnerCompatLayout::DashEndPos;
 constexpr auto ServerPos = AiManagerInnerCompatLayout::ServerPos;
 constexpr auto MoveVec3 = AiManagerInnerCompatLayout::MoveVec3;
 constexpr auto DashTargetNetId = AiManagerInnerCompatLayout::DashTargetNetId;
-constexpr auto DashSecondaryNetId = AiManagerInnerCompatLayout::DashSecondaryNetId;
+constexpr auto DashSecondaryNetId =
+    AiManagerInnerCompatLayout::DashSecondaryNetId;
 constexpr auto PreviousPos = AiManagerInnerCompatLayout::PreviousPos;
 } // namespace InnerCompat
 
@@ -381,7 +395,8 @@ constexpr auto PreviousPos = InnerCompat::PreviousPos;
 namespace SpellBook {
 constexpr auto Offset = SpellRuntime::SpellBookOffset;
 constexpr auto SpellSlotArray = SpellBookLayout::SpellSlotArray;
-constexpr auto ActiveSpellCast = SpellRuntime::ActiveSpellCast;
+constexpr auto ActiveSpellCast = SpellBookLayout::ActiveSpellCast;
+constexpr auto ActiveSpellCastObject = SpellRuntime::ActiveSpellCast;
 
 constexpr auto SlotLevel = SpellSlotLayout::SlotLevel;
 constexpr auto SlotCooldown = SpellSlotLayout::SlotCooldown;
@@ -431,7 +446,8 @@ namespace Missile {
 constexpr auto SpellDataPtr = MissileClient::SpellDataPtr;
 constexpr auto Position = MissileClient::Position;
 constexpr auto CastInfoBase = MissileClient::CastInfoBase;
-constexpr auto CI_SpellData = MissileClient::CastInfoBase + SpellCastInfoLayout::SpellData;
+constexpr auto CI_SpellData =
+    MissileClient::CastInfoBase + SpellCastInfoLayout::SpellData;
 constexpr auto SpellName = MissileClient::SpellName;
 constexpr auto MissileName = MissileClient::MissileName;
 constexpr auto StartPos = MissileClient::StartPos;
@@ -440,19 +456,25 @@ constexpr auto CastEndPos = MissileClient::CastEndPos;
 constexpr auto CasterNetId = MissileClient::CasterNetId;
 constexpr auto SrcIndex = MissileClient::CasterNetId;
 constexpr auto TargetNetId = MissileClient::TargetNetId;
-constexpr auto CI_TargetNetId2 = MissileClient::TargetNetId - MissileClient::CastInfoBase;
+constexpr auto CI_TargetNetId2 =
+    MissileClient::TargetNetId - MissileClient::CastInfoBase;
 constexpr auto MissileNetId = MissileClient::MissileNetId;
 constexpr auto CI_MissileNetId = MissileClient::MissileNetId;
-constexpr auto DestIndex = MissileClient::CastInfoBase + SpellCastInfoLayout::TargetIndex;
+constexpr auto DestIndex =
+    MissileClient::CastInfoBase + SpellCastInfoLayout::TargetIndex;
 
 constexpr auto CI_REL_SpellData = SpellCastInfoLayout::SpellData;
-constexpr auto CI_REL_SpellName = MissileClient::SpellName - MissileClient::CastInfoBase;
-constexpr auto CI_REL_MissileName = MissileClient::MissileName - MissileClient::CastInfoBase;
+constexpr auto CI_REL_SpellName =
+    MissileClient::SpellName - MissileClient::CastInfoBase;
+constexpr auto CI_REL_MissileName =
+    MissileClient::MissileName - MissileClient::CastInfoBase;
 constexpr auto CI_REL_StartPos = SpellCastInfoLayout::StartPos;
 constexpr auto CI_REL_EndPos = SpellCastInfoLayout::EndPos;
-constexpr auto CI_REL_CastEndPos = MissileClient::CastEndPos - MissileClient::CastInfoBase;
+constexpr auto CI_REL_CastEndPos =
+    MissileClient::CastEndPos - MissileClient::CastInfoBase;
 constexpr auto CI_REL_CasterNetId = SpellCastInfoLayout::SrcIndex;
-constexpr auto CI_REL_MissileNetId = MissileClient::MissileNetId - MissileClient::CastInfoBase;
+constexpr auto CI_REL_MissileNetId =
+    MissileClient::MissileNetId - MissileClient::CastInfoBase;
 } // namespace Missile
 
 namespace BasicAttack {

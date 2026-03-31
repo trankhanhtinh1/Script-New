@@ -555,10 +555,23 @@ namespace CoreObjects {
             if (!IsValid()) {
                 return false;
             }
-            // Temporarily disabled. Current client does not expose a reliable recall
-            // signal through the existing core paths yet, and false positives are worse
-            // than a hard-disabled state for combat logic.
-            return false;
+
+            // Check recall buff from BuffManager
+            const bool hasRecallBuff = CoreBuffs::HasBuffContaining(address, "recall", 1);
+            if (!hasRecallBuff) {
+                return false;
+            }
+
+            // ── Cancel detection ──
+            // In newer client versions, the recall buff lingers briefly after
+            // cancellation. If the player is moving or dashing, the recall was
+            // cancelled and we should NOT block combat actions.
+            if (IsMovingOnPath() || IsDashingOnPath()) {
+                return false;
+            }
+
+            // Player has recall buff AND is standing still → genuinely recalling
+            return true;
         }
 
         bool IsWindingUp() const {

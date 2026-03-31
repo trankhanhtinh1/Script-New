@@ -121,6 +121,58 @@ namespace Globals {
         return ReadRiotString(nameAddr, out, maxOut);
     }
 
+    inline bool ReadCString(uintptr_t strAddr, char* out, int maxOut) {
+        if (!out || maxOut <= 1 || !IsValidPtr(strAddr)) {
+            if (out && maxOut > 0) {
+                out[0] = 0;
+            }
+            return false;
+        }
+
+        __try {
+            int count = 0;
+            for (; count < (maxOut - 1); ++count) {
+                const char ch = *((const char*)strAddr + count);
+                if (ch == 0) {
+                    out[count] = 0;
+                    return count > 0;
+                }
+
+                const unsigned char uch = static_cast<unsigned char>(ch);
+                if (uch < 0x20 || uch > 0x7E) {
+                    out[0] = 0;
+                    return false;
+                }
+
+                out[count] = ch;
+            }
+
+            out[maxOut - 1] = 0;
+            return true;
+        } __except(1) {
+            out[0] = 0;
+            return false;
+        }
+    }
+
+    inline bool ReadRuntimeStringField(uintptr_t fieldAddr, char* out, int maxOut) {
+        if (!out || maxOut <= 1) {
+            return false;
+        }
+        out[0] = 0;
+
+        if (ReadGameString(fieldAddr, out, maxOut)) {
+            return true;
+        }
+
+        const uintptr_t ptr = Read<uintptr_t>(fieldAddr);
+        if (IsValidPtr(ptr) && ReadCString(ptr, out, maxOut)) {
+            return true;
+        }
+
+        return ReadCString(fieldAddr, out, maxOut);
+    }
+
     // Read a pointer array from a manager struct (SEH safe)
     // Returns number of valid entries read into out[]
     inline int ReadPtrArray(uintptr_t listAddr, int count, uintptr_t* out, int maxOut) {

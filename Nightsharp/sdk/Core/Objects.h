@@ -891,6 +891,9 @@ namespace ObjectManager {
         return out;
     }
 
+    // ── AllyMinions — use RuntimeAPI directly (matches old NightSharp) ──
+    // Old NightSharp: FillMinions() returns ALL from MinionManager, then
+    // caller checks obj.IsLaneMinion() which delegates to RuntimeAPI::IsLaneMinion()
     inline std::vector<AIMinionClient> AllyMinions() {
         const int myTeam = Player().Team();
         uintptr_t buffer[512] = {};
@@ -898,15 +901,18 @@ namespace ObjectManager {
         std::vector<AIMinionClient> out;
         out.reserve(count);
         for (int i = 0; i < count; ++i) {
+            if (!Globals::IsValidPtr(buffer[i])) continue;
+            // Use RuntimeAPI directly — same as old NightSharp obj.IsLaneMinion()
+            if (!RuntimeAPI::IsLaneMinion(buffer[i])) continue;
             AIMinionClient minion(buffer[i]);
-            if (!detail::IsLaneMinionObject(minion) || minion.Team() != myTeam) {
-                continue;
-            }
+            if (!minion.IsAlive()) continue;
+            if (minion.Team() != myTeam) continue;
             out.emplace_back(buffer[i]);
         }
         return out;
     }
 
+    // ── EnemyMinions — use RuntimeAPI directly (matches old NightSharp) ──
     inline std::vector<AIMinionClient> EnemyMinions() {
         const int myTeam = Player().Team();
         uintptr_t buffer[512] = {};
@@ -914,25 +920,31 @@ namespace ObjectManager {
         std::vector<AIMinionClient> out;
         out.reserve(count);
         for (int i = 0; i < count; ++i) {
+            if (!Globals::IsValidPtr(buffer[i])) continue;
+            // Use RuntimeAPI directly — same as old NightSharp obj.IsLaneMinion()
+            if (!RuntimeAPI::IsLaneMinion(buffer[i])) continue;
             AIMinionClient minion(buffer[i]);
-            if (!detail::IsLaneMinionObject(minion) || minion.Team() == myTeam || minion.Team() == 300) {
-                continue;
-            }
+            if (!minion.IsAlive()) continue;
+            const int team = minion.Team();
+            if (team == myTeam || team == 300) continue;
             out.emplace_back(buffer[i]);
         }
         return out;
     }
 
+    // ── JungleMinions — use RuntimeAPI directly (matches old NightSharp) ──
+    // Old NightSharp: obj.IsJungleMonster() → RuntimeAPI::IsJungleMonster()
     inline std::vector<AIMinionClient> JungleMinions() {
         uintptr_t buffer[512] = {};
         const int count = detail::ReadManagerListLegacy(Offset::Global::MinionManager, buffer, 512, 2000);
         std::vector<AIMinionClient> out;
         out.reserve(count);
         for (int i = 0; i < count; ++i) {
+            if (!Globals::IsValidPtr(buffer[i])) continue;
+            // Use RuntimeAPI directly — same as old NightSharp obj.IsJungleMonster()
+            if (!RuntimeAPI::IsJungleMonster(buffer[i])) continue;
             AIMinionClient minion(buffer[i]);
-            if (!detail::IsJungleObject(minion)) {
-                continue;
-            }
+            if (!minion.IsAlive()) continue;
             out.emplace_back(buffer[i]);
         }
         return out;

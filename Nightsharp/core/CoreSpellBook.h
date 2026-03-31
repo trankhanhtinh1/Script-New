@@ -37,6 +37,16 @@ namespace CoreSpellBook {
     struct SlotRef {
         uintptr_t address = 0;
 
+        static int ClampRank(int rank) {
+            if (rank < 0) {
+                return 0;
+            }
+            if (rank > 6) {
+                return 6;
+            }
+            return rank;
+        }
+
         bool IsValid() const {
             return Globals::IsValidPtr(address);
         }
@@ -62,19 +72,14 @@ namespace CoreSpellBook {
         }
 
         float GetAmmoRechargeTime() const {
-            const auto resource = GetSpellResource();
-            return Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResAmmoRecharge);
+            const auto data = GetSpellData();
+            return Globals::Read<float>(data + Offset::SpellBook::ResAmmoRecharge);
         }
 
         float GetBaseCooldownTime(int rank = 0) const {
-            const auto resource = GetSpellResource();
-            if (rank < 0) {
-                rank = 0;
-            }
-            if (rank > 6) {
-                rank = 6;
-            }
-            return Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResCooldownTime + static_cast<uintptr_t>(rank * sizeof(float)));
+            const auto data = GetSpellData();
+            const auto safeRank = ClampRank(rank);
+            return Globals::Read<float>(data + Offset::SpellBook::ResCooldownTime + static_cast<uintptr_t>(safeRank * sizeof(float)));
         }
 
         float GetRemainingCooldown(float gameTime) const {
@@ -171,14 +176,9 @@ namespace CoreSpellBook {
         }
 
         float GetCastRange(int rank = 0) const {
-            const auto resource = GetSpellResource();
-            if (rank < 0) {
-                rank = 0;
-            }
-            if (rank > 6) {
-                rank = 6;
-            }
-            return Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResCastRange + static_cast<uintptr_t>(rank * sizeof(float)));
+            const auto data = GetSpellData();
+            const auto safeRank = ClampRank(rank);
+            return Globals::Read<float>(data + Offset::SpellBook::ResCastRange + static_cast<uintptr_t>(safeRank * sizeof(float)));
         }
 
         float GetMissileSpeed() const {
@@ -197,14 +197,9 @@ namespace CoreSpellBook {
         }
 
         int GetMaxAmmo(int rank = 0) const {
-            const auto resource = GetSpellResource();
-            if (rank < 0) {
-                rank = 0;
-            }
-            if (rank > 6) {
-                rank = 6;
-            }
-            return Globals::Read<int>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResMaxAmmo + static_cast<uintptr_t>(rank * sizeof(int)));
+            const auto data = GetSpellData();
+            const auto safeRank = ClampRank(rank);
+            return Globals::Read<int>(data + Offset::SpellBook::ResMaxAmmo + static_cast<uintptr_t>(safeRank * sizeof(int)));
         }
 
         bool ReadSpellName(char* out, int maxOut) const {
@@ -218,7 +213,7 @@ namespace CoreSpellBook {
                 return false;
             }
 
-            return Globals::ReadGameString(data + Offset::SpellBook::DataSpellName, out, maxOut);
+            return Globals::ReadRuntimeStringField(data + Offset::SpellBook::DataSpellName, out, maxOut);
         }
 
         bool ReadScriptName(char* out, int maxOut) const {
@@ -226,16 +221,13 @@ namespace CoreSpellBook {
                 return false;
             }
 
-            const auto resource = GetSpellResource();
-            if (!Globals::IsValidPtr(resource)) {
+            const auto data = GetSpellData();
+            if (!Globals::IsValidPtr(data)) {
                 out[0] = 0;
                 return false;
             }
 
-            return Globals::ReadGameString(
-                resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResScriptName,
-                out,
-                maxOut);
+            return Globals::ReadRuntimeStringField(data + Offset::SpellBook::ResScriptName, out, maxOut);
         }
 
         bool ReadIconName(char* out, int maxOut) const {

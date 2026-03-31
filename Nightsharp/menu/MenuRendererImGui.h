@@ -10,3 +10,4 @@ namespace MenuRendererImGui {
     inline void RenderSDKMenuTree() {}
 
 } // namespace MenuRendererImGui
+    

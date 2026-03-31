@@ -8,6 +8,7 @@
 #include "../imgui/imgui_impl_dx11.h"
 #include "../imgui/imgui_impl_win32.h"
 #include "../menu/NightSharpMenu.h"
+#include "../menu/MenuConfig.h"
 #include "../menu/PluginHostBridge.h"
 #include "../menu/PluginRegistry.h"
 #include "../plugins/PluginBootstrap.h"
@@ -39,6 +40,7 @@ UINT g_ResizeH = 0;
 volatile LONG g_bRunning = 0;
 volatile LONG g_bShutdown = 0;
 volatile LONG g_bMenuVisible = 1;
+bool g_antiCaptureEnabled = false;
 
 const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
 
@@ -226,6 +228,18 @@ void SetClickThrough(bool through) {
     SetWindowLongPtrW(g_hOverlay, GWL_EXSTYLE, desired);
     SetWindowPos(g_hOverlay, nullptr, 0, 0, 0, 0,
         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+// Anti-capture: hide overlay from OBS / screenshots / screen recording
+// Uses SetWindowDisplayAffinity (Windows 10 2004+)
+// WDA_EXCLUDEFROMCAPTURE = 0x11 — window is invisible to capture APIs
+void SetAntiCapture(bool enabled) {
+    if (!g_hOverlay) return;
+    if (enabled == g_antiCaptureEnabled) return;
+    const DWORD affinity = enabled ? 0x00000011u : 0x00000000u;
+    if (SetWindowDisplayAffinity(g_hOverlay, affinity)) {
+        g_antiCaptureEnabled = enabled;
+    }
 }
 
 void UpdateClickThroughFromMenuBounds() {
@@ -490,6 +504,9 @@ void Overlay::Run() {
             CrashTelemetry::SetStage("Overlay::Frame::MoveOverlay");
             traceFrameStage("MoveOverlay");
             MoveOverlayToTarget();
+
+            // Sync OBS bypass with menu toggle
+            SetAntiCapture(Config::StreamProtection::bypassObs);
 
             CrashTelemetry::SetStage("Overlay::Frame::Hotkeys");
             traceFrameStage("Hotkeys");

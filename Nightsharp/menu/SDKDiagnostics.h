@@ -151,6 +151,9 @@ inline void Render() {
     ImGui::Text("sdk.recall buff : aura=%s any=%s", recallBuffAura ? "yes" : "no", recallBuffAny ? "yes" : "no");
     ImGui::Text("sdk.recall cast : slot=%d name=%s", recallCast.GetSlot(), recallCastName[0] ? recallCastName : "<empty>");
     ImGui::Text("sdk.recall anim : %s", recallAnimName[0] ? recallAnimName : "<empty>");
+    ImGui::Text("sdk.recall cancel: moving=%s dashing=%s",
+        local.IsMovingOnPath() ? "yes" : "no",
+        local.IsDashingOnPath() ? "yes" : "no");
 
     const auto& orbDbg = SDK::Orbwalker::GetDebugState();
     ImGui::Separator();
@@ -170,6 +173,16 @@ inline void Render() {
     ImGui::Text("orb.orders      : attack=%d move=%d",
         orbDbg.attackIssued ? 1 : 0,
         orbDbg.moveIssued ? 1 : 0);
+    // Show effective windup buffer from percentage slider
+    {
+      const float diagWindup = ctx.cachedAttackWindup * 1000.0f;
+      auto* orbMenu = SDK::Orbwalker::GetMenu();
+      auto* advMenu = orbMenu ? orbMenu->GetSubMenu("advanced") : nullptr;
+      const int windupSlider = advMenu ? advMenu->GetSliderValue("delayWindup", 80) : 80;
+      const float windupBuf = diagWindup * (static_cast<float>(windupSlider) / 200.0f);
+      ImGui::Text("orb.windupBuf   : %.0f ms (%d%% of %.0f ms)",
+          windupBuf, windupSlider, diagWindup);
+    }
 
     const auto slotQ = CoreAPI::SpellBook::GetSlot(local.address, 0);
     const auto navGrid = CoreAPI::NavGrid::Get();
@@ -207,6 +220,49 @@ inline void Render() {
     ImGui::Text("buff stun/snare : %s / %s",
         CoreAPI::Buffs::HasBuffType(local.address, 5) ? "yes" : "no",
         CoreAPI::Buffs::HasBuffType(local.address, 11) ? "yes" : "no");
+
+    // ── Active Buff List (for recall debugging) ──
+    if (ImGui::TreeNode("Active Buffs (expand to see all)")) {
+        const float gameTime = CoreAPI::Game::GetTime();
+        int activeCount = 0;
+        for (int i = 0; i < buffCount && i < 64; ++i) {
+            CoreBuffs::BuffRef buff{ buffAddrs[i] };
+            if (!buff.IsValid()) continue;
+            if (!buff.IsActive(gameTime)) continue;
+
+            char bName[96] = {};
+            buff.ReadName(bName, static_cast<int>(sizeof(bName)));
+            if (!bName[0]) continue;
+
+            const int bType = buff.GetType();
+            const int bStacks = buff.GetStacks();
+            const float bRemaining = buff.GetRemainingTime(gameTime);
+
+            // Highlight recall-related buffs in yellow
+            bool isRecallBuff = false;
+            for (const char* p = bName; *p; ++p) {
+                if ((*p == 'r' || *p == 'R') &&
+                    (_strnicmp(p, "recall", 6) == 0)) {
+                    isRecallBuff = true;
+                    break;
+                }
+            }
+
+            if (isRecallBuff) {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f),
+                    "[%d] \"%s\" type=%d stacks=%d remain=%.2fs",
+                    activeCount, bName, bType, bStacks, bRemaining);
+            } else {
+                ImGui::Text("[%d] \"%s\" type=%d stacks=%d remain=%.2fs",
+                    activeCount, bName, bType, bStacks, bRemaining);
+            }
+            activeCount++;
+        }
+        if (activeCount == 0) {
+            ImGui::TextDisabled("(no active buffs)");
+        }
+        ImGui::TreePop();
+    }
 
     Vec3 waypoints[16] = {};
     const auto ai = CoreAPI::Ai::Get(local.address);

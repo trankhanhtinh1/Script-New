@@ -1,26 +1,2 @@
-﻿NightSharp TODO (cập nhật 2026-03-08)
-
-1. Test lại Orbwalker trong game.
-   - Kiểm tra last-hit, lane clear, canh windup, turret farm.
-   - Ghi lại case lỗi cụ thể (thời điểm, target, mode).
-
-2. Test lại Target Selector trong game.
-   - Kiểm tra chọn mục tiêu theo mode, force target, only select target.
-   - So sánh hành vi thực tế với logic mong muốn.
-
-3. Test vẽ missile trong TestRenderPlugin.
-   - Xác nhận missile detect đúng, vị trí/đường bay đúng, không bị lệch W2S.
-
-4. Làm Prediction.
-   - Hoàn thiện logic prediction đang thiếu.
-   - Thêm debug draw để kiểm tra hit chance/predicted position.
-
-5. Viết vài script combo champion để test Prediction.
-   - Ưu tiên 2-3 tướng trước (vd: Ahri, Lux, Ezreal).
-   - Dùng script để kiểm tra prediction có miss bất thường không.
-
-6. Công việc phụ: thêm hiệu ứng menu (HImGuiAnimation).
-   - Hiệu ứng mở/đóng menu: fade + slide.
-   - Hiệu ứng chọn mục: pulse nhẹ cho item active.
-   - Đảm bảo không ảnh hưởng input/timing in-game.
-
+﻿- Need Fix Prediction
+- Need Fix Object Minion/Jungle follow Old NightSharp

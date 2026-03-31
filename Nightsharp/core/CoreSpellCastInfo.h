@@ -84,7 +84,7 @@ namespace CoreSpellCastInfo {
                 return false;
             }
 
-            return Globals::ReadGameString(spellData + Offset::SpellBook::DataSpellName, out, maxOut);
+            return Globals::ReadRuntimeStringField(spellData + Offset::SpellBook::DataSpellName, out, maxOut);
         }
     };
 
@@ -92,7 +92,7 @@ namespace CoreSpellCastInfo {
         if (!Globals::IsValidPtr(obj)) {
             return {};
         }
-        return { Globals::Read<uintptr_t>(obj + Offset::SpellBook::ActiveSpellCast) };
+        return { Globals::Read<uintptr_t>(obj + Offset::SpellBook::ActiveSpellCastObject) };
     }
 
     inline CastRef GetMissileCast(uintptr_t missile) {

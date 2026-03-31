@@ -1,16 +1,15 @@
 #pragma once
 
-#include "../../../Backup/Script-New/Nightsharp/libs/nlohmann/json.hpp"
-#include "../../Data/26.6.h"
+// DamageLibrary — zero-runtime-parse using codegen constexpr data
+// Replaces old nlohmann::json-based init that crashed in manual-map context.
+
+#include "../../Data/DamageData.generated.h"
 #include "../../Enumerations/DamageType.h"
 #include "../../Enumerations/SpellSlot.h"
 #include "../../Core/Objects.h"
 
 #include <algorithm>
-#include <new>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <cstring>
 
 namespace SDK {
 
@@ -56,129 +55,47 @@ enum class DamageStage {
 
 class DamageLibrary {
 public:
-    struct BonusScaling {
-        DamageType Type = DamageType::Physical;
-        DamageScalingTarget Target = DamageScalingTarget::Source;
-        DamageScalingType Scaling = DamageScalingType::Unknown;
-        std::vector<float> Percentages = {};
-    };
-
-    struct SpellEntry {
-        DamageStage Stage = DamageStage::Default;
-        DamageType Type = DamageType::True;
-        std::vector<float> Damages = {};
-        std::vector<float> DamagesPerLevel = {};
-        std::vector<float> ScalePerTargetMissingHealth = {};
-        float MaxScaleTargetMissingHealth = 0.0f;
-        float ScalePerCritChance = 0.0f;
-        std::vector<BonusScaling> Bonuses = {};
-    };
-
-    struct ChampionDamage {
-        std::unordered_map<SpellSlot, std::vector<SpellEntry>> Spells = {};
-    };
-
-    static bool Initialize() {
-        if (s_collection) {
-            return true;
-        }
-
-        auto* storage = new(std::nothrow) std::unordered_map<std::string, ChampionDamage>();
-        if (!storage) {
-            return false;
-        }
-
-        try {
-            const auto root = nlohmann::json::parse(Data::Patch26_6::Json());
-            for (auto championIt = root.begin(); championIt != root.end(); ++championIt) {
-                ChampionDamage champion = {};
-                for (auto spellIt = championIt.value().begin(); spellIt != championIt.value().end(); ++spellIt) {
-                    const SpellSlot slot = ParseSlot(spellIt.key());
-                    if (slot == SpellSlot::Unknown || !spellIt.value().is_array()) {
-                        continue;
-                    }
-
-                    auto& entries = champion.Spells[slot];
-                    for (const auto& stageNode : spellIt.value()) {
-                        SpellEntry entry = {};
-                        entry.Stage = ParseStage(stageNode.value("Stage", "Default"));
-
-                        const auto spellDataIt = stageNode.find("SpellData");
-                        if (spellDataIt == stageNode.end() || !spellDataIt->is_object()) {
-                            continue;
-                        }
-
-                        const auto& spellData = *spellDataIt;
-                        entry.Type = ParseDamageType(spellData.value("DamageType", "True"));
-                        entry.Damages = ParseFloatArray(spellData, "Damages");
-                        entry.DamagesPerLevel = ParseFloatArray(spellData, "DamagesPerLvl");
-                        entry.ScalePerTargetMissingHealth = ParseFloatArray(spellData, "ScalePerTargetMissHealth");
-                        entry.MaxScaleTargetMissingHealth = spellData.value("MaxScaleTargetMissHealth", 0.0f);
-                        entry.ScalePerCritChance = spellData.value("ScalePerCritChance", 0.0f);
-
-                        const auto bonusIt = spellData.find("BonusDamages");
-                        if (bonusIt != spellData.end() && bonusIt->is_array()) {
-                            for (const auto& bonusNode : *bonusIt) {
-                                BonusScaling bonus = {};
-                                bonus.Type = ParseDamageType(bonusNode.value("DamageType", "True"));
-                                bonus.Target = ParseScalingTarget(bonusNode.value("ScalingTarget", "Source"));
-                                bonus.Scaling = ParseScalingType(bonusNode.value("ScalingType", ""));
-                                bonus.Percentages = ParseFloatArray(bonusNode, "DamagePercentages");
-                                entry.Bonuses.push_back(std::move(bonus));
-                            }
-                        }
-
-                        entries.push_back(std::move(entry));
-                    }
-                }
-
-                (*storage)[championIt.key()] = std::move(champion);
-            }
-        } catch (...) {
-            delete storage;
-            return false;
-        }
-
-        s_collection = storage;
-        return true;
-    }
-
-    static void Shutdown() {
-        delete s_collection;
-        s_collection = nullptr;
-    }
-
-    static bool HasChampion(const std::string& championName) {
-        return Initialize() && s_collection->find(championName) != s_collection->end();
-    }
 
     static float GetSpellDamage(const AIBaseClient& source,
                                 const AIBaseClient& target,
                                 SpellSlot slot,
                                 DamageStage stage = DamageStage::Default) {
-        if (!source.IsValid() || !target.IsValid() || !Initialize()) {
+        if (!source.IsValid() || !target.IsValid()) {
             return 0.0f;
         }
 
-        const auto it = s_collection->find(source.CharacterName());
-        if (it == s_collection->end()) {
+        // Find champion in constexpr table (binary search, sorted by name)
+        const auto* champ = DamageData::FindChampion(source.CharacterName().c_str());
+        if (!champ) {
             return 0.0f;
         }
 
-        const auto slotIt = it->second.Spells.find(slot);
-        if (slotIt == it->second.Spells.end() || slotIt->second.empty()) {
+        // Map SpellSlot enum to table index (0=Q, 1=W, 2=E, 3=R)
+        const uint8_t slotIdx = MapSlot(slot);
+        if (slotIdx > 3) {
             return 0.0f;
         }
 
-        const SpellEntry* entry = nullptr;
-        for (const auto& candidate : slotIt->second) {
-            if (candidate.Stage == stage) {
-                entry = &candidate;
+        // Find the matching slot
+        const DamageData::SlotEntry* slotEntry = nullptr;
+        for (int i = 0; i < champ->SlotCount; ++i) {
+            if (champ->Slots[i].Slot == slotIdx) {
+                slotEntry = &champ->Slots[i];
                 break;
             }
         }
-        if (!entry) {
-            entry = &slotIt->second.front();
+        if (!slotEntry || slotEntry->StageCount == 0) {
+            return 0.0f;
+        }
+
+        // Find the matching stage
+        const uint8_t stageIdx = static_cast<uint8_t>(stage);
+        const DamageData::StageEntry* entry = &slotEntry->Stages[0]; // default fallback
+        for (int i = 0; i < slotEntry->StageCount; ++i) {
+            if (slotEntry->Stages[i].Stage == stageIdx) {
+                entry = &slotEntry->Stages[i];
+                break;
+            }
         }
 
         const int spellLevel = std::max(1, source.GetSpell(slot).Level());
@@ -188,45 +105,42 @@ public:
         float magical = 0.0f;
         float trueDamage = 0.0f;
 
-        const auto accumulate = [&](DamageType type, float raw) {
+        const auto accumulate = [&](uint8_t type, float raw) {
             switch (type) {
-            case DamageType::Physical:
-                physical += raw;
-                break;
-            case DamageType::Magical:
-                magical += raw;
-                break;
-            case DamageType::Mixed:
-                physical += raw * 0.5f;
-                magical += raw * 0.5f;
-                break;
-            case DamageType::True:
-            default:
-                trueDamage += raw;
-                break;
+            case 0: physical += raw; break;   // Physical
+            case 1: magical += raw; break;    // Magical
+            case 2: physical += raw * 0.5f; magical += raw * 0.5f; break; // Mixed
+            case 3: default: trueDamage += raw; break; // True
             }
         };
 
-        accumulate(entry->Type, Pick(entry->Damages, spellLevel - 1));
-        if (!entry->DamagesPerLevel.empty()) {
-            accumulate(entry->Type, Pick(entry->DamagesPerLevel, championLevel - 1));
+        // Base damages
+        accumulate(entry->Type, PickArr(entry->Damages, entry->DamageCount, spellLevel - 1));
+
+        // Damages per level
+        if (entry->DmgPerLvlCount > 0) {
+            accumulate(entry->Type, PickArr(entry->DamagesPerLvl, entry->DmgPerLvlCount, championLevel - 1));
         }
 
-        if (!entry->ScalePerTargetMissingHealth.empty()) {
+        // Scale per target missing health
+        if (entry->ScaleMissHpCount > 0) {
             const float missingHealth = std::max(0.0f, target.MaxHealth() - target.Health());
-            const float rawScale = missingHealth * Pick(entry->ScalePerTargetMissingHealth, spellLevel - 1);
-            accumulate(entry->Type, entry->MaxScaleTargetMissingHealth > 0.0f
-                ? std::min(rawScale, entry->MaxScaleTargetMissingHealth)
+            const float rawScale = missingHealth * PickArr(entry->ScaleMissHp, entry->ScaleMissHpCount, spellLevel - 1);
+            accumulate(entry->Type, entry->MaxScaleMissHp > 0.0f
+                ? std::min(rawScale, entry->MaxScaleMissHp)
                 : rawScale);
         }
 
-        if (entry->ScalePerCritChance > 0.0f) {
-            accumulate(entry->Type, source.Crit() * entry->ScalePerCritChance);
+        // Scale per crit chance
+        if (entry->ScalePerCrit > 0.0f) {
+            accumulate(entry->Type, source.Crit() * entry->ScalePerCrit);
         }
 
-        for (const auto& bonus : entry->Bonuses) {
-            const float scaleValue = ResolveScalingValue(bonus, source, target);
-            accumulate(bonus.Type, scaleValue * Pick(bonus.Percentages, spellLevel - 1));
+        // Bonus scaling
+        for (int i = 0; i < entry->BonusCount && i < DamageData::kMaxBonuses; ++i) {
+            const auto& bonus = entry->Bonuses[i];
+            const float scaleValue = ResolveScaling(bonus, source, target);
+            accumulate(bonus.Type, scaleValue * PickArr(bonus.Percentages, bonus.Count, spellLevel - 1));
         }
 
         return source.CalculatePhysicalDamage(target, physical) +
@@ -234,114 +148,49 @@ public:
                trueDamage;
     }
 
-private:
-    static float Pick(const std::vector<float>& values, int index) {
-        if (values.empty()) {
-            return 0.0f;
-        }
-        const int safe = std::clamp(index, 0, static_cast<int>(values.size()) - 1);
-        return values[safe];
-    }
-
-    static std::vector<float> ParseFloatArray(const nlohmann::json& node, const char* key) {
-        std::vector<float> out;
-        const auto it = node.find(key);
-        if (it == node.end() || !it->is_array()) {
-            return out;
-        }
-        out.reserve(it->size());
-        for (const auto& value : *it) {
-            out.push_back(value.get<float>());
-        }
-        return out;
-    }
-
-    static SpellSlot ParseSlot(const std::string& value) {
-        if (value == "Q") return SpellSlot::Q;
-        if (value == "W") return SpellSlot::W;
-        if (value == "E") return SpellSlot::E;
-        if (value == "R") return SpellSlot::R;
-        return SpellSlot::Unknown;
-    }
-
-    static DamageStage ParseStage(const std::string& value) {
-        if (value == "WayBack") return DamageStage::WayBack;
-        if (value == "Detonation") return DamageStage::Detonation;
-        if (value == "DamagePerTick") return DamageStage::DamagePerTick;
-        if (value == "DamagePerTime") return DamageStage::DamagePerTime;
-        if (value == "DamagePerHalfSecond") return DamageStage::DamagePerHalfSecond;
-        if (value == "DamagePerQuarterSecond") return DamageStage::DamagePerQuarterSecond;
-        if (value == "DamagePerSecond") return DamageStage::DamagePerSecond;
-        if (value == "SingleTotal") return DamageStage::SingleTotal;
-        if (value == "SecondForm") return DamageStage::SecondForm;
-        if (value == "ThirdForm") return DamageStage::ThirdForm;
-        if (value == "SecondCast") return DamageStage::SecondCast;
-        if (value == "ThirdCast") return DamageStage::ThirdCast;
-        if (value == "Buff") return DamageStage::Buff;
-        if (value == "Empowered") return DamageStage::Empowered;
-        if (value == "EmpoweredDamagePerSecond") return DamageStage::EmpoweredDamagePerSecond;
-        if (value == "EmpoweredDamagePerHalfSecond") return DamageStage::EmpoweredDamagePerHalfSecond;
-        if (value == "EmpoweredDamagePerQuarterSecond") return DamageStage::EmpoweredDamagePerQuarterSecond;
-        return DamageStage::Default;
-    }
-
-    static DamageType ParseDamageType(const std::string& value) {
-        if (value == "Physical") return DamageType::Physical;
-        if (value == "Magical") return DamageType::Magical;
-        if (value == "Mixed") return DamageType::Mixed;
-        return DamageType::True;
-    }
-
-    static DamageScalingTarget ParseScalingTarget(const std::string& value) {
-        return value == "Target" ? DamageScalingTarget::Target : DamageScalingTarget::Source;
-    }
-
-    static DamageScalingType ParseScalingType(const std::string& value) {
-        if (value == "AttackPoints") return DamageScalingType::AttackPoints;
-        if (value == "BonusAttackPoints") return DamageScalingType::BonusAttackPoints;
-        if (value == "AbilityPoints") return DamageScalingType::AbilityPoints;
-        if (value == "BonusHealth") return DamageScalingType::BonusHealth;
-        if (value == "CurrentHealth") return DamageScalingType::CurrentHealth;
-        if (value == "MaxHealth") return DamageScalingType::MaxHealth;
-        if (value == "MissingHealth") return DamageScalingType::MissingHealth;
-        if (value == "MaxMana") return DamageScalingType::MaxMana;
-        if (value == "Armor") return DamageScalingType::Armor;
-        if (value == "PhysicalLethality") return DamageScalingType::PhysicalLethality;
-        return DamageScalingType::Unknown;
-    }
-
-    static float ResolveScalingValue(const BonusScaling& bonus,
-                                     const AIBaseClient& source,
+    static float GetAutoAttackDamage(const AIBaseClient& source,
                                      const AIBaseClient& target) {
-        const AIBaseClient& scaler = bonus.Target == DamageScalingTarget::Target ? target : source;
-        switch (bonus.Scaling) {
-        case DamageScalingType::AttackPoints:
-            return scaler.TotalAttackDamage();
-        case DamageScalingType::BonusAttackPoints:
-            return scaler.BonusAttackDamage();
-        case DamageScalingType::AbilityPoints:
-            return scaler.AbilityPower();
-        case DamageScalingType::BonusHealth:
-            return scaler.MaxHealth();
-        case DamageScalingType::CurrentHealth:
-            return scaler.Health();
-        case DamageScalingType::MaxHealth:
-            return scaler.MaxHealth();
-        case DamageScalingType::MissingHealth:
-            return std::max(0.0f, scaler.MaxHealth() - scaler.Health());
-        case DamageScalingType::MaxMana:
-            return scaler.MaxMana();
-        case DamageScalingType::Armor:
-            return scaler.Armor();
-        case DamageScalingType::PhysicalLethality:
-            return scaler.Lethality();
-        case DamageScalingType::Unknown:
-        default:
+        if (!source.IsValid() || !target.IsValid()) {
             return 0.0f;
+        }
+        return source.CalculatePhysicalDamage(target, source.TotalAttackDamage());
+    }
+
+private:
+    static float PickArr(const float* arr, int count, int index) {
+        if (count <= 0) return 0.0f;
+        const int safe = (index < 0) ? 0 : (index >= count ? count - 1 : index);
+        return arr[safe];
+    }
+
+    static uint8_t MapSlot(SpellSlot slot) {
+        switch (slot) {
+        case SpellSlot::Q: return 0;
+        case SpellSlot::W: return 1;
+        case SpellSlot::E: return 2;
+        case SpellSlot::R: return 3;
+        default: return 255;
         }
     }
 
-    static inline std::unordered_map<std::string, ChampionDamage>* s_collection = nullptr;
+    static float ResolveScaling(const DamageData::BonusEntry& bonus,
+                                const AIBaseClient& source,
+                                const AIBaseClient& target) {
+        const AIBaseClient& scaler = bonus.Target == 1 ? target : source;
+        switch (bonus.Scaling) {
+        case 1:  return scaler.TotalAttackDamage();      // AttackPoints
+        case 2:  return scaler.BonusAttackDamage();       // BonusAttackPoints
+        case 3:  return scaler.AbilityPower();            // AbilityPoints
+        case 4:  return scaler.MaxHealth();               // BonusHealth (approx)
+        case 5:  return scaler.Health();                  // CurrentHealth
+        case 6:  return scaler.MaxHealth();               // MaxHealth
+        case 7:  return std::max(0.0f, scaler.MaxHealth() - scaler.Health()); // MissingHealth
+        case 8:  return scaler.MaxMana();                 // MaxMana
+        case 9:  return scaler.Armor();                   // Armor
+        case 10: return scaler.Lethality();               // PhysicalLethality
+        default: return 0.0f;
+        }
+    }
 };
 
 } // namespace SDK
