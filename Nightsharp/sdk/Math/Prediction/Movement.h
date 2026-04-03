@@ -14,6 +14,11 @@
 
 namespace SDK::Prediction::Movement {
 
+/// Callback type for AoE prediction routing (set by Cluster.h to avoid circular include).
+/// Matches C# pattern: if (input.AoE) return Cluster.GetAoEPrediction(input);
+using AoEPredictionCallback = PredictionOutput(*)(const PredictionInput&);
+inline AoEPredictionCallback g_aoePredictionCallback = nullptr;
+
 namespace detail {
 
 constexpr int kBuffTypeStun = 5;
@@ -461,44 +466,29 @@ inline PredictionOutput GetAdvancedPrediction(PredictionInput input, float addit
 
     const AIBaseClient target = input.Unit;
 
-    // Target standing still → cast at current position (EnsoulSharp parity)
-    if (!target.IsMoving()) {
-        result.Input = input;
-        result.CastPosition = target.Position();
-        result.UnitPosition = target.Position();
-        result.Hitchance = HitChance::VeryHigh;
-        return result;
-    }
-
-    // Target moving: predict future position
+    // Match C#: var speed = Math.Abs(additionalSpeed) < float.Epsilon ? input.Speed : input.Speed * additionalSpeed;
     float speed = std::fabs(additionalSpeed) < FLT_EPSILON ? input.Speed : (input.Speed * additionalSpeed);
     if (detail::IsInstantSpeed(speed)) {
         speed = 90000.0f;
     }
 
-    const auto path = detail::BuildCurrentPath(target);
-    if (path.size() > 1) {
-        // Delay is already in seconds — do NOT divide by 1000
-        const float travelDist = target.MoveSpeed() * input.Delay;
-        const Vector2 position = SDK::Geometry::PositionAlongPath(
-            [&]() {
-                std::vector<Vector2> p;
-                p.reserve(path.size());
-                for (const auto& pt : path) p.push_back(pt.To2D());
-                return p;
-            }(),
-            travelDist);
+    // Match C#: var position = PositionAfter(unit, 1, unit.MoveSpeed - 100);
+    const float reducedSpeed = std::max(target.MoveSpeed() - 100.0f, 0.0f);
+    const Vector2 position = detail::PositionAfter(target, 1.0f, reducedSpeed);
 
-        result.Input = input;
-        result.UnitPosition = Vector3(position.x, target.Position().y, position.y);
-        result.CastPosition = result.UnitPosition;
-        result.Hitchance = HitChance::High;
-        return result;
+    // Match C#: var prediction = position + speed * (input.Delay / 1000);
+    // C# Delay is in seconds, speed * Delay gives a travel distance.
+    // The direction is along the unit's path heading.
+    const Vector2 currentPos = target.Position().To2D();
+    Vec2 direction = (position - currentPos);
+    if (direction.LengthSqr() > 0.0001f) {
+        direction = direction.Normalized();
     }
+    const Vector2 prediction = position + (direction * (speed * (input.Delay / 1000.0f)));
 
     result.Input = input;
-    result.CastPosition = target.Position();
-    result.UnitPosition = target.Position();
+    result.UnitPosition = Vector3(position.x, target.Position().y, position.y);
+    result.CastPosition = Vector3(prediction.x, target.Position().y, prediction.y);
     result.Hitchance = HitChance::High;
     return result;
 }
@@ -612,25 +602,35 @@ inline PredictionOutput GetPredictionCore(PredictionInput input,
     result.Input = input;
 
     if (adjustDelay) {
+        // Match C#: input.Delay += (Game.Ping / 2000f) + 0.06f;
         input.Delay += (Game::Ping() / 2000.0f) + 0.06f;
+
+        // Match C#: if (input.AoE) return Cluster.GetAoEPrediction(input);
+        if (input.AoE && g_aoePredictionCallback) {
+            return g_aoePredictionCallback(input);
+        }
     }
 
+    // Match C#: Target too far away.
     if (!detail::IsMaxRange(input.Range) &&
         input.Unit.DistanceSquared(input.RangeCheckFrom) > std::pow(input.Range * 1.5f, 2.0f)) {
         return result;
     }
 
+    // Match C#: Unit is dashing.
     if (input.Unit.IsDashing()) {
         result = GetDashingPrediction(input);
     } else {
+        // Match C#: Unit is immobile.
         const double immobileUntil = detail::UnitIsImmobileUntil(input.Unit);
         if (immobileUntil >= 0.0) {
             result = GetImmobilePrediction(input, immobileUntil);
         }
     }
 
+    // Match C#: if (result == null) result = GetAdvancedPrediction(input);
     if (!result.IsValid()) {
-        result = input.Unit.IsMoving() ? GetStandardPrediction(input) : GetAdvancedPrediction(input);
+        result = GetAdvancedPrediction(input);
     }
 
     const float radius = detail::GetRealRadius(input, input.Unit);

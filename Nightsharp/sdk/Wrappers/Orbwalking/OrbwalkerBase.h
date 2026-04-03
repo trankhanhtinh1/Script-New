@@ -52,15 +52,20 @@ public:
         return (now + (ping / 2) + 25) >= (LastAutoAttackTick + static_cast<int>(attackDelayMs + extraWindup));
     }
 
-    // ── CanMove – pure timing (poll-based, no MissileLaunched):
-    //    Since we don't have event-driven OnDoCast like old NightSharp,
-    //    MissileLaunched detection via polling is unreliable.
-    //    Use pure timing: TickCount + Ping/2 >= LastAutoAttackTick + windupMs + extra
-    //    Matches old NightSharp's OrbwalkerPlugin::CanMove formula.
-    bool CanMove(float extraWindup = 0.0f, bool /*disableMissileCheck*/ = false) const {
+    // ── CanMove – matching C# OrbwalkerBase.CanMove ──
+    //    1. If MissileLaunched && missile check enabled → safe to move (missile confirmed release)
+    //    2. If CanCancelAutoAttack() is false (Kalista) → always can move
+    //    3. Otherwise → timing gate: TickCount + Ping/2 >= LastAutoAttackTick + windupMs + extra
+    bool CanMove(float extraWindup = 0.0f, bool disableMissileCheck = false) const {
+        // C# line 248-251: if (this.MissileLaunched && !disableMissileCheck) return true;
+        if (MissileLaunched && !disableMissileCheck) {
+            return true;
+        }
+
         const int now = Game::TickCount();
         const int ping = CoreAPI::Control::GetPing();
         const float windupMs = CoreAPI::Control::GetAttackWindup() * 1000.0f;
+        // C# line 253-255: !CanCancelAutoAttack() || (timing check)
         return (now + (ping / 2)) >= (LastAutoAttackTick + static_cast<int>(windupMs + extraWindup));
     }
 

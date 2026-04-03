@@ -4,44 +4,57 @@
 
 #include <cmath>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 namespace SDK::Geometry {
 
+/// <summary>
+///     Represents a Circle Polygon.
+///     Port of EnsoulSharp.SDK CirclePoly.cs — exact behavioral parity.
+/// </summary>
 class CirclePoly : public Polygon {
 public:
-    Vec2 Center = {};
-    float Radius = 0.0f;
-    int Quality = 20;
+    Vec2  Center  = {};
+    float Radius  = 0.0f;
+    int   Quality = 20;
 
     CirclePoly() = default;
 
-    CirclePoly(const Vec3& center, float radius, int quality = 20) {
-        Build(center.To2D(), radius, quality);
-    }
+    CirclePoly(const Vec3& center, float radius, int quality = 20)
+        : CirclePoly(center.To2D(), radius, quality) {}
 
-    CirclePoly(const Vec2& center, float radius, int quality = 24) {
-        Build(center, radius, quality);
-    }
-
-    void Build(const Vec2& center, float radius, int quality = 24) {
-        Center = center;
-        Radius = radius;
+    CirclePoly(const Vec2& center, float radius, int quality = 20) {
+        Center  = center;
+        Radius  = radius;
         Quality = quality;
-        Points.clear();
-        if (radius <= 0.0f || quality < 3) {
-            return;
-        }
 
-        const float outRadius = radius / std::cos((2.0f * static_cast<float>(M_PI)) / static_cast<float>(quality));
-        const float step = (2.0f * static_cast<float>(M_PI)) / static_cast<float>(quality);
-        for (int i = 1; i <= quality; ++i) {
-            const float angle = step * static_cast<float>(i);
-            Points.emplace_back(center.x + std::cos(angle) * outRadius, center.y + std::sin(angle) * outRadius);
-        }
+        UpdatePolygon();
     }
 
+    /// <summary>
+    ///     Updates the Circle polygon.
+    ///     Matches C# UpdatePolygon(int offset = 0, float overrideWidth = -1) exactly.
+    ///     When overrideWidth > 0, it is used directly (no cosine expansion).
+    ///     Otherwise, (offset + Radius) / cos(2π/quality) is used.
+    /// </summary>
     void UpdatePolygon(int offset = 0, float overrideWidth = -1.0f) {
-        const float effectiveRadius = overrideWidth > 0.0f ? overrideWidth : (Radius + static_cast<float>(offset));
-        Build(Center, effectiveRadius, Quality);
+        Points.clear();
+
+        const float outRadius = overrideWidth > 0.0f
+            ? overrideWidth
+            : (static_cast<float>(offset) + Radius)
+              / static_cast<float>(std::cos(2.0 * M_PI / static_cast<double>(Quality)));
+
+        for (int i = 1; i <= Quality; ++i) {
+            const float angle = static_cast<float>(i) * 2.0f * static_cast<float>(M_PI)
+                                / static_cast<float>(Quality);
+            Points.emplace_back(
+                Center.x + outRadius * std::cos(angle),
+                Center.y + outRadius * std::sin(angle)
+            );
+        }
     }
 };
 

@@ -328,8 +328,7 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
                 const float dist = bestHitPoints[i].DistanceSqr(proj1.segmentPoint) +
                                    bestHitPoints[j].DistanceSqr(proj2.segmentPoint);
                 if (dist >= maxDistance &&
-                    std::fabs((proj1.segmentPoint - bestHitPoints[i]).AngleBetween(proj2.segmentPoint - bestHitPoints[j])) >
-                        (90.0f * (static_cast<float>(M_PI) / 180.0f))) {
+                    Extensions::AngleBetween(proj1.segmentPoint - bestHitPoints[i], proj2.segmentPoint - bestHitPoints[j]) > 90.0f) {
                     maxDistance = dist;
                     p1 = bestHitPoints[i];
                     p2 = bestHitPoints[j];
@@ -415,3 +414,16 @@ namespace Line {
 }
 
 } // namespace SDK::Cluster
+
+/// Wire Movement.h AoE routing → Cluster::GetAoEPrediction
+/// Matches C# pattern: if (input.AoE) return Cluster.GetAoEPrediction(input);
+namespace SDK::Prediction::Movement::detail_cluster_init {
+    inline PredictionOutput AoETrampoline(const PredictionInput& input) {
+        return Prediction::Cluster::GetAoEPrediction(input);
+    }
+
+    inline const bool g_registered = []() {
+        ::SDK::Prediction::Movement::g_aoePredictionCallback = &AoETrampoline;
+        return true;
+    }();
+} // namespace SDK::Prediction::Movement::detail_cluster_init

@@ -99,7 +99,7 @@ constexpr auto IsDead = ClassificationRuntime::IsDead;
 constexpr auto IsTargetableByUnit = UnitQueryRuntime::IsTargetableByUnit;
 constexpr auto IsVulnerable = ClassificationRuntime::IsVulnerable;
 constexpr auto IsDragon = ClassificationRuntime::IsDragon;
-constexpr auto IsElderDragon = ClassificationRuntime::IsElderDragon;
+// IsElderDragon: no native RVA — RuntimeAPI uses name-based strcmp instead
 constexpr auto IsBaron = ClassificationRuntime::IsBaron;
 constexpr auto IsSelectable = ClassificationRuntime::IsSelectable;
 constexpr auto IsFleeing = ClassificationRuntime::IsFleeing;

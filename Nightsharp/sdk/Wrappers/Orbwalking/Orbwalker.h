@@ -410,14 +410,10 @@ private:
     return OrbwalkerBase::CanAttack(extraDelay);
   }
 
-  // ── CanMoveFull – percentage-based windup buffer ──
-  // Slider "delayWindup" (0-200) is treated as a PERCENTAGE of windupMs.
-  // This scales the safety buffer with attack speed:
-  //   - lv1 (windupMs≈400ms), slider 80 → buffer=160ms → total wait 560ms (safe)
-  //   - high AS (windupMs≈200ms), slider 80 → buffer=80ms → total wait 280ms (responsive)
-  //   - slider 0 → no buffer (risky, may cancel AA)
-  //   - slider 20 → 10% buffer (fast kite, still mostly safe)
-  // Formula: now + ping/2 >= LastAutoAttackTick + windupMs + windupMs*(slider/200) + extra
+  // ── CanMoveFull – matching C# Orbwalker.CanMove ──
+  // C# calls: base.CanMove(extraWindup + localExtraWindup + delayWindup_slider, 
+  //                         disableMissileCheck || !miscMissile)
+  // Slider "delayWindup" (0-200) is treated as FLAT ms added to windup (matching C#).
   bool CanMoveFull(float extra = 0.0f) const {
     const auto player = ObjectManager::Player();
     if (!player.IsValid()) return false;
@@ -429,29 +425,23 @@ private:
 
     float localExtra = extra;
 
-    // Rengar Q extra windup (matching old NightSharp)
+    // Rengar Q extra windup (matching C# Orbwalker.CanMove line 278-282)
     const std::string name = player.CharacterName();
     if (name == "Rengar" && (player.HasBuff("RengarQ") || player.HasBuff("RengarQEmp"))) {
       localExtra += 200.0f;
     }
 
-    // Pure timing: now + ping/2 >= LastAutoAttackTick + windupMs + buffer + extra
-    const int now = Game::TickCount();
-    const int ping = CoreAPI::Control::GetPing();
-    const float windupMs = CoreAPI::Control::GetAttackWindup() * 1000.0f;
-
-    // Percentage-based windup buffer from menu slider
-    // slider/200 gives 0.0 to 1.0 ratio, applied to windupMs
+    // C#: extraWindup + localExtraWindup + delayWindup slider value (FLAT ms)
     auto* advanced = s_menu ? s_menu->GetSubMenu("advanced") : nullptr;
     const int sliderVal = advanced ? advanced->GetSliderValue("delayWindup", 80) : 80;
-    const float pctBuffer = windupMs * (static_cast<float>(sliderVal) / 200.0f);
-    // Add a small flat minimum (20ms) when slider > 0 to cover poll/tick imprecision
-    const float windupBuffer = (sliderVal > 0)
-        ? (std::max)(pctBuffer, 20.0f)
-        : 0.0f;
-    localExtra += windupBuffer;
+    localExtra += static_cast<float>(sliderVal);
 
-    return (now + (ping / 2)) >= (LastAutoAttackTick + static_cast<int>(windupMs + localExtra));
+    // C#: disableMissileCheck || !miscMissile
+    const bool useMissile = advanced ? advanced->GetBoolValue("miscMissile", true) : true;
+    const bool disableMissileCheck = !useMissile;
+
+    // Delegates to OrbwalkerBase::CanMove which checks MissileLaunched first
+    return OrbwalkerBase::CanMove(localExtra, disableMissileCheck);
   }
 
   // ── Attack (matching Orbwalker.cs::Attack) ──
@@ -485,14 +475,13 @@ private:
       s_debug.attackIssued = true;
       s_lastConfirmedAutoAttackTick = 0;
 
-      // DON'T subtract ping/2 here — that was causing CanMove to fire too early.
-      // Set LastAutoAttackTick = now (actual command time).
-      // PollAutoAttackState Phase 1 will override with confirmed cast time.
-      LastAutoAttackTick = now;
+      // Match C# OnDoCast line 523: LastAutoAttackTick = TickCount - (Ping / 2);
+      // Backdate is safe now because CanMove checks MissileLaunched first.
+      const int ping = CoreAPI::Control::GetPing();
+      LastAutoAttackTick = now - (ping / 2);
       MissileLaunched = false;
       LastMovementOrderTick = 0;
 
-      const int ping = CoreAPI::Control::GetPing();
       const int baseBlock = 70 + std::min(60, ping);
       s_blockOrdersUntil = now + baseBlock;
     }
@@ -589,11 +578,12 @@ private:
     // ── Phase 1: Detect AA START (windup began) ──
     // Transition: was NOT attacking → IS attacking
     if (isCurrentlyAAing && !s_wasAttacking) {
-      // AA just started. Keep the confirmed local tick instead of backdating by
-      // ping/2, otherwise CanMoveFull effectively gets ping/2 twice and opens
-      // movement too early, which cancels autos.
+      // Match C# OnDoCast line 523: LastAutoAttackTick = TickCount - (Ping / 2);
+      // Backdate by ping/2 to compensate for network delay in detection.
+      // Safe now because CanMove checks MissileLaunched before timing gate.
       const int now = Game::TickCount();
-      s_lastConfirmedAutoAttackTick = now;
+      const int ping = CoreAPI::Control::GetPing();
+      s_lastConfirmedAutoAttackTick = now - (ping / 2);
       LastAutoAttackTick = s_lastConfirmedAutoAttackTick;
       MissileLaunched = false;
       LastMovementOrderTick = 0; // allow immediate move after windup

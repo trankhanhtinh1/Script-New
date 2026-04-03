@@ -3931,9 +3931,9 @@ agesReductionOnSoldier": [],
           "Damages": [
             0.0,
             20.0,
-            43.0,
-            66.0,
-            89.0
+            45.0,
+            70.0,
+            95.0
           ],
           "DamagesOnMonster": [],
           "DamagesPerLvl": [],
@@ -11344,10 +11344,10 @@ static const char kChunk_027[] = R"NS_26_6_027(
             {
               "DamagePercentages": [
                 0.2,
-                0.2375,
                 0.275,
-                0.3125,
-                0.35
+                0.35,
+                0.425,
+                0.5
               ],
               "DamageType": "Physical",
               "ScalingBuff": "kalistaexpungemarker",

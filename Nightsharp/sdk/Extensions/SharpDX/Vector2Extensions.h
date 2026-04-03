@@ -274,4 +274,81 @@ namespace SDK::Extensions {
         return result;
     }
 
+    /// <summary>
+    ///     Calculates movement collision between two vector points.
+    ///     Exact port of C# VectorMovementCollision (2-point overload).
+    /// </summary>
+    inline MovementCollisionInfo VectorMovementCollision(
+        const Vec2& pointStartA,
+        const Vec2& pointEndA,
+        float pointVelocityA,
+        const Vec2& pointB,
+        float pointVelocityB,
+        float delay = 0.0f)
+    {
+        float sP1X = pointStartA.x, sP1Y = pointStartA.y;
+        float eP1X = pointEndA.x,   eP1Y = pointEndA.y;
+        float sP2X = pointB.x,      sP2Y = pointB.y;
+
+        float d = eP1X - sP1X, e = eP1Y - sP1Y;
+        float dist = std::sqrt((d * d) + (e * e));
+        float t1 = std::numeric_limits<float>::quiet_NaN();
+
+        float s = (std::fabs(dist) > std::numeric_limits<float>::epsilon())
+                  ? pointVelocityA * d / dist : 0.0f;
+        float k = (std::fabs(dist) > std::numeric_limits<float>::epsilon())
+                  ? pointVelocityA * e / dist : 0.0f;
+
+        float r = sP2X - sP1X, j = sP2Y - sP1Y;
+        float c = (r * r) + (j * j);
+
+        if (dist > 0.0f) {
+            if (std::fabs(pointVelocityA - std::numeric_limits<float>::max()) < std::numeric_limits<float>::epsilon()) {
+                float t = dist / pointVelocityA;
+                t1 = (pointVelocityB * t >= 0.0f) ? t : std::numeric_limits<float>::quiet_NaN();
+            }
+            else if (std::fabs(pointVelocityB - std::numeric_limits<float>::max()) < std::numeric_limits<float>::epsilon()) {
+                t1 = 0.0f;
+            }
+            else {
+                float a = (s * s) + (k * k) - (pointVelocityB * pointVelocityB);
+                float b = (-r * s) - (j * k);
+
+                if (std::fabs(a) < std::numeric_limits<float>::epsilon()) {
+                    if (std::fabs(b) < std::numeric_limits<float>::epsilon()) {
+                        t1 = (std::fabs(c) < std::numeric_limits<float>::epsilon()) ? 0.0f
+                             : std::numeric_limits<float>::quiet_NaN();
+                    } else {
+                        float t = -c / (2.0f * b);
+                        t1 = (pointVelocityB * t >= 0.0f) ? t : std::numeric_limits<float>::quiet_NaN();
+                    }
+                } else {
+                    float sqr = (b * b) - (a * c);
+                    if (sqr >= 0.0f) {
+                        float nom = std::sqrt(sqr);
+                        float t = (-nom - b) / a;
+                        t1 = (pointVelocityB * t >= 0.0f) ? t : std::numeric_limits<float>::quiet_NaN();
+                        t = (nom - b) / a;
+                        float t2 = (pointVelocityB * t >= 0.0f) ? t : std::numeric_limits<float>::quiet_NaN();
+
+                        if (!std::isnan(t2) && !std::isnan(t1)) {
+                            if (t1 >= delay && t2 >= delay) {
+                                t1 = std::min(t1, t2);
+                            } else if (t2 >= delay) {
+                                t1 = t2;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else if (std::fabs(dist) < std::numeric_limits<float>::epsilon()) {
+            t1 = 0.0f;
+        }
+
+        return MovementCollisionInfo(
+            t1,
+            !std::isnan(t1) ? Vec2(sP1X + (s * t1), sP1Y + (k * t1)) : Vec2());
+    }
+
 } // namespace SDK::Extensions

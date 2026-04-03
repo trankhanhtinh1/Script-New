@@ -71,7 +71,7 @@ public:
     combo->Add<MenuBool>("ComboEWall", "Use E |Wall Check", true);
     combo->Add<MenuBool>("useR", "Use R", true);
     // Semi R — Ezreal.cs line 51: MenuKeyBind("SemiR", "Semi R", Keys.R, KeyBindType.Press)
-    combo->Add<MenuKeyBind>("SemiR", "Semi R", 'T', false);
+    combo->Add<MenuKeyBind>("SemiR", "Semi R", 'T', KeyBindType::Press);
 
     // Harass Settings
     auto *harass = m_menu->AddSubMenu("harass", "Harass Settings");

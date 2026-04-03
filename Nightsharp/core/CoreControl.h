@@ -18,6 +18,8 @@ namespace CoreControl {
     inline constexpr int CastSpellModeNormal = 1;
     inline constexpr int CastSpellModeSmart = 2;
     inline constexpr int CastSpellPhasePress = 1;
+    // BB8A20 is the legacy target-commit stub the old write-path still calls.
+    // The real CastSpellSafe body lives elsewhere and is tracked by the generator.
     inline constexpr uintptr_t CastSpellTargetCommitRva = 0xBB8A20;
     inline constexpr uintptr_t CastSpellTargetFollowRva = 0xBBB7D0;
     inline constexpr uintptr_t GameObjectSpellDataOffset = 0x60;
@@ -560,9 +562,7 @@ namespace CoreControl {
             AppendIssueOrderDebug(dbg);
         }
 
-        // ── Call BB8A20 (CastSpellSafe) via spoof_call ──
-        // BB8A20 signature: fn(rcx=hudSpellInfo, rdx=spellInfoPtr) — 2 params only
-        // Internally sets CastSpellFlag (byte_1D04F40=1) and dispatches the cast
+        // ── Call CastSpellSafe via spoof_call ──
         using fnCastSpellSafe = void(__fastcall*)(uintptr_t, uintptr_t);
 
         bool ok = false;
