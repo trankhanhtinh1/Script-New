@@ -802,6 +802,51 @@ namespace ObjectManager {
 
             return obj.IsPet();
         }
+
+        inline bool IsWardObject(const AIMinionClient& obj) {
+            if (!obj.IsValid() || !obj.IsAlive()) {
+                return false;
+            }
+            const std::string lowerName = BestName(obj);
+            return lowerName.find("ward") != std::string::npos ||
+                   lowerName.find("jammerdevice") != std::string::npos;
+        }
+
+        inline bool IsBarrelObject(const AIMinionClient& obj) {
+            if (!obj.IsValid() || !obj.IsAlive()) {
+                return false;
+            }
+            const std::string lowerName = BestName(obj);
+            return lowerName.find("gangplankbarrel") != std::string::npos;
+        }
+
+        inline bool IsSpecialMinionObject(const AIMinionClient& obj) {
+            if (!obj.IsValid() || !obj.IsAlive()) {
+                return false;
+            }
+            const std::string lowerName = BestName(obj);
+            static const char* specials[] = {
+                "annietibbers", "elisespiderling", "heimertyellow", "heimertblue",
+                "ivernminion", "malzaharvoidling", "shacobox", "teemomushroom",
+                "yorickghoulmelee", "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
+            };
+            for (const auto& s : specials) {
+                if (lowerName == s) return true;
+            }
+            return false;
+        }
+
+        inline bool IsCloneObject(const AIMinionClient& obj) {
+            if (!obj.IsValid() || !obj.IsAlive()) {
+                return false;
+            }
+            const std::string lowerName = BestName(obj);
+            static const char* clones[] = { "leblanc", "monkeyking", "neeko", "shaco" };
+            for (const auto& c : clones) {
+                if (lowerName == c) return true;
+            }
+            return false;
+        }
     } // namespace detail
 
     inline AIHeroClient Player() {
@@ -980,12 +1025,72 @@ namespace ObjectManager {
         return out;
     }
 
+    inline std::vector<AIMinionClient> Wards() {
+        uintptr_t buffer[512] = {};
+        const int count = detail::ReadManagerListLegacy(Offset::Global::MinionManager, buffer, 512, 2000);
+        std::vector<AIMinionClient> out;
+        out.reserve(16);
+        for (int i = 0; i < count; ++i) {
+            AIMinionClient minion(buffer[i]);
+            if (!detail::IsWardObject(minion)) {
+                continue;
+            }
+            out.emplace_back(buffer[i]);
+        }
+        return out;
+    }
+
+    inline std::vector<AIMinionClient> Barrels() {
+        uintptr_t buffer[512] = {};
+        const int count = detail::ReadManagerListLegacy(Offset::Global::MinionManager, buffer, 512, 2000);
+        std::vector<AIMinionClient> out;
+        out.reserve(8);
+        for (int i = 0; i < count; ++i) {
+            AIMinionClient minion(buffer[i]);
+            if (!detail::IsBarrelObject(minion)) {
+                continue;
+            }
+            out.emplace_back(buffer[i]);
+        }
+        return out;
+    }
+
     inline std::vector<AITurretClient> AllyTurrets() {
         uintptr_t buffer[64] = {};
         const int count = CoreAPI::Objects::EnumerateAllyTurrets(buffer, 64);
         std::vector<AITurretClient> out;
         out.reserve(count);
         for (int i = 0; i < count; ++i) {
+            out.emplace_back(buffer[i]);
+        }
+        return out;
+    }
+
+    inline std::vector<AIMinionClient> SpecialMinions() {
+        uintptr_t buffer[512] = {};
+        const int count = detail::ReadManagerListLegacy(Offset::Global::MinionManager, buffer, 512, 2000);
+        std::vector<AIMinionClient> out;
+        out.reserve(16);
+        const int myTeam = Player().Team();
+        for (int i = 0; i < count; ++i) {
+            AIMinionClient minion(buffer[i]);
+            if (!detail::IsSpecialMinionObject(minion)) continue;
+            if (minion.Team() == myTeam) continue;  // enemy specials only
+            out.emplace_back(buffer[i]);
+        }
+        return out;
+    }
+
+    inline std::vector<AIMinionClient> Clones() {
+        uintptr_t buffer[512] = {};
+        const int count = detail::ReadManagerListLegacy(Offset::Global::MinionManager, buffer, 512, 2000);
+        std::vector<AIMinionClient> out;
+        out.reserve(8);
+        const int myTeam = Player().Team();
+        for (int i = 0; i < count; ++i) {
+            AIMinionClient minion(buffer[i]);
+            if (!detail::IsCloneObject(minion)) continue;
+            if (minion.Team() == myTeam) continue;  // enemy clones only
             out.emplace_back(buffer[i]);
         }
         return out;
@@ -1037,6 +1142,10 @@ namespace GameObjects {
     inline std::vector<AIMinionClient> Plants() { return ObjectManager::Plants(); }
     inline std::vector<AIMinionClient> JunglePlants() { return ObjectManager::Plants(); }
     inline std::vector<AIMinionClient> Pets() { return ObjectManager::Pets(); }
+    inline std::vector<AIMinionClient> Wards() { return ObjectManager::Wards(); }
+    inline std::vector<AIMinionClient> Barrels() { return ObjectManager::Barrels(); }
+    inline std::vector<AIMinionClient> SpecialMinions() { return ObjectManager::SpecialMinions(); }
+    inline std::vector<AIMinionClient> Clones() { return ObjectManager::Clones(); }
     inline std::vector<AITurretClient> AllyTurrets() { return ObjectManager::AllyTurrets(); }
     inline std::vector<AITurretClient> EnemyTurrets() { return ObjectManager::EnemyTurrets(); }
     inline std::vector<MissileClient> Missiles() { return ObjectManager::Missiles(); }

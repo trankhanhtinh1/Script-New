@@ -529,7 +529,7 @@ private:
       return s_forcedTarget;
     }
 
-    return OrbwalkerSelector::GetTarget(player, ActiveMode, range);
+    return OrbwalkerSelector::GetTarget(player, ActiveMode, range, s_menu);
   }
 
   // ══════════════════════════════════════════════════════════════

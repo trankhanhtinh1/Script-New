@@ -516,29 +516,29 @@ namespace CoreControl {
             return false;
         }
 
-        // ── Get spellInfoPtr from spell slot ──
+        // ── Get spellInputPtr from spell slot (CastSpellSafe→sub_BA0450 matches arg2 with *(slot+0x130)) ──
         const auto slot = CoreSpellBook::GetSlot(ctx.localPlayer, slotId);
         if (!slot.IsValid()) {
             AppendIssueOrderDebug("[CastSafe] FAIL: spell slot invalid\r\n");
             return false;
         }
-        const auto spellInfoPtr = Globals::Read<uintptr_t>(slot.address + Offset::SpellSlotLayout::SlotSpellInfo);
-        if (!Globals::IsValidPtr(spellInfoPtr)) {
-            AppendIssueOrderDebug("[CastSafe] FAIL: spellInfoPtr invalid\r\n");
+        const auto spellInputPtr = slot.GetSpellInput();
+        if (!Globals::IsValidPtr(spellInputPtr)) {
+            AppendIssueOrderDebug("[CastSafe] FAIL: spellInputPtr invalid\r\n");
             return false;
         }
 
-        // ── Prepare SpellInput with target data ──
-        const auto spellInput = slot.GetSpellInput();
+        // ── Prepare position data (lives in SpellInfo 0x128, not SpellInput 0x130) ──
+        const auto posStruct = slot.GetSpellInfo();
         Vec3 origInputStart = {}, origInputEnd = {};
         uint32_t origInputTargetNetId = 0;
-        if (Globals::IsValidPtr(spellInput)) {
-            origInputStart = Globals::Read<Vec3>(spellInput + Offset::SpellInputLayout::InputStartPos);
-            origInputEnd = Globals::Read<Vec3>(spellInput + Offset::SpellInputLayout::InputEndPos);
-            origInputTargetNetId = Globals::Read<uint32_t>(spellInput + Offset::SpellInputLayout::InputTargetNetId);
-            Globals::Write<Vec3>(spellInput + Offset::SpellInputLayout::InputStartPos, start);
-            Globals::Write<Vec3>(spellInput + Offset::SpellInputLayout::InputEndPos, end);
-            Globals::Write<uint32_t>(spellInput + Offset::SpellInputLayout::InputTargetNetId, targetNetId);
+        if (Globals::IsValidPtr(posStruct)) {
+            origInputStart = Globals::Read<Vec3>(posStruct + Offset::SpellInputLayout::InputStartPos);
+            origInputEnd = Globals::Read<Vec3>(posStruct + Offset::SpellInputLayout::InputEndPos);
+            origInputTargetNetId = Globals::Read<uint32_t>(posStruct + Offset::SpellInputLayout::InputTargetNetId);
+            Globals::Write<Vec3>(posStruct + Offset::SpellInputLayout::InputStartPos, start);
+            Globals::Write<Vec3>(posStruct + Offset::SpellInputLayout::InputEndPos, end);
+            Globals::Write<uint32_t>(posStruct + Offset::SpellInputLayout::InputTargetNetId, targetNetId);
         }
 
         // ── Also write HudInput→MouseWorldPos for packet position ──
@@ -556,8 +556,8 @@ namespace CoreControl {
         {
             char dbg[512] = {};
             std::snprintf(dbg, sizeof(dbg),
-                "[CastSafe] slot=%d hudSpellInfo=0x%llX spellInfoPtr=0x%llX castFn=0x%llX targetNetId=%u pos=(%.1f %.1f %.1f)\r\n",
-                slotId, (unsigned long long)hudSpellInfo, (unsigned long long)spellInfoPtr,
+                "[CastSafe] slot=%d hudSpellInfo=0x%llX spellInputPtr=0x%llX castFn=0x%llX targetNetId=%u pos=(%.1f %.1f %.1f)\r\n",
+                slotId, (unsigned long long)hudSpellInfo, (unsigned long long)spellInputPtr,
                 (unsigned long long)ctx.castSpellFn, targetNetId, end.x, end.y, end.z);
             AppendIssueOrderDebug(dbg);
         }
@@ -572,18 +572,18 @@ namespace CoreControl {
                 reinterpret_cast<void*>(ctx.spoofTrampoline),
                 reinterpret_cast<fnCastSpellSafe>(ctx.castSpellFn),
                 hudSpellInfo,
-                spellInfoPtr);
+                spellInputPtr);
             ok = true;
         }
         __except (1) {
             ok = false;
         }
 
-        // ── Restore SpellInput ──
-        if (Globals::IsValidPtr(spellInput)) {
-            Globals::Write<Vec3>(spellInput + Offset::SpellInputLayout::InputStartPos, origInputStart);
-            Globals::Write<Vec3>(spellInput + Offset::SpellInputLayout::InputEndPos, origInputEnd);
-            Globals::Write<uint32_t>(spellInput + Offset::SpellInputLayout::InputTargetNetId, origInputTargetNetId);
+        // ── Restore position data ──
+        if (Globals::IsValidPtr(posStruct)) {
+            Globals::Write<Vec3>(posStruct + Offset::SpellInputLayout::InputStartPos, origInputStart);
+            Globals::Write<Vec3>(posStruct + Offset::SpellInputLayout::InputEndPos, origInputEnd);
+            Globals::Write<uint32_t>(posStruct + Offset::SpellInputLayout::InputTargetNetId, origInputTargetNetId);
         }
 
         // ── Restore HudInput ──
@@ -615,11 +615,12 @@ namespace CoreControl {
             return false;
         }
 
-        // ── Save SpellInput originals ──
-        const auto origStartPos = Globals::Read<Vec3>(spellInput + Offset::SpellBook::InputStartPos);
-        const auto origEndPos = Globals::Read<Vec3>(spellInput + Offset::SpellBook::InputEndPos);
-        const auto origEndPos2 = Globals::Read<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3));
-        const auto origEndPos3 = Globals::Read<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2);
+        // ── Save position originals (from SpellInfo 0x128) ──
+        const auto posPtr = slot.GetSpellInfo();
+        const auto origStartPos = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputStartPos) : Vec3{};
+        const auto origEndPos = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos) : Vec3{};
+        const auto origEndPos2 = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3)) : Vec3{};
+        const auto origEndPos3 = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2) : Vec3{};
         const int castMode = (targetNetId != 0) ? CastSpellModeNormal : CastSpellModeSmart;
 
         // ── Write SpellInput ──
@@ -644,11 +645,13 @@ namespace CoreControl {
                 : "[CastSafe] failed (SEH/crash)\r\n");
         }
 
-        // ── Restore SpellInput ──
-        Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputStartPos, origStartPos);
-        Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos, origEndPos);
-        Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3), origEndPos2);
-        Globals::Write<Vec3>(spellInput + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2, origEndPos3);
+        // ── Restore position data ──
+        if (Globals::IsValidPtr(posPtr)) {
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputStartPos, origStartPos);
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos, origEndPos);
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3), origEndPos2);
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2, origEndPos3);
+        }
 
         CoreValidation::MarkCastResult(ok);
         return ok;

@@ -556,8 +556,8 @@ namespace CoreObjects {
                 return false;
             }
 
-            // Check recall buff from BuffManager
-            const bool hasRecallBuff = CoreBuffs::HasBuffContaining(address, "recall", 1);
+            // Check recall buff from BuffManager (no type filter — type may vary across versions)
+            const bool hasRecallBuff = CoreBuffs::HasBuffContaining(address, "recall");
             if (!hasRecallBuff) {
                 return false;
             }

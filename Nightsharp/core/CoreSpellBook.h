@@ -161,7 +161,7 @@ namespace CoreSpellBook {
         }
 
         bool SetInputData(uint32_t targetNetId, const Vec3& start, const Vec3& end) const {
-            const auto input = GetSpellInput();
+            const auto input = GetSpellInfo();  // position lives in SpellInfo (0x128)
             if (!Globals::IsValidPtr(input)) {
                 return false;
             }

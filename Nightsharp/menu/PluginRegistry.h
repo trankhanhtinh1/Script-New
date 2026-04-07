@@ -44,6 +44,7 @@ namespace PluginRegistry {
         bool       (*RuntimeLoad)(void*) = nullptr;
         bool       (*RuntimeUnload)(void*) = nullptr;
         SDK::MenuUI::Menu* (*RuntimeMenuRoot)(void*) = nullptr;
+        bool       (*CanLoadFn)(void*) = nullptr;   // Champion compatibility check
     };
 
     // ── Fixed-size registry ──
@@ -200,12 +201,14 @@ namespace PluginRegistry {
                             void* userData,
                             bool (*loadFn)(void*),
                             bool (*unloadFn)(void*),
-                            SDK::MenuUI::Menu* (*menuRootFn)(void*)) {
+                            SDK::MenuUI::Menu* (*menuRootFn)(void*),
+                            bool (*canLoadFn)(void*) = nullptr) {
         if (idx < 0 || idx >= PluginCount) return;
         Plugins[idx].RuntimeUserData = userData;
         Plugins[idx].RuntimeLoad = loadFn;
         Plugins[idx].RuntimeUnload = unloadFn;
         Plugins[idx].RuntimeMenuRoot = menuRootFn;
+        Plugins[idx].CanLoadFn = canLoadFn;
         if (menuRootFn) {
             Plugins[idx].MenuRoot = menuRootFn(userData);
         }
@@ -307,6 +310,15 @@ namespace PluginRegistry {
             if (Plugins[i].Kind == kind)
                 count++;
         return count;
+    }
+
+    // Check if a plugin can be loaded (champion compatibility).
+    // Returns true for non-Champion plugins or if CanLoadFn is null.
+    inline bool CanPluginLoad(int idx) {
+        if (idx < 0 || idx >= PluginCount) return false;
+        auto& p = Plugins[idx];
+        if (!p.CanLoadFn) return true;  // No check = always loadable
+        return p.CanLoadFn(p.RuntimeUserData);
     }
 
 } // namespace PluginRegistry

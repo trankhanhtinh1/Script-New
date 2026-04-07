@@ -107,21 +107,42 @@ private:
 
     static bool CastRaw(int slotId, const Vec3& start, const Vec3& end, uint32_t targetNetId, int castMode) {
         auto& ctx = CoreRuntime::g_ctx;
-        if (!CoreRuntime::IsWritePhase() || !CoreControl::CanCastSpell()) {
+        const bool isWrite = CoreRuntime::IsWritePhase();
+        const bool canCast = CoreControl::CanCastSpell();
+        if (!isWrite || !canCast) {
+            char buf[256] = {};
+            std::snprintf(buf, sizeof(buf),
+                "[EzrealCastHotkeys] CAST FAIL: isWritePhase=%d canCastSpell=%d\r\n",
+                isWrite ? 1 : 0, canCast ? 1 : 0);
+            Log(buf);
             return false;
         }
 
-        if (!Globals::IsValidPtr(ctx.localPlayer) || !Globals::IsValidPtr(ctx.spoofTrampoline)) {
+        const bool validPlayer = Globals::IsValidPtr(ctx.localPlayer);
+        const bool validSpoof = Globals::IsValidPtr(ctx.spoofTrampoline);
+        if (!validPlayer || !validSpoof) {
+            char buf[256] = {};
+            std::snprintf(buf, sizeof(buf),
+                "[EzrealCastHotkeys] CAST FAIL: validPlayer=%d validSpoof=%d player=0x%llX spoof=0x%llX\r\n",
+                validPlayer ? 1 : 0, validSpoof ? 1 : 0,
+                (unsigned long long)ctx.localPlayer, (unsigned long long)ctx.spoofTrampoline);
+            Log(buf);
             return false;
         }
 
         const auto slot = CoreSpellBook::GetSlot(ctx.localPlayer, slotId);
         if (!slot.IsValid()) {
+            Log("[EzrealCastHotkeys] CAST FAIL: slot invalid\r\n");
             return false;
         }
 
         const auto spellInput = slot.GetSpellInput();
         if (!Globals::IsValidPtr(spellInput)) {
+            char buf[256] = {};
+            std::snprintf(buf, sizeof(buf),
+                "[EzrealCastHotkeys] CAST FAIL: spellInput invalid (0x%llX)\r\n",
+                (unsigned long long)spellInput);
+            Log(buf);
             return false;
         }
 
@@ -134,11 +155,17 @@ private:
 
         // Write SpellInput
         if (!slot.SetInputData(targetNetId, start, end)) {
+            Log("[EzrealCastHotkeys] CAST FAIL: SetInputData failed\r\n");
             return false;
         }
 
-        // CastSpellPacket now tries the BB8A20 target-flow first, then falls back to CastSpellSafe.
+        Log("[EzrealCastHotkeys] CAST: calling CastSpellPacket...\r\n");
         const bool ok = CoreControl::CastSpellPacket(slotId, start, end, targetNetId);
+
+        char buf[256] = {};
+        std::snprintf(buf, sizeof(buf),
+            "[EzrealCastHotkeys] CAST: CastSpellPacket returned %d\r\n", ok ? 1 : 0);
+        Log(buf);
 
         // Restore SpellInput
         Globals::Write<uint32_t>(spellInput + Offset::SpellBook::InputTargetNetId, origTargetNetId);
@@ -150,6 +177,31 @@ private:
     }
 
     void TryCastQCursor(const SDK::AIHeroClient& player) {
+        // Diagnostic: dump raw slot state BEFORE IsReady check
+        {
+            const float gt = SDK::Game::Time();
+            const auto slot = CoreSpellBook::GetSlot(player.Address(), 0);
+            char diag[512] = {};
+            if (slot.IsValid()) {
+                std::snprintf(diag, sizeof(diag),
+                    "[EzrealCastHotkeys] Q DIAG: valid=%d level=%d readyAt=%.2f gameTime=%.2f remaining=%.2f "
+                    "hasInfo=%d hasInput=%d stacks=%d\r\n",
+                    1,
+                    slot.GetLevel(),
+                    slot.GetReadyAt(),
+                    gt,
+                    slot.GetRemainingCooldown(gt),
+                    slot.HasSpellInfo() ? 1 : 0,
+                    slot.HasSpellInput() ? 1 : 0,
+                    slot.GetStacks());
+            } else {
+                std::snprintf(diag, sizeof(diag),
+                    "[EzrealCastHotkeys] Q DIAG: slot INVALID (ptr=0x%llX) gameTime=%.2f\r\n",
+                    (unsigned long long)slot.address, gt);
+            }
+            Log(diag);
+        }
+
         if (!m_q.IsReady()) {
             Log("[EzrealCastHotkeys] A blocked: Q not ready\r\n");
             return;

@@ -26,6 +26,8 @@
 #include <new>
 
 #include "core/CrashTelemetry.h"
+#include "core/Offsets.h"
+#include "core/KeyAuth.h"
 
 #pragma comment(lib, "user32.lib")
 
@@ -144,6 +146,100 @@ static DWORD WINAPI OverlayWorker(LPVOID param)
     CrashTelemetry::SetStage("OverlayWorker::Enter");
     MmFlag(16, 0x21);  // Worker entered
     OutputDebugStringA("[NightSharp] OverlayWorker entered\n");
+
+    // ── Key Verification (TEMPORARILY DISABLED) ──
+    /*
+    {
+        CrashTelemetry::SetStage("OverlayWorker::KeyAuth");
+        OutputDebugStringA("[NightSharp] Verifying license key...\n");
+
+        KeyAuth::Status authStatus = KeyAuth::Verify();
+
+        if (authStatus != KeyAuth::Status::Valid) {
+            char msg[512] = {};
+            wsprintfA(msg, "[NightSharp] Key verification FAILED: %s\n", KeyAuth::GetStatusText());
+            OutputDebugStringA(msg);
+
+            // Show error to user via MessageBox
+            char userMsg[512] = {};
+            switch (authStatus) {
+                case KeyAuth::Status::Expired:
+                    wsprintfA(userMsg, "NightSharp: Key has expired!\n\nPlease renew your license.");
+                    break;
+                case KeyAuth::Status::InvalidKey:
+                    wsprintfA(userMsg, "NightSharp: Invalid key!\n\nError: %s", KeyAuth::GetErrorMessage());
+                    break;
+                case KeyAuth::Status::HWIDMismatch:
+                    wsprintfA(userMsg, "NightSharp: HWID mismatch!\n\nPlease reset your HWID in the loader.");
+                    break;
+                case KeyAuth::Status::NetworkError:
+                    wsprintfA(userMsg, "NightSharp: Cannot connect to server!\n\nError: %s", KeyAuth::GetErrorMessage());
+                    break;
+                case KeyAuth::Status::FileNotFound:
+                    wsprintfA(userMsg, "NightSharp: License key not found!\n\nPlease login via NightSharp Loader first.");
+                    break;
+                default:
+                    wsprintfA(userMsg, "NightSharp: Authentication failed!\n\nError: %s", KeyAuth::GetErrorMessage());
+                    break;
+            }
+
+            // Show on separate thread to prevent blocking game
+            struct MsgData { char text[512]; };
+            static MsgData data;
+            lstrcpyA(data.text, userMsg);
+            CreateThread(nullptr, 0, [](LPVOID p) -> DWORD {
+                MsgData* d = (MsgData*)p;
+                MessageBoxA(NULL, d->text, "NightSharp - License Error", MB_OK | MB_ICONERROR);
+                return 0;
+            }, &data, 0, nullptr);
+
+            MmFlag(16, 0xAA);  // Auth failed
+            CrashTelemetry::SetStage("OverlayWorker::KeyAuthFailed");
+            return 0;  // Exit worker — don't load overlay
+        }
+
+        // Key valid!
+        char successMsg[256] = {};
+        wsprintfA(successMsg, "[NightSharp] Key verified! Remaining: %s\n", KeyAuth::GetRemainingTime());
+        OutputDebugStringA(successMsg);
+        MmFlag(16, 0x20);  // Key OK
+    }
+    */
+
+    // ── Wait for game to fully load (GameTime > 3.0f = on fountain) ──
+    // Matches leagueoflegends-master pattern: prevents menu from showing
+    // during loading screen.
+    {
+        CrashTelemetry::SetStage("OverlayWorker::WaitForGame");
+        OutputDebugStringA("[NightSharp] Waiting for game to load (GameTime > 3.0)...\n");
+
+        const uintptr_t base = (uintptr_t)GetModuleHandle(nullptr);
+        const uintptr_t gameTimeAddr = base + Offset::Global::GameTime;
+
+        for (int i = 0; i < 240; ++i) {  // max 240 * 500ms = 120 sec
+            __try {
+                if (gameTimeAddr > 0x10000) {
+                    float gt = *(volatile float*)gameTimeAddr;
+                    if (gt > 3.0f && gt < 1000000.0f) {
+                        char buf[128] = {};
+                        wsprintfA(buf, "[NightSharp] Game loaded! GameTime = %d.%02d\r\n",
+                            (int)gt, (int)(gt * 100) % 100);
+                        //OutputDebugStringA(buf);
+                        break;
+                    }
+                }
+            } __except(1) {}
+
+            if (i > 0 && (i % 20) == 0) {
+                char buf[128] = {};
+                wsprintfA(buf, "[NightSharp] Still waiting... (%d sec)\r\n", (i * 500) / 1000);
+                OutputDebugStringA(buf);
+            }
+            Sleep(500);
+        }
+
+        OutputDebugStringA("[NightSharp] Game ready, starting overlay\n");
+    }
 
     MmFlag(16, 0x22);  // About to start overlay
     CrashTelemetry::SetStage("OverlayWorker::OverlayRun");

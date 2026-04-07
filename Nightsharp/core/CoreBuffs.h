@@ -50,35 +50,23 @@ namespace CoreBuffs {
                 return false;
             }
 
-            const auto nameWrapper = Globals::Read<uintptr_t>(address + Offset::BuffManager::BuffNamePtr);
-            if (!Globals::IsValidPtr(nameWrapper)) {
+            // Chain: buff + 0x10 → ScriptBaseBuff*
+            //        ScriptBaseBuff + 0x8 → char* (direct C-string pointer)
+            // CE verified: ScriptBaseBuff+0x8 is a raw char*, NOT SSO.
+            //   +0x18/+0x20 contain garbage (not length/capacity).
+            const auto scriptBase = Globals::Read<uintptr_t>(address + Offset::BuffManager::BuffNamePtr);
+            if (!Globals::IsValidPtr(scriptBase)) {
                 out[0] = 0;
                 return false;
             }
 
-            const auto dataPtr = Globals::Read<uintptr_t>(nameWrapper + Offset::BuffManager::BuffNameData);
-            const int len = Globals::Read<int>(nameWrapper + Offset::BuffManager::BuffNameLength);
-            const int capacity = Globals::Read<int>(nameWrapper + Offset::BuffManager::BuffNameCapacity);
-            if (!Globals::IsValidPtr(dataPtr) || len <= 0 || len >= maxOut) {
-                out[0] = 0;
-                return false;
-            }
-            if (capacity < len || capacity > 0x10000) {
+            const auto charPtr = Globals::Read<uintptr_t>(scriptBase + Offset::BuffManager::BuffNameData);
+            if (!Globals::IsValidPtr(charPtr)) {
                 out[0] = 0;
                 return false;
             }
 
-            __try {
-                const auto src = reinterpret_cast<const char*>(dataPtr);
-                for (int i = 0; i < len; ++i) {
-                    out[i] = src[i];
-                }
-                out[len] = 0;
-                return true;
-            } __except(1) {
-                out[0] = 0;
-                return false;
-            }
+            return Globals::ReadCString(charPtr, out, maxOut);
         }
     };
 

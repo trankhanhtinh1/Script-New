@@ -2,7 +2,6 @@
 
 #include "PluginManager.h"
 #include "core/RenderTestPlugin.h"
-#include "champions/EzrealCastHotkeyTestPlugin.h"
 #include "champions/EzrealPlugin.h"
 
 namespace Plugins {
@@ -15,9 +14,9 @@ namespace PluginBootstrap {
 
         auto& manager = PluginManager::Get();
         manager.Register<RenderTestPlugin>();
-        manager.Register<EzrealCastHotkeyTestPlugin>();
         manager.Register<EzrealPlugin>();
     }
 
 } // namespace PluginBootstrap
 } // namespace Plugins
+

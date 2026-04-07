@@ -417,7 +417,7 @@ public:
 
     bool CastPredicted(const AIBaseClient& target, HitChance minimum = HitChance::High) const {
         const auto prediction = GetPrediction(target);
-        if (static_cast<int>(prediction.Hitchance) < static_cast<int>(minimum)) {
+        if (prediction.Hitchance < minimum) {
             return false;
         }
 

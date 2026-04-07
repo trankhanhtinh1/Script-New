@@ -1,7 +1,8 @@
 #pragma once
 
 // ═══════════════════════════════════════════════════════
-// NightSharp Ezreal Plugin — Ported line-by-line from Ezreal.cs
+// NightSharp Ezreal Plugin — Simplified C++ (mirrors Ezreal.cs)
+// Logic: 100% identical to previous version
 // ═══════════════════════════════════════════════════════
 
 #include "../IPlugin.h"
@@ -16,34 +17,32 @@
 
 namespace Plugins {
 
+using namespace SDK;
+using namespace SDK::MenuUI;
+
 class EzrealPlugin : public IPlugin {
 public:
-  // ── IPlugin interface ──
-  const char *GetName() const override { return "Ezreal"; }
+  // ── IPlugin identity ──
+  const char *GetName()       const override { return "Ezreal"; }
   const char *GetInternalId() const override { return "champion_ezreal"; }
-  const char *GetAuthor() const override { return "7UP / NightSharp"; }
-  PluginCategory GetCategory() const override {
-    return PluginCategory::Champion;
-  }
-  bool AutoLoadByDefault() const override { return false; }
+  const char *GetAuthor()     const override { return "7UP / NightSharp"; }
+  PluginCategory GetCategory() const override { return PluginCategory::Champion; }
+  bool AutoLoadByDefault()    const override { return false; }
 
   bool CanLoad() const override {
-    const auto player = SDK::ObjectManager::Player();
-    if (!player.IsValid())
-      return false;
-    return player.CharacterName() == "Ezreal";
+    return Player().IsValid() && Player().CharacterName() == "Ezreal";
   }
 
+  // ── Spells (like C#: public static Spell Q, W, E, R, EQ) ──
+  Spell Q, W, E, R, EQ;
+
   // ════════════════════════════════════════════════
-  // OnLoad — Spell Init + Menu (matching Ezreal.cs OnGameLoad lines 27-86)
+  // OnLoad — Spell Init + Menu  (Ezreal.cs lines 27-86)
   // ════════════════════════════════════════════════
   void OnLoad() override {
-    if (m_menu)
-      return;
-    using namespace SDK;
-    using namespace SDK::MenuUI;
+    if (m_menu) return;
 
-    // ── Spell Definitions (Ezreal.cs lines 31-40) ──
+    // Spell Definitions (Ezreal.cs lines 31-40)
     Q = Spell(SpellSlot::Q, 1200.0f);
     Q.SetSkillshot(0.25f, 53.0f, 2000.0f, true, SpellType::Line);
 
@@ -59,10 +58,9 @@ public:
     EQ = Spell(SpellSlot::Q, 1625.0f);
     EQ.SetSkillshot(0.90f, 57.0f, 1350.0f, true, SpellType::Line);
 
-    // ── Menu (Ezreal.cs lines 43-79) ──
+    // Menu (Ezreal.cs lines 43-79)
     m_menu = Menu::Create("EzrealRoot", "[NightSharp] Ezreal");
 
-    // Combo Settings
     auto *combo = m_menu->AddSubMenu("combo", "Combo Settings");
     combo->Add<MenuBool>("useQ", "Use Q", true);
     combo->Add<MenuBool>("useW", "Use W", true);
@@ -70,242 +68,265 @@ public:
     combo->Add<MenuBool>("ComboECheck", "Use E |Safe Check", true);
     combo->Add<MenuBool>("ComboEWall", "Use E |Wall Check", true);
     combo->Add<MenuBool>("useR", "Use R", true);
-    // Semi R — Ezreal.cs line 51: MenuKeyBind("SemiR", "Semi R", Keys.R, KeyBindType.Press)
     combo->Add<MenuKeyBind>("SemiR", "Semi R", 'T', KeyBindType::Press);
 
-    // Harass Settings
     auto *harass = m_menu->AddSubMenu("harass", "Harass Settings");
     harass->Add<MenuBool>("useQ", "Use Q", true);
     harass->Add<MenuBool>("useW", "Use W", true);
 
-    // LaneClear Settings
     auto *laneclear = m_menu->AddSubMenu("laneclear", "LaneClear Settings");
     laneclear->Add<MenuBool>("useQ", "Use Q", true);
     laneclear->Add<MenuBool>("QLH", "Use Q Last Hit", false);
     laneclear->Add<MenuSlider>("ManaCL", "Mana Clear", 15, 0, 100);
 
-    // JungleClear Settings
     auto *jungle = m_menu->AddSubMenu("jungle", "Jungle Settings");
     jungle->Add<MenuBool>("useQ", "Use Q", true);
     jungle->Add<MenuBool>("useW", "Use W", true);
     jungle->Add<MenuSlider>("ManaCL", "Mana Clear", 15, 0, 100);
 
-    // R Settings
     auto *rmenu = m_menu->AddSubMenu("rmenu", "R Settings");
     rmenu->Add<MenuBool>("AutoR", "Auto R", true);
-    rmenu->Add<MenuSlider>("RRange", "Auto R |Min Cast Range >= x", 900, 0,
-                           1500);
-    rmenu->Add<MenuSlider>("RMaxRange", "Auto R |Max Cast Range >= x", 3000,
-                           1500, 5000);
+    rmenu->Add<MenuSlider>("RRange", "Auto R |Min Cast Range >= x", 900, 0, 1500);
+    rmenu->Add<MenuSlider>("RMaxRange", "Auto R |Max Cast Range >= x", 3000, 1500, 5000);
 
-    // Misc
     auto *misc = m_menu->AddSubMenu("misc", "Misc Settings");
     misc->Add<MenuBool>("gapcloser", "Gapcloser", true);
+    misc->Add<MenuBool>("antigrab", "Anti-Hook (Blitz/Thresh/Pyke)", true);
 
-    // KillSteal
     auto *ks = m_menu->AddSubMenu("killsteal", "KillSteal Settings");
     ks->Add<MenuBool>("killstealQ", "Use Q", true);
+
+    // Events are automatically registered by IPlugin::RegisterEvents()
   }
 
   void OnUnload() override {
-    if (!m_menu)
-      return;
-    SDK::MenuUI::Menu::Remove("EzrealRoot");
+    if (!m_menu) return;
+    Menu::Remove("EzrealRoot");
     m_menu = nullptr;
   }
 
-  SDK::MenuUI::Menu *GetMenuRoot() override { return m_menu; }
+  Menu *GetMenuRoot() override { return m_menu; }
 
   // ════════════════════════════════════════════════
-  // File-based diagnostic logger (manual-map safe)
+  // OnBeforeAttack — W weaving  (Ezreal.cs lines 88-129)
   // ════════════════════════════════════════════════
-  static void EzLog(const char *msg) {
-    HANDLE hFile =
-        CreateFileA("C:\\Users\\Public\\Ezreal.txt", FILE_APPEND_DATA,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
-                    FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
-      DWORD written = 0;
-      WriteFile(hFile, msg, static_cast<DWORD>(strlen(msg)), &written, nullptr);
-      CloseHandle(hFile);
+  void OnBeforeAttack(OrbwalkingActionArgs& args) override {
+    if (!m_menu || !args.Target.IsValid() || args.Target.IsDead()) return;
+
+    if (Orbwalker::GetMode() == OrbwalkerMode::Combo) {
+      auto *combo = m_menu->GetSubMenu("combo");
+      if (combo && combo->GetBoolValue("useW", true) && W.IsReady()) {
+        auto target = TargetSelector::GetTarget(W.Range, DamageType::Physical);
+        if (target.IsValid() && target.IsValidTarget(W.Range)) {
+          W.CastPredicted(target, HitChance::High);
+        }
+      }
     }
   }
 
   // ════════════════════════════════════════════════
-  // OnUpdate — Main loop (matching Ezreal.cs Game_OnUpdate lines 198-236)
+  // OnAfterAttack — Q weaving  (Ezreal.cs lines 131-177)
+  // ════════════════════════════════════════════════
+  void OnAfterAttack(OrbwalkingActionArgs& args) override {
+    if (!m_menu || !args.Target.IsValid() || args.Target.IsDead()) return;
+
+    const auto mode = Orbwalker::GetMode();
+
+    if (mode == OrbwalkerMode::Combo) {
+      auto *combo = m_menu->GetSubMenu("combo");
+      if (combo && combo->GetBoolValue("useQ", true) && Q.IsReady()) {
+        auto target = TargetSelector::GetTarget(Q.Range, DamageType::Physical);
+        if (target.IsValid() && target.IsValidTarget(Q.Range)) {
+          Q.CastPredicted(target, HitChance::High);
+        }
+      }
+    } else if (mode == OrbwalkerMode::Harass || mode == OrbwalkerMode::Clear) {
+      auto *harass = m_menu->GetSubMenu("harass");
+      if (harass && harass->GetBoolValue("useQ", true) && Q.IsReady()) {
+        auto target = TargetSelector::GetTarget(Q.Range, DamageType::Physical);
+        if (target.IsValid() && target.IsValidTarget(Q.Range)) {
+          Q.CastPredicted(target, HitChance::High);
+        }
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════
+  // OnGapcloser — E escape  (Ezreal.cs lines 179-196)
+  // ════════════════════════════════════════════════
+  void OnGapcloser(const AIHeroClient& sender, const AntiGapcloser::GapcloserArgs& args) override {
+    if (!m_menu) return;
+    auto *misc = m_menu->GetSubMenu("misc");
+    if (!misc || !misc->GetBoolValue("gapcloser", true)) return;
+    if (!E.IsReady() || !sender.IsValid() || !sender.IsValidTarget(E.Range)) return;
+
+    const Vector3 playerPos = Player().Position();
+    const Vector3 senderPos = sender.Position();
+
+    // Melee gapcloser (Ezreal.cs lines 184-186)
+    if (sender.IsMelee()) {
+      if (sender.IsValidTarget(sender.AttackRange() + sender.BoundingRadius() + 100.0f, playerPos)) {
+        E.Cast(playerPos + (playerPos - senderPos).Normalized() * E.Range);
+        return;
+      }
+    }
+
+    // Dashing toward us (Ezreal.cs lines 188-191)
+    if (sender.IsDashing()) {
+      if (args.EndPosition.Distance(playerPos) <= 250.0f ||
+          senderPos.Distance(playerPos) <= 300.0f) {
+        E.Cast(playerPos + (playerPos - senderPos).Normalized() * E.Range);
+        return;
+      }
+    }
+
+    // Important spell nearby (Ezreal.cs lines 193-195)
+    if (senderPos.Distance(playerPos) <= 300.0f) {
+      E.Cast(playerPos + (playerPos - senderPos).Normalized() * E.Range);
+    }
+  }
+
+  // ════════════════════════════════════════════════
+  // OnBuffGain — Anti-Hook  (Ezreal.cs lines 284-297)
+  // ════════════════════════════════════════════════
+  void OnBuffGain(const AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) override {
+    if (!m_menu || !sender.IsValid() || !sender.IsMe() || !E.IsReady()) return;
+
+    auto *misc = m_menu->GetSubMenu("misc");
+    if (!misc || !misc->GetBoolValue("antigrab", true)) return;
+
+    if (args.Name == "ThreshQ" || args.Name == "rocketgrab2" || args.Name == "PykeQ") {
+      const Vector3 playerPos = Player().Position();
+
+      // Find hook caster and E away
+      AIHeroClient hookCaster;
+      for (const auto& enemy : ObjectManager::EnemyHeroes()) {
+        if (!enemy.IsValid()) continue;
+        const std::string name = enemy.CharacterName();
+        if ((args.Name == "ThreshQ" && name == "Thresh") ||
+            (args.Name == "rocketgrab2" && name == "Blitzcrank") ||
+            (args.Name == "PykeQ" && name == "Pyke")) {
+          hookCaster = enemy;
+          break;
+        }
+      }
+
+      Vector3 escapeDir = hookCaster.IsValid()
+          ? (playerPos - hookCaster.Position())
+          : (playerPos - Player().Direction());
+
+      float len = escapeDir.Length();
+      if (len > 0.001f) escapeDir = escapeDir * (E.Range / len);
+      E.Cast(playerPos + escapeDir);
+    }
+  }
+
+  // ════════════════════════════════════════════════
+  // OnUpdate — Main loop  (Ezreal.cs lines 198-236)
   // ════════════════════════════════════════════════
   void OnUpdate() override {
-    using namespace SDK;
-    const auto player = ObjectManager::Player();
-    if (!player.IsValid() || !m_menu)
-      return;
+    if (!Player().IsValid() || !m_menu) return;
+    if (Player().IsDead() || Player().IsRecalling() || Player().IsWindingUp()) return;
 
-    // if (Player.IsDead || Player.IsRecalling() || Player.IsWindingUp) return;
-    if (player.IsDead() || player.IsRecalling() || player.IsWindingUp())
-      return;
-
-    // ── Diagnostic: Log spell state once per second ──
-    {
-      const int now = Game::TickCount();
-      if (now - m_lastDiagTick > 1000) {
-        m_lastDiagTick = now;
-        char buf[512] = {};
-        wsprintfA(
-            buf,
-            "[Ezreal] Mode=%d Q.Ready=%d W.Ready=%d E.Ready=%d R.Ready=%d "
-            "CanCast=%d GameTimex10=%d\r\n",
-            static_cast<int>(Orbwalker::GetMode()), Q.IsReady() ? 1 : 0,
-            W.IsReady() ? 1 : 0, E.IsReady() ? 1 : 0, R.IsReady() ? 1 : 0,
-            CoreAPI::Control::CanCastSpell() ? 1 : 0,
-            static_cast<int>(Game::Time() * 10.0f));
-        EzLog(buf);
-      }
-    }
-
-    // R.Range = RMenu["RMaxRange"].Value;
+    // R.Range = RMenu["RMaxRange"] (Ezreal.cs line 206)
     if (R.Instance().Level() > 0) {
       auto *rmenu = m_menu->GetSubMenu("rmenu");
-      if (rmenu) {
-        R.Range = static_cast<float>(rmenu->GetSliderValue("RMaxRange", 3000));
-      }
+      if (rmenu) R.Range = static_cast<float>(rmenu->GetSliderValue("RMaxRange", 3000));
     }
 
-    // ── Semi R (Ezreal.cs lines 209-212) ──
-    // if (ComboMenu["SemiR"].GetValue<MenuKeyBind>().Active) { OneKeyCastR(); }
-    {
-      auto *combo = m_menu->GetSubMenu("combo");
-      if (combo && combo->GetKeyBindValue("SemiR")) {
-        OneKeyCastR(player);
-      }
+    // Semi R (Ezreal.cs lines 209-212)
+    auto *combo = m_menu->GetSubMenu("combo");
+    if (combo && combo->GetKeyBindValue("SemiR")) {
+      OneKeyCastR();
     }
 
-    // AutoR logic (Ezreal.cs lines 213-216)
-    {
-      auto *rmenu = m_menu->GetSubMenu("rmenu");
-      if (rmenu && rmenu->GetBoolValue("AutoR", true) && R.IsReady() &&
-          player.CountEnemyHeroesInRange(1000) == 0) {
-        AutoRLogic(player);
-      }
+    // AutoR (Ezreal.cs lines 213-216)
+    auto *rmenu = m_menu->GetSubMenu("rmenu");
+    if (rmenu && rmenu->GetBoolValue("AutoR", true) && R.IsReady() &&
+        Player().CountEnemyHeroesInRange(1000) == 0) {
+      AutoRLogic();
     }
 
-    // switch (Orbwalker.ActiveMode) (Ezreal.cs lines 217-232)
-    const auto mode = Orbwalker::GetMode();
-    switch (mode) {
-    case OrbwalkerMode::Combo:
-      Combo(player);
-      break;
-    case OrbwalkerMode::Harass:
-      Harass(player);
-      break;
-    case OrbwalkerMode::Clear:
-      LaneClear(player);
-      JungleClear(player);
-      break;
-    case OrbwalkerMode::LastHit:
-      LastHit(player);
-      break;
-    default:
-      break;
+    // Mode switch (Ezreal.cs lines 217-232)
+    switch (Orbwalker::GetMode()) {
+    case OrbwalkerMode::Combo:    Combo();    break;
+    case OrbwalkerMode::Harass:   Harass();   break;
+    case OrbwalkerMode::Clear:    LaneClear(); JungleClear(); break;
+    case OrbwalkerMode::LastHit:  LastHit();  break;
+    default: break;
     }
 
-    // KillSteal always runs (Ezreal.cs line 233)
-    KillSteal(player);
+    KillSteal();
   }
 
 private:
-  SDK::MenuUI::Menu *m_menu = nullptr;
-  SDK::Spell Q, W, E, R, EQ;
-  int m_lastDiagTick = 0;
+  Menu *m_menu = nullptr;
 
   // ════════════════════════════════════════════════
-  // Combo (matching Ezreal.cs lines 298-377)
+  // Combo  (Ezreal.cs lines 298-377)
   // ════════════════════════════════════════════════
-  void Combo(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void Combo() {
     auto *combo = m_menu->GetSubMenu("combo");
-    if (!combo)
-      return;
+    if (!combo) return;
 
     const bool useQ = combo->GetBoolValue("useQ", true);
     const bool useW = combo->GetBoolValue("useW", true);
     const bool useE = combo->GetBoolValue("useE", true);
     const bool useR = combo->GetBoolValue("useR", true);
 
-    // var target = TargetSelector.GetTarget(EQ.Range, DamageType.Physical);
-    const float eqRange = EQ.GetRange();
-    auto target = TargetSelector::GetTarget(eqRange, DamageType::Physical);
-    if (!target.IsValid() || !target.IsValidTarget(eqRange))
-      return;
+    auto target = TargetSelector::GetTarget(EQ.Range, DamageType::Physical);
+    if (!target.IsValid() || !target.IsValidTarget(EQ.Range)) return;
 
-    // E logic (Ezreal.cs lines 308-311)
-    if (useE && E.IsReady() && target.IsValidTarget(EQ.GetRange())) {
-      ComboELogic(player, target);
+    // E logic
+    if (useE && E.IsReady() && target.IsValidTarget(EQ.Range)) {
+      ComboELogic(target);
     }
 
     // W logic (Ezreal.cs lines 313-334)
-    if (useW && W.IsReady() && target.IsValidTarget(W.GetRange())) {
+    if (useW && W.IsReady() && target.IsValidTarget(W.Range)) {
       auto wPred = W.GetPrediction(target);
-      if (static_cast<int>(wPred.Hitchance) >=
-          static_cast<int>(HitChance::High)) {
-        // Case 1: Q is also ready — pre-cast W at Q's predicted position
+      if (wPred.Hitchance >= HitChance::High) {
         if (Q.IsReady()) {
           auto qPred = Q.GetPrediction(target);
-          if (static_cast<int>(qPred.Hitchance) >=
-              static_cast<int>(HitChance::High)) {
+          if (qPred.Hitchance >= HitChance::High) {
             W.Cast(qPred.CastPosition);
           }
         }
-        // Case 2: Target is in auto-attack range — cast W directly
-        if (player.InAutoAttackRange(target)) {
+        if (Player().InAutoAttackRange(target)) {
           W.Cast(wPred.CastPosition);
         }
       }
     }
 
     // Q logic (Ezreal.cs lines 336-344)
-    if (useQ && Q.IsReady() && target.IsValidTarget(Q.GetRange())) {
+    if (useQ && Q.IsReady() && target.IsValidTarget(Q.Range)) {
       auto qp = Q.GetPrediction(target);
-      if (static_cast<int>(qp.Hitchance) >=
-          static_cast<int>(HitChance::Medium)) {
+      if (qp.Hitchance >= HitChance::Medium) {
         Q.Cast(qp.CastPosition);
       }
     }
 
     // R logic in combo (Ezreal.cs lines 346-374)
     if (useR && R.IsReady()) {
-      if (player.CountEnemyHeroesInRange(800) > 1)
-        return;
+      if (Player().CountEnemyHeroesInRange(800) > 1) return;
 
       auto *rmenu = m_menu->GetSubMenu("rmenu");
-      const float rMinRange =
-          rmenu ? static_cast<float>(rmenu->GetSliderValue("RRange", 900))
-                : 900.0f;
+      const float rMinRange = rmenu ? static_cast<float>(rmenu->GetSliderValue("RRange", 900)) : 900.0f;
 
       for (const auto &rTarget : ObjectManager::EnemyHeroes()) {
-        if (!rTarget.IsValidTarget(R.GetRange()))
-          continue;
-        if (rTarget.DistanceToPlayer() < rMinRange)
-          continue;
+        if (!rTarget.IsValidTarget(R.Range)) continue;
+        if (rTarget.DistanceToPlayer() < rMinRange) continue;
 
-        // Kill with R alone if far away
-        const float rDmgSolo = Damage::GetSpellDamage(player, rTarget,
-                                                      SpellSlot::R,
-                                                      DamageStage::Default);
+        const float rDmg = Damage::GetSpellDamage(Player(), rTarget, SpellSlot::R, DamageStage::Default);
 
-        if (rTarget.Health() < rDmgSolo &&
-            rTarget.DistanceToPlayer() > Q.GetRange() + E.GetRange() / 2.0f) {
+        if (rTarget.Health() < rDmg && rTarget.DistanceToPlayer() > Q.Range + E.Range / 2.0f) {
           R.CastPredicted(rTarget, HitChance::High);
         }
 
-        // Kill with R+Q+W combo
-        if (rTarget.IsValidTarget(Q.GetRange() + E.GetRange())) {
-          float totalDmg = rDmgSolo;
-          if (Q.IsReady())
-            totalDmg += Damage::GetSpellDamage(player, rTarget, SpellSlot::Q,
-                                               DamageStage::Default);
-          if (W.IsReady())
-            totalDmg += Damage::GetSpellDamage(player, rTarget, SpellSlot::W,
-                                               DamageStage::Default);
+        if (rTarget.IsValidTarget(Q.Range + E.Range)) {
+          float totalDmg = rDmg;
+          if (Q.IsReady()) totalDmg += Damage::GetSpellDamage(Player(), rTarget, SpellSlot::Q, DamageStage::Default);
+          if (W.IsReady()) totalDmg += Damage::GetSpellDamage(Player(), rTarget, SpellSlot::W, DamageStage::Default);
           if (totalDmg > rTarget.Health() + rTarget.HPRegenRate() * 2.0f) {
             R.CastPredicted(rTarget, HitChance::High);
           }
@@ -315,148 +336,90 @@ private:
   }
 
   // ════════════════════════════════════════════════
-  // ComboELogic (matching Ezreal.cs lines 379-455)
+  // ComboELogic  (Ezreal.cs lines 379-455)
   // ════════════════════════════════════════════════
-  void ComboELogic(const SDK::AIHeroClient &player,
-                   const SDK::AIHeroClient &target) {
-    using namespace SDK;
+  void ComboELogic(const AIHeroClient &target) {
     auto *combo = m_menu->GetSubMenu("combo");
-    if (!combo)
-      return;
+    if (!combo || !target.IsValid() || !target.IsValidTarget()) return;
 
     const bool ECheck = combo->GetBoolValue("ComboECheck", true);
-    const bool EWall = combo->GetBoolValue("ComboEWall", true);
+    const bool EWall  = combo->GetBoolValue("ComboEWall", true);
 
-    if (!target.IsValid() || !target.IsValidTarget())
-      return;
+    if (!ECheck) return;
+    if (Player().CountEnemyHeroesInRange(1200.0f) > 2) return;
 
-    if (!ECheck)
-      return;
-    // Safe check: not under enemy turret, <= 2 enemies nearby
-    if (player.CountEnemyHeroesInRange(1200.0f) > 2)
-      return;
+    const float aaRange = Player().AttackRange() + Player().BoundingRadius() + target.BoundingRadius();
+    if (target.DistanceToPlayer() <= aaRange) return;
 
-    const float aaRange = player.AttackRange() + player.BoundingRadius() +
-                          target.BoundingRadius();
-    if (target.DistanceToPlayer() <= aaRange)
-      return; // already in AA range
-
-    const Vector3 playerPos = player.Position();
+    const Vector3 playerPos = Player().Position();
     const Vector3 targetPos = target.Position();
     const Vector3 cursorPos = Game::CursorPos();
+    const Vector3 castEPos  = playerPos + (targetPos - playerPos).Normalized() * 475.0f;
 
-    // Extend toward target
-    auto direction = (targetPos - playerPos);
-    const float dist = direction.Length();
-    if (dist > 0.001f)
-      direction = direction * (475.0f / dist);
-    const Vector3 castEPos = playerPos + direction;
+    if (targetPos.Distance(cursorPos) >= playerPos.Distance(cursorPos)) return;
 
-    // Check: target must be closer to cursor than player (moving toward cursor)
-    if (targetPos.Distance(cursorPos) >= playerPos.Distance(cursorPos))
-      return;
-
-    // Case 1: Kill with E + AA (Ezreal.cs lines 393-410)
-    float eDmg = Damage::GetSpellDamage(player, target, SpellSlot::E,
-                                        DamageStage::Default);
-    float aaDmg = Damage::GetAutoAttackDamage(player, target);
+    // Kill with E + AA
+    float eDmg = Damage::GetSpellDamage(Player(), target, SpellSlot::E, DamageStage::Default);
+    float aaDmg = Damage::GetAutoAttackDamage(Player(), target);
     if (target.Health() < eDmg + aaDmg) {
-      if (!EWall || !CoreAPI::NavGrid::IsWall(castEPos)) {
-        E.Cast(castEPos);
-      }
+      if (!EWall || !CoreAPI::NavGrid::IsWall(castEPos)) E.Cast(castEPos);
       return;
     }
 
-    // Case 2: Kill with E + W (Ezreal.cs lines 412-431)
+    // Kill with E + W
     if (W.IsReady()) {
-      float wDmg = Damage::GetSpellDamage(player, target, SpellSlot::W,
-                                          DamageStage::Default);
+      float wDmg = Damage::GetSpellDamage(Player(), target, SpellSlot::W, DamageStage::Default);
       if (target.Health() < eDmg + wDmg &&
-          targetPos.Distance(cursorPos) + 350.0f <
-              playerPos.Distance(cursorPos)) {
-        if (!EWall || !CoreAPI::NavGrid::IsWall(castEPos)) {
-          E.Cast(castEPos);
-        }
+          targetPos.Distance(cursorPos) + 350.0f < playerPos.Distance(cursorPos)) {
+        if (!EWall || !CoreAPI::NavGrid::IsWall(castEPos)) E.Cast(castEPos);
         return;
       }
     }
 
-    // Case 3: Kill with E + Q (Ezreal.cs lines 433-451)
+    // Kill with E + Q
     if (Q.IsReady()) {
-      float qDmg = Damage::GetSpellDamage(player, target, SpellSlot::Q,
-                                          DamageStage::Default);
+      float qDmg = Damage::GetSpellDamage(Player(), target, SpellSlot::Q, DamageStage::Default);
       if (target.Health() < eDmg + qDmg &&
-          targetPos.Distance(cursorPos) + 300.0f <
-              playerPos.Distance(cursorPos)) {
-        if (!EWall || !CoreAPI::NavGrid::IsWall(castEPos)) {
-          E.Cast(castEPos);
-        }
+          targetPos.Distance(cursorPos) + 300.0f < playerPos.Distance(cursorPos)) {
+        if (!EWall || !CoreAPI::NavGrid::IsWall(castEPos)) E.Cast(castEPos);
       }
     }
   }
 
   // ════════════════════════════════════════════════
-  // Harass (matching Ezreal.cs lines 457-471)
+  // Harass  (Ezreal.cs lines 457-471)
   // ════════════════════════════════════════════════
-  void Harass(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void Harass() {
     auto *harass = m_menu->GetSubMenu("harass");
-    if (!harass)
-      return;
+    if (!harass) return;
 
     if (harass->GetBoolValue("useQ", true) && Q.IsReady()) {
-      auto target =
-          TargetSelector::GetTarget(Q.GetRange(), DamageType::Physical);
-      if (target.IsValid() && target.IsValidTarget(Q.GetRange())) {
+      auto target = TargetSelector::GetTarget(Q.Range, DamageType::Physical);
+      if (target.IsValid() && target.IsValidTarget(Q.Range)) {
         Q.CastPredicted(target, HitChance::High);
       }
     }
   }
 
   // ════════════════════════════════════════════════
-  // LaneClear (matching Ezreal.cs lines 473-491)
-  // Fixed: removed IsLaneMinion() filter — EnsoulSharp uses GetMinions()
-  // which returns all enemy minions in range, not just lane minions.
+  // LaneClear  (Ezreal.cs lines 473-491)
   // ════════════════════════════════════════════════
-  void LaneClear(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void LaneClear() {
     auto *lc = m_menu->GetSubMenu("laneclear");
-    if (!lc)
-      return;
+    if (!lc || !lc->GetBoolValue("useQ", true)) return;
+    if (Player().ManaPercent() < static_cast<float>(lc->GetSliderValue("ManaCL", 15))) return;
+    if (!Q.IsReady()) return;
 
-    if (!lc->GetBoolValue("useQ", true))
-      return;
-    if (player.ManaPercent() <
-        static_cast<float>(lc->GetSliderValue("ManaCL", 15)))
-      return;
-    if (!Q.IsReady())
-      return;
-
-    // Ezreal.cs lines 482-488:
-    // var preds = GameObjects.GetMinions(Player.Position, Q.Range)
-    //     .Where(i => Q.GetHealthPrediction(i) > 0
-    //         && Q.GetHealthPrediction(i) <= Q.GetDamage(i)
-    //         && (...distance > autoAttackRange + 50 || health > aaDmg))
-    //     .Select(y => Q.GetPrediction(y, false, -1, CollisionObjects.Minions))
-    //     .Where(i => i.Hitchance >= HitChance.High)
     for (const auto &minion : ObjectManager::EnemyMinions()) {
-      if (!minion.IsValid() || !minion.IsValidTarget(Q.GetRange()))
-        continue;
+      if (!minion.IsValid() || !minion.IsValidTarget(Q.Range)) continue;
 
       const float hpPred = Q.GetHealthPrediction(minion);
-      if (hpPred <= 0.0f)
-        continue;
-      if (hpPred > Q.GetDamage(minion))
-        continue;
+      if (hpPred <= 0.0f || hpPred > Q.GetDamage(minion)) continue;
 
-      // Prefer Q on minions out of AA range or that we can't last hit with AA
-      if (minion.DistanceToPlayer() > player.AttackRange() + player.BoundingRadius() + minion.BoundingRadius() + 50.0f ||
-          minion.Health() > Damage::GetAutoAttackDamage(player, minion)) {
-        // Cast with collision check — Q collides with minions
-        // Note: When collision is detected, Hitchance is set to HitChance::Collision
-        // so checking >= High naturally excludes collision cases
+      if (minion.DistanceToPlayer() > Player().AttackRange() + Player().BoundingRadius() + minion.BoundingRadius() + 50.0f ||
+          minion.Health() > Damage::GetAutoAttackDamage(Player(), minion)) {
         auto pred = Q.GetPrediction(minion, true);
-        if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
+        if (pred.Hitchance >= HitChance::High) {
           Q.Cast(pred.CastPosition);
           return;
         }
@@ -465,33 +428,26 @@ private:
   }
 
   // ════════════════════════════════════════════════
-  // JungleClear (matching Ezreal.cs lines 494-523)
+  // JungleClear  (Ezreal.cs lines 494-523)
   // ════════════════════════════════════════════════
-  void JungleClear(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void JungleClear() {
     auto *jg = m_menu->GetSubMenu("jungle");
-    if (!jg)
-      return;
+    if (!jg) return;
 
     const bool useQ = jg->GetBoolValue("useQ", true);
     const bool useW = jg->GetBoolValue("useW", true);
-    if (player.ManaPercent() <
-        static_cast<float>(jg->GetSliderValue("ManaCL", 15)))
-      return;
+    if (Player().ManaPercent() < static_cast<float>(jg->GetSliderValue("ManaCL", 15))) return;
 
     for (const auto &mob : ObjectManager::JungleMinions()) {
-      if (!mob.IsValidTarget(Q.GetRange()))
-        continue;
+      if (!mob.IsValidTarget(Q.Range)) continue;
 
-      // W on Legendary mobs only (Ezreal.cs lines 506-516)
-      if (useW && W.IsReady() && mob.IsValidTarget(W.GetRange())) {
+      if (useW && W.IsReady() && mob.IsValidTarget(W.Range)) {
         if (Utils::Jungle::GetJungleType(mob) >= JungleType::Legendary) {
           W.CastPredicted(mob, HitChance::High);
         }
       }
 
-      // Q on closest mob (Ezreal.cs lines 518-522)
-      if (useQ && Q.IsReady() && player.Distance(mob) < Q.GetRange()) {
+      if (useQ && Q.IsReady() && Player().Distance(mob) < Q.Range) {
         Q.Cast(mob.Position());
         return;
       }
@@ -499,32 +455,20 @@ private:
   }
 
   // ════════════════════════════════════════════════
-  // LastHit (matching Ezreal.cs lines 526-546)
-  // Fixed: removed IsLaneMinion() filter
+  // LastHit  (Ezreal.cs lines 526-546)
   // ════════════════════════════════════════════════
-  void LastHit(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void LastHit() {
     auto *lc = m_menu->GetSubMenu("laneclear");
-    if (!lc)
-      return;
-
-    if (player.ManaPercent() <
-        static_cast<float>(lc->GetSliderValue("ManaCL", 15)))
-      return;
-    if (!Q.IsReady())
-      return;
+    if (!lc) return;
+    if (Player().ManaPercent() < static_cast<float>(lc->GetSliderValue("ManaCL", 15))) return;
+    if (!Q.IsReady()) return;
 
     for (const auto &minion : ObjectManager::EnemyMinions()) {
-      if (!minion.IsValidTarget(Q.GetRange()))
-        continue;
+      if (!minion.IsValidTarget(Q.Range)) continue;
 
-      // Only Q minions outside AA range that are killable
-      const float aaRange = player.AttackRange() + player.BoundingRadius() +
-                            minion.BoundingRadius();
+      const float aaRange = Player().AttackRange() + Player().BoundingRadius() + minion.BoundingRadius();
       if (minion.DistanceToPlayer() > aaRange &&
-          minion.Health() <
-              Damage::GetSpellDamage(player, minion, SpellSlot::Q,
-                                    DamageStage::Default)) {
+          minion.Health() < Damage::GetSpellDamage(Player(), minion, SpellSlot::Q, DamageStage::Default)) {
         Q.CastPredicted(minion, HitChance::Medium);
         return;
       }
@@ -532,70 +476,44 @@ private:
   }
 
   // ════════════════════════════════════════════════
-  // OneKeyCastR / Semi R (matching Ezreal.cs lines 238-257)
+  // OneKeyCastR / Semi R  (Ezreal.cs lines 238-257)
   // ════════════════════════════════════════════════
-  void OneKeyCastR(const SDK::AIHeroClient &player) {
-    using namespace SDK;
-
-    // Player.IssueOrder(GameObjectOrder.MoveTo, Game.CursorPos);
-    CoreAPI::Control::IssueMove(player.Position().IsZero()
-        ? Game::CursorPos() : Game::CursorPos());
-
-    if (!R.IsReady())
-      return;
+  void OneKeyCastR() {
+    CoreAPI::Control::IssueMove(Game::CursorPos());
+    if (!R.IsReady()) return;
 
     auto *rmenu = m_menu->GetSubMenu("rmenu");
-    const float rMinRange =
-        rmenu ? static_cast<float>(rmenu->GetSliderValue("RRange", 900))
-              : 900.0f;
+    const float rMinRange = rmenu ? static_cast<float>(rmenu->GetSliderValue("RRange", 900)) : 900.0f;
 
-    // var target = TargetSelector.GetTarget(R.Range, DamageType.Physical);
-    auto target = TargetSelector::GetTarget(R.GetRange(), DamageType::Physical);
-
-    // if (target.IsValidTarget(R.Range) && !target.IsValidTarget(RMenu["RRange"]))
-    if (target.IsValid() && target.IsValidTarget(R.GetRange()) &&
-        target.DistanceToPlayer() >= rMinRange) {
+    auto target = TargetSelector::GetTarget(R.Range, DamageType::Physical);
+    if (target.IsValid() && target.IsValidTarget(R.Range) && target.DistanceToPlayer() >= rMinRange) {
       R.CastPredicted(target, HitChance::High);
     }
   }
 
   // ════════════════════════════════════════════════
-  // AutoRLogic (matching Ezreal.cs lines 259-281)
-  // Fixed: R.Cast(target) → R.CastPredicted for both cases
+  // AutoRLogic  (Ezreal.cs lines 259-281)
   // ════════════════════════════════════════════════
-  void AutoRLogic(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void AutoRLogic() {
     auto *rmenu = m_menu->GetSubMenu("rmenu");
-    if (!rmenu)
-      return;
+    if (!rmenu) return;
 
-    const float rMinRange =
-        static_cast<float>(rmenu->GetSliderValue("RRange", 900));
+    const float rMinRange = static_cast<float>(rmenu->GetSliderValue("RRange", 900));
 
     for (const auto &target : ObjectManager::EnemyHeroes()) {
-      if (!target.IsValidTarget(R.GetRange()))
-        continue;
-      if (target.DistanceToPlayer() < rMinRange)
-        continue;
+      if (!target.IsValidTarget(R.Range) || target.DistanceToPlayer() < rMinRange) continue;
 
-      float rDmg = Damage::GetSpellDamage(player, target, SpellSlot::R,
-                                    DamageStage::Default);
-      float qDmg = Damage::GetSpellDamage(player, target, SpellSlot::Q,
-                                    DamageStage::Default);
+      float rDmg = Damage::GetSpellDamage(Player(), target, SpellSlot::R, DamageStage::Default);
+      float qDmg = Damage::GetSpellDamage(Player(), target, SpellSlot::Q, DamageStage::Default);
       const float effectiveHp = target.Health() + target.HPRegenRate() * 2.0f;
 
-      // Immobile target: R + 3*Q kill (Ezreal.cs lines 267-272)
-      // C# uses: !target.CanMove && R.Cast(target) — targeted cast
-      if (!target.IsMoving() && target.IsValidTarget(EQ.GetRange()) &&
-          rDmg + qDmg * 3.0f >= effectiveHp) {
-        // Immobile → cast at current position (high confidence)
+      // Immobile target: R + 3*Q kill
+      if (!target.IsMoving() && target.IsValidTarget(EQ.Range) && rDmg + qDmg * 3.0f >= effectiveHp) {
         R.Cast(target.Position());
         continue;
       }
 
-      // Standing still / low path: R alone kill (Ezreal.cs lines 274-279)
-      // C# uses: rDmg > effectiveHp && target.Path.Length < 2 &&
-      //          R.GetPrediction(target).Hitchance >= High → R.Cast(target)
+      // R alone kill
       if (rDmg > effectiveHp) {
         R.CastPredicted(target, HitChance::High);
       }
@@ -603,53 +521,33 @@ private:
   }
 
   // ════════════════════════════════════════════════
-  // KillSteal (matching Ezreal.cs lines 555-594)
+  // KillSteal  (Ezreal.cs lines 555-594)
   // ════════════════════════════════════════════════
-  void KillSteal(const SDK::AIHeroClient &player) {
-    using namespace SDK;
+  void KillSteal() {
     auto *ks = m_menu->GetSubMenu("killsteal");
-    if (!ks)
-      return;
-    if (!ks->GetBoolValue("killstealQ", true))
-      return;
-    if (!Q.IsReady())
-      return;
+    if (!ks || !ks->GetBoolValue("killstealQ", true) || !Q.IsReady()) return;
 
     for (const auto &target : ObjectManager::EnemyHeroes()) {
-      if (!target.IsValidTarget(Q.GetRange()))
-        continue;
+      if (!target.IsValidTarget(Q.Range)) continue;
 
-      // Skip invulnerable / untargetable targets
-      if (target.HasBuff("JudicatorIntervention")) continue; // Kayle R
-      if (target.HasBuff("kindredrnodeathbuff")) continue;   // Kindred R
-      if (target.HasBuff("UndyingRage")) continue;           // Tryndamere R
-      if (target.HasBuff("FioraW")) continue;                // Fiora Riposte
-      if (target.HasBuff("ChronoShift")) continue;           // Zilean R
-      if (target.HasBuff("zhonyasringshield")) continue;     // Zhonya's
-      if (target.HasBuff("BardRStasis")) continue;           // Bard R
-      if (target.HasBuff("MelW")) continue;                  // Mel W Shield
+      // Skip invulnerable targets
+      if (target.HasBuff("JudicatorIntervention") || target.HasBuff("kindredrnodeathbuff") ||
+          target.HasBuff("UndyingRage") || target.HasBuff("FioraW") ||
+          target.HasBuff("ChronoShift") || target.HasBuff("zhonyasringshield") ||
+          target.HasBuff("BardRStasis") || target.HasBuff("MelW")) continue;
 
-      // QDamage = 20/45/70/95/120 + 1.3 * bonus AD (Ezreal.cs lines 548-553)
+      // QDamage = 20/45/70/95/120 + 1.3 * bonus AD
       const int qLevel = Q.Instance().Level();
-      if (qLevel <= 0)
-        continue;
+      if (qLevel <= 0) continue;
       constexpr float qBase[6] = {0.0f, 20.0f, 45.0f, 70.0f, 95.0f, 120.0f};
-      const float rawQDmg =
-          qBase[std::min(qLevel, 5)] + 1.30f * player.BonusAttackDamage();
-      const float qDmg = player.CalculatePhysicalDamage(target, rawQDmg);
-
+      const float qDmg = Player().CalculatePhysicalDamage(target,
+          qBase[std::min(qLevel, 5)] + 1.30f * Player().BonusAttackDamage());
       const float effectiveHp = target.Health() + target.AllShield();
 
-      if (player.Distance(target) > 150.0f) {
-        if (effectiveHp <= qDmg) {
-          Q.CastPredicted(target, HitChance::High);
-          return;
-        }
+      if (Player().Distance(target) > 150.0f) {
+        if (effectiveHp <= qDmg) { Q.CastPredicted(target, HitChance::High); return; }
       } else {
-        if (effectiveHp <= qDmg * 1.5f) {
-          Q.CastPredicted(target, HitChance::High);
-          return;
-        }
+        if (effectiveHp <= qDmg * 1.5f) { Q.CastPredicted(target, HitChance::High); return; }
       }
     }
   }

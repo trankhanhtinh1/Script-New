@@ -40,7 +40,8 @@ namespace Plugins {
 
             raw->m_registryIndex = idx;
             PluginRegistry::BindRuntime(idx, raw, &PluginManager::LoadThunk,
-                &PluginManager::UnloadThunk, &PluginManager::MenuRootThunk);
+                &PluginManager::UnloadThunk, &PluginManager::MenuRootThunk,
+                &PluginManager::CanLoadThunk);
 
             m_plugins.push_back(std::move(plugin));
             SyncRegistry(raw);
@@ -53,6 +54,7 @@ namespace Plugins {
             if (!plugin->CanLoad()) return false;
 
             plugin->OnLoad();
+            plugin->RegisterEvents();  // Auto-register virtual event callbacks
             plugin->m_loaded = true;
             SyncRegistry(plugin);
             return true;
@@ -123,6 +125,11 @@ namespace Plugins {
         static SDK::MenuUI::Menu* MenuRootThunk(void* userData) {
             auto* plugin = static_cast<IPlugin*>(userData);
             return plugin ? plugin->GetMenuRoot() : nullptr;
+        }
+
+        static bool CanLoadThunk(void* userData) {
+            auto* plugin = static_cast<IPlugin*>(userData);
+            return plugin ? plugin->CanLoad() : false;
         }
 
         void SyncRegistry(IPlugin* plugin) {

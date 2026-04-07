@@ -104,7 +104,7 @@ constexpr auto IsBaron = ClassificationRuntime::IsBaron;
 constexpr auto IsSelectable = ClassificationRuntime::IsSelectable;
 constexpr auto IsFleeing = ClassificationRuntime::IsFleeing;
 constexpr auto IsNoRender = ClassificationRuntime::IsNoRender;
-constexpr auto CanAttack = ClassificationRuntime::CanAttack;
+constexpr auto CanAttack = ControlRuntime::CanAttack;
 constexpr auto GetSpellCastInfo = ControlRuntime::GetSpellCastInfo;
 constexpr auto GetSpellSlot = ControlRuntime::GetSpellSlot;
 constexpr auto GetResourceType = ControlRuntime::GetResourceType;
@@ -146,16 +146,15 @@ constexpr auto EntryStride = BuffEntryLayout::EntryStride;
 constexpr auto EntryBuff = BuffEntryLayout::EntryBuff;
 constexpr auto EntryAux = BuffEntryLayout::EntryAux;
 constexpr auto BuffType = BuffDataLayout::BuffType;
-constexpr auto BuffNamePtr = BuffDataLayout::BuffNamePtr;
-constexpr auto BuffRemainingTime = BuffDataLayout::BuffRemainingTime;
+constexpr auto BuffNamePtr = BuffDataLayout::BuffScriptPtr;    // 0x10 — ptr to ScriptBaseBuff
+// BuffRemainingTime not in generated; use BuffEndTime as proxy (runtime computes endTime - gameTime)
+constexpr auto BuffRemainingTime = BuffDataLayout::BuffEndTime;
 constexpr auto BuffStartTime = BuffDataLayout::BuffStartTime;
 constexpr auto BuffEndTime = BuffDataLayout::BuffEndTime;
 constexpr auto BuffStacks = BuffDataLayout::BuffStacks;
 constexpr auto BuffStacksAlt = BuffDataLayout::BuffStacksAlt;
-constexpr auto BuffNameData = BuffNameLayout::BuffNameData;
-constexpr auto BuffNameLength = BuffNameLayout::BuffNameLength;
-constexpr auto BuffNameCapacity = BuffNameLayout::BuffNameCapacity;
-// constexpr auto BuffNameStr = BuffNameLayout::BuffNameStr;
+// ScriptBaseBuff + 0x8 = char* (direct C-string pointer, CE verified)
+constexpr auto BuffNameData = 0x8;      // ScriptBaseBuff + 0x8 → char* to buff name
 } // namespace BuffManager
 
 namespace GameObject {
@@ -395,7 +394,7 @@ constexpr auto PreviousPos = InnerCompat::PreviousPos;
 namespace SpellBook {
 constexpr auto Offset = SpellRuntime::SpellBookOffset;
 constexpr auto SpellSlotArray = SpellBookLayout::SpellSlotArray;
-constexpr auto ActiveSpellCast = SpellBookLayout::ActiveSpellCast;
+constexpr auto ActiveSpellCast = SpellRuntime::ActiveSpellCast;
 constexpr auto ActiveSpellCastObject = SpellRuntime::ActiveSpellCast;
 
 constexpr auto SlotLevel = SpellSlotLayout::SlotLevel;

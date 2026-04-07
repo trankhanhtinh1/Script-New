@@ -13,6 +13,7 @@
 #include "../menu/PluginRegistry.h"
 #include "../plugins/PluginBootstrap.h"
 #include "../plugins/PluginManager.h"
+#include "../plugins/NightPackageLoader.h"
 #include "../menu/MenuUI.h"
 #include "../sdk/SDK.h"
 
@@ -418,6 +419,16 @@ void Overlay::Run() {
     Plugins::PluginManager::Get().LoadAuto();
     PluginHostBridge::WireHostAPI();
 
+    // Scan and load external .night plugins from %APPDATA%/NightSharp/Plugin/
+    {
+        int nightLoaded = NightPackageLoader::ScanAndLoadAll();
+        if (nightLoaded > 0) {
+            char buf[128];
+            wsprintfA(buf, "[NightSharp] Loaded %d .night plugin(s)\r\n", nightLoaded);
+            WriteStage(buf);
+        }
+    }
+
     WriteStage("[NightSharp] STAGE 6: Menu + plugin substrate initialized\r\n");
 
     CrashTelemetry::SetStage("Overlay::Run::InitCore");
@@ -571,12 +582,14 @@ void Overlay::Run() {
             CrashTelemetry::SetStage("Overlay::Frame::PluginsUpdate");
             traceFrameStage("PluginsUpdate");
             Plugins::PluginManager::Get().OnUpdate();
+            NightPackageLoader::OnUpdateAll();
             CrashTelemetry::SetStage("Overlay::Frame::MenuRender");
             traceFrameStage("MenuRender");
             NightSharpMenu::Render();
             CrashTelemetry::SetStage("Overlay::Frame::PluginsRender");
             traceFrameStage("PluginsRender");
             Plugins::PluginManager::Get().OnRender();
+            NightPackageLoader::OnRenderAll();
             CrashTelemetry::SetStage("Overlay::Frame::SDKRender");
             traceFrameStage("SDKRender");
             SDK::Bootstrap::Render();
@@ -616,6 +629,7 @@ void Overlay::Run() {
     }
 
     CrashTelemetry::SetStage("Overlay::Run::Cleanup");
+    NightPackageLoader::UnloadAll();
     Plugins::PluginManager::Get().UnloadAll();
     SDK::Bootstrap::Shutdown();
     CoreRuntime::Shutdown();

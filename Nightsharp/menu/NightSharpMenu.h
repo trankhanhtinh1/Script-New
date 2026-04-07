@@ -211,9 +211,15 @@ namespace NightSharpMenu {
             ImGui::PushID(i + idBase);
             ImGui::BeginGroup();
 
+            // Check champion compatibility
+            const bool canLoad = PluginRegistry::CanPluginLoad(i);
+
             ImVec4 statusColor;
             const char* statusText;
-            if (!p.MenuRoot) {
+            if (!canLoad) {
+                statusColor = ImVec4(0.6f, 0.4f, 0.1f, 1.0f);  // Dark orange = incompatible
+                statusText = "[NC]";
+            } else if (!p.MenuRoot) {
                 statusColor = ImVec4(0.9f, 0.6f, 0.1f, 1.0f);
                 statusText = "[!!]";
             } else if (p.Loaded) {
@@ -225,9 +231,12 @@ namespace NightSharpMenu {
             }
             ImGui::TextColored(statusColor, "%s", statusText);
             ImGui::SameLine(0, 8);
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", p.Name);
+            ImGui::TextColored(canLoad ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 0.7f), "%s", p.Name);
 
-            if (!p.MenuRoot) {
+            if (!canLoad) {
+                ImGui::SameLine(0, 8);
+                ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.1f, 0.9f), "(wrong champion)");
+            } else if (!p.MenuRoot) {
                 ImGui::SameLine(0, 8);
                 ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
                     hasRuntime ? "(no menu)" : "(menu init failed)");
@@ -241,7 +250,7 @@ namespace NightSharpMenu {
             if (targetX > ImGui::GetCursorPosX())
                 ImGui::SetCursorPosX(targetX);
 
-            if (p.MenuRoot || hasRuntime) {
+            if (canLoad && (p.MenuRoot || hasRuntime)) {
                 if (p.Loaded) {
                     if (DrawStateButton("unload", "Unload", true, false, buttonW))
                         PluginRegistry::UnloadPlugin(i);
@@ -295,9 +304,14 @@ namespace NightSharpMenu {
             ImGui::BeginGroup();
 
             // Status indicator
+            const bool canLoad = PluginRegistry::CanPluginLoad(i);
+
             ImVec4 statusColor;
             const char* statusText;
-            if (!p.MenuRoot) {
+            if (!canLoad) {
+                statusColor = ImVec4(0.6f, 0.4f, 0.1f, 1.0f);  // Dark orange = incompatible
+                statusText = "[NC]";
+            } else if (!p.MenuRoot) {
                 statusColor = ImVec4(0.9f, 0.6f, 0.1f, 1.0f);  // Orange = no menu
                 statusText = "[!!]";
             } else if (p.Loaded) {
@@ -311,10 +325,13 @@ namespace NightSharpMenu {
             ImGui::SameLine(0, 8);
 
             // Plugin name
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", p.Name);
+            ImGui::TextColored(canLoad ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 0.7f), "%s", p.Name);
 
-            // Show warning if menu creation failed
-            if (!p.MenuRoot) {
+            // Show warning if incompatible or menu creation failed
+            if (!canLoad) {
+                ImGui::SameLine(0, 8);
+                ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.1f, 0.9f), "(wrong champion)");
+            } else if (!p.MenuRoot) {
                 ImGui::SameLine(0, 8);
                 ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
                     hasRuntime ? "(no menu)" : "(menu init failed)");
@@ -330,8 +347,8 @@ namespace NightSharpMenu {
             if (targetX > ImGui::GetCursorPosX())
                 ImGui::SetCursorPosX(targetX);
 
-            // Load/Unload button (works even without MenuRoot — just controls visibility)
-            if (p.MenuRoot || hasRuntime) {
+            // Load/Unload button (disabled for incompatible champions)
+            if (canLoad && (p.MenuRoot || hasRuntime)) {
                 if (p.Loaded) {
                     if (DrawStateButton("unload", "Unload", true, false, buttonW))
                         PluginRegistry::UnloadPlugin(i);
@@ -340,11 +357,11 @@ namespace NightSharpMenu {
                         PluginRegistry::LoadPlugin(i);
                 }
             } else {
-                // Disabled button for plugins without menu
+                // Disabled button for incompatible or plugins without menu
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.2f,0.2f,0.5f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f,0.5f,0.5f,0.8f));
-                ImGui::Button("Error", ImVec2(buttonW, 0));
+                ImGui::Button(canLoad ? "Error" : "N/A", ImVec2(buttonW, 0));
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar();
             }
@@ -462,8 +479,12 @@ namespace NightSharpMenu {
     // ============================================================================
     inline float MaxF(float a, float b) { return a > b ? a : b; }
     inline int MaxI(int a, int b) { return a > b ? a : b; }
-    inline bool IsPrimaryPluginEntry(const PluginRegistry::PluginEntry& p) {
+    inline bool IsPrimaryPluginEntry(const PluginRegistry::PluginEntry& p, int registryIdx = -1) {
         if (!p.Name || !p.Loaded || !p.MenuRoot) {
+            return false;
+        }
+        // Hide champion plugins that don't match current champion
+        if (p.CanLoadFn && !p.CanLoadFn(p.RuntimeUserData)) {
             return false;
         }
         return p.Kind == PluginRegistry::PluginKind::SDK ||
@@ -503,7 +524,7 @@ namespace NightSharpMenu {
 
         for (int i = 0; i < PluginRegistry::PluginCount; i++) {
             auto& p = PluginRegistry::Plugins[i];
-            if (IsPrimaryPluginEntry(p)) {
+            if (IsPrimaryPluginEntry(p, i)) {
                 if (primaryCount < MAX_PRIMARY) {
                     primaryLabels[primaryCount] = p.Name;
                     primaryPluginMap[primaryCount] = i;

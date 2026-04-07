@@ -66,11 +66,13 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <UseMultiToolTask>false</UseMultiToolTask>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;$(ProjectDir)..\platina loader\framework\bypass\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;libcurl_a.lib;libssl.lib;libcrypto.lib;zlib.lib;ws2_32.lib;crypt32.lib;wldap32.lib;winhttp.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\platina loader\framework\bypass\include\lib;$(ProjectDir)..\platina loader\framework\bypass\include\openssl;$(ProjectDir)..\platina loader\framework\bypass\include\zlib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -88,14 +90,16 @@
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <UseMultiToolTask>false</UseMultiToolTask>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;$(ProjectDir)..\platina loader\framework\bypass\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>CURL_STATICLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateManifest>false</GenerateManifest>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;libcurl_a.lib;libssl.lib;libcrypto.lib;zlib.lib;ws2_32.lib;crypt32.lib;wldap32.lib;winhttp.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\platina loader\framework\bypass\include\lib;$(ProjectDir)..\platina loader\framework\bypass\include\openssl;$(ProjectDir)..\platina loader\framework\bypass\include\zlib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -149,6 +153,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core\Globals.h" />
+    <ClInclude Include="core\KeyAuth.h" />
+    <ClInclude Include="core\VerifyUserKey.h" />
+    <ClInclude Include="core\version.h" />
     <ClInclude Include="core\CoreRuntime.h" />
     <ClInclude Include="core\CoreAPI.h" />
     <ClInclude Include="core\CoreGame.h" />

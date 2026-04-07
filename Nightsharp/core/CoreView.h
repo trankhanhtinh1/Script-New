@@ -13,6 +13,27 @@ namespace CoreView {
         bool onScreen = false;
     };
 
+    inline bool GetRendererSize(Vec2& out);
+
+    inline bool IsFiniteFloat(float value) {
+        return value == value && value > -3.4e38f && value < 3.4e38f;
+    }
+
+    inline bool IsPlausibleScreenVec2(const Vec2& value) {
+        if (!IsFiniteFloat(value.x) || !IsFiniteFloat(value.y)) {
+            return false;
+        }
+
+        Vec2 size = {};
+        if (GetRendererSize(size)) {
+            const float maxX = (size.x > 0.0f ? size.x * 2.0f : 8192.0f);
+            const float maxY = (size.y > 0.0f ? size.y * 2.0f : 8192.0f);
+            return value.x >= -maxX && value.x <= maxX && value.y >= -maxY && value.y <= maxY;
+        }
+
+        return value.x >= -8192.0f && value.x <= 8192.0f && value.y >= -8192.0f && value.y <= 8192.0f;
+    }
+
     inline bool GetRendererSize(Vec2& out) {
         const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         if (displaySize.x > 0.0f && displaySize.y > 0.0f) {
@@ -100,6 +121,14 @@ namespace CoreView {
             return false;
         }
 
+        // Current generated RVA for WorldToScreen is only boundary-validated, not
+        // ABI-approved for the 3-arg fastcall used below. Calling the wrong
+        // target every frame is extremely expensive due to repeated exceptions
+        // and can tank FPS, so keep the native path disabled until the callable
+        // contract is re-proven on the live build.
+        screen = {};
+        return false;
+
         using fnWorldToScreen = bool(__fastcall*)(uintptr_t, const Vec3*, Vec3*);
         Vec3 out = {};
         bool ok = false;
@@ -123,7 +152,8 @@ namespace CoreView {
         float matrix[16] = {};
         Vec2 size = {};
         if (!ReadViewProjection(matrix) || !GetRendererSize(size)) {
-            return WorldToScreenCall(world, screen);
+            screen = {};
+            return false;
         }
 
         Vec4 clip = {};
@@ -171,12 +201,18 @@ namespace CoreView {
     inline Vec2 GetMouseScreenPos() {
         const auto mouseVec2 = CoreRuntime::GetContext().mouseScreenVec2;
         if (Globals::IsValidPtr(mouseVec2)) {
-            return Globals::Read<Vec2>(mouseVec2);
+            const Vec2 candidate = Globals::Read<Vec2>(mouseVec2);
+            if (IsPlausibleScreenVec2(candidate)) {
+                return candidate;
+            }
         }
 
         const auto cursor = CoreRuntime::GetContext().cursorInstance;
         if (Globals::IsValidPtr(cursor)) {
-            return Globals::Read<Vec2>(cursor + 0x2C);
+            const Vec2 candidate = Globals::Read<Vec2>(cursor + 0x2C);
+            if (IsPlausibleScreenVec2(candidate)) {
+                return candidate;
+            }
         }
 
         return {};

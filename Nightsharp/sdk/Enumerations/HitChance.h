@@ -14,4 +14,10 @@ enum class HitChance : int {
     Immobile = 8
 };
 
+// Comparison operators so you can write: pred.Hitchance >= HitChance::High
+inline bool operator>=(HitChance lhs, HitChance rhs) { return static_cast<int>(lhs) >= static_cast<int>(rhs); }
+inline bool operator<=(HitChance lhs, HitChance rhs) { return static_cast<int>(lhs) <= static_cast<int>(rhs); }
+inline bool operator>(HitChance lhs, HitChance rhs)  { return static_cast<int>(lhs) >  static_cast<int>(rhs); }
+inline bool operator<(HitChance lhs, HitChance rhs)  { return static_cast<int>(lhs) <  static_cast<int>(rhs); }
+
 } // namespace SDK
