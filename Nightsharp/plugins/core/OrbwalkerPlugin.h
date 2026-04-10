@@ -124,6 +124,9 @@ public:
         // Keybinds
         m_menu->Add<SDK::MenuSeparator>("sep_keys", "--- Keybinds ---");
         m_menu->Add<SDK::MenuKeyBind>("combo", "Combo", VK_SPACE, SDK::KeyBindType::Press);
+        m_menu->Add<SDK::MenuKeyBind>("harass", "Harass", 'C', SDK::KeyBindType::Press);
+        m_menu->Add<SDK::MenuKeyBind>("laneclear", "LaneClear", 'V', SDK::KeyBindType::Press);
+        m_menu->Add<SDK::MenuKeyBind>("lasthit", "LastHit", 'X', SDK::KeyBindType::Press);
         m_menu->Add<SDK::MenuKeyBind>("flee", "Flee", 'Z', SDK::KeyBindType::Press);
         m_menu->Add<SDK::MenuKeyBind>("comboNoMove", "Combo (No Move)", 0, SDK::KeyBindType::Press);
 
@@ -299,8 +302,10 @@ public:
 
         if (m_menu->GetKeyBindValue("combo", false)) return SDK::OrbwalkerMode::Combo;
         if (m_menu->GetKeyBindValue("comboNoMove", false)) return SDK::OrbwalkerMode::Combo;
+        if (m_menu->GetKeyBindValue("harass", false)) return SDK::OrbwalkerMode::Harass;
+        if (m_menu->GetKeyBindValue("laneclear", false)) return SDK::OrbwalkerMode::Clear;
+        if (m_menu->GetKeyBindValue("lasthit", false)) return SDK::OrbwalkerMode::LastHit;
         if (m_menu->GetKeyBindValue("flee", false)) return SDK::OrbwalkerMode::Flee;
-        // TODO: V/C/X/A farm modes removed — will be rewritten
 
         return SDK::OrbwalkerMode::None;
     }
@@ -349,14 +354,13 @@ public:
         float now = SDK::Game::Time();
         if (now < m_blockOrdersUntil) return false;
 
-        std::string champName = player.CharacterName();
-        if (champName == "Kalista") return true;
-
-        if (champName == "Rengar" && player.HasBuff("RengarR")) {
-            extraWindup += 0.05f;
-        }
-
         float windup = player.AttackCastDelay();
+
+        // Safety: Hard windup lock — don't allow move for at least 65% of the windup
+        // This prevents "instant" cancels due to flickering engine state
+        if (now < m_lastAttackCommandTime + windup * 0.65f) return false;
+
+        // Missile launched — allow movement immediately
 
         // Missile launched — allow movement immediately
         auto* settings = m_menu ? m_menu->GetSubMenu("settings") : nullptr;
@@ -481,23 +485,27 @@ private:
 
         // Phase 2: Detect MISSILE LAUNCH — transition: WAS winding up → NOT winding up
         if (!isWindingUp && m_wasWindingUp && !m_missileLaunched) {
-            m_missileLaunched = true;
-            SDK::Orbwalker::Instance().MissileLaunched = true;
+            // Safety: Ensure we haven't just started the windup (ignore flickers)
+            float windup = player.AttackCastDelay();
+            if (now >= m_confirmedAttackStartTime + windup * 0.9f) {
+                m_missileLaunched = true;
+                SDK::Orbwalker::Instance().MissileLaunched = true;
 
-            if (m_lastTarget.IsValid()) {
-                SDK::OrbwalkingActionArgs afterArgs;
-                afterArgs.Target = m_lastTarget;
-                afterArgs.Sender = player;
-                afterArgs.Type = SDK::OrbwalkingType::AfterAttack;
-                afterArgs.Process = true;
-                SDK::Orbwalker::Instance().InvokeAction(afterArgs);
+                if (m_lastTarget.IsValid()) {
+                    SDK::OrbwalkingActionArgs afterArgs;
+                    afterArgs.Target = m_lastTarget;
+                    afterArgs.Sender = player;
+                    afterArgs.Type = SDK::OrbwalkingType::AfterAttack;
+                    afterArgs.Process = true;
+                    SDK::Orbwalker::Instance().InvokeAction(afterArgs);
+                }
             }
         }
 
         // Fallback: if windup time exceeded but still no missile detected
         if (!m_missileLaunched && m_confirmedAttackStartTime > 0.0f) {
             float windup = player.AttackCastDelay();
-            if (now >= m_confirmedAttackStartTime + windup + 0.05f) {
+            if (now >= m_confirmedAttackStartTime + windup + 0.03f) { // reduced from 0.05f for responsiveness
                 m_missileLaunched = true;
                 SDK::Orbwalker::Instance().MissileLaunched = true;
             }
@@ -558,13 +566,117 @@ private:
         if (m_forceChaseActive)
             range += m_forceChaseExtraRange;
 
-        // Combo: hero target only
-        auto hero = GetBestHeroTarget(range);
-        if (hero.IsValid()) return hero;
+        // 1. Combo: hero target only
+        if (m_activeMode == SDK::OrbwalkerMode::Combo) {
+            return GetBestHeroTarget(range);
+        }
 
-        // TODO: farm/harass/lasthit target logic removed — will be rewritten
+        // 2. Special targets (Wards, Barrels, etc.)
+        auto special = GetSpecialTarget(range);
+        if (special.IsValid()) return special;
+
+        // 3. Harass: Hero > Last Hit Minion
+        if (m_activeMode == SDK::OrbwalkerMode::Harass) {
+            auto hero = GetBestHeroTarget(range);
+            if (hero.IsValid()) return hero;
+
+            auto lastHit = GetLastHitTarget(range);
+            if (lastHit.IsValid()) return lastHit;
+        }
+
+        // 4. Last Hit: Only killable minions
+        if (m_activeMode == SDK::OrbwalkerMode::LastHit) {
+            return GetLastHitTarget(range);
+        }
+
+        // 5. Lane Clear: Jungle > Last Hit > Turret > Normal Minion
+        if (m_activeMode == SDK::OrbwalkerMode::Clear) {
+            auto jungle = GetJungleTarget(range);
+            if (jungle.IsValid()) return jungle;
+
+            auto lastHit = GetLastHitTarget(range);
+            if (lastHit.IsValid()) return lastHit;
+
+            auto turret = GetTurretTarget(range);
+            if (turret.IsValid()) return turret;
+
+            return GetLaneClearTarget(range);
+        }
 
         return SDK::AIBaseClient();
+    }
+
+    SDK::AIBaseClient GetSpecialTarget(float range) {
+        auto player = SDK::ObjectManager::Player();
+        auto* attackable = m_menu ? m_menu->GetSubMenu("attackable") : nullptr;
+        if (!attackable) return SDK::AIBaseClient();
+
+        for (auto& minion : SDK::ObjectManager::EnemyMinions()) {
+            if (!minion.IsValid() || !minion.IsAlive() || !minion.IsVisible() || !player.InAutoAttackRange(minion))
+                continue;
+
+            // GP Barrels
+            if (attackable->GetBoolValue("barrels", true) && minion.CharacterName() == "GangplankBarrel") {
+                if (minion.Health() <= 1.0f) return minion;
+            }
+        }
+        return SDK::AIBaseClient();
+    }
+
+    SDK::AIBaseClient GetLastHitTarget(float range) {
+        auto player = SDK::ObjectManager::Player();
+        for (auto& minion : SDK::ObjectManager::EnemyMinions()) {
+            if (!minion.IsValid() || !minion.IsAlive() || !minion.IsVisible() || !player.InAutoAttackRange(minion))
+                continue;
+
+            float damage = player.GetAutoAttackDamage(minion);
+            if (minion.Health() <= damage) {
+                return minion;
+            }
+        }
+        return SDK::AIBaseClient();
+    }
+
+    SDK::AIBaseClient GetJungleTarget(float range) {
+        auto player = SDK::ObjectManager::Player();
+        for (auto& mob : SDK::ObjectManager::JungleMinions()) {
+            if (!mob.IsValid() || !mob.IsAlive() || !mob.IsVisible() || !player.InAutoAttackRange(mob))
+                continue;
+
+            return mob;
+        }
+        return SDK::AIBaseClient();
+    }
+
+    SDK::AIBaseClient GetTurretTarget(float range) {
+        auto player = SDK::ObjectManager::Player();
+        auto* prioritize = m_menu ? m_menu->GetSubMenu("prioritize") : nullptr;
+        if (prioritize && !prioritize->GetBoolValue("turret", true)) return SDK::AIBaseClient();
+
+        for (auto& turret : SDK::ObjectManager::EnemyTurrets()) {
+            if (!turret.IsValid() || !turret.IsAlive() || !turret.IsVisible() || !player.InAutoAttackRange(turret))
+                continue;
+
+            return turret;
+        }
+        return SDK::AIBaseClient();
+    }
+
+    SDK::AIBaseClient GetLaneClearTarget(float range) {
+        auto player = SDK::ObjectManager::Player();
+        SDK::AIBaseClient bestMinion;
+        float lowestHealth = FLT_MAX;
+
+        for (auto& minion : SDK::ObjectManager::EnemyMinions()) {
+            if (!minion.IsValid() || !minion.IsAlive() || !minion.IsVisible() || !player.InAutoAttackRange(minion))
+                continue;
+
+            if (minion.Health() < lowestHealth) {
+                lowestHealth = minion.Health();
+                bestMinion = minion;
+            }
+        }
+        return bestMinion;
     }
 
     SDK::AIBaseClient GetBestHeroTarget(float range) {
@@ -660,13 +772,16 @@ private:
         if (!CanMove()) return;
         if (m_blockMove) return;
 
-        // LimitAttack: skip kiting if AS > 2.5
+        // LimitAttack: skip kiting if AS is extremely high to maintain DPS
         auto* settings = m_menu ? m_menu->GetSubMenu("settings") : nullptr;
         bool limitAttack = settings ? settings->GetBoolValue("limitAttack", false) : false;
         if (limitAttack) {
             float delay = player.AttackDelay();
-            if (delay < 0.3846f && m_autoAttackCounter % 3 != 0)
-                return;
+            if (delay < 0.35f) { // AS > 2.8
+                // Allow movement only if missile launched or very close to finished
+                if (!m_missileLaunched && now < m_confirmedAttackStartTime + player.AttackCastDelay() + 0.02f)
+                    return;
+            }
         }
 
         if (IsComboNoMove()) return;
@@ -762,7 +877,8 @@ private:
 
         // BlockOrders: prevent move/attack for windup safety window
         float ping = SDK::Game::Ping() / 2000.0f; // half-ping in seconds
-        m_blockOrdersUntil = now + 0.07f + ping;
+        float windup = player.AttackCastDelay();
+        m_blockOrdersUntil = now + (windup * 0.8f) + ping;
 
         // Sync SDK state
         SDK::Orbwalker::Instance().LastAutoAttackTick = SDK::Game::TickCount();
