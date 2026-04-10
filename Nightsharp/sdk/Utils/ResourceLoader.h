@@ -3,7 +3,7 @@
 #include "Logging.h"
 #include "ResourceFactory.h"
 #include "ResourceImportAttribute.h"
-#include "../../../Backup/Script-New/Nightsharp/libs/nlohmann/json.hpp"
+#include "../../libs/nlohmann/json.hpp"
 
 #include <functional>
 #include <new>

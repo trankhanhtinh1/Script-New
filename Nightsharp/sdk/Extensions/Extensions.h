@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../Backup/Script-New/Nightsharp/libs/nlohmann/json.hpp"
+#include "../../libs/nlohmann/json.hpp"
 #include "../Core/Game.h"
 #include "../Core/Objects.h"
 #include "../GameObjects/ObjectManager.h"

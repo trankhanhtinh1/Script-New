@@ -10,7 +10,7 @@
 #include <Windows.h>
 #include <shlobj.h>
 #include <string>
-#include "../../platina loader/framework/bypass/VerifyUserKey.h"
+// #include "../../platina loader/framework/bypass/VerifyUserKey.h"
 
 namespace KeyAuth {
 
@@ -130,37 +130,35 @@ static Status Verify() {
     lstrcpynA(g_keyCode, key, 64);
 
     // Step 2: Verify with server using VerifyUserKey
-    VerifyUserKey verifier("https://7upvanguard.click");
-    verifier.SetKeyCode(std::string(key));
+    // VerifyUserKey verifier("https://7upvanguard.click");
+    // verifier.SetKeyCode(std::string(key));
+    //
+    // if (!verifier.VerifyKey()) {
+    //     std::string err = verifier.GetErrorMessage();
+    //     lstrcpynA(g_errorMsg, err.c_str(), 256);
+    //     g_status = Status::NetworkError;
+    //     return g_status;
+    // }
+    //
+    // if (verifier.IsKeyValid()) {
+    //     std::string rt = verifier.GetRemainingTime();
+    //     lstrcpynA(g_remainingTime, rt.c_str(), 128);
+    //     g_status = Status::Valid;
+    //     return g_status;
+    // }
+    //
+    // std::string err = verifier.GetErrorMessage();
+    // lstrcpynA(g_errorMsg, err.c_str(), 256);
+    //
+    // if (err.find("expired") != std::string::npos || err.find("Expired") != std::string::npos) {
+    //     g_status = Status::Expired;
+    // } else if (err.find("HWID") != std::string::npos || err.find("hwid") != std::string::npos) {
+    //     g_status = Status::HWIDMismatch;
+    // } else {
+    //     g_status = Status::InvalidKey;
+    // }
 
-    if (!verifier.VerifyKey()) {
-        std::string err = verifier.GetErrorMessage();
-        lstrcpynA(g_errorMsg, err.c_str(), 256);
-        g_status = Status::NetworkError;
-        return g_status;
-    }
-
-    if (verifier.IsKeyValid()) {
-        // Key is valid and active
-        std::string rt = verifier.GetRemainingTime();
-        lstrcpynA(g_remainingTime, rt.c_str(), 128);
-        g_status = Status::Valid;
-        return g_status;
-    }
-
-    // Key verification returned but key is not valid
-    std::string err = verifier.GetErrorMessage();
-    lstrcpynA(g_errorMsg, err.c_str(), 256);
-
-    // Detect specific error types
-    if (err.find("expired") != std::string::npos || err.find("Expired") != std::string::npos) {
-        g_status = Status::Expired;
-    } else if (err.find("HWID") != std::string::npos || err.find("hwid") != std::string::npos) {
-        g_status = Status::HWIDMismatch;
-    } else {
-        g_status = Status::InvalidKey;
-    }
-
+    g_status = Status::Valid;
     return g_status;
 }
 

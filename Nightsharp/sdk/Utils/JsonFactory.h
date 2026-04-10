@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ResourceFactory.h"
-#include "../../../Backup/Script-New/Nightsharp/libs/nlohmann/json.hpp"
+#include "../../libs/nlohmann/json.hpp"
 
 #include <fstream>
 #include <string>
