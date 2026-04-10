@@ -4,6 +4,7 @@
 #include "../sdk/Wrappers/Orbwalking/OrbwalkerBase.h"
 #include "../sdk/Events/AntiGapcloser.h"
 #include "../sdk/Events/BuffTracker.h"
+#include "../sdk/Events/SpellCastTracker.h"
 
 namespace SDK {
     namespace MenuUI {
@@ -45,6 +46,7 @@ namespace Plugins {
         virtual void OnGapcloser(const SDK::AIHeroClient& sender, const SDK::AntiGapcloser::GapcloserArgs& args) {}
         virtual void OnBuffGain(const SDK::AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) {}
         virtual void OnBuffLose(const SDK::AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) {}
+        virtual void OnProcessSpellCast(const SDK::AIBaseClient& sender, const SDK::Events::SpellCast::ProcessSpellCastEventArgs& args) {}
 
         virtual SDK::MenuUI::Menu* GetMenuRoot() { return nullptr; }
 
@@ -59,16 +61,47 @@ namespace Plugins {
 
         // ── Auto event registration (called by PluginManager after OnLoad) ──
         void RegisterEvents() {
-            s_activePlugin = this;
-            SDK::Orbwalker::Instance().OnBeforeAttack(S_OnBeforeAttack);
-            SDK::Orbwalker::Instance().OnAfterAttack(S_OnAfterAttack);
-            SDK::AntiGapcloser::OnGapcloser(S_OnGapcloser);
-            SDK::Events::BuffTracker::OnBuffGain([](const SDK::AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) {
-                if (s_activePlugin) s_activePlugin->OnBuffGain(sender, args);
-            });
-            SDK::Events::BuffTracker::OnBuffLose([](const SDK::AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) {
-                if (s_activePlugin) s_activePlugin->OnBuffLose(sender, args);
-            });
+            // Add this plugin to the dispatch list (no duplicates)
+            bool alreadyRegistered = false;
+            for (int i = 0; i < s_pluginCount; ++i) {
+                if (s_plugins[i] == this) { alreadyRegistered = true; break; }
+            }
+            if (!alreadyRegistered && s_pluginCount < kMaxPlugins) {
+                s_plugins[s_pluginCount++] = this;
+            }
+
+            // Register static trampolines ONCE (prevents duplicate handler entries)
+            if (!s_handlersRegistered) {
+                s_handlersRegistered = true;
+                SDK::Orbwalker::Instance().OnBeforeAttack(S_OnBeforeAttack);
+                SDK::Orbwalker::Instance().OnAfterAttack(S_OnAfterAttack);
+                SDK::AntiGapcloser::OnGapcloser(S_OnGapcloser);
+                SDK::Events::BuffTracker::OnBuffGain([](const SDK::AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) {
+                    for (int i = 0; i < s_pluginCount; ++i) {
+                        if (s_plugins[i] && s_plugins[i]->m_loaded && s_plugins[i]->m_enabled)
+                            s_plugins[i]->OnBuffGain(sender, args);
+                    }
+                });
+                SDK::Events::BuffTracker::OnBuffLose([](const SDK::AIBaseClient& sender, const SDK::Events::BuffEventArgs& args) {
+                    for (int i = 0; i < s_pluginCount; ++i) {
+                        if (s_plugins[i] && s_plugins[i]->m_loaded && s_plugins[i]->m_enabled)
+                            s_plugins[i]->OnBuffLose(sender, args);
+                    }
+                });
+                SDK::Events::SpellCast::AddOnProcessSpellCast(S_OnProcessSpellCast);
+            }
+        }
+
+        // ── Remove plugin from dispatch list (called on Unload) ──
+        void UnregisterEvents() {
+            for (int i = 0; i < s_pluginCount; ++i) {
+                if (s_plugins[i] == this) {
+                    for (int j = i; j < s_pluginCount - 1; ++j)
+                        s_plugins[j] = s_plugins[j + 1];
+                    s_plugins[--s_pluginCount] = nullptr;
+                    break;
+                }
+            }
         }
 
     private:
@@ -77,19 +110,37 @@ namespace Plugins {
         bool m_enabled = true;
         int m_registryIndex = -1;
 
-        // Static dispatch trampolines
-        static inline IPlugin* s_activePlugin = nullptr;
+        // ── Multi-plugin dispatch array ──
+        static constexpr int kMaxPlugins = 16;
+        static inline IPlugin* s_plugins[kMaxPlugins] = {};
+        static inline int s_pluginCount = 0;
+        static inline bool s_handlersRegistered = false;
 
         static void S_OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-            if (s_activePlugin && args.Type == SDK::OrbwalkingType::BeforeAttack)
-                s_activePlugin->OnBeforeAttack(args);
+            if (args.Type != SDK::OrbwalkingType::BeforeAttack) return;
+            for (int i = 0; i < s_pluginCount; ++i) {
+                if (s_plugins[i] && s_plugins[i]->m_loaded && s_plugins[i]->m_enabled)
+                    s_plugins[i]->OnBeforeAttack(args);
+            }
         }
         static void S_OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-            if (s_activePlugin && args.Type == SDK::OrbwalkingType::AfterAttack)
-                s_activePlugin->OnAfterAttack(args);
+            if (args.Type != SDK::OrbwalkingType::AfterAttack) return;
+            for (int i = 0; i < s_pluginCount; ++i) {
+                if (s_plugins[i] && s_plugins[i]->m_loaded && s_plugins[i]->m_enabled)
+                    s_plugins[i]->OnAfterAttack(args);
+            }
         }
         static void S_OnGapcloser(const SDK::AIHeroClient& sender, const SDK::AntiGapcloser::GapcloserArgs& args) {
-            if (s_activePlugin) s_activePlugin->OnGapcloser(sender, args);
+            for (int i = 0; i < s_pluginCount; ++i) {
+                if (s_plugins[i] && s_plugins[i]->m_loaded && s_plugins[i]->m_enabled)
+                    s_plugins[i]->OnGapcloser(sender, args);
+            }
+        }
+        static void S_OnProcessSpellCast(const SDK::AIBaseClient& sender, const SDK::Events::SpellCast::ProcessSpellCastEventArgs& args) {
+            for (int i = 0; i < s_pluginCount; ++i) {
+                if (s_plugins[i] && s_plugins[i]->m_loaded && s_plugins[i]->m_enabled)
+                    s_plugins[i]->OnProcessSpellCast(sender, args);
+            }
         }
     };
 

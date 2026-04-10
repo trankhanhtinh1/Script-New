@@ -250,7 +250,14 @@ namespace NightSharpMenu {
             if (targetX > ImGui::GetCursorPosX())
                 ImGui::SetCursorPosX(targetX);
 
-            if (canLoad && (p.MenuRoot || hasRuntime)) {
+            if (PluginRegistry::IsBuiltInSDKPlugin(i)) {
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f,0.45f,0.22f,0.95f));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f,0.97f,1.0f,1.0f));
+                ImGui::Button("Built-in", ImVec2(buttonW, 0));
+                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar();
+            } else if (canLoad && (p.MenuRoot || hasRuntime)) {
                 if (p.Loaded) {
                     if (DrawStateButton("unload", "Unload", true, false, buttonW))
                         PluginRegistry::UnloadPlugin(i);
@@ -284,8 +291,11 @@ namespace NightSharpMenu {
     // Hiện danh sách plugin với Load/Unload + Always Load
     // ============================================================================
     inline void DrawSDKPluginsSection() {
-        DrawSectionTitle("SDK Plugin Manager");
+        DrawSectionTitle("SDK Built-ins");
         ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.5f,0.75f,0.5f,1.0f), "Orbwalker and Target Selector are always on.");
+        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "This section is read-only for built-in SDK modules.");
+        ImGui::Separator();
         int sdkCount = PluginRegistry::GetCountByKind(PluginRegistry::PluginKind::SDK);
         if (sdkCount == 0) {
             ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "No SDK plugins registered.");
@@ -369,9 +379,13 @@ namespace NightSharpMenu {
             ImGui::SameLine(0, 8);
 
             // Always Load checkbox — persisted to plugins.ini
-            bool al = p.AlwaysLoad;
-            if (ImGui::Checkbox("Always Load", &al)) {
-                PluginRegistry::SetAlwaysLoad(i, al);
+            if (PluginRegistry::IsBuiltInSDKPlugin(i)) {
+                ImGui::TextColored(ImVec4(0.5f,0.85f,0.5f,1.0f), "Built-in");
+            } else {
+                bool al = p.AlwaysLoad;
+                if (ImGui::Checkbox("Always Load", &al)) {
+                    PluginRegistry::SetAlwaysLoad(i, al);
+                }
             }
 
             ImGui::EndGroup();

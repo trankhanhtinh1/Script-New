@@ -362,41 +362,55 @@ public:
 
     float GetAutoAttackDamage(const GameObject& target, bool includePassives = true) const {
         (void)includePassives;
-        if (!target.IsValid()) {
+        if (!target.IsValid() || !Globals::IsValidPtr(target.Address())) {
             return 0.0f;
         }
 
-        const float rawDamage = TotalAttackDamage();
-        const float armor = target.Armor();
-        if (armor >= 0.0f) {
-            return rawDamage * (100.0f / (100.0f + armor));
+        __try {
+            const float rawDamage = TotalAttackDamage();
+            const float armor = target.Armor();
+            if (armor >= 0.0f) {
+                return rawDamage * (100.0f / (100.0f + armor));
+            }
+            return rawDamage * (2.0f - (100.0f / (100.0f - armor)));
         }
-
-        return rawDamage * (2.0f - (100.0f / (100.0f - armor)));
+        __except (1) {
+            return 0.0f;
+        }
     }
 
     float CalculatePhysicalDamage(const GameObject& target, float rawDamage) const {
-        if (!target.IsValid() || rawDamage <= 0.0f) {
+        if (!target.IsValid() || rawDamage <= 0.0f || !Globals::IsValidPtr(target.Address())) {
             return 0.0f;
         }
 
-        const float mitigatedArmor = target.Armor() - FlatArmorPenetration();
-        if (mitigatedArmor >= 0.0f) {
-            return rawDamage * (100.0f / (100.0f + mitigatedArmor));
+        __try {
+            const float mitigatedArmor = target.Armor() - FlatArmorPenetration();
+            if (mitigatedArmor >= 0.0f) {
+                return rawDamage * (100.0f / (100.0f + mitigatedArmor));
+            }
+            return rawDamage * (2.0f - (100.0f / (100.0f - mitigatedArmor)));
         }
-        return rawDamage * (2.0f - (100.0f / (100.0f - mitigatedArmor)));
+        __except (1) {
+            return 0.0f;
+        }
     }
 
     float CalculateMagicDamage(const GameObject& target, float rawDamage) const {
-        if (!target.IsValid() || rawDamage <= 0.0f) {
+        if (!target.IsValid() || rawDamage <= 0.0f || !Globals::IsValidPtr(target.Address())) {
             return 0.0f;
         }
 
-        const float mitigatedMR = target.SpellBlock() - FlatMagicPenetration();
-        if (mitigatedMR >= 0.0f) {
-            return rawDamage * (100.0f / (100.0f + mitigatedMR));
+        __try {
+            const float mitigatedMR = target.SpellBlock() - FlatMagicPenetration();
+            if (mitigatedMR >= 0.0f) {
+                return rawDamage * (100.0f / (100.0f + mitigatedMR));
+            }
+            return rawDamage * (2.0f - (100.0f / (100.0f - mitigatedMR)));
         }
-        return rawDamage * (2.0f - (100.0f / (100.0f - mitigatedMR)));
+        __except (1) {
+            return 0.0f;
+        }
     }
 
     float CalculateDamage(const GameObject& target, DamageType damageType, float rawDamage) const {

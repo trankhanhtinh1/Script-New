@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <cstdint>
 
+namespace Plugins { class OrbwalkerPlugin; }
+
 namespace SDK {
 
 // --- Event args matching EnsoulSharp OrbwalkingActionArgs ---
@@ -26,6 +28,7 @@ using AfterAttackEventArgs  = OrbwalkingActionArgs;
 
 // --- OrbwalkerBase – matches EnsoulSharp OrbwalkerBase<TK, T> ---
 class OrbwalkerBase {
+    friend class ::Plugins::OrbwalkerPlugin;
 public:
     using ActionHandler = void(*)(OrbwalkingActionArgs&);
 

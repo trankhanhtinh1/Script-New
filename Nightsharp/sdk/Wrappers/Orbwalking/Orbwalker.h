@@ -24,6 +24,7 @@ namespace SDK {
 
 class Orbwalker : public OrbwalkerBase {
 public:
+
   static void TraceStage(const char* stage) {
     CrashTelemetry::SetStage(stage);
   }
@@ -109,6 +110,7 @@ public:
     drawings.AddBool("drawExtraHoldPosition", "Extra Hold Position", false);
     drawings.AddBool("drawKillableMinion", "Killable Minions", false);
     drawings.AddBool("drawKillableMinionFade", "Killable Minions Fade Effect", false);
+    drawings.AddBool("drawActiveMode", "Active Mode", true);
 
     // Advanced
     auto advanced = root.AddMenu("advanced", "Advanced");
@@ -119,7 +121,7 @@ public:
     advanced.AddSlider("movementMaximumDistance", "Maximum Distance", 1500, 500, 1500);
 
     advanced.AddSeparator("separatorDelay", "Delay");
-    advanced.AddSlider("delayMovement", "Movement", 0, 0, 500);
+    advanced.AddSlider("delayMovement", "Movement", 35, 0, 500);
     advanced.AddSlider("delayWindup", "Windup %", 80, 0, 200);
     advanced.AddSlider("delayFarm", "Farm", 30, 0, 200);
 
@@ -142,12 +144,19 @@ public:
     advanced.AddBool("miscMissile", "Use Missile Checks", true);
     advanced.AddBool("miscAttackSpeed", "Don't Kite if Attack Speed > 2.5", true);
 
+    auto misc = root.AddMenu("misc", "Miscellaneous");
+    misc.AddBool("drawChaseRange", "Draw Chase Range", false);
+    misc.AddSlider("forceChaseRange", "Force Chase Extra Range", 0, 0, 500);
+    misc.AddKeyBind("forceChaseKey", "Force Chase Key", 'F', KeyBindType::Press);
+
     // Key Bindings
     root.AddSeparator("separatorKeys", "Key Bindings");
     root.AddKeyBind("lasthitKey", "Last Hit", 'X', KeyBindType::Press);
     root.AddKeyBind("laneclearKey", "Lane Clear", 'V', KeyBindType::Press);
+    root.AddKeyBind("fastLaneClearKey", "Fast LaneClear", 'A', KeyBindType::Press);
     root.AddKeyBind("hybridKey", "Hybrid", 'C', KeyBindType::Press);
     root.AddKeyBind("comboKey", "Combo", VK_SPACE, KeyBindType::Press);
+    root.AddKeyBind("comboNoMoveKey", "Combo (No Move)", 0, KeyBindType::Press);
     root.AddKeyBind("fleeKey", "Flee", 'Z', KeyBindType::Press);
     root.AddBool("enabledOption", "Enabled", true);
   }
@@ -158,10 +167,43 @@ public:
     return instance;
   }
   static Menu* GetMenu() { return Instance().s_menu; }
+  static OrbwalkerMode GetMode() { return Instance().ActiveMode; }
+  static bool IsEnabled() {
+    auto* menu = Instance().s_menu;
+    return menu && menu->GetBoolValue("enabledOption", true);
+  }
+
+  static bool IsComboNoMoveActive() {
+    auto* menu = Instance().s_menu;
+    return menu && menu->GetKeyBindValue("comboNoMoveKey", false);
+  }
+
+  static bool IsForceChaseActive() {
+    auto* menu = Instance().s_menu;
+    if (!menu || Instance().ActiveMode != OrbwalkerMode::Combo) {
+      return false;
+    }
+
+    auto* misc = menu->GetSubMenu("misc");
+    if (!misc) {
+      return false;
+    }
+
+    return misc->GetKeyBindValue("forceChaseKey", false) &&
+           misc->GetSliderValue("forceChaseRange", 0) > 0;
+  }
+
+  static float GetForceChaseExtraRange() {
+    auto* menu = Instance().s_menu;
+    if (!menu) {
+      return 0.0f;
+    }
+
+    auto* misc = menu->GetSubMenu("misc");
+    return misc ? static_cast<float>(misc->GetSliderValue("forceChaseRange", 0)) : 0.0f;
+  }
 
   // ── Public API (static wrappers) ──
-  static OrbwalkerMode GetMode()      { return Instance().ActiveMode; }
-  static bool IsEnabled()             { return Instance().s_menu && Instance().s_menu->GetBoolValue("enabledOption", true); }
   static int  LastAttackTick()        { return Instance().LastAutoAttackTick; }
   static int  LastAutoAttackCommandT(){ return Instance().LastAutoAttackCommandTick; }
   static int  LastMoveTick()          { return Instance().LastMovementOrderTick; }
@@ -169,12 +211,10 @@ public:
   static int  GetTotalAutoAttacks()   { return Instance().TotalAutoAttacks; }
 
   static bool CanAttackNow(float extra = 0.0f) { return Instance().CanAttackFull(extra); }
-  static bool CanMoveNow(float extra = 0.0f)   { return Instance().CanMoveFull(extra); }
-
+  static bool CanMoveNow(float extra = 0.0f) { return Instance().CanMoveFull(extra); }
   static void ForceTarget(const AIBaseClient& t) { Instance().s_forcedTarget = t; }
-  static void ClearForcedTarget()      { Instance().s_forcedTarget = AIBaseClient(); }
+  static void ClearForcedTarget() { Instance().s_forcedTarget = AIBaseClient(); }
   static AIBaseClient GetForcedTarget() { return Instance().s_forcedTarget; }
-
   static void ResetAutoAttackTimer() { Instance().ResetSwingTimer(); }
 
   // ── Block orders (matching C# BlockOrdersUntilTick) ──
@@ -321,6 +361,47 @@ public:
         }
       }
     }
+
+    auto* misc = menu->GetSubMenu("misc");
+    if (misc && misc->GetBoolValue("drawChaseRange", false)) {
+      const float extraRange = GetForceChaseExtraRange();
+      if (extraRange > 0.0f) {
+        const float totalRange = player.AttackRange() + player.BoundingRadius() + extraRange;
+        ImU32 color = IM_COL32(100, 200, 255, 120);
+        if (IsForceChaseActive()) {
+          const float t = std::fmod(Game::Time() * 2.0f, 1.0f);
+          const int r = static_cast<int>(std::sinf(t * 6.2831853f) * 127.0f + 128.0f);
+          const int g = static_cast<int>(std::sinf(t * 6.2831853f + 2.0943951f) * 127.0f + 128.0f);
+          const int b = static_cast<int>(std::sinf(t * 6.2831853f + 4.1887902f) * 127.0f + 128.0f);
+          color = IM_COL32(r, g, b, 200);
+        }
+        Drawing::DrawCircle(player.Position(), totalRange, color, IsForceChaseActive() ? 2.5f : 1.0f);
+      }
+    }
+
+    if (drawings->GetBoolValue("drawActiveMode", true) && Instance().ActiveMode != OrbwalkerMode::None) {
+      const char* modeText = nullptr;
+      switch (Instance().ActiveMode) {
+      case OrbwalkerMode::Combo:   modeText = "Combo"; break;
+      case OrbwalkerMode::Harass:  modeText = "Harass"; break;
+      case OrbwalkerMode::Clear:   modeText = "LaneClear"; break;
+      case OrbwalkerMode::LastHit: modeText = "LastHit"; break;
+      case OrbwalkerMode::Flee:    modeText = "Flee"; break;
+      default: break;
+      }
+
+      if (modeText) {
+        ImDrawList* dl = ImGui::GetBackgroundDrawList();
+        if (dl) {
+          ImVec2 display = ImGui::GetIO().DisplaySize;
+          ImVec2 textSize = ImGui::CalcTextSize(modeText);
+          const float x = display.x * 0.5f - textSize.x * 0.5f;
+          const float y = display.y - 80.0f;
+          dl->AddText(ImVec2(x + 1.0f, y + 1.0f), IM_COL32(0, 0, 0, 180), modeText);
+          dl->AddText(ImVec2(x, y), IM_COL32(255, 255, 255, 220), modeText);
+        }
+      }
+    }
   }
 
   // ── Debug state (kept for diagnostics) ──
@@ -355,13 +436,17 @@ private:
       return;
     }
 
-    // Priority: Flee > Combo > Hybrid > LaneClear > LastHit
+    // Priority: Flee > Combo > ComboNoMove > Hybrid > FastLaneClear > LaneClear > LastHit
     if (s_menu->GetKeyBindValue("fleeKey", false)) {
       ActiveMode = OrbwalkerMode::Flee;
     } else if (s_menu->GetKeyBindValue("comboKey", false)) {
       ActiveMode = OrbwalkerMode::Combo;
+    } else if (s_menu->GetKeyBindValue("comboNoMoveKey", false)) {
+      ActiveMode = OrbwalkerMode::Combo;
     } else if (s_menu->GetKeyBindValue("hybridKey", false)) {
       ActiveMode = OrbwalkerMode::Harass;
+    } else if (s_menu->GetKeyBindValue("fastLaneClearKey", false)) {
+      ActiveMode = OrbwalkerMode::Clear;
     } else if (s_menu->GetKeyBindValue("laneclearKey", false)) {
       ActiveMode = OrbwalkerMode::Clear;
     } else if (s_menu->GetKeyBindValue("lasthitKey", false)) {
@@ -423,6 +508,17 @@ private:
       return true;
     }
 
+    const int now = Game::TickCount();
+    const int ping = CoreAPI::Control::GetPing();
+    const float windupMs = CoreAPI::Control::GetAttackWindup() * 1000.0f;
+    const int sinceAA = now - LastAutoAttackTick;
+
+    // Hard minimum: never move before 85% of windup has elapsed
+    // This prevents false-positive MissileLaunched from polling jitter
+    if (LastAutoAttackTick > 0 && sinceAA < static_cast<int>(windupMs * 0.85f)) {
+      return false;
+    }
+
     float localExtra = extra;
 
     // Rengar Q extra windup (matching C# Orbwalker.CanMove line 278-282)
@@ -436,12 +532,23 @@ private:
     const int sliderVal = advanced ? advanced->GetSliderValue("delayWindup", 80) : 80;
     localExtra += static_cast<float>(sliderVal);
 
-    // C#: disableMissileCheck || !miscMissile
+    // MissileLaunched: trust ONLY if timing also confirms windup is done
     const bool useMissile = advanced ? advanced->GetBoolValue("miscMissile", true) : true;
-    const bool disableMissileCheck = !useMissile;
+    if (MissileLaunched && useMissile) {
+      // Additional timing confirmation: at least 90% of windup must have passed
+      if (sinceAA >= static_cast<int>(windupMs * 0.9f)) {
+        return true;
+      }
+      // If timing doesn't confirm, fall through to normal timing gate
+    }
 
-    // Delegates to OrbwalkerBase::CanMove which checks MissileLaunched first
-    return OrbwalkerBase::CanMove(localExtra, disableMissileCheck);
+    // Normal timing gate: full windup + slider buffer
+    return (now + (ping / 2)) >= (LastAutoAttackTick + static_cast<int>(windupMs + localExtra));
+  }
+
+  int GetMovementOrderDelay() const {
+    auto* advanced = s_menu ? s_menu->GetSubMenu("advanced") : nullptr;
+    return advanced ? advanced->GetSliderValue("delayMovement", 35) : 35;
   }
 
   // ── Attack (matching Orbwalker.cs::Attack) ──
@@ -482,7 +589,8 @@ private:
       MissileLaunched = false;
       LastMovementOrderTick = 0;
 
-      const int baseBlock = 70 + std::min(60, ping);
+      const int movementDelay = GetMovementOrderDelay();
+      const int baseBlock = 70 + movementDelay + std::min(60, ping);
       s_blockOrdersUntil = now + baseBlock;
     }
   }
@@ -497,9 +605,13 @@ private:
     TraceStage("Orbwalker::MoveInternal::Player");
     auto player = ObjectManager::Player();
     if (!player.IsValid()) return;
+    if (ActiveMode == OrbwalkerMode::Combo && IsComboNoMoveActive()) {
+      return;
+    }
 
     TraceStage("Orbwalker::MoveInternal::Throttle");
-    const int minInterval = 70 + std::min(60, CoreAPI::Control::GetPing());
+    const int movementDelay = GetMovementOrderDelay();
+    const int minInterval = 70 + movementDelay + std::min(60, CoreAPI::Control::GetPing());
     if ((now - LastMovementOrderTick) < minInterval) {
       return;
     }
@@ -523,7 +635,10 @@ private:
   AIBaseClient GetTargetInternal() {
     TraceStage("Orbwalker::GetTargetInternal::Enter");
     const auto player = ObjectManager::Player();
-    const float range = player.AttackRange() + player.BoundingRadius() + 100.0f;
+    float range = player.AttackRange() + player.BoundingRadius();
+    if (IsForceChaseActive()) {
+      range += GetForceChaseExtraRange();
+    }
 
     if (s_forcedTarget.IsValid() && s_forcedTarget.IsValidTarget(range, player.Position())) {
       return s_forcedTarget;
@@ -599,16 +714,22 @@ private:
     }
 
     // ── Phase 2: Detect MISSILE LAUNCH (windup ended) ──
-    // MissileLaunched is now only used for AfterAttack events.
-    // Movement control uses pure timing (CanMoveFull), not MissileLaunched.
+    // Safety: only accept missile launch if enough windup time has actually passed.
+    // This prevents false-positive detection from polling jitter/frame drops.
     if (s_wasAttacking && !isCurrentlyWindingUp && !MissileLaunched) {
-      MissileLaunched = true;
-      if (LastTarget.IsValid()) {
-        OrbwalkingActionArgs afterArgs{};
-        afterArgs.Target = LastTarget;
-        afterArgs.Sender = player;
-        afterArgs.Type = OrbwalkingType::AfterAttack;
-        InvokeAction(afterArgs);
+      const int now2 = Game::TickCount();
+      const float windupCheck = CoreAPI::Control::GetAttackWindup() * 1000.0f;
+      const bool enoughTimePassed = (LastAutoAttackTick <= 0) ||
+          ((now2 - LastAutoAttackTick) >= static_cast<int>(windupCheck * 0.6f));
+      if (enoughTimePassed) {
+        MissileLaunched = true;
+        if (LastTarget.IsValid()) {
+          OrbwalkingActionArgs afterArgs{};
+          afterArgs.Target = LastTarget;
+          afterArgs.Sender = player;
+          afterArgs.Type = OrbwalkingType::AfterAttack;
+          InvokeAction(afterArgs);
+        }
       }
     }
 
@@ -616,7 +737,7 @@ private:
     if (!MissileLaunched && LastAutoAttackTick > 0) {
       const int now = Game::TickCount();
       const float windupMs = CoreAPI::Control::GetAttackWindup() * 1000.0f;
-      if ((now - LastAutoAttackTick) >= static_cast<int>(windupMs + 50.0f)) {
+      if ((now - LastAutoAttackTick) >= static_cast<int>(windupMs + 80.0f)) {
         MissileLaunched = true;
         if (LastTarget.IsValid()) {
           OrbwalkingActionArgs afterArgs{};

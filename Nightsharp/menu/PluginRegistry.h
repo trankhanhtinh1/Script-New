@@ -52,6 +52,10 @@ namespace PluginRegistry {
     inline PluginEntry Plugins[MAX_PLUGINS] = {};
     inline int PluginCount = 0;
 
+    inline bool IsBuiltInSDKPlugin(int idx) {
+        return idx >= 0 && idx < PluginCount && Plugins[idx].Kind == PluginKind::SDK;
+    }
+
     // ============================================================================
     // Persistence — WinAPI only (manual map safe)
     // File: %APPDATA%/NightSharp/config/plugins.ini
@@ -94,6 +98,7 @@ namespace PluginRegistry {
         // Write each plugin: internalId=0|1
         for (int i = 0; i < PluginCount; i++) {
             if (!Plugins[i].InternalId) continue;
+            if (IsBuiltInSDKPlugin(i)) continue;
             char line[128] = {};
             wsprintfA(line, "%s=%d\r\n", Plugins[i].InternalId, Plugins[i].AlwaysLoad ? 1 : 0);
             WriteFile(hFile, line, (DWORD)lstrlenA(line), &written, nullptr);
@@ -171,6 +176,11 @@ namespace PluginRegistry {
                 if (*a != *b) match = false;
 
                 if (match) {
+                    if (IsBuiltInSDKPlugin(i)) {
+                        Plugins[i].AlwaysLoad = true;
+                        Plugins[i].Loaded = true;
+                        break;
+                    }
                     Plugins[i].AlwaysLoad = (value == 1);
                     Plugins[i].Loaded = Plugins[i].AlwaysLoad;
                     break;
@@ -192,8 +202,9 @@ namespace PluginRegistry {
         Plugins[idx].InternalId = internalId;
         Plugins[idx].Kind       = kind;
         Plugins[idx].MenuRoot   = menuRoot;
-        Plugins[idx].AlwaysLoad = autoLoad;
-        Plugins[idx].Loaded     = autoLoad;
+        const bool builtInSDK = (kind == PluginKind::SDK);
+        Plugins[idx].AlwaysLoad = builtInSDK ? true : autoLoad;
+        Plugins[idx].Loaded     = builtInSDK ? true : autoLoad;
         return idx;
     }
 
@@ -263,6 +274,12 @@ namespace PluginRegistry {
     inline void LoadPlugin(int idx) {
         if (idx >= 0 && idx < PluginCount) {
             auto& p = Plugins[idx];
+            if (IsBuiltInSDKPlugin(idx)) {
+                p.Loaded = true;
+                p.AlwaysLoad = true;
+                RefreshMenuRoot(idx);
+                return;
+            }
             bool ok = true;
             if (p.RuntimeLoad) {
                 ok = p.RuntimeLoad(p.RuntimeUserData);
@@ -277,6 +294,12 @@ namespace PluginRegistry {
     inline void UnloadPlugin(int idx) {
         if (idx >= 0 && idx < PluginCount) {
             auto& p = Plugins[idx];
+            if (IsBuiltInSDKPlugin(idx)) {
+                p.Loaded = true;
+                p.AlwaysLoad = true;
+                RefreshMenuRoot(idx);
+                return;
+            }
             bool ok = true;
             if (p.RuntimeUnload) {
                 ok = p.RuntimeUnload(p.RuntimeUserData);
@@ -290,6 +313,11 @@ namespace PluginRegistry {
 
     inline void SetAlwaysLoad(int idx, bool value) {
         if (idx >= 0 && idx < PluginCount) {
+            if (IsBuiltInSDKPlugin(idx)) {
+                Plugins[idx].AlwaysLoad = true;
+                Plugins[idx].Loaded = true;
+                return;
+            }
             Plugins[idx].AlwaysLoad = value;
             SaveConfig();  // Persist immediately
         }

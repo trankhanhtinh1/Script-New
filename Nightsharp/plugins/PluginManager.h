@@ -65,6 +65,7 @@ namespace Plugins {
             if (!plugin->m_loaded) return true;
 
             plugin->OnUnload();
+            plugin->UnregisterEvents();
             plugin->m_loaded = false;
             SyncRegistry(plugin);
             return true;

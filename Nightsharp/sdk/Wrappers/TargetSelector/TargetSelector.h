@@ -19,6 +19,13 @@ namespace SDK {
 
 class TargetSelector {
 public:
+    using OverrideGetTargetFn = AIHeroClient(*)(float, DamageType, const Vector3&);
+    using OverrideGetTargetsFn = std::vector<AIHeroClient>(*)(float, DamageType, const Vector3&);
+    using OverrideGetSelectedTargetFn = AIHeroClient(*)();
+    using OverrideSetSelectedTargetFn = void(*)(const AIHeroClient&);
+    using OverrideClearSelectedTargetFn = void(*)();
+    using OverrideGetPriorityFn = int(*)(const AIHeroClient&);
+
     static void Initialize() {
         if (s_initialized) {
             return;
@@ -37,19 +44,60 @@ public:
         return s_menu;
     }
 
+    static void SetOverride(OverrideGetTargetFn getTarget,
+                            OverrideGetTargetsFn getTargets,
+                            OverrideGetSelectedTargetFn getSelectedTarget = nullptr,
+                            OverrideSetSelectedTargetFn setSelectedTarget = nullptr,
+                            OverrideClearSelectedTargetFn clearSelectedTarget = nullptr,
+                            OverrideGetPriorityFn getPriority = nullptr) {
+        s_overrideGetTarget = getTarget;
+        s_overrideGetTargets = getTargets;
+        s_overrideGetSelectedTarget = getSelectedTarget;
+        s_overrideSetSelectedTarget = setSelectedTarget;
+        s_overrideClearSelectedTarget = clearSelectedTarget;
+        s_overrideGetPriority = getPriority;
+    }
+
+    static void ClearOverride() {
+        s_overrideGetTarget = nullptr;
+        s_overrideGetTargets = nullptr;
+        s_overrideGetSelectedTarget = nullptr;
+        s_overrideSetSelectedTarget = nullptr;
+        s_overrideClearSelectedTarget = nullptr;
+        s_overrideGetPriority = nullptr;
+    }
+
+    static bool HasOverride() {
+        return s_overrideGetTarget != nullptr && s_overrideGetTargets != nullptr;
+    }
+
     static void Update() {
+        if (HasOverride()) {
+            return;
+        }
         TargetSelectorSelected::Update();
     }
 
     static AIHeroClient GetSelectedTarget() {
+        if (HasOverride() && s_overrideGetSelectedTarget) {
+            return s_overrideGetSelectedTarget();
+        }
         return TargetSelectorSelected::Target();
     }
 
     static void SetSelectedTarget(const AIHeroClient& target) {
+        if (HasOverride() && s_overrideSetSelectedTarget) {
+            s_overrideSetSelectedTarget(target);
+            return;
+        }
         TargetSelectorSelected::SetTarget(target);
     }
 
     static void ClearSelectedTarget() {
+        if (HasOverride() && s_overrideClearSelectedTarget) {
+            s_overrideClearSelectedTarget();
+            return;
+        }
         TargetSelectorSelected::ClearTarget();
     }
 
@@ -66,6 +114,9 @@ public:
     }
 
     static int GetPriority(const AIHeroClient& hero) {
+        if (HasOverride() && s_overrideGetPriority) {
+            return s_overrideGetPriority(hero);
+        }
         return TargetSelectorModes::TargetSelectorModeManager::GetPriority(hero);
     }
 
@@ -83,6 +134,9 @@ public:
     }
 
     static AIHeroClient GetTarget(float range, DamageType damageType = DamageType::True, const Vector3& from = Vector3()) {
+        if (HasOverride()) {
+            return s_overrideGetTarget(range, damageType, from);
+        }
         const auto targets = GetTargets(range, damageType, from);
         return targets.empty() ? AIHeroClient() : targets.front();
     }
@@ -102,6 +156,9 @@ public:
     }
 
     static std::vector<AIHeroClient> GetTargets(float range, DamageType damageType = DamageType::True, const Vector3& from = Vector3()) {
+        if (HasOverride()) {
+            return s_overrideGetTargets(range, damageType, from);
+        }
         const auto player = ObjectManager::Player();
         const Vector3 origin = from.IsZero() ? player.Position() : from;
 
@@ -165,6 +222,9 @@ public:
     }
 
     static void Render() {
+        if (HasOverride()) {
+            return;
+        }
         const auto current = GetTarget(1500.0f, DamageType::Physical, ObjectManager::Player().Position());
         TargetSelectorDrawing::Render(s_menu, TargetSelectorSelected::Target(), TargetSelectorSelected::ForcedTarget(), current);
     }
@@ -172,6 +232,12 @@ public:
 private:
     static inline bool s_initialized = false;
     static inline Menu* s_menu = nullptr;
+    static inline OverrideGetTargetFn s_overrideGetTarget = nullptr;
+    static inline OverrideGetTargetsFn s_overrideGetTargets = nullptr;
+    static inline OverrideGetSelectedTargetFn s_overrideGetSelectedTarget = nullptr;
+    static inline OverrideSetSelectedTargetFn s_overrideSetSelectedTarget = nullptr;
+    static inline OverrideClearSelectedTargetFn s_overrideClearSelectedTarget = nullptr;
+    static inline OverrideGetPriorityFn s_overrideGetPriority = nullptr;
 };
 
 } // namespace SDK
