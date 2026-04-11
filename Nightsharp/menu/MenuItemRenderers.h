@@ -57,56 +57,73 @@ inline void DrawKeyBindItem(ImDrawList* dl, ImVec2 pos, float panelX, float pane
 
     const char* pressText = Translations::T("Press");
     const char* toggleText = Translations::T("Toggle");
+    const char* modeText = (kb->Type == KBType::Toggle) ? toggleText : pressText;
     const char* keyText = kb->IsListening() ? Translations::T("Press key...") : SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key);
     float padX = ImGui::GetStyle().FramePadding.x;
     float pad2 = padX * 2.0f;
-    float pressW = ImGui::CalcTextSize(pressText).x + pad2;
-    float toggleW = ImGui::CalcTextSize(toggleText).x + pad2;
+    float modeTextW = ImGui::CalcTextSize(pressText).x;
+    float toggleTextW = ImGui::CalcTextSize(toggleText).x;
+    if (toggleTextW > modeTextW) modeTextW = toggleTextW;
+    float arrowW = 18.0f;
+    float modeGap = 4.0f;
+    float modeTotalW = arrowW + modeGap + modeTextW + pad2 + modeGap + arrowW;
+
     float keyTextW = ImGui::CalcTextSize(Translations::T("Press key...")).x;
     float keyNameW = ImGui::CalcTextSize(SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key)).x;
     float keyBtnW = ((keyTextW > keyNameW) ? keyTextW : keyNameW) + pad2;
-    float gap = 4.0f;
-    float totalW = pressW + gap + toggleW + gap + keyBtnW;
+
+    float gap = 6.0f;
+    float totalW = modeTotalW + gap + keyBtnW;
     float startX = panelX + panelW - totalW - 8.0f;
     float btnY = pos.y + 4.0f;
     float btnH = ITEM_H - 8.0f;
 
-    ImU32 colActive = IM_COL32(77, 148, 87, 242);
-    ImU32 colInactive = IM_COL32(36, 41, 61, 242);
+    ImU32 colBtn = IM_COL32(36, 41, 61, 242);
+    ImU32 colKeyActive = IM_COL32(77, 148, 87, 242);
+    ImU32 colKeyListening = IM_COL32(180, 130, 40, 242);
 
     float cx = startX;
-    ImVec2 pressMin = ImVec2(cx, btnY);
-    ImVec2 pressMax = ImVec2(cx + pressW, btnY + btnH);
-    dl->AddRectFilled(pressMin, pressMax, (kb->Type == KBType::Press) ? colActive : colInactive, 7.0f);
-    ImVec2 pts = ImGui::CalcTextSize(pressText);
-    dl->AddText(ImVec2(cx + (pressW - pts.x) * 0.5f, pos.y + (ITEM_H - pts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), pressText);
+    ImVec2 leftMin = ImVec2(cx, btnY);
+    ImVec2 leftMax = ImVec2(cx + arrowW, btnY + btnH);
+    dl->AddRectFilled(leftMin, leftMax, colBtn, 7.0f);
+    ImVec2 lts = ImGui::CalcTextSize("<");
+    dl->AddText(ImVec2(cx + (arrowW - lts.x) * 0.5f, pos.y + (ITEM_H - lts.y) * 0.5f),
+                IM_COL32(245, 247, 255, 255), "<");
 
-    cx += pressW + gap;
-    ImVec2 toggleMin = ImVec2(cx, btnY);
-    ImVec2 toggleMax = ImVec2(cx + toggleW, btnY + btnH);
-    dl->AddRectFilled(toggleMin, toggleMax, (kb->Type == KBType::Toggle) ? colActive : colInactive, 7.0f);
-    ImVec2 tts = ImGui::CalcTextSize(toggleText);
-    dl->AddText(ImVec2(cx + (toggleW - tts.x) * 0.5f, pos.y + (ITEM_H - tts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), toggleText);
+    cx += arrowW + modeGap;
+    float modeBtnW = modeTextW + pad2;
+    ImVec2 modeMin = ImVec2(cx, btnY);
+    ImVec2 modeMax = ImVec2(cx + modeBtnW, btnY + btnH);
+    dl->AddRectFilled(modeMin, modeMax, colBtn, 7.0f);
+    ImVec2 mts = ImGui::CalcTextSize(modeText);
+    dl->AddText(ImVec2(cx + (modeBtnW - mts.x) * 0.5f, pos.y + (ITEM_H - mts.y) * 0.5f),
+                IM_COL32(245, 247, 255, 255), modeText);
 
-    cx += toggleW + gap;
+    cx += modeBtnW + modeGap;
+    ImVec2 rightMin = ImVec2(cx, btnY);
+    ImVec2 rightMax = ImVec2(cx + arrowW, btnY + btnH);
+    dl->AddRectFilled(rightMin, rightMax, colBtn, 7.0f);
+    ImVec2 rts = ImGui::CalcTextSize(">");
+    dl->AddText(ImVec2(cx + (arrowW - rts.x) * 0.5f, pos.y + (ITEM_H - rts.y) * 0.5f),
+                IM_COL32(245, 247, 255, 255), ">");
+
+    cx += arrowW + gap;
     ImVec2 keyMin = ImVec2(cx, btnY);
     ImVec2 keyMax = ImVec2(cx + keyBtnW, btnY + btnH);
-    dl->AddRectFilled(keyMin, keyMax, colInactive, 7.0f);
+    ImU32 keyCol = kb->IsListening() ? colKeyListening : (kb->Active ? colKeyActive : colBtn);
+    dl->AddRectFilled(keyMin, keyMax, keyCol, 7.0f);
     ImVec2 kts = ImGui::CalcTextSize(keyText);
     dl->AddText(ImVec2(cx + (keyBtnW - kts.x) * 0.5f, pos.y + (ITEM_H - kts.y) * 0.5f),
                 IM_COL32(245, 247, 255, 255), keyText);
 
     if (g_inputEnabled) {
-        if (ImGui::IsMouseHoveringRect(pressMin, pressMax, false) && ImGui::IsMouseClicked(0) &&
-            kb->Type != KBType::Press) {
-            kb->Type = KBType::Press;
-            kb->Active = false;
+        if (ImGui::IsMouseHoveringRect(leftMin, leftMax, false) && ImGui::IsMouseClicked(0)) {
+            if (kb->Type == KBType::Toggle) { kb->Type = KBType::Press; kb->Active = false; }
+            else { kb->Type = KBType::Toggle; }
         }
-        if (ImGui::IsMouseHoveringRect(toggleMin, toggleMax, false) && ImGui::IsMouseClicked(0) &&
-            kb->Type != KBType::Toggle) {
-            kb->Type = KBType::Toggle;
+        if (ImGui::IsMouseHoveringRect(rightMin, rightMax, false) && ImGui::IsMouseClicked(0)) {
+            if (kb->Type == KBType::Press) { kb->Type = KBType::Toggle; }
+            else { kb->Type = KBType::Press; kb->Active = false; }
         }
         if (ImGui::IsMouseHoveringRect(keyMin, keyMax, false) && ImGui::IsMouseClicked(0)) {
             kb->StartListening();
@@ -167,7 +184,7 @@ inline void DrawSliderItemInt(ImDrawList* dl, ImVec2 pos, float panelX, float pa
     if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         s_expandedSlider = expanded ? nullptr : s;
     if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        s->SetValue(s->MinValue);
+        s->ResetDefault();
 
     if (expanded) {
         float range = (float)(s->MaxValue - s->MinValue);
@@ -214,7 +231,7 @@ inline void DrawSliderItemFloat(ImDrawList* dl, ImVec2 pos, float panelX, float 
     if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         s_expandedSlider = expanded ? nullptr : s;
     if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        s->Value = s->MinValue;
+        s->ResetDefault();
 
     if (expanded) {
         float range = s->MaxValue - s->MinValue;
@@ -237,75 +254,126 @@ inline void DrawSliderItemFloat(ImDrawList* dl, ImVec2 pos, float panelX, float 
     }
 }
 
-inline void DrawListItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
+inline const void* s_expandedDropdown = nullptr;
+
+struct DropdownState {
+    int selectedIndex;
+    bool expanded;
+    bool changed;
+};
+
+inline void DrawDropdownIndicator(ImDrawList* dl, float rowY, float panelX, float panelW,
+                                   const char* const* labels, int count, int selectedIndex) {
+    if (count <= 0) return;
+    int safeIdx = std::clamp(selectedIndex, 0, count - 1);
+    const char* current = labels[safeIdx];
+
+    float maxW = 0.0f;
+    for (int i = 0; i < count; i++) {
+        float w = ImGui::CalcTextSize(labels[i]).x;
+        if (w > maxW) maxW = w;
+    }
+    float dropW = maxW + 12.0f;
+    float dropX = panelX + panelW - dropW - 8.0f;
+    ImVec2 dropMin = ImVec2(dropX, rowY + 3.0f);
+    ImVec2 dropMax = ImVec2(dropX + dropW, rowY + ITEM_H - 3.0f);
+    bool dropHovered = g_inputEnabled && ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
+
+    dl->AddRectFilled(dropMin, dropMax, dropHovered ? COL_ITEM_HOVER : COL_ITEM, 3.0f);
+    dl->AddRect(dropMin, dropMax, COL_BORDER, 3.0f);
+    ImVec2 ts = ImGui::CalcTextSize(current);
+    dl->AddText(ImVec2(dropX + (dropW - ts.x) * 0.5f, rowY + (ITEM_H - ts.y) * 0.5f),
+                IM_COL32(245, 247, 255, 255), current);
+}
+
+inline float DrawDropdownExpandedRows(ImDrawList* dl, float startY, float panelX, float panelW,
+                                       const char* const* labels, int count, int selectedIndex,
+                                       const void* owner, DropdownState& out) {
+    out.selectedIndex = selectedIndex;
+    out.expanded = true;
+    out.changed = false;
+
+    float y = startY;
+    for (int i = 0; i < count; i++) {
+        ImVec2 rMin = ImVec2(panelX, y);
+        ImVec2 rMax = ImVec2(panelX + panelW, y + ITEM_H);
+        bool isSel = (i == selectedIndex);
+        bool rHov = g_inputEnabled && ImGui::IsMouseHoveringRect(rMin, rMax, false);
+
+        dl->AddRectFilled(rMin, rMax, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_ITEM), 0.0f);
+        dl->AddLine(ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y), COL_BORDER, 1.0f);
+
+        ImVec2 its = ImGui::CalcTextSize(labels[i]);
+        dl->AddText(ImVec2(rMin.x + 24, rMin.y + (ITEM_H - its.y) * 0.5f),
+                    isSel ? COL_ACCENT : COL_TEXT, labels[i]);
+
+        if (g_inputEnabled && rHov && ImGui::IsMouseClicked(0)) {
+            out.selectedIndex = i;
+            out.expanded = false;
+            out.changed = (i != selectedIndex);
+            s_expandedDropdown = nullptr;
+        }
+        y += ITEM_H;
+    }
+    return ITEM_H * (float)count;
+}
+
+inline float DrawListItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
                            SDK::MenuUI::MenuList* lst, bool drawSep = true) {
+    bool expanded = (s_expandedDropdown == lst);
+    int itemCount = (int)lst->Items.size();
+
     ImVec2 mn = ImVec2(panelX, pos.y);
     ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
     bool hovered = g_inputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
 
     if (hovered)
         dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
-    if (drawSep)
-        dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
 
     dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(lst->DisplayName.c_str()));
 
-    if (lst->Items.empty()) return;
-
-    lst->Index = std::clamp(lst->Index, 0, (int)lst->Items.size() - 1);
-    const char* current = lst->Items[lst->Index].c_str();
-
-    float padX = ImGui::GetStyle().FramePadding.x;
-    float pad2 = padX * 2.0f;
-    float maxItemW = 0.0f;
-    for (auto& item : lst->Items) {
-        float w = ImGui::CalcTextSize(item.c_str()).x;
-        if (w > maxItemW) maxItemW = w;
+    if (!lst->Items.empty()) {
+        lst->Index = std::clamp(lst->Index, 0, itemCount - 1);
+        static thread_local const char* s_labelPtrs[64];
+        int ptrCount = itemCount < 64 ? itemCount : 64;
+        for (int i = 0; i < ptrCount; i++)
+            s_labelPtrs[i] = lst->Items[i].c_str();
+        DrawDropdownIndicator(dl, pos.y, panelX, panelW, s_labelPtrs, ptrCount, lst->Index);
     }
-    float itemBtnW = maxItemW + pad2;
-    float arrowW = 18.0f;
-    float gap = 4.0f;
-    float totalW = arrowW + gap + itemBtnW + gap + arrowW;
-    float startX = panelX + panelW - totalW - 8.0f;
-    float btnY = pos.y + 4.0f;
-    float btnH = ITEM_H - 8.0f;
-    ImU32 colBtn = IM_COL32(36, 41, 61, 242);
 
-    float cx = startX;
-    ImVec2 leftMin = ImVec2(cx, btnY);
-    ImVec2 leftMax = ImVec2(cx + arrowW, btnY + btnH);
-    dl->AddRectFilled(leftMin, leftMax, colBtn, 7.0f);
-    ImVec2 lts = ImGui::CalcTextSize("<");
-    dl->AddText(ImVec2(cx + (arrowW - lts.x) * 0.5f, pos.y + (ITEM_H - lts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), "<");
-
-    cx += arrowW + gap;
-    ImVec2 itemMin = ImVec2(cx, btnY);
-    ImVec2 itemMax = ImVec2(cx + itemBtnW, btnY + btnH);
-    dl->AddRectFilled(itemMin, itemMax, colBtn, 7.0f);
-    ImVec2 its = ImGui::CalcTextSize(current);
-    dl->AddText(ImVec2(cx + (itemBtnW - its.x) * 0.5f, pos.y + (ITEM_H - its.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), current);
-
-    cx += itemBtnW + gap;
-    ImVec2 rightMin = ImVec2(cx, btnY);
-    ImVec2 rightMax = ImVec2(cx + arrowW, btnY + btnH);
-    dl->AddRectFilled(rightMin, rightMax, colBtn, 7.0f);
-    ImVec2 rts = ImGui::CalcTextSize(">");
-    dl->AddText(ImVec2(cx + (arrowW - rts.x) * 0.5f, pos.y + (ITEM_H - rts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), ">");
-
-    int prevIdx = lst->Index;
-    if (g_inputEnabled) {
-        if (ImGui::IsMouseHoveringRect(leftMin, leftMax, false) && ImGui::IsMouseClicked(0))
-            lst->Index = (lst->Index - 1 + (int)lst->Items.size()) % (int)lst->Items.size();
-        if (ImGui::IsMouseHoveringRect(rightMin, rightMax, false) && ImGui::IsMouseClicked(0))
-            lst->Index = (lst->Index + 1) % (int)lst->Items.size();
-        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-            lst->SetIndex(0);
+    if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        s_expandedDropdown = expanded ? nullptr : lst;
+    if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        int prevIdx = lst->Index;
+        lst->SetIndex(0);
+        if (lst->Index != prevIdx) lst->NotifyValueChanged();
     }
-    if (lst->Index != prevIdx)
+
+    if (!expanded || lst->Items.empty()) {
+        if (drawSep)
+            dl->AddLine(ImVec2(panelX, pos.y + ITEM_H), ImVec2(panelX + panelW, pos.y + ITEM_H), COL_BORDER, 1.0f);
+        return ITEM_H;
+    }
+
+    static thread_local const char* s_labelPtrs2[64];
+    int ptrCount = itemCount < 64 ? itemCount : 64;
+    for (int i = 0; i < ptrCount; i++)
+        s_labelPtrs2[i] = lst->Items[i].c_str();
+
+    DropdownState ds;
+    float extraH = DrawDropdownExpandedRows(dl, pos.y + ITEM_H, panelX, panelW,
+                                             s_labelPtrs2, ptrCount, lst->Index, lst, ds);
+    if (ds.changed) {
+        lst->Index = ds.selectedIndex;
         lst->NotifyValueChanged();
+    }
+    if (!ds.expanded)
+        expanded = false;
+
+    float totalH = ITEM_H + extraH;
+    if (drawSep)
+        dl->AddLine(ImVec2(panelX, pos.y + totalH), ImVec2(panelX + panelW, pos.y + totalH), COL_BORDER, 1.0f);
+    return totalH;
 }
 
 inline void DrawSeparatorItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
@@ -393,6 +461,8 @@ inline float EstimateItemHeight(SDK::MenuItem* item) {
         return (s_expandedSlider == s) ? ITEM_H * 2.0f : ITEM_H;
     if (auto* sf = dynamic_cast<SDK::MenuUI::MenuSliderF*>(item))
         return (s_expandedSlider == sf) ? ITEM_H * 2.0f : ITEM_H;
+    if (auto* lst = dynamic_cast<SDK::MenuUI::MenuList*>(item))
+        return (s_expandedDropdown == lst) ? ITEM_H + ITEM_H * (float)lst->Items.size() : ITEM_H;
     return ITEM_H;
 }
 
@@ -417,8 +487,7 @@ inline float DrawItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
         return (s_expandedSlider == sf) ? ITEM_H * 2.0f : ITEM_H;
     }
     if (auto* lst = dynamic_cast<SDK::MenuUI::MenuList*>(item)) {
-        DrawListItem(dl, pos, panelX, panelW, lst, drawSep);
-        return ITEM_H;
+        return DrawListItem(dl, pos, panelX, panelW, lst, drawSep);
     }
     if (auto* sep = dynamic_cast<SDK::MenuUI::MenuSeparator*>(item)) {
         DrawSeparatorItem(dl, pos, panelX, panelW, sep);

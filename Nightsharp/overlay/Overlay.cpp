@@ -444,7 +444,6 @@ void Overlay::Run() {
 
     Plugins::PluginBootstrap::EnsureRegistered();
     PluginRegistry::LoadConfig();
-    // NOTE: LoadAuto() moved after Bootstrap::Init() — plugins need SDK menus to exist
     PluginHostBridge::WireHostAPI();
 
 

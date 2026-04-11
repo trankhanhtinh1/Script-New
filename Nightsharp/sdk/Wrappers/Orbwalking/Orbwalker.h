@@ -210,6 +210,16 @@ public:
   static AIBaseClient GetLastTarget() { return Instance().LastTarget; }
   static int  GetTotalAutoAttacks()   { return Instance().TotalAutoAttacks; }
 
+  static float TimeUntilNextAttack() {
+      const int now = Game::TickCount();
+      const int ping = CoreAPI::Control::GetPing();
+      const float attackDelayMs = CoreAPI::Control::GetAttackDelay() * 1000.0f;
+      const int nextAttackTick = Instance().LastAutoAttackTick + static_cast<int>(attackDelayMs);
+      const int adjusted = now + (ping / 2) + 25;
+      if (adjusted >= nextAttackTick) return 0.0f;
+      return static_cast<float>(nextAttackTick - adjusted) / 1000.0f;
+  }
+
   static bool CanAttackNow(float extra = 0.0f) { return Instance().CanAttackFull(extra); }
   static bool CanMoveNow(float extra = 0.0f) { return Instance().CanMoveFull(extra); }
   static void ForceTarget(const AIBaseClient& t) { Instance().s_forcedTarget = t; }

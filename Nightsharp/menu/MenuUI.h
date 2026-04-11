@@ -283,6 +283,7 @@ namespace MenuUI {
 
         int GetValue() const { return Value; }
         void SetValue(int value) { Value = std::clamp(value, MinValue, MaxValue); }
+        void ResetDefault() { Value = m_default; }
 
         float EstimateMinWidth() const override {
             float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
@@ -308,6 +309,8 @@ namespace MenuUI {
         MenuSliderF(const std::string& name, const std::string& display,
                     float defaultValue, float minVal, float maxVal)
             : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue), m_default(defaultValue) {}
+
+        void ResetDefault() { Value = m_default; }
 
         float EstimateMinWidth() const override {
             float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
@@ -356,10 +359,8 @@ namespace MenuUI {
                 float w = ImGui::CalcTextSize(item.c_str()).x;
                 if (w > maxItemW) maxItemW = w;
             }
-            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
-            float itemBtnW = maxItemW + pad2;
-            float arrowBtnW = ImGui::GetFrameHeight();
-            return labelW + 20.0f + arrowBtnW + 6.0f + itemBtnW + 6.0f + arrowBtnW;
+            float dropW = maxItemW + 12.0f;
+            return labelW + 20.0f + dropW + 8.0f;
         }
     private:
         int m_prev;
@@ -448,13 +449,15 @@ namespace MenuUI {
         float EstimateMinWidth() const override {
             float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
             float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
-            float pressW = ImGui::CalcTextSize(Translations::T("Press")).x + pad2;
-            float toggleW = ImGui::CalcTextSize(Translations::T("Toggle")).x + pad2;
+            float modeTextW = ImGui::CalcTextSize(Translations::T("Press")).x;
+            float toggleTextW = ImGui::CalcTextSize(Translations::T("Toggle")).x;
+            if (toggleTextW > modeTextW) modeTextW = toggleTextW;
+            float arrowW = 18.0f;
+            float modeTotalW = arrowW + 4.0f + modeTextW + pad2 + 4.0f + arrowW;
             float pressKeyW = ImGui::CalcTextSize(Translations::T("Press key...")).x + pad2;
             float keyNameW = ImGui::CalcTextSize(GetKeyName(Key)).x + pad2;
             float keyBtnW = (pressKeyW > keyNameW ? pressKeyW : keyNameW);
-            float onOffW = ImGui::CalcTextSize(Translations::T("On")).x;
-            return labelW + 20.0f + pressW + 6.0f + toggleW + 6.0f + keyBtnW + 6.0f + onOffW;
+            return labelW + 20.0f + modeTotalW + 6.0f + keyBtnW + 8.0f;
         }
 
     public:

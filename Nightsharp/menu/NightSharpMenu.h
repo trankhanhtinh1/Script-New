@@ -740,9 +740,10 @@ namespace NightSharpMenu {
                 activeSecondaryIdx = 0;
 
             int& langIndex = Translations::langIndex;
-            static bool langDropOpen = false;
+            static const int s_langDropdownId = 0;
             const char* const langItems[] = { "EN", "CN", "VN" };
             constexpr int langItemCount = 3;
+            bool langDropOpen = (MenuRenderers::s_expandedDropdown == &s_langDropdownId);
             int langExtraRows = (activePlugMap < 0 && langDropOpen) ? langItemCount : 0;
 
             secondaryH = HEADER_H + ITEM_H * (float)MaxI(1, secCount + langExtraRows) + 4;
@@ -768,20 +769,9 @@ namespace NightSharpMenu {
                 if (!secLabel) secLabel = "?";
 
                 if (activePlugMap < 0 && i == 0) {
-                    float maxLangW = 0.0f;
-                    for (int li = 0; li < langItemCount; li++) {
-                        float lw = ImGui::CalcTextSize(langItems[li]).x;
-                        if (lw > maxLangW) maxLangW = lw;
-                    }
-                    float dropW = maxLangW + 12.0f;
-                    float dropX = secondaryPos.x + SECONDARY_W - dropW - 6.0f;
                     ImVec2 mn = ImVec2(secondaryPos.x, y);
                     ImVec2 mx = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
-
                     bool rowHovered = g_inputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
-                    ImVec2 dropMin = ImVec2(dropX, y + 3.0f);
-                    ImVec2 dropMax = ImVec2(dropX + dropW, y + ITEM_H - 3.0f);
-                    bool dropHovered = g_inputEnabled && ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
 
                     bool langRowActive = secondarySelected && activeSecondaryIdx == i;
                     if (rowHovered || langRowActive)
@@ -791,14 +781,11 @@ namespace NightSharpMenu {
                     dl->AddLine(ImVec2(mn.x, mx.y), ImVec2(mx.x, mx.y), COL_BORDER, 1.0f);
                     dl->AddText(ImVec2(secondaryPos.x + 12, y + 7), COL_TEXT, secLabel);
 
-                    dl->AddRectFilled(dropMin, dropMax, dropHovered ? COL_ITEM_HOVER : COL_ITEM, 3.0f);
-                    dl->AddRect(dropMin, dropMax, COL_BORDER, 3.0f);
-                    const char* cur = langItems[langIndex];
-                    ImVec2 ts = ImGui::CalcTextSize(cur);
-                    dl->AddText(ImVec2(dropX + (dropW - ts.x) * 0.5f, y + (ITEM_H - ts.y) * 0.5f), COL_TEXT, cur);
+                    MenuRenderers::DrawDropdownIndicator(dl, y, secondaryPos.x, SECONDARY_W,
+                                                         langItems, langItemCount, langIndex);
 
-                    if (rowHovered && ImGui::IsMouseClicked(0)) {
-                        langDropOpen = !langDropOpen;
+                    if (g_inputEnabled && rowHovered && ImGui::IsMouseClicked(0)) {
+                        MenuRenderers::s_expandedDropdown = langDropOpen ? nullptr : &s_langDropdownId;
                         activeSecondaryIdx = i;
                         secondarySelected = true;
                     }
@@ -806,33 +793,23 @@ namespace NightSharpMenu {
                     y += ITEM_H;
 
                     if (langDropOpen) {
-                        for (int li = 0; li < langItemCount; li++) {
-                            ImVec2 rMin = ImVec2(secondaryPos.x, y);
-                            ImVec2 rMax = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
-                            bool isSel = (li == langIndex);
-                            bool rHov = g_inputEnabled && ImGui::IsMouseHoveringRect(rMin, rMax, false);
-
-                            dl->AddRectFilled(rMin, rMax, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_ITEM), 0.0f);
-                            dl->AddLine(ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y), COL_BORDER, 1.0f);
-
-                            ImVec2 its = ImGui::CalcTextSize(langItems[li]);
-                            dl->AddText(ImVec2(rMin.x + 24, rMin.y + (ITEM_H - its.y) * 0.5f),
-                                        isSel ? COL_ACCENT : COL_TEXT, langItems[li]);
-
-                            if (rHov && ImGui::IsMouseClicked(0)) {
-                                langIndex = li;
-                                Translations::SaveLangIndex();
-                                Translations::FlushMissTranslations();
-                            }
-                            y += ITEM_H;
+                        MenuRenderers::DropdownState ds;
+                        float extraH = MenuRenderers::DrawDropdownExpandedRows(
+                            dl, y, secondaryPos.x, SECONDARY_W,
+                            langItems, langItemCount, langIndex, &s_langDropdownId, ds);
+                        if (ds.changed) {
+                            langIndex = ds.selectedIndex;
+                            Translations::SaveLangIndex();
+                            Translations::FlushMissTranslations();
                         }
+                        y += extraH;
                     }
                 } else {
                     if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W,
                                         secLabel, secondarySelected && activeSecondaryIdx == i, true)) {
                         activeSecondaryIdx = i;
                         secondarySelected = true;
-                        langDropOpen = false;
+                        MenuRenderers::s_expandedDropdown = nullptr;
                     }
                     y += ITEM_H;
                 }

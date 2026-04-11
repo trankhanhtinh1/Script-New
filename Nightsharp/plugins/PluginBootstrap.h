@@ -23,11 +23,9 @@ namespace PluginBootstrap {
         registered = true;
 
         auto& manager = PluginManager::Get();
-        // Core plugins first
         manager.Register<OrbwalkerPlugin>();
         manager.Register<TargetSelectorPlugin>();
         manager.Register<RenderTestPlugin>();
-        // Champion plugins
         manager.Register<EzrealPlugin>();
         manager.Register<JinxPlugin>();
         manager.Register<XerathPlugin>();
