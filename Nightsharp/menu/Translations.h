@@ -198,6 +198,7 @@ namespace Translations {
         d["Extra Range Setting"] = { .cn = "额外范围设置", .vn = "" };
         d["Prioritize"] = { .cn = "优先级", .vn = "" };
         d["Farm"] = { .cn = "发育", .vn = "" };
+        d["Ezreal"] = { .cn = "伊澤瑞爾", .vn = "" };
     }
 
     inline void InitTranslations() {

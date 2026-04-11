@@ -101,6 +101,12 @@ namespace Plugins {
         void OnUpdate() {
             RefreshRegistryViews();
             for (auto& plugin : m_plugins) {
+                if (!plugin->m_loaded) {
+                    const int idx = plugin->m_registryIndex;
+                    if (idx >= 0 && PluginRegistry::Plugins[idx].AlwaysLoad) {
+                        if (Load(plugin.get())) continue;
+                    }
+                }
                 if (plugin->m_loaded && plugin->m_enabled) {
                     plugin->OnUpdate();
                 }
