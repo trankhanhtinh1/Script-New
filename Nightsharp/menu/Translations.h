@@ -88,7 +88,7 @@ namespace Translations {
         if (!g_missing || g_missing->empty() || !g_missingDirty) return;
         g_missingDirty = false;
 
-        const char* path = "C:\\Users\\admin\\Desktop\\NNN\\New\\miss_translations.txt";
+        const char* path = "C:\\Users\\Public\\miss_translations.txt";
 
         HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, nullptr,
             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
