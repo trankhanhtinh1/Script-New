@@ -77,7 +77,9 @@ namespace Plugins {
                 if (idx < 0) continue;
 
                 if (PluginRegistry::Plugins[idx].AlwaysLoad) {
-                    Load(plugin.get());
+                    if (!Load(plugin.get())) {
+                        SyncRegistry(plugin.get());
+                    }
                 } else {
                     Unload(plugin.get());
                 }
