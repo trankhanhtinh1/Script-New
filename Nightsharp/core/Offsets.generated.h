@@ -36,7 +36,7 @@ namespace GameRuntime {
     constexpr auto MySpellState = 0x1DC5AF8;   // 48 8B 15 ? ? ? ? 85 DB 78 [signature was not learned into a strict rule]
     constexpr auto CursorPosRaw = 0x1E4F610;   // 48 89 1D ? ? ? ? 48 89 1D ? ? ? ? E8 ? ? ? ? 48 39 1D ? ? ? ? [signature was not learned into a strict rule]
     constexpr auto MouseScreenVec2 = 0x1DC2D48;   // 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B C8 48 83 C4 ? [signature was not learned into a strict rule]
-    constexpr auto GetPing = 0x673680;   // 48 8B C4 57 48 83 EC ? 8B 51 ? [signature was not learned into a strict rule]
+    constexpr auto GetPing = 0x673720;   // E8 ? ? ? ? 8B F8 39 03 [signature was not learned into a strict rule]
     constexpr auto GetMapID = 0x298FD0;   // E8 ? ? ? ? 48 8D 8F ? ? ? ? 89 47 ? [signature was not learned into a strict rule]
     constexpr auto PrintChat = 0x10CE620;   // E8 ? ? ? ? 48 83 C4 ? C3 CC CC CC CC CC CC 4C 8B DC 53 [signature was not learned into a strict rule]
 } // namespace GameRuntime

@@ -779,13 +779,38 @@ private:
             if (!min.IsValid() || !min.IsAlive() || !min.IsVisible()) continue;
             if (p.Distance(min) > range + min.BoundingRadius()) continue;
 
+            float hpNow = min.Health();
             float dmg = p.GetAutoAttackDamage(min);
+            if (dmg <= 0.0f) continue;
 
-            // HealthPrediction now fed by missile-based AA tracking (RuntimeAPI)
+            // Use Default mode — Simulated requires full attack simulation
+            // which NightSharp SDK doesn't support (C# EnsoulSharp tracks all game events).
+            // Default mode uses registered attacks from missile tracking + SpellCast events.
             float hp = SDK::HealthPrediction::GetPrediction(
-                min, predTime, farmDelay, SDK::HealthPredictionType::Simulated);
+                min, predTime, farmDelay, SDK::HealthPredictionType::Default);
 
-            if (dmg > 0.0f && hp > 0.0f && hp <= dmg) {
+            // If HealthPrediction didn't track any damage (hp unchanged),
+            // use heuristic ONLY if ally minions are nearby (within 1500 of this minion).
+            // No ally minions = no incoming damage = just push freely.
+            if (fabsf(hp - hpNow) < 1.0f) {
+                bool allyNearby = false;
+                for (const auto& ally : SDK::ObjectManager::AllyMinions()) {
+                    if (ally.IsValid() && ally.IsAlive() && ally.Distance(min) < 1500.0f) {
+                        allyNearby = true;
+                        break;
+                    }
+                }
+                if (!allyNearby) continue;  // No ally minion = no wait needed
+
+                float gameMin = SDK::Game::Time() / 60.0f;
+                float waveDPS = 50.0f + gameMin * 2.5f;
+                if (waveDPS > 150.0f) waveDPS = 150.0f;
+                float estimatedIncoming = (float)predTime / 1000.0f * waveDPS;
+                hp = hpNow - estimatedIncoming;
+                if (hp < 0.0f) hp = 0.0f;
+            }
+
+            if (hp > 0.0f && hp <= dmg) {
                 return true;
             }
         }
@@ -829,18 +854,31 @@ private:
             if (barrel.IsValid()) return barrel;
         }
 
+        // Target step logger (throttled)
+        auto LogStep = [&](const char* step) {
+            static DWORD s_lastStepLog = 0;
+            DWORD tnow = GetTickCount();
+            if (m_activeMode == SDK::OrbwalkerMode::Clear && (tnow - s_lastStepLog) > 2000) {
+                s_lastStepLog = tnow;
+                bool sw = ShouldWait(range);
+                char buf[128] = {};
+                std::snprintf(buf, sizeof(buf), "[Target] step=%s sw=%d\r\n", step, sw ? 1 : 0);
+                DbgLog(buf);
+            }
+        };
+
         // ── Step 3: Minion last-hit (C# line 1106-1137) ──
         DbgStage("OrbPlugin::Target::LastHit");
         if (m_activeMode != SDK::OrbwalkerMode::Combo) {
             auto lh = GetLastHitMinion();
-            if (lh.IsValid()) return lh;
+            if (lh.IsValid()) { LogStep("3:LastHit"); return lh; }
         }
 
         // ── Step 4: Turret + Inhibitor + Nexus (C# line 1144-1168) ──
         DbgStage("OrbPlugin::Target::Structures");
         if (m_activeMode != SDK::OrbwalkerMode::Combo) {
             auto st = GetStructure();
-            if (st.IsValid()) return st;
+            if (st.IsValid()) { LogStep("4:Structure"); return st; }
         }
 
         // ── Step 5: Hero target (C# line 1170-1179) ──
@@ -848,7 +886,7 @@ private:
         if (m_activeMode != SDK::OrbwalkerMode::LastHit &&
             (m_activeMode != SDK::OrbwalkerMode::Clear || !ShouldWait(range))) {
             auto hero = GetBestHero(range + findRange);
-            if (hero.IsValid()) return hero;
+            if (hero.IsValid()) { LogStep("5:Hero"); return hero; }
         }
 
         // ── Step 6: Special minions if prioritized (C# line 1181-1188) ──
@@ -856,7 +894,7 @@ private:
         if (priMenu && priMenu->GetBoolValue("specialMinion", false) &&
             m_activeMode != SDK::OrbwalkerMode::Combo && !ShouldWait(range)) {
             auto sp = GetSpecialMinion();
-            if (sp.IsValid()) return sp;
+            if (sp.IsValid()) { LogStep("6:Special"); return sp; }
         }
 
         // ── Step 7: Jungle monsters (C# line 1190-1213) ──
@@ -865,15 +903,14 @@ private:
             m_activeMode == SDK::OrbwalkerMode::Clear ||
             m_activeMode == SDK::OrbwalkerMode::LastHit) {
             auto jg = GetJungle();
-            if (jg.IsValid()) return jg;
+            if (jg.IsValid()) { LogStep("7:Jungle"); return jg; }
         }
 
         // ── Step 8: Turret farm (C# line 1215-1283) ──
         DbgStage("OrbPlugin::Target::TurretFarm");
         if (m_activeMode != SDK::OrbwalkerMode::Combo && CanTurretFarm()) {
             auto tf = GetTurretFarmTarget();
-            if (tf.IsValid()) return tf;
-            // If turret farm returned null, stop — don't push under turret
+            if (tf.IsValid()) { LogStep("8:TurretFarm"); return tf; }
             return {};
         }
 
@@ -881,15 +918,16 @@ private:
         DbgStage("OrbPlugin::Target::Push");
         if (m_activeMode == SDK::OrbwalkerMode::Clear && !ShouldWait(range)) {
             auto push = GetPushMinion();
-            if (push.IsValid()) return push;
+            if (push.IsValid()) { LogStep("9:Push"); return push; }
         }
 
         // ── Step 10: Special minions fallback (C# line 1314-1321) ──
         DbgStage("OrbPlugin::Target::SpecialFB");
         if (m_activeMode != SDK::OrbwalkerMode::Combo && !ShouldWait(range)) {
             auto sp = GetSpecialMinion();
-            if (sp.IsValid()) { CacheTarget(sp); return sp; }
+            if (sp.IsValid()) { LogStep("10:SpecialFB"); CacheTarget(sp); return sp; }
         }
+        LogStep("NONE");
 
         CacheTarget({});
         return {};
@@ -1045,13 +1083,7 @@ private:
                 if (t.IsValid() && t.IsAlive() && p.InAutoAttackRange(t)) return t;
             }
         }
-        // Inhibitors + Nexus — disabled: EnemyInhibitors/EnemyNexus iterate AllObjects(4096)
-        // which is too expensive per frame. Will optimize later with caching.
-        // for (const auto& inh : SDK::ObjectManager::EnemyInhibitors()) {
-        //     if (inh.IsValid() && inh.IsAlive() && p.InAutoAttackRange(inh)) return inh;
-        // }
-        // auto nex = SDK::ObjectManager::EnemyNexus();
-        // if (nex.IsValid() && nex.IsAlive() && p.InAutoAttackRange(nex)) return nex;
+        // TODO: EnemyInhibitors/EnemyNexus disabled — needs dedicated building manager
 
         return {};
     }

@@ -59,11 +59,20 @@ namespace CoreControl {
     };
 
     inline int GetPing() {
-        // cachedPing is never populated, read from game memory
         const auto& ctx = CoreRuntime::GetContext();
         if (ctx.cachedPing > 0) return ctx.cachedPing;
-        // Fallback: return a reasonable default
-        return 30;
+
+        // Call game's GetPing function: int __fastcall GetPing(netInstance)
+        if (ctx.getPingFn && Globals::IsValidPtr(ctx.netInstance)) {
+            __try {
+                using fnGetPing = int(__fastcall*)(uintptr_t);
+                int ping = reinterpret_cast<fnGetPing>(ctx.getPingFn)(ctx.netInstance);
+                if (ping > 0 && ping < 5000) return ping;
+            }
+            __except (1) {}
+        }
+
+        return 30;  // Fallback
     }
 
     inline float ReadAttackDelayFor(uintptr_t object) {

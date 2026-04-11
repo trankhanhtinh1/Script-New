@@ -310,6 +310,69 @@ inline void Reset() {
     detail::g_hooksRegistered = false;
 }
 
+// Missile scan implementation — called from SEH wrapper
+inline void ScanMissilesImpl(int now) {
+    if (!detail::EnsureStorage()) return;
+    const int myTeam = ObjectManager::Player().Team();
+    if (detail::g_activeAttacks->size() >= 64) return;
+
+    for (const auto& missile : ObjectManager::Missiles()) {
+        if (!missile.IsValid()) continue;
+
+        int classify = RuntimeAPI::ClassifyMissile(missile.Address());
+        if (classify != 1 && classify != 2) continue;
+
+        int casterNetId = missile.CasterNetworkId();
+        int targetNetId = missile.TargetNetworkId();
+        if (casterNetId == 0 || targetNetId == 0) continue;
+
+        auto existIt = detail::g_lastAttackBySource->find(casterNetId);
+        if (existIt != detail::g_lastAttackBySource->end()) {
+            auto attackIt = detail::g_activeAttacks->find(existIt->second);
+            if (attackIt != detail::g_activeAttacks->end() &&
+                attackIt->second.TargetNetId == targetNetId) {
+                continue;
+            }
+        }
+
+        auto casterObj = ObjectManager::GetByNetId(casterNetId);
+        if (!casterObj.IsValid() || casterObj.Team() != myTeam) continue;
+
+        auto caster = AIBaseClient(casterObj.Address());
+        auto target = AIBaseClient(ObjectManager::GetByNetId(targetNetId).Address());
+        if (!caster.IsValid() || !target.IsValid()) continue;
+
+        PredictedDamage attack = {};
+        attack.AttackId = detail::g_nextAttackId++;
+        attack.SourceNetId = casterNetId;
+        attack.TargetNetId = targetNetId;
+        attack.StartTick = now;
+        attack.Damage = caster.GetAutoAttackDamage(target);
+        attack.Delay = (int)(caster.AttackCastDelay() * 1000.0f);
+        attack.ProjectileSpeed = caster.IsMelee() ? FLT_MAX : 1200.0f;
+        attack.IsMelee = caster.IsMelee();
+        attack.Processed = false;
+
+        (*detail::g_activeAttacks)[attack.AttackId] = attack;
+        (*detail::g_lastAttackBySource)[casterNetId] = attack.AttackId;
+
+        if (classify == 2) {
+            (*detail::g_turretAggroStartTick)[targetNetId] = now;
+        }
+    }
+}
+
+// SEH wrapper — no local objects with destructors (C2712 safe)
+inline void ScanMissilesSafe(int now) {
+    __try {
+        ScanMissilesImpl(now);
+    }
+    __except (1) {
+        if (detail::g_activeAttacks) detail::g_activeAttacks->clear();
+        if (detail::g_lastAttackBySource) detail::g_lastAttackBySource->clear();
+    }
+}
+
 inline void Update() {
     Initialize();
     if (!detail::EnsureStorage()) {
@@ -317,78 +380,29 @@ inline void Update() {
     }
 
     const int now = Game::TickCount();
-    const int myTeam = ObjectManager::Player().Team();
 
     // ── Missile-based AA tracking (RuntimeAPI) ──
-    // Iterate all active missiles. If missile is MinionAA(1) or TurretShot(2)
-    // from ally units targeting enemy minions, register in g_activeAttacks.
-    // This is more accurate than SpellCast polling and feeds HealthPrediction.
-    for (const auto& missile : ObjectManager::Missiles()) {
-        if (!missile.IsValid()) continue;
-        uintptr_t mAddr = missile.Address();
-
-        int classify = RuntimeAPI::ClassifyMissile(mAddr);
-        if (classify != 1 && classify != 2) continue;  // Only MinionAA + TurretShot
-
-        int casterNetId = missile.CasterNetworkId();
-        int targetNetId = missile.TargetNetworkId();
-        if (casterNetId == 0 || targetNetId == 0) continue;
-
-        // Only track ally missiles hitting enemy minions
-        int casterTeam = 0;
-        {
-            auto casterObj = ObjectManager::GetByNetId(casterNetId);
-            if (!casterObj.IsValid()) continue;
-            casterTeam = casterObj.Team();
-        }
-        if (casterTeam != myTeam) continue;  // Only ally attacks
-
-        // Check if already tracked (by source netId)
-        auto existIt = detail::g_lastAttackBySource->find(casterNetId);
-        if (existIt != detail::g_lastAttackBySource->end()) {
-            // Already tracking an attack from this source — check if same missile
-            auto attackIt = detail::g_activeAttacks->find(existIt->second);
-            if (attackIt != detail::g_activeAttacks->end() &&
-                attackIt->second.TargetNetId == targetNetId) {
-                continue;  // Same attack, already tracked
-            }
-        }
-
-        // Register new attack
-        PredictedDamage attack = {};
-        attack.AttackId = detail::g_nextAttackId++;
-        attack.SourceNetId = casterNetId;
-        attack.TargetNetId = targetNetId;
-        attack.StartTick = now;
-
-        // Estimate damage from caster
-        auto caster = AIBaseClient(ObjectManager::GetByNetId(casterNetId).Address());
-        auto target = AIBaseClient(ObjectManager::GetByNetId(targetNetId).Address());
-        if (caster.IsValid() && target.IsValid()) {
-            attack.Damage = caster.GetAutoAttackDamage(target);
-            attack.Delay = (int)(caster.AttackCastDelay() * 1000.0f);
-            float dist = caster.Distance(target);
-            attack.ProjectileSpeed = caster.IsMelee() ? FLT_MAX : 1200.0f;  // Default minion projectile
-            attack.IsMelee = caster.IsMelee();
-            attack.Processed = false;
-
-            (*detail::g_activeAttacks)[attack.AttackId] = attack;
-            (*detail::g_lastAttackBySource)[casterNetId] = attack.AttackId;
-
-            // Track turret aggro
-            if (classify == 2) {
-                (*detail::g_turretAggroStartTick)[targetNetId] = now;
-            }
-        }
+    // Throttle: only scan missiles every other frame to reduce CPU
+    static int s_frameCounter = 0;
+    s_frameCounter++;
+    if ((s_frameCounter & 1) == 0) {
+        ScanMissilesSafe(now);
     }
 
     // ── Cleanup expired attacks ──
+    // Age-based: remove any entry older than 3 seconds (prevents unbounded growth)
     std::vector<uint64_t> toErase = {};
+    toErase.reserve(16);
 
     for (const auto& [id, attack] : *detail::g_activeAttacks) {
-        const auto source = detail::ResolveSource(attack.SourceNetId);
+        // Hard age limit: 3 seconds max
+        if (now - attack.StartTick > 3000) {
+            toErase.push_back(id);
+            continue;
+        }
+
         const auto target = AIBaseClient(detail::ResolveTarget(attack.TargetNetId).Address());
-        if (!source.IsValid() || !target.IsValid() || target.IsDead()) {
+        if (!target.IsValid() || target.IsDead()) {
             toErase.push_back(id);
             continue;
         }
@@ -401,6 +415,11 @@ inline void Update() {
 
     for (const auto id : toErase) {
         detail::g_activeAttacks->erase(id);
+    }
+
+    // Cleanup stale source entries
+    if (detail::g_lastAttackBySource->size() > 128) {
+        detail::g_lastAttackBySource->clear();
     }
 }
 
