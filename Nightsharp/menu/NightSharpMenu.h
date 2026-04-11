@@ -572,23 +572,12 @@ namespace NightSharpMenu {
             menuPosY = mouse.y - dragOffY;
         }
 
-        ImDrawList* dl = ImGui::GetForegroundDrawList();
-        if (!dl) return;
-
-        // ---- Positions ----
-        ImVec2 primaryPos   = ImVec2(menuPosX, menuPosY);
-        ImVec2 secondaryPos = ImVec2(menuPosX + PRIMARY_W + PANEL_GAP, menuPosY);
-        ImVec2 contentPos   = ImVec2(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY);
-
-        // ── Secondary count depends on active primary ──
         int secCount = 0;
         if (showSecondary && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount) {
             int plugIdx = primaryPluginMap[activePrimaryIdx];
             if (plugIdx < 0) {
-                // Core
                 secCount = CORE_SECONDARY_COUNT;
             } else {
-                // Plugin — virtual secondary: submenus + "General" for leaf items
                 auto& p = PluginRegistry::Plugins[plugIdx];
                 secCount = (p.MenuRoot && p.Loaded) ? GetPluginSecondaryCount(plugIdx) : 0;
             }
@@ -598,6 +587,22 @@ namespace NightSharpMenu {
         float secondaryH = showSecondary ? HEADER_H + ITEM_H * (float)MaxI(1, secCount) + 4 : 0;
         float sidebarH   = MaxF(primaryH, secondaryH > 0 ? secondaryH : primaryH);
         float contentH   = MaxF(sidebarH, MAX_CONTENT_H);
+        float actualH    = showContent ? contentH : sidebarH;
+
+        const ImVec2 display = ImGui::GetIO().DisplaySize;
+        if (display.x > 0.0f && display.y > 0.0f) {
+            if (menuPosX < 0.0f) menuPosX = 0.0f;
+            if (menuPosY < 0.0f) menuPosY = 0.0f;
+            if (menuPosX + totalW > display.x) menuPosX = display.x - totalW;
+            if (menuPosY + actualH > display.y) menuPosY = display.y - actualH;
+        }
+
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        if (!dl) return;
+
+        ImVec2 primaryPos   = ImVec2(menuPosX, menuPosY);
+        ImVec2 secondaryPos = ImVec2(menuPosX + PRIMARY_W + PANEL_GAP, menuPosY);
+        ImVec2 contentPos   = ImVec2(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY);
 
         // ==== PRIMARY PANEL ====
         {
@@ -726,7 +731,7 @@ namespace NightSharpMenu {
 
         // Update explicit menu bounds for WM_NCHITTEST
         menuBoundsRight  = menuPosX + totalW;
-        menuBoundsBottom = menuPosY + contentH;
+        menuBoundsBottom = menuPosY + actualH;
     }
 
 } // namespace NightSharpMenu
