@@ -16,7 +16,9 @@
  */
 
 #include "../imgui/imgui.h"
+#include "MenuTheme.h"
 #include "MenuUI.h"
+#include "MenuItemRenderers.h"
 #include "MenuConfig.h"
 #include "Translations.h"
 
@@ -49,30 +51,11 @@ namespace NightSharpMenu {
     inline PanelRect menuPanels[3] = {};
     inline int menuPanelCount = 0;
 
-    // ============================================================================
-    // Layout constants
-    // ============================================================================
+    using namespace MenuTheme;
+
     inline float PRIMARY_W      = 190.0f;
     inline float SECONDARY_W    = 190.0f;
     inline float CONTENT_W      = 560.0f;
-    constexpr float ITEM_H      = 30.0f;
-    constexpr float HEADER_H    = 32.0f;
-    constexpr float PANEL_GAP   = 3.0f;
-    constexpr float MAX_CONTENT_H = 620.0f;
-
-    // ============================================================================
-    // Color scheme (dark theme with green accent)
-    // ============================================================================
-    inline ImU32 COL_BG          = IM_COL32(8, 10, 18, 214);
-    inline ImU32 COL_CONTENT_BG  = IM_COL32(8, 10, 18, 128);
-    inline ImU32 COL_HEADER      = IM_COL32(16, 18, 28, 236);
-    inline ImU32 COL_ITEM        = IM_COL32(18, 20, 30, 118);
-    inline ImU32 COL_ITEM_HOVER  = IM_COL32(52, 48, 82, 215);
-    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 232);
-    inline ImU32 COL_ACCENT      = IM_COL32(120, 235, 120, 255);
-    inline ImU32 COL_TEXT        = IM_COL32(255, 255, 255, 255);
-    inline ImU32 COL_TEXT_DIM    = IM_COL32(185, 185, 205, 255);
-    inline ImU32 COL_BORDER      = IM_COL32(88, 100, 148, 180);
 
     // ============================================================================
     // Entry structures — POD, const char* only
@@ -90,14 +73,12 @@ namespace NightSharpMenu {
     // ============================================================================
     // Drawing helpers
     // ============================================================================
-    inline bool g_menuInputEnabled = true;
-
     inline bool DrawSidebarItem(ImDrawList* dl, ImVec2 pos, float w,
                                 const char* text, bool isActive, bool hasArrow = false)
     {
         ImVec2 mn = pos;
         ImVec2 mx = ImVec2(pos.x + w, pos.y + ITEM_H);
-        bool hovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
+        bool hovered = g_inputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
         bool clicked = hovered && ImGui::IsMouseClicked(0);
 
         if (hovered || isActive)
@@ -112,59 +93,41 @@ namespace NightSharpMenu {
         return clicked;
     }
 
-    inline bool DrawStateButton(const char* id, const char* label, bool active, bool positive, float width = 44.0f)
-    {
-        ImVec4 activeBase   = positive ? ImVec4(0.18f,0.55f,0.28f,0.98f) : ImVec4(0.65f,0.22f,0.24f,0.98f);
-        ImVec4 activeHover  = positive ? ImVec4(0.22f,0.64f,0.32f,1.0f)  : ImVec4(0.75f,0.27f,0.29f,1.0f);
-        ImVec4 activePress  = positive ? ImVec4(0.15f,0.48f,0.24f,1.0f)  : ImVec4(0.58f,0.18f,0.20f,1.0f);
-        ImVec4 inactiveBase = ImVec4(0.14f,0.16f,0.24f,0.98f);
-        ImVec4 inactiveHov  = ImVec4(0.20f,0.24f,0.34f,1.0f);
-        ImVec4 inactivePr   = ImVec4(0.24f,0.28f,0.40f,1.0f);
-        ImVec4 text = active ? ImVec4(0.96f,0.97f,1.0f,1.0f) : ImVec4(0.78f,0.81f,0.90f,1.0f);
-
-        ImGui::PushID(id);
-        ImGui::PushStyleColor(ImGuiCol_Button,        active ? activeBase  : inactiveBase);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  active ? activeHover : inactiveHov);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   active ? activePress : inactivePr);
-        ImGui::PushStyleColor(ImGuiCol_Text, text);
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-        bool clicked = ImGui::Button(Translations::T(label), ImVec2(width, 0));
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(5);
-        ImGui::PopID();
-        return clicked;
-    }
-
     inline bool DrawOnOffEditor(const char* label, bool& value, const char* id)
     {
         bool changed = false;
-        ImGui::PushID(id);
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+        float panelW = ImGui::GetContentRegionAvail().x;
+        ImVec2 winPos = ImGui::GetWindowPos();
+        float panelX = winPos.x;
 
-        ImVec2 rowMin = ImGui::GetCursorScreenPos();
-        float rowWidth = ImGui::GetContentRegionAvail().x;
+        ImVec2 mn = ImVec2(panelX, pos.y);
+        ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
+        bool hovered = g_inputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
 
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(Translations::T(label));
-        ImGui::SameLine();
+        if (hovered)
+            dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
+        dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
 
-        const char* onText = Translations::T("On");
-        const char* offText = Translations::T("Off");
-        float onW = ImGui::CalcTextSize(onText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        float offW = ImGui::CalcTextSize(offText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        float btnW = (onW > offW ? onW : offW);
-        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - btnW;
-        if (targetX > ImGui::GetCursorPosX())
-            ImGui::SetCursorPosX(targetX);
-        DrawStateButton("toggle", value ? "On" : "Off", true, value, btnW);
+        dl->AddText(ImVec2(pos.x + 2, pos.y + 7), COL_TEXT, Translations::T(label));
 
-        ImVec2 rowMax = ImVec2(rowMin.x + rowWidth, ImGui::GetItemRectMax().y);
-        if (g_menuInputEnabled && ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const char* stateText = value ? Translations::T("On") : Translations::T("Off");
+        ImVec2 stateSize = ImGui::CalcTextSize(stateText);
+        float padX = ImGui::GetStyle().FramePadding.x;
+        float btnW = stateSize.x + padX * 2.0f;
+        float btnX = panelX + panelW - btnW - 8.0f;
+        ImU32 btnCol = value ? IM_COL32(46, 140, 71, 250) : IM_COL32(166, 56, 61, 250);
+        dl->AddRectFilled(ImVec2(btnX, pos.y + 4.0f), ImVec2(btnX + btnW, pos.y + ITEM_H - 4.0f), btnCol, 7.0f);
+        dl->AddText(ImVec2(btnX + padX, pos.y + (ITEM_H - stateSize.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), stateText);
+
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             value = !value;
             changed = true;
         }
-        ImGui::PopID();
+
+        ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + ITEM_H));
         return changed;
     }
 
@@ -176,7 +139,7 @@ namespace NightSharpMenu {
     // ============================================================================
     // Content sections — Core
     // ============================================================================
-    inline bool debugWindowEnabled = true;
+    inline bool debugWindowEnabled = false;
 
     inline void DrawMenuSection() {
         DrawSectionTitle("Menu Settings");
@@ -476,120 +439,6 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
-    // Draw a single MenuBool as a sidebar-style row
-    // ============================================================================
-    inline void DrawBoolSidebarItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
-                                     SDK::MenuUI::MenuBool* b, bool drawSep = true) {
-        ImVec2 mn = ImVec2(panelX, pos.y);
-        ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
-        bool hovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
-
-        if (hovered)
-            dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
-        if (drawSep)
-            dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
-
-        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(b->DisplayName.c_str()));
-
-        const char* stateText = b->Enabled ? Translations::T("On") : Translations::T("Off");
-        ImVec2 stateSize = ImGui::CalcTextSize(stateText);
-        float padX = ImGui::GetStyle().FramePadding.x;
-        float btnW = stateSize.x + padX * 2.0f;
-        float btnX = panelX + panelW - btnW - 8.0f;
-        ImU32 btnCol = b->Enabled ? IM_COL32(46, 140, 71, 250) : IM_COL32(166, 56, 61, 250);
-        dl->AddRectFilled(ImVec2(btnX, pos.y + 4.0f), ImVec2(btnX + btnW, pos.y + ITEM_H - 4.0f), btnCol, 7.0f);
-        dl->AddText(ImVec2(btnX + padX, pos.y + (ITEM_H - stateSize.y) * 0.5f),
-                    IM_COL32(245, 247, 255, 255), stateText);
-
-        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-            b->Toggle();
-        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-            b->ResetDefault();
-
-        b->CheckChanged();
-    }
-
-    // ============================================================================
-    // Draw a single MenuKeyBind as a sidebar-style row
-    // ============================================================================
-    inline void DrawKeyBindSidebarItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
-                                        SDK::MenuUI::MenuKeyBind* kb, bool drawSep = true) {
-        using KBType = SDK::MenuUI::KeyBindType;
-        kb->PollListeningKey();
-
-        ImVec2 mn = ImVec2(panelX, pos.y);
-        ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
-        bool hovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
-
-        if (hovered)
-            dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
-        if (drawSep)
-            dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
-
-        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(kb->DisplayName.c_str()));
-
-        const char* pressText = Translations::T("Press");
-        const char* toggleText = Translations::T("Toggle");
-        const char* keyText = kb->IsListening() ? Translations::T("Press key...") : SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key);
-        float padX = ImGui::GetStyle().FramePadding.x;
-        float pad2 = padX * 2.0f;
-        float pressW = ImGui::CalcTextSize(pressText).x + pad2;
-        float toggleW = ImGui::CalcTextSize(toggleText).x + pad2;
-        float keyTextW = ImGui::CalcTextSize(Translations::T("Press key...")).x;
-        float keyNameW = ImGui::CalcTextSize(SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key)).x;
-        float keyBtnW = ((keyTextW > keyNameW) ? keyTextW : keyNameW) + pad2;
-        float gap = 4.0f;
-        float totalW = pressW + gap + toggleW + gap + keyBtnW;
-        float startX = panelX + panelW - totalW - 8.0f;
-        float btnY = pos.y + 4.0f;
-        float btnH = ITEM_H - 8.0f;
-
-        ImU32 colActive = IM_COL32(77, 148, 87, 242);
-        ImU32 colInactive = IM_COL32(36, 41, 61, 242);
-
-        float cx = startX;
-        ImVec2 pressMin = ImVec2(cx, btnY);
-        ImVec2 pressMax = ImVec2(cx + pressW, btnY + btnH);
-        dl->AddRectFilled(pressMin, pressMax, (kb->Type == KBType::Press) ? colActive : colInactive, 7.0f);
-        ImVec2 pts = ImGui::CalcTextSize(pressText);
-        dl->AddText(ImVec2(cx + (pressW - pts.x) * 0.5f, pos.y + (ITEM_H - pts.y) * 0.5f),
-                    IM_COL32(245, 247, 255, 255), pressText);
-
-        cx += pressW + gap;
-        ImVec2 toggleMin = ImVec2(cx, btnY);
-        ImVec2 toggleMax = ImVec2(cx + toggleW, btnY + btnH);
-        dl->AddRectFilled(toggleMin, toggleMax, (kb->Type == KBType::Toggle) ? colActive : colInactive, 7.0f);
-        ImVec2 tts = ImGui::CalcTextSize(toggleText);
-        dl->AddText(ImVec2(cx + (toggleW - tts.x) * 0.5f, pos.y + (ITEM_H - tts.y) * 0.5f),
-                    IM_COL32(245, 247, 255, 255), toggleText);
-
-        cx += toggleW + gap;
-        ImVec2 keyMin = ImVec2(cx, btnY);
-        ImVec2 keyMax = ImVec2(cx + keyBtnW, btnY + btnH);
-        dl->AddRectFilled(keyMin, keyMax, colInactive, 7.0f);
-        ImVec2 kts = ImGui::CalcTextSize(keyText);
-        dl->AddText(ImVec2(cx + (keyBtnW - kts.x) * 0.5f, pos.y + (ITEM_H - kts.y) * 0.5f),
-                    IM_COL32(245, 247, 255, 255), keyText);
-
-        if (g_menuInputEnabled) {
-            if (ImGui::IsMouseHoveringRect(pressMin, pressMax, false) && ImGui::IsMouseClicked(0) &&
-                kb->Type != KBType::Press) {
-                kb->Type = KBType::Press;
-                kb->Active = false;
-            }
-            if (ImGui::IsMouseHoveringRect(toggleMin, toggleMax, false) && ImGui::IsMouseClicked(0) &&
-                kb->Type != KBType::Toggle) {
-                kb->Type = KBType::Toggle;
-            }
-            if (ImGui::IsMouseHoveringRect(keyMin, keyMax, false) && ImGui::IsMouseClicked(0)) {
-                kb->StartListening();
-            }
-        }
-
-        kb->CheckConfigChanged();
-    }
-
-    // ============================================================================
     // Plugin content panel — renders plugin's SDK menu subtree
     // ============================================================================
     inline void DrawPluginContentPanel(int pluginIdx, int secIdx, float panelX, float panelW) {
@@ -613,22 +462,9 @@ namespace NightSharpMenu {
                 if (!item) continue;
                 idx++;
                 bool isLast = (idx == count);
-                auto* boolItem = dynamic_cast<SDK::MenuUI::MenuBool*>(item);
-                auto* kbItem = dynamic_cast<SDK::MenuUI::MenuKeyBind*>(item);
-                if (boolItem) {
-                    DrawBoolSidebarItem(dl, ImVec2(cursor.x, y), panelX, panelW, boolItem, !isLast);
-                    y += ITEM_H;
-                    ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
-                } else if (kbItem) {
-                    DrawKeyBindSidebarItem(dl, ImVec2(cursor.x, y), panelX, panelW, kbItem, !isLast);
-                    y += ITEM_H;
-                    ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
-                } else {
-                    ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
-                    SDK::MenuUI::Menu::DrawItemRow(item, panelX, panelW);
-                    y = ImGui::GetCursorScreenPos().y;
-                }
+                y += MenuRenderers::DrawItem(dl, ImVec2(cursor.x, y), panelX, panelW, item, !isLast);
             }
+            ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
         };
 
         if (sectionKey == "__root_items") {
@@ -692,8 +528,19 @@ namespace NightSharpMenu {
 
         if (!showMenu) return;
 
-        g_menuInputEnabled = SDK::MenuUI::MenuKeyBind::IsCurrentProcessForeground();
-        SDK::MenuUI::g_inputEnabled = g_menuInputEnabled;
+        {
+            bool isFg = SDK::MenuUI::MenuKeyBind::IsCurrentProcessForeground();
+            bool mouseInMenu = false;
+            ImVec2 mp = ImGui::GetIO().MousePos;
+            for (int i = 0; i < menuPanelCount; i++) {
+                auto& r = menuPanels[i];
+                if (mp.x >= r.x && mp.x <= r.x + r.w && mp.y >= r.y && mp.y <= r.y + r.h) {
+                    mouseInMenu = true;
+                    break;
+                }
+            }
+            MenuTheme::g_inputEnabled = isFg || mouseInMenu;
+        }
 
         // ── Build dynamic primary entries ──
         // [0] = Core, [1..N] = loaded SDK plugins
@@ -809,7 +656,7 @@ namespace NightSharpMenu {
         bool inTitle = mouse.x >= menuPosX && mouse.x <= titleMaxX
                     && mouse.y >= menuPosY && mouse.y <= titleMaxY;
 
-        if (g_menuInputEnabled && ImGui::IsMouseClicked(0) && inTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
+        if (g_inputEnabled && ImGui::IsMouseClicked(0) && inTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
             isDragging = true;
             dragOffX = mouse.x - menuPosX;
             dragOffY = mouse.y - menuPosY;
@@ -931,10 +778,10 @@ namespace NightSharpMenu {
                     ImVec2 mn = ImVec2(secondaryPos.x, y);
                     ImVec2 mx = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
 
-                    bool rowHovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
+                    bool rowHovered = g_inputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
                     ImVec2 dropMin = ImVec2(dropX, y + 3.0f);
                     ImVec2 dropMax = ImVec2(dropX + dropW, y + ITEM_H - 3.0f);
-                    bool dropHovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
+                    bool dropHovered = g_inputEnabled && ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
 
                     bool langRowActive = secondarySelected && activeSecondaryIdx == i;
                     if (rowHovered || langRowActive)
@@ -963,7 +810,7 @@ namespace NightSharpMenu {
                             ImVec2 rMin = ImVec2(secondaryPos.x, y);
                             ImVec2 rMax = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
                             bool isSel = (li == langIndex);
-                            bool rHov = g_menuInputEnabled && ImGui::IsMouseHoveringRect(rMin, rMax, false);
+                            bool rHov = g_inputEnabled && ImGui::IsMouseHoveringRect(rMin, rMax, false);
 
                             dl->AddRectFilled(rMin, rMax, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_ITEM), 0.0f);
                             dl->AddLine(ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y), COL_BORDER, 1.0f);
@@ -1007,14 +854,27 @@ namespace NightSharpMenu {
                 if (pe.MenuRoot && pe.Loaded) {
                     auto secs = pe.MenuRoot->GetRootSections();
                     if (activeSecondaryIdx < (int)secs.size()) {
-                        int rowCount = pe.MenuRoot->EstimateRootSectionRowCount(secs[activeSecondaryIdx].first);
-                        estimatedContentH = HEADER_H + ITEM_H * (float)MaxI(1, rowCount) + 8.0f;
+                        float totalItemH = 0.0f;
+                        const auto& sectionKey = secs[activeSecondaryIdx].first;
+                        if (sectionKey == "__root_items") {
+                            std::vector<SDK::MenuItem*> standalone;
+                            pe.MenuRoot->GetStandaloneItems(standalone);
+                            for (auto* item : standalone)
+                                totalItemH += MenuRenderers::EstimateItemHeight(item);
+                        } else {
+                            auto* sub = pe.MenuRoot->FindSection(sectionKey);
+                            if (sub) {
+                                for (auto& item : sub->GetItems())
+                                    totalItemH += MenuRenderers::EstimateItemHeight(item);
+                            }
+                        }
+                        estimatedContentH = HEADER_H + MaxF(totalItemH, ITEM_H) + 8.0f;
                     }
                 }
             } else if (activePlugMap < 0) {
                 estimatedContentH = MAX_CONTENT_H;
             }
-            contentH = MaxF(secondaryH, estimatedContentH);
+            contentH = estimatedContentH;
 
             dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
             dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
@@ -1036,7 +896,7 @@ namespace NightSharpMenu {
             ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
             ImGuiWindowFlags contentFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground;
-            if (!g_menuInputEnabled)
+            if (!g_inputEnabled)
                 contentFlags |= ImGuiWindowFlags_NoInputs;
             ImGui::Begin("##ns_content", nullptr, contentFlags);
 

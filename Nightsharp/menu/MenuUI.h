@@ -1,5 +1,6 @@
 #pragma once
 #include "../imgui/imgui.h"
+#include "MenuTheme.h"
 #include "Translations.h"
 #include <Windows.h>
 #ifdef min
@@ -37,15 +38,10 @@
 //   // Short helpers (recommended for frequent access):
 //   int rangeFast = menu->GetSliderValue("Range", 900);
 //   bool enabledFast = menu->GetBoolValue("Enable", true);
-// 
-//   // In OnMenu() callback:
-//   menu->Draw();
 // ============================================================================
 
 namespace SDK {
 namespace MenuUI {
-
-    inline bool g_inputEnabled = true;
 
     template<typename T, int Capacity>
     class FixedList {
@@ -121,95 +117,6 @@ namespace MenuUI {
                name == "fleeKey";
     }
 
-    inline bool DrawSegmentButton(const char* id, bool active, const ImVec2& size) {
-        ImVec4 base = active ? ImVec4(0.30f, 0.58f, 0.34f, 0.95f) : ImVec4(0.14f, 0.16f, 0.24f, 0.95f);
-        ImVec4 hover = active ? ImVec4(0.36f, 0.66f, 0.38f, 1.0f) : ImVec4(0.20f, 0.24f, 0.34f, 0.98f);
-        ImVec4 pressed = active ? ImVec4(0.26f, 0.50f, 0.30f, 1.0f) : ImVec4(0.24f, 0.28f, 0.40f, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, base);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, pressed);
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-        bool clicked = ImGui::Button(id, size);
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
-        return clicked;
-    }
-
-    inline bool DrawStateToggleButton(const char* id, const char* label, bool active, bool positive, const ImVec2& size) {
-        ImVec4 activeBase = positive ? ImVec4(0.18f, 0.55f, 0.28f, 0.98f) : ImVec4(0.65f, 0.22f, 0.24f, 0.98f);
-        ImVec4 activeHover = positive ? ImVec4(0.22f, 0.64f, 0.32f, 1.0f) : ImVec4(0.75f, 0.27f, 0.29f, 1.0f);
-        ImVec4 activePress = positive ? ImVec4(0.15f, 0.48f, 0.24f, 1.0f) : ImVec4(0.58f, 0.18f, 0.20f, 1.0f);
-        ImVec4 inactiveBase = ImVec4(0.14f, 0.16f, 0.24f, 0.95f);
-        ImVec4 inactiveHover = ImVec4(0.20f, 0.24f, 0.34f, 0.98f);
-        ImVec4 inactivePress = ImVec4(0.24f, 0.28f, 0.40f, 1.0f);
-
-        ImGui::PushStyleColor(ImGuiCol_Button, active ? activeBase : inactiveBase);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? activeHover : inactiveHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePress : inactivePress);
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-        bool clicked = ImGui::Button(label, size);
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
-        return clicked;
-    }
-
-    inline bool DrawSidebarSelector(const char* id, bool active, const ImVec2& size) {
-        ImVec4 base = active ? ImVec4(0.28f, 0.32f, 0.56f, 0.96f) : ImVec4(0.11f, 0.13f, 0.20f, 0.98f);
-        ImVec4 hover = active ? ImVec4(0.33f, 0.38f, 0.64f, 1.0f) : ImVec4(0.16f, 0.19f, 0.29f, 1.0f);
-        ImVec4 pressed = active ? ImVec4(0.24f, 0.28f, 0.49f, 1.0f) : ImVec4(0.20f, 0.23f, 0.35f, 1.0f);
-        ImVec4 text = active ? ImVec4(0.96f, 0.97f, 1.0f, 1.0f) : ImVec4(0.78f, 0.81f, 0.90f, 1.0f);
-
-        ImGui::PushStyleColor(ImGuiCol_Button, base);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, pressed);
-        ImGui::PushStyleColor(ImGuiCol_Text, text);
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-        bool clicked = ImGui::Button(id, size);
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(5);
-        return clicked;
-    }
-
-    inline bool DrawOnOffEditor(const char* label, bool& value, const char* idSuffix = nullptr) {
-        bool changed = false;
-        std::string id = idSuffix ? idSuffix : label;
-        ImGui::PushID(id.c_str());
-
-        ImVec2 rowMin = ImGui::GetCursorScreenPos();
-        float rowWidth = ImGui::GetContentRegionAvail().x;
-
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(Translations::T(label));
-        ImGui::SameLine();
-
-        const char* onText = Translations::T("On");
-        const char* offText = Translations::T("Off");
-        float onW = ImGui::CalcTextSize(onText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        float offW = ImGui::CalcTextSize(offText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        float btnW = (onW > offW ? onW : offW);
-        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - btnW;
-        if (targetX > ImGui::GetCursorPosX()) {
-            ImGui::SetCursorPosX(targetX);
-        }
-
-        const char* btnLabel = value ? onText : offText;
-        DrawStateToggleButton("##toggle", btnLabel, true, value, ImVec2(btnW, 0.0f));
-
-        ImVec2 rowMax = ImVec2(rowMin.x + rowWidth, ImGui::GetItemRectMax().y);
-        if (g_inputEnabled && ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-            value = !value;
-            changed = true;
-        }
-        ImGui::PopID();
-        return changed;
-    }
-
     // ========================================================================
     // KeyBind types
     // ========================================================================
@@ -259,7 +166,7 @@ namespace MenuUI {
         }
 
         virtual ~MenuItem() = default;
-        virtual void Draw() = 0;
+        virtual void Draw() {}
         virtual float EstimateMinWidth() const { return ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x + 100.0f; }
 
         MenuItem(const std::string& name, const std::string& display)
@@ -297,10 +204,11 @@ namespace MenuUI {
             }
         }
 
+        void NotifyValueChanged() { FireValueChanged(); }
+
     protected:
         FixedList<OnValueChangedFn, 8> m_valueChangedCallbacks;
 
-        /// Fire value changed event — call from subclass Draw() when value changes
         void FireValueChanged() {
             MenuValueChangedEventArgs args(nullptr, this, InternalName);
             for (auto& cb : m_valueChangedCallbacks) {
@@ -347,12 +255,6 @@ namespace MenuUI {
             }
         }
 
-        void Draw() override {
-            DrawOnOffEditor(GetDisplayText(), Enabled, InternalName.c_str());
-            CheckChanged();
-            DrawTooltip();
-        }
-
         float EstimateMinWidth() const override {
             float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
             float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
@@ -378,16 +280,6 @@ namespace MenuUI {
         MenuSlider(const std::string& name, const std::string& display,
                    int defaultValue, int minVal, int maxVal)
             : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue), m_default(defaultValue) {}
-
-        void Draw() override {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
-            ImGui::SliderInt(GetDisplayText(), &Value, MinValue, MaxValue);
-            ImGui::PopStyleColor(2);
-            if (g_inputEnabled && ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
-            if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
-            DrawTooltip();
-        }
 
         int GetValue() const { return Value; }
         void SetValue(int value) { Value = std::clamp(value, MinValue, MaxValue); }
@@ -417,16 +309,6 @@ namespace MenuUI {
                     float defaultValue, float minVal, float maxVal)
             : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue), m_default(defaultValue) {}
 
-        void Draw() override {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
-            ImGui::SliderFloat(GetDisplayText(), &Value, MinValue, MaxValue);
-            ImGui::PopStyleColor(2);
-            if (g_inputEnabled && ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
-            if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
-            DrawTooltip();
-        }
-
         float EstimateMinWidth() const override {
             float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
             char valBuf[32];
@@ -450,61 +332,6 @@ namespace MenuUI {
         MenuList(const std::string& name, const std::string& display,
                  const std::vector<std::string>& items, int defaultIndex = 0)
             : MenuItem(name, display), Items(items), Index(defaultIndex), m_prev(defaultIndex), m_default(defaultIndex) {}
-
-        void Draw() override {
-            ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(GetDisplayText());
-            ImGui::SameLine();
-
-            if (Items.empty()) {
-                ImGui::TextDisabled("-");
-                DrawTooltip();
-                return;
-            }
-
-            Index = std::clamp(Index, 0, (int)Items.size() - 1);
-            const char* current = Items[Index].c_str();
-
-            ImGui::PushID(InternalName.c_str());
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-
-            float maxItemW = 0.0f;
-            for (auto& item : Items) {
-                float w = ImGui::CalcTextSize(item.c_str()).x;
-                if (w > maxItemW) maxItemW = w;
-            }
-            float itemBtnW = maxItemW + ImGui::GetStyle().FramePadding.x * 2.0f;
-            float arrowBtnW = ImGui::GetFrameHeight();
-            float listTotalW = arrowBtnW + 6.0f + itemBtnW + 6.0f + arrowBtnW;
-            float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - listTotalW;
-            if (rightStart > ImGui::GetCursorPosX()) {
-                ImGui::SetCursorPosX(rightStart);
-            }
-
-            if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) {
-                Index = (Index - 1 + (int)Items.size()) % (int)Items.size();
-            }
-            ImGui::SameLine(0.0f, 6.0f);
-            ImGui::Button(current, ImVec2(itemBtnW, 0.0f));
-            ImGui::SameLine(0.0f, 6.0f);
-            if (ImGui::ArrowButton("##next", ImGuiDir_Right)) {
-                Index = (Index + 1) % (int)Items.size();
-            }
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor();
-            ImGui::PopID();
-
-            ImVec2 rowMax = ImVec2(rowMin.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y);
-            if (g_inputEnabled && ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-                Index = std::clamp(m_default, 0, (int)Items.size() - 1);
-            }
-
-            if (Index != m_prev) { m_prev = Index; FireValueChanged(); }
-            DrawTooltip();
-        }
 
         void SetIndex(int index) {
             if (Items.empty()) {
@@ -553,22 +380,17 @@ namespace MenuUI {
             m_default[0] = r; m_default[1] = g; m_default[2] = b; m_default[3] = a;
         }
 
+        void ResetDefault() {
+            Color[0] = m_default[0]; Color[1] = m_default[1];
+            Color[2] = m_default[2]; Color[3] = m_default[3];
+            NotifyValueChanged();
+        }
+
         ImU32 GetImU32() const {
             return IM_COL32((int)(Color[0]*255), (int)(Color[1]*255),
                             (int)(Color[2]*255), (int)(Color[3]*255));
         }
 
-        void Draw() override {
-            if (ImGui::ColorEdit4(GetDisplayText(), Color, ImGuiColorEditFlags_AlphaBar)) {
-                FireValueChanged();
-            }
-            if (g_inputEnabled && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
-                Color[0] = m_default[0]; Color[1] = m_default[1];
-                Color[2] = m_default[2]; Color[3] = m_default[3];
-                FireValueChanged();
-            }
-            DrawTooltip();
-        }
     private:
         float m_default[4];
     };
@@ -621,63 +443,6 @@ namespace MenuUI {
                     InternalName.c_str(), Active ? 1 : 0, Key, (int)Type);
                 MenuStageTrace(buf);
             }
-        }
-
-        void Draw() override {
-            PollListeningKey();
-
-            ImGui::PushID(InternalName.c_str());
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(GetDisplayText());
-            ImGui::SameLine();
-
-            const char* pressText = Translations::T("Press");
-            const char* toggleText = Translations::T("Toggle");
-            const char* pressKeyText = Translations::T("Press key...");
-            const char* keyNameText = GetKeyName(Key);
-            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
-            float pressW = ImGui::CalcTextSize(pressText).x + pad2;
-            float toggleW = ImGui::CalcTextSize(toggleText).x + pad2;
-            float keyTextW = ImGui::CalcTextSize(pressKeyText).x;
-            float keyNameW = ImGui::CalcTextSize(keyNameText).x;
-            float keyBtnW = (keyTextW > keyNameW ? keyTextW : keyNameW) + pad2;
-            float kbTotalW = pressW + 6.0f + toggleW + 6.0f + keyBtnW;
-            float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - kbTotalW;
-            if (rightStart > ImGui::GetCursorPosX()) {
-                ImGui::SetCursorPosX(rightStart);
-            }
-
-            if (DrawSegmentButton(pressText, Type == KeyBindType::Press, ImVec2(pressW, 0.0f)) &&
-                Type != KeyBindType::Press) {
-                Type = KeyBindType::Press;
-                Active = false;
-                m_wasDown = false;
-            }
-
-            ImGui::SameLine(0.0f, 6.0f);
-            if (DrawSegmentButton(toggleText, Type == KeyBindType::Toggle, ImVec2(toggleW, 0.0f)) &&
-                Type != KeyBindType::Toggle) {
-                Type = KeyBindType::Toggle;
-                m_wasDown = false;
-            }
-
-            ImGui::SameLine(0.0f, 6.0f);
-            char keyLabel[128];
-            snprintf(keyLabel, sizeof(keyLabel), "%s##key_btn", m_listening ? pressKeyText : keyNameText);
-            if (ImGui::Button(keyLabel, ImVec2(keyBtnW, 0.0f))) {
-                StartListening();
-            }
-
-            if (Type == KeyBindType::Toggle) {
-                ImGui::SameLine(0.0f, 6.0f);
-                ImU32 col = Active ? IM_COL32(70, 190, 90, 255) : IM_COL32(150, 70, 70, 255);
-                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), "%s", Active ? Translations::T("On") : Translations::T("Off"));
-            }
-
-            CheckConfigChanged();
-
-            ImGui::PopID();
-            DrawTooltip();
         }
 
         float EstimateMinWidth() const override {
@@ -827,13 +592,6 @@ namespace MenuUI {
             }
         }
 
-        void Draw() override {
-            if (ImGui::InputText(GetDisplayText(), m_buf.data(), m_buf.size())) {
-                Text = m_buf.data();
-                FireValueChanged();
-            }
-        }
-
     private:
         std::vector<char> m_buf;
     };
@@ -845,13 +603,6 @@ namespace MenuUI {
     public:
         MenuSeparator(const std::string& name = "", const std::string& display = "")
             : MenuItem(name, display) {}
-
-        void Draw() override {
-            if (!DisplayName.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.7f, 1.0f, 1.0f), "%s", GetDisplayText());
-            }
-            ImGui::Separator();
-        }
     };
 
     // ========================================================================
@@ -1027,73 +778,6 @@ namespace MenuUI {
             }
         }
 
-        // Draw menu (ImGui)
-        static constexpr float kContentRowH = 30.0f;
-
-        static void DrawItemRow(MenuItem* item, float panelX = -1.0f, float panelW = -1.0f) {
-            if (!item) return;
-            ImDrawList* dl = ImGui::GetForegroundDrawList();
-            ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            float rowWidth = ImGui::GetContentRegionAvail().x;
-
-            float lineX = (panelX >= 0.0f) ? panelX : rowMin.x;
-            float lineW = (panelW >= 0.0f) ? panelW : rowWidth;
-
-            ImVec2 hoverMin = ImVec2(lineX, rowMin.y);
-            ImVec2 hoverMax = ImVec2(lineX + lineW, rowMin.y + kContentRowH);
-
-            if (g_inputEnabled && ImGui::IsMouseHoveringRect(hoverMin, hoverMax))
-                dl->AddRectFilled(hoverMin, hoverMax, IM_COL32(52, 48, 82, 215), 3.0f);
-
-            float padY = (kContentRowH - ImGui::GetFrameHeight()) * 0.5f;
-            if (padY > 0.0f)
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + padY);
-
-            item->Draw();
-
-            dl->AddLine(ImVec2(lineX, rowMin.y + kContentRowH),
-                        ImVec2(lineX + lineW, rowMin.y + kContentRowH),
-                        IM_COL32(88, 100, 148, 180), 1.0f);
-
-            float nextY = (rowMin.y + kContentRowH) - ImGui::GetWindowPos().y;
-            if (ImGui::GetCursorPosY() < nextY)
-                ImGui::SetCursorPosY(nextY);
-        }
-
-        void DrawContentPanel() {
-            for (auto& item : m_items) {
-                if (!item) continue;
-                auto* sub = dynamic_cast<Menu*>(item);
-                if (sub) {
-                    ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f), "%s", sub->GetDisplayText());
-                    ImGui::Separator();
-                    ImGui::Indent(10.0f);
-                    for (auto& child : sub->m_items) {
-                        DrawItemRow(child);
-                    }
-                    ImGui::Unindent(10.0f);
-                } else {
-                    DrawItemRow(item);
-                }
-            }
-        }
-
-        void Draw() override {
-            if (m_isRoot) {
-                DrawRootMenu();
-            } else {
-                ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f), "%s", GetDisplayText());
-                ImGui::Separator();
-                ImGui::Indent(10.0f);
-                for (auto& item : m_items) {
-                    DrawItemRow(item);
-                }
-                ImGui::Unindent(10.0f);
-            }
-        }
-
         const FixedList<MenuItem*, kMaxMenuItems>& GetItems() const { return m_items; }
 
         Menu* FindSection(const std::string& sectionKey) {
@@ -1133,18 +817,6 @@ namespace MenuUI {
             }
 
             return sections;
-        }
-
-        void DrawRootSection(const std::string& sectionKey) {
-            if (!m_isRoot) {
-                Draw();
-                return;
-            }
-
-            std::vector<MenuItem*> standaloneItems;
-            std::vector<Menu*> subMenus;
-            const bool onlyKeyBinds = SplitRootItems(standaloneItems, subMenus);
-            DrawRootSectionContent(sectionKey, standaloneItems, subMenus, onlyKeyBinds);
         }
 
         int EstimateRowCount() const {
@@ -1389,91 +1061,6 @@ namespace MenuUI {
             }
 
             return onlyKeyBinds;
-        }
-
-        void DrawRootSectionContent(const std::string& sectionKey,
-                                    const std::vector<MenuItem*>& standaloneItems,
-                                    const std::vector<Menu*>& subMenus,
-                                    bool onlyKeyBinds) {
-            if (sectionKey == "__root_items") {
-                for (auto& item : standaloneItems) {
-                    DrawItemRow(item);
-                }
-                return;
-            }
-
-            for (auto* sub : subMenus) {
-                if (sub->InternalName == sectionKey) {
-                    sub->DrawContentPanel();
-                    return;
-                }
-            }
-
-            if (!standaloneItems.empty()) {
-                DrawRootSectionContent("__root_items", standaloneItems, subMenus, onlyKeyBinds);
-            }
-        }
-
-        void DrawRootMenu() {
-            std::vector<MenuItem*> standaloneItems;
-            std::vector<Menu*> subMenus;
-            const bool onlyKeyBinds = SplitRootItems(standaloneItems, subMenus);
-
-            if (subMenus.empty()) {
-                for (auto& item : m_items) {
-                    if (item) item->Draw();
-                }
-                return;
-            }
-
-            std::vector<std::pair<std::string, std::string>> sections;
-            if (!standaloneItems.empty()) {
-                sections.push_back({
-                    "__root_items",
-                    onlyKeyBinds ? std::string(Translations::T("Keys")) : std::string(Translations::T("General"))
-                });
-            }
-            for (auto* sub : subMenus) {
-                sections.push_back({ sub->InternalName, std::string(Translations::T(sub->DisplayName.c_str())) });
-            }
-
-            if (sections.empty()) {
-                return;
-            }
-
-            bool activeValid = false;
-            for (auto& section : sections) {
-                if (section.first == m_activeRootSection) {
-                    activeValid = true;
-                    break;
-                }
-            }
-            if (!activeValid) {
-                m_activeRootSection = sections.front().first;
-            }
-
-            float innerSidebarW = 0.0f;
-            for (auto& section : sections) {
-                float sw = ImGui::CalcTextSize(section.second.c_str()).x + 20.0f;
-                if (sw > innerSidebarW) innerSidebarW = sw;
-            }
-            if (innerSidebarW < 100.0f) innerSidebarW = 100.0f;
-            ImGui::BeginChild((std::string("##sidebar_") + InternalName).c_str(), ImVec2(innerSidebarW, 0.0f), true);
-            ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Sliderbar");
-            ImGui::Separator();
-            for (auto& section : sections) {
-                bool selected = (m_activeRootSection == section.first);
-                if (DrawSidebarSelector(section.second.c_str(), selected, ImVec2(-1.0f, 34.0f))) {
-                    m_activeRootSection = section.first;
-                }
-            }
-            ImGui::EndChild();
-
-            ImGui::SameLine(0.0f, 8.0f);
-
-            ImGui::BeginChild((std::string("##content_") + InternalName).c_str(), ImVec2(0.0f, 0.0f), true);
-            DrawRootSectionContent(m_activeRootSection, standaloneItems, subMenus, onlyKeyBinds);
-            ImGui::EndChild();
         }
 
         bool m_isRoot;
