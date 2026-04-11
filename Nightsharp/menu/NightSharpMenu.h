@@ -18,6 +18,7 @@
 #include "../imgui/imgui.h"
 #include "MenuUI.h"
 #include "MenuConfig.h"
+#include "Translations.h"
 
 #include "PluginRegistry.h"
 #include "SDKDiagnostics.h"
@@ -126,7 +127,7 @@ namespace NightSharpMenu {
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-        bool clicked = ImGui::Button(label, ImVec2(width, 0));
+        bool clicked = ImGui::Button(Translations::T(label), ImVec2(width, 0));
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(5);
         ImGui::PopID();
@@ -138,7 +139,7 @@ namespace NightSharpMenu {
         bool changed = false;
         ImGui::PushID(id);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label);
+        ImGui::TextUnformatted(Translations::T(label));
         ImGui::SameLine();
         float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 96.0f;
         if (targetX > ImGui::GetCursorPosX())
@@ -151,7 +152,7 @@ namespace NightSharpMenu {
     }
 
     inline void DrawSectionTitle(const char* title) {
-        ImGui::TextColored(ImVec4(0.47f,0.92f,0.47f,1.0f), "%s", title);
+        ImGui::TextColored(ImVec4(0.47f,0.92f,0.47f,1.0f), "%s", Translations::T(title));
         ImGui::Separator();
     }
 
@@ -165,8 +166,8 @@ namespace NightSharpMenu {
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "Bypass OBS: overlay hidden from screen capture");
-        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "(requires Win10 2004+)");
+        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("Bypass OBS: overlay hidden from screen capture"));
+        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("(requires Win10 2004+)"));
     }
 
     inline void DrawDebugSection() {
@@ -185,7 +186,7 @@ namespace NightSharpMenu {
         int pluginCount = PluginRegistry::GetCountByKind(kind);
         if (pluginCount == 0) {
             if (emptyText && emptyText[0]) {
-                ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", emptyText);
+                ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T(emptyText));
             }
             return;
         }
@@ -224,7 +225,7 @@ namespace NightSharpMenu {
             if (!p.MenuRoot) {
                 ImGui::SameLine(0, 8);
                 ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
-                    hasRuntime ? "(no menu)" : "(menu init failed)");
+                    hasRuntime ? Translations::T("(no menu)") : Translations::T("(menu init failed)"));
             }
 
             ImGui::SameLine();
@@ -239,7 +240,7 @@ namespace NightSharpMenu {
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f,0.45f,0.22f,0.95f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f,0.97f,1.0f,1.0f));
-                ImGui::Button("Built-in", ImVec2(buttonW, 0));
+                ImGui::Button(Translations::T("Built-in"), ImVec2(buttonW, 0));
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar();
             } else if (canLoad && (p.MenuRoot || hasRuntime)) {
@@ -254,14 +255,14 @@ namespace NightSharpMenu {
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.2f,0.2f,0.5f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f,0.5f,0.5f,0.8f));
-                ImGui::Button("Error", ImVec2(buttonW, 0));
+                ImGui::Button(Translations::T("Error"), ImVec2(buttonW, 0));
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar();
             }
 
             ImGui::SameLine(0, 8);
             bool al = p.AlwaysLoad;
-            if (ImGui::Checkbox("Always Load", &al)) {
+            if (ImGui::Checkbox(Translations::T("Always Load"), &al)) {
                 PluginRegistry::SetAlwaysLoad(i, al);
             }
 
@@ -278,12 +279,12 @@ namespace NightSharpMenu {
     inline void DrawSDKPluginsSection() {
         DrawSectionTitle("SDK Built-ins");
         ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.5f,0.75f,0.5f,1.0f), "Orbwalker and Target Selector are always on.");
-        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "This section is read-only for built-in SDK modules.");
+        ImGui::TextColored(ImVec4(0.5f,0.75f,0.5f,1.0f), "%s", Translations::T("Orbwalker and Target Selector are always on."));
+        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("This section is read-only for built-in SDK modules."));
         ImGui::Separator();
         int sdkCount = PluginRegistry::GetCountByKind(PluginRegistry::PluginKind::SDK);
         if (sdkCount == 0) {
-            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "No SDK plugins registered.");
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("No SDK plugins registered."));
             return;
         }
 
@@ -325,16 +326,15 @@ namespace NightSharpMenu {
             // Show warning if incompatible or menu creation failed
             if (!canLoad) {
                 ImGui::SameLine(0, 8);
-                ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.1f, 0.9f), "(wrong champion)");
+                ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.1f, 0.9f), "%s", Translations::T("(wrong champion)"));
             } else if (!p.MenuRoot) {
                 ImGui::SameLine(0, 8);
-                ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
-                    hasRuntime ? "(no menu)" : "(menu init failed)");
+                ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f), "%s",
+                    hasRuntime ? Translations::T("(no menu)") : Translations::T("(menu init failed)"));
             }
 
             ImGui::SameLine();
 
-            // Push to right side
             float rightEdge = ImGui::GetContentRegionAvail().x;
             float buttonW = 70.0f;
             float checkW = 120.0f;
@@ -356,7 +356,7 @@ namespace NightSharpMenu {
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.2f,0.2f,0.5f));
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f,0.5f,0.5f,0.8f));
-                ImGui::Button(canLoad ? "Error" : "N/A", ImVec2(buttonW, 0));
+                ImGui::Button(canLoad ? Translations::T("Error") : Translations::T("N/A"), ImVec2(buttonW, 0));
                 ImGui::PopStyleColor(2);
                 ImGui::PopStyleVar();
             }
@@ -365,10 +365,10 @@ namespace NightSharpMenu {
 
             // Always Load checkbox — persisted to plugins.ini
             if (PluginRegistry::IsBuiltInSDKPlugin(i)) {
-                ImGui::TextColored(ImVec4(0.5f,0.85f,0.5f,1.0f), "Built-in");
+                ImGui::TextColored(ImVec4(0.5f,0.85f,0.5f,1.0f), "%s", Translations::T("Built-in"));
             } else {
                 bool al = p.AlwaysLoad;
-                if (ImGui::Checkbox("Always Load", &al)) {
+                if (ImGui::Checkbox(Translations::T("Always Load"), &al)) {
                     PluginRegistry::SetAlwaysLoad(i, al);
                 }
             }
@@ -388,8 +388,8 @@ namespace NightSharpMenu {
         int extCount = PluginRegistry::GetCountByKind(PluginRegistry::PluginKind::External);
         if (extCount == 0) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "No external plugins loaded.");
-            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "Drop plugin DLLs into /plugins/ folder.");
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("No external plugins loaded."));
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("Drop plugin DLLs into /plugins/ folder."));
             return;
         }
 
@@ -507,6 +507,18 @@ namespace NightSharpMenu {
     // Main render — called each ImGui frame
     // ============================================================================
     inline void Render() {
+        Translations::InitTranslations();
+
+        static int flushDelay = 0;
+        if (Translations::g_missingDirty) {
+            if (++flushDelay >= 60) {
+                flushDelay = 0;
+                Translations::FlushMissTranslations();
+            }
+        } else {
+            flushDelay = 0;
+        }
+
         if (!showMenu) return;
 
         // ── Build dynamic primary entries ──
@@ -516,7 +528,7 @@ namespace NightSharpMenu {
         int primaryPluginMap[MAX_PRIMARY];  // maps primary index → plugin registry index (-1 for Core)
         int primaryCount = 0;
 
-        primaryLabels[0] = "Core";
+        primaryLabels[0] = Translations::T("Core");
         primaryPluginMap[0] = -1;  // Core
         primaryCount = 1;
 
@@ -524,7 +536,7 @@ namespace NightSharpMenu {
             auto& p = PluginRegistry::Plugins[i];
             if (IsPrimaryPluginEntry(p, i)) {
                 if (primaryCount < MAX_PRIMARY) {
-                    primaryLabels[primaryCount] = p.Name;
+                    primaryLabels[primaryCount] = Translations::T(p.Name);
                     primaryPluginMap[primaryCount] = i;
                     primaryCount++;
                 }
@@ -642,7 +654,7 @@ namespace NightSharpMenu {
             if (activeSecondaryIdx < 0 && secCount > 0)
                 activeSecondaryIdx = 0;
 
-            static int langIndex = 0;
+            int& langIndex = Translations::langIndex;
             static bool langDropOpen = false;
             const char* const langItems[] = { "EN", "CN", "VN" };
             constexpr int langItemCount = 3;
@@ -664,7 +676,7 @@ namespace NightSharpMenu {
             for (int i = 0; i < secCount; i++) {
                 const char* secLabel = nullptr;
                 if (activePlugMap < 0) {
-                    secLabel = CORE_SECONDARY[i].label;
+                    secLabel = Translations::T(CORE_SECONDARY[i].label);
                 } else {
                     secLabel = GetPluginSecondaryLabel(activePlugMap, i);
                 }
@@ -718,7 +730,8 @@ namespace NightSharpMenu {
 
                             if (rHov && ImGui::IsMouseClicked(0)) {
                                 langIndex = li;
-                                langDropOpen = false;
+                                Translations::SaveLangIndex();
+                                Translations::FlushMissTranslations();
                             }
                             y += ITEM_H;
                         }
@@ -753,7 +766,7 @@ namespace NightSharpMenu {
             // Section label
             const char* sectionLabel = "?";
             if (activePlugMap < 0 && activeSecondaryIdx < CORE_SECONDARY_COUNT)
-                sectionLabel = CORE_SECONDARY[activeSecondaryIdx].label;
+                sectionLabel = Translations::T(CORE_SECONDARY[activeSecondaryIdx].label);
             else if (activePlugMap >= 0) {
                 sectionLabel = GetPluginSecondaryLabel(activePlugMap, activeSecondaryIdx);
             }
@@ -787,6 +800,7 @@ namespace NightSharpMenu {
             menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + PANEL_GAP, menuPosY, SECONDARY_W, secondaryH };
         if (showContent)
             menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY, CONTENT_W, contentH };
+
     }
 
 } // namespace NightSharpMenu

@@ -1,5 +1,6 @@
 #pragma once
 #include "../imgui/imgui.h"
+#include "Translations.h"
 #include <Windows.h>
 #ifdef min
 #undef min
@@ -178,7 +179,7 @@ namespace MenuUI {
         std::string id = idSuffix ? idSuffix : label;
         ImGui::PushID(id.c_str());
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label);
+        ImGui::TextUnformatted(Translations::T(label));
         ImGui::SameLine();
         const float totalWidth = 86.0f;
         float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - totalWidth;
@@ -186,12 +187,12 @@ namespace MenuUI {
             ImGui::SetCursorPosX(targetX);
         }
 
-        if (DrawStateToggleButton("##on", "On", value, true, ImVec2(40.0f, 0.0f)) && !value) {
+        if (DrawStateToggleButton("##on", Translations::T("On"), value, true, ImVec2(40.0f, 0.0f)) && !value) {
             value = true;
             changed = true;
         }
         ImGui::SameLine(0.0f, 6.0f);
-        if (DrawStateToggleButton("##off", "Off", !value, false, ImVec2(40.0f, 0.0f)) && value) {
+        if (DrawStateToggleButton("##off", Translations::T("Off"), !value, false, ImVec2(40.0f, 0.0f)) && value) {
             value = false;
             changed = true;
         }
@@ -275,6 +276,10 @@ namespace MenuUI {
         }
 
         /// Draw tooltip if hovered (call after Draw() in each subclass if needed)
+        const char* GetDisplayText() const {
+            return Translations::T(DisplayName.c_str());
+        }
+
         void DrawTooltip() const {
             if (!Tooltip.empty() && ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("%s", Tooltip.c_str());
@@ -305,7 +310,7 @@ namespace MenuUI {
             : MenuItem(name, display), Enabled(defaultValue), Value(Enabled), m_prev(defaultValue) {}
 
         void Draw() override {
-            DrawOnOffEditor(DisplayName.c_str(), Enabled, InternalName.c_str());
+            DrawOnOffEditor(GetDisplayText(), Enabled, InternalName.c_str());
             if (Enabled != m_prev) {
                 if (IsOrbwalkerTraceItem(InternalName)) {
                     char buf[192] = {};
@@ -344,7 +349,7 @@ namespace MenuUI {
         void Draw() override {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
-            ImGui::SliderInt(DisplayName.c_str(), &Value, MinValue, MaxValue);
+            ImGui::SliderInt(GetDisplayText(), &Value, MinValue, MaxValue);
             ImGui::PopStyleColor(2);
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
@@ -372,7 +377,7 @@ namespace MenuUI {
         void Draw() override {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
-            ImGui::SliderFloat(DisplayName.c_str(), &Value, MinValue, MaxValue);
+            ImGui::SliderFloat(GetDisplayText(), &Value, MinValue, MaxValue);
             ImGui::PopStyleColor(2);
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
@@ -395,7 +400,7 @@ namespace MenuUI {
 
         void Draw() override {
             ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(DisplayName.c_str());
+            ImGui::TextUnformatted(GetDisplayText());
             ImGui::SameLine();
 
             if (Items.empty()) {
@@ -471,7 +476,7 @@ namespace MenuUI {
         }
 
         void Draw() override {
-            if (ImGui::ColorEdit4(DisplayName.c_str(), Color, ImGuiColorEditFlags_AlphaBar)) {
+            if (ImGui::ColorEdit4(GetDisplayText(), Color, ImGuiColorEditFlags_AlphaBar)) {
                 FireValueChanged();
             }
             DrawTooltip();
@@ -533,7 +538,7 @@ namespace MenuUI {
 
             ImGui::PushID(InternalName.c_str());
             ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(DisplayName.c_str());
+            ImGui::TextUnformatted(GetDisplayText());
             ImGui::SameLine();
 
             float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 246.0f;
@@ -541,7 +546,7 @@ namespace MenuUI {
                 ImGui::SetCursorPosX(rightStart);
             }
 
-            if (DrawSegmentButton("Press", Type == KeyBindType::Press, ImVec2(54.0f, 0.0f)) &&
+            if (DrawSegmentButton(Translations::T("Press"), Type == KeyBindType::Press, ImVec2(54.0f, 0.0f)) &&
                 Type != KeyBindType::Press) {
                 Type = KeyBindType::Press;
                 Active = false;
@@ -549,7 +554,7 @@ namespace MenuUI {
             }
 
             ImGui::SameLine(0.0f, 6.0f);
-            if (DrawSegmentButton("Toggle", Type == KeyBindType::Toggle, ImVec2(58.0f, 0.0f)) &&
+            if (DrawSegmentButton(Translations::T("Toggle"), Type == KeyBindType::Toggle, ImVec2(58.0f, 0.0f)) &&
                 Type != KeyBindType::Toggle) {
                 Type = KeyBindType::Toggle;
                 m_wasDown = false;
@@ -557,7 +562,7 @@ namespace MenuUI {
 
             ImGui::SameLine(0.0f, 6.0f);
             char keyLabel[128];
-            snprintf(keyLabel, sizeof(keyLabel), "%s##key_btn", m_listening ? "Press key..." : GetKeyName(Key));
+            snprintf(keyLabel, sizeof(keyLabel), "%s##key_btn", m_listening ? Translations::T("Press key...") : GetKeyName(Key));
             if (ImGui::Button(keyLabel, ImVec2(110.0f, 0.0f))) {
                 m_listening = true;
                 m_listenDebounceFrames = 4;
@@ -566,7 +571,7 @@ namespace MenuUI {
             if (Type == KeyBindType::Toggle) {
                 ImGui::SameLine(0.0f, 6.0f);
                 ImU32 col = Active ? IM_COL32(70, 190, 90, 255) : IM_COL32(150, 70, 70, 255);
-                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), Active ? "On" : "Off");
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), "%s", Active ? Translations::T("On") : Translations::T("Off"));
             }
 
             bool configChanged = (Key != m_prevKey || Type != m_prevType);
@@ -731,7 +736,7 @@ namespace MenuUI {
         }
 
         void Draw() override {
-            if (ImGui::InputText(DisplayName.c_str(), m_buf.data(), m_buf.size())) {
+            if (ImGui::InputText(GetDisplayText(), m_buf.data(), m_buf.size())) {
                 Text = m_buf.data();
                 FireValueChanged();
             }
@@ -751,7 +756,7 @@ namespace MenuUI {
 
         void Draw() override {
             if (!DisplayName.empty()) {
-                ImGui::TextColored(ImVec4(0.5f, 0.7f, 1.0f, 1.0f), "%s", DisplayName.c_str());
+                ImGui::TextColored(ImVec4(0.5f, 0.7f, 1.0f, 1.0f), "%s", GetDisplayText());
             }
             ImGui::Separator();
         }
@@ -936,7 +941,7 @@ namespace MenuUI {
                 DrawRootMenu();
             } else {
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f), "%s", DisplayName.c_str());
+                ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f), "%s", GetDisplayText());
                 ImGui::Separator();
                 ImGui::Indent(10.0f);
                 for (auto& item : m_items) {
@@ -961,12 +966,12 @@ namespace MenuUI {
             if (!standaloneItems.empty()) {
                 sections.push_back({
                     "__root_items",
-                    onlyKeyBinds ? std::string("Keys") : std::string("General")
+                    onlyKeyBinds ? std::string(Translations::T("Keys")) : std::string(Translations::T("General"))
                 });
             }
 
             for (auto* sub : subMenus) {
-                sections.push_back({ sub->InternalName, sub->DisplayName });
+                sections.push_back({ sub->InternalName, std::string(Translations::T(sub->DisplayName.c_str())) });
             }
 
             return sections;
@@ -1198,7 +1203,7 @@ namespace MenuUI {
             if (sectionKey == "__root_items") {
                 ImGui::Spacing();
                 ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f),
-                    "%s", onlyKeyBinds ? "Keys" : "General");
+                    "%s", onlyKeyBinds ? Translations::T("Keys") : Translations::T("General"));
                 ImGui::Separator();
                 ImGui::Indent(10.0f);
                 for (auto& item : standaloneItems) {
@@ -1236,11 +1241,11 @@ namespace MenuUI {
             if (!standaloneItems.empty()) {
                 sections.push_back({
                     "__root_items",
-                    onlyKeyBinds ? std::string("Keys") : std::string("General")
+                    onlyKeyBinds ? std::string(Translations::T("Keys")) : std::string(Translations::T("General"))
                 });
             }
             for (auto* sub : subMenus) {
-                sections.push_back({ sub->InternalName, sub->DisplayName });
+                sections.push_back({ sub->InternalName, std::string(Translations::T(sub->DisplayName.c_str())) });
             }
 
             if (sections.empty()) {
@@ -1295,7 +1300,7 @@ namespace MenuUI {
             : MenuItem(name, display), ButtonText(btnText), OnClick(onClick) {}
 
         void Draw() override {
-            ImGui::Text("%s", DisplayName.c_str());
+            ImGui::Text("%s", GetDisplayText());
             ImGui::SameLine();
             if (ImGui::Button(ButtonText.c_str())) {
                 if (OnClick) OnClick();
@@ -1369,7 +1374,7 @@ namespace MenuUI {
 
             // Show display name as label
             ImGui::SameLine();
-            ImGui::Text("%s", DisplayName.c_str());
+            ImGui::Text("%s", GetDisplayText());
 
             // Fire change event
             if (SValue != m_prevS || BValue != m_prevB) {
@@ -1460,12 +1465,11 @@ namespace MenuUI {
         }
 
         void Draw() override {
-            if (ImGui::CollapsingHeader(DisplayName.c_str())) {
+            if (ImGui::CollapsingHeader(GetDisplayText())) {
                 ImGui::Indent(10.0f);
-                // Draw as radio buttons for clearer UX
                 for (int i = 0; i < (int)m_options.size(); i++) {
                     bool active = m_options[i]->Enabled;
-                    if (ImGui::RadioButton(m_options[i]->DisplayName.c_str(), active)) {
+                    if (ImGui::RadioButton(m_options[i]->GetDisplayText(), active)) {
                         // Set this one active, disable all others
                         for (int j = 0; j < (int)m_options.size(); j++) {
                             m_options[j]->Enabled = (j == i);
@@ -1561,23 +1565,23 @@ namespace MenuUI {
 
         /// Draw the customizer UI (add to menu)
         static void Draw() {
-            if (ImGui::CollapsingHeader("Menu Customizer")) {
+            if (ImGui::CollapsingHeader(Translations::T("Menu Customizer"))) {
                 ImGui::Indent(10.0f);
                 bool changed = false;
 
-                changed |= ImGui::SliderFloat("Font Scale", &FontScale, 0.7f, 1.5f);
-                changed |= ImGui::SliderFloat("Menu Alpha", &MenuAlpha, 0.3f, 1.0f);
-                changed |= ImGui::SliderFloat("Item Spacing", &ItemSpacing, 0.0f, 12.0f);
-                changed |= ImGui::SliderFloat("Rounding", &Rounding, 0.0f, 15.0f);
-                changed |= ImGui::Checkbox("Lock Position", &LockPosition);
-                changed |= ImGui::ColorEdit4("Accent Color", AccentColor, ImGuiColorEditFlags_AlphaBar);
-                changed |= ImGui::ColorEdit4("Background", BgColor, ImGuiColorEditFlags_AlphaBar);
+                changed |= ImGui::SliderFloat(Translations::T("Font Scale"), &FontScale, 0.7f, 1.5f);
+                changed |= ImGui::SliderFloat(Translations::T("Menu Alpha"), &MenuAlpha, 0.3f, 1.0f);
+                changed |= ImGui::SliderFloat(Translations::T("Item Spacing"), &ItemSpacing, 0.0f, 12.0f);
+                changed |= ImGui::SliderFloat(Translations::T("Rounding"), &Rounding, 0.0f, 15.0f);
+                changed |= ImGui::Checkbox(Translations::T("Lock Position"), &LockPosition);
+                changed |= ImGui::ColorEdit4(Translations::T("Accent Color"), AccentColor, ImGuiColorEditFlags_AlphaBar);
+                changed |= ImGui::ColorEdit4(Translations::T("Background"), BgColor, ImGuiColorEditFlags_AlphaBar);
 
-                if (ImGui::Button("Apply")) {
+                if (ImGui::Button(Translations::T("Apply"))) {
                     Apply();
                 }
                 ImGui::SameLine();
-                if (ImGui::Button("Reset")) {
+                if (ImGui::Button(Translations::T("Reset"))) {
                     FontScale = 1.0f;
                     MenuAlpha = 0.95f;
                     ItemSpacing = 4.0f;

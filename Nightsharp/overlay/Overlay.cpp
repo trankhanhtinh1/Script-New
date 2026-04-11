@@ -401,6 +401,32 @@ void Overlay::Run() {
     io.LogFilename = nullptr;
     io.Fonts->AddFontDefault();
 
+    {
+        HANDLE hFont = CreateFileA("C:\\Windows\\Fonts\\msyh.ttc",
+            GENERIC_READ, FILE_SHARE_READ, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFont != INVALID_HANDLE_VALUE) {
+            DWORD fileSize = GetFileSize(hFont, nullptr);
+            if (fileSize > 0 && fileSize != INVALID_FILE_SIZE) {
+                void* fontData = ImGui::MemAlloc(fileSize);
+                if (fontData) {
+                    DWORD bytesRead = 0;
+                    if (ReadFile(hFont, fontData, fileSize, &bytesRead, nullptr) && bytesRead == fileSize) {
+                        ImFontConfig mergeCfg;
+                        mergeCfg.MergeMode = true;
+                        mergeCfg.PixelSnapH = true;
+                        mergeCfg.FontDataOwnedByAtlas = true;
+                        io.Fonts->AddFontFromMemoryTTF(fontData, (int)fileSize, 14.0f, &mergeCfg,
+                            io.Fonts->GetGlyphRangesChineseFull());
+                    } else {
+                        ImGui::MemFree(fontData);
+                    }
+                }
+            }
+            CloseHandle(hFont);
+        }
+    }
+
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
 

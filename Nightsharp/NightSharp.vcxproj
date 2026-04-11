@@ -68,6 +68,7 @@
       <UseMultiToolTask>false</UseMultiToolTask>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -91,6 +92,7 @@
       <UseMultiToolTask>false</UseMultiToolTask>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -207,7 +209,6 @@
     <ClInclude Include="plugins\PluginBootstrap.h" />
     <ClInclude Include="plugins\PluginManager.h" />
     <ClInclude Include="plugins\PluginSdkCompat.h" />
-    <ClInclude Include="plugins\champions\EzrealCastHotkeyTestPlugin.h" />
     <ClInclude Include="plugins\champions\EzrealPlugin.h" />
     <ClInclude Include="plugins\champions\JinxPlugin.h" />
     <ClInclude Include="plugins\champions\KalistaPlugin.h" />
