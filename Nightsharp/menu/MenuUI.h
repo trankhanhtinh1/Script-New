@@ -181,18 +181,24 @@ namespace MenuUI {
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(Translations::T(label));
         ImGui::SameLine();
-        const float totalWidth = 86.0f;
+
+        const char* onText = Translations::T("On");
+        const char* offText = Translations::T("Off");
+        float onW = ImGui::CalcTextSize(onText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float offW = ImGui::CalcTextSize(offText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float btnW = (onW > offW ? onW : offW);
+        float totalWidth = btnW * 2.0f + 6.0f;
         float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - totalWidth;
         if (targetX > ImGui::GetCursorPosX()) {
             ImGui::SetCursorPosX(targetX);
         }
 
-        if (DrawStateToggleButton("##on", Translations::T("On"), value, true, ImVec2(40.0f, 0.0f)) && !value) {
+        if (DrawStateToggleButton("##on", onText, value, true, ImVec2(btnW, 0.0f)) && !value) {
             value = true;
             changed = true;
         }
         ImGui::SameLine(0.0f, 6.0f);
-        if (DrawStateToggleButton("##off", Translations::T("Off"), !value, false, ImVec2(40.0f, 0.0f)) && value) {
+        if (DrawStateToggleButton("##off", offText, !value, false, ImVec2(btnW, 0.0f)) && value) {
             value = false;
             changed = true;
         }
@@ -250,6 +256,7 @@ namespace MenuUI {
 
         virtual ~MenuItem() = default;
         virtual void Draw() = 0;
+        virtual float EstimateMinWidth() const { return ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x + 100.0f; }
 
         MenuItem(const std::string& name, const std::string& display)
             : InternalName(name), DisplayName(display) {}
@@ -307,10 +314,15 @@ namespace MenuUI {
         bool& Value;
 
         MenuBool(const std::string& name, const std::string& display, bool defaultValue = true)
-            : MenuItem(name, display), Enabled(defaultValue), Value(Enabled), m_prev(defaultValue) {}
+            : MenuItem(name, display), Enabled(defaultValue), Value(Enabled), m_prev(defaultValue), m_default(defaultValue) {}
 
         void Draw() override {
+            ImVec2 rowMin = ImGui::GetCursorScreenPos();
             DrawOnOffEditor(GetDisplayText(), Enabled, InternalName.c_str());
+            ImVec2 rowMax = ImVec2(rowMin.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y);
+            if (ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                Enabled = m_default;
+            }
             if (Enabled != m_prev) {
                 if (IsOrbwalkerTraceItem(InternalName)) {
                     char buf[192] = {};
@@ -329,8 +341,18 @@ namespace MenuUI {
             }
             DrawTooltip();
         }
+
+        float EstimateMinWidth() const override {
+            float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
+            float onW = ImGui::CalcTextSize(Translations::T("On")).x + pad2;
+            float offW = ImGui::CalcTextSize(Translations::T("Off")).x + pad2;
+            float btnW = (onW > offW ? onW : offW);
+            return labelW + 20.0f + btnW * 2.0f + 6.0f;
+        }
     private:
         bool m_prev;
+        bool m_default;
     };
 
     // ========================================================================
@@ -344,21 +366,31 @@ namespace MenuUI {
 
         MenuSlider(const std::string& name, const std::string& display,
                    int defaultValue, int minVal, int maxVal)
-            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue) {}
+            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue), m_default(defaultValue) {}
 
         void Draw() override {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
             ImGui::SliderInt(GetDisplayText(), &Value, MinValue, MaxValue);
             ImGui::PopStyleColor(2);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
 
         int GetValue() const { return Value; }
         void SetValue(int value) { Value = std::clamp(value, MinValue, MaxValue); }
+
+        float EstimateMinWidth() const override {
+            float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            char valBuf[32];
+            snprintf(valBuf, sizeof(valBuf), "%d", MaxValue);
+            float valW = ImGui::CalcTextSize(valBuf).x;
+            return labelW + 20.0f + valW + 100.0f;
+        }
     private:
         int m_prev;
+        int m_default;
     };
 
     // ========================================================================
@@ -372,18 +404,28 @@ namespace MenuUI {
 
         MenuSliderF(const std::string& name, const std::string& display,
                     float defaultValue, float minVal, float maxVal)
-            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue) {}
+            : MenuItem(name, display), Value(defaultValue), MinValue(minVal), MaxValue(maxVal), m_prev(defaultValue), m_default(defaultValue) {}
 
         void Draw() override {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
             ImGui::SliderFloat(GetDisplayText(), &Value, MinValue, MaxValue);
             ImGui::PopStyleColor(2);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
+
+        float EstimateMinWidth() const override {
+            float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            char valBuf[32];
+            snprintf(valBuf, sizeof(valBuf), "%.1f", (double)MaxValue);
+            float valW = ImGui::CalcTextSize(valBuf).x;
+            return labelW + 20.0f + valW + 100.0f;
+        }
     private:
         float m_prev;
+        float m_default;
     };
 
     // ========================================================================
@@ -396,9 +438,10 @@ namespace MenuUI {
 
         MenuList(const std::string& name, const std::string& display,
                  const std::vector<std::string>& items, int defaultIndex = 0)
-            : MenuItem(name, display), Items(items), Index(defaultIndex), m_prev(defaultIndex) {}
+            : MenuItem(name, display), Items(items), Index(defaultIndex), m_prev(defaultIndex), m_default(defaultIndex) {}
 
         void Draw() override {
+            ImVec2 rowMin = ImGui::GetCursorScreenPos();
             ImGui::AlignTextToFramePadding();
             ImGui::TextUnformatted(GetDisplayText());
             ImGui::SameLine();
@@ -416,7 +459,16 @@ namespace MenuUI {
             ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-            float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 212.0f;
+
+            float maxItemW = 0.0f;
+            for (auto& item : Items) {
+                float w = ImGui::CalcTextSize(item.c_str()).x;
+                if (w > maxItemW) maxItemW = w;
+            }
+            float itemBtnW = maxItemW + ImGui::GetStyle().FramePadding.x * 2.0f;
+            float arrowBtnW = ImGui::GetFrameHeight();
+            float listTotalW = arrowBtnW + 6.0f + itemBtnW + 6.0f + arrowBtnW;
+            float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - listTotalW;
             if (rightStart > ImGui::GetCursorPosX()) {
                 ImGui::SetCursorPosX(rightStart);
             }
@@ -425,7 +477,7 @@ namespace MenuUI {
                 Index = (Index - 1 + (int)Items.size()) % (int)Items.size();
             }
             ImGui::SameLine(0.0f, 6.0f);
-            ImGui::Button(current, ImVec2(160.0f, 0.0f));
+            ImGui::Button(current, ImVec2(itemBtnW, 0.0f));
             ImGui::SameLine(0.0f, 6.0f);
             if (ImGui::ArrowButton("##next", ImGuiDir_Right)) {
                 Index = (Index + 1) % (int)Items.size();
@@ -433,6 +485,11 @@ namespace MenuUI {
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor();
             ImGui::PopID();
+
+            ImVec2 rowMax = ImVec2(rowMin.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y);
+            if (ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                Index = std::clamp(m_default, 0, (int)Items.size() - 1);
+            }
 
             if (Index != m_prev) { m_prev = Index; FireValueChanged(); }
             DrawTooltip();
@@ -453,8 +510,22 @@ namespace MenuUI {
             int safeIndex = std::clamp(Index, 0, (int)Items.size() - 1);
             return Items[safeIndex].c_str();
         }
+
+        float EstimateMinWidth() const override {
+            float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            float maxItemW = 0.0f;
+            for (auto& item : Items) {
+                float w = ImGui::CalcTextSize(item.c_str()).x;
+                if (w > maxItemW) maxItemW = w;
+            }
+            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
+            float itemBtnW = maxItemW + pad2;
+            float arrowBtnW = ImGui::GetFrameHeight();
+            return labelW + 20.0f + arrowBtnW + 6.0f + itemBtnW + 6.0f + arrowBtnW;
+        }
     private:
         int m_prev;
+        int m_default;
     };
 
     // ========================================================================
@@ -462,12 +533,13 @@ namespace MenuUI {
     // ========================================================================
     class MenuColor : public MenuItem {
     public:
-        float Color[4]; // RGBA 0-1
+        float Color[4];
 
         MenuColor(const std::string& name, const std::string& display,
                   float r = 1.0f, float g = 1.0f, float b = 1.0f, float a = 1.0f)
             : MenuItem(name, display) {
             Color[0] = r; Color[1] = g; Color[2] = b; Color[3] = a;
+            m_default[0] = r; m_default[1] = g; m_default[2] = b; m_default[3] = a;
         }
 
         ImU32 GetImU32() const {
@@ -479,8 +551,15 @@ namespace MenuUI {
             if (ImGui::ColorEdit4(GetDisplayText(), Color, ImGuiColorEditFlags_AlphaBar)) {
                 FireValueChanged();
             }
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+                Color[0] = m_default[0]; Color[1] = m_default[1];
+                Color[2] = m_default[2]; Color[3] = m_default[3];
+                FireValueChanged();
+            }
             DrawTooltip();
         }
+    private:
+        float m_default[4];
     };
 
     // ========================================================================
@@ -541,12 +620,23 @@ namespace MenuUI {
             ImGui::TextUnformatted(GetDisplayText());
             ImGui::SameLine();
 
-            float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 246.0f;
+            const char* pressText = Translations::T("Press");
+            const char* toggleText = Translations::T("Toggle");
+            const char* pressKeyText = Translations::T("Press key...");
+            const char* keyNameText = GetKeyName(Key);
+            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
+            float pressW = ImGui::CalcTextSize(pressText).x + pad2;
+            float toggleW = ImGui::CalcTextSize(toggleText).x + pad2;
+            float keyTextW = ImGui::CalcTextSize(pressKeyText).x;
+            float keyNameW = ImGui::CalcTextSize(keyNameText).x;
+            float keyBtnW = (keyTextW > keyNameW ? keyTextW : keyNameW) + pad2;
+            float kbTotalW = pressW + 6.0f + toggleW + 6.0f + keyBtnW;
+            float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - kbTotalW;
             if (rightStart > ImGui::GetCursorPosX()) {
                 ImGui::SetCursorPosX(rightStart);
             }
 
-            if (DrawSegmentButton(Translations::T("Press"), Type == KeyBindType::Press, ImVec2(54.0f, 0.0f)) &&
+            if (DrawSegmentButton(pressText, Type == KeyBindType::Press, ImVec2(pressW, 0.0f)) &&
                 Type != KeyBindType::Press) {
                 Type = KeyBindType::Press;
                 Active = false;
@@ -554,7 +644,7 @@ namespace MenuUI {
             }
 
             ImGui::SameLine(0.0f, 6.0f);
-            if (DrawSegmentButton(Translations::T("Toggle"), Type == KeyBindType::Toggle, ImVec2(58.0f, 0.0f)) &&
+            if (DrawSegmentButton(toggleText, Type == KeyBindType::Toggle, ImVec2(toggleW, 0.0f)) &&
                 Type != KeyBindType::Toggle) {
                 Type = KeyBindType::Toggle;
                 m_wasDown = false;
@@ -562,8 +652,8 @@ namespace MenuUI {
 
             ImGui::SameLine(0.0f, 6.0f);
             char keyLabel[128];
-            snprintf(keyLabel, sizeof(keyLabel), "%s##key_btn", m_listening ? Translations::T("Press key...") : GetKeyName(Key));
-            if (ImGui::Button(keyLabel, ImVec2(110.0f, 0.0f))) {
+            snprintf(keyLabel, sizeof(keyLabel), "%s##key_btn", m_listening ? pressKeyText : keyNameText);
+            if (ImGui::Button(keyLabel, ImVec2(keyBtnW, 0.0f))) {
                 m_listening = true;
                 m_listenDebounceFrames = 4;
             }
@@ -587,6 +677,18 @@ namespace MenuUI {
 
             ImGui::PopID();
             DrawTooltip();
+        }
+
+        float EstimateMinWidth() const override {
+            float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
+            float pressW = ImGui::CalcTextSize(Translations::T("Press")).x + pad2;
+            float toggleW = ImGui::CalcTextSize(Translations::T("Toggle")).x + pad2;
+            float pressKeyW = ImGui::CalcTextSize(Translations::T("Press key...")).x + pad2;
+            float keyNameW = ImGui::CalcTextSize(GetKeyName(Key)).x + pad2;
+            float keyBtnW = (pressKeyW > keyNameW ? pressKeyW : keyNameW);
+            float onOffW = ImGui::CalcTextSize(Translations::T("On")).x;
+            return labelW + 20.0f + pressW + 6.0f + toggleW + 6.0f + keyBtnW + 6.0f + onOffW;
         }
 
     private:
@@ -1028,6 +1130,42 @@ namespace MenuUI {
             return 2;
         }
 
+        float EstimateMinWidth() const override {
+            float maxW = 0.0f;
+            for (const auto& item : m_items) {
+                if (!item) continue;
+                float w = item->EstimateMinWidth();
+                if (w > maxW) maxW = w;
+            }
+            return maxW;
+        }
+
+        float EstimateRootSectionWidth(const std::string& sectionKey) const {
+            if (!m_isRoot) return EstimateMinWidth();
+
+            std::vector<MenuItem*> standaloneItems;
+            std::vector<Menu*> subMenus;
+            SplitRootItems(standaloneItems, subMenus);
+
+            if (sectionKey == "__root_items") {
+                float maxW = 0.0f;
+                for (auto* item : standaloneItems) {
+                    if (!item) continue;
+                    float w = item->EstimateMinWidth();
+                    if (w > maxW) maxW = w;
+                }
+                return maxW;
+            }
+
+            for (auto* sub : subMenus) {
+                if (sub->InternalName == sectionKey) {
+                    return sub->EstimateMinWidth();
+                }
+            }
+
+            return 200.0f;
+        }
+
         // Factory: create a root menu
         static Menu* Create(const std::string& name, const std::string& display) {
             MenuDebugLog("MenuUI::Menu::Create begin");
@@ -1263,7 +1401,13 @@ namespace MenuUI {
                 m_activeRootSection = sections.front().first;
             }
 
-            ImGui::BeginChild((std::string("##sidebar_") + InternalName).c_str(), ImVec2(170.0f, 0.0f), true);
+            float innerSidebarW = 0.0f;
+            for (auto& section : sections) {
+                float sw = ImGui::CalcTextSize(section.second.c_str()).x + 20.0f;
+                if (sw > innerSidebarW) innerSidebarW = sw;
+            }
+            if (innerSidebarW < 100.0f) innerSidebarW = 100.0f;
+            ImGui::BeginChild((std::string("##sidebar_") + InternalName).c_str(), ImVec2(innerSidebarW, 0.0f), true);
             ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Sliderbar");
             ImGui::Separator();
             for (auto& section : sections) {
@@ -1352,11 +1496,13 @@ namespace MenuUI {
 
             // Slider portion (takes most width)
             float avail = ImGui::GetContentRegionAvail().x;
-            float btnWidth = 50.0f;
+            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
+            float onW = ImGui::CalcTextSize("ON").x + pad2;
+            float offW = ImGui::CalcTextSize("OFF").x + pad2;
+            float btnWidth = (onW > offW ? onW : offW);
             ImGui::SetNextItemWidth(avail - btnWidth - 10.0f);
             ImGui::SliderInt("##slider", &SValue, MinValue, MaxValue);
 
-            // Button portion
             ImGui::SameLine();
             if (BValue) {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.45f, 0.8f, 1.0f));
@@ -1387,6 +1533,18 @@ namespace MenuUI {
 
         int GetValue() const { return SValue; }
         void SetValue(int value) { SValue = std::clamp(value, MinValue, MaxValue); }
+
+        float EstimateMinWidth() const override {
+            float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
+            float onW = ImGui::CalcTextSize("ON").x + pad2;
+            float offW = ImGui::CalcTextSize("OFF").x + pad2;
+            float btnW = (onW > offW ? onW : offW);
+            char valBuf[32];
+            snprintf(valBuf, sizeof(valBuf), "%d", MaxValue);
+            float valW = ImGui::CalcTextSize(valBuf).x;
+            return labelW + 20.0f + valW + 100.0f + 10.0f + btnW;
+        }
 
     private:
         int m_prevS;
@@ -1650,8 +1808,16 @@ namespace MenuUI {
             float y = s_posY;
             float itemHeight = 22.0f;
             float padding = 6.0f;
-            float nameWidth = 120.0f;
-            float statusWidth = 40.0f;
+
+            float nameWidth = 0.0f;
+            for (auto& entry : s_entries) {
+                float w = ImGui::CalcTextSize(entry.DisplayName.c_str()).x;
+                if (w > nameWidth) nameWidth = w;
+            }
+            float onW = ImGui::CalcTextSize("ON").x;
+            float offW = ImGui::CalcTextSize("OFF").x;
+            float statusTextMax = (onW > offW ? onW : offW);
+            float statusWidth = statusTextMax + padding * 2;
             float totalWidth = nameWidth + statusWidth + padding * 3;
             float totalHeight = itemHeight * (float)s_entries.size() + padding * 2;
 

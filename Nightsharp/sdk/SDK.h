@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/CrashTelemetry.h"
+#include "../plugins/core/DebugLog.h"
 #include "../menu/PluginRegistry.h"
 #include "Core/Constants.h"
 #include "Wrappers/Damages/Damage.h"

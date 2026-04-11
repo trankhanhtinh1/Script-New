@@ -4,6 +4,7 @@
 #include "core/OrbwalkerPlugin.h"
 #include "core/TargetSelectorPlugin.h"
 #include "core/RenderTestPlugin.h"
+#include "core/DebugWindowPlugin.h"
 #include "champions/EzrealPlugin.h"
 #include "champions/JinxPlugin.h"
 #include "champions/XerathPlugin.h"
@@ -26,6 +27,7 @@ namespace PluginBootstrap {
         manager.Register<OrbwalkerPlugin>();
         manager.Register<TargetSelectorPlugin>();
         manager.Register<RenderTestPlugin>();
+        manager.Register<DebugWindowPlugin>();
         // Champion plugins
         manager.Register<EzrealPlugin>();
         manager.Register<JinxPlugin>();

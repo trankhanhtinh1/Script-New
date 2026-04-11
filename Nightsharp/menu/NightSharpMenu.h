@@ -22,6 +22,7 @@
 
 #include "PluginRegistry.h"
 #include "SDKDiagnostics.h"
+#include "../plugins/core/DebugLog.h"
 
 namespace NightSharpMenu {
 
@@ -51,9 +52,9 @@ namespace NightSharpMenu {
     // ============================================================================
     // Layout constants
     // ============================================================================
-    constexpr float PRIMARY_W   = 190.0f;
-    constexpr float SECONDARY_W = 190.0f;
-    constexpr float CONTENT_W   = 560.0f;
+    inline float PRIMARY_W      = 190.0f;
+    inline float SECONDARY_W    = 190.0f;
+    inline float CONTENT_W      = 560.0f;
     constexpr float ITEM_H      = 30.0f;
     constexpr float HEADER_H    = 32.0f;
     constexpr float PANEL_GAP   = 6.0f;
@@ -159,12 +160,15 @@ namespace NightSharpMenu {
     // ============================================================================
     // Content sections — Core
     // ============================================================================
+    inline bool debugWindowEnabled = true;
+
     inline void DrawMenuSection() {
         DrawSectionTitle("Menu Settings");
         static bool skinChanger = false;
         DrawOnOffEditor("Skin Changer", skinChanger, "menu_skin");
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
+        DrawOnOffEditor("Debug Window", debugWindowEnabled, "debug_window_enabled");
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("Bypass OBS: overlay hidden from screen capture"));
         ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("(requires Win10 2004+)"));
@@ -543,11 +547,88 @@ namespace NightSharpMenu {
             }
         }
 
+        {
+            float maxTextW = 0.0f;
+            ImVec2 arrowSize = ImGui::CalcTextSize(">");
+            ImVec2 spaceSize = ImGui::CalcTextSize("    ");
+            for (int i = 0; i < primaryCount; i++) {
+                ImVec2 ts = ImGui::CalcTextSize(primaryLabels[i]);
+                if (ts.x > maxTextW) maxTextW = ts.x;
+            }
+            float computed = 12.0f + maxTextW + spaceSize.x + arrowSize.x + 12.0f;
+            float headerW = 10.0f + ImGui::CalcTextSize("NightSharp").x + 10.0f;
+            if (headerW > computed) computed = headerW;
+            PRIMARY_W = computed;
+        }
+
         bool showSecondary = primarySelected && activePrimaryIdx >= 0;
         int activePlugMapEarly = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
                                  ? primaryPluginMap[activePrimaryIdx] : -1;
         bool isLangSelected = showSecondary && secondarySelected && activePlugMapEarly < 0 && activeSecondaryIdx == 0;
         bool showContent   = showSecondary && secondarySelected && !isLangSelected;
+
+        int secCount = 0;
+        if (showSecondary && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount) {
+            int plugIdx = primaryPluginMap[activePrimaryIdx];
+            if (plugIdx < 0) {
+                secCount = CORE_SECONDARY_COUNT;
+            } else {
+                auto& p = PluginRegistry::Plugins[plugIdx];
+                secCount = (p.MenuRoot && p.Loaded) ? GetPluginSecondaryCount(plugIdx) : 0;
+            }
+        }
+
+        if (showSecondary && secCount > 0) {
+            float maxTextW = 0.0f;
+            ImVec2 arrowSize = ImGui::CalcTextSize(">");
+            ImVec2 spaceSize = ImGui::CalcTextSize("    ");
+            for (int i = 0; i < secCount; i++) {
+                const char* lbl = nullptr;
+                if (activePlugMapEarly < 0) {
+                    lbl = Translations::T(CORE_SECONDARY[i].label);
+                } else {
+                    lbl = GetPluginSecondaryLabel(activePlugMapEarly, i);
+                }
+                if (!lbl) lbl = "?";
+                ImVec2 ts = ImGui::CalcTextSize(lbl);
+                if (ts.x > maxTextW) maxTextW = ts.x;
+            }
+            float computed = 12.0f + maxTextW + spaceSize.x + arrowSize.x + 12.0f;
+
+            const char* headerLabel = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
+                                      ? primaryLabels[activePrimaryIdx] : "?";
+            float headerW = 10.0f + ImGui::CalcTextSize(headerLabel).x + 10.0f;
+            if (headerW > computed) computed = headerW;
+
+            if (activePlugMapEarly < 0) {
+                const char* const langItemsEarly[] = { "EN", "CN", "VN" };
+                float maxLangW = 0.0f;
+                for (int li = 0; li < 3; li++) {
+                    float lw = ImGui::CalcTextSize(langItemsEarly[li]).x;
+                    if (lw > maxLangW) maxLangW = lw;
+                }
+                float langDropMinW = maxLangW + 12.0f + 6.0f;
+                float langRow = 12.0f + maxTextW + langDropMinW + 12.0f;
+                if (computed < langRow) computed = langRow;
+            }
+            SECONDARY_W = computed;
+        }
+
+        if (showContent) {
+            CONTENT_W = 560.0f;
+            if (activePlugMapEarly >= 0 && activeSecondaryIdx >= 0) {
+                auto& p = PluginRegistry::Plugins[activePlugMapEarly];
+                if (p.MenuRoot && p.Loaded) {
+                    auto sections = p.MenuRoot->GetRootSections();
+                    if (activeSecondaryIdx < (int)sections.size()) {
+                        float estimated = p.MenuRoot->EstimateRootSectionWidth(sections[activeSecondaryIdx].first);
+                        float minW = 300.0f;
+                        float padded = estimated + 40.0f;
+                        CONTENT_W = (padded > minW ? padded : minW);
+                    }
+                }
+            }
+        }
 
         float totalW = PRIMARY_W;
         if (showSecondary) totalW += PANEL_GAP + SECONDARY_W;
@@ -569,17 +650,6 @@ namespace NightSharpMenu {
         if (isDragging) {
             menuPosX = mouse.x - dragOffX;
             menuPosY = mouse.y - dragOffY;
-        }
-
-        int secCount = 0;
-        if (showSecondary && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount) {
-            int plugIdx = primaryPluginMap[activePrimaryIdx];
-            if (plugIdx < 0) {
-                secCount = CORE_SECONDARY_COUNT;
-            } else {
-                auto& p = PluginRegistry::Plugins[plugIdx];
-                secCount = (p.MenuRoot && p.Loaded) ? GetPluginSecondaryCount(plugIdx) : 0;
-            }
         }
 
         float primaryH   = HEADER_H + ITEM_H * (float)MaxI(1, primaryCount) + 4;
@@ -683,7 +753,12 @@ namespace NightSharpMenu {
                 if (!secLabel) secLabel = "?";
 
                 if (activePlugMap < 0 && i == 0) {
-                    constexpr float dropW = 52.0f;
+                    float maxLangW = 0.0f;
+                    for (int li = 0; li < langItemCount; li++) {
+                        float lw = ImGui::CalcTextSize(langItems[li]).x;
+                        if (lw > maxLangW) maxLangW = lw;
+                    }
+                    float dropW = maxLangW + 12.0f;
                     float dropX = secondaryPos.x + SECONDARY_W - dropW - 6.0f;
                     ImVec2 mn = ImVec2(secondaryPos.x, y);
                     ImVec2 mx = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
