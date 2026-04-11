@@ -208,18 +208,18 @@ namespace NightSharpMenu {
             if (!p.Name) continue;
             const bool hasRuntime = PluginRegistry::HasRuntime(i);
 
-            ImGui::PushID(i + idBase);
-            ImGui::BeginGroup();
-
             // Check champion compatibility
             const bool canLoad = PluginRegistry::CanPluginLoad(i);
 
+            // Hide incompatible champion scripts — don't clutter the list
+            if (!canLoad) continue;
+
+            ImGui::PushID(i + idBase);
+            ImGui::BeginGroup();
+
             ImVec4 statusColor;
             const char* statusText;
-            if (!canLoad) {
-                statusColor = ImVec4(0.6f, 0.4f, 0.1f, 1.0f);  // Dark orange = incompatible
-                statusText = "[NC]";
-            } else if (!p.MenuRoot) {
+            if (!p.MenuRoot) {
                 statusColor = ImVec4(0.9f, 0.6f, 0.1f, 1.0f);
                 statusText = "[!!]";
             } else if (p.Loaded) {
@@ -231,12 +231,9 @@ namespace NightSharpMenu {
             }
             ImGui::TextColored(statusColor, "%s", statusText);
             ImGui::SameLine(0, 8);
-            ImGui::TextColored(canLoad ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 0.7f), "%s", p.Name);
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", p.Name);
 
-            if (!canLoad) {
-                ImGui::SameLine(0, 8);
-                ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.1f, 0.9f), "(wrong champion)");
-            } else if (!p.MenuRoot) {
+            if (!p.MenuRoot) {
                 ImGui::SameLine(0, 8);
                 ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.1f, 0.9f),
                     hasRuntime ? "(no menu)" : "(menu init failed)");

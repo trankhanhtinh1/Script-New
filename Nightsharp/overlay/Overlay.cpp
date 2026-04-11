@@ -416,7 +416,7 @@ void Overlay::Run() {
 
     Plugins::PluginBootstrap::EnsureRegistered();
     PluginRegistry::LoadConfig();
-    Plugins::PluginManager::Get().LoadAuto();
+    // NOTE: LoadAuto() moved after Bootstrap::Init() — plugins need SDK menus to exist
     PluginHostBridge::WireHostAPI();
 
 
@@ -459,6 +459,10 @@ void Overlay::Run() {
         return;
     }
     WriteStage("[NightSharp] STAGE 8: SDK bootstrap initialized\r\n");
+
+    // Load plugins AFTER SDK init — plugins need SDK menus to exist for override
+    Plugins::PluginManager::Get().LoadAuto();
+    WriteStage("[NightSharp] STAGE 8b: Plugins loaded (post-SDK)\r\n");
 
     const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     int frameCount = 0;

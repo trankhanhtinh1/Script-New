@@ -410,17 +410,29 @@ private:
     if (Player().ManaPercent() < static_cast<float>(lc->GetSliderValue("ManaCL", 15))) return;
     if (!Q.IsReady()) return;
 
+    const float aaRange = Player().AttackRange() + Player().BoundingRadius();
+    const bool lastHitOnly = lc->GetBoolValue("QLH", false);
+
     for (const auto &minion : ObjectManager::EnemyMinions()) {
       if (!minion.IsValid() || !minion.IsValidTarget(Q.Range)) continue;
 
-      const float hpPred = Q.GetHealthPrediction(minion);
-      if (hpPred <= 0.0f || hpPred > Q.GetDamage(minion)) continue;
+      const float qDmg = Damage::GetSpellDamage(Player(), minion, SpellSlot::Q, DamageStage::Default);
+      if (qDmg <= 0.0f) continue;
 
-      if (minion.DistanceToPlayer() > Player().AttackRange() + Player().BoundingRadius() + minion.BoundingRadius() + 50.0f ||
-          minion.Health() > Damage::GetAutoAttackDamage(Player(), minion)) {
-        auto pred = Q.GetPrediction(minion, true);
-        if (pred.Hitchance >= HitChance::High) {
-          Q.Cast(pred.CastPosition);
+      const float minionDist = minion.DistanceToPlayer();
+      const bool outOfAARange = minionDist > aaRange + minion.BoundingRadius() + 50.0f;
+      const float hp = minion.Health();
+
+      if (lastHitOnly) {
+        // Only Q minions that Q can kill AND (out of AA range OR AA can't kill)
+        if (hp <= qDmg && (outOfAARange || hp > Player().GetAutoAttackDamage(minion))) {
+          Q.Cast(minion.Position());
+          return;
+        }
+      } else {
+        // Q any minion that Q can kill
+        if (hp <= qDmg) {
+          Q.Cast(minion.Position());
           return;
         }
       }
@@ -438,18 +450,34 @@ private:
     const bool useW = jg->GetBoolValue("useW", true);
     if (Player().ManaPercent() < static_cast<float>(jg->GetSliderValue("ManaCL", 15))) return;
 
-    for (const auto &mob : ObjectManager::JungleMinions()) {
-      if (!mob.IsValidTarget(Q.Range)) continue;
+    // Get jungle mobs and sort by priority (big first)
+    auto mobs = ObjectManager::JungleMinions();
+    if (mobs.empty()) return;
 
-      if (useW && W.IsReady() && mob.IsValidTarget(W.Range)) {
+    std::sort(mobs.begin(), mobs.end(),
+      [](const AIMinionClient& a, const AIMinionClient& b) {
+        return Utils::Jungle::GetJungleType(a) > Utils::Jungle::GetJungleType(b);
+      });
+
+    // W on Legendary (Dragon/Baron/Herald) — W has no collision
+    if (useW && W.IsReady()) {
+      for (const auto &mob : mobs) {
+        if (!mob.IsValidTarget(W.Range)) continue;
         if (Utils::Jungle::GetJungleType(mob) >= JungleType::Legendary) {
-          W.CastPredicted(mob, HitChance::High);
+          W.Cast(mob.Position());
+          return;
         }
       }
+    }
 
-      if (useQ && Q.IsReady() && Player().Distance(mob) < Q.Range) {
-        Q.Cast(mob.Position());
-        return;
+    // Q on biggest mob — use prediction + collision check (Q collides with minions/plants)
+    if (useQ && Q.IsReady()) {
+      const auto &mob = mobs.front();
+      if (mob.IsValidTarget(Q.Range)) {
+        auto pred = Q.GetPrediction(mob);
+        if (pred.Hitchance >= HitChance::Medium) {
+          Q.Cast(pred.CastPosition);
+        }
       }
     }
   }
@@ -482,11 +510,9 @@ private:
     CoreAPI::Control::IssueMove(Game::CursorPos());
     if (!R.IsReady()) return;
 
-    auto *rmenu = m_menu->GetSubMenu("rmenu");
-    const float rMinRange = rmenu ? static_cast<float>(rmenu->GetSliderValue("RRange", 900)) : 900.0f;
-
+    // Semi R: no range restriction — fire at any valid target
     auto target = TargetSelector::GetTarget(R.Range, DamageType::Physical);
-    if (target.IsValid() && target.IsValidTarget(R.Range) && target.DistanceToPlayer() >= rMinRange) {
+    if (target.IsValid() && target.IsValidTarget(R.Range)) {
       R.CastPredicted(target, HitChance::High);
     }
   }

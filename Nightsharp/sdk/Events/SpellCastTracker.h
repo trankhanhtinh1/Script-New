@@ -154,64 +154,69 @@ inline bool OnDoCast(DoCastHandler h)    { return AddOnDoCast(h); }
 inline bool AddOnStopCast(StopCastHandler h) { return h && detail::g_onStop.push_back(h); }
 inline bool OnStopCast(StopCastHandler h)    { return AddOnStopCast(h); }
 
+/// Poll spell cast state for a single unit
+inline void PollUnit(const AIBaseClient& unit, int now) {
+    const int netId = unit.NetworkId();
+    if (!unit.IsValid() || netId == 0) {
+        if (netId != 0) detail::g_states->erase(netId);
+        return;
+    }
+
+    const auto cast = CoreSpellCastInfo::GetActive(unit.Address());
+    auto& state = (*detail::g_states)[netId];
+
+    if (cast.IsValid()) {
+        if (!state.Active || state.CastAddress != cast.address) {
+            // ── NEW CAST detected ──
+            state.Active      = true;
+            state.CastAddress = cast.address;
+            state.Args        = detail::BuildArgs(cast);
+            state.StartTick   = now;
+            state.CastDelayMs = std::max(state.Args.CastDelay, 0.0f) * 1000.0f;
+            state.DoCastFired = false;
+
+            detail::FireProcess(unit, state.Args);
+        }
+        else if (state.Active && !state.DoCastFired) {
+            // ── Same cast, check if windup elapsed → OnDoCast ──
+            const int elapsed = now - state.StartTick;
+            if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
+                state.DoCastFired = true;
+                detail::FireDoCast(unit, state.Args);
+            }
+        }
+    }
+    else if (state.Active) {
+        // ── Cast disappeared ──
+        if (!state.DoCastFired) {
+            const int elapsed = now - state.StartTick;
+            if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
+                detail::FireDoCast(unit, state.Args);
+            } else {
+                StopCastEventArgs sa = {};
+                sa.Slot              = state.Args.Slot;
+                sa.SpellName         = state.Args.SpellName;
+                sa.SuccessfullyCasted = false;
+                sa.ForceStop         = true;
+                detail::FireStop(unit, sa);
+            }
+        }
+        state.Active      = false;
+        state.CastAddress = 0;
+        state.DoCastFired = false;
+    }
+}
+
 /// Call once per tick from Events::Update()
 inline void Update() {
     if (!detail::EnsureStorage()) return;
 
     const int now = Game::TickCount();
 
+    // Poll heroes only — minion/turret AA tracking done via MissileTracker
+    // in HealthPrediction::Update() using RuntimeAPI::ClassifyMissile
     for (const auto& hero : ObjectManager::Heroes()) {
-        const int netId = hero.NetworkId();
-        if (!hero.IsValid() || netId == 0) {
-            if (netId != 0) detail::g_states->erase(netId);
-            continue;
-        }
-
-        const auto cast = hero.Ref().GetActiveSpellCast();
-        auto& state = (*detail::g_states)[netId];
-
-        if (cast.IsValid()) {
-            if (!state.Active || state.CastAddress != cast.address) {
-                // ── NEW CAST detected ──
-                state.Active      = true;
-                state.CastAddress = cast.address;
-                state.Args        = detail::BuildArgs(cast);
-                state.StartTick   = now;
-                state.CastDelayMs = std::max(state.Args.CastDelay, 0.0f) * 1000.0f;
-                state.DoCastFired = false;
-
-                detail::FireProcess(hero, state.Args);
-            }
-            else if (state.Active && !state.DoCastFired) {
-                // ── Same cast, check if windup elapsed → OnDoCast ──
-                const int elapsed = now - state.StartTick;
-                if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
-                    state.DoCastFired = true;
-                    detail::FireDoCast(hero, state.Args);
-                }
-            }
-        }
-        else if (state.Active) {
-            // ── Cast disappeared ──
-            if (!state.DoCastFired) {
-                const int elapsed = now - state.StartTick;
-                if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
-                    // Completed between ticks
-                    detail::FireDoCast(hero, state.Args);
-                } else {
-                    // Cancelled early
-                    StopCastEventArgs sa = {};
-                    sa.Slot              = state.Args.Slot;
-                    sa.SpellName         = state.Args.SpellName;
-                    sa.SuccessfullyCasted = false;
-                    sa.ForceStop         = true;
-                    detail::FireStop(hero, sa);
-                }
-            }
-            state.Active      = false;
-            state.CastAddress = 0;
-            state.DoCastFired = false;
-        }
+        PollUnit(hero, now);
     }
 }
 
