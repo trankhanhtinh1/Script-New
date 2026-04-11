@@ -240,6 +240,7 @@ public:
     }
 
     bool HasBuff(const char* name) const { return m_ref.HasBuff(name); }
+    bool HasBuffOfType(int type) const { return m_ref.HasBuffType(type); }
     int GetBuffStacks(const char* name) const { return m_ref.GetBuffStacks(name); }
     int GetBuffCount(const char* name) const { return m_ref.GetBuffStacks(name); }
     float GetBuffRemainingTime(const char* name, float gameTime = CoreAPI::Game::GetTime()) const {
@@ -1142,6 +1143,35 @@ namespace ObjectManager {
         }
         return out;
     }
+
+    // Inhibitors (BarracksDampener) — iterate AllObjects, filter by "Barracks" name prefix
+    inline std::vector<AIBaseClient> EnemyInhibitors() {
+        const int myTeam = Player().Team();
+        std::vector<AIBaseClient> out;
+        for (const auto& obj : AllObjects()) {
+            if (!obj.IsValid() || obj.Team() == myTeam) continue;
+            std::string name = obj.CharacterName();
+            if (name.size() >= 8 && _strnicmp(name.c_str(), "Barracks", 8) == 0) {
+                AIBaseClient inhib(obj.Address());
+                if (inhib.IsAlive()) out.push_back(inhib);
+            }
+        }
+        return out;
+    }
+
+    // Nexus (HQ) — iterate AllObjects, filter by "HQ" name prefix
+    inline AIBaseClient EnemyNexus() {
+        const int myTeam = Player().Team();
+        for (const auto& obj : AllObjects()) {
+            if (!obj.IsValid() || obj.Team() == myTeam) continue;
+            std::string name = obj.CharacterName();
+            if (name.size() >= 2 && _strnicmp(name.c_str(), "HQ", 2) == 0) {
+                AIBaseClient nexus(obj.Address());
+                if (nexus.IsAlive()) return nexus;
+            }
+        }
+        return AIBaseClient();
+    }
 }
 
 namespace GameObjects {
@@ -1164,6 +1194,8 @@ namespace GameObjects {
     inline std::vector<AITurretClient> EnemyTurrets() { return ObjectManager::EnemyTurrets(); }
     inline std::vector<MissileClient> Missiles() { return ObjectManager::Missiles(); }
     inline std::vector<GameObject> AllObjects() { return ObjectManager::AllObjects(); }
+    inline std::vector<AIBaseClient> EnemyInhibitors() { return ObjectManager::EnemyInhibitors(); }
+    inline AIBaseClient EnemyNexus() { return ObjectManager::EnemyNexus(); }
 }
 
 } // namespace SDK

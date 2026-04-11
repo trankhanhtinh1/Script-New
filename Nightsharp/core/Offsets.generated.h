@@ -424,7 +424,7 @@ namespace ClassificationRuntime {
     constexpr auto IsJungleMonster = 0x2A71E0;   // 40 53 48 83 EC ? 48 8B 42 ? 48 8B D9 48 8B 51 ? [signature was not learned into a strict rule]
     constexpr auto GetJungleType = 0x677400;   // 40 53 56 41 56 48 83 EC 20 33 F6 4C 8B F1 89 74 [signature was not learned into a strict rule]
     constexpr auto IsClone = 0x2A60C0;   // 40 53 48 83 EC 20 48 8D 99 58 FD FF FF 48 8B 03 48 8B CB FF 90 ? ? ? ? 84 C0 74 ? 48 8B 03 48 8B CB FF 90 78 05 00 00 [signature was not learned into a strict rule]
-    constexpr auto IsBuilding = 0x315790;   // 48 89 5C 24 ? 57 48 83 EC ? 48 8B F9 48 85 C9 74 ? [signature was not learned into a strict rule]
+    constexpr auto IsBuilding = 0x315790;   // 48 89 5C 24 ? 57 48 83 EC ? 48 8B F9 48 85 C9 74 ? [signature was not learned into a strict rule] | MCP_SIG: 48 89 5C 24 08 57 48 83 EC ? 48 8B F9 48 85 C9
     constexpr auto IsDead = 0x2A6327;   // E9 ? ? ? ? 48 81 E9 ? ? ? ? E9 ? ? ? ? CC CC CC CC CC CC CC CC 48 83 EC ? [signature was not learned into a strict rule]
     constexpr auto IsVulnerable = 0x2A7000;   // 40 55 48 83 EC ? 48 8B 01 [signature was not learned into a strict rule]
     constexpr auto IsDragon = 0x2A65F0;   // 40 53 48 83 EC ? 48 8D 99 ? ? ? ? 48 8B CB E8 ? ? ? ? 48 8D 15 ? ? ? ? [signature was not learned into a strict rule]

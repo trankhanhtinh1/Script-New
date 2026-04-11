@@ -5,6 +5,7 @@
 #include "../../Enumerations/HealthPredictionType.h"
 #include "../../Events/ObjectTracker.h"
 #include "../../Events/SpellCastTracker.h"
+#include "../../../core/RuntimeAPI.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -316,6 +317,72 @@ inline void Update() {
     }
 
     const int now = Game::TickCount();
+    const int myTeam = ObjectManager::Player().Team();
+
+    // ── Missile-based AA tracking (RuntimeAPI) ──
+    // Iterate all active missiles. If missile is MinionAA(1) or TurretShot(2)
+    // from ally units targeting enemy minions, register in g_activeAttacks.
+    // This is more accurate than SpellCast polling and feeds HealthPrediction.
+    for (const auto& missile : ObjectManager::Missiles()) {
+        if (!missile.IsValid()) continue;
+        uintptr_t mAddr = missile.Address();
+
+        int classify = RuntimeAPI::ClassifyMissile(mAddr);
+        if (classify != 1 && classify != 2) continue;  // Only MinionAA + TurretShot
+
+        int casterNetId = missile.CasterNetworkId();
+        int targetNetId = missile.TargetNetworkId();
+        if (casterNetId == 0 || targetNetId == 0) continue;
+
+        // Only track ally missiles hitting enemy minions
+        int casterTeam = 0;
+        {
+            auto casterObj = ObjectManager::GetByNetId(casterNetId);
+            if (!casterObj.IsValid()) continue;
+            casterTeam = casterObj.Team();
+        }
+        if (casterTeam != myTeam) continue;  // Only ally attacks
+
+        // Check if already tracked (by source netId)
+        auto existIt = detail::g_lastAttackBySource->find(casterNetId);
+        if (existIt != detail::g_lastAttackBySource->end()) {
+            // Already tracking an attack from this source — check if same missile
+            auto attackIt = detail::g_activeAttacks->find(existIt->second);
+            if (attackIt != detail::g_activeAttacks->end() &&
+                attackIt->second.TargetNetId == targetNetId) {
+                continue;  // Same attack, already tracked
+            }
+        }
+
+        // Register new attack
+        PredictedDamage attack = {};
+        attack.AttackId = detail::g_nextAttackId++;
+        attack.SourceNetId = casterNetId;
+        attack.TargetNetId = targetNetId;
+        attack.StartTick = now;
+
+        // Estimate damage from caster
+        auto caster = AIBaseClient(ObjectManager::GetByNetId(casterNetId).Address());
+        auto target = AIBaseClient(ObjectManager::GetByNetId(targetNetId).Address());
+        if (caster.IsValid() && target.IsValid()) {
+            attack.Damage = caster.GetAutoAttackDamage(target);
+            attack.Delay = (int)(caster.AttackCastDelay() * 1000.0f);
+            float dist = caster.Distance(target);
+            attack.ProjectileSpeed = caster.IsMelee() ? FLT_MAX : 1200.0f;  // Default minion projectile
+            attack.IsMelee = caster.IsMelee();
+            attack.Processed = false;
+
+            (*detail::g_activeAttacks)[attack.AttackId] = attack;
+            (*detail::g_lastAttackBySource)[casterNetId] = attack.AttackId;
+
+            // Track turret aggro
+            if (classify == 2) {
+                (*detail::g_turretAggroStartTick)[targetNetId] = now;
+            }
+        }
+    }
+
+    // ── Cleanup expired attacks ──
     std::vector<uint64_t> toErase = {};
 
     for (const auto& [id, attack] : *detail::g_activeAttacks) {

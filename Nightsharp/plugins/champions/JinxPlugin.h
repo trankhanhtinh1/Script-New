@@ -101,6 +101,7 @@ public:
       std::string label = std::string("Harass Q enemy: ") + enemy.CharacterName();
       qMenu->Add<MenuBool>(key.c_str(), label.c_str(), true);
     }
+    qMenu->Add<MenuKeyBind>("spellFarm", "Spell Farm Toggle", VK_MBUTTON, SDK::KeyBindType::Toggle);
     qMenu->Add<MenuSlider>("QmanaCombo", "Q combo mana", 10, 0, 100);
     qMenu->Add<MenuSlider>("QmanaHarass", "Q harass mana", 40, 0, 100);
     qMenu->Add<MenuSlider>("QmanaLC", "Q lane clear mana", 80, 0, 100);
@@ -188,7 +189,8 @@ public:
     }
 
     // Jinx.cs lines 214-226: not combo and target is minion
-    if (!m_combo && args.Target.IsValid()) {
+    // Only if spell farm toggle is ON
+    if (!m_combo && args.Target.IsValid() && qMenu->GetKeyBindValue("spellFarm", false)) {
       if (Orbwalker::GetMode() == OrbwalkerMode::Clear &&
           Player().ManaPercent() > static_cast<float>(qMenu->GetSliderValue("QmanaLC", 80)) &&
           CountMinionsInRange(250.0f, args.Target.Position()) >= qMenu->GetSliderValue("Qlaneclear", 2)) {
@@ -442,14 +444,21 @@ private:
     }
 
     // R KS (Jinx.cs lines 303-311)
-    auto t1 = TargetSelector::GetTarget(R.Range, SDK::DamageType::Physical);
-    if (t1.IsValid() && t1.IsValidTarget() && rMenu->GetBoolValue("Rks", true)) {
-      if (GetKsDamage(t1, R) > t1.Health() && R.IsReady()) {
-        auto pred1 = R.GetPrediction(t1);
-        if (pred1.Hitchance >= HitChance::High) {
-          // Jinx.cs line 307: Don't R if in W range
-          if (t1.DistanceToPlayer() > W.Range + 100.0f) {
+    if (rMenu->GetBoolValue("Rks", true) && R.IsReady()) {
+      for (const auto& t1 : ObjectManager::EnemyHeroes()) {
+        if (!t1.IsValid() || !t1.IsValidTarget(R.Range)) continue;
+
+        if (GetKsDamage(t1, R) > t1.Health()) {
+          // Skip R if W can kill instead (save R for long range)
+          if (W.IsReady() && t1.DistanceToPlayer() <= W.Range &&
+              GetKsDamage(t1, W) > t1.Health()) {
+            continue;
+          }
+
+          auto pred1 = R.GetPrediction(t1);
+          if (pred1.Hitchance >= HitChance::High) {
             R.CastPredicted(t1, HitChance::High);
+            return;
           }
         }
       }
@@ -604,8 +613,9 @@ private:
     if (m_fishBoneActive) {
       // ── FishBone đang bật (Jinx.cs line 504-520) ──
 
-      // Lane clear: giữ FishBone nếu đủ mana + minion target (Jinx.cs line 507-510)
-      if (Orbwalker::GetMode() == OrbwalkerMode::Clear &&
+      // Lane clear: giữ FishBone nếu đủ mana + minion target + spell farm ON (Jinx.cs line 507-510)
+      bool spellFarm = qMenu->GetKeyBindValue("spellFarm", false);
+      if (spellFarm && Orbwalker::GetMode() == OrbwalkerMode::Clear &&
           Player().ManaPercent() > static_cast<float>(qMenu->GetSliderValue("QmanaLC", 80))) {
         // Giữ FishBone — empty block giữ nguyên C#
       }
@@ -656,7 +666,9 @@ private:
           Q.Cast();
         }
         // Farm: switch FishBone cho minion ngoài tầm (Jinx.cs line 545-554)
-        else if (m_farm && !Player().IsWindingUp() && qMenu->GetBoolValue("farmQout", true)) {
+        // Only if spell farm toggle is ON
+        else if (m_farm && !Player().IsWindingUp() && qMenu->GetBoolValue("farmQout", true) &&
+                 qMenu->GetKeyBindValue("spellFarm", false)) {
           for (const auto& minion : ObjectManager::EnemyMinions()) {
             if (!minion.IsValid() || !minion.IsValidTarget(Q.Range + 30.0f)) continue;
             if (!Player().InAutoAttackRange(minion) &&
@@ -670,7 +682,9 @@ private:
         }
 
         // Lane clear: switch FishBone cho AoE (Jinx.cs line 555-562)
-        if (Orbwalker::GetMode() == OrbwalkerMode::Clear &&
+        // Only if spell farm toggle is ON
+        if (qMenu->GetKeyBindValue("spellFarm", false) &&
+            Orbwalker::GetMode() == OrbwalkerMode::Clear &&
             Player().ManaPercent() > static_cast<float>(qMenu->GetSliderValue("QmanaLC", 80))) {
           for (const auto& minion : ObjectManager::EnemyMinions()) {
             if (!minion.IsValid()) continue;
