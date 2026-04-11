@@ -180,18 +180,6 @@ namespace NightSharpMenu {
         ImGui::Text("Frame: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     }
 
-    inline void DrawLanguageSection() {
-        DrawSectionTitle("Language");
-        static int lang = 0;
-        const char* langs[] = { "EN", "CN", "VN" };
-        for (int i = 0; i < 3; i++) {
-            ImGui::PushID(langs[i]);
-            if (DrawStateButton(langs[i], langs[i], lang == i, true, 56.0f))
-                lang = i;
-            ImGui::PopID();
-            if (i < 2) ImGui::SameLine(0, 8);
-        }
-    }
 
     inline void DrawPluginManagerRows(PluginRegistry::PluginKind kind, const char* emptyText, int idBase = 0) {
         int pluginCount = PluginRegistry::GetCountByKind(kind);
@@ -421,13 +409,12 @@ namespace NightSharpMenu {
     // Core content panel dispatch
     // ============================================================================
     inline void DrawCoreContentPanel(int secondaryIdx) {
-        if (secondaryIdx == 0)      DrawLanguageSection();
-        else if (secondaryIdx == 1) DrawMenuSection();
+        if (secondaryIdx == 1)      DrawMenuSection();
         else if (secondaryIdx == 2) DrawDebugSection();
         else if (secondaryIdx == 3) SDKDiagnostics::Render();
         else if (secondaryIdx == 4) DrawSDKPluginsSection();
         else if (secondaryIdx == 5) DrawPluginsSection();
-        else                        DrawLanguageSection();
+        else                        {}
     }
 
     // ============================================================================
@@ -545,7 +532,10 @@ namespace NightSharpMenu {
         }
 
         bool showSecondary = primarySelected && activePrimaryIdx >= 0;
-        bool showContent   = showSecondary && secondarySelected;
+        int activePlugMapEarly = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
+                                 ? primaryPluginMap[activePrimaryIdx] : -1;
+        bool isLangSelected = showSecondary && secondarySelected && activePlugMapEarly < 0 && activeSecondaryIdx == 0;
+        bool showContent   = showSecondary && secondarySelected && !isLangSelected;
 
         float totalW = PRIMARY_W;
         if (showSecondary) totalW += PANEL_GAP + SECONDARY_W;
@@ -582,9 +572,8 @@ namespace NightSharpMenu {
 
         float primaryH   = HEADER_H + ITEM_H * (float)MaxI(1, primaryCount) + 4;
         float secondaryH = showSecondary ? HEADER_H + ITEM_H * (float)MaxI(1, secCount) + 4 : 0;
-        float sidebarH   = MaxF(primaryH, secondaryH > 0 ? secondaryH : primaryH);
-        float contentH   = MaxF(sidebarH, MAX_CONTENT_H);
-        float actualH    = showContent ? contentH : sidebarH;
+        float contentH   = showContent ? MaxF(secondaryH, MAX_CONTENT_H) : 0;
+        float actualH    = MaxF(primaryH, MaxF(secondaryH, contentH));
 
         const ImVec2 display = ImGui::GetIO().DisplaySize;
         if (display.x > 0.0f && display.y > 0.0f) {
@@ -603,9 +592,9 @@ namespace NightSharpMenu {
 
         // ==== PRIMARY PANEL ====
         {
-            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH), COL_BG, 4.0f);
+            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BG, 4.0f);
             dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH), COL_BORDER, 4.0f);
+            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BORDER, 4.0f);
             dl->AddText(ImVec2(primaryPos.x + 10, primaryPos.y + 8), COL_ACCENT, "NightSharp");
             dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H),
                         ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER);
@@ -614,13 +603,20 @@ namespace NightSharpMenu {
             for (int i = 0; i < primaryCount; i++) {
                 if (DrawSidebarItem(dl, ImVec2(primaryPos.x, y), PRIMARY_W,
                                     primaryLabels[i], activePrimaryIdx == i, true)) {
-                    if (activePrimaryIdx != i) {
+                    if (activePrimaryIdx == i) {
+                        primarySelected = !primarySelected;
+                        if (!primarySelected) {
+                            activeSecondaryIdx = -1;
+                            activePluginSecIdx = -1;
+                            secondarySelected = false;
+                        }
+                    } else {
                         activePrimaryIdx = i;
                         activeSecondaryIdx = -1;
                         activePluginSecIdx = -1;
                         secondarySelected = false;
+                        primarySelected = true;
                     }
-                    primarySelected = true;
                 }
                 y += ITEM_H;
             }
@@ -646,14 +642,18 @@ namespace NightSharpMenu {
             if (activeSecondaryIdx < 0 && secCount > 0)
                 activeSecondaryIdx = 0;
 
-            secondaryH = HEADER_H + ITEM_H * (float)MaxI(1, secCount) + 4;
-            sidebarH = MaxF(primaryH, secondaryH);
+            static int langIndex = 0;
+            static bool langDropOpen = false;
+            const char* const langItems[] = { "EN", "CN", "VN" };
+            constexpr int langItemCount = 3;
+            int langExtraRows = (activePlugMap < 0 && langDropOpen) ? langItemCount : 0;
 
-            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH), COL_BG, 4.0f);
+            secondaryH = HEADER_H + ITEM_H * (float)MaxI(1, secCount + langExtraRows) + 4;
+
+            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH), COL_BG, 4.0f);
             dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH), COL_BORDER, 4.0f);
+            dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH), COL_BORDER, 4.0f);
 
-            // Header label
             const char* headerLabel = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
                                       ? primaryLabels[activePrimaryIdx] : "?";
             dl->AddText(ImVec2(secondaryPos.x + 10, secondaryPos.y + 8), COL_ACCENT, headerLabel);
@@ -664,32 +664,87 @@ namespace NightSharpMenu {
             for (int i = 0; i < secCount; i++) {
                 const char* secLabel = nullptr;
                 if (activePlugMap < 0) {
-                    // Core secondary entries
                     secLabel = CORE_SECONDARY[i].label;
                 } else {
-                    // Plugin secondary entries = virtual (submenus + General)
                     secLabel = GetPluginSecondaryLabel(activePlugMap, i);
                 }
                 if (!secLabel) secLabel = "?";
 
-                if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W,
-                                    secLabel, activeSecondaryIdx == i, true)) {
-                    activeSecondaryIdx = i;
-                    secondarySelected = true;
+                if (activePlugMap < 0 && i == 0) {
+                    constexpr float dropW = 52.0f;
+                    float dropX = secondaryPos.x + SECONDARY_W - dropW - 6.0f;
+                    ImVec2 mn = ImVec2(secondaryPos.x, y);
+                    ImVec2 mx = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
+
+                    bool rowHovered = ImGui::IsMouseHoveringRect(mn, mx, false);
+                    ImVec2 dropMin = ImVec2(dropX, y + 3.0f);
+                    ImVec2 dropMax = ImVec2(dropX + dropW, y + ITEM_H - 3.0f);
+                    bool dropHovered = ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
+
+                    if (rowHovered || activeSecondaryIdx == i)
+                        dl->AddRectFilled(mn, mx, activeSecondaryIdx == i ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, 3.0f);
+                    if (activeSecondaryIdx == i)
+                        dl->AddLine(ImVec2(mn.x + 1, mn.y + 2), ImVec2(mn.x + 1, mx.y - 2), COL_ACCENT, 2.0f);
+                    dl->AddLine(ImVec2(mn.x, mx.y), ImVec2(mx.x, mx.y), COL_BORDER, 1.0f);
+                    dl->AddText(ImVec2(secondaryPos.x + 12, y + 7), COL_TEXT, secLabel);
+
+                    dl->AddRectFilled(dropMin, dropMax, dropHovered ? COL_ITEM_HOVER : COL_ITEM, 3.0f);
+                    dl->AddRect(dropMin, dropMax, COL_BORDER, 3.0f);
+                    const char* cur = langItems[langIndex];
+                    ImVec2 ts = ImGui::CalcTextSize(cur);
+                    dl->AddText(ImVec2(dropX + (dropW - ts.x) * 0.5f, y + (ITEM_H - ts.y) * 0.5f), COL_TEXT, cur);
+
+                    if (rowHovered && ImGui::IsMouseClicked(0)) {
+                        langDropOpen = !langDropOpen;
+                        activeSecondaryIdx = i;
+                        secondarySelected = true;
+                    }
+
+                    y += ITEM_H;
+
+                    if (langDropOpen) {
+                        for (int li = 0; li < langItemCount; li++) {
+                            ImVec2 rMin = ImVec2(secondaryPos.x, y);
+                            ImVec2 rMax = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
+                            bool isSel = (li == langIndex);
+                            bool rHov = ImGui::IsMouseHoveringRect(rMin, rMax, false);
+
+                            dl->AddRectFilled(rMin, rMax, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_ITEM), 0.0f);
+                            dl->AddLine(ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y), COL_BORDER, 1.0f);
+
+                            ImVec2 its = ImGui::CalcTextSize(langItems[li]);
+                            dl->AddText(ImVec2(rMin.x + 24, rMin.y + (ITEM_H - its.y) * 0.5f),
+                                        isSel ? COL_ACCENT : COL_TEXT, langItems[li]);
+
+                            if (rHov && ImGui::IsMouseClicked(0)) {
+                                langIndex = li;
+                                langDropOpen = false;
+                            }
+                            y += ITEM_H;
+                        }
+                    }
+                } else {
+                    if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W,
+                                        secLabel, activeSecondaryIdx == i, true)) {
+                        activeSecondaryIdx = i;
+                        secondarySelected = true;
+                        langDropOpen = false;
+                    }
+                    y += ITEM_H;
                 }
-                y += ITEM_H;
             }
         }
 
         // ==== CONTENT PANEL ====
-        if (secondarySelected && activeSecondaryIdx >= 0) {
+        bool isLangActive = activePlugMap < 0 && activeSecondaryIdx == 0;
+        if (secondarySelected && activeSecondaryIdx >= 0 && !isLangActive) {
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0,0,0,0));
             ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f,1.0f,1.0f,1.0f));
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10,4));
 
-            contentH = MaxF(sidebarH, MAX_CONTENT_H);
+            contentH = MaxF(secondaryH, MAX_CONTENT_H);
 
             dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
             dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
@@ -727,9 +782,9 @@ namespace NightSharpMenu {
         }
 
         menuPanelCount = 0;
-        menuPanels[menuPanelCount++] = { menuPosX, menuPosY, PRIMARY_W, sidebarH };
+        menuPanels[menuPanelCount++] = { menuPosX, menuPosY, PRIMARY_W, primaryH };
         if (showSecondary)
-            menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + PANEL_GAP, menuPosY, SECONDARY_W, sidebarH };
+            menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + PANEL_GAP, menuPosY, SECONDARY_W, secondaryH };
         if (showContent)
             menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY, CONTENT_W, contentH };
     }
