@@ -45,6 +45,8 @@
 namespace SDK {
 namespace MenuUI {
 
+    inline bool g_inputEnabled = true;
+
     template<typename T, int Capacity>
     class FixedList {
     public:
@@ -178,6 +180,10 @@ namespace MenuUI {
         bool changed = false;
         std::string id = idSuffix ? idSuffix : label;
         ImGui::PushID(id.c_str());
+
+        ImVec2 rowMin = ImGui::GetCursorScreenPos();
+        float rowWidth = ImGui::GetContentRegionAvail().x;
+
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(Translations::T(label));
         ImGui::SameLine();
@@ -187,19 +193,17 @@ namespace MenuUI {
         float onW = ImGui::CalcTextSize(onText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
         float offW = ImGui::CalcTextSize(offText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
         float btnW = (onW > offW ? onW : offW);
-        float totalWidth = btnW * 2.0f + 6.0f;
-        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - totalWidth;
+        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - btnW;
         if (targetX > ImGui::GetCursorPosX()) {
             ImGui::SetCursorPosX(targetX);
         }
 
-        if (DrawStateToggleButton("##on", onText, value, true, ImVec2(btnW, 0.0f)) && !value) {
-            value = true;
-            changed = true;
-        }
-        ImGui::SameLine(0.0f, 6.0f);
-        if (DrawStateToggleButton("##off", offText, !value, false, ImVec2(btnW, 0.0f)) && value) {
-            value = false;
+        const char* btnLabel = value ? onText : offText;
+        DrawStateToggleButton("##toggle", btnLabel, true, value, ImVec2(btnW, 0.0f));
+
+        ImVec2 rowMax = ImVec2(rowMin.x + rowWidth, ImGui::GetItemRectMax().y);
+        if (g_inputEnabled && ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            value = !value;
             changed = true;
         }
         ImGui::PopID();
@@ -316,13 +320,15 @@ namespace MenuUI {
         MenuBool(const std::string& name, const std::string& display, bool defaultValue = true)
             : MenuItem(name, display), Enabled(defaultValue), Value(Enabled), m_prev(defaultValue), m_default(defaultValue) {}
 
-        void Draw() override {
-            ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            DrawOnOffEditor(GetDisplayText(), Enabled, InternalName.c_str());
-            ImVec2 rowMax = ImVec2(rowMin.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y);
-            if (ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-                Enabled = m_default;
-            }
+        void Toggle() {
+            Enabled = !Enabled;
+        }
+
+        void ResetDefault() {
+            Enabled = m_default;
+        }
+
+        void CheckChanged() {
             if (Enabled != m_prev) {
                 if (IsOrbwalkerTraceItem(InternalName)) {
                     char buf[192] = {};
@@ -339,6 +345,11 @@ namespace MenuUI {
                     MenuStageTrace(buf);
                 }
             }
+        }
+
+        void Draw() override {
+            DrawOnOffEditor(GetDisplayText(), Enabled, InternalName.c_str());
+            CheckChanged();
             DrawTooltip();
         }
 
@@ -348,7 +359,7 @@ namespace MenuUI {
             float onW = ImGui::CalcTextSize(Translations::T("On")).x + pad2;
             float offW = ImGui::CalcTextSize(Translations::T("Off")).x + pad2;
             float btnW = (onW > offW ? onW : offW);
-            return labelW + 20.0f + btnW * 2.0f + 6.0f;
+            return labelW + 20.0f + btnW;
         }
     private:
         bool m_prev;
@@ -373,7 +384,7 @@ namespace MenuUI {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
             ImGui::SliderInt(GetDisplayText(), &Value, MinValue, MaxValue);
             ImGui::PopStyleColor(2);
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
+            if (g_inputEnabled && ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
@@ -411,7 +422,7 @@ namespace MenuUI {
             ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.16f, 0.22f, 0.95f));
             ImGui::SliderFloat(GetDisplayText(), &Value, MinValue, MaxValue);
             ImGui::PopStyleColor(2);
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
+            if (g_inputEnabled && ImGui::IsItemClicked(ImGuiMouseButton_Right)) { Value = m_default; }
             if (Value != m_prev) { m_prev = Value; FireValueChanged(); }
             DrawTooltip();
         }
@@ -487,7 +498,7 @@ namespace MenuUI {
             ImGui::PopID();
 
             ImVec2 rowMax = ImVec2(rowMin.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y);
-            if (ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            if (g_inputEnabled && ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                 Index = std::clamp(m_default, 0, (int)Items.size() - 1);
             }
 
@@ -551,7 +562,7 @@ namespace MenuUI {
             if (ImGui::ColorEdit4(GetDisplayText(), Color, ImGuiColorEditFlags_AlphaBar)) {
                 FireValueChanged();
             }
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+            if (g_inputEnabled && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
                 Color[0] = m_default[0]; Color[1] = m_default[1];
                 Color[2] = m_default[2]; Color[3] = m_default[3];
                 FireValueChanged();
@@ -654,8 +665,7 @@ namespace MenuUI {
             char keyLabel[128];
             snprintf(keyLabel, sizeof(keyLabel), "%s##key_btn", m_listening ? pressKeyText : keyNameText);
             if (ImGui::Button(keyLabel, ImVec2(keyBtnW, 0.0f))) {
-                m_listening = true;
-                m_listenDebounceFrames = 4;
+                StartListening();
             }
 
             if (Type == KeyBindType::Toggle) {
@@ -664,16 +674,7 @@ namespace MenuUI {
                 ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(col), "%s", Active ? Translations::T("On") : Translations::T("Off"));
             }
 
-            bool configChanged = (Key != m_prevKey || Type != m_prevType);
-            bool toggleStateChanged = (Type == KeyBindType::Toggle && Active != m_prevActive);
-            if (configChanged || toggleStateChanged) {
-                m_prevKey = Key;
-                m_prevType = Type;
-                m_prevActive = Active;
-                FireValueChanged();
-            } else if (Type == KeyBindType::Press) {
-                m_prevActive = Active;
-            }
+            CheckConfigChanged();
 
             ImGui::PopID();
             DrawTooltip();
@@ -691,14 +692,7 @@ namespace MenuUI {
             return labelW + 20.0f + pressW + 6.0f + toggleW + 6.0f + keyBtnW + 6.0f + onOffW;
         }
 
-    private:
-        bool m_wasDown = false;
-        bool m_listening = false;
-        int m_listenDebounceFrames = 0;
-        int m_prevKey = 0;
-        KeyBindType m_prevType = KeyBindType::Press;
-        bool m_prevActive = false;
-
+    public:
         static bool IsCurrentProcessForeground() {
             HWND fg = GetForegroundWindow();
             if (!fg) {
@@ -709,25 +703,20 @@ namespace MenuUI {
             return pid == GetCurrentProcessId();
         }
 
-        static bool IsExtendedKey(int vk) {
-            switch (vk) {
-            case VK_INSERT:
-            case VK_DELETE:
-            case VK_HOME:
-            case VK_END:
-            case VK_PRIOR:
-            case VK_NEXT:
-            case VK_LEFT:
-            case VK_RIGHT:
-            case VK_UP:
-            case VK_DOWN:
-            case VK_DIVIDE:
-            case VK_RCONTROL:
-            case VK_RMENU:
-            case VK_NUMLOCK:
-                return true;
-            default:
-                return false;
+        bool IsListening() const { return m_listening; }
+
+        void StartListening() {
+            m_listening = true;
+            m_listenDebounceFrames = 4;
+        }
+
+        void PollListeningKey() {
+            if (!m_listening) return;
+            if (m_listenDebounceFrames > 0) { --m_listenDebounceFrames; return; }
+            for (int vk = 1; vk < 256; ++vk) {
+                if ((GetAsyncKeyState(vk) & 0x8000) == 0) continue;
+                if (vk == VK_ESCAPE) { m_listening = false; return; }
+                Key = vk; m_listening = false; m_wasDown = true; return;
             }
         }
 
@@ -762,62 +751,63 @@ namespace MenuUI {
             case VK_DOWN: return "Down";
             case VK_OEM_3: return "`";
             default:
-                if (vk >= '0' && vk <= '9') {
-                    nameBuf[0] = (char)vk;
-                    nameBuf[1] = 0;
-                    return nameBuf;
-                }
-                if (vk >= 'A' && vk <= 'Z') {
-                    nameBuf[0] = (char)vk;
-                    nameBuf[1] = 0;
-                    return nameBuf;
-                }
-                if (vk >= VK_F1 && vk <= VK_F12) {
-                    snprintf(nameBuf, sizeof(nameBuf), "F%d", (vk - VK_F1) + 1);
-                    return nameBuf;
-                }
-
+                if (vk >= '0' && vk <= '9') { nameBuf[0] = (char)vk; nameBuf[1] = 0; return nameBuf; }
+                if (vk >= 'A' && vk <= 'Z') { nameBuf[0] = (char)vk; nameBuf[1] = 0; return nameBuf; }
+                if (vk >= VK_F1 && vk <= VK_F12) { snprintf(nameBuf, sizeof(nameBuf), "F%d", (vk - VK_F1) + 1); return nameBuf; }
                 UINT scanCode = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
                 if (scanCode != 0) {
                     LONG lParam = (LONG)(scanCode << 16);
-                    if (IsExtendedKey(vk)) {
-                        lParam |= 1 << 24;
-                    }
+                    if (IsExtendedKey(vk)) lParam |= 1 << 24;
                     int len = GetKeyNameTextA(lParam, nameBuf, (int)sizeof(nameBuf));
-                    if (len > 0) {
-                        return nameBuf;
-                    }
+                    if (len > 0) return nameBuf;
                 }
                 return "?";
             }
         }
 
-        void PollListeningKey() {
-            if (!m_listening) {
-                return;
-            }
-
-            if (m_listenDebounceFrames > 0) {
-                --m_listenDebounceFrames;
-                return;
-            }
-
-            for (int vk = 1; vk < 256; ++vk) {
-                if ((GetAsyncKeyState(vk) & 0x8000) == 0) {
-                    continue;
-                }
-
-                if (vk == VK_ESCAPE) {
-                    m_listening = false;
-                    return;
-                }
-
-                Key = vk;
-                m_listening = false;
-                m_wasDown = true;
-                return;
+        void CheckConfigChanged() {
+            bool configChanged = (Key != m_prevKey || Type != m_prevType);
+            bool toggleStateChanged = (Type == KeyBindType::Toggle && Active != m_prevActive);
+            if (configChanged || toggleStateChanged) {
+                m_prevKey = Key;
+                m_prevType = Type;
+                m_prevActive = Active;
+                FireValueChanged();
+            } else if (Type == KeyBindType::Press) {
+                m_prevActive = Active;
             }
         }
+
+    private:
+        bool m_wasDown = false;
+        bool m_listening = false;
+        int m_listenDebounceFrames = 0;
+        int m_prevKey = 0;
+        KeyBindType m_prevType = KeyBindType::Press;
+        bool m_prevActive = false;
+
+        static bool IsExtendedKey(int vk) {
+            switch (vk) {
+            case VK_INSERT:
+            case VK_DELETE:
+            case VK_HOME:
+            case VK_END:
+            case VK_PRIOR:
+            case VK_NEXT:
+            case VK_LEFT:
+            case VK_RIGHT:
+            case VK_UP:
+            case VK_DOWN:
+            case VK_DIVIDE:
+            case VK_RCONTROL:
+            case VK_RMENU:
+            case VK_NUMLOCK:
+                return true;
+            default:
+                return false;
+            }
+        }
+
     };
 
     // ========================================================================
@@ -1038,6 +1028,57 @@ namespace MenuUI {
         }
 
         // Draw menu (ImGui)
+        static constexpr float kContentRowH = 30.0f;
+
+        static void DrawItemRow(MenuItem* item, float panelX = -1.0f, float panelW = -1.0f) {
+            if (!item) return;
+            ImDrawList* dl = ImGui::GetForegroundDrawList();
+            ImVec2 rowMin = ImGui::GetCursorScreenPos();
+            float rowWidth = ImGui::GetContentRegionAvail().x;
+
+            float lineX = (panelX >= 0.0f) ? panelX : rowMin.x;
+            float lineW = (panelW >= 0.0f) ? panelW : rowWidth;
+
+            ImVec2 hoverMin = ImVec2(lineX, rowMin.y);
+            ImVec2 hoverMax = ImVec2(lineX + lineW, rowMin.y + kContentRowH);
+
+            if (g_inputEnabled && ImGui::IsMouseHoveringRect(hoverMin, hoverMax))
+                dl->AddRectFilled(hoverMin, hoverMax, IM_COL32(52, 48, 82, 215), 3.0f);
+
+            float padY = (kContentRowH - ImGui::GetFrameHeight()) * 0.5f;
+            if (padY > 0.0f)
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + padY);
+
+            item->Draw();
+
+            dl->AddLine(ImVec2(lineX, rowMin.y + kContentRowH),
+                        ImVec2(lineX + lineW, rowMin.y + kContentRowH),
+                        IM_COL32(88, 100, 148, 180), 1.0f);
+
+            float nextY = (rowMin.y + kContentRowH) - ImGui::GetWindowPos().y;
+            if (ImGui::GetCursorPosY() < nextY)
+                ImGui::SetCursorPosY(nextY);
+        }
+
+        void DrawContentPanel() {
+            for (auto& item : m_items) {
+                if (!item) continue;
+                auto* sub = dynamic_cast<Menu*>(item);
+                if (sub) {
+                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f), "%s", sub->GetDisplayText());
+                    ImGui::Separator();
+                    ImGui::Indent(10.0f);
+                    for (auto& child : sub->m_items) {
+                        DrawItemRow(child);
+                    }
+                    ImGui::Unindent(10.0f);
+                } else {
+                    DrawItemRow(item);
+                }
+            }
+        }
+
         void Draw() override {
             if (m_isRoot) {
                 DrawRootMenu();
@@ -1047,13 +1088,28 @@ namespace MenuUI {
                 ImGui::Separator();
                 ImGui::Indent(10.0f);
                 for (auto& item : m_items) {
-                    if (item) item->Draw();
+                    DrawItemRow(item);
                 }
                 ImGui::Unindent(10.0f);
             }
         }
 
         const FixedList<MenuItem*, kMaxMenuItems>& GetItems() const { return m_items; }
+
+        Menu* FindSection(const std::string& sectionKey) {
+            for (auto& item : m_items) {
+                auto* sub = dynamic_cast<Menu*>(item);
+                if (sub && sub->InternalName == sectionKey) return sub;
+            }
+            return nullptr;
+        }
+
+        void GetStandaloneItems(std::vector<MenuItem*>& out) const {
+            out.clear();
+            for (auto& item : m_items) {
+                if (!dynamic_cast<Menu*>(item)) out.push_back(item);
+            }
+        }
 
         std::vector<std::pair<std::string, std::string>> GetRootSections() const {
             std::vector<std::pair<std::string, std::string>> sections;
@@ -1114,12 +1170,12 @@ namespace MenuUI {
             (void)onlyKeyBinds;
 
             if (sectionKey == "__root_items") {
-                return std::max(2 + (int)standaloneItems.size(), 2);
+                return std::max((int)standaloneItems.size(), 1);
             }
 
             for (auto* sub : subMenus) {
                 if (sub->InternalName == sectionKey) {
-                    return std::max(2 + sub->EstimateRowCount(), 2);
+                    return std::max(sub->EstimateRowCount(), 1);
                 }
             }
 
@@ -1131,10 +1187,11 @@ namespace MenuUI {
         }
 
         float EstimateMinWidth() const override {
-            float maxW = 0.0f;
+            float titleW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
+            float maxW = titleW;
             for (const auto& item : m_items) {
                 if (!item) continue;
-                float w = item->EstimateMinWidth();
+                float w = item->EstimateMinWidth() + 10.0f;
                 if (w > maxW) maxW = w;
             }
             return maxW;
@@ -1339,21 +1396,15 @@ namespace MenuUI {
                                     const std::vector<Menu*>& subMenus,
                                     bool onlyKeyBinds) {
             if (sectionKey == "__root_items") {
-                ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.94f, 0.95f, 0.98f, 1.0f),
-                    "%s", onlyKeyBinds ? Translations::T("Keys") : Translations::T("General"));
-                ImGui::Separator();
-                ImGui::Indent(10.0f);
                 for (auto& item : standaloneItems) {
-                    if (item) item->Draw();
+                    DrawItemRow(item);
                 }
-                ImGui::Unindent(10.0f);
                 return;
             }
 
             for (auto* sub : subMenus) {
                 if (sub->InternalName == sectionKey) {
-                    sub->Draw();
+                    sub->DrawContentPanel();
                     return;
                 }
             }

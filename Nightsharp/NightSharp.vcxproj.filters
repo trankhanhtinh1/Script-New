@@ -118,6 +118,27 @@
     <Filter Include="sdk\Data">
       <UniqueIdentifier>{B62E6FC0-7EC6-5C50-9F4E-BC77C18F5FCD}</UniqueIdentifier>
     </Filter>
+    <Filter Include="sdk\External">
+      <UniqueIdentifier>{A3D1E2F4-5B6C-7D8E-9F0A-1B2C3D4E5F60}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins">
+      <UniqueIdentifier>{C1D2E3F4-A5B6-C7D8-E9F0-112233445566}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins\champions">
+      <UniqueIdentifier>{D2E3F4A5-B6C7-D8E9-F0A1-223344556677}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins\core">
+      <UniqueIdentifier>{E3F4A5B6-C7D8-E9F0-A1B2-334455667788}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="plugins\champions\RTXPower">
+      <UniqueIdentifier>{B6C7D8E9-F0A1-B2C3-D4E5-667788990011}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Third_Party">
+      <UniqueIdentifier>{F4A5B6C7-D8E9-F0A1-B2C3-445566778899}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Third_Party\clipper">
+      <UniqueIdentifier>{A5B6C7D8-E9F0-A1B2-C3D4-5566778899AA}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -976,6 +997,117 @@
     </ClInclude>
     <ClInclude Include="sdk\Enumerations\TargetSelectorMode.h">
       <Filter>sdk\Enumerations</Filter>
+    </ClInclude>
+    <ClInclude Include="core\KeyAuth.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\VerifyUserKey.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\CoreBuffs.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\CoreControl.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\CoreSpellBook.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\CoreValidation.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\CoreView.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\CrashTelemetry.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="core\NightPackage.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="Third_Party\clipper\clipper.h">
+      <Filter>Third_Party\clipper</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Data\DamageData.generated.h">
+      <Filter>sdk\Data</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Events\AnimationTracker.h">
+      <Filter>sdk\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Events\BuffTracker.h">
+      <Filter>sdk\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Events\ObjectTracker.h">
+      <Filter>sdk\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Events\PathTracker.h">
+      <Filter>sdk\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Events\PropertyTracker.h">
+      <Filter>sdk\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Events\SpellCastTracker.h">
+      <Filter>sdk\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\External\NightSharpAPI.h">
+      <Filter>sdk\External</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\External\nightsharp_plugin.h">
+      <Filter>sdk\External</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\NightSharpAPIBinding.h">
+      <Filter>sdk</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\IPlugin.h">
+      <Filter>plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\NightPackageLoader.h">
+      <Filter>plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\PluginBootstrap.h">
+      <Filter>plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\PluginManager.h">
+      <Filter>plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\PluginSdkCompat.h">
+      <Filter>plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\EzrealPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\JinxPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\KalistaPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\KarthusPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\KogmawPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\ViktorPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\XerathPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\ZedPlugin.h">
+      <Filter>plugins\champions</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\champions\RTXPower\Ezreal.h">
+      <Filter>plugins\champions\RTXPower</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\core\OrbwalkerPlugin.h">
+      <Filter>plugins\core</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\core\RenderTestPlugin.h">
+      <Filter>plugins\core</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\core\TargetSelectorPlugin.h">
+      <Filter>plugins\core</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

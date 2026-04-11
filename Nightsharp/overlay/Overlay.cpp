@@ -610,6 +610,7 @@ void Overlay::Run() {
             CrashTelemetry::SetStage("Overlay::Frame::MenuRender");
             traceFrameStage("MenuRender");
             NightSharpMenu::Render();
+            NightSharpMenu::RenderDebugWindow();
             CrashTelemetry::SetStage("Overlay::Frame::PluginsRender");
             traceFrameStage("PluginsRender");
             Plugins::PluginManager::Get().OnRender();

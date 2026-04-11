@@ -195,8 +195,6 @@ public:
         if (!Player().IsValid() || !m_menu) return;
         if (Player().IsDead() || Player().IsRecalling() || Player().IsWindingUp()) return;
 
-        print("Ezreallllllllllll");
-
         if (R.Instance().Level() > 0) {
             auto *rmenu = m_menu->GetSubMenu("rmenu");
             if (rmenu) R.Range = static_cast<float>(rmenu->GetSliderValue("RMaxRange", 3000));

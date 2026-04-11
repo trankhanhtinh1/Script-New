@@ -57,7 +57,7 @@ namespace NightSharpMenu {
     inline float CONTENT_W      = 560.0f;
     constexpr float ITEM_H      = 30.0f;
     constexpr float HEADER_H    = 32.0f;
-    constexpr float PANEL_GAP   = 6.0f;
+    constexpr float PANEL_GAP   = 3.0f;
     constexpr float MAX_CONTENT_H = 620.0f;
 
     // ============================================================================
@@ -90,12 +90,14 @@ namespace NightSharpMenu {
     // ============================================================================
     // Drawing helpers
     // ============================================================================
+    inline bool g_menuInputEnabled = true;
+
     inline bool DrawSidebarItem(ImDrawList* dl, ImVec2 pos, float w,
                                 const char* text, bool isActive, bool hasArrow = false)
     {
         ImVec2 mn = pos;
         ImVec2 mx = ImVec2(pos.x + w, pos.y + ITEM_H);
-        bool hovered = ImGui::IsMouseHoveringRect(mn, mx, false);
+        bool hovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
         bool clicked = hovered && ImGui::IsMouseClicked(0);
 
         if (hovered || isActive)
@@ -139,15 +141,29 @@ namespace NightSharpMenu {
     {
         bool changed = false;
         ImGui::PushID(id);
+
+        ImVec2 rowMin = ImGui::GetCursorScreenPos();
+        float rowWidth = ImGui::GetContentRegionAvail().x;
+
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(Translations::T(label));
         ImGui::SameLine();
-        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 96.0f;
+
+        const char* onText = Translations::T("On");
+        const char* offText = Translations::T("Off");
+        float onW = ImGui::CalcTextSize(onText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float offW = ImGui::CalcTextSize(offText).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float btnW = (onW > offW ? onW : offW);
+        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - btnW;
         if (targetX > ImGui::GetCursorPosX())
             ImGui::SetCursorPosX(targetX);
-        if (DrawStateButton("on", "On", value, true) && !value)   { value = true;  changed = true; }
-        ImGui::SameLine(0, 6);
-        if (DrawStateButton("off", "Off", !value, false) && value) { value = false; changed = true; }
+        DrawStateButton("toggle", value ? "On" : "Off", true, value, btnW);
+
+        ImVec2 rowMax = ImVec2(rowMin.x + rowWidth, ImGui::GetItemRectMax().y);
+        if (g_menuInputEnabled && ImGui::IsMouseHoveringRect(rowMin, rowMax) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            value = !value;
+            changed = true;
+        }
         ImGui::PopID();
         return changed;
     }
@@ -460,20 +476,171 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
+    // Draw a single MenuBool as a sidebar-style row
+    // ============================================================================
+    inline void DrawBoolSidebarItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
+                                     SDK::MenuUI::MenuBool* b, bool drawSep = true) {
+        ImVec2 mn = ImVec2(panelX, pos.y);
+        ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
+        bool hovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
+
+        if (hovered)
+            dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
+        if (drawSep)
+            dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
+
+        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(b->DisplayName.c_str()));
+
+        const char* stateText = b->Enabled ? Translations::T("On") : Translations::T("Off");
+        ImVec2 stateSize = ImGui::CalcTextSize(stateText);
+        float padX = ImGui::GetStyle().FramePadding.x;
+        float btnW = stateSize.x + padX * 2.0f;
+        float btnX = panelX + panelW - btnW - 8.0f;
+        ImU32 btnCol = b->Enabled ? IM_COL32(46, 140, 71, 250) : IM_COL32(166, 56, 61, 250);
+        dl->AddRectFilled(ImVec2(btnX, pos.y + 4.0f), ImVec2(btnX + btnW, pos.y + ITEM_H - 4.0f), btnCol, 7.0f);
+        dl->AddText(ImVec2(btnX + padX, pos.y + (ITEM_H - stateSize.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), stateText);
+
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            b->Toggle();
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+            b->ResetDefault();
+
+        b->CheckChanged();
+    }
+
+    // ============================================================================
+    // Draw a single MenuKeyBind as a sidebar-style row
+    // ============================================================================
+    inline void DrawKeyBindSidebarItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
+                                        SDK::MenuUI::MenuKeyBind* kb, bool drawSep = true) {
+        using KBType = SDK::MenuUI::KeyBindType;
+        kb->PollListeningKey();
+
+        ImVec2 mn = ImVec2(panelX, pos.y);
+        ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
+        bool hovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
+
+        if (hovered)
+            dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
+        if (drawSep)
+            dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
+
+        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(kb->DisplayName.c_str()));
+
+        const char* pressText = Translations::T("Press");
+        const char* toggleText = Translations::T("Toggle");
+        const char* keyText = kb->IsListening() ? Translations::T("Press key...") : SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key);
+        float padX = ImGui::GetStyle().FramePadding.x;
+        float pad2 = padX * 2.0f;
+        float pressW = ImGui::CalcTextSize(pressText).x + pad2;
+        float toggleW = ImGui::CalcTextSize(toggleText).x + pad2;
+        float keyTextW = ImGui::CalcTextSize(Translations::T("Press key...")).x;
+        float keyNameW = ImGui::CalcTextSize(SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key)).x;
+        float keyBtnW = ((keyTextW > keyNameW) ? keyTextW : keyNameW) + pad2;
+        float gap = 4.0f;
+        float totalW = pressW + gap + toggleW + gap + keyBtnW;
+        float startX = panelX + panelW - totalW - 8.0f;
+        float btnY = pos.y + 4.0f;
+        float btnH = ITEM_H - 8.0f;
+
+        ImU32 colActive = IM_COL32(77, 148, 87, 242);
+        ImU32 colInactive = IM_COL32(36, 41, 61, 242);
+
+        float cx = startX;
+        ImVec2 pressMin = ImVec2(cx, btnY);
+        ImVec2 pressMax = ImVec2(cx + pressW, btnY + btnH);
+        dl->AddRectFilled(pressMin, pressMax, (kb->Type == KBType::Press) ? colActive : colInactive, 7.0f);
+        ImVec2 pts = ImGui::CalcTextSize(pressText);
+        dl->AddText(ImVec2(cx + (pressW - pts.x) * 0.5f, pos.y + (ITEM_H - pts.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), pressText);
+
+        cx += pressW + gap;
+        ImVec2 toggleMin = ImVec2(cx, btnY);
+        ImVec2 toggleMax = ImVec2(cx + toggleW, btnY + btnH);
+        dl->AddRectFilled(toggleMin, toggleMax, (kb->Type == KBType::Toggle) ? colActive : colInactive, 7.0f);
+        ImVec2 tts = ImGui::CalcTextSize(toggleText);
+        dl->AddText(ImVec2(cx + (toggleW - tts.x) * 0.5f, pos.y + (ITEM_H - tts.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), toggleText);
+
+        cx += toggleW + gap;
+        ImVec2 keyMin = ImVec2(cx, btnY);
+        ImVec2 keyMax = ImVec2(cx + keyBtnW, btnY + btnH);
+        dl->AddRectFilled(keyMin, keyMax, colInactive, 7.0f);
+        ImVec2 kts = ImGui::CalcTextSize(keyText);
+        dl->AddText(ImVec2(cx + (keyBtnW - kts.x) * 0.5f, pos.y + (ITEM_H - kts.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), keyText);
+
+        if (g_menuInputEnabled) {
+            if (ImGui::IsMouseHoveringRect(pressMin, pressMax, false) && ImGui::IsMouseClicked(0) &&
+                kb->Type != KBType::Press) {
+                kb->Type = KBType::Press;
+                kb->Active = false;
+            }
+            if (ImGui::IsMouseHoveringRect(toggleMin, toggleMax, false) && ImGui::IsMouseClicked(0) &&
+                kb->Type != KBType::Toggle) {
+                kb->Type = KBType::Toggle;
+            }
+            if (ImGui::IsMouseHoveringRect(keyMin, keyMax, false) && ImGui::IsMouseClicked(0)) {
+                kb->StartListening();
+            }
+        }
+
+        kb->CheckConfigChanged();
+    }
+
+    // ============================================================================
     // Plugin content panel — renders plugin's SDK menu subtree
     // ============================================================================
-    inline void DrawPluginContentPanel(int pluginIdx, int secIdx) {
+    inline void DrawPluginContentPanel(int pluginIdx, int secIdx, float panelX, float panelW) {
         if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) return;
         auto& p = PluginRegistry::Plugins[pluginIdx];
         if (!p.MenuRoot || !p.Loaded) return;
 
         auto sections = p.MenuRoot->GetRootSections();
-        if (secIdx >= 0 && secIdx < sections.size()) {
-            p.MenuRoot->DrawRootSection(sections[secIdx].first);
-        } else {
-            // Fallback - draw whole root
-            p.MenuRoot->Draw();
+        if (secIdx < 0 || secIdx >= (int)sections.size()) return;
+
+        const std::string& sectionKey = sections[secIdx].first;
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        ImVec2 cursor = ImGui::GetCursorScreenPos();
+        float y = cursor.y;
+
+        auto drawItems = [&](const auto& items) {
+            int count = 0;
+            for (auto& item : items) { if (item) count++; }
+            int idx = 0;
+            for (auto& item : items) {
+                if (!item) continue;
+                idx++;
+                bool isLast = (idx == count);
+                auto* boolItem = dynamic_cast<SDK::MenuUI::MenuBool*>(item);
+                auto* kbItem = dynamic_cast<SDK::MenuUI::MenuKeyBind*>(item);
+                if (boolItem) {
+                    DrawBoolSidebarItem(dl, ImVec2(cursor.x, y), panelX, panelW, boolItem, !isLast);
+                    y += ITEM_H;
+                    ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
+                } else if (kbItem) {
+                    DrawKeyBindSidebarItem(dl, ImVec2(cursor.x, y), panelX, panelW, kbItem, !isLast);
+                    y += ITEM_H;
+                    ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
+                } else {
+                    ImGui::SetCursorScreenPos(ImVec2(cursor.x, y));
+                    SDK::MenuUI::Menu::DrawItemRow(item, panelX, panelW);
+                    y = ImGui::GetCursorScreenPos().y;
+                }
+            }
+        };
+
+        if (sectionKey == "__root_items") {
+            std::vector<SDK::MenuItem*> standalone;
+            p.MenuRoot->GetStandaloneItems(standalone);
+            drawItems(standalone);
+            return;
         }
+
+        auto* sub = p.MenuRoot->FindSection(sectionKey);
+        if (!sub) return;
+        drawItems(sub->GetItems());
     }
 
     // ============================================================================
@@ -524,6 +691,9 @@ namespace NightSharpMenu {
         }
 
         if (!showMenu) return;
+
+        g_menuInputEnabled = SDK::MenuUI::MenuKeyBind::IsCurrentProcessForeground();
+        SDK::MenuUI::g_inputEnabled = g_menuInputEnabled;
 
         // ── Build dynamic primary entries ──
         // [0] = Core, [1..N] = loaded SDK plugins
@@ -622,9 +792,7 @@ namespace NightSharpMenu {
                     auto sections = p.MenuRoot->GetRootSections();
                     if (activeSecondaryIdx < (int)sections.size()) {
                         float estimated = p.MenuRoot->EstimateRootSectionWidth(sections[activeSecondaryIdx].first);
-                        float minW = 300.0f;
-                        float padded = estimated + 40.0f;
-                        CONTENT_W = (padded > minW ? padded : minW);
+                        CONTENT_W = estimated + 40.0f;
                     }
                 }
             }
@@ -641,7 +809,7 @@ namespace NightSharpMenu {
         bool inTitle = mouse.x >= menuPosX && mouse.x <= titleMaxX
                     && mouse.y >= menuPosY && mouse.y <= titleMaxY;
 
-        if (ImGui::IsMouseClicked(0) && inTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
+        if (g_menuInputEnabled && ImGui::IsMouseClicked(0) && inTitle && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
             isDragging = true;
             dragOffX = mouse.x - menuPosX;
             dragOffY = mouse.y - menuPosY;
@@ -684,7 +852,7 @@ namespace NightSharpMenu {
             float y = primaryPos.y + HEADER_H + 2;
             for (int i = 0; i < primaryCount; i++) {
                 if (DrawSidebarItem(dl, ImVec2(primaryPos.x, y), PRIMARY_W,
-                                    primaryLabels[i], activePrimaryIdx == i, true)) {
+                                    primaryLabels[i], primarySelected && activePrimaryIdx == i, true)) {
                     if (activePrimaryIdx == i) {
                         primarySelected = !primarySelected;
                         if (!primarySelected) {
@@ -763,14 +931,15 @@ namespace NightSharpMenu {
                     ImVec2 mn = ImVec2(secondaryPos.x, y);
                     ImVec2 mx = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
 
-                    bool rowHovered = ImGui::IsMouseHoveringRect(mn, mx, false);
+                    bool rowHovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(mn, mx, false);
                     ImVec2 dropMin = ImVec2(dropX, y + 3.0f);
                     ImVec2 dropMax = ImVec2(dropX + dropW, y + ITEM_H - 3.0f);
-                    bool dropHovered = ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
+                    bool dropHovered = g_menuInputEnabled && ImGui::IsMouseHoveringRect(dropMin, dropMax, false);
 
-                    if (rowHovered || activeSecondaryIdx == i)
-                        dl->AddRectFilled(mn, mx, activeSecondaryIdx == i ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, 3.0f);
-                    if (activeSecondaryIdx == i)
+                    bool langRowActive = secondarySelected && activeSecondaryIdx == i;
+                    if (rowHovered || langRowActive)
+                        dl->AddRectFilled(mn, mx, langRowActive ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, 3.0f);
+                    if (langRowActive)
                         dl->AddLine(ImVec2(mn.x + 1, mn.y + 2), ImVec2(mn.x + 1, mx.y - 2), COL_ACCENT, 2.0f);
                     dl->AddLine(ImVec2(mn.x, mx.y), ImVec2(mx.x, mx.y), COL_BORDER, 1.0f);
                     dl->AddText(ImVec2(secondaryPos.x + 12, y + 7), COL_TEXT, secLabel);
@@ -794,7 +963,7 @@ namespace NightSharpMenu {
                             ImVec2 rMin = ImVec2(secondaryPos.x, y);
                             ImVec2 rMax = ImVec2(secondaryPos.x + SECONDARY_W, y + ITEM_H);
                             bool isSel = (li == langIndex);
-                            bool rHov = ImGui::IsMouseHoveringRect(rMin, rMax, false);
+                            bool rHov = g_menuInputEnabled && ImGui::IsMouseHoveringRect(rMin, rMax, false);
 
                             dl->AddRectFilled(rMin, rMax, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_ITEM), 0.0f);
                             dl->AddLine(ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y), COL_BORDER, 1.0f);
@@ -813,7 +982,7 @@ namespace NightSharpMenu {
                     }
                 } else {
                     if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, y), SECONDARY_W,
-                                        secLabel, activeSecondaryIdx == i, true)) {
+                                        secLabel, secondarySelected && activeSecondaryIdx == i, true)) {
                         activeSecondaryIdx = i;
                         secondarySelected = true;
                         langDropOpen = false;
@@ -832,7 +1001,20 @@ namespace NightSharpMenu {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10,4));
 
-            contentH = MaxF(secondaryH, MAX_CONTENT_H);
+            float estimatedContentH = HEADER_H + 4.0f;
+            if (activePlugMap >= 0 && activeSecondaryIdx >= 0) {
+                auto& pe = PluginRegistry::Plugins[activePlugMap];
+                if (pe.MenuRoot && pe.Loaded) {
+                    auto secs = pe.MenuRoot->GetRootSections();
+                    if (activeSecondaryIdx < (int)secs.size()) {
+                        int rowCount = pe.MenuRoot->EstimateRootSectionRowCount(secs[activeSecondaryIdx].first);
+                        estimatedContentH = HEADER_H + ITEM_H * (float)MaxI(1, rowCount) + 8.0f;
+                    }
+                }
+            } else if (activePlugMap < 0) {
+                estimatedContentH = MAX_CONTENT_H;
+            }
+            contentH = MaxF(secondaryH, estimatedContentH);
 
             dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
             dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
@@ -852,16 +1034,18 @@ namespace NightSharpMenu {
 
             ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
             ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
-            ImGui::Begin("##ns_content", nullptr,
-                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
+            ImGuiWindowFlags contentFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground;
+            if (!g_menuInputEnabled)
+                contentFlags |= ImGuiWindowFlags_NoInputs;
+            ImGui::Begin("##ns_content", nullptr, contentFlags);
 
             if (activePlugMap < 0) {
                 // Core content
                 DrawCoreContentPanel(activeSecondaryIdx);
             } else {
                 // Plugin content — render SDK menu subtree
-                DrawPluginContentPanel(activePlugMap, activeSecondaryIdx);
+                DrawPluginContentPanel(activePlugMap, activeSecondaryIdx, contentPos.x, CONTENT_W);
             }
 
             ImGui::End();
@@ -876,6 +1060,58 @@ namespace NightSharpMenu {
         if (showContent)
             menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY, CONTENT_W, contentH };
 
+    }
+
+    inline char g_debugTextBuf[DebugLogState::kMaxLines * DebugLogState::kMaxLineLen] = {};
+    inline int  g_debugLastGen = 0;
+
+    inline void RenderDebugWindow() {
+        if (!debugWindowEnabled) return;
+
+        auto& s = DebugLogState::Get();
+
+        ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowBgAlpha(0.65f);
+
+        if (!ImGui::Begin("Debug Log", nullptr,
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoFocusOnAppearing)) {
+            ImGui::End();
+            return;
+        }
+
+        if (ImGui::Button("Clear")) {
+            printClear();
+        }
+
+        ImGui::Separator();
+
+        g_debugTextBuf[0] = '\0';
+        int pos = 0;
+        for (int i = 0; i < s.Count; ++i) {
+            const char* line;
+            if (s.Count < DebugLogState::kMaxLines)
+                line = s.Lines[i];
+            else
+                line = s.Lines[(s.WriteIndex + i) % DebugLogState::kMaxLines];
+            int len = (int)strlen(line);
+            if (pos + len + 1 < (int)sizeof(g_debugTextBuf)) {
+                memcpy(g_debugTextBuf + pos, line, len);
+                pos += len;
+                g_debugTextBuf[pos++] = '\n';
+            }
+        }
+        g_debugTextBuf[pos] = '\0';
+
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        ImGui::InputTextMultiline("##debuglog", g_debugTextBuf, sizeof(g_debugTextBuf), avail,
+            ImGuiInputTextFlags_ReadOnly);
+
+        if (s.Generation != g_debugLastGen) {
+            ImGui::SetScrollHereY(1.0f);
+            g_debugLastGen = s.Generation;
+        }
+
+        ImGui::End();
     }
 
 } // namespace NightSharpMenu

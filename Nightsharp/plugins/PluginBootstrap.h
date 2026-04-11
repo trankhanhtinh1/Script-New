@@ -4,7 +4,6 @@
 #include "core/OrbwalkerPlugin.h"
 #include "core/TargetSelectorPlugin.h"
 #include "core/RenderTestPlugin.h"
-#include "core/DebugWindowPlugin.h"
 #include "champions/EzrealPlugin.h"
 #include "champions/JinxPlugin.h"
 #include "champions/XerathPlugin.h"
@@ -13,6 +12,7 @@
 #include "champions/ViktorPlugin.h"
 #include "champions/ZedPlugin.h"
 #include "champions/KalistaPlugin.h"
+#include "champions/RTXPower/Ezreal.h"
 
 namespace Plugins {
 namespace PluginBootstrap {
@@ -27,7 +27,6 @@ namespace PluginBootstrap {
         manager.Register<OrbwalkerPlugin>();
         manager.Register<TargetSelectorPlugin>();
         manager.Register<RenderTestPlugin>();
-        manager.Register<DebugWindowPlugin>();
         // Champion plugins
         manager.Register<EzrealPlugin>();
         manager.Register<JinxPlugin>();
@@ -37,6 +36,7 @@ namespace PluginBootstrap {
         manager.Register<ViktorPlugin>();
         manager.Register<ZedPlugin>();
         manager.Register<KalistaPlugin>();
+        manager.Register<RTXPowerPlugin>();
     }
 
 } // namespace PluginBootstrap

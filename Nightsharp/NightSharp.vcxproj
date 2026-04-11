@@ -216,6 +216,7 @@
     <ClInclude Include="plugins\champions\ViktorPlugin.h" />
     <ClInclude Include="plugins\champions\XerathPlugin.h" />
     <ClInclude Include="plugins\champions\ZedPlugin.h" />
+    <ClInclude Include="plugins\champions\RTXPower\Ezreal.h" />
     <ClInclude Include="plugins\core\OrbwalkerPlugin.h" />
     <ClInclude Include="plugins\core\RenderTestPlugin.h" />
     <ClInclude Include="plugins\core\TargetSelectorPlugin.h" />
