@@ -43,9 +43,9 @@ namespace NightSharpMenu {
     inline float dragOffX   = 0.0f;
     inline float dragOffY   = 0.0f;
 
-    // Explicit menu bounding rect for WM_NCHITTEST (updated each frame)
-    inline float menuBoundsRight  = 0.0f;
-    inline float menuBoundsBottom = 0.0f;
+    struct PanelRect { float x, y, w, h; };
+    inline PanelRect menuPanels[3] = {};
+    inline int menuPanelCount = 0;
 
     // ============================================================================
     // Layout constants
@@ -726,9 +726,12 @@ namespace NightSharpMenu {
             ImGui::PopStyleColor(3);
         }
 
-        // Update explicit menu bounds for WM_NCHITTEST
-        menuBoundsRight  = menuPosX + totalW;
-        menuBoundsBottom = menuPosY + actualH;
+        menuPanelCount = 0;
+        menuPanels[menuPanelCount++] = { menuPosX, menuPosY, PRIMARY_W, sidebarH };
+        if (showSecondary)
+            menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + PANEL_GAP, menuPosY, SECONDARY_W, sidebarH };
+        if (showContent)
+            menuPanels[menuPanelCount++] = { menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2, menuPosY, CONTENT_W, contentH };
     }
 
 } // namespace NightSharpMenu

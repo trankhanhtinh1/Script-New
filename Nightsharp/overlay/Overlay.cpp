@@ -255,12 +255,14 @@ void UpdateClickThroughFromMenuBounds() {
 
     const float cx = (float)cursorPt.x;
     const float cy = (float)cursorPt.y;
-    const bool overMenu =
-        (NightSharpMenu::menuBoundsRight > 0.0f) &&
-        cx >= NightSharpMenu::menuPosX &&
-        cx <= NightSharpMenu::menuBoundsRight &&
-        cy >= NightSharpMenu::menuPosY &&
-        cy <= NightSharpMenu::menuBoundsBottom;
+    bool overMenu = false;
+    for (int i = 0; i < NightSharpMenu::menuPanelCount; i++) {
+        auto& p = NightSharpMenu::menuPanels[i];
+        if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) {
+            overMenu = true;
+            break;
+        }
+    }
 
     SetClickThrough(!overMenu);
 }
