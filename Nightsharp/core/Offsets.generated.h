@@ -207,7 +207,7 @@ namespace SpellCastInfoLayout {
     constexpr auto StartPos = 0xD8;
     constexpr auto EndPos = 0xE4;
     constexpr auto CastPos = 0xF0;
-    constexpr auto TargetIndex = 0x108;
+    constexpr auto TargetIndex = 0x9C;   // IDA: MissileClient::TargetNetId(0x35C) - CastInfoBase(0x2C0) = 0x9C
     constexpr auto CastDelay = 0x118;
     constexpr auto IsSpell = 0x134;
     constexpr auto IsSpecialAttack = 0x13E;

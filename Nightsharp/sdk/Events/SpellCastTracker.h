@@ -22,6 +22,7 @@
 // DEPENDENCY: SDK ObjectManager::Heroes() (sdk/Core/Objects.h)
 // ============================================================================
 
+#include "../../core/CoreEventHook.h"
 #include "../../menu/MenuUI.h"
 #include "../Core/Game.h"
 #include "../Core/Objects.h"
@@ -225,6 +226,110 @@ inline void Reset() {
     detail::g_onProcess.clear();
     detail::g_onDoCast.clear();
     detail::g_onStop.clear();
+    CoreEventHook::UninstallAll();
+}
+
+// ---------------------------------------------------------------------------
+// Hook-based mode (alternative to poll-based)
+//
+// IDA reverse of OnProcessSpell @ 0x9362A0:
+//   rcx = SpellBook* = (AIBaseClient + 0x30E8)
+//   rdx = SpellCastInfo*
+//
+// The hook fires our ProcessSpellCast callbacks with EXACT timing,
+// covering ALL units (not just heroes like poll mode).
+// ---------------------------------------------------------------------------
+namespace hook {
+
+    inline void OnRawProcessSpell(uintptr_t senderObj, uintptr_t castInfoAddr) {
+        if (!senderObj || !castInfoAddr) return;
+
+        CoreSpellCastInfo::CastRef cast = { castInfoAddr };
+        if (!cast.IsValid()) return;
+
+        AIBaseClient sender(senderObj);
+        if (!sender.IsValid()) return;
+
+        auto args = detail::BuildArgs(cast);
+        detail::FireProcess(sender, args);
+
+        // Also update poll state so DoCast/StopCast still work via polling
+        if (detail::EnsureStorage()) {
+            const int netId = sender.NetworkId();
+            if (netId != 0) {
+                auto& state = (*detail::g_states)[netId];
+                state.Active      = true;
+                state.CastAddress = castInfoAddr;
+                state.Args        = args;
+                state.StartTick   = Game::TickCount();
+                state.CastDelayMs = std::max(args.CastDelay, 0.0f) * 1000.0f;
+                state.DoCastFired = false;
+            }
+        }
+    }
+
+    inline bool Install() {
+        CoreEventHook::SetOnProcessSpellCallback(OnRawProcessSpell);
+        return CoreEventHook::InstallProcessSpellHook();
+    }
+
+    inline bool IsInstalled() {
+        return CoreEventHook::IsProcessSpellHooked();
+    }
+
+} // namespace hook
+
+// ---------------------------------------------------------------------------
+// Hybrid Update: if hook installed, skip poll for OnProcessSpellCast
+// but still poll for OnDoCast / OnStopCast transitions.
+// ---------------------------------------------------------------------------
+inline void UpdateHybrid() {
+    if (!detail::EnsureStorage()) return;
+
+    const int now = Game::TickCount();
+
+    for (const auto& hero : ObjectManager::Heroes()) {
+        const int netId = hero.NetworkId();
+        if (!hero.IsValid() || netId == 0) continue;
+
+        auto it = detail::g_states->find(netId);
+        if (it == detail::g_states->end()) continue;
+
+        auto& state = it->second;
+        if (!state.Active) continue;
+
+        const auto cast = CoreSpellCastInfo::GetActive(hero.Address());
+
+        if (cast.IsValid() && cast.address == state.CastAddress) {
+            // Same cast still active — check DoCast timing
+            if (!state.DoCastFired) {
+                const int elapsed = now - state.StartTick;
+                if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
+                    state.DoCastFired = true;
+                    detail::FireDoCast(hero, state.Args);
+                }
+            }
+        }
+        else if (!cast.IsValid() || cast.address != state.CastAddress) {
+            // Cast disappeared or changed
+            if (!state.DoCastFired) {
+                const int elapsed = now - state.StartTick;
+                if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
+                    detail::FireDoCast(hero, state.Args);
+                } else {
+                    StopCastEventArgs sa = {};
+                    sa.Slot              = state.Args.Slot;
+                    sa.SpellName         = state.Args.SpellName;
+                    sa.SuccessfullyCasted = false;
+                    sa.ForceStop         = true;
+                    detail::FireStop(hero, sa);
+                }
+            }
+            state.Active      = false;
+            state.CastAddress = 0;
+            state.DoCastFired = false;
+        }
+    }
 }
 
 } // namespace SDK::Events::SpellCast

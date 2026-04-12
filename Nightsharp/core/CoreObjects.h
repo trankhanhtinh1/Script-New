@@ -629,6 +629,9 @@ namespace CoreObjects {
                 if (out && maxOut > 0) out[0] = 0;
                 return false;
             }
+            // Try DisplayName (0x70 = RiotId) first, fall back to Name (0x58)
+            if (Globals::ReadGameString(address + Offset::All::Name, out, maxOut) && out[0])
+                return true;
             return Globals::ReadGameString(address + Offset::GameObject::Name, out, maxOut);
         }
 

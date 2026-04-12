@@ -114,7 +114,13 @@ namespace SDK::Events {
 
     inline void Update() {
         DispatchLoad();
-        SpellCast::Update();          // Must run first — Gapcloser/Interrupter depend on cast data
+        // If hook is installed, use hybrid (hook fires OnProcessSpellCast,
+        // poll handles OnDoCast/OnStopCast). Otherwise pure poll.
+        if (SpellCast::hook::IsInstalled()) {
+            SpellCast::UpdateHybrid();
+        } else {
+            SpellCast::Update();
+        }
         Path::Update();               // Must run before Dash
         ObjectTracker::Update();      // Track object add/remove
         PropertyTracker::Update();    // Track ActionState changes

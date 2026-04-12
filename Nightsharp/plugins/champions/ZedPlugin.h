@@ -75,14 +75,22 @@ public:
 
   UltCastStage GetUltStage() const {
     if (!R.IsReady()) return UltCastStage::Cooldown;
-    return Player().GetSpellBook().GetSpell(SpellSlot::R).Name() == "ZedR"
-      ? UltCastStage::First : UltCastStage::Second;
+    // SpellSlot::Name() not available (game stores names in global hash table).
+    // Use buff + shadow detection:
+    // R Second = ult active (has death mark on someone OR R shadow exists)
+    if (Player().HasBuff("zedulttargetmark") || Player().HasBuff("ZedR2") ||
+        Player().HasBuff("zedrdeathmark") || GetRShadow().IsValid())
+      return UltCastStage::Second;
+    return UltCastStage::First;
   }
 
   ShadowCastStage GetShadowStage() const {
     if (!W.IsReady()) return ShadowCastStage::Cooldown;
-    return Player().GetSpellBook().GetSpell(SpellSlot::W).Name() == "ZedW"
-      ? ShadowCastStage::First : ShadowCastStage::Second;
+    // W Second = shadow already placed (shadow minion exists)
+    if (Player().HasBuff("ZedWHandler") || Player().HasBuff("zedwshadowbuff") ||
+        Player().HasBuff("ZedW2") || GetWShadow().IsValid())
+      return ShadowCastStage::Second;
+    return ShadowCastStage::First;
   }
 
   // Shadow getters (Zed.cs lines 33-49)
@@ -330,6 +338,22 @@ private:
     if (!target.IsValid()) return;
     auto *comboMenu = m_menu->GetSubMenu("Combo");
     if (!comboMenu) return;
+
+    // Debug: log stage every 2s
+    {
+      static DWORD s_lastZedLog = 0;
+      DWORD tnow = GetTickCount();
+      if ((tnow - s_lastZedLog) > 2000) {
+        s_lastZedLog = tnow;
+        char buf[256] = {};
+        std::snprintf(buf, sizeof(buf),
+          "[Zed] R=%d W=%d Rrdy=%d Wrdy=%d dist=%.0f hp=%.0f\r\n",
+          (int)GetUltStage(), (int)GetShadowStage(),
+          R.IsReady() ? 1 : 0, W.IsReady() ? 1 : 0,
+          target.DistanceToPlayer(), target.Health());
+        Plugins::OrbwalkerPlugin::DbgLog(buf);
+      }
+    }
 
     float overkill = Q.GetDamage(target) +
                      E.GetDamage(target) +

@@ -126,6 +126,10 @@ namespace Bootstrap {
         Orbwalker::Initialize();
         TraceInitStage("SDK::Bootstrap::Init::Events");
         Events::Initialize();
+        TraceInitStage("SDK::Bootstrap::Init::EventHook");
+        if (Events::SpellCast::hook::Install()) {
+            TraceInitStage("SDK::Bootstrap::Init::EventHook::OnProcessSpell OK");
+        }
         TraceInitStage("SDK::Bootstrap::Init::Prediction");
         Prediction::Initialize();
         TraceInitStage("SDK::Bootstrap::Init::SpellTracker");
