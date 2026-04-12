@@ -129,6 +129,8 @@ namespace Bootstrap {
         TraceInitStage("SDK::Bootstrap::Init::EventHook");
         if (Events::SpellCast::hook::Install()) {
             TraceInitStage("SDK::Bootstrap::Init::EventHook::OnProcessSpell OK");
+        } else {
+            TraceInitStage("SDK::Bootstrap::Init::EventHook::FAILED (poll mode fallback)");
         }
         TraceInitStage("SDK::Bootstrap::Init::Prediction");
         Prediction::Initialize();

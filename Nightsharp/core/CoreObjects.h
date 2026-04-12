@@ -46,6 +46,13 @@ namespace CoreObjects {
             return Globals::Read<unsigned char>(address + Offset::GameObject::TeamAlt);
         }
 
+        uint32_t GetChampionHash() const {
+            if (!IsValid()) return 0;
+            const auto charData = Globals::Read<uintptr_t>(address + 0x4028); // CharacterDataPtr
+            if (!Globals::IsValidPtr(charData)) return 0;
+            return Globals::Read<uint32_t>(charData + 0x10); // CharacterHash (SDBM)
+        }
+
         Vec3 GetPosition() const {
             return Globals::Read<Vec3>(address + Offset::GameObject::Position);
         }

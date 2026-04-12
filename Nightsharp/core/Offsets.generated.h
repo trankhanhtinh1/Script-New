@@ -207,7 +207,7 @@ namespace SpellCastInfoLayout {
     constexpr auto StartPos = 0xD8;
     constexpr auto EndPos = 0xE4;
     constexpr auto CastPos = 0xF0;
-    constexpr auto TargetIndex = 0x9C;   // IDA: MissileClient::TargetNetId(0x35C) - CastInfoBase(0x2C0) = 0x9C
+    constexpr auto TargetIndex = 0x108;
     constexpr auto CastDelay = 0x118;
     constexpr auto IsSpell = 0x134;
     constexpr auto IsSpecialAttack = 0x13E;
@@ -459,6 +459,12 @@ namespace EffectEmitterDataLayout {
     constexpr auto OrientationForward = 0x138;
 } // namespace EffectEmitterDataLayout
 
+namespace CharacterDataLayout {
+    constexpr auto CharacterDataPtr = 0x4028;   // CE: player+0x4028 → CharacterData struct
+    constexpr auto CharacterHash = 0x10;         // CE: CharacterData+0x10 = SDBM hash (e.g. 0x84DCF93 = "Ezreal")
+    constexpr auto BaseCharacterData = 0x28;     // Chimera reference
+} // namespace CharacterDataLayout
+
 namespace AnimationLayout {
     constexpr auto CharacterData = 0x40C8;
     constexpr auto Component = 0x4450;
@@ -479,7 +485,7 @@ namespace AnimationLayout {
 namespace All {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;   // Scanner: StdString "TESTBAN#0213" (was 0x58)
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -499,7 +505,7 @@ namespace All {
 namespace AttackableUnit {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -531,7 +537,7 @@ namespace AttackableUnit {
 namespace AIHeroClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -652,7 +658,7 @@ namespace AIHeroClient {
 namespace AIMinionClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -763,7 +769,7 @@ namespace AIMinionClient {
 namespace MissileClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -786,7 +792,7 @@ namespace MissileClient {
 namespace Static {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -806,7 +812,7 @@ namespace Static {
 namespace AITurretClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -850,7 +856,7 @@ namespace EffectEmitter {
 namespace BarracksDampenerClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -882,7 +888,7 @@ namespace BarracksDampenerClient {
 namespace HQClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -914,7 +920,7 @@ namespace HQClient {
 namespace ShopClient {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
@@ -931,7 +937,7 @@ namespace ShopClient {
 namespace Obj_SpawnPoint {
     constexpr auto Index = 0x10;
     constexpr auto Team = 0x3C;
-    constexpr auto Name = 0x58;
+    constexpr auto Name = 0x68;
     constexpr auto NetId = 0xCC;
     constexpr auto Dead = 0x250;
     constexpr auto Position = 0x25C;
