@@ -244,6 +244,11 @@ void SetAntiCapture(bool enabled) {
 }
 
 void UpdateClickThroughFromMenuBounds() {
+    if (NightSharpMenu::debugWindowEnabled) {
+        SetClickThrough(false);
+        return;
+    }
+
     if (!g_bMenuVisible) {
         SetClickThrough(true);
         return;
@@ -252,9 +257,9 @@ void UpdateClickThroughFromMenuBounds() {
     POINT cursorPt = {};
     GetCursorPos(&cursorPt);
     ScreenToClient(g_hOverlay, &cursorPt);
-
     const float cx = (float)cursorPt.x;
     const float cy = (float)cursorPt.y;
+
     bool overMenu = false;
     for (int i = 0; i < NightSharpMenu::menuPanelCount; i++) {
         auto& p = NightSharpMenu::menuPanels[i];
@@ -263,7 +268,6 @@ void UpdateClickThroughFromMenuBounds() {
             break;
         }
     }
-
     SetClickThrough(!overMenu);
 }
 
@@ -438,6 +442,7 @@ void Overlay::Run() {
     MoveOverlayToTarget();
 
     SDK::MenuManager::Init();
+    NightSharpMenu::LoadGlobals();
     NightSharpMenu::showMenu = true;
     SDK::MenuManager::SetMenuVisible(true);
     SetClickThrough(false);
@@ -587,7 +592,7 @@ void Overlay::Run() {
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
 
-            if (g_bMenuVisible) {
+            if (g_bMenuVisible || NightSharpMenu::debugWindowEnabled) {
                 POINT mp = {};
                 GetCursorPos(&mp);
                 ScreenToClient(g_hOverlay, &mp);

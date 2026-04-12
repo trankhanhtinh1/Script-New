@@ -524,6 +524,7 @@ private:
 
             // Sync SDK
             SDK::Orbwalker::Instance().LastAutoAttackTick = m_lastAutoAttackTick;
+            SDK::Orbwalker::Instance().LastAutoAttackTime = SDK::Game::Time() - static_cast<float>(ping / 2) / 1000.0f;
             SDK::Orbwalker::Instance().MissileLaunched = false;
 
             // Fire OnAttack event (C# line 689)
@@ -579,6 +580,26 @@ private:
         m_wasWindingUp = winding;
     }
 
+
+    // sender
+    //   .IsMe() .IsEnemy() .CharName()
+    // args
+    //   .Slot .SpellName .IsAutoAttack .Start .End .CastDelay  .MissileSpeed
+    void OnProcessSpellCast(const SDK::AIBaseClient& sender, const SDK::Events::SpellCast::ProcessSpellCastEventArgs& args) override
+    {
+        if (!sender.IsMe()) return;
+        print("Slot=%d SpellName=%s IsAutoAttack=%d IsSpecialAttack=%d Start=(%.1f,%.1f,%.1f) End=(%.1f,%.1f,%.1f) CastPos=(%.1f,%.1f,%.1f) CastDelay=%.3f MissileSpeed=%.1f TargetNetId=%d",
+            static_cast<int>(args.Slot),
+            args.SpellName.c_str(),
+            args.IsAutoAttack ? 1 : 0,
+            args.IsSpecialAttack ? 1 : 0,
+            args.Start.x, args.Start.y, args.Start.z,
+            args.End.x, args.End.y, args.End.z,
+            args.CastPosition.x, args.CastPosition.y, args.CastPosition.z,
+            args.CastDelay,
+            args.MissileSpeed,
+            args.TargetNetworkId);
+    }
     // ═══════════════════════════════════════════════════════════════════
     // CanAttackWithWindWall  (C# lines 403-472)
     // Checks Jax CounterStrike + Yasuo WindWall + Special champions

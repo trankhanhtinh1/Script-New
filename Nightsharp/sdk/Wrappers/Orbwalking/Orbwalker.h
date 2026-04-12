@@ -23,14 +23,17 @@ public:
   static Menu* GetMenu() { return Instance().s_menu; }
   static OrbwalkerMode GetMode() { return Instance().ActiveMode; }
 
+  // It is wrong
   static float TimeUntilNextAttack() {
-      const int now = Game::TickCount();
-      const int ping = CoreAPI::Control::GetPing();
-      const float attackDelayMs = CoreAPI::Control::GetAttackDelay() * 1000.0f;
-      const int nextAttackTick = Instance().LastAutoAttackTick + static_cast<int>(attackDelayMs);
-      const int adjusted = now + (ping / 2) + 25;
-      if (adjusted >= nextAttackTick) return 0.0f;
-      return static_cast<float>(nextAttackTick - adjusted) / 1000.0f;
+      const float lastTime = Instance().LastAutoAttackTime;
+      if (lastTime <= 0.0f) return 0.0f;
+      const float now = Game::Time();
+      const float ping = static_cast<float>(CoreAPI::Control::GetPing());
+      const float attackDelay = CoreAPI::Control::GetAttackDelay();
+      const float nextAttackTime = lastTime + attackDelay;
+      const float adjusted = now + (ping / 2.0f + 25.0f) / 1000.0f;
+      if (adjusted >= nextAttackTime) return 0.0f;
+      return nextAttackTime - adjusted;
   }
 
   static void ForceTarget(const AIBaseClient& t) { Instance().s_forcedTarget = t; }

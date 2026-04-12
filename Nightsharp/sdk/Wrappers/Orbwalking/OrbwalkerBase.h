@@ -30,6 +30,7 @@ public:
 
     OrbwalkerMode ActiveMode    = OrbwalkerMode::None;
     int           LastAutoAttackTick = 0;
+    float         LastAutoAttackTime = 0.0f;
     bool          MissileLaunched    = false;
     AIBaseClient  LastTarget         = {};
 
@@ -41,7 +42,7 @@ public:
         int  targetNetId = 0;
     } lastTickDiag = {};
 
-    void ResetSwingTimer() { LastAutoAttackTick = 0; }
+    void ResetSwingTimer() { LastAutoAttackTick = 0; LastAutoAttackTime = 0.0f; }
 
     bool AddOnAction(ActionHandler handler) {
         if (!handler) return false;

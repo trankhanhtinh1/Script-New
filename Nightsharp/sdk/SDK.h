@@ -87,7 +87,6 @@ namespace Bootstrap {
 
     inline bool g_initialized = false;
     inline int g_targetSelectorPluginIndex = -1;
-    inline int g_orbwalkerPluginIndex = -1;
 
     inline void TraceInitStage(const char* stage) {
         CrashTelemetry::SetStage(stage);
@@ -151,14 +150,6 @@ namespace Bootstrap {
             "targetselector",
             PluginRegistry::PluginKind::SDK,
             TargetSelector::GetMenu(),
-            true);
-
-        TraceInitStage("SDK::Bootstrap::Init::RegisterOrbwalker");
-        g_orbwalkerPluginIndex = PluginRegistry::Register(
-            "Orbwalker",
-            "orbwalker",
-            PluginRegistry::PluginKind::SDK,
-            Orbwalker::GetMenu(),
             true);
 
         TraceInitStage("SDK::Bootstrap::Init::DispatchLoad");

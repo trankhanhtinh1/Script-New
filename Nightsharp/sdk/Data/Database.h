@@ -1,16 +1,20 @@
 #pragma once
 #include "SpellData.h"
 #include <cctype>
+#include <new>
 #include <string>
 #include <vector>
 
 
 namespace SDK {
 namespace Data {
+inline std::vector<SpellData>* g_spellDatabasePtr = nullptr;
 inline std::vector<SpellData> &GetSpellDatabase() {
-  static std::vector<SpellData> Spells;
-  if (!Spells.empty())
-    return Spells;
+  if (g_spellDatabasePtr && !g_spellDatabasePtr->empty()) return *g_spellDatabasePtr;
+  if (!g_spellDatabasePtr)
+    g_spellDatabasePtr = new(std::nothrow) std::vector<SpellData>();
+  auto& Spells = *g_spellDatabasePtr;
+  if (!Spells.empty()) return Spells;
   Spells.reserve(1000);
 
   // ==== AllChampions ====

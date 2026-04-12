@@ -25,6 +25,7 @@
 #include "PluginRegistry.h"
 #include "SDKDiagnostics.h"
 #include "../plugins/core/DebugLog.h"
+#include "../version.h"
 
 namespace NightSharpMenu {
 
@@ -141,13 +142,58 @@ namespace NightSharpMenu {
     // ============================================================================
     inline bool debugWindowEnabled = false;
 
+    inline void SaveGlobals() {
+        char appdata[MAX_PATH] = {};
+        if (!GetEnvironmentVariableA("APPDATA", appdata, MAX_PATH)) return;
+        char dir[MAX_PATH] = {};
+        lstrcpyA(dir, appdata);
+        lstrcatA(dir, "\\NightSharp\\config");
+        CreateDirectoryA(dir, nullptr);
+        char path[MAX_PATH] = {};
+        lstrcpyA(path, dir);
+        lstrcatA(path, "\\globals.ini");
+
+        HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, nullptr,
+            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) return;
+        const char* line1 = debugWindowEnabled ? "debug_window_enabled=1\n" : "debug_window_enabled=0\n";
+        DWORD written = 0;
+        WriteFile(hFile, line1, (DWORD)lstrlenA(line1), &written, nullptr);
+        CloseHandle(hFile);
+    }
+
+    inline void LoadGlobals() {
+        char appdata[MAX_PATH] = {};
+        if (!GetEnvironmentVariableA("APPDATA", appdata, MAX_PATH)) return;
+        char path[MAX_PATH] = {};
+        lstrcpyA(path, appdata);
+        lstrcatA(path, "\\NightSharp\\config\\globals.ini");
+
+        HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) return;
+        char buf[128] = {};
+        DWORD nRead = 0;
+        ReadFile(hFile, buf, sizeof(buf) - 1, &nRead, nullptr);
+        CloseHandle(hFile);
+        buf[nRead] = '\0';
+
+        if (lstrcmpA(buf, "debug_window_enabled=1\n") == 0 ||
+            lstrcmpA(buf, "debug_window_enabled=1") == 0)
+            debugWindowEnabled = true;
+        else if (lstrcmpA(buf, "debug_window_enabled=0\n") == 0 ||
+                 lstrcmpA(buf, "debug_window_enabled=0") == 0)
+            debugWindowEnabled = false;
+    }
+
     inline void DrawMenuSection() {
         DrawSectionTitle("Menu Settings");
         static bool skinChanger = false;
         DrawOnOffEditor("Skin Changer", skinChanger, "menu_skin");
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
-        DrawOnOffEditor("Debug Window", debugWindowEnabled, "debug_window_enabled");
+        if (DrawOnOffEditor("Debug Window", debugWindowEnabled, "debug_window_enabled"))
+            SaveGlobals();
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("Bypass OBS: overlay hidden from screen capture"));
         ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("(requires Win10 2004+)"));
@@ -573,7 +619,7 @@ namespace NightSharpMenu {
                 if (ts.x > maxTextW) maxTextW = ts.x;
             }
             float computed = 12.0f + maxTextW + spaceSize.x + arrowSize.x + 12.0f;
-            float headerW = 10.0f + ImGui::CalcTextSize("NightSharp").x + 10.0f;
+            float headerW = 10.0f + ImGui::CalcTextSize(NS_HEADER_STRING).x + 10.0f;
             if (headerW > computed) computed = headerW;
             PRIMARY_W = computed;
         }
@@ -692,7 +738,7 @@ namespace NightSharpMenu {
             dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BG, 4.0f);
             dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 4.0f);
             dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BORDER, 4.0f);
-            dl->AddText(ImVec2(primaryPos.x + 10, primaryPos.y + 8), COL_ACCENT, "NightSharp");
+            dl->AddText(ImVec2(primaryPos.x + 10, primaryPos.y + 8), COL_ACCENT, NS_HEADER_STRING);
             dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H),
                         ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER);
 
@@ -910,26 +956,17 @@ namespace NightSharpMenu {
         ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowBgAlpha(0.65f);
 
-        if (!ImGui::Begin("Debug Log", nullptr,
-            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoFocusOnAppearing)) {
+        if (!ImGui::Begin("Debug Log", nullptr, ImGuiWindowFlags_NoFocusOnAppearing)) {
             ImGui::End();
             return;
         }
 
-        if (ImGui::Button("Clear")) {
-            printClear();
-        }
-
-        ImGui::Separator();
-
         g_debugTextBuf[0] = '\0';
         int pos = 0;
         for (int i = 0; i < s.Count; ++i) {
-            const char* line;
-            if (s.Count < DebugLogState::kMaxLines)
-                line = s.Lines[i];
-            else
-                line = s.Lines[(s.WriteIndex + i) % DebugLogState::kMaxLines];
+            const char* line = (s.Count < DebugLogState::kMaxLines)
+                ? s.Lines[i]
+                : s.Lines[(s.WriteIndex + i) % DebugLogState::kMaxLines];
             int len = (int)strlen(line);
             if (pos + len + 1 < (int)sizeof(g_debugTextBuf)) {
                 memcpy(g_debugTextBuf + pos, line, len);
@@ -938,6 +975,12 @@ namespace NightSharpMenu {
             }
         }
         g_debugTextBuf[pos] = '\0';
+
+        if (ImGui::Button("Clear")) printClear();
+        ImGui::SameLine();
+        if (ImGui::Button("Copy All")) ImGui::SetClipboardText(g_debugTextBuf);
+
+        ImGui::Separator();
 
         ImVec2 avail = ImGui::GetContentRegionAvail();
         ImGui::InputTextMultiline("##debuglog", g_debugTextBuf, sizeof(g_debugTextBuf), avail,
