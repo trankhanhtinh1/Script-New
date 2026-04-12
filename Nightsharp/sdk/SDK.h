@@ -122,8 +122,6 @@ namespace Bootstrap {
 
         TraceInitStage("SDK::Bootstrap::Init::TargetSelector");
         TargetSelector::Initialize();
-        TraceInitStage("SDK::Bootstrap::Init::Orbwalker");
-        Orbwalker::Initialize();
         TraceInitStage("SDK::Bootstrap::Init::Events");
         Events::Initialize();
         TraceInitStage("SDK::Bootstrap::Init::Prediction");

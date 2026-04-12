@@ -95,23 +95,47 @@ inline AIBaseClient GetTargetSelectorSafe(const AIHeroClient& player, float rang
     }
 }
 
-// ── Combo (TargetSelector) ──
-// C# OrbwalkerSelector.cs line 431-437:
-//   In Combo, only attack special minions/clones/wards if no enemy hero nearby
-inline AIBaseClient GetComboTarget(const AIHeroClient& player, float range, Menu* advanced = nullptr) {
-    // 1. Hero target first
-    auto ts = GetTargetSelectorSafe(player, range);
-    if (ts.IsValid()) {
-        return ts;
+template <typename Container>
+inline AIBaseClient FindNearestInAttackRange(const Container& objects, const AIHeroClient& player, float range) {
+    AIBaseClient best;
+    float bestDist = FLT_MAX;
+    for (const auto& obj : objects) {
+        if (!obj.IsValidTarget(range, player.Position())) continue;
+        if (!player.InAutoAttackRange(obj)) continue;
+        const float dist = obj.Distance(player.Position());
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = obj;
+        }
     }
+    return best;
+}
+
+template <typename Container, typename Pred>
+inline AIBaseClient FindNearestInAttackRangeIf(const Container& objects, const AIHeroClient& player, float range, Pred extra) {
+    AIBaseClient best;
+    float bestDist = FLT_MAX;
+    for (const auto& obj : objects) {
+        if (!extra(obj)) continue;
+        if (!obj.IsValidTarget(range, player.Position())) continue;
+        if (!player.InAutoAttackRange(obj)) continue;
+        const float dist = obj.Distance(player.Position());
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = obj;
+        }
+    }
+    return best;
+}
+
+// ── Combo (TargetSelector) ──
+inline AIBaseClient GetComboTarget(const AIHeroClient& player, float range, Menu* atkMenu = nullptr) {
+    auto ts = GetTargetSelectorSafe(player, range);
+    if (ts.IsValid()) return ts;
 
     auto nearest = GetNearestEnemyTarget(player, range);
-    if (nearest.IsValid()) {
-        return nearest;
-    }
+    if (nearest.IsValid()) return nearest;
 
-    // 2. If no hero target, check special minions/clones (C# line 431-437)
-    //    Only when no enemy hero is nearby
     bool hasEnemyNear = false;
     for (const auto& enemy : ObjectManager::EnemyHeroes()) {
         if (enemy.IsValidTarget(enemy.AttackRange() * 2.0f + 200.0f, player.Position())) {
@@ -121,19 +145,11 @@ inline AIBaseClient GetComboTarget(const AIHeroClient& player, float range, Menu
     }
 
     if (!hasEnemyNear) {
-        const bool doSpecials = advanced ? advanced->GetBoolValue("attackSpecialMinions", true) : true;
-        const bool doClones = advanced ? advanced->GetBoolValue("attackClones", false) : false;
-
+        const bool doSpecials = atkMenu ? atkMenu->GetBoolValue("specialMinions", true) : true;
         if (doSpecials) {
             for (const auto& minion : ObjectManager::SpecialMinions()) {
                 if (minion.IsValidTarget(range, player.Position()) && player.InAutoAttackRange(minion))
                     return minion;
-            }
-        }
-        if (doClones) {
-            for (const auto& clone : ObjectManager::Clones()) {
-                if (clone.IsValidTarget(range, player.Position()) && player.InAutoAttackRange(clone))
-                    return clone;
             }
         }
     }
@@ -349,107 +365,33 @@ inline AIBaseClient GetLaneClearTarget(const AIHeroClient& player, float range, 
 }
 
 // ── Extra targets (wards, barrels, plants, pets) based on menu settings ──
-inline AIBaseClient GetExtraTarget(const AIHeroClient& player, float range, Menu* advanced) {
-    if (!advanced) return AIBaseClient();
+inline AIBaseClient GetExtraTarget(const AIHeroClient& player, float range, Menu* atkMenu) {
+    if (!atkMenu) return AIBaseClient();
 
-    // Wards (enemy only)
-    if (advanced->GetBoolValue("attackWards", false)) {
-        AIBaseClient best;
-        float bestDist = FLT_MAX;
-        for (const auto& ward : ObjectManager::Wards()) {
-            if (ward.IsAlly()) continue;
-            if (!ward.IsValidTarget(range, player.Position())) continue;
-            if (!player.InAutoAttackRange(ward)) continue;
-            const float dist = ward.Distance(player.Position());
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = ward;
-            }
-        }
+    if (atkMenu->GetBoolValue("wards", false)) {
+        auto best = FindNearestInAttackRangeIf(ObjectManager::Wards(), player, range,
+            [](const auto& w) { return !w.IsAlly(); });
         if (best.IsValid()) return best;
     }
 
-    // Barrels — C# line 589-595: only when HP <= 1 (GP barrel last-hit mechanic)
-    if (advanced->GetBoolValue("attackBarrels", false)) {
-        AIBaseClient best;
-        float bestDist = FLT_MAX;
-        for (const auto& barrel : ObjectManager::Barrels()) {
-            if (barrel.Health() > 1.0f) continue;  // C#: j.Health <= 1
-            if (!barrel.IsValidTarget(range, player.Position())) continue;
-            if (!player.InAutoAttackRange(barrel)) continue;
-            const float dist = barrel.Distance(player.Position());
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = barrel;
-            }
-        }
+    if (atkMenu->GetBoolValue("barrels", false)) {
+        auto best = FindNearestInAttackRangeIf(ObjectManager::Barrels(), player, range,
+            [](const auto& b) { return b.Health() <= 1.0f; });
         if (best.IsValid()) return best;
     }
 
-    // Plants (neutral team 300, attackable by all)
-    if (advanced->GetBoolValue("attackPlants", false)) {
-        AIBaseClient best;
-        float bestDist = FLT_MAX;
-        for (const auto& plant : ObjectManager::Plants()) {
-            if (!plant.IsValidTarget(range, player.Position())) continue;
-            if (!player.InAutoAttackRange(plant)) continue;
-            const float dist = plant.Distance(player.Position());
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = plant;
-            }
-        }
+    if (atkMenu->GetBoolValue("junglePlant", false)) {
+        auto best = FindNearestInAttackRange(ObjectManager::Plants(), player, range);
         if (best.IsValid()) return best;
     }
 
-    // Pets (enemy only)
-    if (advanced->GetBoolValue("attackPets", false)) {
+    if (atkMenu->GetBoolValue("specialMinions", true)) {
         const int myTeam = player.Team();
-        AIBaseClient best;
-        float bestDist = FLT_MAX;
-        for (const auto& pet : ObjectManager::Pets()) {
-            if (pet.Team() == myTeam) continue;
-            if (!pet.IsValidTarget(range, player.Position())) continue;
-            if (!player.InAutoAttackRange(pet)) continue;
-            const float dist = pet.Distance(player.Position());
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = pet;
-            }
-        }
+        auto best = FindNearestInAttackRangeIf(ObjectManager::Pets(), player, range,
+            [myTeam](const auto& p) { return p.Team() != myTeam; });
         if (best.IsValid()) return best;
-    }
-
-    // Special minions (tibbers, voidlings, shaco box, etc.)
-    if (advanced->GetBoolValue("attackSpecialMinions", true)) {
-        AIBaseClient best;
-        float bestDist = FLT_MAX;
-        for (const auto& minion : ObjectManager::SpecialMinions()) {
-            if (!minion.IsValidTarget(range, player.Position())) continue;
-            if (!player.InAutoAttackRange(minion)) continue;
-            const float dist = minion.Distance(player.Position());
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = minion;
-            }
-        }
-        if (best.IsValid()) return best;
-    }
-
-    // Clones (leblanc, shaco, neeko, wukong)
-    if (advanced->GetBoolValue("attackClones", false)) {
-        AIBaseClient best;
-        float bestDist = FLT_MAX;
-        for (const auto& clone : ObjectManager::Clones()) {
-            if (!clone.IsValidTarget(range, player.Position())) continue;
-            if (!player.InAutoAttackRange(clone)) continue;
-            const float dist = clone.Distance(player.Position());
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = clone;
-            }
-        }
-        if (best.IsValid()) return best;
+        auto bestSpecial = FindNearestInAttackRange(ObjectManager::SpecialMinions(), player, range);
+        if (bestSpecial.IsValid()) return bestSpecial;
     }
 
     return AIBaseClient();
@@ -457,17 +399,18 @@ inline AIBaseClient GetExtraTarget(const AIHeroClient& player, float range, Menu
 
 // ── GetTarget – main dispatch ──
 inline AIBaseClient GetTarget(const AIHeroClient& player, OrbwalkerMode mode, float range, Menu* orbMenu = nullptr) {
-    // Read menu settings (fall back to defaults if menu unavailable)
-    Menu* advanced = orbMenu ? orbMenu->GetSubMenu("advanced") : nullptr;
-    const int farmDelay = advanced ? advanced->GetSliderValue("delayFarm", 30) : 30;
-    const bool prioritizeFarm = advanced ? advanced->GetBoolValue("prioritizeFarm", true) : true;
-    const bool prioritizeMinions = advanced ? advanced->GetBoolValue("prioritizeMinions", false) : false;
-    const bool prioritizeSmallJungle = advanced ? advanced->GetBoolValue("prioritizeSmallJungle", false) : false;
+    Menu* farmMenu = orbMenu ? orbMenu->GetSubMenu("farm") : nullptr;
+    Menu* priMenu  = orbMenu ? orbMenu->GetSubMenu("prioritize") : nullptr;
+    Menu* atkMenu  = orbMenu ? orbMenu->GetSubMenu("attackable") : nullptr;
+
+    const int farmDelay            = farmMenu ? farmMenu->GetSliderValue("farmDelay", 30) : 30;
+    const bool prioritizeFarm      = priMenu  ? priMenu->GetBoolValue("farmOverHarass", true) : true;
+    const bool prioritizeSmallJung = priMenu  ? priMenu->GetBoolValue("smallJungle", false) : false;
 
     AIBaseClient target;
     switch (mode) {
     case OrbwalkerMode::Combo:
-        target = GetComboTarget(player, range, advanced);
+        target = GetComboTarget(player, range, atkMenu);
         break;
     case OrbwalkerMode::Harass:
         target = GetHarassTarget(player, range, farmDelay, prioritizeFarm);
@@ -476,16 +419,14 @@ inline AIBaseClient GetTarget(const AIHeroClient& player, OrbwalkerMode mode, fl
         target = GetLastHitTarget(player, range, farmDelay);
         break;
     case OrbwalkerMode::Clear:
-        target = GetLaneClearTarget(player, range, farmDelay, prioritizeFarm, prioritizeMinions, prioritizeSmallJungle);
+        target = GetLaneClearTarget(player, range, farmDelay, prioritizeFarm, false, prioritizeSmallJung);
         break;
     default:
         return AIBaseClient();
     }
 
     if (target.IsValid()) return target;
-
-    // Fallback: extra targets (wards, barrels, plants, pets) based on menu
-    return GetExtraTarget(player, range, advanced);
+    return GetExtraTarget(player, range, atkMenu);
 }
 
 } // namespace SDK::OrbwalkerSelector

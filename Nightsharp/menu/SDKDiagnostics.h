@@ -155,30 +155,22 @@ inline void Render() {
         local.IsMovingOnPath() ? "yes" : "no",
         local.IsDashingOnPath() ? "yes" : "no");
 
-    const auto& orbDbg = SDK::Orbwalker::GetDebugState();
+    const auto& diag = SDK::Orbwalker::Instance().lastTickDiag;
+    const auto mode = SDK::Orbwalker::GetMode();
+    const int modeIdx = static_cast<int>(mode);
+    static const char* kModeNames[] = { "None","Combo","Harass","Clear","LastHit","Flee" };
     ImGui::Separator();
-    ImGui::Text("orb.mode        : %d", orbDbg.activeMode);
-    ImGui::Text("orb.reason      : %d", orbDbg.reason);
-    ImGui::Text("orb.enabled     : %s", orbDbg.enabled ? "yes" : "no");
-    ImGui::Text("orb.can A/M     : %d / %d",
-        orbDbg.canAttack ? 1 : 0,
-        orbDbg.canMove ? 1 : 0);
-    ImGui::Text("orb.attack src  : timing=%d native=%d",
-        orbDbg.timingReady ? 1 : 0,
-        orbDbg.nativeCanAttack ? 1 : 0);
-    ImGui::Text("orb.target      : has=%d inRange=%d netId=%d",
-        orbDbg.hasTarget ? 1 : 0,
-        orbDbg.targetInRange ? 1 : 0,
-        orbDbg.targetNetId);
-    ImGui::Text("orb.orders      : attack=%d move=%d",
-        orbDbg.attackIssued ? 1 : 0,
-        orbDbg.moveIssued ? 1 : 0);
-    // Show effective windup buffer from percentage slider
+    ImGui::Text("orb.mode        : %s", (modeIdx >= 0 && modeIdx <= 5) ? kModeNames[modeIdx] : "?");
+    ImGui::Text("orb.timeToAtk   : %.0f ms", SDK::Orbwalker::TimeUntilNextAttack() * 1000.0f);
+    ImGui::Text("orb.can A/M     : %s / %s", diag.canAttack ? "yes" : "no", diag.canMove ? "yes" : "no");
+    ImGui::Text("orb.target      : netId=%d", diag.targetNetId);
+    ImGui::Text("orb.orders      : attack=%s move=%s",
+        diag.attackIssued ? "yes" : "no", diag.moveIssued ? "yes" : "no");
     {
       const float diagWindup = ctx.cachedAttackWindup * 1000.0f;
       auto* orbMenu = SDK::Orbwalker::GetMenu();
-      auto* advMenu = orbMenu ? orbMenu->GetSubMenu("advanced") : nullptr;
-      const int windupSlider = advMenu ? advMenu->GetSliderValue("delayWindup", 80) : 80;
+      auto* settMenu = orbMenu ? orbMenu->GetSubMenu("settings") : nullptr;
+      const int windupSlider = settMenu ? settMenu->GetSliderValue("windupDelay", 60) : 60;
       const float windupBuf = diagWindup * (static_cast<float>(windupSlider) / 200.0f);
       ImGui::Text("orb.windupBuf   : %.0f ms (%d%% of %.0f ms)",
           windupBuf, windupSlider, diagWindup);
