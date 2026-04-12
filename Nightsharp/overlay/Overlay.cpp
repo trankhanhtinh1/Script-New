@@ -210,7 +210,7 @@ void MoveOverlayToTarget() {
 
     RECT rc = {};
     GetWindowRect(g_hGameWindow, &rc);
-    SetWindowPos(g_hOverlay, HWND_TOP,
+    SetWindowPos(g_hOverlay, HWND_TOPMOST,
         rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
         SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
@@ -346,7 +346,7 @@ void Overlay::Run() {
     GetWindowRect(g_hGameWindow, &gameRect);
 
     g_hOverlay = CreateWindowExW(
-        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
         overlayClassName,
         L"NightSharp Overlay",
         WS_POPUP,
@@ -354,7 +354,7 @@ void Overlay::Run() {
         gameRect.top,
         gameRect.right - gameRect.left,
         gameRect.bottom - gameRect.top,
-        g_hGameWindow,
+        nullptr,
         nullptr,
         wc.hInstance,
         nullptr);
