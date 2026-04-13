@@ -90,7 +90,7 @@ namespace ControlRuntime {
     constexpr auto CastSpellWrap = 0xBC45D0;   // 40 53 48 83 EC ? 48 8B 05 ? ? ? ? 8B DA 0F B6 0D ? ? ? ? [signature was not learned into a strict rule]
     constexpr auto IsAlive = 0x2F2390;   // 40 53 48 83 EC ? 48 8B 01 48 8B D9 FF 90 ? ? ? ? 84 C0 74 ? 48 8D 8B ? ? ? ? 48 8B 01 [signature was not learned into a strict rule]
     constexpr auto GetSpellCastInfo = 0x28E9B0;   // 48 89 5C 24 ? 57 48 83 EC ? 4C 8B 81 ? ? ? ? 44 8B CA [signature was not learned into a strict rule]
-    constexpr auto GetSpellSlot = 0x91E2D0;   // 48 89 5C 24 ? 55 56 57 41 56 41 57 48 8D AC 24 60 FD FF FF [signature was not learned into a strict rule]
+    constexpr auto GetSpellSlot = 0x91E540;   // Offset ref: 0x91E540 (was 0x91E2D0). Sig: 48 89 5C 24 ? 55 56 57 41 56 41 57 48 8D AC 24 60 FD FF FF
     constexpr auto GetResourceType = 0x28BCF0;   // 0F B6 C2 48 69 C0 ? ? ? ? [signature was not learned into a strict rule]
     constexpr auto GetAttackDelay = 0x53CFD0;   // F3 0F 10 89 ? ? ? ? E9 ? ? ? ? [signature was not learned into a strict rule]
     constexpr auto GetAttackWindup = 0x53CED0;   // 48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 60 48 8B 01 8B DA 0F 29 74 24 ?? [signature was not learned into a strict rule]
@@ -108,7 +108,7 @@ namespace BasicAttackRuntime {
 } // namespace BasicAttackRuntime
 
 namespace EventRuntime {
-    constexpr auto CreateClientEffect = 0x84B710;   // E8 ? ? ? ? 48 83 C4 ? 5B C3 CC CC CC CC CC CC CC CC CC 4C 89 4C 24 ? 4C 89 44 24 ? 55 [signature was not learned into a strict rule]
+    constexpr auto CreateClientEffect = 0x83C1F0;   // Offset ref: 0x83C1F0 (was 0x84B710)
     constexpr auto OnCreateObject = 0x52A980;   // 48 8B C4 4C 89 48 ? 55 48 8B EC [signature was not learned into a strict rule]
     constexpr auto OnGameUpdate = 0x524810;   // 48 89 5C 24 ? 55 56 57 41 54 41 55 48 83 EC ? 45 33 ED [signature was not learned into a strict rule]
     constexpr auto OnProcessSpell = 0x935D30;   // 40 55 53 41 55 41 56 41 57 48 8D AC 24 30 F0 FF FF [signature was not learned into a strict rule]
@@ -162,13 +162,22 @@ namespace SpellBookLayout {
 } // namespace SpellBookLayout
 
 namespace SpellSlotLayout {
-    constexpr auto SlotLevel = 0x28;
-    constexpr auto SlotCooldown = 0x80;   // IDA: movss xmm0,[rcx+80h] @ sub_858520 (was 0x30)
-    constexpr auto SlotStacks = 0x5C;
-    constexpr auto SlotTotalCd = 0x88;   // IDA: movss xmm0,[rcx+88h] @ sub_858590 (was 0x74)
-    constexpr auto SlotSpellInput = 0x130;   // IDA: mov rax,[rcx+130h] @ sub_5D04D0, 40+ callers (was 0x120)
+    constexpr auto SlotLevel = 0x28;        // TODO: Offset ref says 0x1C (IDA sub_2993D0 + CE) — VERIFY LIVE
+    constexpr auto SlotCooldown = 0x80;     // IDA: sub_858520 CD getter (>0 = on CD)
+    constexpr auto SlotTotalCd = 0x88;      // IDA: sub_858590 total CD getter
+    constexpr auto SlotChargeTimer = 0x30;  // charge/ammo recharge timer (was mistaken for CD)
+    constexpr auto SlotCooldownExpires = 0x70; // game time expiry (-1.0 = not on CD)
+    constexpr auto SlotStacks = 0x5C;       // IDA: sub_85A010 stacks getter
+    constexpr auto SlotSpellInstanceVars = 0x108; // ptr to spell instance variables
+    constexpr auto SlotSpellNameHash = 0x110;     // uint32 FNV hash of spell name
     constexpr auto SlotSpellInfo = 0x128;   // 48 8B 81 28 01 00 00 C3 [rule:op1/consensus]
+    constexpr auto SlotSpellInput = 0x130;  // IDA: mov rax,[rcx+130h] @ sub_5D04D0 (= SpellDataResource ptr)
 } // namespace SpellSlotLayout
+
+namespace SpellDataResourceNameLayout {
+    constexpr auto SpellNameStr = 0x28;     // std::string SSO within SpellDataResource
+    constexpr auto SpellNameCap = 0x40;     // capacity (>0xF = heap ptr at SpellNameStr)
+} // namespace SpellDataResourceNameLayout
 
 namespace SpellInputLayout {
     constexpr auto InputTargetNetId = 0x14;
@@ -220,9 +229,13 @@ namespace BuffManagerRuntime {
 } // namespace BuffManagerRuntime
 
 namespace BuffManagerLayout {
+    // Array 1: 16-byte entries {QWORD buff_ptr, QWORD refcounted_ptr} (IDA: sub_851D90)
     constexpr auto EntriesStart = 0x18;
     constexpr auto EntriesEnd = 0x20;
     constexpr auto EntriesCapacityEnd = 0x28;
+    // Array 2: 8-byte BuffInstance* pointer entries (IDA: sub_BDA550 OnBuffAdd)
+    constexpr auto Array2Start = 0x620;
+    constexpr auto Array2End = 0x628;
 } // namespace BuffManagerLayout
 
 namespace BuffEntryLayout {
@@ -950,5 +963,244 @@ namespace Obj_SpawnPoint {
     constexpr auto CharacterName = 0x4328;   // IDA: lea rdx,[rcx+4328h] @ 0x29B0E7 (was 0x4330)
     constexpr auto Direction = 0x21D8;
 } // namespace Obj_SpawnPoint
+
+// ============================================================================
+// New namespaces from Offset reference (freshly reversed)
+// ============================================================================
+
+namespace GadgetRuntime {
+    // ROP gadgets for return address spoofing
+    // JMP [rbx] (FF 23): 0x4AAA3, 0x5915A, 0x59861, 0x6ADB8, 0xEC0B0
+    // JMP rcx; RET (FF E1 C3):
+    constexpr auto ThreadTrampoline = 0x18D1A7C;
+} // namespace GadgetRuntime
+
+namespace DirectInputRuntime {
+    // Keyboard (IDirectInputDevice8*)
+    constexpr auto KeyboardDevice = 0x1E68BF8;
+    constexpr auto KeyboardBuffer = 0x1E68C08;
+    constexpr auto KeyboardCount  = 0x1E68C28;
+    constexpr auto KeyboardFlag   = 0x1E68C48;
+    // Mouse (IDirectInputDevice8*)
+    constexpr auto MouseDevice    = 0x1E68C00;
+    constexpr auto MouseBuffer    = 0x1E68C10;
+    constexpr auto MouseCount     = 0x1E68C38;
+    // vtable offsets (COM, stable across builds)
+    constexpr auto VT_GetDeviceState = 0x48;
+    constexpr auto VT_GetDeviceData  = 0x50;
+} // namespace DirectInputRuntime
+
+namespace ZoomRuntime {
+    // Camera chain: HudInstance → +0x18 → CameraStruct
+    constexpr auto HudToCameraPtr    = 0x18;
+    constexpr auto CurrentZoom       = 0x324;
+    constexpr auto ZoomConfigPtr     = 0x3D0;
+    constexpr auto ZoomFallbackPtr   = 0x310;
+    constexpr auto DisableZoomClamp  = 0x345;
+    constexpr auto ZoomClampFlag     = 0x344;
+    // ZoomConfig / ZoomFallbackConfig layout:
+    constexpr auto ZC_MinZoom        = 0x24;
+    constexpr auto ZC_MaxZoom        = 0x28;
+    // Read-only .rdata constants (integrity checked):
+    constexpr auto HardcodedMaxZoom  = 0x1916924;
+    constexpr auto ZoomEnableConfig  = 0x1E31E80;
+} // namespace ZoomRuntime
+
+namespace SkinRuntime {
+    // ModSkin: CharacterDataStack at obj+0x2C68
+    constexpr auto SkinNetID         = 0x1440;
+    constexpr auto SkinName          = 0x1448;  // std::string (skin/champion name)
+    constexpr auto ModelName         = 0x1468;  // std::string (model name)
+    constexpr auto SkinChangeFlag    = 0x1488;  // byte bool
+    constexpr auto SkinParam1        = 0x148C;  // dword
+    constexpr auto SkinParam2        = 0x1490;  // dword
+} // namespace SkinRuntime
+
+namespace ShopRuntime {
+    constexpr auto IsShopOpen        = 0x1DBBF98; // GLOBAL dword
+} // namespace ShopRuntime
+
+namespace EventSpellCastInfoLayout {
+    // SpellCastInfo fields from event handlers (OnProcessSpell/OnStopCast)
+    constexpr auto SCI_CasterNetId   = 0x00A0;
+    constexpr auto SCI_SpellSlotShort = 0x0146; // int16
+    constexpr auto SCI_SpellSlotInt  = 0x0154;  // int
+    constexpr auto SCI_IsStopCast    = 0x01AC;  // byte bool
+    constexpr auto SCI_CastState     = 0x0198;  // byte bool
+    constexpr auto SCI_CastData      = 0x01E8;  // ptr
+} // namespace EventSpellCastInfoLayout
+
+namespace NavGridCellLayout {
+    // Cell structure (16 bytes each at CellArray + 16 * (x + z * Width)):
+    //   +0x00: QWORD ptr → overlay data (null = use inline flags)
+    //   +0x08: WORD flags (if overlay null; if overlay, use *overlay+6)
+    constexpr auto CellOverlay       = 0x00;
+    constexpr auto CellFlags         = 0x08;
+    constexpr auto OverlayFlagsOff   = 0x06;  // *(overlay + 6) for overlaid cells
+    constexpr auto CellStride        = 16;
+    // Cell flag bits (from Offset reference — verified by IDA sub_11D0C30):
+    constexpr auto CELL_WALL         = 0x0002;
+    constexpr auto CELL_BRUSH        = 0x0004;
+    constexpr auto CELL_WATER        = 0x0010;
+    constexpr auto CELL_BUILDING     = 0x0040;
+    constexpr auto CELL_VISION       = 0x0080;
+    constexpr auto CELL_PASSABILITY  = 0x0C00;
+    constexpr auto HalfCellSize      = 0x0718; // float (NavGridData + 0x718)
+} // namespace NavGridCellLayout
+
+namespace CombatStatsLayout {
+    // Stat/modifier block offsets (from Offset reference combat namespace)
+    constexpr auto BaseAttackDamage                 = 0x0348;
+    constexpr auto AttackSpeedMod                   = 0x02A8;
+    constexpr auto PercentAttackSpeedMod            = 0x02D0;
+    constexpr auto PercentMultiplicativeAtkSpeedMod = 0x02F8;
+    constexpr auto AttackRange                      = 0x0618;
+    constexpr auto Crit                             = 0x0488;
+    constexpr auto CritDamageMultiplier             = 0x0410;
+    constexpr auto Armor                            = 0x04D8;
+    constexpr auto SpellBlock                       = 0x0528;
+    constexpr auto BonusArmor                       = 0x0500;
+    constexpr auto BonusSpellBlock                  = 0x0550;
+    constexpr auto Dodge                            = 0x0460;
+    constexpr auto FlatPhysicalDamageMod            = 0x0140;
+    constexpr auto PercentPhysicalDamageMod         = 0x0168;
+    constexpr auto FlatMagicDamageMod               = 0x01E0;
+    constexpr auto PercentMagicDamageMod            = 0x0208;
+    constexpr auto HPRegenRate                      = 0x0578;
+    constexpr auto PrimaryARRegenRateRep            = 0x0988;
+    constexpr auto FlatBaseArmorMod                 = 0x0938;
+    constexpr auto FlatBaseSpellBlockMod            = 0x0960;
+} // namespace CombatStatsLayout
+
+namespace HeroFieldsLayout {
+    constexpr auto Gold                      = 0x2830;
+    constexpr auto GoldTotal                 = 0x2858;
+    constexpr auto MinimumGold               = 0x2880;
+    constexpr auto SkillUpLevelDeltaRep      = 0x4D38;
+    constexpr auto EvolvePoints              = 0x4BF8;
+    constexpr auto Flags                     = 0x4C20;
+    constexpr auto Exp                       = 0x4CE8;
+    constexpr auto LevelRef                  = 0x4D10;
+    constexpr auto VisionScore               = 0x55D8;
+    constexpr auto ShutdownValue             = 0x5600;
+    constexpr auto BaseGoldGivenOnDeath      = 0x5628;
+    constexpr auto NumNeutralMinionsKilled   = 0x5650;
+    constexpr auto InputLocks                = 0x56C8;
+    constexpr auto AutoBuildItemId           = 0x5820;
+    constexpr auto CombatType                = 0x2C98;
+    constexpr auto LargePipBitField          = 0x04E0;
+    constexpr auto MediumPipBitField         = 0x0508;
+} // namespace HeroFieldsLayout
+
+namespace MinionFieldsLayout {
+    constexpr auto FollowTargetNetId         = 0x2D90;
+    constexpr auto FollowerTargetDelay       = 0x2DB8;
+    constexpr auto PercentDmgToBarracksMod   = 0x1C50;
+    constexpr auto FlatDmgReductionBarracks  = 0x1C78;
+    constexpr auto IncreasedMoveSpeedMod     = 0x1CA0;
+} // namespace MinionFieldsLayout
+
+namespace TurretFieldsLayout {
+    constexpr auto PropertyManager           = 0x2C88;
+    constexpr auto PalisadesCount            = 0x4AF0;
+    constexpr auto MaxPalisadesCount         = 0x4B18;
+} // namespace TurretFieldsLayout
+
+namespace AIBaseFieldsLayout {
+    constexpr auto Lifetime                  = 0x0DB0;
+    constexpr auto MaxLifetime               = 0x0DD8;
+    constexpr auto LifetimeTicks             = 0x0E00;
+    constexpr auto IsTargetable              = 0x0ED0;
+    constexpr auto IsTargetableToTeam        = 0x0EF8;
+    constexpr auto PhysDmgPctMod             = 0x0E78;
+    constexpr auto MagicDmgPctMod            = 0x0EA0;
+    constexpr auto MoveSpeed                 = 0x05C8;
+    constexpr auto MoveSpeedBaseIncrease     = 0x05F0;
+    constexpr auto ScaleSkinCoef             = 0x0438;
+    constexpr auto FlatBubbleRadiusMod       = 0x0640;
+    constexpr auto PercentBubbleRadiusMod    = 0x0668;
+    constexpr auto PathfindingRadiusMod      = 0x08C0;
+} // namespace AIBaseFieldsLayout
+
+namespace ObjectFieldsLayout {
+    // Core object fields (Offset ref obj namespace)
+    constexpr auto Index             = 0x0020;  // uint32 (NetworkID/ObjIndex)
+    constexpr auto Name              = 0x0068;  // std::string SSO
+    constexpr auto NameCapacity      = 0x0080;  // if >0xF → heap ptr at Name
+    constexpr auto SelectionHeight   = 0x0088;  // float
+    constexpr auto SelectionRadius   = 0x008C;  // float
+    constexpr auto Visible           = 0x0308;  // bool (fog of war)
+    constexpr auto IsCloneFlag       = 0x0218;
+    constexpr auto IsDeadFlag        = 0x0250;
+    constexpr auto Team              = 0x0259;  // uint8 (encrypted, lookup via table)
+    constexpr auto Position          = 0x025C;  // Vector3 (encrypted)
+    constexpr auto CharIntermediate  = 0x02A8;  // ptr
+    constexpr auto DataStackBase     = 0x02C0;  // ptr
+    constexpr auto CharDataBase      = 0x2C68;  // ptr
+    constexpr auto AiManagerPtr      = 0x41E8;  // ENCRYPTED ptr (XOR)
+    constexpr auto CharName          = 0x4328;  // std::string (champion/skin name)
+    constexpr auto CharNameCapacity  = 0x4340;  // if >0xF → heap ptr
+} // namespace ObjectFieldsLayout
+
+namespace SpellDataParamLayout {
+    // SpellData parameter indices (from Offset ref sub_333E00)
+    constexpr auto PARAM_TARGETTINGTYPE       = 0x10;
+    constexpr auto PARAM_COOLDOWN             = 0x15;
+    constexpr auto PARAM_CASTRANGE            = 0x18;
+    constexpr auto PARAM_LINEWIDTH            = 0x22;
+    constexpr auto PARAM_MISSILESPEED         = 0x27;
+    constexpr auto PARAM_MAXAMMOCOUNT         = 0x28;
+    constexpr auto PARAM_CHARGEUPDATEINTERVAL = 0x2A;
+} // namespace SpellDataParamLayout
+
+namespace MissileSpellCastInfoLayout {
+    // SpellCastInfo on missile/caster (obj+0x4010..0x4018, entry=0x190)
+    constexpr auto CastInfoStart     = 0x4010;
+    constexpr auto CastInfoEnd       = 0x4018;
+    constexpr auto CastInfoEntrySize = 0x190;
+    constexpr auto CI_SpellSlotIdx   = 0x08;
+    constexpr auto CI_StartPos       = 0x80;
+    constexpr auto CI_EndPos         = 0x8C;
+    constexpr auto CI_TargetPos      = 0x98;
+    constexpr auto CI_CasterNetId    = 0xC0;
+    constexpr auto CI_TargetNetId    = 0x100;
+    constexpr auto CI_MissileNetId   = 0x108;
+} // namespace MissileSpellCastInfoLayout
+
+namespace AiManagerNavDataLayout {
+    // NavData offsets from Offset reference (flat on resolved inner struct)
+    constexpr auto MoveSpeed         = 0x02F8;
+    constexpr auto NavFlag           = 0x02FD;
+    constexpr auto ServerPosX        = 0x0310;
+    constexpr auto ServerPosZ        = 0x0318;
+    constexpr auto ServerPos         = 0x031C;
+    constexpr auto SegmentsPtr       = 0x0328;
+    constexpr auto SegmentsCount     = 0x0330;
+    constexpr auto CurrentSegment    = 0x0334;
+    constexpr auto DashSpeedCalc     = 0x0340;
+    constexpr auto DashMaxRangeSq    = 0x0354;
+    constexpr auto DashDistRemain    = 0x0358;
+    constexpr auto IsDashingInner    = 0x035C;
+    constexpr auto DashDuration      = 0x0360;
+    constexpr auto PathStart         = 0x0388;
+    constexpr auto PathEndFallback   = 0x03A0;
+    constexpr auto ArrivedFlag       = 0x0450;
+    constexpr auto CurrentPosX       = 0x0454;
+    constexpr auto CurrentPosY       = 0x0458;
+    constexpr auto CurrentPosZ       = 0x045C;
+    constexpr auto DashTargetNetId   = 0x046C;
+    constexpr auto DashSecondaryId   = 0x0470;
+    constexpr auto MoveOverrideFlag  = 0x0474;
+    constexpr auto PreviousPosX      = 0x0570;
+    constexpr auto PreviousPosY      = 0x0574;
+    constexpr auto PreviousPosZ      = 0x0578;
+    constexpr auto VelocityX         = 0x0588;
+    constexpr auto VelocityY         = 0x058C;
+    constexpr auto VelocityZ         = 0x0590;
+} // namespace AiManagerNavDataLayout
+
+namespace TargetRuntime {
+    constexpr auto AITargetComponent = 0x1498;
+} // namespace TargetRuntime
 
 }

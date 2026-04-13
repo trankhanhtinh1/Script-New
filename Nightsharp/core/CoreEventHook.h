@@ -22,6 +22,7 @@
 #include "CoreRuntime.h"
 #include "CoreSpellCastInfo.h"
 #include "Offsets.h"
+#include "spoof/spoofcall.h"
 
 #include <cstdint>
 #include <cstring>
@@ -254,6 +255,8 @@ namespace detail {
     }
 
     // ── Hook body: OnProcessSpell ──
+    // ⚠️ Return address spoofing: call original via spoof_call so Packman
+    //    sees a game-module return address instead of our DLL address.
     int __fastcall HkOnProcessSpell(uintptr_t spellBook, uintptr_t castInfo) {
         // Fire our callback BEFORE the original (so scripts see the event first)
         if (g_processSpellCb && castInfo) {
@@ -263,12 +266,21 @@ namespace detail {
             }
         }
 
-        // Call original game function
+        // Call original game function with return address spoofing
         auto original = g_onProcessSpellDetour.GetOriginal<OnProcessSpellFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            return spoof_call(
+                reinterpret_cast<void*>(trampoline),
+                original,
+                spellBook, castInfo);
+        }
+        // Fallback: direct call if spoof trampoline not resolved yet
         return original(spellBook, castInfo);
     }
 
     // ── Hook body: OnStopCast ──
+    // ⚠️ Return address spoofing applied here too.
     void __fastcall HkOnStopCast(uintptr_t a1, uintptr_t a2, uint8_t a3, uintptr_t castInfo, uintptr_t a5) {
         if (g_stopCastCb && castInfo) {
             // a1 in OnStopCast context — need to figure out sender
@@ -278,7 +290,17 @@ namespace detail {
             }
         }
 
+        // Call original game function with return address spoofing
         auto original = g_onStopCastDetour.GetOriginal<OnStopCastFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            spoof_call(
+                reinterpret_cast<void*>(trampoline),
+                original,
+                a1, a2, a3, castInfo, a5);
+            return;
+        }
+        // Fallback: direct call if spoof trampoline not resolved yet
         original(a1, a2, a3, castInfo, a5);
     }
 

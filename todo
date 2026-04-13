@@ -1,1 +1,180 @@
-﻿- Need Fix Object Minion/Jungle follow Old NightSharp
+NightSharp Comprehensive Update Plan
+=====================================
+
+Dependency Map: Core -> SDK
+  Offsets.generated.h / Offsets.h
+    -> core/CoreSpellBook.h  -> sdk/Core/Objects.h, sdk/Wrappers/Spells/Spell.h, sdk/Events/SpellCastTracker.h
+    -> core/CoreBuffs.h      -> sdk/Core/Objects.h, sdk/Wrappers/Orbwalking/, sdk/Math/HealthPrediction.h
+    -> core/CoreAi.h         -> sdk/Core/Objects.h, sdk/Math/Prediction/Movement.h
+    -> core/CoreEventHook.h  -> sdk/Events/SpellCastTracker.h, sdk/Events/PropertyTracker.h
+    -> core/CoreObjects.h    -> sdk/Core/Objects.h, sdk/GameObjects/
+    -> core/CoreControl.h    -> sdk/Core/Objects.h, sdk/Wrappers/Orbwalking/
+
+========================================================================
+PHASE 1: Trampoline System (Anti-Cheat Bypass)
+========================================================================
+
+[x] 1.1 Return Address Spoofing cho hooks
+    Files: core/CoreEventHook.h, core/spoof/spoofcall.h
+    - HkOnProcessSpell: spoof_call khi goi original (done)
+    - HkOnStopCast: spoof_call khi goi original (done)
+    - Fallback direct call neu trampoline chua resolve (done)
+    SDK impact: Khong - SDK goi qua CoreAPI, transparent
+
+[ ] 1.2 Thread Hijack Trampoline
+    !!! NOTE: CHO KIEM TRA VOI INJECTOR TRUOC !!!
+    File moi: core/TrampolineSystem.h
+    - Gadget: ThreadTrampoline = 0x18D1A7C (FF E1 C3)
+    - JMP [rbx] gadgets: 0x4AAA3, 0x5915A, 0x59861, 0x6ADB8, 0xEC0B0
+
+========================================================================
+PHASE 2: Offset Synchronization (Offset -> NightSharp)
+========================================================================
+
+[x] 2.1 Offset sync toan bo (Offsets.generated.h + Offsets.h)
+
+    SpellSlot updates:
+    [!] Level = 0x28 (TODO: Offset ref noi 0x1C, IDA sub_2993D0 + CE - CAN VERIFY LIVE)
+    [x] Cooldown = 0x80, TotalCd = 0x88 (match)
+    [x] ChargeTimer = 0x30 (new - charge/ammo recharge timer)
+    [x] CooldownExpires = 0x70 (new - game time expiry, -1=off CD)
+    [x] Stacks = 0x5C (match)
+    [x] SpellNameHash = 0x110 (new - FNV hash)
+    [x] SpellInstanceVars = 0x108 (new)
+    [x] SpellNameStr = 0x28, SpellNameCap = 0x40 (new - in SpellDataResource)
+
+    Function addresses updated:
+    [x] CreateClientEffect: 0x84B710 -> 0x83C1F0
+    [x] GetSpellSlot: 0x91E2D0 -> 0x91E540
+
+    BuffManager:
+    [x] Array 1 (+0x18/+0x20, stride=16) - NightSharp dung dung
+    [x] Array 2 (+0x620/+0x628, stride=8) - them vao generated.h lam alternative
+
+    17 new namespaces added to Offsets.generated.h:
+    [x] GadgetRuntime        - ThreadTrampoline, JMP[rbx] gadgets
+    [x] DirectInputRuntime   - KB/Mouse device, buffer, count, vtable
+    [x] ZoomRuntime           - Camera chain, zoom config min/max
+    [x] SkinRuntime           - SkinNetID, SkinName, ModelName
+    [x] ShopRuntime           - IsShopOpen = 0x1DBBF98
+    [x] EventSpellCastInfoLayout - SCI_CasterNetId, SpellSlotInt, IsStopCast
+    [x] NavGridCellLayout     - Cell structure 16B, CELL_WALL/BRUSH/WATER flags
+    [x] CombatStatsLayout     - 20 combat stat offsets
+    [x] HeroFieldsLayout      - Gold, Exp, Level, InputLocks, VisionScore
+    [x] MinionFieldsLayout    - FollowTargetNetId, barracks mods
+    [x] TurretFieldsLayout    - PropertyManager, PalisadesCount
+    [x] AIBaseFieldsLayout    - Lifetime, IsTargetable, MoveSpeed
+    [x] ObjectFieldsLayout    - Core obj fields (Index, Name, Team, Position)
+    [x] SpellDataParamLayout  - Parameter indices (castrange, missilespeed, etc)
+    [x] MissileSpellCastInfoLayout - Missile cast info (entry 0x190 bytes)
+    [x] AiManagerNavDataLayout - Full navdata: velocity, dash target, arrived flag
+    [x] TargetRuntime         - AITargetComponent = 0x1498
+
+    Compatibility layer (Offsets.h) updated:
+    [x] SpellBook: +6 new slot fields + SpellNameStr/Cap
+    [x] New namespaces: Shop, Zoom, Skin, Gadget, DInput, NavGridCell, EventSCI, AiManagerNavData
+
+[ ] 2.2 NavGrid flags reconcile
+    Conflict: NightSharp WALL=0x1, BRUSH=0xC00 vs Offset WALL=0x02, BRUSH=0x04
+    NavGridCellLayout da them voi gia tri tu Offset ref (IDA verified)
+    NavGridFlags (old) van giu nguyen - can verify CE de quyet dinh dung cai nao
+    SDK impact: sdk/Math/Prediction/ collision checks
+
+========================================================================
+PHASE 3: SDK Layer Updates (propagate core changes)
+========================================================================
+
+[ ] 3.1 sdk/Core/Objects.h - Wrapper updates
+    - Buff system: OK (Array 1 approach valid, khong can fix)
+    - Them accessors: Gold(), GoldTotal(), InputLocks(), CombatType()
+    - Them SpellSlot info: SpellNameHash(), ChargeTimer(), CooldownExpires()
+    - Them dash info: DashTarget(), DashDuration(), HasArrived()
+    - Them shop check: IsShopOpen() static helper
+
+[ ] 3.2 sdk/Wrappers/Spells/Spell.h - Spell system
+    - SpellNameHash lookup: nhanh hon string compare
+    - SpellDataResource access: direct name read path (backup)
+    - Charged spell logic: dung ChargeTimer thay vi buff-check
+    - Cast methods: verify qua trampoline (transparent qua CoreControl)
+
+[ ] 3.3 core/CoreSpellBook.h - SlotRef updates
+    - Them GetChargeTimer(), GetCooldownExpires(), GetSpellNameHash()
+    - Them GetSpellInstanceVars()
+    - Them ReadSpellNameFromResource() dung SpellNameStr/Cap path
+
+[ ] 3.4 sdk/Wrappers/Orbwalking/ - Orbwalker
+    - Buff checks: OK (NightSharp buff reading valid)
+    - Shop state check: them SDK::IsShopOpen() -> khong orbwalk khi shop
+    - Event hook: them OnHeroActionStateChange -> detect CC/state changes realtime
+    - Minion aggro: them OnMinionFollowTargetNetIdChange hook
+
+[ ] 3.5 sdk/Math/Prediction/Movement.h - Prediction
+    - Dash prediction: integrate DashTargetNetId + DashDuration
+    - Velocity vectors: su dung VelocityX/Y/Z (0x588-0x590)
+    - NavGrid collision: cell-level walkability check
+    - Arrived flag: skip prediction neu target da arrived
+
+[ ] 3.6 sdk/Math/HealthPrediction.h
+    - Buff fix propagation: auto-fix (buff system da OK)
+    - Missile tracking accuracy: verify missile net ID offsets match
+
+[ ] 3.7 sdk/Events/SpellCastTracker.h
+    - Trampoline: transparent (hook qua CoreEventHook)
+    - Add OnStopCast hook: chua install trong SDK init -> add vao Events::SpellCast::hook::Install()
+    - Add OnBuffAdd hook: new hook point cho buff event tracking
+
+[ ] 3.8 sdk/Events/PropertyTracker.h
+    - OnHeroActionStateChange: hook da co offset, integrate vao events system
+    - OnMinionFollowTargetNetIdChange: add for minion target tracking
+
+========================================================================
+PHASE 4: New Features
+========================================================================
+
+[ ] 4.1 ZoomHack (sdk/Features/ZoomHack.h)
+    - Camera chain: HudInstance -> +0x18 -> Camera -> +0x3D0 -> ZoomConfig -> +0x24/+0x28
+    - Pure memory write - NO trampoline needed
+    - Methods: SetZoom(), SetZoomLimits(), PatchZoomLimits() (safest)
+    - SDK wrapper: SDK::ZoomHack::SetLimits(min, max)
+
+[ ] 4.2 NavGrid Full API (core/CoreNavGrid.h + sdk/Core/NavGrid.h)
+    - Cell-level IsWall/IsBrush/IsWater (su dung NavGridCellLayout)
+    - Path collision check
+    - World <-> Cell conversion (CellSize, MinX/MinZ, HalfCellSize)
+
+[ ] 4.3 DirectInput (core/CoreInput.h)
+    - vtable hook for keyboard/mouse (VT_GetDeviceData = 0x50)
+    - Input inject/filter capability
+    - Device ptrs: KB=0x1E68BF8, Mouse=0x1E68C00
+
+[ ] 4.4 ModSkin (sdk/Features/ModSkin.h)
+    - Read: SkinNetID, SkinName, ModelName, SkinChangeFlag
+    - Write: SkinParam1/SkinParam2 (method 1, no trampoline)
+    - Full reload: call sub_DA1740 (method 2, NEEDS trampoline)
+
+========================================================================
+REFERENCE TABLES
+========================================================================
+
+SpellSlot Offset Status:
+  Level           | NightSharp=0x28 | Offset=0x1C  | CONFLICT - can CE verify
+  Cooldown        | 0x80            | 0x80         | MATCH (IDA sub_858520)
+  TotalCooldown   | 0x88            | 0x88         | MATCH (IDA sub_858590)
+  ChargeTimer     | (added) 0x30    | 0x30         | NEW - charge/ammo recharge
+  CooldownExpires | (added) 0x70    | 0x70         | NEW - game time expiry
+  Stacks          | 0x5C            | 0x5C         | MATCH (IDA sub_85A010)
+  SpellInfo       | 0x128           | 0x128        | MATCH
+  SpellInput/SDR  | 0x130           | 0x130        | MATCH
+  SpellNameHash   | (added) 0x110   | 0x110        | NEW - FNV hash
+  SpellInstVars   | (added) 0x108   | 0x108        | NEW
+  SpellNameStr    | (added) 0x28    | 0x28 in SDR  | NEW
+  SpellNameCap    | (added) 0x40    | 0x40 in SDR  | NEW
+
+BuffManager Status:
+  Array 1 | +0x18/+0x20 | stride=16 | NightSharp dung | IDA sub_851D90
+  Array 2 | +0x620/+0x628 | stride=8 | Offset ref dung | IDA sub_BDA550
+
+NavGrid Flags Conflict:
+  Old NightSharp: WALL=0x1, NOWALK=0x2, BRUSH=0xC00, SPECIAL=0x1000
+  Offset ref:     WALL=0x02, BRUSH=0x04, WATER=0x10, BUILDING=0x40
+  -> Can verify CE de chon dung

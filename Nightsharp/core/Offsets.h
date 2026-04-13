@@ -401,8 +401,14 @@ constexpr auto SlotLevel = SpellSlotLayout::SlotLevel;
 constexpr auto SlotCooldown = SpellSlotLayout::SlotCooldown;
 constexpr auto SlotStacks = SpellSlotLayout::SlotStacks;
 constexpr auto SlotTotalCd = SpellSlotLayout::SlotTotalCd;
+constexpr auto SlotChargeTimer = SpellSlotLayout::SlotChargeTimer;
+constexpr auto SlotCooldownExpires = SpellSlotLayout::SlotCooldownExpires;
+constexpr auto SlotSpellInstanceVars = SpellSlotLayout::SlotSpellInstanceVars;
+constexpr auto SlotSpellNameHash = SpellSlotLayout::SlotSpellNameHash;
 constexpr auto SlotSpellInput = SpellSlotLayout::SlotSpellInput;
 constexpr auto SlotSpellInfo = SpellSlotLayout::SlotSpellInfo;
+constexpr auto SpellNameStr = SpellDataResourceNameLayout::SpellNameStr;
+constexpr auto SpellNameCap = SpellDataResourceNameLayout::SpellNameCap;
 
 constexpr auto InputTargetNetId = SpellInputLayout::InputTargetNetId;
 constexpr auto InputStartPos = SpellInputLayout::InputStartPos;
@@ -547,5 +553,74 @@ constexpr auto IsClone = ClassificationRuntime::IsClone;
 constexpr auto ViewMatrixInst = DrawingRuntime::ViewProjOffset;
 constexpr auto ProjMatrixRelative = DrawingMatrixRuntime::ProjMatrixRelative;
 } // namespace Extra
+
+namespace Shop {
+constexpr auto IsShopOpen = ShopRuntime::IsShopOpen;
+} // namespace Shop
+
+namespace Zoom {
+constexpr auto HudToCameraPtr = ZoomRuntime::HudToCameraPtr;
+constexpr auto CurrentZoom = ZoomRuntime::CurrentZoom;
+constexpr auto ZoomConfigPtr = ZoomRuntime::ZoomConfigPtr;
+constexpr auto ZoomFallbackPtr = ZoomRuntime::ZoomFallbackPtr;
+constexpr auto ZC_MinZoom = ZoomRuntime::ZC_MinZoom;
+constexpr auto ZC_MaxZoom = ZoomRuntime::ZC_MaxZoom;
+constexpr auto DisableZoomClamp = ZoomRuntime::DisableZoomClamp;
+} // namespace Zoom
+
+namespace Skin {
+constexpr auto SkinNetID = SkinRuntime::SkinNetID;
+constexpr auto SkinName = SkinRuntime::SkinName;
+constexpr auto ModelName = SkinRuntime::ModelName;
+constexpr auto SkinChangeFlag = SkinRuntime::SkinChangeFlag;
+constexpr auto SkinParam1 = SkinRuntime::SkinParam1;
+constexpr auto SkinParam2 = SkinRuntime::SkinParam2;
+} // namespace Skin
+
+namespace Gadget {
+constexpr auto ThreadTrampoline = GadgetRuntime::ThreadTrampoline;
+} // namespace Gadget
+
+namespace DInput {
+constexpr auto KeyboardDevice = DirectInputRuntime::KeyboardDevice;
+constexpr auto MouseDevice = DirectInputRuntime::MouseDevice;
+constexpr auto KeyboardBuffer = DirectInputRuntime::KeyboardBuffer;
+constexpr auto MouseBuffer = DirectInputRuntime::MouseBuffer;
+constexpr auto KeyboardCount = DirectInputRuntime::KeyboardCount;
+constexpr auto MouseCount = DirectInputRuntime::MouseCount;
+constexpr auto VT_GetDeviceData = DirectInputRuntime::VT_GetDeviceData;
+} // namespace DInput
+
+namespace NavGridCell {
+constexpr auto CellOverlay = NavGridCellLayout::CellOverlay;
+constexpr auto CellFlags = NavGridCellLayout::CellFlags;
+constexpr auto OverlayFlagsOff = NavGridCellLayout::OverlayFlagsOff;
+constexpr auto CellStride = NavGridCellLayout::CellStride;
+constexpr auto CELL_WALL = NavGridCellLayout::CELL_WALL;
+constexpr auto CELL_BRUSH = NavGridCellLayout::CELL_BRUSH;
+constexpr auto CELL_WATER = NavGridCellLayout::CELL_WATER;
+constexpr auto CELL_BUILDING = NavGridCellLayout::CELL_BUILDING;
+constexpr auto HalfCellSize = NavGridCellLayout::HalfCellSize;
+} // namespace NavGridCell
+
+namespace EventSCI {
+constexpr auto CasterNetId = EventSpellCastInfoLayout::SCI_CasterNetId;
+constexpr auto SpellSlotShort = EventSpellCastInfoLayout::SCI_SpellSlotShort;
+constexpr auto SpellSlotInt = EventSpellCastInfoLayout::SCI_SpellSlotInt;
+constexpr auto IsStopCast = EventSpellCastInfoLayout::SCI_IsStopCast;
+constexpr auto CastState = EventSpellCastInfoLayout::SCI_CastState;
+} // namespace EventSCI
+
+namespace AiManagerNavData {
+constexpr auto ArrivedFlag = AiManagerNavDataLayout::ArrivedFlag;
+constexpr auto DashTargetNetId = AiManagerNavDataLayout::DashTargetNetId;
+constexpr auto DashSecondaryId = AiManagerNavDataLayout::DashSecondaryId;
+constexpr auto DashDistRemain = AiManagerNavDataLayout::DashDistRemain;
+constexpr auto DashDuration = AiManagerNavDataLayout::DashDuration;
+constexpr auto VelocityX = AiManagerNavDataLayout::VelocityX;
+constexpr auto VelocityY = AiManagerNavDataLayout::VelocityY;
+constexpr auto VelocityZ = AiManagerNavDataLayout::VelocityZ;
+constexpr auto MoveOverrideFlag = AiManagerNavDataLayout::MoveOverrideFlag;
+} // namespace AiManagerNavData
 
 } // namespace Offset
