@@ -1,7 +1,9 @@
 #pragma once
 
 // ============================================================================
-// CoreEventHook — Minimal detour for OnProcessSpell / OnStopCast / OnFinishCast
+// CoreEventHook — Event detour system for all game hooks
+// Hooks: OnProcessSpell, OnStopCast, OnFinishCast, OnBuffAdd, OnSpellImpact,
+//        OnCreateObject, OnGameUpdate, OnHeroActionStateChange, OnMinionFollowChange
 //
 // Reversed from IDA (binary dump):
 //   OnProcessSpell @ 0x9362A0:
@@ -35,17 +37,37 @@ namespace CoreEventHook {
 
 // OnProcessSpell(SpellBook*, SpellCastInfo*) → int
 using OnProcessSpellFn = int(__fastcall*)(uintptr_t spellBook, uintptr_t castInfo);
-
 // OnStopCast(???, ???, byte, SpellCastInfo*, ...) → void
 using OnStopCastFn = void(__fastcall*)(uintptr_t a1, uintptr_t a2, uint8_t a3, uintptr_t castInfo, uintptr_t a5);
+// OnFinishCast(obj, castInfo, ???, ???) → void*
+using OnFinishCastFn = void*(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+// OnBuffAdd(buffMgr, ???, flags, ???, int, int) → void*
+using OnBuffAddFn = void*(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, int a5, int a6);
+// OnSpellImpact(???, ???, ???, ???, double, double, float) → void*
+using OnSpellImpactFn = void*(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+// OnCreateObject(eventMgr, data, flags, objPtr, int, uint64) → void
+using OnCreateObjectFn = void(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, int a5, uint64_t a6);
+// OnGameUpdate(???, ???, ???, resultPair, flags) → void*
+using OnGameUpdateFn = void*(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, int a5);
+// OnHeroActionStateChange(???, ???, ???, ???) → void
+using OnHeroActionStateChangeFn = void(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+// OnMinionFollowTargetNetIdChange — same signature
+using OnMinionFollowChangeFn = void(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
 // ---------------------------------------------------------------------------
 // Callback types — SDK layer registers these
 // ---------------------------------------------------------------------------
 
-// Callback: (senderAddress, castInfoAddress) — raw pointers, SDK wraps them
-using RawProcessSpellCallback = void(*)(uintptr_t senderObj, uintptr_t castInfo);
-using RawStopCastCallback     = void(*)(uintptr_t senderObj, uintptr_t castInfo);
+// Callbacks: raw pointers, SDK wraps them
+using RawProcessSpellCallback   = void(*)(uintptr_t senderObj, uintptr_t castInfo);
+using RawStopCastCallback       = void(*)(uintptr_t senderObj, uintptr_t castInfo);
+using RawFinishCastCallback     = void(*)(uintptr_t senderObj, uintptr_t castInfo);
+using RawBuffAddCallback        = void(*)(uintptr_t buffMgr, uintptr_t a2, uintptr_t a3);
+using RawSpellImpactCallback    = void(*)(uintptr_t a1, uintptr_t a2, uintptr_t a3);
+using RawCreateObjectCallback   = void(*)(uintptr_t objPtr);
+using RawGameUpdateCallback     = void(*)();
+using RawHeroActionStateCallback = void(*)(uintptr_t a1, uintptr_t a2);
+using RawMinionFollowCallback   = void(*)(uintptr_t a1, uintptr_t a2);
 
 // ---------------------------------------------------------------------------
 // Minimal x64 Detour — instruction-boundary aware
@@ -241,11 +263,25 @@ namespace detail {
     };
 
     // ── State ──
-    inline Detour g_onProcessSpellDetour = {};
-    inline Detour g_onStopCastDetour     = {};
+    inline Detour g_onProcessSpellDetour    = {};
+    inline Detour g_onStopCastDetour        = {};
+    inline Detour g_onFinishCastDetour      = {};
+    inline Detour g_onBuffAddDetour         = {};
+    inline Detour g_onSpellImpactDetour     = {};
+    inline Detour g_onCreateObjectDetour    = {};
+    inline Detour g_onGameUpdateDetour      = {};
+    inline Detour g_onHeroActionStateDetour = {};
+    inline Detour g_onMinionFollowDetour    = {};
 
-    inline RawProcessSpellCallback g_processSpellCb = nullptr;
-    inline RawStopCastCallback     g_stopCastCb     = nullptr;
+    inline RawProcessSpellCallback   g_processSpellCb   = nullptr;
+    inline RawStopCastCallback       g_stopCastCb       = nullptr;
+    inline RawFinishCastCallback     g_finishCastCb     = nullptr;
+    inline RawBuffAddCallback        g_buffAddCb        = nullptr;
+    inline RawSpellImpactCallback    g_spellImpactCb    = nullptr;
+    inline RawCreateObjectCallback   g_createObjectCb   = nullptr;
+    inline RawGameUpdateCallback     g_gameUpdateCb     = nullptr;
+    inline RawHeroActionStateCallback g_heroActionStateCb = nullptr;
+    inline RawMinionFollowCallback   g_minionFollowCb   = nullptr;
 
     // ── Recover AIBaseClient address from SpellBook pointer ──
     // Game calls: lea rcx, [obj + 0x30E8]  → rcx = SpellBook
@@ -304,19 +340,116 @@ namespace detail {
         original(a1, a2, a3, castInfo, a5);
     }
 
+    // ── Hook body: OnFinishCast ──
+    void* __fastcall HkOnFinishCast(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+        if (g_finishCastCb && Globals::IsValidPtr(a1) && Globals::IsValidPtr(a2)) {
+            g_finishCastCb(a1, a2);
+        }
+        auto original = g_onFinishCastDetour.GetOriginal<OnFinishCastFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            return spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4);
+        }
+        return original(a1, a2, a3, a4);
+    }
+
+    // ── Hook body: OnBuffAdd ──
+    void* __fastcall HkOnBuffAdd(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, int a5, int a6) {
+        if (g_buffAddCb && Globals::IsValidPtr(a1)) {
+            g_buffAddCb(a1, a2, a3);
+        }
+        auto original = g_onBuffAddDetour.GetOriginal<OnBuffAddFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            return spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4, a5, a6);
+        }
+        return original(a1, a2, a3, a4, a5, a6);
+    }
+
+    // ── Hook body: OnSpellImpact ──
+    void* __fastcall HkOnSpellImpact(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+        if (g_spellImpactCb && Globals::IsValidPtr(a1)) {
+            g_spellImpactCb(a1, a2, a3);
+        }
+        auto original = g_onSpellImpactDetour.GetOriginal<OnSpellImpactFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            return spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4);
+        }
+        return original(a1, a2, a3, a4);
+    }
+
+    // ── Hook body: OnCreateObject ──
+    void __fastcall HkOnCreateObject(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, int a5, uint64_t a6) {
+        auto original = g_onCreateObjectDetour.GetOriginal<OnCreateObjectFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4, a5, a6);
+        } else {
+            original(a1, a2, a3, a4, a5, a6);
+        }
+        // Fire callback AFTER original so the object is fully initialized
+        if (g_createObjectCb && Globals::IsValidPtr(a4)) {
+            g_createObjectCb(a4);
+        }
+    }
+
+    // ── Hook body: OnGameUpdate ──
+    void* __fastcall HkOnGameUpdate(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, int a5) {
+        if (g_gameUpdateCb) {
+            g_gameUpdateCb();
+        }
+        auto original = g_onGameUpdateDetour.GetOriginal<OnGameUpdateFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            return spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4, a5);
+        }
+        return original(a1, a2, a3, a4, a5);
+    }
+
+    // ── Hook body: OnHeroActionStateChange ──
+    void __fastcall HkOnHeroActionStateChange(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+        if (g_heroActionStateCb) {
+            g_heroActionStateCb(a1, a2);
+        }
+        auto original = g_onHeroActionStateDetour.GetOriginal<OnHeroActionStateChangeFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4);
+            return;
+        }
+        original(a1, a2, a3, a4);
+    }
+
+    // ── Hook body: OnMinionFollowTargetNetIdChange ──
+    void __fastcall HkOnMinionFollowChange(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
+        if (g_minionFollowCb) {
+            g_minionFollowCb(a1, a2);
+        }
+        auto original = g_onMinionFollowDetour.GetOriginal<OnMinionFollowChangeFn>();
+        const auto trampoline = CoreRuntime::GetContext().spoofTrampoline;
+        if (Globals::IsValidPtr(trampoline)) {
+            spoof_call(reinterpret_cast<void*>(trampoline), original, a1, a2, a3, a4);
+            return;
+        }
+        original(a1, a2, a3, a4);
+    }
+
 } // namespace detail
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-inline void SetOnProcessSpellCallback(RawProcessSpellCallback cb) {
-    detail::g_processSpellCb = cb;
-}
-
-inline void SetOnStopCastCallback(RawStopCastCallback cb) {
-    detail::g_stopCastCb = cb;
-}
+inline void SetOnProcessSpellCallback(RawProcessSpellCallback cb) { detail::g_processSpellCb = cb; }
+inline void SetOnStopCastCallback(RawStopCastCallback cb)       { detail::g_stopCastCb = cb; }
+inline void SetOnFinishCastCallback(RawFinishCastCallback cb)   { detail::g_finishCastCb = cb; }
+inline void SetOnBuffAddCallback(RawBuffAddCallback cb)         { detail::g_buffAddCb = cb; }
+inline void SetOnSpellImpactCallback(RawSpellImpactCallback cb) { detail::g_spellImpactCb = cb; }
+inline void SetOnCreateObjectCallback(RawCreateObjectCallback cb) { detail::g_createObjectCb = cb; }
+inline void SetOnGameUpdateCallback(RawGameUpdateCallback cb)   { detail::g_gameUpdateCb = cb; }
+inline void SetOnHeroActionStateCallback(RawHeroActionStateCallback cb) { detail::g_heroActionStateCb = cb; }
+inline void SetOnMinionFollowCallback(RawMinionFollowCallback cb) { detail::g_minionFollowCb = cb; }
 
 inline bool InstallProcessSpellHook() {
     const uintptr_t base = Globals::base;
@@ -331,19 +464,81 @@ inline bool InstallProcessSpellHook() {
 inline bool InstallStopCastHook() {
     const uintptr_t base = Globals::base;
     if (!base) return false;
-
-    const uintptr_t target = base + Offset::Function::OnStopCast;
-    return detail::g_onStopCastDetour.Install(
-        target,
+    return detail::g_onStopCastDetour.Install(base + Offset::Function::OnStopCast,
         reinterpret_cast<uintptr_t>(&detail::HkOnStopCast));
+}
+
+inline bool InstallFinishCastHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onFinishCastDetour.Install(base + Offset::Function::OnFinishCast,
+        reinterpret_cast<uintptr_t>(&detail::HkOnFinishCast));
+}
+
+inline bool InstallBuffAddHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onBuffAddDetour.Install(base + Offset::Function::OnBuffAdd,
+        reinterpret_cast<uintptr_t>(&detail::HkOnBuffAdd));
+}
+
+inline bool InstallSpellImpactHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onSpellImpactDetour.Install(base + Offset::Function::OnSpellImpact,
+        reinterpret_cast<uintptr_t>(&detail::HkOnSpellImpact));
+}
+
+inline bool InstallCreateObjectHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onCreateObjectDetour.Install(base + Offset::Function::OnCreateObject,
+        reinterpret_cast<uintptr_t>(&detail::HkOnCreateObject));
+}
+
+inline bool InstallGameUpdateHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onGameUpdateDetour.Install(base + Offset::Function::OnGameUpdate,
+        reinterpret_cast<uintptr_t>(&detail::HkOnGameUpdate));
+}
+
+inline bool InstallHeroActionStateHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onHeroActionStateDetour.Install(
+        base + Offset::EventPropertyRuntime::OnHeroActionStateChange,
+        reinterpret_cast<uintptr_t>(&detail::HkOnHeroActionStateChange));
+}
+
+inline bool InstallMinionFollowHook() {
+    const uintptr_t base = Globals::base;
+    if (!base) return false;
+    return detail::g_onMinionFollowDetour.Install(
+        base + Offset::EventPropertyRuntime::OnMinionFollowTargetNetIdChange,
+        reinterpret_cast<uintptr_t>(&detail::HkOnMinionFollowChange));
 }
 
 inline void UninstallAll() {
     detail::g_onProcessSpellDetour.Uninstall();
     detail::g_onStopCastDetour.Uninstall();
+    detail::g_onFinishCastDetour.Uninstall();
+    detail::g_onBuffAddDetour.Uninstall();
+    detail::g_onSpellImpactDetour.Uninstall();
+    detail::g_onCreateObjectDetour.Uninstall();
+    detail::g_onGameUpdateDetour.Uninstall();
+    detail::g_onHeroActionStateDetour.Uninstall();
+    detail::g_onMinionFollowDetour.Uninstall();
 }
 
-inline bool IsProcessSpellHooked() { return detail::g_onProcessSpellDetour.installed; }
-inline bool IsStopCastHooked()     { return detail::g_onStopCastDetour.installed; }
+inline bool IsProcessSpellHooked()    { return detail::g_onProcessSpellDetour.installed; }
+inline bool IsStopCastHooked()        { return detail::g_onStopCastDetour.installed; }
+inline bool IsFinishCastHooked()      { return detail::g_onFinishCastDetour.installed; }
+inline bool IsBuffAddHooked()         { return detail::g_onBuffAddDetour.installed; }
+inline bool IsSpellImpactHooked()     { return detail::g_onSpellImpactDetour.installed; }
+inline bool IsCreateObjectHooked()    { return detail::g_onCreateObjectDetour.installed; }
+inline bool IsGameUpdateHooked()      { return detail::g_onGameUpdateDetour.installed; }
+inline bool IsHeroActionStateHooked() { return detail::g_onHeroActionStateDetour.installed; }
+inline bool IsMinionFollowHooked()    { return detail::g_onMinionFollowDetour.installed; }
 
 } // namespace CoreEventHook

@@ -223,15 +223,20 @@ public:
     bool IsImmobile() const { return m_ref.IsImmobile(); }
     bool IsAlly() const { return m_ref.IsAlly(); }
     bool IsEnemy() const { return m_ref.IsEnemy(); }
-    bool IsHero() const { return RuntimeAPI::IsHero(Address()); }
-    bool IsMinion() const { return RuntimeAPI::IsMinion(Address()); }
-    bool IsTurret() const { return RuntimeAPI::IsTurret(Address()); }
-    bool IsMissile() const { return RuntimeAPI::IsMissile(Address()); }
-    bool IsPlant() const { return RuntimeAPI::IsPlant(Address()); }
-    bool IsPet() const { return RuntimeAPI::IsPet(Address()); }
-    bool IsNeutral() const { return RuntimeAPI::IsNeutral(Address()); }
-    bool IsJungleMonster() const { return RuntimeAPI::IsJungleMonster(Address()); }
-    bool IsLaneMinion() const { return RuntimeAPI::IsLaneMinion(Address()); }
+    bool IsHero() const { return m_ref.IsHero(); }
+    bool IsMinion() const { return m_ref.IsMinion(); }
+    bool IsTurret() const { return m_ref.IsTurret(); }
+    bool IsMissile() const { return m_ref.IsMissile(); }
+    bool IsPlant() const { return m_ref.IsPlant(); }
+    bool IsPet() const { return m_ref.IsPet(); }
+    bool IsNeutral() const { return m_ref.IsNeutral(); }
+    bool IsJungleMonster() const { return m_ref.IsJungleMonster(); }
+    bool IsLaneMinion() const { return m_ref.IsLaneMinion(); }
+    bool IsWard() const { return m_ref.IsWard(); }
+    bool IsInhibitor() const { return m_ref.IsInhibitor(); }
+    bool IsNexus() const { return m_ref.IsNexus(); }
+    bool IsStructure() const { return m_ref.IsStructure(); }
+    bool ShouldIgnore() const { return m_ref.ShouldIgnore(); }
     bool IsMelee() const { return m_ref.IsMelee(); }
     bool IsRanged() const { return m_ref.IsRanged(); }
     bool IsMe() const {

@@ -162,12 +162,18 @@ namespace SpellBookLayout {
 } // namespace SpellBookLayout
 
 namespace SpellSlotLayout {
-    constexpr auto SlotLevel = 0x28;        // TODO: Offset ref says 0x1C (IDA sub_2993D0 + CE) — VERIFY LIVE
-    constexpr auto SlotCooldown = 0x80;     // IDA: sub_858520 CD getter (>0 = on CD)
-    constexpr auto SlotTotalCd = 0x88;      // IDA: sub_858590 total CD getter
-    constexpr auto SlotChargeTimer = 0x30;  // charge/ammo recharge timer (was mistaken for CD)
-    constexpr auto SlotCooldownExpires = 0x70; // game time expiry (-1.0 = not on CD)
-    constexpr auto SlotStacks = 0x5C;       // IDA: sub_85A010 stacks getter
+    // Level — TWO offsets, both valid:
+    constexpr auto SlotLevel = 0x1C;        // int — simple getter (IDA: sub_2993D0, read-only)
+    constexpr auto SlotLevelAlt = 0x28;     // int — written during LevelUp (IDA: sub_36DB50, effective w/ modifiers)
+    // Cooldown — TWO systems:
+    constexpr auto SlotCooldown = 0x80;     // float — official CD getter (IDA: sub_858520, 0=off CD)
+    constexpr auto SlotTotalCd = 0x88;      // float — full CD duration (IDA: sub_858590)
+    constexpr auto SlotChargeTimer = 0x30;  // float — charge/ammo recharge timer
+    constexpr auto SlotCooldownExpires = 0x70; // float — game time expiry (-1.0 = off CD)
+    // Stacks / Cast state:
+    constexpr auto SlotStacks = 0x5C;       // int (IDA: sub_85A010 stacks getter)
+    constexpr auto SlotActiveSpellCast = 0x118; // ptr — active cast data, NULL=not casting (IDA: sub_9DA130)
+    // Spell identity:
     constexpr auto SlotSpellInstanceVars = 0x108; // ptr to spell instance variables
     constexpr auto SlotSpellNameHash = 0x110;     // uint32 FNV hash of spell name
     constexpr auto SlotSpellInfo = 0x128;   // 48 8B 81 28 01 00 00 C3 [rule:op1/consensus]
@@ -213,10 +219,11 @@ namespace SpellDataResourceLayout {
 namespace SpellCastInfoLayout {
     constexpr auto SpellData = 0x0;
     constexpr auto SrcIndex = 0x98;
+    constexpr auto TargetIndex = 0x9C;  // IDA verified: MissileClient::TargetNetId(0x35C) - CastInfoBase(0x2C0) = 0x9C
     constexpr auto StartPos = 0xD8;
     constexpr auto EndPos = 0xE4;
     constexpr auto CastPos = 0xF0;
-    constexpr auto TargetIndex = 0x108;
+    constexpr auto TargetIndexWRONG = 0x108; // OLD — was container/array object, NOT target NetId
     constexpr auto CastDelay = 0x118;
     constexpr auto IsSpell = 0x134;
     constexpr auto IsSpecialAttack = 0x13E;

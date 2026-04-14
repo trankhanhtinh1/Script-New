@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../core/CoreAPI.h"
+#include "../core/CoreClassification.h"
+#include "../core/CoreEventHook.h"
 #include "../core/CoreObjects.h"
 #include "../core/CoreRuntime.h"
 #include "../core/CoreValidation.h"
@@ -62,6 +64,17 @@ inline void Render() {
     ImGui::Text("phaseGen        : %u", ctx.phaseGeneration);
     ImGui::Text("phase           : %u", ctx.currentPhase);
     ImGui::Text("spoofTrampoline : 0x%llX", (unsigned long long)ctx.spoofTrampoline);
+
+    // ── Event Hook Status ──
+    ImGui::Text("hook.ProcessSpell: %s", CoreEventHook::IsProcessSpellHooked() ? "ON" : "off");
+    ImGui::Text("hook.StopCast    : %s", CoreEventHook::IsStopCastHooked() ? "ON" : "off");
+    ImGui::Text("hook.FinishCast  : %s", CoreEventHook::IsFinishCastHooked() ? "ON" : "off");
+    ImGui::Text("hook.BuffAdd     : %s", CoreEventHook::IsBuffAddHooked() ? "ON" : "off");
+    ImGui::Text("hook.SpellImpact : %s", CoreEventHook::IsSpellImpactHooked() ? "ON" : "off");
+    ImGui::Text("hook.CreateObj   : %s", CoreEventHook::IsCreateObjectHooked() ? "ON" : "off");
+    ImGui::Text("hook.GameUpdate  : %s", CoreEventHook::IsGameUpdateHooked() ? "ON" : "off");
+    ImGui::Text("hook.HeroAction  : %s", CoreEventHook::IsHeroActionStateHooked() ? "ON" : "off");
+    ImGui::Text("hook.MinionFollow: %s", CoreEventHook::IsMinionFollowHooked() ? "ON" : "off");
     ImGui::Text("detectWatcher2  : 0x%llX", (unsigned long long)ctx.detectionWatcher2);
     ImGui::Text("ping            : %d", ctx.cachedPing);
     ImGui::Text("attackDelay     : %.4f", ctx.cachedAttackDelay);
@@ -186,33 +199,77 @@ inline void Render() {
 
     const auto slotQ = CoreAPI::SpellBook::GetSlot(local.address, 0);
     const auto navGrid = CoreAPI::NavGrid::Get();
+
+    // ── Q Spell: all offset verification ──
+    SectionHeader("SpellSlot Q — Offset Verification");
     char spellBuf[96] = {};
     slotQ.ReadSpellName(spellBuf, (int)sizeof(spellBuf));
-    ImGui::Separator();
-    ImGui::Text("Q slot valid    : %s", slotQ.IsValid() ? "yes" : "no");
-    ImGui::Text("Q spell name    : %s", spellBuf[0] ? spellBuf : "<empty>");
-    ImGui::Text("Q level/cd      : %d / %.3f", slotQ.GetLevel(), slotQ.GetCooldown());
+    char spellNameRes[96] = {};
+    slotQ.ReadSpellNameFromResource(spellNameRes, (int)sizeof(spellNameRes));
+    ImGui::Text("Q slot valid    : %s  addr=0x%llX", slotQ.IsValid() ? "yes" : "no", (unsigned long long)slotQ.address);
+    ImGui::Text("Q spellName     : %s", spellBuf[0] ? spellBuf : "<empty>");
+    ImGui::Text("Q nameFromSDR   : %s", spellNameRes[0] ? spellNameRes : "<empty>");
+    ImGui::Text("Q nameHash      : 0x%08X", slotQ.GetSpellNameHash());
+    ImGui::Text("Q level(0x1C)   : %d", slotQ.GetLevel());
+    ImGui::Text("Q levelAlt(0x28): %d", slotQ.GetLevelAlt());
+    ImGui::Text("Q cd(0x80)      : %.3f", slotQ.GetCooldown());
+    ImGui::Text("Q totalCd(0x88) : %.3f", slotQ.GetTotalCooldown());
+    ImGui::Text("Q cdExpires(0x70): %.3f", slotQ.GetCooldownExpires());
+    ImGui::Text("Q chargeTimer(0x30): %.3f", slotQ.GetChargeTimer());
+    ImGui::Text("Q stacks(0x5C)  : %d", slotQ.GetStacks());
+    ImGui::Text("Q casting(0x118): %s  ptr=0x%llX",
+        slotQ.IsSlotCasting() ? "yes" : "no",
+        (unsigned long long)slotQ.GetSlotActiveSpellCast());
+    ImGui::Text("Q instVars(0x108): 0x%llX", (unsigned long long)slotQ.GetSpellInstanceVars());
     ImGui::Text("Q range/speed   : %.1f / %.1f", slotQ.GetCastRange(), slotQ.GetMissileSpeed());
     ImGui::Text("Q width/type    : %.1f / %d", slotQ.GetLineWidth(), slotQ.GetCastType());
     ImGui::Text("Q mana/castable : %.1f / %s", slotQ.GetManaCost(), CoreAPI::SpellBook::CanCast(local.address, 0, ctx.gameTime) ? "yes" : "no");
     ImGui::Text("Q state         : %s", SpellStateName(CoreAPI::SpellBook::GetSpellState(local.address, 0, ctx.gameTime)));
-    ImGui::Text("Q castArg       : 0x%llX", (unsigned long long)slotQ.GetCastArgument());
 
+    // ── W/E/R summary (compact) ──
+    {
+        const char* slotNames[] = {"W", "E", "R"};
+        for (int si = 1; si <= 3; ++si) {
+            const auto slot = CoreAPI::SpellBook::GetSlot(local.address, si);
+            char sn[96] = {};
+            slot.ReadSpellName(sn, (int)sizeof(sn));
+            ImGui::Text("%s: lv=%d cd=%.1f hash=0x%08X cast=%s name=%s",
+                slotNames[si-1], slot.GetLevel(), slot.GetCooldown(),
+                slot.GetSpellNameHash(), slot.IsSlotCasting() ? "Y" : "N",
+                sn[0] ? sn : "?");
+        }
+    }
+
+    // ── Active SpellCast (SpellBook level) ──
+    SectionHeader("Active SpellCast");
     const auto activeCast = CoreAPI::SpellCast::GetActive(local.address);
     char activeSpellBuf[96] = {};
     activeCast.ReadSpellName(activeSpellBuf, (int)sizeof(activeSpellBuf));
-    ImGui::Text("activeCast      : %s", activeCast.IsValid() ? "yes" : "no");
+    ImGui::Text("activeCast      : %s  addr=0x%llX", activeCast.IsValid() ? "yes" : "no",
+        (unsigned long long)activeCast.address);
     ImGui::Text("activeSpell     : %s", activeSpellBuf[0] ? activeSpellBuf : "<empty>");
     ImGui::Text("activeSlot      : %d", activeCast.GetSlot());
-    ImGui::Text("activeSrc/Tgt   : %d / %d", activeCast.GetSourceIndex(), activeCast.GetTargetIndex());
+    ImGui::Text("activeSrc(0x98) : %d", activeCast.GetSourceIndex());
+    ImGui::Text("activeTgt(0x9C) : %d", activeCast.GetTargetIndex());
+    // Show raw reads at old vs new TargetIndex for verification
+    if (activeCast.IsValid()) {
+        const int tgtNew = Globals::Read<int>(activeCast.address + 0x9C);
+        const int tgtOld = Globals::Read<int>(activeCast.address + 0x108);
+        ImGui::TextColored(tgtNew != 0 ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(0.6f,0.6f,0.6f,1.0f),
+            "  tgt@0x9C=%d  tgt@0x108=%d  (0x9C=correct)", tgtNew, tgtOld);
+    }
     const Vec3 castStart = activeCast.GetStartPos();
     const Vec3 castEnd = activeCast.GetEndPos();
     ImGui::Text("activeStart     : %.1f %.1f %.1f", castStart.x, castStart.y, castStart.z);
     ImGui::Text("activeEnd       : %.1f %.1f %.1f", castEnd.x, castEnd.y, castEnd.z);
+    ImGui::Text("activeDelay     : %.3f", activeCast.GetCastDelay());
     ImGui::Text("activeFlags     : spell=%s auto=%s special=%s",
         activeCast.IsSpell() ? "yes" : "no",
         activeCast.IsAutoAttack() ? "yes" : "no",
         activeCast.IsSpecialAttack() ? "yes" : "no");
+    if (activeCast.IsValid()) {
+        ImGui::Text("activeMissSpd   : %.1f", activeCast.GetMissileSpeed());
+    }
 
     uintptr_t buffAddrs[64] = {};
     const int buffCount = CoreAPI::Buffs::Enumerate(local.address, buffAddrs, 64);
@@ -274,6 +331,10 @@ inline void Render() {
     ImGui::Text("ai.hasPath      : %s", CoreAPI::Ai::HasPath(local.address) ? "yes" : "no");
     ImGui::Text("ai.dashing      : %s", CoreAPI::Ai::IsDashing(local.address) ? "yes" : "no");
     ImGui::Text("ai.dashSpeed    : %.2f", CoreAPI::Ai::GetDashSpeed(local.address));
+    ImGui::Text("ai.dashTgtNetId : %u", CoreAi::GetDashTargetNetId(local.address));
+    ImGui::Text("ai.dashDuration : %.3f", CoreAi::GetDashDuration(local.address));
+    ImGui::Text("ai.dashDistRem  : %.2f", CoreAi::GetDashDistRemaining(local.address));
+    ImGui::Text("ai.arrived      : %s", CoreAi::HasArrived(local.address) ? "yes" : "no");
     ImGui::Text("ai.serverPos    : %.1f %.1f %.1f", serverPos.x, serverPos.y, serverPos.z);
     ImGui::Text("ai.waypoints    : %d", waypointCount);
     const Vec3 velocity = CoreAPI::Ai::GetVelocity(local.address);
@@ -284,6 +345,47 @@ inline void Render() {
     ImGui::Text("ai.pathStart    : %.1f %.1f %.1f", pathStart.x, pathStart.y, pathStart.z);
     ImGui::Text("ai.pathEnd      : %.1f %.1f %.1f", pathEnd.x, pathEnd.y, pathEnd.z);
     ImGui::Text("ai.orderPos     : %.1f %.1f %.1f", orderPos.x, orderPos.y, orderPos.z);
+
+    // ── Hero Fields ──
+    SectionHeader("Hero Fields");
+    ImGui::Text("hero.gold       : %.1f", local.GetGold());
+    ImGui::Text("hero.goldTotal  : %.1f", local.GetGoldTotal());
+    ImGui::Text("hero.exp        : %.1f", local.GetExp());
+    ImGui::Text("hero.level      : %d  (pts=%d)", local.GetLevel(), local.GetLevelUpPoints());
+    ImGui::Text("hero.champHash  : 0x%08X", local.GetChampionHash());
+
+    // ── Shop ──
+    ImGui::Text("shop.open       : %s", (Globals::Read<int>(ctx.moduleBase + Offset::Shop::IsShopOpen) != 0) ? "yes" : "no");
+
+    // ── Object Classification (nearby objects) ──
+    SectionHeader("Classification (nearby)");
+    {
+        const Vec3 myPos = local.GetPosition();
+        const int myTeam = local.GetTeam();
+        uintptr_t minions[128] = {};
+        const int mCount = CoreObjects::EnumerateMinions(minions, 128);
+        int shown = 0;
+        for (int i = 0; i < mCount && shown < 8; ++i) {
+            CoreObjects::ObjectRef obj{ minions[i] };
+            if (!obj.IsValid()) continue;
+            if (obj.GetPosition().Distance2D(myPos) > 1500.0f) continue;
+            char oName[64] = {};
+            obj.ReadName(oName, sizeof(oName));
+            auto otype = CoreClassification::Classify(minions[i]);
+            bool attackable = CoreClassification::IsAttackable(minions[i], myTeam);
+            bool ignore = CoreClassification::ShouldIgnore(minions[i]);
+            ImGui::TextColored(
+                ignore ? ImVec4(0.5f,0.5f,0.5f,1.0f) : (attackable ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.4f,0.4f,1.0f)),
+                "[%s] %s hp=%.0f atk=%s ign=%s",
+                CoreClassification::TypeName(otype),
+                oName[0] ? oName : "?",
+                obj.GetHealth(),
+                attackable ? "Y" : "N",
+                ignore ? "Y" : "N");
+            shown++;
+        }
+        if (shown == 0) ImGui::TextDisabled("(no nearby minions)");
+    }
 
     ImGui::Separator();
     ImGui::Text("nav.valid       : %s", navGrid.IsValid() ? "yes" : "no");

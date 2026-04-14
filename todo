@@ -14,11 +14,13 @@ Dependency Map: Core -> SDK
 PHASE 1: Trampoline System (Anti-Cheat Bypass)
 ========================================================================
 
-[x] 1.1 Return Address Spoofing cho hooks
+[x] 1.1 Return Address Spoofing cho ALL hooks (9/9)
     Files: core/CoreEventHook.h, core/spoof/spoofcall.h
-    - HkOnProcessSpell: spoof_call khi goi original (done)
-    - HkOnStopCast: spoof_call khi goi original (done)
-    - Fallback direct call neu trampoline chua resolve (done)
+    - All 9 hooks use spoof_call when calling original
+    - Hooks: OnProcessSpell, OnStopCast, OnFinishCast, OnBuffAdd,
+      OnSpellImpact, OnCreateObject, OnGameUpdate,
+      OnHeroActionStateChange, OnMinionFollowChange
+    - Each has: typedef, callback, detour, install, spoof_call, uninstall
     SDK impact: Khong - SDK goi qua CoreAPI, transparent
 
 [ ] 1.2 Thread Hijack Trampoline
@@ -34,7 +36,9 @@ PHASE 2: Offset Synchronization (Offset -> NightSharp)
 [x] 2.1 Offset sync toan bo (Offsets.generated.h + Offsets.h)
 
     SpellSlot updates:
-    [!] Level = 0x28 (TODO: Offset ref noi 0x1C, IDA sub_2993D0 + CE - CAN VERIFY LIVE)
+    [x] Level RESOLVED: 0x1C=getter (sub_2993D0), 0x28=LevelAlt (LevelUp sub_36DB50)
+        NightSharp SlotLevel now = 0x1C (official getter), SlotLevelAlt = 0x28
+    [x] ActiveSpellCast = 0x118 (new - per-slot cast ptr, NULL=not casting, IDA sub_9DA130)
     [x] Cooldown = 0x80, TotalCd = 0x88 (match)
     [x] ChargeTimer = 0x30 (new - charge/ammo recharge timer)
     [x] CooldownExpires = 0x70 (new - game time expiry, -1=off CD)
@@ -42,6 +46,10 @@ PHASE 2: Offset Synchronization (Offset -> NightSharp)
     [x] SpellNameHash = 0x110 (new - FNV hash)
     [x] SpellInstanceVars = 0x108 (new)
     [x] SpellNameStr = 0x28, SpellNameCap = 0x40 (new - in SpellDataResource)
+    SpellCastInfo fix:
+    [x] TargetIndex: 0x108 -> 0x9C (IDA verified: MissileClient cross-ref 0x35C-0x2C0=0x9C)
+        0x108 was container/array object, NOT target NetId
+        Diagnostics shows both old/new for live verification
 
     Function addresses updated:
     [x] CreateClientEffect: 0x84B710 -> 0x83C1F0
@@ -81,51 +89,94 @@ PHASE 2: Offset Synchronization (Offset -> NightSharp)
     SDK impact: sdk/Math/Prediction/ collision checks
 
 ========================================================================
-PHASE 3: SDK Layer Updates (propagate core changes)
+PHASE 3: Core + SDK Layer Updates
 ========================================================================
 
-[ ] 3.1 sdk/Core/Objects.h - Wrapper updates
-    - Buff system: OK (Array 1 approach valid, khong can fix)
-    - Them accessors: Gold(), GoldTotal(), InputLocks(), CombatType()
-    - Them SpellSlot info: SpellNameHash(), ChargeTimer(), CooldownExpires()
-    - Them dash info: DashTarget(), DashDuration(), HasArrived()
-    - Them shop check: IsShopOpen() static helper
+[x] 3.1 core/CoreSpellBook.h - SlotRef updates (DONE)
+    - GetLevelAlt(), GetChargeTimer(), GetCooldownExpires()
+    - GetSpellNameHash(), GetSpellInstanceVars()
+    - GetSlotActiveSpellCast(), IsSlotCasting()
+    - ReadSpellNameFromResource() (SpellDataResource SSO path)
 
-[ ] 3.2 sdk/Wrappers/Spells/Spell.h - Spell system
+[x] 3.2 core/CoreAi.h - New accessors (DONE)
+    - HasArrived(), GetDashTargetNetId(), GetDashSecondaryNetId()
+    - GetDashDuration(), GetDashDistRemaining()
+
+[x] 3.3 core/CoreObjects.h - ObjectRef updates (DONE)
+    - HasArrived(), GetDashTargetNetId(), GetDashDuration(), GetDashDistRemaining()
+    - GetGold(), GetGoldTotal(), GetExp()
+    - Classification: RuntimeAPI -> CoreClassification (name-based)
+    - Added: IsWard, IsInhibitor, IsNexus, IsStructure, ShouldIgnore, IsAttackableBy
+    - GetObjectType() returns CoreClassification::ObjectType enum
+
+[x] 3.4 core/CoreClassification.h (NEW - 200+ lines)
+    - 17 ObjectTypes: Hero, LaneMinion, JungleMonster, JungleBig, JungleEpic,
+      Turret, Inhibitor, Nexus, Ward, Plant, Pet, Scuttle, TurretBuildup,
+      Shop, Marker, Spawn, PracticeDummy, Unknown
+    - Filters 15+ non-attackable objects (TurretBuildup, Corpse, Seed,
+      GenericUnit, HiddenMinion, PlantMasterMinion, etc.)
+    - IsAttackable(obj, myTeam), ShouldIgnore(obj), IsStructure(obj)
+    - TypeName() for diagnostics
+
+[x] 3.5 sdk/Core/Objects.h - SDK wrapper (DONE)
+    - Replace RuntimeAPI:: direct calls -> m_ref. delegation (CoreClassification)
+    - Added: IsWard, IsInhibitor, IsNexus, IsStructure, ShouldIgnore
+
+[x] 3.6 plugins/core/OrbwalkerPlugin.h - Orbwalker fixes (DONE)
+    - GetStructure(): enabled Inhibitor + Nexus targeting (raw EnumerateMinions + classification)
+    - GetStructure(): hp<=0 check for destroyed buildings
+    - GetJungle(): ShouldIgnore + classification guard (filter HiddenMinion, Plant, Ward)
+    - GetSpecialMinion(): ward filter via CoreClassification (FaeLightWardPad filtered)
+    - GetSpecialMinion(): plant uses raw MinionManager (team=3 neutral)
+    - GetLastHitMinion(): ShouldIgnore + IsLaneMinion guard
+    - GetPushMinion(): ShouldIgnore + IsLaneMinion guard
+    - ShouldWait/LastHit/Push damage: restored to GetAutoAttackDamage (original)
+    - Menu logic verified: junglePlant=false (correct C# parity)
+
+[x] 3.6b menu/Translations.h - CRT-Free rewrite (DONE)
+    - Removed: std::string, std::unordered_map, std::unordered_set
+    - Replaced: fixed const LangEntry[] array (90 entries, compile-time)
+    - T() uses lstrcmpA linear scan (Win32 API, no CRT)
+    - InitTranslations() only loads langIndex from file
+    - Root cause of "menu luc len luc khong": STL containers need _initterm
+
+[x] 3.6c PluginManager.h - Singleton fix (reverted)
+    - Tested CRT new approach -> caused game crash
+    - Reverted to Meyer's singleton (static local)
+
+[x] 3.7 menu/SDKDiagnostics.h - Full verification display (DONE)
+    - SpellSlot Q: all new offsets (Level/LevelAlt, 4 CD fields, SpellNameHash,
+      ActiveSpellCast, SpellNameFromResource SSO)
+    - W/E/R compact summary
+    - Active SpellCast: TargetIndex 0x9C vs 0x108 comparison
+    - AiManager: dashTgtNetId, dashDuration, dashDistRem, arrived
+    - Hero Fields: gold, exp, level, champHash
+    - Shop state, Event hook status (9 hooks ON/off)
+    - Classification: nearby objects with Type/Attackable/Ignore color-coded
+
+[ ] 3.8 sdk/Wrappers/Spells/Spell.h - Spell system
     - SpellNameHash lookup: nhanh hon string compare
-    - SpellDataResource access: direct name read path (backup)
     - Charged spell logic: dung ChargeTimer thay vi buff-check
-    - Cast methods: verify qua trampoline (transparent qua CoreControl)
 
-[ ] 3.3 core/CoreSpellBook.h - SlotRef updates
-    - Them GetChargeTimer(), GetCooldownExpires(), GetSpellNameHash()
-    - Them GetSpellInstanceVars()
-    - Them ReadSpellNameFromResource() dung SpellNameStr/Cap path
-
-[ ] 3.4 sdk/Wrappers/Orbwalking/ - Orbwalker
-    - Buff checks: OK (NightSharp buff reading valid)
+[ ] 3.9 sdk/Wrappers/Orbwalking/ - Orbwalker improvements
     - Shop state check: them SDK::IsShopOpen() -> khong orbwalk khi shop
     - Event hook: them OnHeroActionStateChange -> detect CC/state changes realtime
     - Minion aggro: them OnMinionFollowTargetNetIdChange hook
 
-[ ] 3.5 sdk/Math/Prediction/Movement.h - Prediction
+[ ] 3.10 sdk/Math/Prediction/Movement.h - Prediction
     - Dash prediction: integrate DashTargetNetId + DashDuration
     - Velocity vectors: su dung VelocityX/Y/Z (0x588-0x590)
     - NavGrid collision: cell-level walkability check
     - Arrived flag: skip prediction neu target da arrived
 
-[ ] 3.6 sdk/Math/HealthPrediction.h
-    - Buff fix propagation: auto-fix (buff system da OK)
+[ ] 3.11 sdk/Math/HealthPrediction.h
     - Missile tracking accuracy: verify missile net ID offsets match
 
-[ ] 3.7 sdk/Events/SpellCastTracker.h
-    - Trampoline: transparent (hook qua CoreEventHook)
-    - Add OnStopCast hook: chua install trong SDK init -> add vao Events::SpellCast::hook::Install()
-    - Add OnBuffAdd hook: new hook point cho buff event tracking
+[ ] 3.12 sdk/Events/SpellCastTracker.h
+    - Add OnFinishCast/OnStopCast/OnBuffAdd hooks (core ready, SDK wiring needed)
 
-[ ] 3.8 sdk/Events/PropertyTracker.h
-    - OnHeroActionStateChange: hook da co offset, integrate vao events system
-    - OnMinionFollowTargetNetIdChange: add for minion target tracking
+[ ] 3.13 sdk/Events/PropertyTracker.h
+    - OnHeroActionStateChange + OnMinionFollowChange (core ready, SDK wiring needed)
 
 ========================================================================
 PHASE 4: New Features
@@ -157,7 +208,9 @@ REFERENCE TABLES
 ========================================================================
 
 SpellSlot Offset Status:
-  Level           | NightSharp=0x28 | Offset=0x1C  | CONFLICT - can CE verify
+  Level           | 0x1C (now)      | 0x1C         | MATCH - getter (sub_2993D0)
+  LevelAlt        | 0x28 (added)    | 0x28         | NEW - LevelUp written (sub_36DB50)
+  ActiveSpellCast | (added) 0x118   | 0x118        | NEW - per-slot cast ptr (sub_9DA130)
   Cooldown        | 0x80            | 0x80         | MATCH (IDA sub_858520)
   TotalCooldown   | 0x88            | 0x88         | MATCH (IDA sub_858590)
   ChargeTimer     | (added) 0x30    | 0x30         | NEW - charge/ammo recharge

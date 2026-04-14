@@ -432,21 +432,32 @@ void Overlay::Run() {
 
     WriteStage("[NightSharp] STAGE 5: ImGui initialized\r\n");
 
-    CrashTelemetry::SetStage("Overlay::Run::InitMenuPlugins");
+    CrashTelemetry::SetStage("Overlay::Run::ShowWindow");
     ShowWindow(g_hOverlay, SW_SHOWNOACTIVATE);
     UpdateWindow(g_hOverlay);
     MoveOverlayToTarget();
+    WriteStage("[NightSharp] STAGE 5a: Overlay window shown + positioned\r\n");
 
+    CrashTelemetry::SetStage("Overlay::Run::MenuManagerInit");
     SDK::MenuManager::Init();
+    WriteStage("[NightSharp] STAGE 5b: MenuManager::Init() done\r\n");
+
     NightSharpMenu::showMenu = true;
     SDK::MenuManager::SetMenuVisible(true);
     SetClickThrough(false);
+    WriteStage("[NightSharp] STAGE 5c: Menu visible + click-through off\r\n");
 
+    CrashTelemetry::SetStage("Overlay::Run::PluginBootstrap");
     Plugins::PluginBootstrap::EnsureRegistered();
+    WriteStage("[NightSharp] STAGE 5d: PluginBootstrap::EnsureRegistered() done\r\n");
+
+    CrashTelemetry::SetStage("Overlay::Run::PluginConfig");
     PluginRegistry::LoadConfig();
+    WriteStage("[NightSharp] STAGE 5e: PluginRegistry::LoadConfig() done\r\n");
+
+    CrashTelemetry::SetStage("Overlay::Run::PluginHostWire");
     PluginHostBridge::WireHostAPI();
-
-
+    WriteStage("[NightSharp] STAGE 5f: PluginHostBridge::WireHostAPI() done\r\n");
 
     WriteStage("[NightSharp] STAGE 6: Menu + plugin substrate initialized\r\n");
 

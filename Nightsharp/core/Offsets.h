@@ -397,12 +397,14 @@ constexpr auto SpellSlotArray = SpellBookLayout::SpellSlotArray;
 constexpr auto ActiveSpellCast = SpellRuntime::ActiveSpellCast;
 constexpr auto ActiveSpellCastObject = SpellRuntime::ActiveSpellCast;
 
-constexpr auto SlotLevel = SpellSlotLayout::SlotLevel;
+constexpr auto SlotLevel = SpellSlotLayout::SlotLevel;          // 0x1C — getter (sub_2993D0)
+constexpr auto SlotLevelAlt = SpellSlotLayout::SlotLevelAlt;    // 0x28 — LevelUp written (sub_36DB50)
 constexpr auto SlotCooldown = SpellSlotLayout::SlotCooldown;
 constexpr auto SlotStacks = SpellSlotLayout::SlotStacks;
 constexpr auto SlotTotalCd = SpellSlotLayout::SlotTotalCd;
 constexpr auto SlotChargeTimer = SpellSlotLayout::SlotChargeTimer;
 constexpr auto SlotCooldownExpires = SpellSlotLayout::SlotCooldownExpires;
+constexpr auto SlotActiveSpellCast = SpellSlotLayout::SlotActiveSpellCast; // 0x118 — per-slot cast ptr
 constexpr auto SlotSpellInstanceVars = SpellSlotLayout::SlotSpellInstanceVars;
 constexpr auto SlotSpellNameHash = SpellSlotLayout::SlotSpellNameHash;
 constexpr auto SlotSpellInput = SpellSlotLayout::SlotSpellInput;

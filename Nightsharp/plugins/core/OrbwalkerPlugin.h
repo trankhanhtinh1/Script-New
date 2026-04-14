@@ -1,5 +1,6 @@
 #pragma once
 #include "../IPlugin.h"
+#include "../../core/CoreClassification.h"
 #include "../../sdk/UI/UI.h"
 #include "../../sdk/UI/Drawing.h"
 #include "../../sdk/Core/Objects.h"
@@ -232,6 +233,67 @@ public:
 
         DbgStage("OrbPlugin::GetTarget");
         SDK::AIBaseClient target = GetTarget();
+
+        // ── Detailed orbwalk debug (every 2s) ──
+        {
+            static DWORD s_lastOrbDbg = 0;
+            DWORD orbDbgNow = GetTickCount();
+            if ((orbDbgNow - s_lastOrbDbg) > 2000) {
+                s_lastOrbDbg = orbDbgNow;
+                int now = SDK::Game::TickCount();
+                int ping = SDK::Game::Ping();
+                bool canAtk = CanAttack();
+                float windupD = (float)GetOrbSlider("windupDelay", 60);
+                bool canMv = CanMove(windupD, false);
+                bool blockOrders = (now - m_lastLocalAttackTick < 70 + (std::min)(60, ping));
+
+                char buf[512] = {};
+                if (target.IsValid()) {
+                    auto ttype = CoreClassification::Classify(target.Address());
+                    char tname[64] = {};
+                    target.Ref().ReadName(tname, sizeof(tname));
+                    std::snprintf(buf, sizeof(buf),
+                        "[OrbDbg] mode=%d tgt=[%s]%s hp=%.0f range=%s canAtk=%d canMv=%d block=%d missile=%d\r\n",
+                        (int)m_activeMode,
+                        CoreClassification::TypeName(ttype),
+                        tname[0] ? tname : "?",
+                        target.Health(),
+                        player.InAutoAttackRange(target) ? "Y" : "N",
+                        canAtk ? 1 : 0, canMv ? 1 : 0, blockOrders ? 1 : 0,
+                        m_missileLaunched ? 1 : 0);
+                } else {
+                    std::snprintf(buf, sizeof(buf),
+                        "[OrbDbg] mode=%d tgt=NONE canAtk=%d canMv=%d block=%d missile=%d sinceAA=%d\r\n",
+                        (int)m_activeMode,
+                        canAtk ? 1 : 0, canMv ? 1 : 0, blockOrders ? 1 : 0,
+                        m_missileLaunched ? 1 : 0,
+                        now - m_lastAutoAttackTick);
+                }
+                DbgLog(buf);
+
+                // List nearby objects with classification
+                float aaRange = player.AttackRange() + player.BoundingRadius() + 200.0f;
+                int myTeam = player.Team();
+                int shown = 0;
+                for (const auto& m : SDK::ObjectManager::EnemyMinions()) {
+                    if (!m.IsValid() || m.IsDead()) continue;
+                    if (m.Distance(player) > aaRange) continue;
+                    if (shown >= 5) break;
+                    auto ot = CoreClassification::Classify(m.Address());
+                    bool atk = CoreClassification::IsAttackable(m.Address(), myTeam);
+                    bool ign = CoreClassification::ShouldIgnore(m.Address());
+                    char oname[64] = {};
+                    m.Ref().ReadName(oname, sizeof(oname));
+                    char obuf[256] = {};
+                    std::snprintf(obuf, sizeof(obuf),
+                        "  [OrbDbg] nearby: [%s] %s hp=%.0f atk=%d ign=%d dist=%.0f\r\n",
+                        CoreClassification::TypeName(ot), oname[0] ? oname : "?",
+                        m.Health(), atk ? 1 : 0, ign ? 1 : 0, m.Distance(player));
+                    DbgLog(obuf);
+                    shown++;
+                }
+            }
+        }
 
         DbgStage("OrbPlugin::Orbwalk");
         Orbwalk(target);
@@ -989,6 +1051,7 @@ private:
         auto* atkMenu = m_menu ? m_menu->GetSubMenu("attackable") : nullptr;
         if (!atkMenu) return {};
         auto p = SDK::ObjectManager::Player();
+        int myTeam = p.Team();
 
         // Pets (C# line 499-503)
         if (atkMenu->GetBoolValue("specialMinions", true)) {
@@ -998,17 +1061,30 @@ private:
             }
         }
         // Wards — not in combo (C# line 505-509)
+        // Use CoreClassification to avoid FaeLightWardPad and other false positives
         if (atkMenu->GetBoolValue("wards", true) && m_activeMode != SDK::OrbwalkerMode::Combo) {
             for (const auto& w : SDK::ObjectManager::Wards()) {
-                if (w.IsValid() && w.IsAlive() && !w.IsAlly() && p.InAutoAttackRange(w))
-                    return w;
+                if (!w.IsValid() || !w.IsAlive() || w.IsAlly()) continue;
+                if (!p.InAutoAttackRange(w)) continue;
+                if (w.ShouldIgnore()) continue;
+                auto wtype = CoreClassification::Classify(w.Address());
+                if (wtype != CoreClassification::ObjectType::Ward) continue;
+                return w;
             }
         }
         // Jungle Plants — not in combo (C# line 511-515)
+        // Plants are team=3 (neutral) so NOT in EnemyMinions. Use raw MinionManager scan.
         if (atkMenu->GetBoolValue("junglePlant", false) && m_activeMode != SDK::OrbwalkerMode::Combo) {
-            for (const auto& pl : SDK::ObjectManager::Plants()) {
-                if (pl.IsValid() && pl.IsAlive() && p.InAutoAttackRange(pl))
-                    return pl;
+            uintptr_t plantBuf[256] = {};
+            int plantCount = CoreObjects::EnumerateMinions(plantBuf, 256);
+            for (int pi = 0; pi < plantCount; ++pi) {
+                if (!Globals::IsValidPtr(plantBuf[pi])) continue;
+                auto ptype = CoreClassification::Classify(plantBuf[pi]);
+                if (ptype != CoreClassification::ObjectType::Plant) continue;
+                SDK::AIBaseClient pl(plantBuf[pi]);
+                if (!pl.IsValid() || !pl.IsAlive() || pl.Health() <= 0.0f) continue;
+                if (!p.InAutoAttackRange(pl)) continue;
+                return pl;
             }
         }
         return {};
@@ -1028,6 +1104,8 @@ private:
 
         for (const auto& min : SDK::ObjectManager::EnemyMinions()) {
             if (!min.IsValid() || !min.IsAlive() || !min.IsVisible()) continue;
+            if (min.ShouldIgnore()) continue;
+            if (!min.IsLaneMinion()) continue;  // Only lane minions for last-hit
             if (!p.InAutoAttackRange(min)) continue;
 
             // Skip ignored minions (C# line 481: "jarvanivstandard")
@@ -1083,7 +1161,24 @@ private:
                 if (t.IsValid() && t.IsAlive() && p.InAutoAttackRange(t)) return t;
             }
         }
-        // TODO: EnemyInhibitors/EnemyNexus disabled — needs dedicated building manager
+
+        // Inhibitors + Nexus — raw MinionManager scan (they don't have IsMinion flag)
+        if (priMenu && priMenu->GetBoolValue("turret", true)) {
+            uintptr_t mgrBuf[512] = {};
+            int mgrCount = CoreObjects::EnumerateMinions(mgrBuf, 512);
+            int myTeam = p.Team();
+            for (int i = 0; i < mgrCount; ++i) {
+                if (!Globals::IsValidPtr(mgrBuf[i])) continue;
+                auto otype = CoreClassification::Classify(mgrBuf[i]);
+                if (otype != CoreClassification::ObjectType::Inhibitor &&
+                    otype != CoreClassification::ObjectType::Nexus) continue;
+                SDK::AIBaseClient s(mgrBuf[i]);
+                if (!s.IsValid() || !s.IsAlive() || s.Health() <= 0.0f) continue;
+                if (s.Team() == myTeam) continue;
+                if (!p.InAutoAttackRange(s)) continue;
+                return s;
+            }
+        }
 
         return {};
     }
@@ -1101,7 +1196,14 @@ private:
 
         for (const auto& mob : SDK::ObjectManager::JungleMinions()) {
             if (!mob.IsValid() || !mob.IsAlive() || !mob.IsVisible()) continue;
+            if (mob.ShouldIgnore()) continue;
             if (!p.InAutoAttackRange(mob)) continue;
+            // Skip non-jungle objects that slipped through RuntimeAPI filter
+            auto mtype = CoreClassification::Classify(mob.Address());
+            if (mtype == CoreClassification::ObjectType::Unknown ||
+                mtype == CoreClassification::ObjectType::Plant ||
+                mtype == CoreClassification::ObjectType::Ward ||
+                mtype == CoreClassification::ObjectType::Pet) continue;
             float hp = mob.MaxHealth();
             if (smallFirst ? (hp < bestHP) : (hp > bestHP)) {
                 bestHP = hp; best = mob;
@@ -1195,6 +1297,8 @@ private:
 
         for (const auto& min : SDK::ObjectManager::EnemyMinions()) {
             if (!min.IsValid() || !min.IsAlive() || !min.IsVisible()) continue;
+            if (min.ShouldIgnore()) continue;
+            if (!min.IsLaneMinion()) continue;
             if (!p.InAutoAttackRange(min)) continue;
 
             float predHP = SDK::HealthPrediction::GetPrediction(
@@ -1203,7 +1307,7 @@ private:
             float dmg = p.GetAutoAttackDamage(min);
 
             // C#: predHealth >= 2*aaDmg || predHealth == minion.Health
-            if (dmg > 0.0f && (predHP >= 2.0f * dmg || fabsf(predHP - min.Health()) < 0.001f)) {
+            if (predHP >= 2.0f * dmg || fabsf(predHP - min.Health()) < 0.001f) {
                 if (min.Health() > bestHP) {
                     bestHP = min.Health();
                     best = min;

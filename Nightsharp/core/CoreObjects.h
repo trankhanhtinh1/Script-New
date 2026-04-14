@@ -5,6 +5,7 @@
 #include "CoreAi.h"
 #include "CoreBuffs.h"
 #include "CoreBypass.h"
+#include "CoreClassification.h"
 #include "CoreNavGrid.h"
 #include "CoreRuntime.h"
 #include "CoreSpellBook.h"
@@ -288,6 +289,18 @@ namespace CoreObjects {
             return Globals::Read<int>(address + Offset::Hero::LevelUpPoints);
         }
 
+        float GetGold() const {
+            return Globals::Read<float>(address + Offset::Hero::Gold);
+        }
+
+        float GetGoldTotal() const {
+            return Globals::Read<float>(address + Offset::Hero::GoldTotal);
+        }
+
+        float GetExp() const {
+            return Globals::Read<float>(address + Offset::Hero::Exp);
+        }
+
         uintptr_t GetSpellBook() const {
             return CoreSpellBook::GetSpellBook(address);
         }
@@ -349,6 +362,22 @@ namespace CoreObjects {
 
         bool IsDashingOnPath() const {
             return CoreAi::IsDashing(address);
+        }
+
+        bool HasArrived() const {
+            return CoreAi::HasArrived(address);
+        }
+
+        uint32_t GetDashTargetNetId() const {
+            return CoreAi::GetDashTargetNetId(address);
+        }
+
+        float GetDashDuration() const {
+            return CoreAi::GetDashDuration(address);
+        }
+
+        float GetDashDistRemaining() const {
+            return CoreAi::GetDashDistRemaining(address);
         }
 
         int GetCurrentPathSegment() const {
@@ -500,19 +529,72 @@ namespace CoreObjects {
         }
 
         // ====================================================================
-        // Classification — delegate to RuntimeAPI directly
-        // These thin wrappers exist only for use by CoreObjects enumeration.
-        // SDK layer calls RuntimeAPI:: directly (matching old NightSharp).
+        // Classification — uses CoreClassification (name-based, accurate)
+        // Replaces old RuntimeAPI bitmask which missed many object types.
+        // RuntimeAPI kept as fallback for IsMissile (vtable-based).
         // ====================================================================
-        bool IsHero() const { return RuntimeAPI::IsHero(address); }
-        bool IsMinion() const { return RuntimeAPI::IsMinion(address); }
-        bool IsLaneMinion() const { return RuntimeAPI::IsLaneMinion(address); }
-        bool IsTurret() const { return RuntimeAPI::IsTurret(address); }
-        bool IsPlant() const { return RuntimeAPI::IsPlant(address); }
-        bool IsPet() const { return RuntimeAPI::IsPet(address); }
-        bool IsNeutral() const { return RuntimeAPI::IsNeutral(address); }
-        bool IsJungleMonster() const { return RuntimeAPI::IsJungleMonster(address); }
+        CoreClassification::ObjectType GetObjectType() const {
+            return CoreClassification::Classify(address);
+        }
+
+        bool IsHero() const {
+            return GetObjectType() == CoreClassification::ObjectType::Hero;
+        }
+        bool IsMinion() const {
+            auto t = GetObjectType();
+            return t == CoreClassification::ObjectType::LaneMinion ||
+                   t == CoreClassification::ObjectType::JungleMonster ||
+                   t == CoreClassification::ObjectType::JungleBig ||
+                   t == CoreClassification::ObjectType::JungleEpic ||
+                   t == CoreClassification::ObjectType::Scuttle ||
+                   t == CoreClassification::ObjectType::Pet;
+        }
+        bool IsLaneMinion() const {
+            return GetObjectType() == CoreClassification::ObjectType::LaneMinion;
+        }
+        bool IsTurret() const {
+            return GetObjectType() == CoreClassification::ObjectType::Turret;
+        }
+        bool IsPlant() const {
+            return GetObjectType() == CoreClassification::ObjectType::Plant;
+        }
+        bool IsPet() const {
+            return GetObjectType() == CoreClassification::ObjectType::Pet;
+        }
+        bool IsNeutral() const {
+            auto t = GetObjectType();
+            return t == CoreClassification::ObjectType::JungleMonster ||
+                   t == CoreClassification::ObjectType::JungleBig ||
+                   t == CoreClassification::ObjectType::JungleEpic ||
+                   t == CoreClassification::ObjectType::Scuttle ||
+                   t == CoreClassification::ObjectType::Plant;
+        }
+        bool IsJungleMonster() const {
+            auto t = GetObjectType();
+            return t == CoreClassification::ObjectType::JungleMonster ||
+                   t == CoreClassification::ObjectType::JungleBig ||
+                   t == CoreClassification::ObjectType::JungleEpic ||
+                   t == CoreClassification::ObjectType::Scuttle;
+        }
+        bool IsWard() const {
+            return GetObjectType() == CoreClassification::ObjectType::Ward;
+        }
+        bool IsInhibitor() const {
+            return GetObjectType() == CoreClassification::ObjectType::Inhibitor;
+        }
+        bool IsNexus() const {
+            return GetObjectType() == CoreClassification::ObjectType::Nexus;
+        }
+        bool IsStructure() const {
+            return CoreClassification::IsStructure(address);
+        }
         bool IsMissile() const { return RuntimeAPI::IsMissile(address); }
+        bool ShouldIgnore() const {
+            return CoreClassification::ShouldIgnore(address);
+        }
+        bool IsAttackableBy(int myTeam) const {
+            return CoreClassification::IsAttackable(address, myTeam);
+        }
 
         bool IsMelee() const {
             return GetAttackRange() <= 300.0f;
