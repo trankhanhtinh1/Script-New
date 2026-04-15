@@ -274,12 +274,24 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Magical += dmg[idx] + 0.60f * source.BonusAttackDamage() + 0.55f * source.TotalMagicalDamage();
             }
             break;
+        case "Alistar"_h:
+            if (source.HasBuff("alistareattack"))
+                out.Magical += 35.0f + 15.0f * idx;
+            break;
         case "Aphelios"_h:
             if (source.HasBuff("apheliosseverumq")) out.Physical += 0.25f * source.BonusAttackDamage();
             break;
         case "Ashe"_h:
             if (target.HasBuff("ashepassiveslow"))
                 out.Physical += (1.2f + source.Crit() * GetCritMultiplier(source)) * source.TotalAttackDamage() - source.TotalAttackDamage();
+            break;
+        case "Blitzcrank"_h:
+            if (source.HasBuff("PowerFist"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
+        case "Braum"_h:
+            if (target.GetBuffCount("BraumMark") == 3)
+                out.Magical += 26.0f + 10.0f * idx;
             break;
         case "Caitlyn"_h:
             if (source.HasBuff("caitlynheadshot") || target.HasBuff("caitlynyordletrapinternal")) {
@@ -288,8 +300,29 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Physical += dmg;
             }
             break;
+        case "Camille"_h: {
+            const int qLvl = std::max(0, std::min(4, source.GetSpell(SpellSlot::Q).Level() - 1));
+            constexpr float qRatios[5] = {0.20f, 0.25f, 0.30f, 0.35f, 0.40f};
+            if (source.HasBuff("CamilleQ"))
+                out.Physical += qRatios[qLvl] * source.TotalAttackDamage();
+            if (source.HasBuff("CamilleQ2")) {
+                const float trueConv = std::min(1.0f, 0.4f + 0.04f * idx);
+                const float totalDmg = 2.0f * qRatios[qLvl] * source.TotalAttackDamage();
+                out.Physical += (1.0f - trueConv) * totalDmg;
+                out.True_ += trueConv * totalDmg;
+            }
+            break;
+        }
+        case "Chogath"_h:
+            if (source.HasBuff("VorpalSpikes"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
         case "Corki"_h:
             out.Magical += 0.8f * GetCritMultiplier(source) * source.TotalAttackDamage();
+            break;
+        case "Darius"_h:
+            if (source.HasBuff("DariusNoxianTacticsONH"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::W);
             break;
         case "Diana"_h:
             if (source.HasBuff("dianaarcready")) {
@@ -297,14 +330,27 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Magical += dmg[idx] + 0.50f * source.TotalMagicalDamage();
             }
             break;
+        case "DrMundo"_h:
+            if (source.HasBuff("Masochism"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
         case "Draven"_h:
             if (source.HasBuff("DravenSpinning"))
                 out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "Ekko"_h:
-            if (target.GetBuffCount("ekkostacks") == 2) {
+            if (target.GetBuffCount("ekkostacks") == 2)
                 out.Magical += Lerp18(30.0f, 140.0f, source) + 0.8f * source.TotalMagicalDamage();
-            }
+            if (source.HasBuff("ekkoeattackbuff"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
+        case "Elise"_h:
+            if (source.HasBuff("EliseR"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::R);
+            break;
+        case "Ezreal"_h:
+            if (target.HasBuff("ezrealwattach"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
             break;
         case "Fiora"_h:
             if (std::abs(source.Crit() - 1.0f) < 0.001f && !source.HasBuff("FioraE") && !source.HasBuff("fiorae2"))
@@ -312,25 +358,72 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             if (source.HasBuff("fiorae2"))
                 out.Physical += static_cast<float>(GetCritMultiplier(source)) * source.TotalAttackDamage();
             break;
+        case "Fizz"_h:
+            if (source.GetSpell(SpellSlot::W).Level() > 0)
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            if (source.HasBuff("FizzW"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
+        case "Galio"_h:
+            if (source.HasBuff("galiopassivebuff"))
+                out.Magical += 12.0f + 4.0f * idx + source.TotalAttackDamage() + 0.5f * source.TotalMagicalDamage() + 0.4f * source.BonusSpellBlock();
+            break;
         case "Gangplank"_h:
             if (source.HasBuff("gangplankpassiveattack")) {
-                out.True_ += 55.0f + 10.0f * idx + source.BonusAttackDamage();
+                const float gpDmg = (55.0f + 10.0f * idx + source.BonusAttackDamage()) * (target.IsTurret() ? 0.5f : 1.0f);
+                out.True_ += gpDmg;
             }
+            break;
+        case "Garen"_h:
+            if (source.HasBuff("GarenQ"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
+            if (target.HasBuff("garenpassiveenemytarget"))
+                out.True_ += 0.01f * target.MaxHealth();
             break;
         case "Gnar"_h:
             if (target.GetBuffCount("gnarwproc") == 2)
                 out.Magical += source.GetSpellDamage(target, SpellSlot::W);
             break;
+        case "Gragas"_h:
+            if (source.HasBuff("gragaswattackbuff"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
         case "Gwen"_h:
             out.Magical += (0.01f + 0.008f * (source.TotalMagicalDamage() / 100.0f)) * target.MaxHealth();
+            break;
+        case "Hecarim"_h:
+            if (source.HasBuff("hecarimrampspeed"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
+        case "Illaoi"_h:
+            if (source.HasBuff("IllaoiW"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::W);
             break;
         case "Irelia"_h:
             if (source.GetBuffCount("ireliapassivestacks") >= 4)
                 out.Magical += Lerp18(10.0f, 61.0f, source) + 0.25f * source.BonusAttackDamage();
             break;
+        case "Ivern"_h:
+            if (source.HasBuff("ivernwpassive"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
+        case "JarvanIV"_h:
+            if (!target.HasBuff("jarvanivmartialcadencecheck"))
+                out.Physical += std::min(400.0f, std::max(20.0f, 0.08f * target.Health()));
+            break;
         case "Jax"_h:
             if (source.HasBuff("JaxEmpowerTwo"))
                 out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
+        case "Jayce"_h:
+            if (source.HasBuff("JaycePassiveMeleeAttack")) {
+                float jDmg = 0.25f * source.BonusAttackDamage();
+                if (level >= 16) jDmg += 145.0f;
+                else if (level >= 11) jDmg += 105.0f;
+                else if (level >= 6) jDmg += 65.0f;
+                else jDmg += 25.0f;
+                out.Magical += jDmg;
+            }
             break;
         case "Jhin"_h:
             if (source.HasBuff("jhinpassiveattackbuff")) {
@@ -338,23 +431,67 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Physical += missingHpRatio * (target.MaxHealth() - target.Health());
             }
             break;
+        case "Jinx"_h:
+            if (source.HasBuff("JinxQ"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q) * GetCritMultiplier(source, true);
+            break;
+        case "Kaisa"_h: {
+            constexpr float baseDmg[18] = {4,4,4,5,5,6,6,6,7,7,7,8,8,8,9,9,10,10};
+            float kDmg = baseDmg[idx];
+            const int passiveCnt = target.GetBuffCount("kaisapassivemarker");
+            if (passiveCnt > 0) {
+                constexpr float stackDmg[18] = {1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5};
+                kDmg += stackDmg[idx] * passiveCnt;
+            }
+            constexpr float apRatios[5] = {0.10f, 0.125f, 0.15f, 0.175f, 0.20f};
+            kDmg += apRatios[std::min(4, std::max(0, passiveCnt))] * source.TotalMagicalDamage();
+            out.Magical += kDmg;
+            if (passiveCnt >= 3) {
+                const float missingHp = std::max(0.0f, target.MaxHealth() - target.Health());
+                const float capKai = target.IsMinion() ? 400.0f : 999999.0f;
+                out.Magical += std::min(capKai, (0.15f + source.TotalMagicalDamage() / 100.0f * 0.025f) * missingHp);
+            }
+            break;
+        }
         case "Kalista"_h:
             if (target.HasBuff("kalistacoopstrikemarkally"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
+        case "Kassadin"_h:
+            if (source.GetSpell(SpellSlot::W).Level() > 0)
                 out.Magical += source.GetSpellDamage(target, SpellSlot::W);
             break;
         case "Kayle"_h:
             if (!source.HasBuff("KayleE") && std::abs(source.Crit() - 1.0f) < 0.001f)
                 out.Physical += source.TotalAttackDamage() * GetCritMultiplier(source);
-            if (level >= 11)
+            if (source.GetSpell(SpellSlot::E).Level() > 0)
                 out.Magical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
+        case "Kennen"_h:
+            if (source.HasBuff("kennendoublestrikelive"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
             break;
         case "Khazix"_h:
             if (source.HasBuff("KhazixPDamage") && target.IsHero())
                 out.Magical += Lerp18(14.0f, 150.0f, source) + 0.4f * source.BonusAttackDamage();
             break;
+        case "Kled"_h:
+            if (source.HasBuff("kledwactive"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
+        case "KogMaw"_h:
+            if (source.HasBuff("KogMawBioArcaneBarrage"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
         case "KSante"_h:
             if (target.HasBuff("ksantepassivemark"))
                 out.Physical += 5.0f + 0.01f * target.MaxHealth();
+            break;
+        case "Leona"_h:
+            if (target.HasBuff("LeonaSunlight"))
+                out.Magical += 25.0f + 7.0f * idx;
+            if (source.HasBuff("LeonaShieldOfDaybreak"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "Lucian"_h:
             if (source.HasBuff("LucianPassiveBuff")) {
@@ -366,6 +503,10 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             if (target.HasBuff("LuxIlluminatingFraulein"))
                 out.Magical += 20.0f + 10.0f * idx + 0.2f * source.TotalMagicalDamage();
             break;
+        case "Malphite"_h:
+            if (source.HasBuff("MalphiteCleave"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::W);
+            break;
         case "MasterYi"_h:
             if (source.HasBuff("doublestrike"))
                 out.Physical += 0.5f * source.TotalAttackDamage() * GetCritMultiplier(source, true);
@@ -375,29 +516,70 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
         case "MissFortune"_h:
             out.Physical += Lerp18(0.5f, 1.0f, source) * source.TotalAttackDamage();
             break;
+        case "MonkeyKing"_h:
+            if (source.HasBuff("MonkeyKingDoubleAttack"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
+            break;
+        case "Mordekaiser"_h:
+            if (source.HasBuff("mordekaisermaceofspades") || source.HasBuff("mordekaisermaceofspades2"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::Q);
+            break;
         case "Nasus"_h:
             if (source.HasBuff("NasusQ")) out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "Nautilus"_h:
             if (!target.HasBuff("nautiluspassivecheck")) out.Physical += 8.0f + 6.0f * idx;
+            if (source.HasBuff("nautiluspiercinggazeshield"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::W) / (target.IsHero() ? 1.0f : 2.0f);
             break;
         case "Neeko"_h:
             if (source.GetBuffCount("neekowpassivestack") == 2)
                 out.Magical += Lerp18(50.0f, 170.0f, source) + 0.6f * source.TotalMagicalDamage();
             break;
+        case "Nidalee"_h:
+            if (source.HasBuff("Takedown"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::Q);
+            break;
         case "Nilah"_h:
             if (source.Crit() > 0.0f)
                 out.Physical += source.Crit() * 0.33f * source.TotalAttackDamage();
             break;
+        case "Nocturne"_h:
+            if (source.HasBuff("nocturneumbrablades"))
+                out.Physical += 0.2f * source.TotalAttackDamage();
+            break;
         case "Orianna"_h:
             out.Magical += Lerp18(10.0f, 50.0f, source) + 0.15f * source.TotalMagicalDamage();
+            break;
+        case "Ornn"_h:
+            if (target.HasBuff("OrnnVulnerableDebuff"))
+                out.Magical += Lerp18(0.12f, 0.205f, source) * target.MaxHealth();
+            break;
+        case "Pantheon"_h:
+            if (target.HealthPercent() < 15.0f && source.GetSpell(SpellSlot::E).Level() > 0)
+                out.Physical += GetCritMultiplier(source) * source.TotalAttackDamage();
+            break;
+        case "Poppy"_h:
+            if (source.HasBuff("poppypassivebuff"))
+                out.Magical += Lerp18(20.0f, 180.0f, source);
             break;
         case "Quinn"_h:
             if (target.HasBuff("QuinnW"))
                 out.Physical += 10.0f + 5.0f * idx + (0.16f + 0.02f * idx) * source.TotalAttackDamage();
             break;
-        case "Rammus"_h:
-            out.Magical += std::min(20.0f, 8.0f + idx) + 0.1f * source.Armor();
+        case "Rammus"_h: {
+            float rDmg = (std::min(20.0f, 8.0f + static_cast<float>(idx)) + 0.1f * source.Armor());
+            if (source.HasBuff("DefensiveBallCurl")) rDmg *= 1.5f;
+            out.Magical += rDmg;
+            break;
+        }
+        case "RekSai"_h:
+            if (source.HasBuff("RekSaiQ"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
+            break;
+        case "Renekton"_h:
+            if (source.HasBuff("RenektonPreExecute"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::W);
             break;
         case "Rengar"_h:
             if (source.HasBuff("RengarQ")) out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
@@ -414,6 +596,30 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             if (source.DistanceSquared(target) <= 300 * 300)
                 out.Magical += Lerp18(2.0f, 19.0f, source) + 0.04f * source.BonusAttackDamage();
             break;
+        case "Sejuani"_h:
+            if (target.HasBuff("sejuanistun")) {
+                const float sejRatio = level >= 14 ? 0.20f : (level >= 7 ? 0.15f : 0.10f);
+                out.Magical += sejRatio * target.MaxHealth();
+            }
+            break;
+        case "Shen"_h:
+            if (source.HasBuff("shenqbuffweak"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::Q);
+            if (source.HasBuff("shenqbuffstrong"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::Q);
+            break;
+        case "Shyvana"_h:
+            if (source.HasBuff("ShyvanaDoubleAttack") || source.HasBuff("ShyvanaDoubleAttackDragon"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
+            if (source.HasBuff("ShyvanaImmolationAura") || source.HasBuff("ShyvanaImmolateDragon"))
+                out.Magical += 0.25f * source.GetSpellDamage(target, SpellSlot::W);
+            if (target.HasBuff("ShyvanaFireballMissile"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
+        case "Sion"_h:
+            if (source.HasBuff("sionpassivezombie"))
+                out.Physical += std::min(target.IsMinion() ? 75.0f : 999999.0f, 0.1f * target.MaxHealth());
+            break;
         case "Skarner"_h:
             if (target.HasBuff("skarnerpassive3"))
                 out.Magical += 0.05f * target.MaxHealth();
@@ -426,15 +632,35 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             if (source.HasBuff("sonapassiveattack"))
                 out.Magical += Lerp18(20.0f, 240.0f, source) + 0.2f * source.TotalMagicalDamage();
             break;
+        case "Sylas"_h:
+            if (source.HasBuff("SylasPassiveAttack")) {
+                out.Magical += Lerp18(5.0f, 48.0f, source) + 1.0f * source.TotalAttackDamage() + 0.2f * source.TotalMagicalDamage();
+                out.Override = true;
+            }
+            break;
+        case "TahmKench"_h: {
+            const int stacks = std::max(1, target.GetBuffCount("tahmkenchpdebuffcounter"));
+            const float hpRatio = level >= 13 ? 0.0175f : (level >= 7 ? 0.015f : 0.0125f);
+            out.Magical += stacks * hpRatio * source.MaxHealth();
+            break;
+        }
         case "Talon"_h:
             if (target.GetBuffCount("TalonPassiveStack") >= 3)
                 out.Physical += 75.0f + 10.0f * idx + 2.0f * source.BonusAttackDamage();
+            break;
+        case "Taric"_h:
+            if (source.HasBuff("TaricPassiveAttack"))
+                out.Magical += 25.0f + 4.0f * idx + 0.15f * source.BonusArmor();
             break;
         case "Teemo"_h:
             out.Magical += source.GetSpellDamage(target, SpellSlot::E);
             break;
         case "Tristana"_h:
             if (target.GetBuffCount("tristanaecharge") >= 3) out.Physical += source.GetSpellDamage(target, SpellSlot::E);
+            break;
+        case "Trundle"_h:
+            if (source.HasBuff("TrundleTrollSmash"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "TwistedFate"_h:
             if (source.HasBuff("BlueCardPreAttack") || source.HasBuff("RedCardPreAttack") || source.HasBuff("GoldCardPreAttack")) {
@@ -446,6 +672,10 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Twitch"_h:
             out.True_ += static_cast<float>(std::min(std::max(target.GetBuffCount("TwitchDeadlyVenom"), 0) + 1, 6)) * Lerp18(1.0f, 5.0f, source);
+            break;
+        case "Udyr"_h:
+            if (source.GetBuffCount("UdyrTigerStance") >= 3)
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "Varus"_h:
             out.Magical += source.GetSpellDamage(target, SpellSlot::W);
@@ -464,8 +694,22 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             if (target.HasBuff("viegoqmark")) out.Physical += 0.20f * source.TotalAttackDamage();
             out.Physical += 0.02f * target.Health();
             break;
+        case "Viktor"_h:
+            if (source.HasBuff("ViktorPowerTransferReturn"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::Q);
+            break;
+        case "Volibear"_h:
+            if (source.HasBuff("VolibearQ"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
+            if (source.HasBuff("volibearrapplicator"))
+                out.Magical += source.GetSpellDamage(target, SpellSlot::R);
+            break;
         case "Warwick"_h:
             out.Magical += 10.0f + 2.0f * idx;
+            break;
+        case "Xayah"_h:
+            if (source.HasBuff("XayahW"))
+                out.Physical += 0.2f * source.TotalAttackDamage();
             break;
         case "XinZhao"_h:
             if (source.GetBuffCount("XinZhaoPTracker") >= 3) out.Physical += Lerp18(0.15f, 0.45f, source) * source.TotalAttackDamage();
@@ -480,6 +724,10 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Physical *= 0.5f;
                 out.Magical += out.Physical;
             }
+            break;
+        case "Yorick"_h:
+            if (source.HasBuff("yorickqbuff"))
+                out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "Zed"_h:
             if (target.HealthPercent() < 50.0f && !target.HasBuff("zedpassivecd")) out.Magical += Lerp18(0.06f, 0.10f, source) * target.MaxHealth();

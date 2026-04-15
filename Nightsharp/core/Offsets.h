@@ -121,6 +121,8 @@ constexpr auto OnSpellImpact = EventRuntime::OnSpellImpact;
 constexpr auto OnStopCast = EventRuntime::OnStopCast;
 constexpr auto OnFinishCast = EventRuntime::OnFinishCast;
 constexpr auto OnBuffAdd = EventRuntime::OnBuffAdd;
+constexpr auto OnHeroActionStateChange = EventRuntime::OnHeroActionStateChange;
+constexpr auto OnMinionFollowChange = EventRuntime::OnMinionFollowTargetNetIdChange;
 } // namespace Function
 
 namespace ManagerList {
@@ -268,6 +270,8 @@ constexpr auto PercentBonusMagicPen = AIHeroClient::PercentBonusMagicPen;
 constexpr auto PercentLifeSteal = AIHeroClient::PercentLifeSteal;
 constexpr auto PercentSpellVamp = AIHeroClient::PercentSpellVamp;
 constexpr auto PercentOmnivamp = AIHeroClient::PercentOmnivamp;
+constexpr auto PhysDmgPercent = AIHeroClient::PhysDmgPercent;
+constexpr auto MagicDmgPercent = AIHeroClient::MagicDmgPercent;
 } // namespace HeroStats
 
 namespace Hero {
@@ -277,12 +281,20 @@ constexpr auto Exp = AIHeroClient::Exp;
 constexpr auto LevelRef = AIHeroClient::LevelRef;
 constexpr auto LevelUpPoints = AIHeroClient::LevelUpPoints;
 constexpr auto VisionScore = AIHeroClient::VisionScore;
+constexpr auto ShutdownValue = AIHeroClient::ShutdownValue;
+constexpr auto BaseGoldOnDeath = AIHeroClient::BaseGoldOnDeath;
+constexpr auto NeutralMinionsKilled = AIHeroClient::NeutralMinionsKilled;
 } // namespace Hero
 
 namespace ItemSystem {
-constexpr auto SlotInfo = ItemRuntime::SlotInfo;
-constexpr auto InfoData = ItemRuntime::InfoData;
-constexpr auto InfoStacks = ItemRuntime::InfoStacks;
+// NEW inventory chain (post-restructure):
+//   obj+InventoryComponent → component+SlotArray → slot[i] (8-byte ptrs, SlotCount=39)
+//   slot+ItemNode → item_node+ItemInfo → info+DataItemId (XOR ENCRYPTED)
+constexpr auto InventoryComponent = ItemRuntime::InventoryComponent;
+constexpr auto SlotArray = ItemRuntime::SlotArray;
+constexpr auto SlotCount = ItemRuntime::SlotCount;
+constexpr auto ItemNode = ItemRuntime::ItemNode;
+constexpr auto ItemInfo = ItemRuntime::ItemInfo;
 constexpr auto DataItemId = ItemRuntime::DataItemId;
 constexpr auto DataAbilityHaste = ItemRuntime::DataAbilityHaste;
 constexpr auto DataHealth = ItemRuntime::DataHealth;
@@ -500,6 +512,7 @@ constexpr auto MeleeLaneMinion = MinionClassRuntime::MeleeLaneMinion;
 constexpr auto RangedLaneMinion = MinionClassRuntime::RangedLaneMinion;
 constexpr auto SiegeLaneMinion = MinionClassRuntime::SiegeLaneMinion;
 constexpr auto SuperLaneMinion = MinionClassRuntime::SuperLaneMinion;
+constexpr auto FollowTargetNetId = MinionClassRuntime::FollowTargetNetId;
 } // namespace MinionClass
 
 namespace JungleType {
@@ -522,6 +535,7 @@ constexpr auto Scale = NavGridLayout::Scale;
 constexpr auto InverseScale = NavGridLayout::InverseScale;
 constexpr auto GrassRegions = NavGridLayout::GrassRegions;
 constexpr auto CellSize = NavGridLayout::CellSize;
+constexpr auto ByteFlagData = 0x150; // METHOD 1: byte flag array (1 byte/cell, fast bush check)
 constexpr auto FLAG_WALL = NavGridFlags::FlagWall;
 constexpr auto FLAG_NOWALK = NavGridFlags::FlagNoWalk;
 constexpr auto FLAG_BRUSH = NavGridFlags::FlagBrush;
@@ -591,6 +605,9 @@ constexpr auto MouseBuffer = DirectInputRuntime::MouseBuffer;
 constexpr auto KeyboardCount = DirectInputRuntime::KeyboardCount;
 constexpr auto MouseCount = DirectInputRuntime::MouseCount;
 constexpr auto VT_GetDeviceData = DirectInputRuntime::VT_GetDeviceData;
+constexpr auto VT_GetDeviceState = DirectInputRuntime::VT_GetDeviceState;
+constexpr auto KeyboardInput = DirectInputRuntime::KeyboardInput;
+constexpr auto MouseInput = DirectInputRuntime::MouseInput;
 } // namespace DInput
 
 namespace NavGridCell {
@@ -602,6 +619,8 @@ constexpr auto CELL_WALL = NavGridCellLayout::CELL_WALL;
 constexpr auto CELL_BRUSH = NavGridCellLayout::CELL_BRUSH;
 constexpr auto CELL_WATER = NavGridCellLayout::CELL_WATER;
 constexpr auto CELL_BUILDING = NavGridCellLayout::CELL_BUILDING;
+constexpr auto CELL_VISION = NavGridCellLayout::CELL_VISION;
+constexpr auto CELL_PASSABILITY = NavGridCellLayout::CELL_PASSABILITY;
 constexpr auto HalfCellSize = NavGridCellLayout::HalfCellSize;
 } // namespace NavGridCell
 
@@ -611,6 +630,7 @@ constexpr auto SpellSlotShort = EventSpellCastInfoLayout::SCI_SpellSlotShort;
 constexpr auto SpellSlotInt = EventSpellCastInfoLayout::SCI_SpellSlotInt;
 constexpr auto IsStopCast = EventSpellCastInfoLayout::SCI_IsStopCast;
 constexpr auto CastState = EventSpellCastInfoLayout::SCI_CastState;
+constexpr auto CastData = EventSpellCastInfoLayout::SCI_CastData;
 } // namespace EventSCI
 
 namespace AiManagerNavData {
@@ -624,5 +644,10 @@ constexpr auto VelocityY = AiManagerNavDataLayout::VelocityY;
 constexpr auto VelocityZ = AiManagerNavDataLayout::VelocityZ;
 constexpr auto MoveOverrideFlag = AiManagerNavDataLayout::MoveOverrideFlag;
 } // namespace AiManagerNavData
+
+namespace EventPropertyRuntime {
+constexpr auto OnHeroActionStateChange = EventRuntime::OnHeroActionStateChange;
+constexpr auto OnMinionFollowTargetNetIdChange = EventRuntime::OnMinionFollowTargetNetIdChange;
+} // namespace EventPropertyRuntime
 
 } // namespace Offset

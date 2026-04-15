@@ -212,6 +212,9 @@ inline void PollUnit(const AIBaseClient& unit, int now) {
 inline void Update() {
     if (!detail::EnsureStorage()) return;
 
+    // Process VMT spell events (shellcode counter → hero scan → callbacks)
+    CoreEventHook::PollVmtSpellEvents();
+
     const int now = Game::TickCount();
 
     // Poll heroes only — minion/turret AA tracking done via MissileTracker
@@ -285,6 +288,12 @@ namespace hook {
 // ---------------------------------------------------------------------------
 inline void UpdateHybrid() {
     if (!detail::EnsureStorage()) return;
+
+    // CRITICAL: Poll VMT hook events! The VMT shellcode only increments a
+    // counter — PollVmtSpellEvents reads it and fires g_processSpellCb
+    // which populates g_states and calls FireProcess (OnProcessSpellCast).
+    // Without this, VMT hook events are silently lost.
+    CoreEventHook::PollVmtSpellEvents();
 
     const int now = Game::TickCount();
 

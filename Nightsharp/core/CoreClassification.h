@@ -130,7 +130,7 @@ namespace CoreClassification {
         }
 
         // === PET (has follow target) ===
-        const auto followId = Globals::Read<uint32_t>(obj + Offset::MinionFieldsLayout::FollowTargetNetId);
+        const auto followId = Globals::Read<uint32_t>(obj + Offset::MinionClass::FollowTargetNetId);
         if (followId != 0 && (team == 1 || team == 2)) return ObjectType::Pet;
 
         // === HERO (team 1/2, none of above) ===

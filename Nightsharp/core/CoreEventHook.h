@@ -54,6 +54,7 @@ using OnHeroActionStateChangeFn = void(__fastcall*)(uintptr_t a1, uintptr_t a2, 
 // OnMinionFollowTargetNetIdChange — same signature
 using OnMinionFollowChangeFn = void(__fastcall*)(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
+
 // ---------------------------------------------------------------------------
 // Callback types — SDK layer registers these
 // ---------------------------------------------------------------------------
@@ -262,7 +263,159 @@ namespace detail {
         }
     };
 
+    // ── Shadow VMT for OnProcessSpell (stealth approach) ──
+    //
+    // Problem: sub_1FD080 has 13 params including floats/XMM/stack args.
+    //   A C++ hook can't preserve all of them when forwarding to original.
+    //   VirtualProtect on game code is blocked → can't use inline detour.
+    //
+    // Solution: shellcode trampoline that:
+    //   1. Atomically increments a counter (only clobbers RAX + flags)
+    //   2. JMPs to the original function (all params preserved)
+    //   Then VmtScanForNewCast polls heroes on next tick.
+    //
+    // Shellcode (30 bytes):
+    //   push rax
+    //   mov rax, <counter_addr>     ; 10 bytes
+    //   lock inc qword ptr [rax]    ; 4 bytes
+    //   pop rax
+    //   jmp qword ptr [rip+0]       ; 6 bytes
+    //   dq <original_func>          ; 8 bytes data
+    //
+    struct ShadowVMT {
+        static constexpr int kMaxTrackedHeroes = 20;
+
+        // Shellcode template
+        static constexpr uint8_t kTrampTemplate[] = {
+            0x50,                                           // push rax
+            0x48, 0xB8, 0,0,0,0, 0,0,0,0,                  // mov rax, imm64 (counter)
+            0xF0, 0x48, 0xFF, 0x00,                         // lock inc qword [rax]
+            0x58,                                           // pop rax
+            0xFF, 0x25, 0x00, 0x00, 0x00, 0x00,             // jmp [rip+0]
+        };
+        static constexpr int kCounterPatchOff  = 3;         // offset to counter addr
+        static constexpr int kOrigPatchOff     = sizeof(kTrampTemplate); // appended
+        static constexpr int kTrampTotalSize   = sizeof(kTrampTemplate) + 8;
+
+        alignas(64) uintptr_t shadowTable[Offset::SpellEventVMT::VTableEntryCount] = {};
+        uintptr_t  originalFn      = 0;
+        uintptr_t* dispatchSlot    = nullptr;   // writable heap slot
+        uintptr_t  originalVtable  = 0;
+        uintptr_t  trampolineAddr  = 0;         // VirtualAlloc'd shellcode
+        uintptr_t  prevCasts[kMaxTrackedHeroes] = {};
+        volatile long long eventCounter = 0;    // incremented by shellcode
+        long long  lastPolledCount      = 0;    // for change detection
+        bool       installed       = false;
+
+        // Scan writable memory for a qword matching vtableAbsAddr
+        static uintptr_t* FindDispatchSlot(uintptr_t vtableAbsAddr) {
+            MEMORY_BASIC_INFORMATION mbi = {};
+            uintptr_t addr = 0x10000;
+
+            while (VirtualQuery(reinterpret_cast<void*>(addr), &mbi, sizeof(mbi))) {
+                if (mbi.State == MEM_COMMIT &&
+                    (mbi.Protect == PAGE_READWRITE ||
+                     mbi.Protect == PAGE_EXECUTE_READWRITE) &&
+                    mbi.RegionSize >= sizeof(uintptr_t))
+                {
+                    const auto* p = static_cast<const uintptr_t*>(mbi.BaseAddress);
+                    const size_t count = mbi.RegionSize / sizeof(uintptr_t);
+
+                    __try {
+                        for (size_t i = 0; i < count; ++i) {
+                            if (p[i] == vtableAbsAddr) {
+                                return const_cast<uintptr_t*>(&p[i]);
+                            }
+                        }
+                    } __except (1) { /* skip region */ }
+                }
+                const auto next = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+                if (next <= addr) break;
+                addr = next;
+            }
+            return nullptr;
+        }
+
+        bool Install() {
+            if (installed) return true;
+
+            const auto base = Globals::base;
+            if (!base) return false;
+
+            const auto vtableAbsAddr = base + Offset::SpellEventVMT::VTableRVA;
+            const auto* origTable = reinterpret_cast<const uintptr_t*>(vtableAbsAddr);
+
+            // Sanity: entry at HandlerIndex must be sub_1FD080
+            __try {
+                if (origTable[Offset::SpellEventVMT::HandlerIndex] !=
+                    base + Offset::SpellEventVMT::WrapperRVA) {
+                    return false;
+                }
+            } __except (1) { return false; }
+
+            // Locate writable dispatch slot on the heap
+            auto* slot = FindDispatchSlot(vtableAbsAddr);
+            if (!slot) return false;
+            dispatchSlot = slot;
+
+            // Deep-copy original vtable
+            __try {
+                memcpy(shadowTable, origTable,
+                       sizeof(uintptr_t) * Offset::SpellEventVMT::VTableEntryCount);
+            } __except (1) { return false; }
+
+            originalFn     = shadowTable[Offset::SpellEventVMT::HandlerIndex];
+            originalVtable = vtableAbsAddr;
+
+            // Build shellcode trampoline
+            trampolineAddr = reinterpret_cast<uintptr_t>(
+                VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE,
+                             PAGE_EXECUTE_READWRITE));
+            if (!trampolineAddr) return false;
+
+            // Copy template
+            memcpy(reinterpret_cast<void*>(trampolineAddr),
+                   kTrampTemplate, sizeof(kTrampTemplate));
+            // Patch: counter address
+            *reinterpret_cast<uintptr_t*>(trampolineAddr + kCounterPatchOff) =
+                reinterpret_cast<uintptr_t>(&eventCounter);
+            // Patch: original function address (appended after template)
+            *reinterpret_cast<uintptr_t*>(trampolineAddr + kOrigPatchOff) =
+                originalFn;
+            FlushInstructionCache(GetCurrentProcess(),
+                reinterpret_cast<void*>(trampolineAddr), kTrampTotalSize);
+
+            // Point vtable entry at our trampoline
+            shadowTable[Offset::SpellEventVMT::HandlerIndex] = trampolineAddr;
+
+            // Swap vtable pointer (aligned qword write, naturally atomic on x64)
+            *dispatchSlot = reinterpret_cast<uintptr_t>(shadowTable);
+
+            // Reset state
+            eventCounter   = 0;
+            lastPolledCount = 0;
+            memset(prevCasts, 0, sizeof(prevCasts));
+
+            installed = true;
+            return true;
+        }
+
+        void Uninstall() {
+            if (!installed || !dispatchSlot) return;
+            // Restore original vtable pointer
+            *dispatchSlot = originalVtable;
+            // Free trampoline
+            if (trampolineAddr) {
+                VirtualFree(reinterpret_cast<void*>(trampolineAddr), 0, MEM_RELEASE);
+                trampolineAddr = 0;
+            }
+            installed    = false;
+            dispatchSlot = nullptr;
+        }
+    };
+
     // ── State ──
+    inline ShadowVMT g_vmtHook                  = {};
     inline Detour g_onProcessSpellDetour    = {};
     inline Detour g_onStopCastDetour        = {};
     inline Detour g_onFinishCastDetour      = {};
@@ -290,7 +443,52 @@ namespace detail {
         return spellBook - Offset::SpellBook::Offset;
     }
 
-    // ── Hook body: OnProcessSpell ──
+    // ── VMT hook: scan heroes for newly-appeared ActiveSpellCast ──
+    // Called AFTER the original handler runs so ActiveSpellCast is set.
+    inline void VmtScanForNewCast() {
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!Globals::IsValidPtr(ctx.heroManager)) return;
+
+        __try {
+            const auto items = Globals::Read<uintptr_t>(
+                ctx.heroManager + Offset::ManagerList::Items);
+            const auto size  = Globals::Read<int>(
+                ctx.heroManager + Offset::ManagerList::Size);
+            if (!Globals::IsValidPtr(items) || size <= 0 ||
+                size > ShadowVMT::kMaxTrackedHeroes) return;
+
+            for (int i = 0; i < size; ++i) {
+                const auto hero = Globals::Read<uintptr_t>(
+                    items + i * sizeof(uintptr_t));
+                if (!Globals::IsValidPtr(hero)) continue;
+
+                const auto activeCast = Globals::Read<uintptr_t>(
+                    hero + Offset::SpellBook::ActiveSpellCast);
+                if (!Globals::IsValidPtr(activeCast)) continue;
+
+                if (activeCast != g_vmtHook.prevCasts[i]) {
+                    g_vmtHook.prevCasts[i] = activeCast;
+                    if (g_processSpellCb) {
+                        g_processSpellCb(hero, activeCast);
+                    }
+                }
+            }
+        } __except (1) { /* safety */ }
+    }
+
+    // ── Poll VMT spell events ──
+    // Called each tick (e.g. from SpellCastTracker::Update).
+    // Checks if the shellcode trampoline incremented the counter since
+    // last poll, and if so, scans heroes for new ActiveSpellCast.
+    inline void PollVmtSpellEvents() {
+        if (!g_vmtHook.installed) return;
+        const auto current = g_vmtHook.eventCounter;
+        if (current == g_vmtHook.lastPolledCount) return;
+        g_vmtHook.lastPolledCount = current;
+        VmtScanForNewCast();
+    }
+
+    // ── Hook body: OnProcessSpell via inline detour (legacy) ──
     // ⚠️ Return address spoofing: call original via spoof_call so Packman
     //    sees a game-module return address instead of our DLL address.
     int __fastcall HkOnProcessSpell(uintptr_t spellBook, uintptr_t castInfo) {
@@ -455,6 +653,12 @@ inline bool InstallProcessSpellHook() {
     const uintptr_t base = Globals::base;
     if (!base) return false;
 
+    // Strategy 1: Shadow VMT hook (stealth — no code modification, no VirtualProtect)
+    if (detail::g_vmtHook.Install()) {
+        return true;
+    }
+
+    // Strategy 2: Inline detour (legacy fallback — may fail if VirtualProtect blocked)
     const uintptr_t target = base + Offset::Function::OnProcessSpell;
     return detail::g_onProcessSpellDetour.Install(
         target,
@@ -520,6 +724,7 @@ inline bool InstallMinionFollowHook() {
 }
 
 inline void UninstallAll() {
+    detail::g_vmtHook.Uninstall();
     detail::g_onProcessSpellDetour.Uninstall();
     detail::g_onStopCastDetour.Uninstall();
     detail::g_onFinishCastDetour.Uninstall();
@@ -531,7 +736,10 @@ inline void UninstallAll() {
     detail::g_onMinionFollowDetour.Uninstall();
 }
 
-inline bool IsProcessSpellHooked()    { return detail::g_onProcessSpellDetour.installed; }
+// Call each tick to process VMT spell events (shellcode counter → hero scan)
+inline void PollVmtSpellEvents()     { detail::PollVmtSpellEvents(); }
+
+inline bool IsProcessSpellHooked()    { return detail::g_vmtHook.installed || detail::g_onProcessSpellDetour.installed; }
 inline bool IsStopCastHooked()        { return detail::g_onStopCastDetour.installed; }
 inline bool IsFinishCastHooked()      { return detail::g_onFinishCastDetour.installed; }
 inline bool IsBuffAddHooked()         { return detail::g_onBuffAddDetour.installed; }

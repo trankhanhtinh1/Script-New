@@ -2,6 +2,7 @@
 
 #include "../core/CoreAPI.h"
 #include "../core/CoreClassification.h"
+#include "../core/CoreControl.h"
 #include "../core/CoreEventHook.h"
 #include "../core/CoreObjects.h"
 #include "../core/CoreRuntime.h"
@@ -66,7 +67,23 @@ inline void Render() {
     ImGui::Text("spoofTrampoline : 0x%llX", (unsigned long long)ctx.spoofTrampoline);
 
     // ── Event Hook Status ──
-    ImGui::Text("hook.ProcessSpell: %s", CoreEventHook::IsProcessSpellHooked() ? "ON" : "off");
+    SectionHeader("Event Hooks");
+    {
+        const bool vmtInstalled = CoreEventHook::detail::g_vmtHook.installed;
+        const bool detourInstalled = CoreEventHook::detail::g_onProcessSpellDetour.installed;
+        if (vmtInstalled) {
+            ImGui::TextColored(ImVec4(0.4f,1.0f,0.4f,1.0f),
+                "hook.ProcessSpell: VMT (stealth) — counter=%lld slot=0x%llX",
+                CoreEventHook::detail::g_vmtHook.eventCounter,
+                (unsigned long long)CoreEventHook::detail::g_vmtHook.dispatchSlot);
+        } else if (detourInstalled) {
+            ImGui::TextColored(ImVec4(1.0f,1.0f,0.4f,1.0f),
+                "hook.ProcessSpell: DETOUR (legacy)");
+        } else {
+            ImGui::TextColored(ImVec4(1.0f,0.4f,0.4f,1.0f),
+                "hook.ProcessSpell: OFF");
+        }
+    }
     ImGui::Text("hook.StopCast    : %s", CoreEventHook::IsStopCastHooked() ? "ON" : "off");
     ImGui::Text("hook.FinishCast  : %s", CoreEventHook::IsFinishCastHooked() ? "ON" : "off");
     ImGui::Text("hook.BuffAdd     : %s", CoreEventHook::IsBuffAddHooked() ? "ON" : "off");
@@ -76,9 +93,14 @@ inline void Render() {
     ImGui::Text("hook.HeroAction  : %s", CoreEventHook::IsHeroActionStateHooked() ? "ON" : "off");
     ImGui::Text("hook.MinionFollow: %s", CoreEventHook::IsMinionFollowHooked() ? "ON" : "off");
     ImGui::Text("detectWatcher2  : 0x%llX", (unsigned long long)ctx.detectionWatcher2);
-    ImGui::Text("ping            : %d", ctx.cachedPing);
-    ImGui::Text("attackDelay     : %.4f", ctx.cachedAttackDelay);
-    ImGui::Text("attackWindup    : %.4f", ctx.cachedAttackWindup);
+    {
+        const int livePing = CoreControl::GetPing();
+        const float liveDelay = CoreControl::GetAttackDelay();
+        const float liveWindup = CoreControl::GetAttackWindup();
+        ImGui::Text("ping            : %d", livePing);
+        ImGui::Text("attackDelay     : %.4f  (%.0f ms)", liveDelay, liveDelay * 1000.0f);
+        ImGui::Text("attackWindup    : %.4f  (%.0f ms)", liveWindup, liveWindup * 1000.0f);
+    }
     ImGui::Text("issueOrder ok   : %u / %u", ctx.issueOrderSuccesses, ctx.issueOrderAttempts);
     ImGui::Text("cast ok         : %u / %u", ctx.castSuccesses, ctx.castAttempts);
     ImGui::Text("canIssueOrder   : %s", CoreAPI::Control::CanIssueOrder() ? "yes" : "no");
@@ -188,7 +210,7 @@ inline void Render() {
         orbDbg.moveIssued ? 1 : 0);
     // Show effective windup buffer from percentage slider
     {
-      const float diagWindup = ctx.cachedAttackWindup * 1000.0f;
+      const float diagWindup = CoreControl::GetAttackWindup() * 1000.0f;
       auto* orbMenu = SDK::Orbwalker::GetMenu();
       auto* advMenu = orbMenu ? orbMenu->GetSubMenu("advanced") : nullptr;
       const int windupSlider = advMenu ? advMenu->GetSliderValue("delayWindup", 80) : 80;
@@ -345,6 +367,218 @@ inline void Render() {
     ImGui::Text("ai.pathStart    : %.1f %.1f %.1f", pathStart.x, pathStart.y, pathStart.z);
     ImGui::Text("ai.pathEnd      : %.1f %.1f %.1f", pathEnd.x, pathEnd.y, pathEnd.z);
     ImGui::Text("ai.orderPos     : %.1f %.1f %.1f", orderPos.x, orderPos.y, orderPos.z);
+
+    // ── AttackableUnit Offsets (HP, shields, state) ──
+    SectionHeader("AttackableUnit Offsets");
+    {
+        const uintptr_t addr = local.address;
+        const float hp     = Globals::Read<float>(addr + Offset::Health::HP);
+        const float maxHp  = Globals::Read<float>(addr + Offset::Health::MaxHP);
+        const float hpPen  = Globals::Read<float>(addr + Offset::Health::HPMaxPenalty);
+        const float allSh  = Globals::Read<float>(addr + Offset::Health::AllShield);
+        const float physSh = Globals::Read<float>(addr + Offset::Health::PhysicalShield);
+        const float magSh  = Globals::Read<float>(addr + Offset::Health::MagicalShield);
+        const float champSp= Globals::Read<float>(addr + Offset::Health::ChampSpecific);
+        const float inHealA= Globals::Read<float>(addr + Offset::Health::InHealAllied);
+        const float inHealE= Globals::Read<float>(addr + Offset::Health::InHealEnemy);
+        const float inDmg  = Globals::Read<float>(addr + Offset::Health::InDamage);
+        const int tgtable  = Globals::Read<int>(addr + Offset::Targetable::IsTargetable);
+        const int actS1raw = Globals::Read<int>(addr + Offset::ActionState::State1);
+        const int actS2raw = Globals::Read<int>(addr + Offset::ActionState::State2);
+
+        const bool hpOk = (hp > 0.0f && hp <= maxHp + 1000.0f && maxHp > 0.0f && maxHp < 100000.0f);
+        ImGui::TextColored(hpOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "HP(0x%X)         : %.1f / %.1f  penalty=%.1f",
+            Offset::Health::HP, hp, maxHp, hpPen);
+        ImGui::Text("shields          : all=%.1f phys=%.1f mag=%.1f champ=%.1f",
+            allSh, physSh, magSh, champSp);
+        ImGui::Text("inHeal A/E       : %.1f / %.1f  inDmg=%.1f", inHealA, inHealE, inDmg);
+        ImGui::Text("targetable(0x%X) : %d", Offset::Targetable::IsTargetable, tgtable);
+        ImGui::Text("actState1(0x%X)  : 0x%08X", Offset::ActionState::State1, actS1raw);
+        ImGui::Text("actState2(0x%X)  : 0x%08X", Offset::ActionState::State2, actS2raw);
+
+        // Decode key action state flags
+        bool canAtk = (actS1raw & Offset::ActionState::CanAttack) != 0;
+        bool canCast = (actS1raw & Offset::ActionState::CanCast) != 0;
+        bool canMove = (actS1raw & Offset::ActionState::CanMove) != 0;
+        bool immovable = (actS1raw & Offset::ActionState::Immovable) != 0;
+        bool stunned = (actS1raw & Offset::ActionState::Stunned) != 0;
+        ImGui::Text("  flags          : canAtk=%d canCast=%d canMove=%d immov=%d stun=%d",
+            canAtk?1:0, canCast?1:0, canMove?1:0, immovable?1:0, stunned?1:0);
+    }
+
+    // ── AIHeroClient Combat Stats ──
+    SectionHeader("AIHeroClient Combat Stats");
+    {
+        const uintptr_t addr = local.address;
+        // AD
+        const float baseAD = Globals::Read<float>(addr + Offset::HeroStats::BaseAttackDamage);
+        const float bonusAD = Globals::Read<float>(addr + Offset::HeroStats::FlatPhysicalDmgMod);
+        const float baseADSansScale = Globals::Read<float>(addr + Offset::HeroStats::BaseAtkDmgSansScale);
+        const float flatBaseADMod = Globals::Read<float>(addr + Offset::HeroStats::FlatBaseAtkDmgMod);
+        const float pctBaseADMod = Globals::Read<float>(addr + Offset::HeroStats::PercentBaseAtkDmgMod);
+        const float totalAD = baseAD + bonusAD;
+
+        const bool adOk = (baseAD > 20.0f && baseAD < 500.0f && totalAD > 20.0f && totalAD < 2000.0f);
+        ImGui::TextColored(adOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "baseAD(0x%X)     : %.2f", Offset::HeroStats::BaseAttackDamage, baseAD);
+        ImGui::TextColored(adOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "bonusAD(0x%X)    : %.2f  totalAD=%.2f", Offset::HeroStats::FlatPhysicalDmgMod, bonusAD, totalAD);
+        ImGui::Text("baseAD_sans(0x%X): %.2f  flatMod=%.2f  pctMod=%.4f",
+            Offset::HeroStats::BaseAtkDmgSansScale, baseADSansScale, flatBaseADMod, pctBaseADMod);
+
+        // Attack Speed
+        const float asMod = Globals::Read<float>(addr + Offset::HeroStats::AttackSpeedMod);
+        const float pctAs = Globals::Read<float>(addr + Offset::HeroStats::PercentAttackSpeedMod);
+        const float flatBaseAs = Globals::Read<float>(addr + Offset::HeroStats::FlatBaseAttackSpeedMod);
+        const bool asOk = (asMod > 0.3f && asMod < 10.0f);
+        ImGui::TextColored(asOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "atkSpeedMod(0x%X): %.4f  pctMod=%.4f  flatBase=%.4f",
+            Offset::HeroStats::AttackSpeedMod, asMod, pctAs, flatBaseAs);
+
+        // Armor / MR
+        const float armor = Globals::Read<float>(addr + Offset::HeroStats::Armor);
+        const float bonusArmor = Globals::Read<float>(addr + Offset::HeroStats::BonusArmor);
+        const float mr = Globals::Read<float>(addr + Offset::HeroStats::SpellBlock);
+        const float bonusMR = Globals::Read<float>(addr + Offset::HeroStats::BonusSpellBlock);
+        const bool armorOk = (armor >= 0.0f && armor < 1000.0f);
+        ImGui::TextColored(armorOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "armor(0x%X)      : %.2f  bonus=%.2f", Offset::HeroStats::Armor, armor, bonusArmor);
+        ImGui::Text("mr(0x%X)         : %.2f  bonus=%.2f", Offset::HeroStats::SpellBlock, mr, bonusMR);
+
+        // Crit
+        const float crit = Globals::Read<float>(addr + Offset::HeroStats::Crit);
+        const float critMult = Globals::Read<float>(addr + Offset::HeroStats::CritDamageMultiplier);
+        ImGui::Text("crit(0x%X)       : %.2f  mult=%.2f", Offset::HeroStats::Crit, crit, critMult);
+
+        // Pen
+        const float flatArPen = Globals::Read<float>(addr + Offset::HeroStats::FlatArmorPen);
+        const float physLeth = Globals::Read<float>(addr + Offset::HeroStats::PhysicalLethality);
+        const float pctArPen = Globals::Read<float>(addr + Offset::HeroStats::PercentArmorPen);
+        const float pctBonusArPen = Globals::Read<float>(addr + Offset::HeroStats::PercentBonusArmorPen);
+        ImGui::Text("arPen flat/leth  : %.2f / %.2f", flatArPen, physLeth);
+        ImGui::Text("arPen pct/bonus  : %.4f / %.4f", pctArPen, pctBonusArPen);
+
+        const float flatMagPen = Globals::Read<float>(addr + Offset::HeroStats::FlatMagicPen);
+        const float pctMagPen = Globals::Read<float>(addr + Offset::HeroStats::PercentMagicPen);
+        ImGui::Text("magPen flat/pct  : %.2f / %.4f", flatMagPen, pctMagPen);
+
+        // Range / MS
+        const float range = Globals::Read<float>(addr + Offset::HeroStats::AttackRange);
+        const float ms = Globals::Read<float>(addr + Offset::HeroStats::MoveSpeed);
+        const bool rangeOk = (range >= 100.0f && range < 1200.0f);
+        const bool msOk = (ms >= 200.0f && ms < 1500.0f);
+        ImGui::TextColored(rangeOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "range(0x%X)      : %.1f", Offset::HeroStats::AttackRange, range);
+        ImGui::TextColored(msOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+            "moveSpeed(0x%X)  : %.1f", Offset::HeroStats::MoveSpeed, ms);
+
+        // Mana
+        const float mp = Globals::Read<float>(addr + Offset::Mana::MP);
+        const float maxMp = Globals::Read<float>(addr + Offset::Mana::MaxMP);
+        ImGui::Text("mana(0x%X)       : %.1f / %.1f", Offset::Mana::MP, mp, maxMp);
+
+        // AP
+        const float ap = Globals::Read<float>(addr + Offset::HeroStats::BaseAbilityDamage);
+        ImGui::Text("AP(0x%X)         : %.2f", Offset::HeroStats::BaseAbilityDamage, ap);
+
+        // Lifesteal / Omnivamp
+        const float ls = Globals::Read<float>(addr + Offset::HeroStats::PercentLifeSteal);
+        const float omni = Globals::Read<float>(addr + Offset::HeroStats::PercentOmnivamp);
+        ImGui::Text("lifesteal/omni   : %.4f / %.4f", ls, omni);
+    }
+
+    // ── Farm Damage Check (nearest enemy minion) ──
+    SectionHeader("Farm Damage Verification");
+    {
+        const auto player = SDK::ObjectManager::Player();
+        const Vec3 myPos = local.GetPosition();
+        float bestDist = 2000.0f;
+        uintptr_t nearestMinion = 0;
+
+        // Find closest enemy minion
+        uintptr_t mBuf[256] = {};
+        int mCount = CoreObjects::EnumerateEnemyMinions(mBuf, 256);
+        for (int i = 0; i < mCount; ++i) {
+            if (!Globals::IsValidPtr(mBuf[i])) continue;
+            CoreObjects::ObjectRef obj{ mBuf[i] };
+            if (!obj.IsValid() || obj.GetHealth() <= 0.0f) continue;
+            float d = obj.GetPosition().Distance2D(myPos);
+            if (d < bestDist) { bestDist = d; nearestMinion = mBuf[i]; }
+        }
+
+        if (nearestMinion) {
+            CoreObjects::ObjectRef min{ nearestMinion };
+            char mName[64] = {};
+            min.ReadName(mName, sizeof(mName));
+
+            // Read minion stats at same offsets
+            const float mHP = Globals::Read<float>(nearestMinion + Offset::Health::HP);
+            const float mMaxHP = Globals::Read<float>(nearestMinion + Offset::Health::MaxHP);
+            const float mArmor = Globals::Read<float>(nearestMinion + Offset::HeroStats::Armor);
+            const float mMR = Globals::Read<float>(nearestMinion + Offset::HeroStats::SpellBlock);
+            const float mRange = Globals::Read<float>(nearestMinion + Offset::HeroStats::AttackRange);
+            const float mMS = Globals::Read<float>(nearestMinion + Offset::HeroStats::MoveSpeed);
+            const float mAD = Globals::Read<float>(nearestMinion + Offset::HeroStats::BaseAttackDamage);
+            const float mRadius = min.GetBoundingRadius();
+
+            // Check if values are sane
+            const bool mHPOk = (mHP > 0.0f && mHP <= mMaxHP + 100.0f && mMaxHP > 0.0f && mMaxHP < 10000.0f);
+            const bool mArmorOk = (mArmor >= 0.0f && mArmor < 500.0f);
+
+            ImGui::Text("minion: %s  dist=%.0f", mName[0] ? mName : "?", bestDist);
+            ImGui::TextColored(mHPOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+                "  HP: %.1f / %.1f", mHP, mMaxHP);
+            ImGui::TextColored(mArmorOk ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,0.3f,0.3f,1.0f),
+                "  armor=%.2f  mr=%.2f  ad=%.2f", mArmor, mMR, mAD);
+            ImGui::Text("  range=%.1f  ms=%.1f  radius=%.1f", mRange, mMS, mRadius);
+
+            // Calculate AA damage like the SDK does
+            const float playerTotalAD = local.GetTotalAD();
+            float aaDmg = 0.0f;
+            if (mArmor >= 0.0f) {
+                aaDmg = playerTotalAD * (100.0f / (100.0f + mArmor));
+            } else {
+                aaDmg = playerTotalAD * (2.0f - (100.0f / (100.0f - mArmor)));
+            }
+
+            // Also get SDK's calculated value
+            SDK::AIBaseClient sdkMin(nearestMinion);
+            float sdkDmg = 0.0f;
+            if (player.IsValid() && sdkMin.IsValid()) {
+                sdkDmg = player.GetAutoAttackDamage(sdkMin);
+            }
+
+            const bool killable = (aaDmg > 0.0f && mHP <= aaDmg);
+            ImGui::TextColored(killable ? ImVec4(0.4f,1.0f,0.4f,1.0f) : ImVec4(1.0f,1.0f,0.4f,1.0f),
+                "  playerAD=%.2f → aaDmg=%.2f  sdkDmg=%.2f  %s",
+                playerTotalAD, aaDmg, sdkDmg,
+                killable ? "KILLABLE" : "");
+            ImGui::Text("  hitsToKill: %.1f", aaDmg > 0.0f ? (mHP / aaDmg) : 999.0f);
+
+            // Verify: read raw floats at offset+0x28 neighborhood to detect misalignment
+            if (ImGui::TreeNode("Raw offset scan (debug)")) {
+                ImGui::Text("Minion addr: 0x%llX", (unsigned long long)nearestMinion);
+                // Scan around HP offset
+                for (int delta = -0x28; delta <= 0x28; delta += 0x28) {
+                    int off = Offset::Health::HP + delta;
+                    float val = Globals::Read<float>(nearestMinion + off);
+                    ImGui::Text("  HP%+d (0x%X) = %.2f%s", delta, off, val,
+                        (delta == 0) ? " ← CURRENT" : "");
+                }
+                // Scan around Armor offset
+                for (int delta = -0x28; delta <= 0x28; delta += 0x28) {
+                    int off = Offset::HeroStats::Armor + delta;
+                    float val = Globals::Read<float>(nearestMinion + off);
+                    ImGui::Text("  Armor%+d (0x%X) = %.2f%s", delta, off, val,
+                        (delta == 0) ? " ← CURRENT" : "");
+                }
+                ImGui::TreePop();
+            }
+        } else {
+            ImGui::TextDisabled("(no enemy minion nearby)");
+        }
+    }
 
     // ── Hero Fields ──
     SectionHeader("Hero Fields");

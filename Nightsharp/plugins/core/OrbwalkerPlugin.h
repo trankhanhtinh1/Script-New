@@ -699,8 +699,10 @@ private:
 
         // ── Phase 1: AA started (mirrors OnDoCast C# line 681) ──
         if (winding && !m_wasWindingUp) {
-            // C#: LastAutoAttackTick = Variables.GameTimeTickCount - Game.Ping / 2
-            m_lastAutoAttackTick = now - ping / 2;
+            // FIX: Don't backdate by ping/2! Windup starts when client
+            // detects it (IsWindingUp flips), not when server received order.
+            // Backdating caused CanMove to open too early → AA cancel.
+            m_lastAutoAttackTick = now;
             m_missileLaunched = false;
             m_lastMovementTick = 0;
             m_autoAttackCounter++;

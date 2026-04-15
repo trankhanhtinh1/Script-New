@@ -97,6 +97,18 @@ namespace SDK::Extensions {
         return CoreAPI::NavGrid::IsWall(vector3);
     }
 
+    inline bool IsWater(const Vector3& vector3) {
+        return CoreAPI::NavGrid::IsWater(vector3);
+    }
+
+    inline bool IsBuilding(const Vector3& vector3) {
+        return CoreAPI::NavGrid::IsBuilding(vector3);
+    }
+
+    inline bool IsNearWall(const Vector3& vector3, float distance = 50.0f) {
+        return CoreAPI::NavGrid::IsNearWall(vector3, distance);
+    }
+
     inline float Magnitude(const Vector3& vector3) {
         return vector3.Length();
     }

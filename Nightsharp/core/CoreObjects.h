@@ -4,6 +4,7 @@
 #include "Offsets.h"
 #include "CoreAi.h"
 #include "CoreBuffs.h"
+#include "CoreItem.h"
 #include "CoreBypass.h"
 #include "CoreClassification.h"
 #include "CoreNavGrid.h"
@@ -229,6 +230,26 @@ namespace CoreObjects {
 
         float GetOmnivamp() const {
             return Globals::Read<float>(address + Offset::HeroStats::PercentOmnivamp);
+        }
+
+        float GetPhysDmgPercent() const {
+            return Globals::Read<float>(address + Offset::HeroStats::PhysDmgPercent);
+        }
+
+        float GetMagicDmgPercent() const {
+            return Globals::Read<float>(address + Offset::HeroStats::MagicDmgPercent);
+        }
+
+        float GetShutdownValue() const {
+            return Globals::Read<float>(address + Offset::Hero::ShutdownValue);
+        }
+
+        float GetBaseGoldOnDeath() const {
+            return Globals::Read<float>(address + Offset::Hero::BaseGoldOnDeath);
+        }
+
+        float GetNeutralMinionsKilled() const {
+            return Globals::Read<float>(address + Offset::Hero::NeutralMinionsKilled);
         }
 
         float GetHealthPercent() const {
@@ -833,6 +854,35 @@ namespace CoreObjects {
 
         bool GetCurrentAnimation(char* out, int maxOut) const {
             return ReadCurrentAnimation(out, maxOut);
+        }
+
+        // ── Inventory (new build) ──
+        bool HasItem(int slotIndex) const {
+            return CoreItem::HasItem(address, slotIndex);
+        }
+
+        uint32_t GetItemIdRaw(int slotIndex) const {
+            return CoreItem::GetItemIdRaw(address, slotIndex);
+        }
+
+        uintptr_t GetItemInfo(int slotIndex) const {
+            return CoreItem::GetItemInfo(address, slotIndex);
+        }
+
+        int GetItemCount() const {
+            return CoreItem::GetItemCount(address);
+        }
+
+        bool HasTrinket() const {
+            return CoreItem::HasTrinket(address);
+        }
+
+        bool MatchesItemId(int slotIndex, uint32_t encryptedRef) const {
+            return CoreItem::MatchesEncryptedId(address, slotIndex, encryptedRef);
+        }
+
+        int SnapshotItems(CoreItem::ItemSlot* out, int maxOut) const {
+            return CoreItem::SnapshotItems(address, out, maxOut);
         }
     };
 

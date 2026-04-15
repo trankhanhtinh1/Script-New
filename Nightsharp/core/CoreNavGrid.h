@@ -20,6 +20,7 @@ namespace CoreNavGrid {
         uintptr_t navGrid = 0;
         uintptr_t manager = 0;
         uintptr_t cellData = 0;
+        uintptr_t byteData = 0; // METHOD 1: fast byte flag array (1 byte/cell)
         int width = 0;
         int height = 0;
         float minX = 0.0f;
@@ -119,6 +120,90 @@ namespace CoreNavGrid {
             return (flags & Offset::NavGrid::FLAG_NOWALK) == 0;
         }
 
+        // METHOD 1: Fast bush check (1 byte read, no overlay)
+        bool IsInBrushFast(const Vec3& pos) const {
+            if (!Globals::IsValidPtr(byteData)) {
+                return IsBrush(pos);
+            }
+            int x = 0, z = 0;
+            if (!WorldToCell(pos, x, z)) {
+                return false;
+            }
+            const int idx = z * width + x;
+            __try {
+                const uint8_t flag = Globals::Read<uint8_t>(byteData + idx);
+                return flag != 0 && (flag & 0x1) == 0; // nonzero + not wall = brush
+            } __except(1) { return false; }
+        }
+
+        // METHOD 2 extended terrain queries
+        bool IsWater(const Vec3& pos) const {
+            const uint16_t flags = GetCellFlags(pos);
+            return flags != 0xFFFF && (flags & Offset::NavGridCell::CELL_WATER) != 0;
+        }
+
+        bool IsBuilding(const Vec3& pos) const {
+            const uint16_t flags = GetCellFlags(pos);
+            return flags != 0xFFFF && (flags & Offset::NavGridCell::CELL_BUILDING) != 0;
+        }
+
+        bool HasVision(const Vec3& pos) const {
+            const uint16_t flags = GetCellFlags(pos);
+            return flags != 0xFFFF && (flags & Offset::NavGridCell::CELL_VISION) != 0;
+        }
+
+        bool IsInPassabilityBrush(const Vec3& pos) const {
+            const uint16_t flags = GetCellFlags(pos);
+            return flags != 0xFFFF
+                && (flags & Offset::NavGridCell::CELL_PASSABILITY) != 0
+                && (flags & Offset::NavGridCell::CELL_WALL) == 0;
+        }
+
+        // ── Prediction helpers ──
+        // Find first wall collision point along a line. Returns true if wall hit.
+        bool FindWallCollision(const Vec3& from, const Vec3& to,
+                               Vec3& hitPoint, float step = 10.0f) const {
+            if (!IsValid() || step <= 0.0f) {
+                return false;
+            }
+            const float dx = to.x - from.x;
+            const float dz = to.z - from.z;
+            const float dist = from.Distance2D(to);
+            if (dist < 1.0f) return false;
+
+            const int steps = (std::max)(1, static_cast<int>(dist / step));
+            for (int i = 1; i <= steps; ++i) {
+                const float t = static_cast<float>(i) / static_cast<float>(steps);
+                const Vec3 sample = { from.x + dx * t, from.y, from.z + dz * t };
+                if (IsWall(sample)) {
+                    const float tPrev = static_cast<float>(i - 1) / static_cast<float>(steps);
+                    hitPoint = { from.x + dx * tPrev, from.y, from.z + dz * tPrev };
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Count wall cells in radius (for condemn/knockback predictions)
+        int CountWallsInRadius(const Vec3& center, float radius, float step = 25.0f) const {
+            if (!IsValid() || radius <= 0.0f) return 0;
+            int count = 0;
+            for (float dx = -radius; dx <= radius; dx += step) {
+                for (float dz = -radius; dz <= radius; dz += step) {
+                    if (dx * dx + dz * dz <= radius * radius) {
+                        const Vec3 pos = { center.x + dx, center.y, center.z + dz };
+                        if (IsWall(pos)) ++count;
+                    }
+                }
+            }
+            return count;
+        }
+
+        // Check if position is near a wall within given distance
+        bool IsNearWall(const Vec3& pos, float distance = 50.0f) const {
+            return CountWallsInRadius(pos, distance, 25.0f) > 0;
+        }
+
         bool IsWallBetween(const Vec3& from, const Vec3& to, float step = 40.0f) const {
             if (!IsValid() || step <= 0.0f) {
                 return false;
@@ -162,6 +247,7 @@ namespace CoreNavGrid {
         grid.navGrid = navGrid;
         grid.manager = manager;
         grid.cellData = Globals::Read<uintptr_t>(manager + Offset::NavGrid::Data);
+        grid.byteData = Globals::Read<uintptr_t>(manager + Offset::NavGrid::ByteFlagData);
         grid.width = Globals::Read<int>(manager + Offset::NavGrid::Width);
         grid.height = Globals::Read<int>(manager + Offset::NavGrid::Height);
         grid.minX = Globals::Read<float>(manager + Offset::NavGrid::MinX);
