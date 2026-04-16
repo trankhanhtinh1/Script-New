@@ -606,14 +606,6 @@ namespace CoreControl {
     }
 
     inline bool CastSpellPacket(int slotId, const Vec3& start, const Vec3& end, uint32_t targetNetId = 0) {
-        // Rate limiting: min 100ms between spell casts
-        {
-            static DWORD s_lastCast = 0;
-            DWORD now = GetTickCount();
-            if ((now - s_lastCast) < 100) return false;
-            s_lastCast = now;
-        }
-
         auto& ctx = CoreRuntime::g_ctx;
         if (!CoreRuntime::IsWritePhase() || !CanCastSpell() || !Globals::IsValidPtr(ctx.localPlayer) || !Globals::IsValidPtr(ctx.spoofTrampoline)) {
             CoreValidation::MarkCastResult(false);

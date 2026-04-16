@@ -67,12 +67,7 @@ namespace detail {
         if (source.IsTurret()) {
             return 1200.0f;
         }
-        if (source.IsMinion()) {
-            uint8_t mc = RuntimeAPI::GetMinionClass(source.Address());
-            if (mc == ::MC_SiegeLaneMinion) return 1200.0f; // Cannon/Siege
-            return 650.0f; // Ranged caster
-        }
-        return 1400.0f;
+        return 1700.0f;
     }
 
     inline GameObject ResolveTarget(int targetNetId) {
@@ -354,14 +349,7 @@ inline void ScanMissilesImpl(int now) {
         attack.StartTick = now;
         attack.Damage = caster.GetAutoAttackDamage(target);
         attack.Delay = (int)(caster.AttackCastDelay() * 1000.0f);
-        if (caster.IsMelee()) {
-            attack.ProjectileSpeed = FLT_MAX;
-        } else if (classify == 2) {
-            attack.ProjectileSpeed = 1200.0f; // Turret
-        } else {
-            uint8_t mc = RuntimeAPI::GetMinionClass(caster.Address());
-            attack.ProjectileSpeed = (mc == ::MC_SiegeLaneMinion) ? 1200.0f : 650.0f;
-        }
+        attack.ProjectileSpeed = caster.IsMelee() ? FLT_MAX : 1200.0f;
         attack.IsMelee = caster.IsMelee();
         attack.Processed = false;
 

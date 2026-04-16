@@ -12,7 +12,6 @@
 #include "../TargetSelector/TargetSelector.h"
 #include "../../../core/CoreSpellCastInfo.h"
 #include "../../UI/UI.h"
-#include "../../Events/SpellCastTracker.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -227,12 +226,6 @@ public:
   static void ClearForcedTarget() { Instance().s_forcedTarget = AIBaseClient(); }
   static AIBaseClient GetForcedTarget() { return Instance().s_forcedTarget; }
   static void ResetAutoAttackTimer() { Instance().ResetSwingTimer(); }
-
-  // Register OnProcessSpellCast callback for event-driven AA detection.
-  // Must be called AFTER Events::Initialize() + SpellCast::hook::Install().
-  static void RegisterSpellCastEvents() {
-    Events::SpellCast::AddOnProcessSpellCast(OnProcessSpellCastCallback);
-  }
 
   // ── Block orders (matching C# BlockOrdersUntilTick) ──
   static int BlockOrdersUntilTick() { return Instance().s_blockOrdersUntil; }
@@ -599,14 +592,13 @@ private:
       s_debug.attackIssued = true;
       s_lastConfirmedAutoAttackTick = 0;
 
-      // Set LastAutoAttackTick = now as safety net to block moves immediately.
-      // OnProcessSpellCast callback will update this more precisely when
-      // the game confirms the AA. No backdate by ping/2.
-      LastAutoAttackTick = now;
+      // Match C# OnDoCast line 523: LastAutoAttackTick = TickCount - (Ping / 2);
+      // Backdate is safe now because CanMove checks MissileLaunched first.
+      const int ping = CoreAPI::Control::GetPing();
+      LastAutoAttackTick = now - (ping / 2);
       MissileLaunched = false;
       LastMovementOrderTick = 0;
 
-      const int ping = CoreAPI::Control::GetPing();
       const int movementDelay = GetMovementOrderDelay();
       const int baseBlock = 70 + movementDelay + std::min(60, ping);
       s_blockOrdersUntil = now + baseBlock;
@@ -674,43 +666,10 @@ private:
   //   NOT-attacking → attacking  = AA started  → set LastAutoAttackTick
   //   attacking     → NOT-winding up = missile launched → set MissileLaunched
   // ══════════════════════════════════════════════════════════════
-  // OnProcessSpellCast callback — event-driven AA detection
-  // Replaces broken ActiveSpellCast polling (total was always 0).
-  // ══════════════════════════════════════════════════════════════
-  static void OnProcessSpellCastCallback(
-      const AIBaseClient& sender,
-      const Events::SpellCast::ProcessSpellCastEventArgs& args) {
-    // Only care about local player's auto-attacks
-    auto player = ObjectManager::Player();
-    if (!player.IsValid()) return;
-    if (sender.Address() != player.Address()) return;
-    if (!args.IsAutoAttack && !args.IsSpecialAttack) return;
-
-    auto& orb = Instance();
-    const int now = Game::TickCount();
-
-    orb.s_lastConfirmedAutoAttackTick = now;
-    orb.LastAutoAttackTick = now;
-    orb.MissileLaunched = false;
-    orb.LastMovementOrderTick = 0;
-    orb.TotalAutoAttacks++;
-
-    // Fire OnAttack event
-    if (orb.LastTarget.IsValid()) {
-      OrbwalkingActionArgs onAttack{};
-      onAttack.Target = orb.LastTarget;
-      onAttack.Sender = player;
-      onAttack.Type = OrbwalkingType::OnAttack;
-      orb.InvokeAction(onAttack);
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // PollAutoAttackState — Phase 2 (missile launch) + fallback only
-  // Phase 1 (AA start) is now handled by OnProcessSpellCast event.
-  // ══════════════════════════════════════════════════════════════
   void PollAutoAttackState(const AIHeroClient& player) {
+    const auto castRef = CoreSpellCastInfo::GetActive(player.Address());
     const bool isCurrentlyWindingUp = player.IsWindingUp();
+    const bool isCurrentlyAAing = castRef.IsValid() && castRef.IsAutoAttack();
 
     // Diagnostic: log poll state (throttled)
     static DWORD s_lastPollLog = 0;
@@ -724,9 +683,10 @@ private:
       const int diagTimeSince = diagNow - LastAutoAttackTick;
       auto* advanced = s_menu ? s_menu->GetSubMenu("advanced") : nullptr;
       const int diagSlider = advanced ? advanced->GetSliderValue("delayWindup", 80) : 80;
+      const float diagBuffer = diagWindup * (static_cast<float>(diagSlider) / 200.0f);
       char buf[512] = {};
       std::snprintf(buf, sizeof(buf),
-        "[NightSharp][PollAA] missile=%d lastAATick=%d total=%d now=%d ping=%d atkDelay=%.0f windup=%.0f slider=%d sinceAA=%d winding=%d\r\n",
+        "[NightSharp][PollAA] missile=%d lastAATick=%d total=%d now=%d ping=%d atkDelay=%.0f windup=%.0f buffer=%.0f(slider=%d) sinceAA=%d\r\n",
         MissileLaunched ? 1 : 0,
         LastAutoAttackTick,
         TotalAutoAttacks,
@@ -734,16 +694,39 @@ private:
         diagPing,
         diagAtkDelay,
         diagWindup,
+        diagBuffer,
         diagSlider,
-        diagTimeSince,
-        isCurrentlyWindingUp ? 1 : 0);
+        diagTimeSince);
       CoreControl::AppendIssueOrderDebug(buf);
     }
 
+    // ── Phase 1: Detect AA START (windup began) ──
+    // Transition: was NOT attacking → IS attacking
+    if (isCurrentlyAAing && !s_wasAttacking) {
+      // Match C# OnDoCast line 523: LastAutoAttackTick = TickCount - (Ping / 2);
+      // Backdate by ping/2 to compensate for network delay in detection.
+      // Safe now because CanMove checks MissileLaunched before timing gate.
+      const int now = Game::TickCount();
+      const int ping = CoreAPI::Control::GetPing();
+      s_lastConfirmedAutoAttackTick = now - (ping / 2);
+      LastAutoAttackTick = s_lastConfirmedAutoAttackTick;
+      MissileLaunched = false;
+      LastMovementOrderTick = 0; // allow immediate move after windup
+      TotalAutoAttacks++;
+      // Fire OnAttack event (target is already set by AttackInternal → LastTarget)
+      if (LastTarget.IsValid()) {
+        OrbwalkingActionArgs onAttack{};
+        onAttack.Target = LastTarget;
+        onAttack.Sender = player;
+        onAttack.Type = OrbwalkingType::OnAttack;
+        InvokeAction(onAttack);
+      }
+    }
+
     // ── Phase 2: Detect MISSILE LAUNCH (windup ended) ──
-    // IsWindingUp flips false → true → false during AA. When it goes
-    // from true→false, the windup animation finished and missile released.
-    if (s_wasWindingUp && !isCurrentlyWindingUp && !MissileLaunched) {
+    // Safety: only accept missile launch if enough windup time has actually passed.
+    // This prevents false-positive detection from polling jitter/frame drops.
+    if (s_wasAttacking && !isCurrentlyWindingUp && !MissileLaunched) {
       const int now2 = Game::TickCount();
       const float windupCheck = CoreAPI::Control::GetAttackWindup() * 1000.0f;
       const bool enoughTimePassed = (LastAutoAttackTick <= 0) ||
@@ -776,7 +759,7 @@ private:
       }
     }
 
-    s_wasWindingUp = isCurrentlyWindingUp;
+    s_wasAttacking = isCurrentlyAAing;
   }
 
   // ── Internal state ──
@@ -784,11 +767,10 @@ private:
   Menu* s_menu = nullptr;
   AIBaseClient s_forcedTarget = {};
   int s_blockOrdersUntil = 0;
-  bool s_wasWindingUp = false;  // tracks previous frame's IsWindingUp state
+  bool s_wasAttacking = false;  // tracks previous frame's AA state
   int s_lastConfirmedAutoAttackTick = 0;
   DebugState s_debug = {};
 
-  // ── OnProcessSpell-based AA confirmation ──
   static bool SafeIssueMove(const AIHeroClient& player, const Vector3& position) {
     __try {
       return player.IssueOrder(GameObjectOrder::MoveTo, position);

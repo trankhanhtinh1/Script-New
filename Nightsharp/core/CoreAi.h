@@ -146,33 +146,6 @@ namespace CoreAi {
         return Globals::Read<Vec3>(navBase + Offset::AiManager::NavBase::OrderPosition);
     }
 
-    // ── New accessors from Offset reference (AiManagerNavDataLayout) ──
-
-    inline bool HasArrived(uintptr_t obj) {
-        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<uint8_t>(navBase + Offset::AiManagerNavData::ArrivedFlag) != 0;
-    }
-
-    inline uint32_t GetDashTargetNetId(uintptr_t obj) {
-        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<uint32_t>(navBase + Offset::AiManagerNavData::DashTargetNetId);
-    }
-
-    inline uint32_t GetDashSecondaryNetId(uintptr_t obj) {
-        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<uint32_t>(navBase + Offset::AiManagerNavData::DashSecondaryId);
-    }
-
-    inline float GetDashDuration(uintptr_t obj) {
-        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<float>(navBase + Offset::AiManagerNavData::DashDuration);
-    }
-
-    inline float GetDashDistRemaining(uintptr_t obj) {
-        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<float>(navBase + Offset::AiManagerNavData::DashDistRemain);
-    }
-
     inline int GetWaypointCount(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
         return Globals::Read<int>(navBase + Offset::AiManager::PathStateLayout::Count);

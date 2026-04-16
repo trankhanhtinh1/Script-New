@@ -492,38 +492,6 @@ namespace CoreAPI {
         inline bool IsWallBetween(const Vec3& from, const Vec3& to, float step = 40.0f) {
             return CoreNavGrid::Get().IsWallBetween(from, to, step);
         }
-
-        inline bool IsWater(const Vec3& pos) {
-            return CoreNavGrid::Get().IsWater(pos);
-        }
-
-        inline bool IsBuilding(const Vec3& pos) {
-            return CoreNavGrid::Get().IsBuilding(pos);
-        }
-
-        inline bool HasVision(const Vec3& pos) {
-            return CoreNavGrid::Get().HasVision(pos);
-        }
-
-        inline bool IsInBrushFast(const Vec3& pos) {
-            return CoreNavGrid::Get().IsInBrushFast(pos);
-        }
-
-        inline bool IsInPassabilityBrush(const Vec3& pos) {
-            return CoreNavGrid::Get().IsInPassabilityBrush(pos);
-        }
-
-        inline bool FindWallCollision(const Vec3& from, const Vec3& to, Vec3& hitPoint, float step = 10.0f) {
-            return CoreNavGrid::Get().FindWallCollision(from, to, hitPoint, step);
-        }
-
-        inline int CountWallsInRadius(const Vec3& center, float radius, float step = 25.0f) {
-            return CoreNavGrid::Get().CountWallsInRadius(center, radius, step);
-        }
-
-        inline bool IsNearWall(const Vec3& pos, float distance = 50.0f) {
-            return CoreNavGrid::Get().IsNearWall(pos, distance);
-        }
     }
 
 } // namespace CoreAPI

@@ -51,16 +51,10 @@ namespace CoreSpellBook {
             return Globals::IsValidPtr(address);
         }
 
-        // Level — 0x1C=getter (sub_2993D0), 0x28=LevelAlt (LevelUp sub_36DB50)
         int GetLevel() const {
             return Globals::Read<int>(address + Offset::SpellBook::SlotLevel);
         }
 
-        int GetLevelAlt() const {
-            return Globals::Read<int>(address + Offset::SpellBook::SlotLevelAlt);
-        }
-
-        // Cooldown system 1: official getters (0=off CD)
         float GetReadyAt() const {
             return Globals::Read<float>(address + Offset::SpellBook::SlotCooldown);
         }
@@ -73,49 +67,8 @@ namespace CoreSpellBook {
             return Globals::Read<float>(address + Offset::SpellBook::SlotTotalCd);
         }
 
-        // Cooldown system 2: expiration time (-1.0=off CD, else game time)
-        float GetCooldownExpires() const {
-            return Globals::Read<float>(address + Offset::SpellBook::SlotCooldownExpires);
-        }
-
-        // Charge/ammo recharge timer (Teemo R, Akali R, etc.)
-        float GetChargeTimer() const {
-            return Globals::Read<float>(address + Offset::SpellBook::SlotChargeTimer);
-        }
-
         int GetStacks() const {
             return Globals::Read<int>(address + Offset::SpellBook::SlotStacks);
-        }
-
-        // Per-slot active cast ptr (NULL = not casting this spell)
-        uintptr_t GetSlotActiveSpellCast() const {
-            return Globals::Read<uintptr_t>(address + Offset::SpellBook::SlotActiveSpellCast);
-        }
-
-        bool IsSlotCasting() const {
-            return Globals::IsValidPtr(GetSlotActiveSpellCast());
-        }
-
-        // Spell identity
-        uint32_t GetSpellNameHash() const {
-            return Globals::Read<uint32_t>(address + Offset::SpellBook::SlotSpellNameHash);
-        }
-
-        uintptr_t GetSpellInstanceVars() const {
-            return Globals::Read<uintptr_t>(address + Offset::SpellBook::SlotSpellInstanceVars);
-        }
-
-        // Read spell name via SpellDataResource SSO path (alternative to DataSpellName)
-        bool ReadSpellNameFromResource(char* out, int maxOut) const {
-            if (!out || maxOut <= 0) { out[0] = 0; return false; }
-            const auto sdr = Globals::Read<uintptr_t>(address + Offset::SpellBook::SlotSpellInput); // =SpellDataResource
-            if (!Globals::IsValidPtr(sdr)) { out[0] = 0; return false; }
-            const auto cap = Globals::Read<size_t>(sdr + Offset::SpellBook::SpellNameCap);
-            if (cap > 0xF) {
-                const auto heapPtr = Globals::Read<uintptr_t>(sdr + Offset::SpellBook::SpellNameStr);
-                return Globals::IsValidPtr(heapPtr) ? Globals::ReadCString(heapPtr, out, maxOut) : (out[0] = 0, false);
-            }
-            return Globals::ReadCString(sdr + Offset::SpellBook::SpellNameStr, out, maxOut);
         }
 
         float GetAmmoRechargeTime() const {

@@ -32,18 +32,12 @@ public:
         }
         s_initialized = true;
 
-        CrashTelemetry::SetStage("SDK::TS::CreateMenu");
         auto root = UI::CreateMenu("targetselector", "Target Selector");
         s_menu = root.Raw();
-        CrashTelemetry::SetStage("SDK::TS::ModeManager");
         TargetSelectorModes::TargetSelectorModeManager::Initialize(s_menu);
-        CrashTelemetry::SetStage("SDK::TS::Selected");
         TargetSelectorSelected::Initialize(s_menu);
-        CrashTelemetry::SetStage("SDK::TS::Drawing");
         TargetSelectorDrawing::Initialize(s_menu);
-        CrashTelemetry::SetStage("SDK::TS::Humanizer");
         TargetSelectorHumanizer::Initialize(s_menu);
-        CrashTelemetry::SetStage("SDK::TS::Done");
     }
 
     static Menu* GetMenu() {

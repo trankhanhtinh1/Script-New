@@ -102,7 +102,7 @@ namespace EventRuntime {
     constexpr auto CreateClientEffect = 0x5D49E0;
     constexpr auto OnCreateObject = 0x5388D0;
     constexpr auto OnGameUpdate = 0x533FE0;
-    constexpr auto OnProcessSpell = 0x941D00;
+    constexpr auto OnProcessSpell = 0x942270; // IDA verified: rcx=SpellBook, rdx=CastInfo, reads IsAuto@0x141, Slot@0x14C
     constexpr auto OnSpellImpact = 0x937A40;
     constexpr auto OnStopCast = 0x942300;
     constexpr auto OnFinishCast = 0x2D5B70;
@@ -110,74 +110,7 @@ namespace EventRuntime {
     constexpr auto OnBuffAddHandler = 0xBF59E0;
     constexpr auto OnHeroActionStateChange = 0xEBA680;
     constexpr auto OnMinionFollowTargetNetIdChange = 0xEBDAC0;
-
-    // ── Signatures (IDA: Search → Sequence of bytes) ──
-    // OnProcessSpell (sub_941D00) — UNIQUE, 1 match:
-    //   40 55 53 41 55 41 56 41 57 48 8D AC 24 30 F0 FF FF B8 D0 10 00 00
-    //   → result = RVA of OnProcessSpell
-    //
-    // Verify: function prologue push rbp/rbx/r13/r14/r15, alloca 0x10D0
 } // namespace EventRuntime
-
-// ── VMT hook data for OnProcessSpell (shadow-vtable approach) ──
-// Verified via IDA + CE runtime analysis.
-//
-// ── Signatures ──
-//
-// WrapperRVA (sub_1FD080) — UNIQUE, 1 match:
-//   48 89 5C 24 10 56 48 83 EC 50 49 83 78 18 0F 0F 57 C0 F3 0F 7F 44 24 30
-//   → result = RVA of WrapperRVA (sub_1FD080)
-//   Verify: function starts with mov [rsp+10h],rbx; push rsi; sub rsp,50h
-//   Verify: at offset +0x31 has CALL → that target = OnProcessSpell (sub_941D00)
-//
-// VTableRVA (0x1928D58) — KHÔNG CÓ UNIQUE BYTE SIGNATURE
-// ┌─────────────────────────────────────────────────────────────────┐
-// │ CÁCH TÌM VTABLE KHI UPDATE GAME:                              │
-// │                                                                │
-// │ Cách 1: Từ WrapperRVA (IDA)                                   │
-// │   1. Tìm sub_1FD080 bằng signature trên                       │
-// │   2. Trong IDA: Xrefs TO sub_1FD080 → tìm .rdata xref        │
-// │   3. Xref .rdata sẽ là vtable entry → addr - (35 * 8)         │
-// │      = VTableRVA                                               │
-// │   Ví dụ: xref tại 0x1928E70 → 0x1928E70 - 0x118 = 0x1928D58  │
-// │                                                                │
-// │ Cách 2: Từ constructor sub_2004C0 (IDA)                       │
-// │   1. Tìm xrefs TO vtable address hiện tại                     │
-// │   2. Có 2 xrefs: sub_1F5EB0 và sub_2004C0                    │
-// │   3. sub_2004C0 là destructor nhỏ (0x2B bytes):               │
-// │      push rbx; sub rsp,20h; lea rax,[vtable]; mov rbx,rcx;    │
-// │      mov [rcx],rax; test dl,1; jz ...; mov edx,8; call free   │
-// │   4. LEA operand = VTableRVA mới                               │
-// │                                                                │
-// │ Cách 3: Từ OnProcessSpell (CE runtime)                        │
-// │   1. Tìm OnProcessSpell mới bằng signature                    │
-// │   2. Đặt breakpoint, cast spell                                │
-// │   3. Return address nằm trong sub_1FD080 mới                  │
-// │   4. Stack trace: sub_1FD080 được gọi qua vtable              │
-// │   5. Caller instruction: call qword ptr [rax+0x118]           │
-// │      → rax = vtable base = VTableRVA + moduleBase             │
-// │   6. VTableRVA = rax - moduleBase                              │
-// │                                                                │
-// │ Verify VTable (CE):                                            │
-// │   1. base + VTableRVA + 35*8 = base + VTableRVA + 0x118       │
-// │   2. Đọc qword tại đó = base + WrapperRVA                     │
-// │   3. Nếu đúng → VTableRVA chính xác                           │
-// └─────────────────────────────────────────────────────────────────┘
-//
-// HandlerIndex: cố định = 35 (index trong vtable của wrapper)
-//   - Verify: vtable[35] phải trỏ đến WrapperRVA
-//   - Nếu game thay đổi vtable layout: disasm caller, tìm offset
-//     trong `call [rax+??h]` → index = offset / 8
-//
-// VTableEntryCount: đếm entries liên tiếp trong vtable (.rdata)
-//   - Trong IDA: xem vtable data, đếm qwords cho đến khi gặp
-//     địa chỉ không hợp lệ hoặc vtable khác
-namespace SpellEventVMT {
-    constexpr auto VTableRVA          = 0x1928D58;
-    constexpr auto HandlerIndex       = 35;
-    constexpr auto VTableEntryCount   = 64;
-    constexpr auto WrapperRVA         = 0x1FD080;   // sub_1FD080
-} // namespace SpellEventVMT
 
 namespace NavGridRuntime {
     constexpr auto NavGrid = 0x1DDAFF0;
@@ -395,13 +328,11 @@ namespace AiManagerNavDataLayout {
 } // namespace AiManagerNavDataLayout
 
 namespace ItemRuntime {
-    // NEW: Inventory system restructured in this build
-    constexpr auto InventoryComponent = 0x4DB8; // IDA: sub_261660 init, vtable-managed
-    constexpr auto SlotArray = 0x50;             // component+0x50 = 39 slot ptrs (8 bytes each)
-    constexpr auto SlotCount = 39;               // 0x27 slots
-    constexpr auto ItemNode = 0x10;              // slot+0x10 = item node ptr (null=empty)
-    constexpr auto ItemInfo = 0x00;              // item_node+0x00 = info ptr
-    constexpr auto DataItemId = 0xB4;            // info+0xB4 = item ID (XOR ENCRYPTED!)
+    constexpr auto ItemList = 0x4D20;
+    constexpr auto SlotInfo = 0x10;
+    constexpr auto InfoData = 0x38;
+    constexpr auto InfoStacks = 0x64;
+    constexpr auto DataItemId = 0xB4;
     // OLD chain (SlotInfo=0x10→InfoData=0x38→DataItemId=0xB4) NO LONGER VALID
     // Item stat offsets below need re-verification with new chain:
     constexpr auto DataAbilityHaste = 0x160;

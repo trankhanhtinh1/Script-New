@@ -132,8 +132,6 @@ namespace Bootstrap {
         } else {
             TraceInitStage("SDK::Bootstrap::Init::EventHook::FAILED (poll mode fallback)");
         }
-        TraceInitStage("SDK::Bootstrap::Init::OrbwalkerEvents");
-        Orbwalker::RegisterSpellCastEvents();
         TraceInitStage("SDK::Bootstrap::Init::Prediction");
         Prediction::Initialize();
         TraceInitStage("SDK::Bootstrap::Init::SpellTracker");
