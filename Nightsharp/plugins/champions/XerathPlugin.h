@@ -237,8 +237,10 @@ private:
   }
 
   float EDamage(const AIBaseClient& target) const {
-    // Note: C# code uses R.Level for E damage — likely a bug, but keeping 1:1
-    int level = Player().GetSpellBook().GetSpell(SpellSlot::R).Level();
+    // Fixed 2026-04-17: C# original used R.Level for E damage which capped the
+    // value at rank 3 (Xerath R has only 3 ranks). E has 5 ranks and the
+    // baseDmg[] table is sized accordingly, so index with E.Level.
+    int level = Player().GetSpellBook().GetSpell(SpellSlot::E).Level();
     static const float baseDmg[] = { 0, 70, 100, 130, 160, 190 };
     float raw = baseDmg[std::clamp(level, 0, 5)] + 0.45f * Player().FlatMagicDamageMod();
     return Player().CalculateMagicDamage(target, raw);
@@ -392,9 +394,11 @@ private:
     for (const auto& target : ObjectManager::EnemyHeroes()) {
       if (!target.IsValidTarget(W.Range)) continue;
       // Invulnerability checks (Xerath.cs line 382)
-      if (target.HasBuff("JudicatorIntervention") ||
-          target.HasBuff("kindredrnodeathbuff") ||
-          target.HasBuff("Undying Rage")) continue;
+      // Invulnerability buffs (HasBuff uses lstrcmpiA — case-insensitive but
+      // whitespace/exact-token sensitive). Real internal names have no spaces.
+      if (target.HasBuff("JudicatorIntervention") ||  // Kayle R
+          target.HasBuff("KindredRNoDeathBuff") ||    // Kindred R (Lamb's Respite)
+          target.HasBuff("UndyingRage")) continue;    // Tryndamere R (fixed: was "Undying Rage")
 
       float effectiveHP = target.Health() + target.AllShield();
 

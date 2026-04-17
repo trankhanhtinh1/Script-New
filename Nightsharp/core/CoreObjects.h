@@ -5,6 +5,7 @@
 #include "CoreAi.h"
 #include "CoreBuffs.h"
 #include "CoreBypass.h"
+#include "CoreItem.h"
 #include "CoreNavGrid.h"
 #include "CoreRuntime.h"
 #include "CoreSpellBook.h"
@@ -463,8 +464,25 @@ namespace CoreObjects {
             return Globals::Read<bool>(address + Offset::Targetable::IsTargetable);
         }
 
+        // Raw memory offset (All::IsInvulnerable = 0x5A0) is UNVALIDATED for
+        // build 26.7 — returns garbage (180, 12, 248… instead of 0/1). We fall
+        // back to the in-game buff-type system which covers every invulnerability
+        // source known on Summoner's Rift:
+        //
+        //   BuffType 17 = Invulnerability
+        //     Kayle R (JudicatorIntervention), Tryndamere R (UndyingRage),
+        //     Zhonya's Hourglass / Stopwatch / Zilean R (ChronoShift),
+        //     Kindred R (KindredRNoDeathBuff), Taric R (TaricR),
+        //     Fiora W (FioraW), Poppy R keystone, GA revive, etc.
+        //
+        //   BuffType 15 = SpellImmunity — no damage from spells (Morgana E,
+        //     Banshee's, Sivir E, Nocturne W, Edge of Night). Treated as
+        //     invulnerable for target-selection purposes to avoid wasted casts.
         bool IsInvulnerable() const {
-            return Globals::Read<bool>(address + Offset::GameObject::IsInvulnerable);
+            if (!IsValid()) return false;
+            if (CoreBuffs::HasBuffType(address, 17)) return true; // Invulnerability
+            if (CoreBuffs::HasBuffType(address, 15)) return true; // SpellImmunity
+            return false;
         }
 
         bool IsVulnerable() const {
@@ -608,14 +626,11 @@ namespace CoreObjects {
             if (requireTargetable && !IsTargetable()) {
                 return false;
             }
-            // NOTE: IsInvulnerable() offset (0x5A0) is UNVALIDATED and reads garbage
-            // bytes (180, 12, 248 etc instead of 0/1). This was causing ALL targets
-            // to be rejected. Invulnerability should be checked via buff-based logic
-            // (Kayle R, Tryndamere R, etc.) instead of this raw memory read.
-            // TODO: Find the correct IsInvulnerable offset or implement buff-based check
-            // if (IsInvulnerable()) {
-            //     return false;
-            // }
+            // IsInvulnerable() now uses buff-type detection (see method above) —
+            // skip targets under Kayle R / Trynd R / Zhonya / Banshee's / etc.
+            if (IsInvulnerable()) {
+                return false;
+            }
             if (maxRange >= 0.0f) {
                 Vec3 origin = from;
                 if (origin.IsZero()) {
@@ -648,6 +663,40 @@ namespace CoreObjects {
                 return false;
             }
             return Globals::ReadGameString(address + Offset::GameObject::CharacterName, out, maxOut);
+        }
+
+        // ── Inventory helpers (wrapper around CoreItem chain) ──
+        //
+        // The game stores a stable INTERNAL item id at info+0xB4 which is NOT
+        // the Riot-facing id (e.g. 3031 for Infinity Edge). To implement
+        // "HasItem(3031)" reliably, callers must supply either:
+        //   (a) a previously captured internal id (see GetItemInternalId),
+        //   (b) a buff-name fallback (most on-hit items carry a buff), or
+        //   (c) a learned RiotId -> internalId catalog populated at runtime.
+        bool HasItemInSlot(int slotIndex) const {
+            return IsValid() && CoreItem::HasItemInSlot(address, slotIndex);
+        }
+
+        uint32_t GetItemInternalId(int slotIndex) const {
+            return IsValid() ? CoreItem::GetItemIdRaw(address, slotIndex) : 0;
+        }
+
+        uintptr_t GetItemInfo(int slotIndex) const {
+            return IsValid() ? CoreItem::GetItemInfo(address, slotIndex) : 0;
+        }
+
+        // Returns true if any visible slot (0..6) carries the given internal id.
+        bool HasItemWithInternalId(uint32_t internalId) const {
+            return IsValid() && CoreItem::HasInternalId(address, internalId);
+        }
+
+        // Filled item slots (0..5), excluding trinket and internal slots.
+        int GetInventoryCount() const {
+            return IsValid() ? CoreItem::GetItemCount(address) : 0;
+        }
+
+        bool HasTrinket() const {
+            return IsValid() && CoreItem::HasTrinket(address);
         }
 
         uintptr_t GetAnimationComponentAddress() const {

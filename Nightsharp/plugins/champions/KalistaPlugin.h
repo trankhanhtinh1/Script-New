@@ -504,16 +504,34 @@ private:
       if (killCount >= minE) CastRend();
     }
 
-    // Q jungle (Kalista.cs lines 750-763)
+    // Q jungle (Kalista.cs lines 750-763) —
+    // Previous implementation iterated JungleMinions() in native order and
+    // `break`-ed on the first mob with MaxHealth > 1000, which meant Baron
+    // and Dragon were treated inconsistently: whichever the game happened to
+    // return first in the list was Q'd, the other was never considered. The
+    // fix is to sort by MaxHealth descending and explicitly classify the mob
+    // with Utils::Jungle::GetJungleType so Baron / Dragon / Herald (all
+    // JungleType::Legendary) always take priority over the regular Large camp
+    // (Blue, Red, Gromp, Krug, …). Only one Q is fired per tick on the single
+    // biggest valid mob.
     if (useQ && Q.IsReady()) {
-      for (const auto& mob : ObjectManager::JungleMinions()) {
+      auto mobs = ObjectManager::JungleMinions();
+      std::sort(mobs.begin(), mobs.end(),
+        [](const AIMinionClient& a, const AIMinionClient& b) {
+          return a.MaxHealth() > b.MaxHealth();
+        });
+      for (const auto& mob : mobs) {
         if (!mob.IsValid() || !mob.IsValidTarget(Q.Range)) continue;
-        // Only large+ mobs
-        if (mob.MaxHealth() > 1000.0f) {
-          auto pred = Q.GetPrediction(mob);
-          if (pred.Hitchance >= HitChance::Medium) Q.Cast(pred.CastPosition);
-          break;
+        // Skip small camps (scuttle, krug mini, etc.) — Q is a line skillshot
+        // and is wasted on trash mobs during farming.
+        const JungleType jt = Utils::Jungle::GetJungleType(mob);
+        if (jt < JungleType::Large) continue;
+
+        auto pred = Q.GetPrediction(mob);
+        if (pred.Hitchance >= HitChance::Medium) {
+          Q.Cast(pred.CastPosition);
         }
+        break;  // one Q per tick, on the biggest Large/Legendary mob
       }
     }
 

@@ -357,6 +357,19 @@ private:
         const float aaRange = Player().AttackRange() + Player().BoundingRadius();
         const bool lastHitOnly = lc->GetBoolValue("QLH", false);
 
+        // Single pass, two priorities:
+        //   (1) Execute — cast Q on a minion that will die to it and cannot be
+        //       comfortably finished with an AA (either out of AA range or too
+        //       tanky for a single AA to kill).
+        //   (2) Push    — if no execute is available and last-hit mode is OFF,
+        //       fire Q at the farthest minion that is already out of AA range
+        //       so we keep shoving the wave instead of idling when nothing is
+        //       executable. Previously this branch required `hp <= qDmg` which
+        //       made the non-last-hit mode identical to last-hit.
+        Vector3 pushPos{};
+        float pushDist = 0.0f;
+        bool hasPush = false;
+
         for (const auto &minion : ObjectManager::EnemyMinions()) {
             if (!minion.IsValid() || !minion.IsValidTarget(Q.Range)) continue;
 
@@ -367,17 +380,22 @@ private:
             const bool outOfAARange = minionDist > aaRange + minion.BoundingRadius() + 50.0f;
             const float hp = minion.Health();
 
-            if (lastHitOnly) {
-                if (hp <= qDmg && (outOfAARange || hp > Player().GetAutoAttackDamage(minion))) {
-                    Q.Cast(minion.Position());
-                    return;
-                }
-            } else {
-                if (hp <= qDmg) {
-                    Q.Cast(minion.Position());
-                    return;
-                }
+            // Priority 1: execute candidate.
+            if (hp <= qDmg && (outOfAARange || hp > Player().GetAutoAttackDamage(minion))) {
+                Q.Cast(minion.Position());
+                return;
             }
+
+            // Priority 2: push candidate (only when last-hit mode is disabled).
+            if (!lastHitOnly && outOfAARange && minionDist > pushDist) {
+                pushDist = minionDist;
+                pushPos = minion.Position();
+                hasPush = true;
+            }
+        }
+
+        if (hasPush) {
+            Q.Cast(pushPos);
         }
     }
 

@@ -2,6 +2,7 @@
 
 #include "../../core/CoreAPI.h"
 #include "../../core/CoreBypass.h"
+#include "../../core/CoreItem.h"
 #include "../../core/Globals.h"
 #include "../../core/Offsets.h"
 #include "../../core/RuntimeAPI.h"
@@ -9,6 +10,8 @@
 #include "../Enumerations/DamageType.h"
 #include "../Enumerations/GameObjectOrder.h"
 #include "../Enumerations/SpellSlot.h"
+#include "ItemCatalog.h"
+#include "Items.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -440,9 +443,68 @@ public:
         return CoreAPI::Control::GetAttackWindup(Address());
     }
 
-    bool HasItem(int itemId) const {
-        (void)itemId;
+    // ── HasItem(riotItemId) ──
+    //
+    // Resolution order:
+    //   1. Learned catalog: if ItemCatalog has a RiotId -> internalId mapping
+    //      for this patch, compare against info+0xB4 across all visible slots.
+    //   2. Unique-buff fallback: for items whose presence can be proven by a
+    //      buff that no other item or spell produces (e.g. "InfinityEdge",
+    //      "lichbane", "itemfrozenfist"), check HasBuff. This also records a
+    //      learned mapping by snapshotting the slot whose internal id changes
+    //      coincides with the buff being present, so subsequent calls short
+    //      circuit through the catalog.
+    //   3. Otherwise return false (caller falls back to HasBuff-based logic).
+    bool HasItem(int riotItemId) const {
+        if (!IsValid() || riotItemId <= 0) {
+            return false;
+        }
+
+        // 1) Catalog lookup
+        if (const uint32_t internalId = ItemCatalog::GetInternal(riotItemId)) {
+            return m_ref.HasItemWithInternalId(internalId);
+        }
+
+        // 2) Unique-buff fallback
+        if (const char* buffName = ItemCatalog::GetUniqueBuffFor(riotItemId)) {
+            if (m_ref.HasBuff(buffName)) {
+                // Try to learn the internal id for this riot id so future
+                // checks short-circuit through the catalog. Accept a mapping
+                // only when exactly one visible slot holds an as-yet-unknown
+                // internal id; otherwise we'd risk binding the wrong slot.
+                uint32_t candidate = 0;
+                int unknownCount = 0;
+                for (int i = 0; i < CoreItem::SLOT_VISIBLE_COUNT; ++i) {
+                    const uint32_t raw = m_ref.GetItemInternalId(i);
+                    if (raw == 0) continue;
+                    if (ItemCatalog::GetRiot(raw) != 0) continue; // already claimed
+                    if (++unknownCount > 1) { candidate = 0; break; }
+                    candidate = raw;
+                }
+                if (candidate != 0) {
+                    ItemCatalog::Learn(riotItemId, candidate);
+                }
+                return true;
+            }
+        }
+
+        // 3) No reliable way to tell — conservative false.
         return false;
+    }
+
+    // ── HasItem(scriptName) ──
+    //
+    // Looks up `scriptName` in the SDK::Items name table (case-insensitive,
+    // ignores spaces/underscores/apostrophes/dashes) and delegates to the
+    // integer overload. Empty or unknown names return false.
+    //
+    //   hero.HasItem("Tiamat")
+    //   hero.HasItem("Blade Of The Ruined King")
+    //   hero.HasItem("BotRK")
+    //   hero.HasItem("Rabadon's Deathcap")
+    bool HasItem(const char* scriptName) const {
+        const int riotId = SDK::Items::FromScript(scriptName);
+        return (riotId > 0) && HasItem(riotId);
     }
 
     float GetTimeToHit() const {
@@ -493,7 +555,9 @@ public:
         }
 
         const auto spellbook = GetSpellBook();
-        for (int i = 0; i <= static_cast<int>(SpellSlot::Unknown); ++i) {
+        // Iterate real slots [Q..Recall] only — SpellSlot::Unknown is a sentinel
+        // (value 14) and GetSpell(Unknown) has no meaningful result.
+        for (int i = 0; i < static_cast<int>(SpellSlot::Unknown); ++i) {
             const auto slot = spellbook.GetSpell(static_cast<SpellSlot>(i));
             if (!slot.IsValid()) {
                 continue;
@@ -555,7 +619,7 @@ public:
         return cast.GetCastDelay() > 0.25f;
     }
 
-    bool IsCastingImporantSpell() const {
+    bool IsCastingImportantSpell() const {
         return IsCastingInterruptableSpell(false);
     }
 

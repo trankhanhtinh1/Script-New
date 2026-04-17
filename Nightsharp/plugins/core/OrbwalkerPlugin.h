@@ -1083,7 +1083,19 @@ private:
                 if (t.IsValid() && t.IsAlive() && p.InAutoAttackRange(t)) return t;
             }
         }
-        // TODO: EnemyInhibitors/EnemyNexus disabled — needs dedicated building manager
+
+        // Inhibitors (C# line 1155-1161) — always attack when in range.
+        // EnemyInhibitors filters AllObjects by "Barracks" CharacterName prefix.
+        for (const auto& inh : SDK::ObjectManager::EnemyInhibitors()) {
+            if (inh.IsValid() && inh.IsAlive() && p.InAutoAttackRange(inh)) return inh;
+        }
+
+        // Nexus (C# line 1162-1166) — always attack when in range.
+        // Single object filtered by "HQ" prefix.
+        if (auto nex = SDK::ObjectManager::EnemyNexus();
+            nex.IsValid() && nex.IsAlive() && p.InAutoAttackRange(nex)) {
+            return nex;
+        }
 
         return {};
     }

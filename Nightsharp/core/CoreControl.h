@@ -625,11 +625,14 @@ namespace CoreControl {
         }
 
         // ── Save position originals (from SpellInfo 0x128) ──
+        // All four position slots are snapshotted so we can restore them after
+        // the cast — preventing any stale state from leaking into subsequent
+        // spells that happen to read the same fields.
         const auto posPtr = slot.GetSpellInfo();
         const auto origStartPos = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputStartPos) : Vec3{};
-        const auto origEndPos = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos) : Vec3{};
-        const auto origEndPos2 = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3)) : Vec3{};
-        const auto origEndPos3 = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2) : Vec3{};
+        const auto origEndPos   = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos)   : Vec3{};
+        const auto origEndPos2  = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos2)  : Vec3{};
+        const auto origEndPos3  = Globals::IsValidPtr(posPtr) ? Globals::Read<Vec3>(posPtr + Offset::SpellBook::InputEndPos3)  : Vec3{};
         const int castMode = (targetNetId != 0) ? CastSpellModeNormal : CastSpellModeSmart;
 
         // ── Write SpellInput ──
@@ -657,9 +660,9 @@ namespace CoreControl {
         // ── Restore position data ──
         if (Globals::IsValidPtr(posPtr)) {
             Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputStartPos, origStartPos);
-            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos, origEndPos);
-            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3), origEndPos2);
-            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2, origEndPos3);
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos,   origEndPos);
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos2,  origEndPos2);
+            Globals::Write<Vec3>(posPtr + Offset::SpellBook::InputEndPos3,  origEndPos3);
         }
 
         CoreValidation::MarkCastResult(ok);

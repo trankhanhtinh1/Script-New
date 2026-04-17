@@ -35,8 +35,10 @@ constexpr auto ShopInstance = GameRuntime::ShopInstance;
 constexpr auto OpenWindowsArray = GameRuntime::OpenWindowsArray;
 constexpr auto OpenWindowsCount = GameRuntime::OpenWindowsCount;
 
-// Legacy runtime global: not present in Offsets.generated.h yet.
-constexpr auto MySpellState = 0x1DA7FC8;
+// IDA-verified 2026-04-17: legacy 0x1DA7FC8 is stale (0 xrefs), the correct
+// RVA in build 26.7 is GameRuntime::MySpellState = 0x1DDDDD8 (9 xrefs in the
+// spell-cast dispatcher sub_2CBB80 etc.). Re-route to generated.
+constexpr auto MySpellState = GameRuntime::MySpellState;
 } // namespace Global
 
 namespace Flag {
@@ -280,10 +282,28 @@ constexpr auto VisionScore = AIHeroClient::VisionScore;
 } // namespace Hero
 
 namespace ItemSystem {
-constexpr auto SlotInfo = ItemRuntime::SlotInfo;
-constexpr auto InfoData = ItemRuntime::InfoData;
+// New chain (IDA-verified):
+//   obj+InventoryComponent (inline) -> component+SlotArray+idx*8 -> slot
+//   slot+ItemNode -> node+ItemInfo -> info+DataItemId
+constexpr auto InventoryComponent = ItemRuntime::InventoryComponent;
+constexpr auto SlotArray          = ItemRuntime::SlotArray;
+constexpr auto SlotCount          = ItemRuntime::SlotCount;
+constexpr auto ItemNode           = ItemRuntime::ItemNode;
+constexpr auto ItemInfo           = ItemRuntime::ItemInfo;
+constexpr auto DataItemId         = ItemRuntime::DataItemId;
+
+// Slot classes
+constexpr auto SlotItemBegin    = ItemRuntime::SlotItemBegin;
+constexpr auto SlotItemEnd      = ItemRuntime::SlotItemEnd;
+constexpr auto SlotTrinket      = ItemRuntime::SlotTrinket;
+constexpr auto SlotVisibleCount = ItemRuntime::SlotVisibleCount;
+
+// Legacy aliases (source compat during migration)
+constexpr auto SlotInfo = ItemRuntime::ItemNode;   // old name for ItemNode
+constexpr auto InfoData = ItemRuntime::ItemInfo;   // old name for ItemInfo
+
+// Stat fields relative to ItemInfo (unchanged offsets)
 constexpr auto InfoStacks = ItemRuntime::InfoStacks;
-constexpr auto DataItemId = ItemRuntime::DataItemId;
 constexpr auto DataAbilityHaste = ItemRuntime::DataAbilityHaste;
 constexpr auto DataHealth = ItemRuntime::DataHealth;
 constexpr auto DataArmor = ItemRuntime::DataArmor;
@@ -407,6 +427,8 @@ constexpr auto SlotSpellInfo = SpellSlotLayout::SlotSpellInfo;
 constexpr auto InputTargetNetId = SpellInputLayout::InputTargetNetId;
 constexpr auto InputStartPos = SpellInputLayout::InputStartPos;
 constexpr auto InputEndPos = SpellInputLayout::InputEndPos;
+constexpr auto InputEndPos2 = SpellInputLayout::InputEndPos2;
+constexpr auto InputEndPos3 = SpellInputLayout::InputEndPos3;
 
 constexpr auto InfoSpellData = SpellInfoLayout::InfoSpellData;
 constexpr auto SpellInfoNamePtr = SpellInfoLayout::SpellInfoNamePtr;

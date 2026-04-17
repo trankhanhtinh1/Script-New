@@ -137,26 +137,25 @@ public:
   }
 
   // ════════════════════════════════════════════════
-  // OnBeforeAttack (Viktor.cs lines 198-208)
+  // OnBeforeAttack (Viktor.cs lines 198-208) —
+  // When `qAuto` is ON, hold the auto-attack until either Q / E is no longer a
+  // better option, or we already have the empowered AA buff ready. When OFF we
+  // leave args.Process alone so the orbwalker's default (true) applies.
   // ════════════════════════════════════════════════
   void OnBeforeAttack(OrbwalkingActionArgs& args) override {
     if (!m_menu) return;
-    // Viktor: don't AA heroes without passive in combo
-    // Simplified — AttacksEnabled logic
     auto *comboMenu = m_menu->GetSubMenu("Combo");
     if (!comboMenu) return;
+    if (Orbwalker::GetMode() != OrbwalkerMode::Combo) return;
+    if (!comboMenu->GetBoolValue("qAuto", false)) return;
 
-    if (Orbwalker::GetMode() == OrbwalkerMode::Combo) {
-      bool qAuto = comboMenu->GetBoolValue("qAuto", false);
-      if (qAuto) {
-        bool canAttack = (!Q.IsReady() || Player().Mana() < Q.Instance().ManaCost()) &&
-                         (!E.IsReady() || Player().Mana() < E.Instance().ManaCost()) &&
-                         Player().HasBuff("viktorpowertransferreturn");
-        // Only block AA on hero targets if we want passive-only
-        // Can't check target type in C++ easily — always allow for now
-        args.Process = canAttack || !qAuto;
-      }
-    }
+    // Inside the `qAuto` block `!qAuto` is tautologically false, so the old
+    // `args.Process = canAttack || !qAuto` was just `args.Process = canAttack`
+    // with extra noise. Clean form:
+    const bool qBlocked = !Q.IsReady() || Player().Mana() < Q.Instance().ManaCost();
+    const bool eBlocked = !E.IsReady() || Player().Mana() < E.Instance().ManaCost();
+    const bool hasPassive = Player().HasBuff("ViktorPowerTransferReturn");
+    args.Process = (qBlocked && eBlocked) || hasPassive;
   }
 
   // ════════════════════════════════════════════════
@@ -242,9 +241,19 @@ private:
       PredictCastE(eTarget);
     }
 
-    // Q combo (Viktor.cs lines 442-446)
-    if (useQ && qTarget.IsValid()) {
-      Q.Cast(qTarget);
+    // Q combo (Viktor.cs lines 442-446) —
+    // Previously this was `Q.Cast(qTarget)` with no guard, so a stale qTarget
+    // (dead / invisible / just moved out of 600 range between the TargetSelector
+    // call and the cast) would fire a targeted cast that the engine silently
+    // rejected — visible symptom: "Viktor never casts Q in combo".
+    // CastPredicted on a targeted spell resolves to `Cast(target)` after a
+    // fresh IsValidTarget(GetRange(), source) probe, so we only cast when the
+    // game would actually accept the packet. If the prediction path reports
+    // OutOfRange we fall through to the other spells without wasting a tick.
+    if (useQ && qTarget.IsValid() &&
+        qTarget.IsValidTarget(Q.Range) &&
+        !qTarget.IsInvulnerable()) {
+      Q.CastPredicted(qTarget, HitChance::High);
     }
 
     // W combo (Viktor.cs lines 448-471)
@@ -292,7 +301,12 @@ private:
 
     if (useQ) {
       auto t = TargetSelector::GetTarget(Q.Range, SDK::DamageType::Magical);
-      if (t.IsValid()) Q.Cast(t);
+      // Same CastPredicted fix as combo mode — a raw Q.Cast on a stale target
+      // gets silently rejected by the engine, which matches the reported
+      // "Q doesn't cast" symptom.
+      if (t.IsValid() && t.IsValidTarget(Q.Range) && !t.IsInvulnerable()) {
+        Q.CastPredicted(t, HitChance::High);
+      }
     }
 
     if (useE) {

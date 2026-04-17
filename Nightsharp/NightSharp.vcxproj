@@ -165,6 +165,7 @@
     <ClInclude Include="core\CoreRuntime.h" />
     <ClInclude Include="core\CoreAPI.h" />
     <ClInclude Include="core\CoreGame.h" />
+    <ClInclude Include="core\CoreItem.h" />
     <ClInclude Include="core\CoreNavGrid.h" />
     <ClInclude Include="core\CoreObjects.h" />
     <ClInclude Include="core\LeagueObfuscation.h" />
@@ -265,6 +266,8 @@
     <ClInclude Include="sdk\Enumerations\TurretType.h" />
     <ClInclude Include="sdk\Core\Game.h" />
     <ClInclude Include="sdk\Core\GameObjects.h" />
+    <ClInclude Include="sdk\Core\ItemCatalog.h" />
+    <ClInclude Include="sdk\Core\Items.h" />
     <ClInclude Include="sdk\Core\MenuUI.h" />
     <ClInclude Include="sdk\Core\Objects.h" />
     <ClInclude Include="sdk\Core\Variables.h" />

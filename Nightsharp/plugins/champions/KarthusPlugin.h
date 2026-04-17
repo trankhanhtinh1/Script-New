@@ -44,6 +44,13 @@ public:
 
   bool m_comboE = false;
 
+  // R safety throttle — R (Requiem) has a ~3s channel and a travel delay, so
+  // without a guard the auto-R logic would fire R every tick during the channel
+  // (each attempt resets cast state, visibly delaying or cancelling the cast).
+  // 3500ms covers channel + 0.5s network latency buffer.
+  int m_lastRCastTick = 0;
+  static constexpr int kRCastThrottleMs = 3500;
+
   void OnLoad() override {
     if (m_menu) return;
 
@@ -89,6 +96,17 @@ public:
     jgMenu->Add<MenuBool>("useQ", "Use Q", true);
     jgMenu->Add<MenuBool>("useE", "Use E", true);
 
+    // Auto R — single master toggle. Behaviour is hard-coded per user spec:
+    //   • Alive: cast only when target is outside W.Range AND zero enemies
+    //            stand within W.Range of Karthus.
+    //   • Passive (Death Defied): always allowed to cast.
+    //   • Skip targets carrying any survivability buff (Kayle R, Trynd R,
+    //     Kindred R, Zhonya, etc.) — those buffs are also covered by the
+    //     IsInvulnerable()/IsValidTarget() auto-filter, but we keep an
+    //     explicit HasBuff list for documentation + belt-and-suspenders.
+    auto *autoRMenu = m_menu->AddSubMenu("AutoR", "Auto R");
+    autoRMenu->Add<MenuBool>("enabled", "Auto R", true);
+
     // Misc Menu (Karthus.cs lines 76-80)
     auto *miscMenu = m_menu->AddSubMenu("Misc", "Misc Settings");
     miscMenu->Add<MenuBool>("autoCast", "Auto Combo/LaneClear if dead", false);
@@ -129,7 +147,18 @@ public:
   // ════════════════════════════════════════════════
   void OnUpdate() override {
     if (!Player().IsValid() || !m_menu) return;
-    if (Player().IsDead() || Player().IsRecalling() || Player().IsWindingUp()) return;
+
+    // Karthus passive (Death Defied) keeps IsDead() == true while granting a
+    // 7-second window where Q/E/R can still be cast. The old guard returned
+    // immediately on IsDead, which killed every auto-cast (including R) the
+    // moment Karthus died — exactly the window where auto-R matters most.
+    // Only the recall/wind-up gates still short-circuit in passive form.
+    const bool inPassive = IsInPassiveForm();
+    if ((Player().IsDead() && !inPassive) ||
+        Player().IsRecalling() ||
+        Player().IsWindingUp()) {
+      return;
+    }
 
     auto *harassMenu = m_menu->GetSubMenu("HarassMenu");
     auto *miscMenu = m_menu->GetSubMenu("Misc");
@@ -148,7 +177,11 @@ public:
       case OrbwalkerMode::Combo:
         Combo();
         LogicE();
-        return;
+        // NOTE: previously this branch did `return`, which skipped both LogicEE
+        // and LogicR. That is the root cause of the "no auto R in combo" bug —
+        // LogicR is the only thing that fires Requiem for a global killsteal.
+        // Use `break` so the tail (LogicEE + LogicR) runs in every mode.
+        break;
       case OrbwalkerMode::Harass:
         Harass();
         break;
@@ -162,7 +195,7 @@ public:
       default:
         // Auto cast if dead/passive (Karthus.cs lines 138-142)
         if (miscMenu && miscMenu->GetBoolValue("autoCast", false)) {
-          if (IsInPassiveForm()) {
+          if (inPassive) {
             Combo();
             LaneClear();
           }
@@ -172,7 +205,8 @@ public:
 
     // Logic EE — turn off E when no mode (Karthus.cs lines 163-169)
     LogicEE();
-    // Logic R (Karthus.cs lines 379-411)
+    // Logic R (Karthus.cs lines 379-411) — runs in every mode, and also during
+    // passive form so Karthus can steal kills while "dead".
     LogicR();
   }
 
@@ -275,35 +309,89 @@ private:
   }
 
   // ════════════════════════════════════════════════
-  // LogicR (Karthus.cs lines 379-411)
+  // HasSurvivabilityBuff — explicit HasBuff list for buffs that would prevent
+  // Karthus R from actually securing the kill. IsValidTarget() already filters
+  // everything tagged BuffType 17 (Invulnerability) or 15 (SpellImmunity), so
+  // this check is a documentation-grade safety net; it still matters if the
+  // engine-side BuffType tag is missing on a patch or for edge cases the auto
+  // detection misses. Case-insensitive match via HasBuff.
+  // ════════════════════════════════════════════════
+  bool HasSurvivabilityBuff(const AIHeroClient& t) const {
+    static constexpr const char* kSurvivalBuffs[] = {
+      "JudicatorIntervention",   // Kayle R — invulnerable
+      "UndyingRage",             // Tryndamere R — stays at 1 HP
+      "KindredRNoDeathBuff",     // Kindred R — cannot drop below 10% HP
+      "TaricR",                  // Taric R — invulnerable
+      "ChronoShift",             // Zilean R — revives on fatal damage
+      "zhonyasringshield",       // Zhonya's Hourglass — stasis
+      "stopwatchbuff",           // Stopwatch — stasis
+      "FioraW",                  // Fiora W — parry, blocks dmg instance
+      "BardRStasis",             // Bard R — stasis
+      "bansheesveil",            // Banshee's Veil — blocks magic spell
+      "itemmagekillerveil",      // Edge of Night — spell shield
+      "SivirE",                  // Sivir E — spell shield
+      "NocturneShroudofDarkness", // Nocturne W — spell shield
+      "MorganaE",                // Morgana E — blocks magic
+      "malzaharpassiveshield",   // Malzahar passive — spell shield
+    };
+    for (const char* name : kSurvivalBuffs) {
+      if (t.HasBuff(name)) return true;
+    }
+    return false;
+  }
+
+  // ════════════════════════════════════════════════
+  // LogicR (Karthus.cs lines 379-411) — simplified per user spec.
+  // Menu: one Bool ("AutoR.enabled"). Hard-coded behaviour:
+  //   • R.IsReady() + 3.5s throttle
+  //   • Target passes IsValidTarget (alive, visible, targetable, NOT invuln)
+  //   • Target has NO survivability buff (HasSurvivabilityBuff == false)
+  //   • Target NOT protected from magic spell shield
+  //   • R.GetDamage(target) >= target.Health()
+  //   • Alive branch : player.Distance(target) > W.Range
+  //                    AND zero enemies within W.Range of Karthus
+  //   • Passive branch: always allowed (Death Defied cannot be interrupted)
   // ════════════════════════════════════════════════
   void LogicR() {
     if (!R.IsReady()) return;
 
-    // Find killable target globally
+    auto *rMenu = m_menu->GetSubMenu("AutoR");
+    if (!rMenu || !rMenu->GetBoolValue("enabled", true)) return;
+
+    // Throttle: R has a ~3s channel. If we attempt to cast again while the
+    // channel is still active the engine treats it as a cancel request.
+    const int now = Game::TickCount();
+    if (m_lastRCastTick > 0 && (now - m_lastRCastTick) < kRCastThrottleMs) return;
+
+    const bool inPassive = IsInPassiveForm();
+
     for (const auto& target : ObjectManager::EnemyHeroes()) {
       if (!target.IsValid() || target.IsDead()) continue;
       if (!target.IsValidTarget()) continue;
 
-      float dmg = R.GetDamage(target);
-      float hp = target.Health();
+      // Buffs keeping the target alive → skip (Kayle R, Trynd R, Zhonya, etc.)
+      if (HasSurvivabilityBuff(target)) continue;
+
+      const float dmg = R.GetDamage(target);
+      const float hp = target.Health();
+      if (dmg < hp) continue;  // R cannot kill this target
 
       if (Compat::IsProtectedFromSpell(target, SDK::DamageType::Magical, dmg)) continue;
 
-      // Not in W range + R can kill + no enemies nearby + not under turret + no allies near target
-      if (Player().Distance(target) > W.Range + 250.0f &&
-          dmg >= hp &&
-          Player().CountEnemyHeroesInRange(W.Range) == 0 &&
-          target.CountAllyHeroesInRange(W.Range) == 0) {
-        R.Cast();
+      // Branch B — passive form R: always allowed, no distance / enemy-around
+      // gates. Karthus cannot be interrupted during Death Defied so any safe
+      // kill should be taken.
+      if (inPassive) {
+        if (R.Cast()) m_lastRCastTick = now;
         return;
       }
 
-      // Passive form R (Karthus.cs lines 405-410)
-      if (dmg >= hp &&
-          Player().HasBuff("KarthusDeathDefiedBuff") &&
-          target.CountAllyHeroesInRange(W.Range) == 0) {
-        R.Cast();
+      // Branch A — alive: strict safe-global condition. Per user spec the
+      // target must be outside W.Range (no extra buffer) AND zero enemies
+      // within W.Range of Karthus (we must be fully alone for the 3s channel).
+      if (Player().Distance(target) > W.Range &&
+          Player().CountEnemyHeroesInRange(W.Range) == 0) {
+        if (R.Cast()) m_lastRCastTick = now;
         return;
       }
     }

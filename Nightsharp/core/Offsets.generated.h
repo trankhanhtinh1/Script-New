@@ -112,6 +112,25 @@ namespace EventRuntime {
     constexpr auto OnMinionFollowTargetNetIdChange = 0xEBDAC0;
 } // namespace EventRuntime
 
+// ── Shadow-VMT OnProcessSpell (verified in legacy NightSharp build) ──
+// Game executes OnProcessSpell via vtable[HandlerIndex] on a writable heap
+// dispatch slot. We deep-copy the vtable, redirect vtable[HandlerIndex] to a
+// shellcode trampoline that LOCK-INCs an event counter then JMPs to the
+// original function, and swap the heap slot to point at our shadow table.
+// No code-page writes → safe under CRC scanners / anti-tamper.
+//
+// TODO (build 26.7 re-verify via IDA):
+//   - VTableRVA: xref .rdata that points to WrapperRVA, subtract 35*8
+//   - HandlerIndex: disasm caller, `call [rax+???]` → offset/8
+//   - WrapperRVA : byte-sig 48 89 5C 24 10 56 48 83 EC 50 49 83 78 18 0F 0F 57 C0 F3 0F 7F 44 24 30
+//   - VTableEntryCount: count qwords until next vtable in .rdata
+namespace SpellEventVMT {
+    constexpr auto VTableRVA        = 0x1928D58;
+    constexpr auto HandlerIndex     = 35;
+    constexpr auto VTableEntryCount = 64;
+    constexpr auto WrapperRVA       = 0x1FD080;   // sub_1FD080
+} // namespace SpellEventVMT
+
 namespace NavGridRuntime {
     constexpr auto NavGrid = 0x1DDAFF0;
     constexpr auto GetCollisionFlags = 0x11DEB10;
@@ -150,9 +169,29 @@ namespace SpellBookLayout {
     constexpr auto SpellSlotArray = 0xAE0;
 } // namespace SpellBookLayout
 
-// TODO: CE reverify lines 153-216 (SpellSlot → SpellDataResource → SpellCastInfo chain)
-// IDA byte scan OK but needs runtime CE verification for full confidence
-// Param indices changed: COOLDOWN=0x0C, CASTRANGE=0x0F, LINEWIDTH=0x1D (old: 0x15, 0x18, 0x22)
+// ── Spell chain layout — IDA verification status (2026-04-17) ──────────────
+//
+// Direct-access fields verified by byte-pattern scan on the 26.7 dump:
+//   SpellRuntime::SpellBookOffset = 0x3120         ✓ (10 `lea REG,[REG+0x3120]` hits)
+//   SpellRuntime::ActiveSpellCast = 0x3158         ✓ (2 `lea` hits)
+//   SpellBookLayout::SpellSlotArray = 0xAE0        ✓ (8 `mov REG,[REG+0xAE0]` hits)
+//   SpellSlotLayout::SlotCooldown = 0x80           ✓ (8 `movss XMM,[REG+0x80]` hits)
+//   SpellSlotLayout::SlotTotalCd = 0x88            ✓ (8 `movss XMM,[REG+0x88]` hits)
+//   SpellSlotLayout::SlotActiveSpellCast = 0x118   ✓ (8 pointer reads)
+//   SpellSlotLayout::SlotSpellInfo = 0x128         ✓ (8 pointer reads)
+//   SpellSlotLayout::SlotSpellInput = 0x130        ✓ (8 pointer reads)
+//   SpellCastInfo::IsAuto = 0x141, Slot = 0x14C    ✓ (decompiled OnProcessSpell @ 0x942270)
+//   SpellData::DataResourceBase = 0x60             ✓ (OnProcessSpell `mov r8,[r8+60h]`)
+//
+// ⚠ SUSPECTED STALE — game accesses these fields via an indexed getter
+// (param index table), not direct `[reg+disp32]` loads. A byte-pattern scan
+// found 0 hits for 0x478/0x518 and only 1 for 0x568. These three constants
+// are kept for source compatibility but should not be trusted without runtime
+// CE verification against a live game:
+//   SpellDataResourceLayout::ResCastRange    = 0x478
+//   SpellDataResourceLayout::ResMissileSpeed = 0x518
+//   SpellDataResourceLayout::ResLineWidth    = 0x568
+// Param indices (from legacy notes): COOLDOWN=0x0C, CASTRANGE=0x0F, LINEWIDTH=0x1D.
 namespace SpellSlotLayout {
     constexpr auto SlotLevel = 0x1C;
     constexpr auto SlotLevelAlt = 0x28;
@@ -175,13 +214,23 @@ namespace SpellDataResourceNameLayout {
 
 namespace SpellInputLayout {
     constexpr auto InputTargetNetId = 0x14;
-    constexpr auto InputStartPos = 0x18;
-    constexpr auto InputEndPos = 0x24;
+    constexpr auto InputStartPos    = 0x18; // Vec3 #1 (start / caster pos)
+    constexpr auto InputEndPos      = 0x24; // Vec3 #2 (primary end / target pos)
+    // Additional position slots the engine mirrors — byte-pattern scan shows
+    // the game reads from +0x30 (4 hits) and +0x3C (5 hits) during cast
+    // dispatch, so we keep them here as named constants rather than raw
+    // arithmetic (`InputEndPos + sizeof(Vec3) * k`).
+    constexpr auto InputEndPos2     = 0x30; // Vec3 #3 (client/world mirror)
+    constexpr auto InputEndPos3     = 0x3C; // Vec3 #4 (predicted/hitchance)
 } // namespace SpellInputLayout
 
 namespace SpellInfoLayout {
     constexpr auto InfoSpellData = 0x78; // CE verified: Info+0x60=slot backref, Info+0x78=SpellData
     constexpr auto SpellInfoNamePtr = 0x28;
+    // SpellInfo mirrors the same position layout as SpellInput at the same
+    // relative offsets. The cast-spell path writes positions through
+    // SpellInfo (slot+0x128) while getters read through SpellInput
+    // (slot+0x130) — the engine keeps them synchronized during a cast.
 } // namespace SpellInfoLayout
 
 namespace SpellDataLayout {
@@ -328,16 +377,43 @@ namespace AiManagerNavDataLayout {
 } // namespace AiManagerNavDataLayout
 
 namespace ItemRuntime {
-    constexpr auto ItemList = 0x4D20;
-    constexpr auto SlotInfo = 0x10;
-    constexpr auto InfoData = 0x38;
+    // NEW chain (verified via MCP IDA on current build):
+    //   obj + InventoryComponent (inline, lea not deref)
+    //     component + SlotArray + index * 8 = slot ptr (SlotCount total, 8-byte ptrs)
+    //       slot + ItemNode                 = item node ptr (null = empty slot)
+    //         node + ItemInfo               = item info ptr
+    //           info + DataItemId           = internal item id (uint32, stable hash)
+    //
+    // IDA evidence:
+    //   sub_26B9B0 (InventoryComponent dtor): v12 = a4 + 0x50; v13 = 39; do{...}while(--v13)
+    //   sub_5843D0 (GetItemIdRaw):  [rcx+0x10] -> [+0x38] -> [+0xB4]
+    //   sub_594740: [rdi+rbx*8+0x4E08] = hero+0x4DB8+0x50+idx*8
+    //   sub_2BE920: v5 = a4 + 0x4DB8; v6 = *(a4+0x4DB8+0x50+8*idx); if(*(v6+0x10)) ...
+    constexpr auto InventoryComponent = 0x4DB8; // was ItemList=0x4D20 (dead)
+    constexpr auto SlotArray          = 0x50;   // relative to InventoryComponent
+    constexpr auto SlotCount          = 39;     // 0x27, from dtor loop counter
+    constexpr auto ItemNode           = 0x10;   // relative to slot (was SlotInfo)
+    constexpr auto ItemInfo           = 0x38;   // relative to ItemNode (was InfoData)
+    constexpr auto DataItemId         = 0xB4;   // relative to ItemInfo (internal id)
+
+    // Legacy aliases kept for source compatibility during migration.
+    constexpr auto ItemList = InventoryComponent;
+    constexpr auto SlotInfo = ItemNode;
+    constexpr auto InfoData = ItemInfo;
+
+    // Slot classes (verified in sub_590710: visible inventory enumerates 0..6)
+    constexpr auto SlotItemBegin = 0;  // first regular item slot
+    constexpr auto SlotItemEnd   = 5;  // last regular item slot (inclusive)
+    constexpr auto SlotTrinket   = 6;  // trinket/ward slot
+    constexpr auto SlotVisibleCount = 7; // slots 0..6 (visible inventory)
+
+    // Item stat offsets relative to ItemInfo — still need CE re-verify on current build
+    // (kept as-is from the previous snapshot; values were tied to the old InfoData
+    // chain which had the same 0x38 offset, so they may still be correct).
     constexpr auto InfoStacks = 0x64;
-    constexpr auto DataItemId = 0xB4;
-    // OLD chain (SlotInfo=0x10→InfoData=0x38→DataItemId=0xB4) NO LONGER VALID
-    // Item stat offsets below need re-verification with new chain:
     constexpr auto DataAbilityHaste = 0x160;
     constexpr auto DataHealth = 0x164;
-    constexpr auto DataArmor = 0x19C;
+    constexpr auto DataArmor = 0x1B4;
     constexpr auto DataMR = 0x1BC;
     constexpr auto DataAD = 0x1D8;
     constexpr auto DataAP = 0x1E0;

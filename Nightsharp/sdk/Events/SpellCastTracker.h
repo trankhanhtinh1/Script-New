@@ -212,6 +212,10 @@ inline void PollUnit(const AIBaseClient& unit, int now) {
 inline void Update() {
     if (!detail::EnsureStorage()) return;
 
+    // Drain the ShadowVMT counter — shellcode just bumps a counter, we scan
+    // heroes for a new ActiveSpellCast each tick. No-op if hook not installed.
+    CoreEventHook::PollVmtSpellEvents();
+
     const int now = Game::TickCount();
 
     // Poll heroes only — minion/turret AA tracking done via MissileTracker
@@ -285,6 +289,10 @@ namespace hook {
 // ---------------------------------------------------------------------------
 inline void UpdateHybrid() {
     if (!detail::EnsureStorage()) return;
+
+    // Drain the ShadowVMT counter FIRST so that OnRawProcessSpell runs before
+    // we test cast-vs-state transitions in the DoCast/StopCast poll below.
+    CoreEventHook::PollVmtSpellEvents();
 
     const int now = Game::TickCount();
 

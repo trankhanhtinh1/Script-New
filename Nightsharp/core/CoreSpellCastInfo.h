@@ -61,6 +61,8 @@ namespace CoreSpellCastInfo {
 
         /// Read missile speed from SpellData resource.
         /// Matches EnsoulSharp: args.SData.MissileSpeed
+        /// NOTE: ResMissileSpeed offset is STALE in 26.7 (CE+IDA verified).
+        /// Clamps garbage to 0.0f so callers fall back to static DB values.
         float GetMissileSpeed() const {
             const auto spellData = GetSpellData();
             if (!Globals::IsValidPtr(spellData)) {
@@ -70,7 +72,9 @@ namespace CoreSpellCastInfo {
             if (!Globals::IsValidPtr(resource)) {
                 return 0.0f;
             }
-            return Globals::Read<float>(resource + Offset::SpellBook::ResMissileSpeed);
+            const float raw = Globals::Read<float>(resource + Offset::SpellBook::ResMissileSpeed);
+            if (!(raw == raw) || raw < 0.0f || raw > 50000.0f) return 0.0f;
+            return raw;
         }
 
         bool ReadSpellName(char* out, int maxOut) const {

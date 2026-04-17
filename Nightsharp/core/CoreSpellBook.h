@@ -37,12 +37,19 @@ namespace CoreSpellBook {
     struct SlotRef {
         uintptr_t address = 0;
 
+        // LoL spell data rank arrays are dimensioned for 6 entries (rank 0..5),
+        // which covers both regular spells (max rank 5) and ults (max rank 3).
+        // A previous version capped at 6 which read one element past the array
+        // end — returning garbage for `GetCastRange(6)` / `GetMaxAmmo(6)` /
+        // `GetBaseCooldownTime(6)` and potentially faulting if the spell data
+        // struct is short. Cap at 5 so the maximum accessible index matches the
+        // last real array slot.
         static int ClampRank(int rank) {
             if (rank < 0) {
                 return 0;
             }
-            if (rank > 6) {
-                return 6;
+            if (rank > 5) {
+                return 5;
             }
             return rank;
         }
@@ -160,8 +167,21 @@ namespace CoreSpellBook {
             return Globals::Read<Vec3>(input + Offset::SpellBook::InputEndPos);
         }
 
+        // Stage the four position slots the engine consumes during a cast.
+        //
+        // Position data lives in SpellInfo (slot+0x128) rather than SpellInput
+        // (slot+0x130); both structures share the same relative layout and the
+        // engine keeps them in sync. Writing through SpellInfo matches the
+        // save/restore flow in `CoreControl::CastSpellPacket` and is what the
+        // live game reads back when dispatching the cast.
+        //
+        // IDA verified (byte-pattern scan, 2026-04-17):
+        //   +0x18 InputStartPos  — 5 `movss XMM,[rcx+0x18]` hits
+        //   +0x24 InputEndPos    — 5 `movss XMM,[rcx+0x24]` hits
+        //   +0x30 InputEndPos2   — 4 `movss XMM,[rcx+0x30]` hits
+        //   +0x3C InputEndPos3   — 5 `movss XMM,[rcx+0x3C]` hits
         bool SetInputData(uint32_t targetNetId, const Vec3& start, const Vec3& end) const {
-            const auto input = GetSpellInfo();  // position lives in SpellInfo (0x128)
+            const auto input = GetSpellInfo();
             if (!Globals::IsValidPtr(input)) {
                 return false;
             }
@@ -169,26 +189,50 @@ namespace CoreSpellBook {
             bool ok = true;
             ok &= Globals::Write<uint32_t>(input + Offset::SpellBook::InputTargetNetId, targetNetId);
             ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputStartPos, start);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputEndPos, end);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputEndPos + sizeof(Vec3), end);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputEndPos + sizeof(Vec3) * 2, end);
+            ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputEndPos,   end);
+            ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputEndPos2,  end);
+            ok &= Globals::Write<Vec3>(input + Offset::SpellBook::InputEndPos3,  end);
             return ok;
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        // Res{CastRange,MissileSpeed,LineWidth} offsets are STALE in 26.7
+        // (verified via CE runtime + IDA decompile 2026-04-17). The game
+        // resolves these via indexed-getter dispatch (GetFloatParam(res, idx))
+        // where CASTRANGE=0x0F, LINEWIDTH=0x1D, MISSILESPEED=0x27.
+        //
+        // Reading at the legacy direct offsets returns garbage (strings or
+        // function pointers interpreted as float). We clamp the result to a
+        // sane range and return 0.0f on garbage so callers fall back to
+        // compile-time static values from SpellDatabaseData.generated.h (the
+        // `Spell` constructor in every plugin supplies range/speed/width
+        // directly, so these getters are almost never the source of truth).
+        //
+        // TODO: implement indexed-getter via game function trampoline.
+        // ─────────────────────────────────────────────────────────────────
+        static float ClampSpellStat(float v, float hi) {
+            // Reject NaN / inf / negative / out-of-range garbage
+            if (!(v == v) || v < 0.0f || v > hi) return 0.0f;
+            return v;
         }
 
         float GetCastRange(int rank = 0) const {
             const auto data = GetSpellData();
             const auto safeRank = ClampRank(rank);
-            return Globals::Read<float>(data + Offset::SpellBook::ResCastRange + static_cast<uintptr_t>(safeRank * sizeof(float)));
+            const float raw = Globals::Read<float>(data + Offset::SpellBook::ResCastRange + static_cast<uintptr_t>(safeRank * sizeof(float)));
+            return ClampSpellStat(raw, 50000.0f); // Karthus R = 25000 is the real max
         }
 
         float GetMissileSpeed() const {
             const auto resource = GetSpellResource();
-            return Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResMissileSpeed);
+            const float raw = Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResMissileSpeed);
+            return ClampSpellStat(raw, 50000.0f);
         }
 
         float GetLineWidth() const {
             const auto resource = GetSpellResource();
-            return Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResLineWidth);
+            const float raw = Globals::Read<float>(resource + Offset::SpellBook::DataResourceBase + Offset::SpellBook::ResLineWidth);
+            return ClampSpellStat(raw, 2000.0f); // widest skillshots ~400u
         }
 
         int GetCastType() const {

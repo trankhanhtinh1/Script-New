@@ -226,14 +226,48 @@ namespace RuntimeAPI {
         __except (1) { return false; }
     }
 
+    // Is this an Inhibitor? CharacterName starts with "Barracks"
+    //   (e.g. "Barracks_T1_L1", "Barracks_T2_R3")
+    __declspec(noinline) inline bool IsInhibitor(uintptr_t obj) {
+        if (!obj) return false;
+        __try {
+            char name[32] = {};
+            if (!Globals::ReadGameString(obj + Offset::GameObject::CharacterName, name, sizeof(name))) {
+                return false;
+            }
+            return _strnicmp(name, "Barracks", 8) == 0;
+        }
+        __except (1) { return false; }
+    }
+
+    // Is this a Nexus? CharacterName starts with "HQ"
+    //   (e.g. "HQ_T1", "HQ_T2")
+    __declspec(noinline) inline bool IsNexus(uintptr_t obj) {
+        if (!obj) return false;
+        __try {
+            char name[32] = {};
+            if (!Globals::ReadGameString(obj + Offset::GameObject::CharacterName, name, sizeof(name))) {
+                return false;
+            }
+            return _strnicmp(name, "HQ", 2) == 0;
+        }
+        __except (1) { return false; }
+    }
+
     // Is this a Structure? (Turret, Inhibitor, Nexus)
-    // WARNING: IDA shows 0x1C8C30 = AK::WriteBytesCount::Reserve stub (xor al,al; ret)
-    //          This always returns false! Use IsTurret() via CompareTypeFlags instead.
+    //
+    // Native IsBuilding @ Offset::Function::IsBuilding is a stub
+    // (xor al,al; ret) in build 26.7 and always returns false. We therefore
+    // compose the check from:
+    //   - CompareTypeFlags(0x2000) for Turret
+    //   - CharacterName prefix "Barracks" for Inhibitor
+    //   - CharacterName prefix "HQ"       for Nexus
     __declspec(noinline) inline bool IsStructure(uintptr_t obj) {
         if (!obj) return false;
-        // Native IsBuilding is a stub — always returns false
-        // Fall back to CompareTypeFlags for turret check
-        return IsTurret(obj);
+        if (IsTurret(obj))    return true;
+        if (IsInhibitor(obj)) return true;
+        if (IsNexus(obj))     return true;
+        return false;
     }
 
     // Is this a Clone? (Shaco, LeBlanc, Neeko, etc.)
@@ -423,6 +457,9 @@ namespace RuntimeAPI {
         __except (1) { return nullptr; }
     }
 
+    // NOTE: Res{MissileSpeed,LineWidth,CastRange} offsets are STALE in 26.7
+    // (CE+IDA verified 2026-04-17 — dispatch via indexed getter, not direct
+    // field). Clamp to sane range; callers fall back to static DB values.
     __declspec(noinline) inline float GetMissileSpeed(uintptr_t missile) {
         if (!missile) return 0.0f;
         __try {
@@ -430,7 +467,9 @@ namespace RuntimeAPI {
             if (!spellData) return 0.0f;
             uintptr_t spellDataRes = *(uintptr_t*)(spellData + Offset::SpellBook::DataResourceBase);
             if (!spellDataRes) return 0.0f;
-            return *(float*)(spellDataRes + Offset::SpellBook::ResMissileSpeed);
+            const float raw = *(float*)(spellDataRes + Offset::SpellBook::ResMissileSpeed);
+            if (!(raw == raw) || raw < 0.0f || raw > 50000.0f) return 0.0f;
+            return raw;
         }
         __except (1) { return 0.0f; }
     }
@@ -442,7 +481,9 @@ namespace RuntimeAPI {
             if (!spellData) return 0.0f;
             uintptr_t spellDataRes = *(uintptr_t*)(spellData + Offset::SpellBook::DataResourceBase);
             if (!spellDataRes) return 0.0f;
-            return *(float*)(spellDataRes + Offset::SpellBook::ResLineWidth);
+            const float raw = *(float*)(spellDataRes + Offset::SpellBook::ResLineWidth);
+            if (!(raw == raw) || raw < 0.0f || raw > 2000.0f) return 0.0f;
+            return raw;
         }
         __except (1) { return 0.0f; }
     }
@@ -521,6 +562,7 @@ namespace RuntimeAPI {
     }
 
     // Cast range from SpellDataResource (rank 0)
+    // NOTE: ResCastRange offset STALE in 26.7 — same clamp pattern as above.
     __declspec(noinline) inline float GetMissileCastRange(uintptr_t missile) {
         if (!missile) return 0.0f;
         __try {
@@ -528,7 +570,9 @@ namespace RuntimeAPI {
             if (!spellData) return 0.0f;
             uintptr_t spellDataRes = *(uintptr_t*)(spellData + Offset::SpellBook::DataResourceBase);
             if (!spellDataRes) return 0.0f;
-            return *(float*)(spellDataRes + Offset::SpellBook::ResCastRange);
+            const float raw = *(float*)(spellDataRes + Offset::SpellBook::ResCastRange);
+            if (!(raw == raw) || raw < 0.0f || raw > 50000.0f) return 0.0f;
+            return raw;
         }
         __except (1) { return 0.0f; }
     }
