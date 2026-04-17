@@ -445,7 +445,9 @@ void Overlay::Run() {
     NightSharpMenu::LoadGlobals();
     NightSharpMenu::showMenu = true;
     SDK::MenuManager::SetMenuVisible(true);
-    SetClickThrough(false);
+    SetClickThrough(true);
+    SetWindowPos(g_hOverlay, nullptr, 0, 0, 0, 0,
+        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     Plugins::PluginBootstrap::EnsureRegistered();
     PluginRegistry::LoadConfig();

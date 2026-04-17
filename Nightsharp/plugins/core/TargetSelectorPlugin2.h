@@ -39,7 +39,7 @@ public:
         if (player.IsValid()) m_playerName = player.CharacterName();
         m_modeKey = m_playerName.empty() ? "TSMode2" : ("TSMode2_" + m_playerName);
 
-        static const std::vector<std::string> kModeItems = {
+        const std::vector<std::string> kModeItems = {
             "Script", "AP Damage", "AD Damage", "Least HP",
             "Less AA", "Less Casts", "Priority", "Near Mouse", "Close Me"
         };

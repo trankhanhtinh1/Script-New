@@ -339,22 +339,6 @@ private:
     auto *comboMenu = m_menu->GetSubMenu("Combo");
     if (!comboMenu) return;
 
-    // Debug: log stage every 2s
-    {
-      static DWORD s_lastZedLog = 0;
-      DWORD tnow = GetTickCount();
-      if ((tnow - s_lastZedLog) > 2000) {
-        s_lastZedLog = tnow;
-        char buf[256] = {};
-        std::snprintf(buf, sizeof(buf),
-          "[Zed] R=%d W=%d Rrdy=%d Wrdy=%d dist=%.0f hp=%.0f\r\n",
-          (int)GetUltStage(), (int)GetShadowStage(),
-          R.IsReady() ? 1 : 0, W.IsReady() ? 1 : 0,
-          target.DistanceToPlayer(), target.Health());
-        Plugins::OrbwalkerPlugin::DbgLog(buf);
-      }
-    }
-
     float overkill = Q.GetDamage(target) +
                      E.GetDamage(target) +
                      Player().GetAutoAttackDamage(target) * 2.0f;
