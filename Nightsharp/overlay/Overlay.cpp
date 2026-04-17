@@ -210,7 +210,7 @@ void MoveOverlayToTarget() {
 
     RECT rc = {};
     GetWindowRect(g_hGameWindow, &rc);
-    SetWindowPos(g_hOverlay, HWND_TOP,
+    SetWindowPos(g_hOverlay, HWND_TOPMOST,
         rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
         SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
@@ -244,6 +244,11 @@ void SetAntiCapture(bool enabled) {
 }
 
 void UpdateClickThroughFromMenuBounds() {
+    if (NightSharpMenu::debugWindowEnabled) {
+        SetClickThrough(false);
+        return;
+    }
+
     if (!g_bMenuVisible) {
         SetClickThrough(true);
         return;
@@ -252,9 +257,9 @@ void UpdateClickThroughFromMenuBounds() {
     POINT cursorPt = {};
     GetCursorPos(&cursorPt);
     ScreenToClient(g_hOverlay, &cursorPt);
-
     const float cx = (float)cursorPt.x;
     const float cy = (float)cursorPt.y;
+
     bool overMenu = false;
     for (int i = 0; i < NightSharpMenu::menuPanelCount; i++) {
         auto& p = NightSharpMenu::menuPanels[i];
@@ -263,7 +268,6 @@ void UpdateClickThroughFromMenuBounds() {
             break;
         }
     }
-
     SetClickThrough(!overMenu);
 }
 
@@ -342,7 +346,7 @@ void Overlay::Run() {
     GetWindowRect(g_hGameWindow, &gameRect);
 
     g_hOverlay = CreateWindowExW(
-        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
         overlayClassName,
         L"NightSharp Overlay",
         WS_POPUP,
@@ -350,7 +354,7 @@ void Overlay::Run() {
         gameRect.top,
         gameRect.right - gameRect.left,
         gameRect.bottom - gameRect.top,
-        g_hGameWindow,
+        nullptr,
         nullptr,
         wc.hInstance,
         nullptr);
@@ -438,6 +442,7 @@ void Overlay::Run() {
     MoveOverlayToTarget();
 
     SDK::MenuManager::Init();
+    NightSharpMenu::LoadGlobals();
     NightSharpMenu::showMenu = true;
     SDK::MenuManager::SetMenuVisible(true);
     SetClickThrough(false);
@@ -587,7 +592,7 @@ void Overlay::Run() {
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
 
-            if (g_bMenuVisible) {
+            if (g_bMenuVisible || NightSharpMenu::debugWindowEnabled) {
                 POINT mp = {};
                 GetCursorPos(&mp);
                 ScreenToClient(g_hOverlay, &mp);

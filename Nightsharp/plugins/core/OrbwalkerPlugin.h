@@ -15,18 +15,15 @@
 #include "../../menu/MenuUI.h"
 #include "../../menu/PluginRegistry.h"
 #include "../../core/CoreAPI.h"
-#include "../../core/CoreControl.h"
 #include "../../core/CrashTelemetry.h"
 
 #include <Windows.h>
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 // ============================================================================
 // OrbwalkerPlugin — 100% port from NewOrbwalker.cs (ImpulseAIO)
@@ -44,35 +41,10 @@ public:
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
     bool AutoLoadByDefault() const override { return true; }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Debug infrastructure
-    // ═══════════════════════════════════════════════════════════════════
-    static void DbgLog(const char* text) {
-        if (!text || !*text) return;
-        HANDLE h = CreateFileA("C:\\Users\\Public\\ns_orbplugin_debug.txt",
-            FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
-            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h == INVALID_HANDLE_VALUE) return;
-        DWORD w = 0;
-        WriteFile(h, text, (DWORD)lstrlenA(text), &w, nullptr);
-        CloseHandle(h);
-    }
-    static void DbgStage(const char* s) {
-        s_stage = s ? s : "?";
-        CrashTelemetry::SetStage(s);
-    }
-    static inline const char* s_stage = "idle";
+    static void DbgStage(const char* s) { CrashTelemetry::SetStage(s); }
 
-    static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
-        char buf[512] = {};
-        std::snprintf(buf, sizeof(buf),
-            "[OrbPlugin] CRASH stage='%s' code=0x%08X addr=%p\r\n",
-            s_stage,
-            ep && ep->ExceptionRecord ? ep->ExceptionRecord->ExceptionCode : 0,
-            ep && ep->ExceptionRecord ? (void*)ep->ExceptionRecord->ExceptionAddress : nullptr);
-        DbgLog(buf);
-        return EXCEPTION_EXECUTE_HANDLER;
-    }
+    static OrbwalkerPlugin* Get() { return s_instance; }
+    static SDK::Menu* GetPluginMenu() { return s_instance ? s_instance->m_menu : nullptr; }
 
     // ═══════════════════════════════════════════════════════════════════
     // OnLoad — Menu + Init  (C# constructor lines 92-213)
@@ -165,15 +137,13 @@ public:
         }
 
         m_initialized = true;
-        m_attackEnabled = true;
-        m_moveEnabled = true;
-
-        DisableSDKOrbwalker();
-        DbgLog("[OrbPlugin] OnLoad complete\r\n");
+        s_instance = this;
+        SDK::Orbwalker::SetMenu(m_menu);
     }
 
     void OnUnload() override {
-        RestoreSDKOrbwalker();
+        s_instance = nullptr;
+        SDK::Orbwalker::SetMenu(nullptr);
         m_menu = nullptr;
         m_initialized = false;
     }
@@ -185,7 +155,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════
     void OnUpdate() override {
         __try { OnUpdateImpl(); }
-        __except (CrashHandler(GetExceptionInformation())) { return; }
+        __except (CrashTelemetry::ReportAndHandle("OrbPlugin", GetExceptionInformation())) { return; }
     }
 
     void OnUpdateImpl() {
@@ -201,8 +171,6 @@ public:
             m_nextAttackIsPassive = false;
         }
 
-        m_calcItemDamage = GetAdvBool("calcItemDamage", false);
-
         // Poll AA state (replaces C# OnDoCast/OnProcessSpellCast)
         DbgStage("OrbPlugin::PollAA");
         PollAttackState();
@@ -213,22 +181,6 @@ public:
         m_activeMode = GetActiveMode();
         SDK::Orbwalker::Instance().ActiveMode = m_activeMode;
         if (m_activeMode == SDK::OrbwalkerMode::None) return;
-
-        // Periodic debug dump (every 3s)
-        {
-            static DWORD s_lastDump = 0;
-            DWORD dumpNow = GetTickCount();
-            if ((dumpNow - s_lastDump) > 3000) {
-                s_lastDump = dumpNow;
-                char buf[512] = {};
-                std::snprintf(buf, sizeof(buf),
-                    "[OrbPlugin] mode=%d lastAA=%d missile=%d atkCnt=%d now=%d ping=%d atkDelay=%.0f windup=%.0f\r\n",
-                    (int)m_activeMode, m_lastAutoAttackTick, m_missileLaunched ? 1 : 0,
-                    m_autoAttackCounter, SDK::Game::TickCount(), SDK::Game::Ping(),
-                    player.AttackDelay() * 1000.0f, player.AttackCastDelay() * 1000.0f);
-                DbgLog(buf);
-            }
-        }
 
         DbgStage("OrbPlugin::GetTarget");
         SDK::AIBaseClient target = GetTarget();
@@ -244,7 +196,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════
     void OnRender() override {
         __try { OnRenderImpl(); }
-        __except (CrashHandler(GetExceptionInformation())) { return; }
+        __except (CrashTelemetry::ReportAndHandle("OrbPlugin", GetExceptionInformation())) { return; }
     }
 
     void OnRenderImpl() {
@@ -267,11 +219,6 @@ public:
             SDK::Drawing::DrawCircle(player.Position(),
                 player.BoundingRadius() + (float)hold,
                 IM_COL32(128, 0, 200, 100), 1.0f);
-        }
-
-        // Draw fast lane clear text
-        if (IsFastLaneClear()) {
-            // (text drawn via ImGui if needed)
         }
 
         // Draw force chase range (C# line 876-888)
@@ -323,8 +270,6 @@ public:
         }
     }
 
-    void OnMenu() override {}
-
     // ═══════════════════════════════════════════════════════════════════
     // Public API — Properties  (C# lines 16-90)
     // ═══════════════════════════════════════════════════════════════════
@@ -338,8 +283,6 @@ public:
         if (m_menu->GetKeyBindValue("flee", false)) return SDK::OrbwalkerMode::Flee;
         return SDK::OrbwalkerMode::None;
     }
-
-    SDK::OrbwalkerMode ActiveMode() const { return m_activeMode; }
 
     bool IsForceChase() const {
         return m_activeMode == SDK::OrbwalkerMode::Combo && m_menu &&
@@ -369,10 +312,6 @@ public:
         if (!m_initialized) return false;
         auto p = SDK::ObjectManager::Player();
         if (!p.IsValid()) return false;
-
-        // Pause checks (C# lines 952-958)
-        if (m_allPauseTick > 0 && m_allPauseTick > SDK::Game::TickCount()) return false;
-        if (m_attackPauseTick > 0 && m_attackPauseTick > SDK::Game::TickCount()) return false;
 
         // Buff checks (C# lines 960-975)
         if (m_tahmInGame && p.HasBuff("tahmkenchwhasdevouredtarget")) return false;
@@ -410,10 +349,6 @@ public:
         auto p = SDK::ObjectManager::Player();
         if (!p.IsValid()) return false;
 
-        // Pause checks (C# lines 1015-1022)
-        if (m_allPauseTick > 0 && m_allPauseTick > SDK::Game::TickCount()) return false;
-        if (m_movePauseTick > 0 && m_movePauseTick > SDK::Game::TickCount()) return false;
-
         // TahmKench (C# line 1023-1026)
         if (m_tahmInGame && p.HasBuff("tahmkenchwhasdevouredtarget")) return false;
 
@@ -437,27 +372,11 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // Timer API  (C# lines 1443-1484)
-    // ═══════════════════════════════════════════════════════════════════
-    void ResetAutoAttackTimer() {
-        m_allPauseTick = 0; m_attackPauseTick = 0;
-        m_lastAutoAttackTick = 0; m_movePauseTick = 0;
-        SDK::Orbwalker::Instance().LastAutoAttackTick = 0;
-        SDK::Orbwalker::Instance().MissileLaunched = false;
-    }
-    void SetPauseTime(int ms) { m_allPauseTick = SDK::Game::TickCount() + ms; }
-    void SetAttackPauseTime(int ms) { m_attackPauseTick = SDK::Game::TickCount() + ms; }
-    void SetMovePauseTime(int ms) { m_movePauseTick = SDK::Game::TickCount() + ms; }
-
-    bool BlockAttack() const { return m_blockAttack; }
-    bool BlockMove() const { return m_blockMove; }
-    void SetBlockAttack(bool b) { m_blockAttack = b; }
-    void SetBlockMove(bool b) { m_blockMove = b; }
-
-    // ═══════════════════════════════════════════════════════════════════
     // State  (C# lines 1703-1796)
     // ═══════════════════════════════════════════════════════════════════
 private:
+    static inline OrbwalkerPlugin* s_instance = nullptr;
+
     // ── Menu ──
     SDK::Menu* m_menu = nullptr;
     bool m_initialized = false;
@@ -470,17 +389,7 @@ private:
     int m_lastLocalAttackTick = 0;   // TickCount when IssueOrder(Attack) called
     int m_lastMovementTick = 0;      // TickCount when last move issued
     int m_autoAttackCounter = 0;
-    int m_allPauseTick = 0;
-    int m_attackPauseTick = 0;
-    int m_movePauseTick = 0;
-    int m_lastFakeClickTick = 0;
     bool m_missileLaunched = false;
-
-    // ── Attack/Move state ──
-    bool m_attackEnabled = true;
-    bool m_moveEnabled = true;
-    bool m_blockAttack = false;
-    bool m_blockMove = false;
 
     // ── Champion flags (C# lines 1725-1758) ──
     bool m_isAphelios = false;
@@ -492,12 +401,10 @@ private:
     bool m_jaxInGame = false;
     bool m_gpInGame = false;
     bool m_tahmInGame = false;
-    bool m_calcItemDamage = false;
 
     // ── Sett passive (C# lines 1746-1747, 1793-1813) ──
     bool m_nextAttackIsPassive = false;
     int m_settAttackTime = 0;
-    bool m_settIsLeftPunch = true;
 
     // ── Target cache ──
     SDK::AIBaseClient m_lastTarget;
@@ -509,8 +416,6 @@ private:
     bool m_wasWindingUp = false;
 
     // ── SDK override ──
-    int m_sdkOrbRegistryIndex = -1;
-    bool m_sdkOrbWasLoaded = true;
 
     // ═══════════════════════════════════════════════════════════════════
     // Menu helpers
@@ -537,32 +442,6 @@ private:
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // SDK Orbwalker Override  (mirrors DisableSDKOrbwalker/Restore)
-    // ═══════════════════════════════════════════════════════════════════
-    void DisableSDKOrbwalker() {
-        auto* sdkMenu = SDK::Orbwalker::GetMenu();
-        if (sdkMenu) {
-            auto* en = sdkMenu->Get<SDK::MenuBool>("enabledOption");
-            if (en) en->Enabled = false;
-        }
-        m_sdkOrbRegistryIndex = PluginRegistry::FindByInternalId("orbwalker");
-        if (m_sdkOrbRegistryIndex >= 0) {
-            m_sdkOrbWasLoaded = PluginRegistry::Plugins[m_sdkOrbRegistryIndex].Loaded;
-            PluginRegistry::Plugins[m_sdkOrbRegistryIndex].Loaded = false;
-        }
-    }
-    void RestoreSDKOrbwalker() {
-        auto* sdkMenu = SDK::Orbwalker::GetMenu();
-        if (sdkMenu) {
-            auto* en = sdkMenu->Get<SDK::MenuBool>("enabledOption");
-            if (en) en->Enabled = true;
-        }
-        if (m_sdkOrbRegistryIndex >= 0) {
-            PluginRegistry::Plugins[m_sdkOrbRegistryIndex].Loaded = m_sdkOrbWasLoaded;
-            m_sdkOrbRegistryIndex = -1;
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════════
     // GetAttackCastDelay  (C# lines 214-221) — Sett passive override
     // ═══════════════════════════════════════════════════════════════════
@@ -645,8 +524,8 @@ private:
 
             // Sync SDK
             SDK::Orbwalker::Instance().LastAutoAttackTick = m_lastAutoAttackTick;
+            SDK::Orbwalker::Instance().LastAutoAttackTime = SDK::Game::Time() - static_cast<float>(ping / 2) / 1000.0f;
             SDK::Orbwalker::Instance().MissileLaunched = false;
-            SDK::Orbwalker::Instance().TotalAutoAttacks++;
 
             // Fire OnAttack event (C# line 689)
             if (m_lastTarget.IsValid()) {
@@ -701,6 +580,26 @@ private:
         m_wasWindingUp = winding;
     }
 
+
+    // sender
+    //   .IsMe() .IsEnemy() .CharName()
+    // args
+    //   .Slot .SpellName .IsAutoAttack .Start .End .CastDelay  .MissileSpeed
+    void OnProcessSpellCast(const SDK::AIBaseClient& sender, const SDK::Events::SpellCast::ProcessSpellCastEventArgs& args) override
+    {
+        if (!sender.IsMe()) return;
+        print("Slot=%d SpellName=%s IsAutoAttack=%d IsSpecialAttack=%d Start=(%.1f,%.1f,%.1f) End=(%.1f,%.1f,%.1f) CastPos=(%.1f,%.1f,%.1f) CastDelay=%.3f MissileSpeed=%.1f TargetNetId=%d",
+            static_cast<int>(args.Slot),
+            args.SpellName.c_str(),
+            args.IsAutoAttack ? 1 : 0,
+            args.IsSpecialAttack ? 1 : 0,
+            args.Start.x, args.Start.y, args.Start.z,
+            args.End.x, args.End.y, args.End.z,
+            args.CastPosition.x, args.CastPosition.y, args.CastPosition.z,
+            args.CastDelay,
+            args.MissileSpeed,
+            args.TargetNetworkId);
+    }
     // ═══════════════════════════════════════════════════════════════════
     // CanAttackWithWindWall  (C# lines 403-472)
     // Checks Jax CounterStrike + Yasuo WindWall + Special champions
@@ -854,31 +753,18 @@ private:
             if (barrel.IsValid()) return barrel;
         }
 
-        // Target step logger (throttled)
-        auto LogStep = [&](const char* step) {
-            static DWORD s_lastStepLog = 0;
-            DWORD tnow = GetTickCount();
-            if (m_activeMode == SDK::OrbwalkerMode::Clear && (tnow - s_lastStepLog) > 2000) {
-                s_lastStepLog = tnow;
-                bool sw = ShouldWait(range);
-                char buf[128] = {};
-                std::snprintf(buf, sizeof(buf), "[Target] step=%s sw=%d\r\n", step, sw ? 1 : 0);
-                DbgLog(buf);
-            }
-        };
-
         // ── Step 3: Minion last-hit (C# line 1106-1137) ──
         DbgStage("OrbPlugin::Target::LastHit");
         if (m_activeMode != SDK::OrbwalkerMode::Combo) {
             auto lh = GetLastHitMinion();
-            if (lh.IsValid()) { LogStep("3:LastHit"); return lh; }
+            if (lh.IsValid()) return lh;
         }
 
         // ── Step 4: Turret + Inhibitor + Nexus (C# line 1144-1168) ──
         DbgStage("OrbPlugin::Target::Structures");
         if (m_activeMode != SDK::OrbwalkerMode::Combo) {
             auto st = GetStructure();
-            if (st.IsValid()) { LogStep("4:Structure"); return st; }
+            if (st.IsValid()) return st;
         }
 
         // ── Step 5: Hero target (C# line 1170-1179) ──
@@ -886,7 +772,7 @@ private:
         if (m_activeMode != SDK::OrbwalkerMode::LastHit &&
             (m_activeMode != SDK::OrbwalkerMode::Clear || !ShouldWait(range))) {
             auto hero = GetBestHero(range + findRange);
-            if (hero.IsValid()) { LogStep("5:Hero"); return hero; }
+            if (hero.IsValid()) return hero;
         }
 
         // ── Step 6: Special minions if prioritized (C# line 1181-1188) ──
@@ -894,7 +780,7 @@ private:
         if (priMenu && priMenu->GetBoolValue("specialMinion", false) &&
             m_activeMode != SDK::OrbwalkerMode::Combo && !ShouldWait(range)) {
             auto sp = GetSpecialMinion();
-            if (sp.IsValid()) { LogStep("6:Special"); return sp; }
+            if (sp.IsValid()) return sp;
         }
 
         // ── Step 7: Jungle monsters (C# line 1190-1213) ──
@@ -903,14 +789,14 @@ private:
             m_activeMode == SDK::OrbwalkerMode::Clear ||
             m_activeMode == SDK::OrbwalkerMode::LastHit) {
             auto jg = GetJungle();
-            if (jg.IsValid()) { LogStep("7:Jungle"); return jg; }
+            if (jg.IsValid()) return jg;
         }
 
         // ── Step 8: Turret farm (C# line 1215-1283) ──
         DbgStage("OrbPlugin::Target::TurretFarm");
         if (m_activeMode != SDK::OrbwalkerMode::Combo && CanTurretFarm()) {
             auto tf = GetTurretFarmTarget();
-            if (tf.IsValid()) { LogStep("8:TurretFarm"); return tf; }
+            if (tf.IsValid()) return tf;
             return {};
         }
 
@@ -918,16 +804,15 @@ private:
         DbgStage("OrbPlugin::Target::Push");
         if (m_activeMode == SDK::OrbwalkerMode::Clear && !ShouldWait(range)) {
             auto push = GetPushMinion();
-            if (push.IsValid()) { LogStep("9:Push"); return push; }
+            if (push.IsValid()) return push;
         }
 
         // ── Step 10: Special minions fallback (C# line 1314-1321) ──
         DbgStage("OrbPlugin::Target::SpecialFB");
         if (m_activeMode != SDK::OrbwalkerMode::Combo && !ShouldWait(range)) {
             auto sp = GetSpecialMinion();
-            if (sp.IsValid()) { LogStep("10:SpecialFB"); CacheTarget(sp); return sp; }
+            if (sp.IsValid()) { CacheTarget(sp); return sp; }
         }
-        LogStep("NONE");
 
         CacheTarget({});
         return {};
@@ -1285,18 +1170,6 @@ private:
         SDK::Vector3 playerPos = p.Position();
         if (pos.Distance2D(playerPos) < holdDist) return;
 
-        // Max move distance (C# not in original, but in our settings)
-        int maxMoveDist = GetOrbSlider("maxMoveDistance", 0);
-        if (maxMoveDist > 0 && pos.Distance2D(playerPos) > (float)maxMoveDist) {
-            SDK::Vector3 dir(pos.x - playerPos.x, 0, pos.z - playerPos.z);
-            float len = std::sqrt(dir.x * dir.x + dir.z * dir.z);
-            if (len > 1.0f) {
-                dir = SDK::Vector3(dir.x / len, 0, dir.z / len);
-                pos = SDK::Vector3(playerPos.x + dir.x * (float)maxMoveDist,
-                    pos.y, playerPos.z + dir.z * (float)maxMoveDist);
-            }
-        }
-
         // Randomize movement (C# line 1359-1361)
         if (GetOrbBool("moveRandom", false) && playerPos.Distance2D(pos) < 150.0f) {
             SDK::Vector3 dir = pos - playerPos;
@@ -1333,15 +1206,6 @@ private:
         SDK::Orbwalker::Instance().InvokeAction(ma);
         if (!ma.Process) return;
 
-        // FakeClick (C# line 1402-1406)
-        auto* drawMenu = m_menu ? m_menu->GetSubMenu("drawing") : nullptr;
-        if (drawMenu && drawMenu->GetBoolValue("showFakeClick", false)) {
-            if (now - m_lastFakeClickTick > (int)(250.0f - (float)ping * 10.0f)) {
-                // SDK doesn't have Hud.ShowClick — skip
-                m_lastFakeClickTick = now;
-            }
-        }
-
         // Issue move order (C# line 1407-1410)
         if (p.IssueOrder(SDK::GameObjectOrder::MoveTo, ma.Position)) {
             m_lastMovementTick = now;
@@ -1360,6 +1224,10 @@ private:
         int now = SDK::Game::TickCount();
         int ping = SDK::Game::Ping();
 
+        auto& diag = SDK::Orbwalker::Instance().lastTickDiag;
+        diag = {};
+        diag.targetNetId = target.IsValid() ? target.NetworkId() : 0;
+
         // Block orders window (C# line 1420)
         // After issuing attack, block all orders for a short time
         if (now - m_lastLocalAttackTick < 70 + (std::min)(60, ping))
@@ -1367,13 +1235,19 @@ private:
 
         // ── Attack phase (C# line 1424) ──
         DbgStage("OrbPlugin::Orbwalk::Attack");
-        if (m_attackEnabled && !m_blockAttack && CanAttack() && Attack(target))
+        const bool canAtk = CanAttack();
+        diag.canAttack = canAtk;
+        if (canAtk && Attack(target)) {
+            diag.attackIssued = true;
             return;
+        }
 
         // ── Move phase (C# line 1428-1440) ──
         DbgStage("OrbPlugin::Orbwalk::Move");
         float windupDelay = (float)GetOrbSlider("windupDelay", 60);
-        if (m_moveEnabled && !m_blockMove && CanMove(windupDelay, false)) {
+        const bool canMov = CanMove(windupDelay, false);
+        diag.canMove = canMov;
+        if (canMov) {
             // ComboNoMove (C# line 1430-1432)
             if (IsComboNoMove()) return;
 
@@ -1386,6 +1260,7 @@ private:
             // Issue move (C# line 1438-1439)
             SDK::Vector3 movePos = SDK::Game::CursorPos();
             Move(movePos);
+            diag.moveIssued = true;
         }
     }
 

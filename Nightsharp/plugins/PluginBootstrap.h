@@ -3,6 +3,7 @@
 #include "PluginManager.h"
 #include "core/OrbwalkerPlugin.h"
 #include "core/TargetSelectorPlugin.h"
+#include "core/TargetSelectorPlugin2.h"
 #include "core/RenderTestPlugin.h"
 #include "core/OffsetScannerPlugin.h"
 #include "champions/EzrealPlugin.h"
@@ -26,6 +27,7 @@ namespace PluginBootstrap {
         auto& manager = PluginManager::Get();
         manager.Register<OrbwalkerPlugin>();
         manager.Register<TargetSelectorPlugin>();
+        manager.Register<TargetSelectorPlugin2>();
         manager.Register<RenderTestPlugin>();
         manager.Register<OffsetScannerPlugin>();
         manager.Register<EzrealPlugin>();

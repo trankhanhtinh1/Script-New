@@ -6,6 +6,7 @@
 #include "../../../Core/Objects.h"
 
 #include <algorithm>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -28,20 +29,29 @@ struct TrackedSpellEntry {
     bool Targeted = false;
 };
 
+inline std::vector<TrackedSpellEntry>* g_trackerEntries = nullptr;
+
+inline bool EnsureEntries() {
+    if (!g_trackerEntries)
+        g_trackerEntries = new(std::nothrow) std::vector<TrackedSpellEntry>();
+    return g_trackerEntries != nullptr;
+}
+
 inline std::vector<TrackedSpellEntry>& Entries() {
-    static std::vector<TrackedSpellEntry> entries;
-    return entries;
+    return *g_trackerEntries;
 }
 
 inline void Initialize() {
-    Entries().clear();
+    if (!EnsureEntries()) return;
+    g_trackerEntries->clear();
 }
 
 inline void Reset() {
-    Entries().clear();
+    if (g_trackerEntries) g_trackerEntries->clear();
 }
 
 inline void Update() {
+    if (!EnsureEntries()) return;
     auto& out = Entries();
     out.clear();
 
@@ -102,7 +112,8 @@ inline void Update() {
 }
 
 inline const TrackedSpellEntry* FindByCaster(int networkId) {
-    const auto& entries = Entries();
+    if (!g_trackerEntries) return nullptr;
+    const auto& entries = *g_trackerEntries;
     auto it = std::find_if(entries.begin(), entries.end(), [&](const TrackedSpellEntry& entry) {
         return entry.CasterNetworkId == networkId;
     });
@@ -110,7 +121,8 @@ inline const TrackedSpellEntry* FindByCaster(int networkId) {
 }
 
 inline const TrackedSpellEntry* FindByMissile(int networkId) {
-    const auto& entries = Entries();
+    if (!g_trackerEntries) return nullptr;
+    const auto& entries = *g_trackerEntries;
     auto it = std::find_if(entries.begin(), entries.end(), [&](const TrackedSpellEntry& entry) {
         return entry.MissileNetworkId == networkId;
     });
