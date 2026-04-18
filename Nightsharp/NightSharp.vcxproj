@@ -254,9 +254,6 @@
     <ClInclude Include="sdk\Enumerations\MinionTeam.h" />
     <ClInclude Include="sdk\Enumerations\MinionTypes.h" />
     <ClInclude Include="sdk\Enumerations\NotificationIconType.h" />
-    <ClInclude Include="sdk\Enumerations\OrbwalkerMode.h" />
-    <ClInclude Include="sdk\Enumerations\OrbwalkingMode.h" />
-    <ClInclude Include="sdk\Enumerations\OrbwalkingType.h" />
     <ClInclude Include="sdk\Enumerations\PerformanceType.h" />
     <ClInclude Include="sdk\Enumerations\SkillshotType.h" />
     <ClInclude Include="sdk\Enumerations\SpellSlot.h" />
@@ -399,9 +396,7 @@
     <ClInclude Include="sdk\Wrappers\Damages\DamagePassives.h" />
     <ClInclude Include="sdk\Wrappers\GameObjects.h" />
     <ClInclude Include="sdk\Wrappers\Map.h" />
-    <ClInclude Include="sdk\Wrappers\Orbwalking\OrbwalkerBase.h" />
     <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h" />
-    <ClInclude Include="sdk\Wrappers\Orbwalking\OrbwalkerSelector.h" />
     <ClInclude Include="sdk\Wrappers\Spells\Database\SpellDatabase.h" />
     <ClInclude Include="sdk\Wrappers\Spells\Database\SpellDatabaseEntry.h" />
     <ClInclude Include="sdk\Wrappers\Spells\LastCast.h" />

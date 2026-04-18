@@ -96,7 +96,11 @@ void* operator new(size_t sz, std::align_val_t al) {
 
 void operator delete(void* ptr, std::align_val_t) noexcept {
     if (ptr) {
-        HeapFree(GetProcessHeap(), 0, ((void**)ptr)[-1]);
+        void* raw = ((void**)ptr)[-1];
+        uintptr_t r = (uintptr_t)raw;
+        if (r >= 0x10000ULL && r < 0x7FFFFFFFFFFF0000ULL) {
+            HeapFree(GetProcessHeap(), 0, raw);
+        }
     }
 }
 

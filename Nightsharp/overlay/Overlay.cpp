@@ -143,7 +143,7 @@ void CleanupDeviceD3D11() {
 }
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (g_bMenuVisible) {
+    if (g_bMenuVisible || NightSharpMenu::debugWindowEnabled) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }
@@ -217,19 +217,39 @@ void MoveOverlayToTarget() {
 }
 
 void SetClickThrough(bool through) {
-    if (!g_hOverlay) {
-        return;
-    }
-
+    if (!g_hOverlay) return;
     LONG_PTR cur = GetWindowLongPtrW(g_hOverlay, GWL_EXSTYLE);
     LONG_PTR desired = through ? (cur | WS_EX_TRANSPARENT) : (cur & ~WS_EX_TRANSPARENT);
-    if (desired == cur) {
-        return;
-    }
-
+    if (desired == cur) return;
     SetWindowLongPtrW(g_hOverlay, GWL_EXSTYLE, desired);
     SetWindowPos(g_hOverlay, nullptr, 0, 0, 0, 0,
         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void UpdateClickThroughState() {
+    if (!g_bMenuVisible && !NightSharpMenu::debugWindowEnabled) {
+        SetClickThrough(true);
+        return;
+    }
+    if (ImGui::GetIO().WantCaptureMouse) {
+        SetClickThrough(false);
+        return;
+    }
+    if (g_bMenuVisible && g_hOverlay) {
+        POINT pt = {};
+        GetCursorPos(&pt);
+        ScreenToClient(g_hOverlay, &pt);
+        const float cx = (float)pt.x;
+        const float cy = (float)pt.y;
+        for (int i = 0; i < NightSharpMenu::menuPanelCount; i++) {
+            auto& p = NightSharpMenu::menuPanels[i];
+            if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) {
+                SetClickThrough(false);
+                return;
+            }
+        }
+    }
+    SetClickThrough(true);
 }
 
 // Anti-capture: hide overlay from OBS / screenshots / screen recording
@@ -244,33 +264,6 @@ void SetAntiCapture(bool enabled) {
     }
 }
 
-void UpdateClickThroughFromMenuBounds() {
-    if (NightSharpMenu::debugWindowEnabled) {
-        SetClickThrough(false);
-        return;
-    }
-
-    if (!g_bMenuVisible) {
-        SetClickThrough(true);
-        return;
-    }
-
-    POINT cursorPt = {};
-    GetCursorPos(&cursorPt);
-    ScreenToClient(g_hOverlay, &cursorPt);
-    const float cx = (float)cursorPt.x;
-    const float cy = (float)cursorPt.y;
-
-    bool overMenu = false;
-    for (int i = 0; i < NightSharpMenu::menuPanelCount; i++) {
-        auto& p = NightSharpMenu::menuPanels[i];
-        if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) {
-            overMenu = true;
-            break;
-        }
-    }
-    SetClickThrough(!overMenu);
-}
 
 void ToggleMenuVisible() {
     LONG vis = !g_bMenuVisible;
@@ -447,8 +440,6 @@ void Overlay::Run() {
     NightSharpMenu::showMenu = true;
     SDK::MenuManager::SetMenuVisible(true);
     SetClickThrough(true);
-    SetWindowPos(g_hOverlay, nullptr, 0, 0, 0, 0,
-        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     CrashTelemetry::SetStage("Overlay::Run::InitCore");
     const bool coreInitOk = CoreRuntime::Initialize();
@@ -509,7 +500,14 @@ void Overlay::Run() {
     Plugins::PluginManager::Get().LoadAuto();
     WriteStage("[NightSharp] STAGE 8b: Plugins loaded (post-SDK)\r\n");
 
-    MenuPersistence::LoadAll();
+    CrashTelemetry::SetStage("Overlay::PreLoadAll");
+    __try {
+        MenuPersistence::LoadAll();
+    }
+    __except (CrashTelemetry::ReportAndHandle("Overlay::LoadAll", GetExceptionInformation())) {
+        WriteStage("[NightSharp] STAGE 8c: FAILED (LoadAll crash)\r\n");
+    }
+    CrashTelemetry::SetStage("Overlay::PostLoadAll");
     WriteStage("[NightSharp] STAGE 8c: MenuPersistence::LoadAll done\r\n");
 
     const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -574,9 +572,7 @@ void Overlay::Run() {
                 __leave;
             }
 
-            CrashTelemetry::SetStage("Overlay::Frame::ClickThrough");
-            traceFrameStage("ClickThrough");
-            UpdateClickThroughFromMenuBounds();
+
 
             CrashTelemetry::SetStage("Overlay::Frame::TickRead");
             traceFrameStage("TickRead");
@@ -631,6 +627,7 @@ void Overlay::Run() {
             traceFrameStage("MenuRender");
             NightSharpMenu::Render();
             NightSharpMenu::RenderDebugWindow();
+            UpdateClickThroughState();
             CrashTelemetry::SetStage("Overlay::Frame::PluginsRender");
             traceFrameStage("PluginsRender");
             Plugins::PluginManager::Get().OnRender();
@@ -668,7 +665,8 @@ void Overlay::Run() {
         }
 
         if (frameFault) {
-            WriteStage("[NightSharp] RENDER LOOP: frame exception, breaking\r\n");
+            __try { WriteStage("[NightSharp] RENDER LOOP: frame exception, breaking\r\n"); }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
             break;
         }
     }

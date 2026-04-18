@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../sdk/Core/Objects.h"
-#include "../sdk/Wrappers/Orbwalking/OrbwalkerBase.h"
+#include "../sdk/Wrappers/Orbwalking/Orbwalker.h"
 #include "../sdk/Events/AntiGapcloser.h"
 #include "../sdk/Events/BuffTracker.h"
 #include "../sdk/Events/SpellCastTracker.h"

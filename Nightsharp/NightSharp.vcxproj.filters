@@ -758,12 +758,6 @@
     <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h">
       <Filter>sdk\Wrappers\Orbwalking</Filter>
     </ClInclude>
-    <ClInclude Include="sdk\Wrappers\Orbwalking\OrbwalkerBase.h">
-      <Filter>sdk\Wrappers\Orbwalking</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\Orbwalking\OrbwalkerSelector.h">
-      <Filter>sdk\Wrappers\Orbwalking</Filter>
-    </ClInclude>
     <ClInclude Include="sdk\Wrappers\Spells\LastCast.h">
       <Filter>sdk\Wrappers\Spells</Filter>
     </ClInclude>
@@ -882,15 +876,6 @@
       <Filter>sdk\Enumerations</Filter>
     </ClInclude>
     <ClInclude Include="sdk\Enumerations\NotificationIconType.h">
-      <Filter>sdk\Enumerations</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Enumerations\OrbwalkerMode.h">
-      <Filter>sdk\Enumerations</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Enumerations\OrbwalkingMode.h">
-      <Filter>sdk\Enumerations</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Enumerations\OrbwalkingType.h">
       <Filter>sdk\Enumerations</Filter>
     </ClInclude>
     <ClInclude Include="sdk\Enumerations\PerformanceType.h">

@@ -5,7 +5,6 @@
 #include "../../sdk/Core/Objects.h"
 #include "../../sdk/Core/Game.h"
 #include "../../sdk/Wrappers/Orbwalking/Orbwalker.h"
-#include "../../sdk/Wrappers/Orbwalking/OrbwalkerBase.h"
 #include "../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../sdk/Math/Collision.h"
 #include "../../sdk/Math/HealthPrediction.h"
@@ -181,6 +180,8 @@ public:
         m_activeMode = GetActiveMode();
         SDK::Orbwalker::Instance().ActiveMode = m_activeMode;
         if (m_activeMode == SDK::OrbwalkerMode::None) return;
+        if (m_activeMode == SDK::OrbwalkerMode::Clear)
+            print("[LC] Mode=Clear tick=%d", SDK::Game::TickCount());
 
         DbgStage("OrbPlugin::GetTarget");
         SDK::AIBaseClient target = GetTarget();
@@ -267,6 +268,25 @@ public:
                     dl->AddText(ImVec2(x, y), col, txt);
                 }
             }
+        }
+
+        if (m_pushMinionDraw.IsValid() && m_pushMinionDraw.IsAlive() && m_pushMinionDraw.IsVisible()) {
+            SDK::Drawing::DrawCircle(m_pushMinionDraw.Position(), m_pushMinionDraw.BoundingRadius(), IM_COL32(0, 255, 0, 200), 2.0f);
+
+            char hpBuf[32];
+            wsprintfA(hpBuf, "%d", (int)m_pushMinionDraw.Health());
+            SDK::Vector3 hpPos = m_pushMinionDraw.Position();
+            hpPos.y += 120.0f;
+            SDK::Drawing::DrawText(hpPos, hpBuf, IM_COL32(0, 255, 0, 255), true);
+        }
+        if (m_lastHitMinionDraw.IsValid() && m_lastHitMinionDraw.IsAlive()) {
+            SDK::Drawing::DrawCircle(m_pushMinionDraw.Position(), m_pushMinionDraw.BoundingRadius(), IM_COL32(255, 0, 0, 200), 2.0f);
+
+            char hpBuf[32];
+            wsprintfA(hpBuf, "%d", (int)m_pushMinionDraw.Health());
+            SDK::Vector3 hpPos = m_pushMinionDraw.Position();
+            hpPos.y += 120.0f;
+            SDK::Drawing::DrawText(hpPos, hpBuf, IM_COL32(0, 255, 0, 255), true);
         }
     }
 
@@ -411,6 +431,8 @@ private:
     SDK::AIBaseClient m_laneClearMinion;
     SDK::AIBaseClient m_cachedTarget;
     int m_targetCacheTick = 0;
+    SDK::AIBaseClient m_pushMinionDraw;
+    SDK::AIBaseClient m_lastHitMinionDraw;
 
     // ── AA polling ──
     bool m_wasWindingUp = false;
@@ -757,6 +779,7 @@ private:
         DbgStage("OrbPlugin::Target::LastHit");
         if (m_activeMode != SDK::OrbwalkerMode::Combo) {
             auto lh = GetLastHitMinion();
+            m_lastHitMinionDraw = lh;
             if (lh.IsValid()) return lh;
         }
 
@@ -804,8 +827,11 @@ private:
         DbgStage("OrbPlugin::Target::Push");
         if (m_activeMode == SDK::OrbwalkerMode::Clear && !ShouldWait(range)) {
             auto push = GetPushMinion();
+            m_pushMinionDraw = push;
             if (push.IsValid()) return push;
         }
+        if (m_activeMode != SDK::OrbwalkerMode::Clear)
+            m_pushMinionDraw = {};
 
         // ── Step 10: Special minions fallback (C# line 1314-1321) ──
         DbgStage("OrbPlugin::Target::SpecialFB");
@@ -938,7 +964,8 @@ private:
             if (hpPred <= 0.0f) {
                 SDK::OrbwalkingActionArgs nk{};
                 nk.Target = min; nk.Sender = p;
-                nk.Type = SDK::OrbwalkingType::NonKillableMinion; nk.Process = true;
+                nk.Type = SDK::OrbwalkingType::NonKillableMinion; 
+                nk.Process = true;
                 SDK::Orbwalker::Instance().InvokeAction(nk);
                 continue;
             }
@@ -1239,6 +1266,8 @@ private:
         diag.canAttack = canAtk;
         if (canAtk && Attack(target)) {
             diag.attackIssued = true;
+            if (m_activeMode == SDK::OrbwalkerMode::Clear)
+                print("[LC] Attack issued netId=%d", target.NetworkId());
             return;
         }
 
@@ -1247,6 +1276,8 @@ private:
         float windupDelay = (float)GetOrbSlider("windupDelay", 60);
         const bool canMov = CanMove(windupDelay, false);
         diag.canMove = canMov;
+        if (m_activeMode == SDK::OrbwalkerMode::Clear)
+            print("[LC] Orbwalk canMov=%d", canMov ? 1 : 0);
         if (canMov) {
             // ComboNoMove (C# line 1430-1432)
             if (IsComboNoMove()) return;
