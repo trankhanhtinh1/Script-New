@@ -58,6 +58,10 @@ public:
     bool OnBeforeAttack(ActionHandler h) { return AddOnAction(h); }
     bool OnAfterAttack(ActionHandler h)  { return AddOnAction(h); }
 
+    static void ResetHandlers() {
+        for (int i = 0; i < kMaxHandlers; ++i) s_actionHandlers[i] = nullptr;
+    }
+
 protected:
     void InvokeAction(OrbwalkingActionArgs& e) const {
         for (int i = 0; i < kMaxHandlers && s_actionHandlers[i]; ++i) {

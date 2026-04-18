@@ -3,46 +3,33 @@
 #include "../core/CoreAPI.h"
 #include "../sdk/Core/Objects.h"
 #include "../sdk/Enumerations/DamageType.h"
-#include "../sdk/Math/Prediction/Movement.h"
 #include "../sdk/Utils/Invulnerable.h"
+#include "../sdk/Utils/StatusCheck.h"
 
 #include <initializer_list>
 
 namespace Plugins::Compat {
 
-inline constexpr int kBuffTypeStun = SDK::Prediction::Movement::detail::kBuffTypeStun;
-inline constexpr int kBuffTypeSnare = SDK::Prediction::Movement::detail::kBuffTypeSnare;
-inline constexpr int kBuffTypeSuppression = SDK::Prediction::Movement::detail::kBuffTypeSuppression;
-inline constexpr int kBuffTypeCharm = SDK::Prediction::Movement::detail::kBuffTypeCharm;
-inline constexpr int kBuffTypeKnockup = SDK::Prediction::Movement::detail::kBuffTypeKnockup;
+inline constexpr int kBuffTypeStun        = SDK::Utils::StatusCheck::kBuffTypeStun;
+inline constexpr int kBuffTypeSnare       = SDK::Utils::StatusCheck::kBuffTypeSnare;
+inline constexpr int kBuffTypeSuppression = SDK::Utils::StatusCheck::kBuffTypeSuppression;
+inline constexpr int kBuffTypeCharm       = SDK::Utils::StatusCheck::kBuffTypeCharm;
+inline constexpr int kBuffTypeKnockup     = SDK::Utils::StatusCheck::kBuffTypeKnockup;
 
 inline bool HasBuffType(const SDK::AIBaseClient& target, int type) {
-    return target.IsValid() && CoreAPI::Buffs::HasBuffType(target.Address(), type);
+    return SDK::Utils::StatusCheck::HasBuffType(target, type);
 }
 
 inline bool HasAnyBuffType(const SDK::AIBaseClient& target, std::initializer_list<int> buffTypes) {
-    if (!target.IsValid()) {
-        return false;
-    }
-
-    for (const int buffType : buffTypes) {
-        if (CoreAPI::Buffs::HasBuffType(target.Address(), buffType)) {
-            return true;
-        }
-    }
-    return false;
+    return SDK::Utils::StatusCheck::HasAnyBuffType(target, buffTypes);
 }
 
 inline bool HasMovementLock(const SDK::AIBaseClient& target) {
-    return !target.CanMove() ||
-           HasAnyBuffType(target, {kBuffTypeStun, kBuffTypeSnare, kBuffTypeSuppression, kBuffTypeCharm, kBuffTypeKnockup});
+    return SDK::Utils::StatusCheck::HasMovementLock(target);
 }
 
 inline bool IsZombieLike(const SDK::AIHeroClient& target) {
-    return target.IsValid() &&
-           (target.HasBuff("KarthusDeathDefiedBuff") ||
-            target.HasBuff("sionpassivezombie") ||
-            target.HasBuff("SionPassiveZombie"));
+    return SDK::Utils::StatusCheck::IsZombieLike(target);
 }
 
 inline bool IsProtectedFromSpell(const SDK::AIHeroClient& target,

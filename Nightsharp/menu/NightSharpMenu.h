@@ -1,6 +1,6 @@
 #pragma once
 /*
- * NightSharp v2.0 — Three-level Sidebar Menu (CRT-Free)
+ * NightSharp v2.0 ??Three-level Sidebar Menu (CRT-Free)
  *
  * Rewritten from old NightSharp menu to eliminate all CRT dependencies:
  *   - No std::string, std::vector, std::array
@@ -30,7 +30,7 @@
 namespace NightSharpMenu {
 
     // ============================================================================
-    // State — POD only, zero-initialized (safe without _initterm)
+    // State ??POD only, zero-initialized (safe without _initterm)
     // ============================================================================
     inline bool showMenu          = true;
     inline int  activePrimaryIdx  = -1;
@@ -38,7 +38,7 @@ namespace NightSharpMenu {
     inline bool primarySelected   = false;
     inline bool secondarySelected = false;
 
-    // Plugin sidebar state — which plugin's secondary panel is active
+    // Plugin sidebar state ??which plugin's secondary panel is active
     inline int  activePluginIdx   = -1;     // index into PluginRegistry::Plugins[]
     inline int  activePluginSecIdx = -1;    // secondary item within plugin menu
 
@@ -59,7 +59,7 @@ namespace NightSharpMenu {
     inline float CONTENT_W      = 560.0f;
 
     // ============================================================================
-    // Entry structures — POD, const char* only
+    // Entry structures ??POD, const char* only
     // ============================================================================
     struct SidebarEntry { const char* label; };
 
@@ -138,7 +138,7 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
-    // Content sections — Core
+    // Content sections ??Core
     // ============================================================================
     inline bool debugWindowEnabled = false;
 
@@ -195,8 +195,8 @@ namespace NightSharpMenu {
         if (DrawOnOffEditor("Debug Window", debugWindowEnabled, "debug_window_enabled"))
             SaveGlobals();
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("Bypass OBS: overlay hidden from screen capture"));
-        ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f), "%s", Translations::T("(requires Win10 2004+)"));
+        ImGui::TextColored(ImVec4(0.9f,0.9f,0.9f,1.0f), "%s", Translations::T("Bypass OBS: overlay hidden from screen capture"));
+        ImGui::TextColored(ImVec4(0.9f,0.9f,0.9f,1.0f), "%s", Translations::T("(requires Win10 2004+)"));
     }
 
     inline void DrawDebugSection() {
@@ -229,7 +229,7 @@ namespace NightSharpMenu {
             // Check champion compatibility
             const bool canLoad = PluginRegistry::CanPluginLoad(i);
 
-            // Hide incompatible champion scripts — don't clutter the list
+            // Hide incompatible champion scripts ??don't clutter the list
             if (!canLoad) continue;
 
             ImGui::PushID(i + idBase);
@@ -302,7 +302,7 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
-    // SDK Plugins tab — PLUGIN MANAGER UI
+    // SDK Plugins tab ??PLUGIN MANAGER UI
     // Hiện danh sách plugin với Load/Unload + Always Load
     // ============================================================================
     inline void DrawSDKPluginsSection() {
@@ -325,7 +325,7 @@ namespace NightSharpMenu {
 
             ImGui::PushID(i);
 
-            // Plugin row: [icon] Name    [Load/Unload] [☑ Always Load]
+            // Plugin row: [icon] Name    [Load/Unload] [??Always Load]
             ImGui::BeginGroup();
 
             // Status indicator
@@ -392,7 +392,7 @@ namespace NightSharpMenu {
 
             ImGui::SameLine(0, 8);
 
-            // Always Load checkbox — persisted to plugins.ini
+            // Always Load checkbox ??persisted to plugins.ini
             if (PluginRegistry::IsBuiltInSDKPlugin(i)) {
                 ImGui::TextColored(ImVec4(0.5f,0.85f,0.5f,1.0f), "%s", Translations::T("Built-in"));
             } else {
@@ -422,7 +422,7 @@ namespace NightSharpMenu {
             return;
         }
 
-        // Tương tự SDK plugins - sẽ implement sau
+        // Tương t�?SDK plugins - s�?implement sau
         for (int i = 0; i < PluginRegistry::PluginCount; i++) {
             auto& p = PluginRegistry::Plugins[i];
             if (p.Kind != PluginRegistry::PluginKind::External) continue;
@@ -447,17 +447,17 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
-    // Plugin menu helpers — build virtual secondary entries
+    // Plugin menu helpers ??build virtual secondary entries
     //
     // Orbwalker menu structure:
     //   orbwalker (Menu_)
-    //   ├── drawings (Menu)        → secondary "Drawings"
-    //   ├── advanced (Menu)        → secondary "Advanced"
-    //   ├── separatorKeys (Sep)    ┐
-    //   ├── lasthitKey (KeyBind)   │→ grouped into synthetic "General" entry
-    //   ├── laneclearKey (KeyBind) │
-    //   ├── comboKey (KeyBind)     │
-    //   └── enabledOption (Bool)   ┘
+    //   ?��??� drawings (Menu)        ??secondary "Drawings"
+    //   ?��??� advanced (Menu)        ??secondary "Advanced"
+    //   ?��??� separatorKeys (Sep)    ??
+    //   ?��??� lasthitKey (KeyBind)   ?��? grouped into synthetic "General" entry
+    //   ?��??� laneclearKey (KeyBind) ??
+    //   ?��??� comboKey (KeyBind)     ??
+    //   ?��??� enabledOption (Bool)   ??
     //
     // Secondary sidebar shows: Drawings, Advanced, General
     // "General" contains all non-Menu root children
@@ -485,7 +485,7 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
-    // Plugin content panel — renders plugin's SDK menu subtree
+    // Plugin content panel ??renders plugin's SDK menu subtree
     // ============================================================================
     inline void DrawPluginContentPanel(int pluginIdx, int secIdx, float panelX, float panelW) {
         if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) return;
@@ -557,7 +557,7 @@ namespace NightSharpMenu {
     }
 
     // ============================================================================
-    // Main render — called each ImGui frame
+    // Main render ??called each ImGui frame
     // ============================================================================
     inline void Render() {
         Translations::InitTranslations();
@@ -588,11 +588,11 @@ namespace NightSharpMenu {
             MenuTheme::g_inputEnabled = isFg || mouseInMenu;
         }
 
-        // ── Build dynamic primary entries ──
+        // ?�?� Build dynamic primary entries ?�?�
         // [0] = Core, [1..N] = loaded SDK plugins
         constexpr int MAX_PRIMARY = 17;  // 1 Core + 16 plugins max
         const char* primaryLabels[MAX_PRIMARY];
-        int primaryPluginMap[MAX_PRIMARY];  // maps primary index → plugin registry index (-1 for Core)
+        int primaryPluginMap[MAX_PRIMARY];  // maps primary index ??plugin registry index (-1 for Core)
         int primaryCount = 0;
 
         primaryLabels[0] = Translations::T("Core");
@@ -641,7 +641,13 @@ namespace NightSharpMenu {
             }
         }
 
-        if (showSecondary && secCount > 0) {
+        bool plugHasStandaloneEarly = false;
+        if (activePlugMapEarly >= 0 && activePlugMapEarly < PluginRegistry::PluginCount) {
+            auto& pe = PluginRegistry::Plugins[activePlugMapEarly];
+            if (pe.MenuRoot && pe.Loaded) plugHasStandaloneEarly = pe.MenuRoot->HasStandaloneItems();
+        }
+
+        if (showSecondary && (secCount > 0 || plugHasStandaloneEarly)) {
             float maxTextW = 0.0f;
             ImVec2 arrowSize = ImGui::CalcTextSize(">");
             ImVec2 spaceSize = ImGui::CalcTextSize("    ");
@@ -674,6 +680,13 @@ namespace NightSharpMenu {
                 float langRow = 12.0f + maxTextW + langDropMinW + 12.0f;
                 if (computed < langRow) computed = langRow;
             }
+
+            if (plugHasStandaloneEarly) {
+                auto& pe = PluginRegistry::Plugins[activePlugMapEarly];
+                float itemsW = pe.MenuRoot->EstimateStandaloneItemsWidth() + 40.0f;
+                if (itemsW > computed) computed = itemsW;
+            }
+
             SECONDARY_W = computed;
         }
 
@@ -735,9 +748,9 @@ namespace NightSharpMenu {
 
         // ==== PRIMARY PANEL ====
         {
-            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BG, 4.0f);
-            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BORDER, 4.0f);
+            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BG, 8.0f);
+            dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 8.0f);
+            dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH), COL_BORDER, 8.0f);
             dl->AddText(ImVec2(primaryPos.x + 10, primaryPos.y + 8), COL_ACCENT, NS_HEADER_STRING);
             dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H),
                         ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER);
@@ -781,6 +794,17 @@ namespace NightSharpMenu {
         }
 
         // ==== SECONDARY PANEL ====
+        std::vector<SDK::MenuItem*> standaloneItemsSec;
+        float standaloneTotalH = 0.0f;
+        if (activePlugMap >= 0) {
+            auto& pSec = PluginRegistry::Plugins[activePlugMap];
+            if (pSec.MenuRoot && pSec.Loaded) {
+                pSec.MenuRoot->GetStandaloneItems(standaloneItemsSec);
+                for (auto* it : standaloneItemsSec) {
+                    if (it) standaloneTotalH += MenuRenderers::EstimateItemHeight(it);
+                }
+            }
+        }
         {
             if (activeSecondaryIdx < 0 && secCount > 0)
                 activeSecondaryIdx = 0;
@@ -792,11 +816,13 @@ namespace NightSharpMenu {
             bool langDropOpen = (MenuRenderers::s_expandedDropdown == &s_langDropdownId);
             int langExtraRows = (activePlugMap < 0 && langDropOpen) ? langItemCount : 0;
 
-            secondaryH = HEADER_H + ITEM_H * (float)MaxI(1, secCount + langExtraRows) + 4;
+            float bodyH = ITEM_H * (float)(secCount + langExtraRows) + standaloneTotalH;
+            if (bodyH < ITEM_H) bodyH = ITEM_H;
+            secondaryH = HEADER_H + bodyH + 4;
 
-            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH), COL_BG, 4.0f);
-            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH), COL_BORDER, 4.0f);
+            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH), COL_BG, 8.0f);
+            dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 8.0f);
+            dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH), COL_BORDER, 8.0f);
 
             const char* headerLabel = (activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)
                                       ? primaryLabels[activePrimaryIdx] : "?";
@@ -860,6 +886,19 @@ namespace NightSharpMenu {
                     y += ITEM_H;
                 }
             }
+
+            if (!standaloneItemsSec.empty()) {
+                int siCount = 0;
+                for (auto* it : standaloneItemsSec) if (it) siCount++;
+                int siIdx = 0;
+                for (auto* it : standaloneItemsSec) {
+                    if (!it) continue;
+                    siIdx++;
+                    bool isLast = (siIdx == siCount);
+                    y += MenuRenderers::DrawItem(dl, ImVec2(secondaryPos.x, y),
+                                                 secondaryPos.x, SECONDARY_W, it, !isLast);
+                }
+            }
         }
 
         // ==== CONTENT PANEL ====
@@ -899,9 +938,9 @@ namespace NightSharpMenu {
             }
             contentH = estimatedContentH;
 
-            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
-            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_BORDER, 4.0f);
+            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 8.0f); // old theme: dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
+            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 8.0f); // old theme: dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
+            dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_BORDER, 8.0f); // old theme: dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_BORDER, 8.0f);
 
             // Section label
             const char* sectionLabel = "?";
@@ -927,7 +966,7 @@ namespace NightSharpMenu {
                 // Core content
                 DrawCoreContentPanel(activeSecondaryIdx);
             } else {
-                // Plugin content — render SDK menu subtree
+                // Plugin content ??render SDK menu subtree
                 DrawPluginContentPanel(activePlugMap, activeSecondaryIdx, contentPos.x, CONTENT_W);
             }
 
@@ -995,3 +1034,4 @@ namespace NightSharpMenu {
     }
 
 } // namespace NightSharpMenu
+

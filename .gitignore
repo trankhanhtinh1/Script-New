@@ -30,4 +30,4 @@ x86/
 
 *.txt
 *.aps
-ipch/
+ipch/Nightsharp/version.h

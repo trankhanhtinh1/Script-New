@@ -2,7 +2,6 @@
 
 #include "../IPlugin.h"
 #include "../PluginSdkCompat.h"
-#include "../../menu/PluginRegistry.h"
 #include "../../sdk/Core/Game.h"
 #include "../../sdk/Core/Objects.h"
 #include "../../sdk/Enumerations/DamageType.h"
@@ -37,46 +36,76 @@ public:
 
         auto player = SDK::ObjectManager::Player();
         if (player.IsValid()) m_playerName = player.CharacterName();
-        m_modeKey = m_playerName.empty() ? "TSMode2" : ("TSMode2_" + m_playerName);
+        m_modeKey     = m_playerName.empty() ? "TSMode2"     : ("TSMode2_"     + m_playerName);
+        m_modeKey2nd  = m_playerName.empty() ? "TSMode2_Sec" : ("TSMode2_Sec_" + m_playerName);
 
         const std::vector<std::string> kModeItems = {
             "Script", "AP Damage", "AD Damage", "Least HP",
             "Less AA", "Less Casts", "Priority", "Near Mouse", "Close Me"
         };
 
-        m_priorityMenu = m_menu->AddSubMenu("Priority", "Priority");
+        m_coreMenu = m_menu->AddSubMenu("CoreSettings", "Core settings");
+        if (m_coreMenu) {
+            m_coreMenu->Add<SDK::MenuSeparator>("sep_core", "Core");
+            m_coreMenu->Add<SDK::MenuList>(m_modeKey, "Main mode", kModeItems, 0);
+            m_coreMenu->Add<SDK::MenuList>(m_modeKey2nd, "Secondary mode", kModeItems, 0);
+            m_coreMenu->Add<SDK::MenuBool>("DebuffPriority", "Prioritize targets with debuffs", true);
+            m_coreMenu->Add<SDK::MenuList>("DistanceDetection", "Distance detection",
+                std::vector<std::string>{ "Default", "Normal", "Strict" }, 0);
+            m_coreMenu->Add<SDK::MenuBool>("AttackZombie", "Attack zombie", true);
+            m_coreMenu->Add<SDK::MenuSeparator>("sep_prio", "Priority");
+            m_coreMenu->Add<SDK::MenuSeparator>("sep_prio_hint", "[low] 1  2  3  4  5 [high]");
+        }
+        m_priorityMenu = m_coreMenu;
 
-        auto* draw = m_menu->AddSubMenu("Drawings", "Drawings");
+        auto* draw = m_menu->AddSubMenu("DrawSettings", "Draw settings");
         if (draw) {
-            draw->Add<SDK::MenuBool>("DrawEnemies", "Draw Enemy Circles", true);
-            draw->Add<SDK::MenuColor>("EnemyColor", "Enemy Color", 0.5f, 0.55f, 0.55f, 1.0f);
-            draw->Add<SDK::MenuColor>("SelectColor", "Selected Color", 1.0f, 0.18f, 0.18f, 1.0f);
-            draw->Add<SDK::MenuBool>("DrawSelect", "Draw Selected Target", true);
-            draw->Add<SDK::MenuBool>("LightSelect", "Highlight Selected (Pulse)", true);
-            draw->Add<SDK::MenuBool>("ShowHUD", "Show Target HUD", true);
+            draw->Add<SDK::MenuSeparator>("sep_noti", "Notification");
+            draw->Add<SDK::MenuBool>("NotiEnable", "Enable", true);
+            draw->Add<SDK::MenuColor>("TextColor", "Text color", 1.0f, 1.0f, 1.0f, 0.784f);
+            draw->Add<SDK::MenuColor>("BackgroundColor", "Background color", 0.0f, 0.0f, 0.0f, 0.392f);
+            draw->Add<SDK::MenuColor>("BackgroundColorLock", "-> Only attack selected",
+                0.839f, 0.188f, 0.192f, 0.392f);
+
+            draw->Add<SDK::MenuSeparator>("sep_enemies", "Enemies");
+            draw->Add<SDK::MenuBool>("EnemiesEnable", "Enable", true);
+            draw->Add<SDK::MenuSlider>("EnemiesSize", "Size (%)", 100, 50, 100);
+            draw->Add<SDK::MenuColor>("EnemiesColor", "Not selected enemies",
+                0.498f, 0.549f, 0.553f, 1.0f);
+            draw->Add<SDK::MenuColor>("SelectedColor", "Selected target",
+                0.918f, 0.188f, 0.192f, 1.0f);
         }
 
-        m_menu->Add<SDK::MenuBool>("FocusSelected", "Focus Selected Target", true);
-        m_menu->Add<SDK::MenuBool>("OnlyAttackSelected", "Only Attack Selected", false);
-        m_menu->Add<SDK::MenuKeyBind>("OnlySelectKey", "Only Attack Selected (toggle)", 0, SDK::KeyBindType::Toggle);
-        m_menu->Add<SDK::MenuBool>("AttackZombie", "Attack Zombie", true);
-        m_menu->Add<SDK::MenuBool>("DebuffPriority", "Prioritize CC'd Targets", true);
-        m_menu->Add<SDK::MenuList>(m_modeKey, "Mode", kModeItems, 0);
-        m_menu->Add<SDK::MenuList>("SecondaryMode", "Secondary Mode", kModeItems, 0);
-        m_menu->Add<SDK::MenuKeyBind>("SecondaryModeKey", "Secondary Mode Key (hold)", 0, SDK::KeyBindType::Press);
-
-        auto* forceMenu = m_menu->AddSubMenu("ForceTarget", "Force Target");
+        auto* forceMenu = m_menu->AddSubMenu("ForceTarget", "Force target");
         if (forceMenu) {
-            forceMenu->Add<SDK::MenuSlider>("MouseRange", "Mouse Range", 400, 0, 1000);
-            forceMenu->Add<SDK::MenuSlider>("Timeout", "Timeout (sec)", 5, 0, 10);
-            forceMenu->Add<SDK::MenuList>("Boss", "Boss Target", std::vector<std::string>{ "None" }, 0);
+            forceMenu->Add<SDK::MenuKeyBind>("SecondaryModeKey", "Use secondary mode",
+                0, SDK::KeyBindType::Press);
+            forceMenu->Add<SDK::MenuKeyBind>("ForceTargetKey", "Force target",
+                VK_LBUTTON, SDK::KeyBindType::Press);
+            forceMenu->Add<SDK::MenuButton>("ChangeToLMB", "-> Change to left mouse", "Click",
+                []() {
+                    if (!s_instance || !s_instance->m_menu) return;
+                    auto* force = s_instance->m_menu->GetSubMenu("ForceTarget");
+                    if (!force) return;
+                    if (auto* kb = force->Get<SDK::MenuKeyBind>("ForceTargetKey"))
+                        kb->Key = VK_LBUTTON;
+                });
+            forceMenu->Add<SDK::MenuSlider>("Timeout", "Time out (sec)", 5, 0, 10);
+            forceMenu->Add<SDK::MenuSlider>("MouseRange", "Mouse range", 400, 0, 1000);
+            forceMenu->Add<SDK::MenuKeyBind>("OnlySelectKey", "Only attack select / boss",
+                0, SDK::KeyBindType::Toggle);
         }
 
+        auto* bossMenu = m_menu->AddSubMenu("BossMode", "Boss mode");
+        if (bossMenu) {
+            bossMenu->Add<SDK::MenuList>("Boss", "Boss",
+                std::vector<std::string>{ "None" }, 0);
+        }
+
+        s_instance = this;
         EnsurePrioritySliders();
         EnsureBossOptions();
-        s_instance = this;
 
-        HidePluginV1();
         SDK::TargetSelector::SetOverride(
             &TargetSelectorPlugin2::SDKGetTargetFn,
             &TargetSelectorPlugin2::SDKGetTargetsFn,
@@ -87,7 +116,6 @@ public:
     }
 
     void OnUnload() override {
-        RestorePluginV1();
         if (s_instance == this) {
             SDK::TargetSelector::ClearOverride();
             s_instance = nullptr;
@@ -98,8 +126,9 @@ public:
 
         if (m_menu) {
             SDK::Menu::Remove("CustomTS2");
-            m_menu = nullptr;
+            m_menu         = nullptr;
             m_priorityMenu = nullptr;
+            m_coreMenu     = nullptr;
         }
     }
 
@@ -116,66 +145,40 @@ public:
 
     void OnRender() override {
         if (!m_menu) return;
-        auto* draw = m_menu->GetSubMenu("Drawings");
+        auto* draw = m_menu->GetSubMenu("DrawSettings");
         if (!draw) return;
 
         const auto bossTarget = ResolveBossTarget();
         const uint32_t bossNetId = bossTarget.IsValid() ? static_cast<uint32_t>(bossTarget.NetworkId()) : 0u;
         const uint32_t selNetId  = m_selectedTarget.IsValid() ? static_cast<uint32_t>(m_selectedTarget.NetworkId()) : 0u;
 
-        auto* drawEnemies = draw->Get<SDK::MenuBool>("DrawEnemies");
+        auto* drawEnemies = draw->Get<SDK::MenuBool>("EnemiesEnable");
         if (drawEnemies && drawEnemies->Enabled) {
-            auto* colorItem    = draw->Get<SDK::MenuColor>("EnemyColor");
-            auto* selColorItem = draw->Get<SDK::MenuColor>("SelectColor");
-            ImU32 enemyCol = colorItem    ? colorItem->GetImU32()    : IM_COL32(127, 140, 141, 220);
-            ImU32 selCol   = selColorItem ? selColorItem->GetImU32() : IM_COL32(255, 46, 46, 255);
+            auto* sizeItem     = draw->Get<SDK::MenuSlider>("EnemiesSize");
+            auto* enemyColItem = draw->Get<SDK::MenuColor>("EnemiesColor");
+            auto* selColItem   = draw->Get<SDK::MenuColor>("SelectedColor");
+
+            const float scale = sizeItem ? (static_cast<float>(sizeItem->Value) / 100.0f) : 1.0f;
+            const ImU32 enemyCol = enemyColItem ? enemyColItem->GetImU32() : IM_COL32(127, 140, 141, 255);
+            const ImU32 selCol   = selColItem   ? selColItem->GetImU32()   : IM_COL32(234, 48, 49, 255);
+
+            const bool enemyColVisible = enemyColItem ? enemyColItem->Color[3] > 0.18f : true;
+            const bool selColVisible   = selColItem   ? selColItem->Color[3]   > 0.18f : true;
 
             for (const auto& enemy : SDK::ObjectManager::EnemyHeroes()) {
                 if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) continue;
-                uint32_t nid = static_cast<uint32_t>(enemy.NetworkId());
-                ImU32 col = (nid == bossNetId || nid == selNetId) ? selCol : enemyCol;
-                SDK::Drawing::DrawCircle(enemy.Position(), enemy.BoundingRadius() + 38.0f, col, 2.0f);
+                const uint32_t nid = static_cast<uint32_t>(enemy.NetworkId());
+                const bool isSel = (nid == bossNetId || nid == selNetId);
+                if (isSel && !selColVisible) continue;
+                if (!isSel && !enemyColVisible) continue;
+                const ImU32 col = isSel ? selCol : enemyCol;
+                const float radius = (enemy.BoundingRadius() + 10.0f) * scale;
+                SDK::Drawing::DrawCircle(enemy.Position(), radius, col, 2.0f);
             }
         }
 
         const SDK::AIHeroClient& activeTarget = bossTarget.IsValid() ? bossTarget : m_selectedTarget;
-
-        auto* drawSelect = draw->Get<SDK::MenuBool>("DrawSelect");
-        if (drawSelect && drawSelect->Enabled && activeTarget.IsValid() && !activeTarget.IsDead()) {
-            auto* selColorItem = draw->Get<SDK::MenuColor>("SelectColor");
-            ImU32 selCol = selColorItem ? selColorItem->GetImU32() : IM_COL32(255, 46, 46, 255);
-            SDK::Drawing::DrawCircle(activeTarget.Position(), activeTarget.BoundingRadius() + 48.0f, selCol, 3.0f);
-
-            auto* light = draw->Get<SDK::MenuBool>("LightSelect");
-            if (light && light->Enabled) {
-                float t = SDK::Game::Time();
-                float pulse = 6.0f + 6.0f * (0.5f + 0.5f * sinf(t * 6.0f));
-                SDK::Drawing::DrawCircle(activeTarget.Position(),
-                    activeTarget.BoundingRadius() + 48.0f + pulse,
-                    IM_COL32(180, 80, 255, 170), 1.5f);
-            }
-        }
-
-        auto* showHUD = draw->Get<SDK::MenuBool>("ShowHUD");
-        if (showHUD && showHUD->Enabled && activeTarget.IsValid() && !activeTarget.IsDead()) {
-            bool onlySelect = IsOnlyAttackSelected();
-            std::string name = activeTarget.CharacterName();
-            if (!name.empty()) {
-                std::string label = onlySelect ? ("LOCKED: " + name) : ("TARGET: " + name);
-                auto* dl = ImGui::GetForegroundDrawList();
-                if (dl) {
-                    ImVec2 sz = ImGui::CalcTextSize(label.c_str());
-                    float x = ImGui::GetIO().DisplaySize.x * 0.5f - sz.x * 0.5f;
-                    float y = 60.0f;
-                    ImU32 bgCol = onlySelect ? IM_COL32(214, 48, 49, 190) : IM_COL32(0, 0, 0, 150);
-                    dl->AddRectFilled(
-                        ImVec2(x - 6.0f, y - 3.0f),
-                        ImVec2(x + sz.x + 6.0f, y + sz.y + 3.0f),
-                        bgCol, 4.0f);
-                    dl->AddText(ImVec2(x, y), IM_COL32(255, 255, 255, 220), label.c_str());
-                }
-            }
-        }
+        DrawNotification(draw, activeTarget);
     }
 
     SDK::AIHeroClient GetTarget(float range,
@@ -197,12 +200,9 @@ public:
         if (targets.empty()) return SDK::AIHeroClient();
 
         if (m_selectedTarget.IsValid() && !m_selectedTarget.IsDead()) {
-            auto* focus = m_menu->Get<SDK::MenuBool>("FocusSelected");
-            if (focus && focus->Enabled) {
-                for (const auto& t : targets) {
-                    if (static_cast<uint32_t>(t.NetworkId()) == static_cast<uint32_t>(m_selectedTarget.NetworkId()))
-                        return m_selectedTarget;
-                }
+            for (const auto& t : targets) {
+                if (static_cast<uint32_t>(t.NetworkId()) == static_cast<uint32_t>(m_selectedTarget.NetworkId()))
+                    return m_selectedTarget;
             }
         }
 
@@ -228,15 +228,12 @@ public:
         SortTargets(targets, damageType, origin);
 
         if (m_selectedTarget.IsValid() && !m_selectedTarget.IsDead()) {
-            auto* focus = m_menu->Get<SDK::MenuBool>("FocusSelected");
-            if (focus && focus->Enabled) {
-                for (auto it = targets.begin(); it != targets.end(); ++it) {
-                    if (static_cast<uint32_t>(it->NetworkId()) == static_cast<uint32_t>(m_selectedTarget.NetworkId())) {
-                        auto sel = *it;
-                        targets.erase(it);
-                        targets.insert(targets.begin(), sel);
-                        break;
-                    }
+            for (auto it = targets.begin(); it != targets.end(); ++it) {
+                if (static_cast<uint32_t>(it->NetworkId()) == static_cast<uint32_t>(m_selectedTarget.NetworkId())) {
+                    auto sel = *it;
+                    targets.erase(it);
+                    targets.insert(targets.begin(), sel);
+                    break;
                 }
             }
         }
@@ -248,6 +245,13 @@ public:
 
     void SetSelectedTarget(const SDK::AIHeroClient& target) {
         m_selectedTarget = (target.IsValid() && target.IsHero()) ? target : SDK::AIHeroClient();
+        if (m_selectedTarget.IsValid()) {
+            if (auto* force = m_menu ? m_menu->GetSubMenu("ForceTarget") : nullptr) {
+                auto* t = force->Get<SDK::MenuSlider>("Timeout");
+                float timeout = t ? static_cast<float>(t->Value) : 5.0f;
+                m_forceExpireTime = SDK::Game::Time() + timeout;
+            }
+        }
         SyncSelectionToSDK();
     }
 
@@ -284,16 +288,17 @@ private:
     static inline TargetSelectorPlugin2* s_instance = nullptr;
 
     SDK::MenuUI::Menu* m_menu         = nullptr;
+    SDK::MenuUI::Menu* m_coreMenu     = nullptr;
     SDK::MenuUI::Menu* m_priorityMenu = nullptr;
     SDK::AIHeroClient  m_selectedTarget;
     std::string        m_modeKey;
+    std::string        m_modeKey2nd;
     std::string        m_playerName;
-    int                m_v1RegistryIndex    = -1;
-    bool               m_v1WasLoaded        = true;
-    bool               m_bossMenuBuilt      = false;
-    float              m_forceExpireTime    = 0.0f;
-    bool               m_wasLmbDown         = false;
-    float              m_lmbPressTime       = 0.0f;
+    bool               m_bossMenuBuilt   = false;
+    float              m_forceExpireTime = 0.0f;
+    bool               m_wasForceKeyDown = false;
+    float              m_forceKeyPressTime = 0.0f;
+    float              m_lastSetForceTime  = 0.0f;
 
     static SDK::AIHeroClient SDKGetTargetFn(float r, SDK::DamageType dt, const SDK::Vector3& f) {
         return s_instance ? s_instance->GetTarget(r, dt, f) : SDK::AIHeroClient();
@@ -314,29 +319,15 @@ private:
         return s_instance ? s_instance->GetPriority(t) : 1;
     }
 
-    void HidePluginV1() {
-        m_v1RegistryIndex = PluginRegistry::FindByInternalId("custom_targetselector");
-        if (m_v1RegistryIndex >= 0) {
-            m_v1WasLoaded = PluginRegistry::Plugins[m_v1RegistryIndex].Loaded;
-            PluginRegistry::Plugins[m_v1RegistryIndex].Loaded = false;
-        }
-    }
-
-    void RestorePluginV1() {
-        if (m_v1RegistryIndex >= 0) {
-            PluginRegistry::Plugins[m_v1RegistryIndex].Loaded = m_v1WasLoaded;
-            m_v1RegistryIndex = -1;
-        }
-    }
-
     int GetActiveModeIndex() const {
-        if (!m_menu) return 0;
-        auto* secKey = m_menu->Get<SDK::MenuKeyBind>("SecondaryModeKey");
+        if (!m_coreMenu) return 0;
+        auto* force = m_menu ? m_menu->GetSubMenu("ForceTarget") : nullptr;
+        auto* secKey = force ? force->Get<SDK::MenuKeyBind>("SecondaryModeKey") : nullptr;
         if (secKey && secKey->Active) {
-            auto* secList = m_menu->Get<SDK::MenuList>("SecondaryMode");
+            auto* secList = m_coreMenu->Get<SDK::MenuList>(m_modeKey2nd);
             return secList ? std::clamp(secList->Index, 0, 8) : 0;
         }
-        auto* modeList = m_menu->Get<SDK::MenuList>(m_modeKey);
+        auto* modeList = m_coreMenu->Get<SDK::MenuList>(m_modeKey);
         return modeList ? std::clamp(modeList->Index, 0, 8) : 0;
     }
 
@@ -389,8 +380,8 @@ private:
     }
 
     float ApplyDebuffBonus(float score, const SDK::AIHeroClient& hero) const {
-        if (!m_menu) return score;
-        auto* item = m_menu->Get<SDK::MenuBool>("DebuffPriority");
+        if (!m_coreMenu) return score;
+        auto* item = m_coreMenu->Get<SDK::MenuBool>("DebuffPriority");
         if (item && item->Enabled && Compat::HasMovementLock(hero))
             return score * 0.8f;
         return score;
@@ -398,15 +389,27 @@ private:
 
     bool IsOnlyAttackSelected() const {
         if (!m_menu) return false;
-        auto* kb   = m_menu->Get<SDK::MenuKeyBind>("OnlySelectKey");
-        auto* bool_ = m_menu->Get<SDK::MenuBool>("OnlyAttackSelected");
-        return (kb && kb->Active) || (bool_ && bool_->Enabled);
+        auto* force = m_menu->GetSubMenu("ForceTarget");
+        if (!force) return false;
+        auto* kb = force->Get<SDK::MenuKeyBind>("OnlySelectKey");
+        return kb && kb->Active;
     }
 
     bool IsAttackZombie() const {
-        if (!m_menu) return true;
-        auto* item = m_menu->Get<SDK::MenuBool>("AttackZombie");
+        if (!m_coreMenu) return true;
+        auto* item = m_coreMenu->Get<SDK::MenuBool>("AttackZombie");
         return item ? item->Enabled : true;
+    }
+
+    float GetDistanceMultiplier() const {
+        if (!m_coreMenu) return 1.0f;
+        auto* item = m_coreMenu->Get<SDK::MenuList>("DistanceDetection");
+        if (!item) return 1.0f;
+        switch (item->Index) {
+        case 1:  return 0.9f;
+        case 2:  return 0.8f;
+        default: return 1.0f;
+        }
     }
 
     bool IsTargetValid(const SDK::AIHeroClient& target, float range,
@@ -423,8 +426,11 @@ private:
         for (const char** p = kInvuln; *p; ++p)
             if (target.HasBuff(*p)) return false;
 
-        if (range > 0.0f && target.Distance(origin) > range + target.BoundingRadius())
-            return false;
+        if (range > 0.0f) {
+            const float effectiveRange = (range + target.BoundingRadius()) * GetDistanceMultiplier();
+            if (target.Distance(origin) > effectiveRange)
+                return false;
+        }
 
         return true;
     }
@@ -490,9 +496,9 @@ private:
 
     SDK::AIHeroClient ResolveBossTarget() const {
         if (!m_menu) return SDK::AIHeroClient();
-        auto* forceMenu = m_menu->GetSubMenu("ForceTarget");
-        if (!forceMenu) return SDK::AIHeroClient();
-        auto* bossList = forceMenu->Get<SDK::MenuList>("Boss");
+        auto* bossMenu = m_menu->GetSubMenu("BossMode");
+        if (!bossMenu) return SDK::AIHeroClient();
+        auto* bossList = bossMenu->Get<SDK::MenuList>("Boss");
         if (!bossList || bossList->Index <= 0) return SDK::AIHeroClient();
         int idx = bossList->Index;
         if (idx >= static_cast<int>(bossList->Items.size())) return SDK::AIHeroClient();
@@ -509,9 +515,9 @@ private:
 
     void EnsureBossOptions() {
         if (m_bossMenuBuilt || !m_menu) return;
-        auto* forceMenu = m_menu->GetSubMenu("ForceTarget");
-        if (!forceMenu) return;
-        auto* bossList = forceMenu->Get<SDK::MenuList>("Boss");
+        auto* bossMenu = m_menu->GetSubMenu("BossMode");
+        if (!bossMenu) return;
+        auto* bossList = bossMenu->Get<SDK::MenuList>("Boss");
         if (!bossList) return;
         auto enemies = SDK::ObjectManager::EnemyHeroes();
         if (enemies.empty()) return;
@@ -527,6 +533,15 @@ private:
         m_bossMenuBuilt = true;
     }
 
+    int GetForceTargetKey() const {
+        if (!m_menu) return VK_LBUTTON;
+        auto* force = m_menu->GetSubMenu("ForceTarget");
+        if (!force) return VK_LBUTTON;
+        auto* kb = force->Get<SDK::MenuKeyBind>("ForceTargetKey");
+        if (!kb || kb->Key <= 0) return VK_LBUTTON;
+        return kb->Key;
+    }
+
     void HandleForceTarget() {
         if (!m_menu) return;
         auto* forceMenu = m_menu->GetSubMenu("ForceTarget");
@@ -539,13 +554,15 @@ private:
         if (auto* t = forceMenu->Get<SDK::MenuSlider>("Timeout"))
             timeout = static_cast<float>(t->Value);
 
-        bool lmbDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        float gameTime = SDK::Game::Time();
+        const int  forceKey = GetForceTargetKey();
+        const bool keyDown  = (GetAsyncKeyState(forceKey) & 0x8000) != 0;
+        const float gameTime = SDK::Game::Time();
 
-        if (lmbDown && !m_wasLmbDown) {
-            m_lmbPressTime = gameTime;
-        } else if (!lmbDown && m_wasLmbDown) {
-            if ((gameTime - m_lmbPressTime) < 0.3f) {
+        if (keyDown && !m_wasForceKeyDown) {
+            m_forceKeyPressTime = gameTime;
+        } else if (!keyDown && m_wasForceKeyDown) {
+            if ((gameTime - m_forceKeyPressTime) < 0.3f &&
+                (gameTime - m_lastSetForceTime) > 1.0f) {
                 auto cursor = SDK::Game::CursorPos();
                 if (!cursor.IsZero()) {
                     SDK::AIHeroClient nearest;
@@ -556,15 +573,16 @@ private:
                         if (dist < bestDist) { bestDist = dist; nearest = hero; }
                     }
                     if (nearest.IsValid()) {
-                        m_selectedTarget = nearest;
-                        m_forceExpireTime = gameTime + timeout;
+                        m_selectedTarget    = nearest;
+                        m_forceExpireTime   = gameTime + timeout;
+                        m_lastSetForceTime  = gameTime;
                     } else {
                         m_selectedTarget = SDK::AIHeroClient();
                     }
                 }
             }
         }
-        m_wasLmbDown = lmbDown;
+        m_wasForceKeyDown = keyDown;
 
         if (m_selectedTarget.IsValid()) {
             if (m_selectedTarget.IsDead()) {
@@ -580,30 +598,27 @@ private:
     void SyncSelectionToSDK() {
         if (m_selectedTarget.IsValid() && !m_selectedTarget.IsDead() && m_selectedTarget.IsVisible()) {
             SDK::TargetSelectorSelected::SetTarget(m_selectedTarget);
-            auto* focus = m_menu ? m_menu->Get<SDK::MenuBool>("FocusSelected") : nullptr;
-            if (focus && focus->Enabled)
+            if (IsOnlyAttackSelected())
                 SDK::TargetSelectorSelected::SetForcedTarget(m_selectedTarget);
             else
-                SDK::TargetSelectorSelected::ClearForcedTarget();
+                SDK::TargetSelectorSelected::SetForcedTarget(m_selectedTarget);
         } else {
             SDK::TargetSelectorSelected::ClearTarget();
             SDK::TargetSelectorSelected::ClearForcedTarget();
         }
-        if (IsOnlyAttackSelected() && m_selectedTarget.IsValid())
-            SDK::TargetSelectorSelected::SetForcedTarget(m_selectedTarget);
     }
 
     void SyncSDKMode() {
         static const SDK::TargetSelectorMode kMap[] = {
-            SDK::TargetSelectorMode::Priority,           // Script
-            SDK::TargetSelectorMode::MostAbilityPower,   // APDamage
-            SDK::TargetSelectorMode::MostAttackDamage,   // ADDamage
-            SDK::TargetSelectorMode::LeastHealth,        // LeastHP
-            SDK::TargetSelectorMode::LessAttacksToKill,  // LessAA
-            SDK::TargetSelectorMode::LessCastsToKill,    // LessCasts
-            SDK::TargetSelectorMode::Priority,           // Priority
-            SDK::TargetSelectorMode::NearMouse,          // Mouse
-            SDK::TargetSelectorMode::Closest,            // CloseMe
+            SDK::TargetSelectorMode::Priority,
+            SDK::TargetSelectorMode::MostAbilityPower,
+            SDK::TargetSelectorMode::MostAttackDamage,
+            SDK::TargetSelectorMode::LeastHealth,
+            SDK::TargetSelectorMode::LessAttacksToKill,
+            SDK::TargetSelectorMode::LessCastsToKill,
+            SDK::TargetSelectorMode::Priority,
+            SDK::TargetSelectorMode::NearMouse,
+            SDK::TargetSelectorMode::Closest,
         };
         int idx = GetActiveModeIndex();
         if (idx >= 0 && idx < 9) SDK::TargetSelector::SetMode(kMap[idx]);
@@ -617,8 +632,45 @@ private:
             if (name.empty()) continue;
             const std::string key = "TS2_" + name;
             if (!m_priorityMenu->Get<SDK::MenuSlider>(key))
-                m_priorityMenu->Add<SDK::MenuSlider>(key, name, GetDefaultPriority(name), 1, 5);
+                m_priorityMenu->Add<SDK::MenuSlider>(key, name, GetDefaultPriority(name), 0, 5);
         }
+    }
+
+    void DrawNotification(SDK::MenuUI::Menu* draw, const SDK::AIHeroClient& target) {
+        if (!draw) return;
+
+        const bool onlySelect = IsOnlyAttackSelected();
+        auto* noti = draw->Get<SDK::MenuBool>("NotiEnable");
+        const bool notiEnabled = noti ? noti->Enabled : true;
+
+        if (!onlySelect && (!notiEnabled || !target.IsValid())) return;
+        if (!target.IsValid() || target.IsDead()) return;
+
+        std::string name = target.CharacterName();
+        if (name.empty()) return;
+
+        std::string label = onlySelect ? ("LOCKED: " + name) : ("Selected target: " + name);
+
+        auto* txtCol = draw->Get<SDK::MenuColor>("TextColor");
+        auto* bgCol  = draw->Get<SDK::MenuColor>("BackgroundColor");
+        auto* lockCol= draw->Get<SDK::MenuColor>("BackgroundColorLock");
+
+        const ImU32 textU32 = txtCol ? txtCol->GetImU32() : IM_COL32(255, 255, 255, 200);
+        const ImU32 bgU32   = onlySelect
+            ? (lockCol ? lockCol->GetImU32() : IM_COL32(214, 48, 49, 100))
+            : (bgCol   ? bgCol->GetImU32()   : IM_COL32(0, 0, 0, 100));
+
+        auto* dl = ImGui::GetForegroundDrawList();
+        if (!dl) return;
+
+        ImVec2 sz = ImGui::CalcTextSize(label.c_str());
+        float x = ImGui::GetIO().DisplaySize.x * 0.5f - sz.x * 0.5f;
+        float y = 60.0f;
+        dl->AddRectFilled(
+            ImVec2(x - 8.0f, y - 4.0f),
+            ImVec2(x + sz.x + 8.0f, y + sz.y + 4.0f),
+            bgU32, 4.0f);
+        dl->AddText(ImVec2(x, y), textU32, label.c_str());
     }
 
     static int GetDefaultPriority(const std::string& name) {

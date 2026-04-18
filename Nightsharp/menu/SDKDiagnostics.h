@@ -23,7 +23,7 @@ inline const char* SpellStateName(CoreSpellBook::SpellState state) {
 
 inline void SectionHeader(const char* title) {
     ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "%s", title);
+    ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", title);
     ImGui::Separator();
 }
 

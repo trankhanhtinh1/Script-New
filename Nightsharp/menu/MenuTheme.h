@@ -12,15 +12,16 @@ namespace MenuTheme {
     constexpr float PANEL_GAP     = 3.0f;
     constexpr float MAX_CONTENT_H = 620.0f;
 
-    inline ImU32 COL_BG           = IM_COL32(8, 10, 18, 214);
-    inline ImU32 COL_CONTENT_BG   = IM_COL32(8, 10, 18, 128);
-    inline ImU32 COL_HEADER       = IM_COL32(16, 18, 28, 236);
+    inline ImU32 COL_BG           = IM_COL32(30, 30, 30, 214); //IM_COL32(8, 10, 18, 214);
+    inline ImU32 COL_CONTENT_BG   = IM_COL32(30, 30, 30, 214); //IM_COL32(8, 10, 18, 128);
+    inline ImU32 COL_HEADER       = IM_COL32(30, 30, 30, 214); //IM_COL32(16, 18, 28, 236);
     inline ImU32 COL_ITEM         = IM_COL32(18, 20, 30, 118);
+    inline ImU32 COL_EXPANDED_BG  = IM_COL32(10, 10, 10, 200);
     inline ImU32 COL_ITEM_HOVER   = IM_COL32(52, 48, 82, 215);
     inline ImU32 COL_ITEM_ACTIVE  = IM_COL32(82, 66, 132, 232);
     inline ImU32 COL_ACCENT       = IM_COL32(120, 235, 120, 255);
     inline ImU32 COL_TEXT         = IM_COL32(255, 255, 255, 255);
-    inline ImU32 COL_TEXT_DIM     = IM_COL32(185, 185, 205, 255);
+    inline ImU32 COL_TEXT_DIM     = IM_COL32(255, 255, 255, 255); //IM_COL32(185, 185, 205, 255);
     inline ImU32 COL_BORDER       = IM_COL32(88, 100, 148, 180);
 
     inline bool DrawStateButton(const char* id, const char* label, bool active, bool positive, float width = 44.0f) {

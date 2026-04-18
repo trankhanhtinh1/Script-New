@@ -104,6 +104,12 @@ namespace Plugins {
             }
         }
 
+        static void ResetAll() {
+            for (int i = 0; i < kMaxPlugins; ++i) s_plugins[i] = nullptr;
+            s_pluginCount = 0;
+            s_handlersRegistered = false;
+        }
+
     private:
         friend class PluginManager;
         bool m_loaded = false;

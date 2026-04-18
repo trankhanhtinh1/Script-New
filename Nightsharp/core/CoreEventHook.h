@@ -36,6 +36,7 @@
 
 #include "CoreRuntime.h"
 #include "CoreSpellCastInfo.h"
+#include "CrashTelemetry.h"
 #include "Globals.h"
 #include "Offsets.h"
 
@@ -183,14 +184,37 @@ namespace detail {
         }
 
         void Uninstall() {
-            if (!installed || !dispatchSlot) return;
-            *dispatchSlot = originalVtable;
+            CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::Enter\r\n");
+            if (!installed || !dispatchSlot) {
+                CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::NotInstalled\r\n");
+                return;
+            }
+
+            CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::RestoreVTable::Begin\r\n");
+            bool restoreOk = false;
+            __try {
+                *dispatchSlot = originalVtable;
+                restoreOk = true;
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::RestoreVTable::SEH_CAUGHT\r\n");
+            }
+            if (restoreOk) {
+                CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::RestoreVTable::OK\r\n");
+            }
+
             if (trampolineAddr) {
-                VirtualFree(reinterpret_cast<void*>(trampolineAddr), 0, MEM_RELEASE);
+                CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::FreeTrampoline::Begin\r\n");
+                __try {
+                    VirtualFree(reinterpret_cast<void*>(trampolineAddr), 0, MEM_RELEASE);
+                    CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::FreeTrampoline::OK\r\n");
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                    CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::FreeTrampoline::SEH_CAUGHT\r\n");
+                }
                 trampolineAddr = 0;
             }
             installed    = false;
             dispatchSlot = nullptr;
+            CrashTelemetry::AppendStageLine("[NightSharp][Hook] Uninstall::Done\r\n");
         }
     };
 

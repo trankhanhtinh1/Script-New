@@ -103,12 +103,6 @@
     <Filter Include="sdk\Wrappers\TargetSelector">
       <UniqueIdentifier>{F209F7B0-4D2E-44A1-BE50-0CA6BA6F1470}</UniqueIdentifier>
     </Filter>
-    <Filter Include="sdk\Wrappers\TargetSelector\Modes">
-      <UniqueIdentifier>{9565C4E4-6816-4D3B-98C3-99319C1E253A}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sdk\Wrappers\TargetSelector\Modes\Weights">
-      <UniqueIdentifier>{A1D7B7D7-92DE-44DA-AE1B-9D2F35B8D2B5}</UniqueIdentifier>
-    </Filter>
     <Filter Include="sdk\Wrappers\Map">
       <UniqueIdentifier>{B6973E9B-C7B2-4707-A63C-F9862B560E46}</UniqueIdentifier>
     </Filter>
@@ -299,10 +293,16 @@
     <ClInclude Include="menu\MenuConfig.h">
       <Filter>menu</Filter>
     </ClInclude>
+    <ClInclude Include="menu\MenuItemRenderers.h">
+      <Filter>menu</Filter>
+    </ClInclude>
     <ClInclude Include="menu\MenuPersistence.h">
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="menu\MenuRendererImGui.h">
+      <Filter>menu</Filter>
+    </ClInclude>
+    <ClInclude Include="menu\MenuTheme.h">
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="menu\MenuUI.h">
@@ -318,6 +318,9 @@
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="menu\SDKDiagnostics.h">
+      <Filter>menu</Filter>
+    </ClInclude>
+    <ClInclude Include="menu\Translations.h">
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="ns_sscanf.h">
@@ -441,6 +444,9 @@
       <Filter>sdk\Utils</Filter>
     </ClInclude>
     <ClInclude Include="sdk\Utils\ResourceLoader.h">
+      <Filter>sdk\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="sdk\Utils\StatusCheck.h">
       <Filter>sdk\Utils</Filter>
     </ClInclude>
     <ClInclude Include="sdk\Utils\Storage.h">
@@ -830,95 +836,8 @@
     <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelector.h">
       <Filter>sdk\Wrappers\TargetSelector</Filter>
     </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\HeroVisibleEntry.h">
+    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorDefault.h">
       <Filter>sdk\Wrappers\TargetSelector</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\ITargetSelectorMode.h">
-      <Filter>sdk\Wrappers\TargetSelector</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorDrawing.h">
-      <Filter>sdk\Wrappers\TargetSelector</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorHumanizer.h">
-      <Filter>sdk\Wrappers\TargetSelector</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorMode.h">
-      <Filter>sdk\Wrappers\TargetSelector</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorSelected.h">
-      <Filter>sdk\Wrappers\TargetSelector</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Closest.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\IWeightItem.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\LeastHealth.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\LessAttacksToKill.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\LessCastsToKill.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\MostAbilityPower.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\MostAttackDamage.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\NearMouse.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Priority.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\PriorityCategory.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weight.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\WeightItemWrapper.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\AbilityPower.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\Aggro.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\AttackDamage.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\CrowdControl.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\FocusMe.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\Gold.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\Killable.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\LowHealth.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\LowResists.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\ShortDistanceCursor.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\ShortDistancePlayer.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
-    </ClInclude>
-    <ClInclude Include="sdk\Wrappers\TargetSelector\Modes\Weights\TeamFocus.h">
-      <Filter>sdk\Wrappers\TargetSelector\Modes\Weights</Filter>
     </ClInclude>
     <ClInclude Include="sdk\Enumerations\CollisionableObjects.h">
       <Filter>sdk\Enumerations</Filter>
@@ -995,9 +914,6 @@
     <ClInclude Include="sdk\Enumerations\TurretType.h">
       <Filter>sdk\Enumerations</Filter>
     </ClInclude>
-    <ClInclude Include="sdk\Enumerations\TargetSelectorMode.h">
-      <Filter>sdk\Enumerations</Filter>
-    </ClInclude>
     <ClInclude Include="core\KeyAuth.h">
       <Filter>core</Filter>
     </ClInclude>
@@ -1055,13 +971,7 @@
     <ClInclude Include="sdk\External\nightsharp_plugin.h">
       <Filter>sdk\External</Filter>
     </ClInclude>
-    <ClInclude Include="sdk\NightSharpAPIBinding.h">
-      <Filter>sdk</Filter>
-    </ClInclude>
     <ClInclude Include="plugins\IPlugin.h">
-      <Filter>plugins</Filter>
-    </ClInclude>
-    <ClInclude Include="plugins\NightPackageLoader.h">
       <Filter>plugins</Filter>
     </ClInclude>
     <ClInclude Include="plugins\PluginBootstrap.h">
@@ -1104,9 +1014,6 @@
       <Filter>plugins\core</Filter>
     </ClInclude>
     <ClInclude Include="plugins\core\RenderTestPlugin.h">
-      <Filter>plugins\core</Filter>
-    </ClInclude>
-    <ClInclude Include="plugins\core\TargetSelectorPlugin.h">
       <Filter>plugins\core</Filter>
     </ClInclude>
   </ItemGroup>

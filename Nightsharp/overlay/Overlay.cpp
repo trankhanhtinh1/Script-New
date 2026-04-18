@@ -9,6 +9,7 @@
 #include "../imgui/imgui_impl_win32.h"
 #include "../menu/NightSharpMenu.h"
 #include "../menu/MenuConfig.h"
+#include "../menu/MenuPersistence.h"
 #include "../menu/PluginHostBridge.h"
 #include "../menu/PluginRegistry.h"
 #include "../plugins/PluginBootstrap.h"
@@ -449,14 +450,6 @@ void Overlay::Run() {
     SetWindowPos(g_hOverlay, nullptr, 0, 0, 0, 0,
         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-    Plugins::PluginBootstrap::EnsureRegistered();
-    PluginRegistry::LoadConfig();
-    PluginHostBridge::WireHostAPI();
-
-
-
-    WriteStage("[NightSharp] STAGE 6: Menu + plugin substrate initialized\r\n");
-
     CrashTelemetry::SetStage("Overlay::Run::InitCore");
     const bool coreInitOk = CoreRuntime::Initialize();
     WriteStage(coreInitOk
@@ -494,9 +487,30 @@ void Overlay::Run() {
     }
     WriteStage("[NightSharp] STAGE 8: SDK bootstrap initialized\r\n");
 
+    CrashTelemetry::SetStage("Overlay::Run::PluginBootstrap::EnsureRegistered");
+    WriteStage("[NightSharp] STAGE 8.1: PluginBootstrap::EnsureRegistered begin\r\n");
+    Plugins::PluginBootstrap::EnsureRegistered();
+    WriteStage("[NightSharp] STAGE 8.1: PluginBootstrap::EnsureRegistered done\r\n");
+
+    CrashTelemetry::SetStage("Overlay::Run::PluginRegistry::LoadConfig");
+    WriteStage("[NightSharp] STAGE 8.2: PluginRegistry::LoadConfig begin\r\n");
+    PluginRegistry::LoadConfig();
+    WriteStage("[NightSharp] STAGE 8.2: PluginRegistry::LoadConfig done\r\n");
+
+    CrashTelemetry::SetStage("Overlay::Run::PluginHostBridge::WireHostAPI");
+    WriteStage("[NightSharp] STAGE 8.3: PluginHostBridge::WireHostAPI begin\r\n");
+    PluginHostBridge::WireHostAPI();
+    WriteStage("[NightSharp] STAGE 8.3: PluginHostBridge::WireHostAPI done\r\n");
+
+    WriteStage("[NightSharp] STAGE 8a: Plugin substrate registered (post-SDK)\r\n");
+
     // Load plugins AFTER SDK init — plugins need SDK menus to exist for override
+    CrashTelemetry::SetStage("Overlay::Run::PluginManager::LoadAuto");
     Plugins::PluginManager::Get().LoadAuto();
     WriteStage("[NightSharp] STAGE 8b: Plugins loaded (post-SDK)\r\n");
+
+    MenuPersistence::LoadAll();
+    WriteStage("[NightSharp] STAGE 8c: MenuPersistence::LoadAll done\r\n");
 
     const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     int frameCount = 0;
@@ -660,30 +674,140 @@ void Overlay::Run() {
     }
 
     CrashTelemetry::SetStage("Overlay::Run::Cleanup");
+    WriteStage("[NightSharp] CLEANUP: Begin\r\n");
 
-    Plugins::PluginManager::Get().UnloadAll();
-    SDK::Bootstrap::Shutdown();
-    CoreRuntime::Shutdown();
-    SDK::MenuManager::Shutdown();
-
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
-
-    CleanupDeviceD3D11();
-
-    if (g_hOverlay) {
-        DestroyWindow(g_hOverlay);
-        g_hOverlay = nullptr;
+    CrashTelemetry::SetStage("Overlay::Cleanup::UnloadAll");
+    WriteStage("[NightSharp] CLEANUP 1: UnloadAll::Begin\r\n");
+    __try {
+        Plugins::PluginManager::Get().UnloadAll();
+        WriteStage("[NightSharp] CLEANUP 1: UnloadAll::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::UnloadAll", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 1: UnloadAll::SEH_CAUGHT\r\n");
     }
 
-    if (classRegistered) {
-        UnregisterClassW(overlayClassName, wc.hInstance);
+    CrashTelemetry::SetStage("Overlay::Cleanup::SDKShutdown");
+    WriteStage("[NightSharp] CLEANUP 2: SDK::Shutdown::Begin\r\n");
+    __try {
+        SDK::Bootstrap::Shutdown();
+        WriteStage("[NightSharp] CLEANUP 2: SDK::Shutdown::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::SDKShutdown", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 2: SDK::Shutdown::SEH_CAUGHT\r\n");
     }
-    NsHeapDestroy();
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::PluginManagerClear");
+    WriteStage("[NightSharp] CLEANUP 2a: PluginManager::ClearAll::Begin\r\n");
+    __try {
+        Plugins::PluginManager::Get().ClearAll();
+        WriteStage("[NightSharp] CLEANUP 2a: PluginManager::ClearAll::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::PluginManagerClear", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 2a: PluginManager::ClearAll::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::PluginRegistryClear");
+    WriteStage("[NightSharp] CLEANUP 2b: PluginRegistry::Clear::Begin\r\n");
+    __try {
+        PluginRegistry::Clear();
+        WriteStage("[NightSharp] CLEANUP 2b: PluginRegistry::Clear::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::PluginRegistryClear", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 2b: PluginRegistry::Clear::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::CoreRuntimeShutdown");
+    WriteStage("[NightSharp] CLEANUP 3: CoreRuntime::Shutdown::Begin\r\n");
+    __try {
+        CoreRuntime::Shutdown();
+        WriteStage("[NightSharp] CLEANUP 3: CoreRuntime::Shutdown::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::CoreRuntimeShutdown", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 3: CoreRuntime::Shutdown::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::MenuPersistenceSave");
+    __try {
+        MenuPersistence::SaveAll();
+        WriteStage("[NightSharp] CLEANUP 3b: MenuPersistence::SaveAll::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::MenuPersistenceSave", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 3b: MenuPersistence::SaveAll::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::MenuManagerShutdown");
+    WriteStage("[NightSharp] CLEANUP 4: MenuManager::Shutdown::Begin\r\n");
+    __try {
+        SDK::MenuManager::Shutdown();
+        WriteStage("[NightSharp] CLEANUP 4: MenuManager::Shutdown::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::MenuManagerShutdown", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 4: MenuManager::Shutdown::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::ImGuiDX11Shutdown");
+    WriteStage("[NightSharp] CLEANUP 5: ImGui_ImplDX11_Shutdown::Begin\r\n");
+    __try {
+        ImGui_ImplDX11_Shutdown();
+        WriteStage("[NightSharp] CLEANUP 5: ImGui_ImplDX11_Shutdown::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::ImGuiDX11Shutdown", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 5: ImGui_ImplDX11_Shutdown::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::ImGuiWin32Shutdown");
+    WriteStage("[NightSharp] CLEANUP 6: ImGui_ImplWin32_Shutdown::Begin\r\n");
+    __try {
+        ImGui_ImplWin32_Shutdown();
+        WriteStage("[NightSharp] CLEANUP 6: ImGui_ImplWin32_Shutdown::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::ImGuiWin32Shutdown", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 6: ImGui_ImplWin32_Shutdown::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::ImGuiDestroyContext");
+    WriteStage("[NightSharp] CLEANUP 7: ImGui::DestroyContext::Begin\r\n");
+    __try {
+        ImGui::DestroyContext();
+        WriteStage("[NightSharp] CLEANUP 7: ImGui::DestroyContext::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::ImGuiDestroyContext", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 7: ImGui::DestroyContext::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::CleanupDeviceD3D11");
+    WriteStage("[NightSharp] CLEANUP 8: CleanupDeviceD3D11::Begin\r\n");
+    __try {
+        CleanupDeviceD3D11();
+        WriteStage("[NightSharp] CLEANUP 8: CleanupDeviceD3D11::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::CleanupDeviceD3D11", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 8: CleanupDeviceD3D11::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::DestroyWindow");
+    WriteStage("[NightSharp] CLEANUP 9: DestroyWindow::Begin\r\n");
+    __try {
+        if (g_hOverlay) {
+            DestroyWindow(g_hOverlay);
+            g_hOverlay = nullptr;
+        }
+        WriteStage("[NightSharp] CLEANUP 9: DestroyWindow::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::DestroyWindow", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 9: DestroyWindow::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::UnregisterClass");
+    WriteStage("[NightSharp] CLEANUP 10: UnregisterClass::Begin\r\n");
+    __try {
+        if (classRegistered) {
+            UnregisterClassW(overlayClassName, wc.hInstance);
+        }
+        WriteStage("[NightSharp] CLEANUP 10: UnregisterClass::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::UnregisterClass", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 10: UnregisterClass::SEH_CAUGHT\r\n");
+    }
+
+    CrashTelemetry::SetStage("Overlay::Cleanup::NsHeapDestroy");
+    WriteStage("[NightSharp] CLEANUP 11: NsHeapDestroy::Begin\r\n");
+    __try {
+        NsHeapDestroy();
+        WriteStage("[NightSharp] CLEANUP 11: NsHeapDestroy::OK\r\n");
+    } __except (CrashTelemetry::ReportAndHandle("Cleanup::NsHeapDestroy", GetExceptionInformation())) {
+        WriteStage("[NightSharp] CLEANUP 11: NsHeapDestroy::SEH_CAUGHT\r\n");
+    }
 
     InterlockedExchange(&g_bRunning, 0);
-    WriteStage("[NightSharp] Overlay cleanup complete\r\n");
+    WriteStage("[NightSharp] CLEANUP: Complete\r\n");
 }
 
 void Overlay::RequestShutdown() {

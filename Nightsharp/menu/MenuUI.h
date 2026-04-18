@@ -449,15 +449,8 @@ namespace MenuUI {
         float EstimateMinWidth() const override {
             float labelW = ImGui::CalcTextSize(Translations::T(DisplayName.c_str())).x;
             float pad2 = ImGui::GetStyle().FramePadding.x * 2.0f;
-            float modeTextW = ImGui::CalcTextSize(Translations::T("Press")).x;
-            float toggleTextW = ImGui::CalcTextSize(Translations::T("Toggle")).x;
-            if (toggleTextW > modeTextW) modeTextW = toggleTextW;
-            float arrowW = 18.0f;
-            float modeTotalW = arrowW + 4.0f + modeTextW + pad2 + 4.0f + arrowW;
-            float pressKeyW = ImGui::CalcTextSize(Translations::T("Press key...")).x + pad2;
             float keyNameW = ImGui::CalcTextSize(GetKeyName(Key)).x + pad2;
-            float keyBtnW = (pressKeyW > keyNameW ? pressKeyW : keyNameW);
-            return labelW + 20.0f + modeTotalW + 6.0f + keyBtnW + 8.0f;
+            return labelW + 20.0f + keyNameW + 8.0f;
         }
 
     public:
@@ -476,14 +469,22 @@ namespace MenuUI {
         void StartListening() {
             m_listening = true;
             m_listenDebounceFrames = 4;
+            m_waitingForRelease = true;
         }
 
         void PollListeningKey() {
             if (!m_listening) return;
             if (m_listenDebounceFrames > 0) { --m_listenDebounceFrames; return; }
+            if (m_waitingForRelease) {
+                for (int vk = 1; vk < 256; ++vk) {
+                    if (GetAsyncKeyState(vk) & 0x8000) return;
+                }
+                m_waitingForRelease = false;
+                return;
+            }
             for (int vk = 1; vk < 256; ++vk) {
                 if ((GetAsyncKeyState(vk) & 0x8000) == 0) continue;
-                if (vk == VK_ESCAPE) { m_listening = false; return; }
+                if (vk == VK_ESCAPE) { Key = 0; m_listening = false; m_wasDown = false; return; }
                 Key = vk; m_listening = false; m_wasDown = true; return;
             }
         }
@@ -549,6 +550,7 @@ namespace MenuUI {
     private:
         bool m_wasDown = false;
         bool m_listening = false;
+        bool m_waitingForRelease = false;
         int m_listenDebounceFrames = 0;
         int m_prevKey = 0;
         KeyBindType m_prevType = KeyBindType::Press;
@@ -806,20 +808,32 @@ namespace MenuUI {
 
             std::vector<MenuItem*> standaloneItems;
             std::vector<Menu*> subMenus;
-            const bool onlyKeyBinds = SplitRootItems(standaloneItems, subMenus);
-
-            if (!standaloneItems.empty()) {
-                sections.push_back({
-                    "__root_items",
-                    onlyKeyBinds ? std::string(Translations::T("Keys")) : std::string(Translations::T("General"))
-                });
-            }
+            SplitRootItems(standaloneItems, subMenus);
 
             for (auto* sub : subMenus) {
                 sections.push_back({ sub->InternalName, std::string(Translations::T(sub->DisplayName.c_str())) });
             }
 
             return sections;
+        }
+
+        bool HasStandaloneItems() const {
+            if (!m_isRoot) return false;
+            for (auto& item : m_items) {
+                if (!dynamic_cast<Menu*>(item)) return true;
+            }
+            return false;
+        }
+
+        float EstimateStandaloneItemsWidth() const {
+            if (!m_isRoot) return 0.0f;
+            float maxW = 0.0f;
+            for (auto& item : m_items) {
+                if (!item || dynamic_cast<Menu*>(item)) continue;
+                float w = item->EstimateMinWidth();
+                if (w > maxW) maxW = w;
+            }
+            return maxW;
         }
 
         int EstimateRowCount() const {

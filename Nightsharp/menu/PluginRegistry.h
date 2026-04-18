@@ -56,6 +56,13 @@ namespace PluginRegistry {
         return idx >= 0 && idx < PluginCount && Plugins[idx].Kind == PluginKind::SDK;
     }
 
+    inline void Clear() {
+        for (int i = 0; i < MAX_PLUGINS; ++i) {
+            Plugins[i] = {};
+        }
+        PluginCount = 0;
+    }
+
     // ============================================================================
     // Persistence — WinAPI only (manual map safe)
     // File: %APPDATA%/NightSharp/config/plugins.ini

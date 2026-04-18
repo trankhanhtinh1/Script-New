@@ -8,6 +8,8 @@ namespace MenuRenderers {
 
 using namespace MenuTheme;
 
+inline const void* s_expandedKeyBind = nullptr;
+
 inline void DrawBoolItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
                           SDK::MenuUI::MenuBool* b, bool drawSep = true) {
     ImVec2 mn = ImVec2(panelX, pos.y);
@@ -39,10 +41,14 @@ inline void DrawBoolItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
     b->CheckChanged();
 }
 
-inline void DrawKeyBindItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
+inline float DrawKeyBindItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
                               SDK::MenuUI::MenuKeyBind* kb, bool drawSep = true) {
     using KBType = SDK::MenuUI::KeyBindType;
+    bool wasListening = kb->IsListening();
     kb->PollListeningKey();
+
+    bool expanded = (s_expandedKeyBind == kb);
+    float totalH = expanded ? ITEM_H * 2.0f : ITEM_H;
 
     ImVec2 mn = ImVec2(panelX, pos.y);
     ImVec2 mx = ImVec2(panelX + panelW, pos.y + ITEM_H);
@@ -50,87 +56,88 @@ inline void DrawKeyBindItem(ImDrawList* dl, ImVec2 pos, float panelX, float pane
 
     if (hovered)
         dl->AddRectFilled(mn, mx, COL_ITEM_HOVER, 3.0f);
-    if (drawSep)
-        dl->AddLine(ImVec2(panelX, mx.y), ImVec2(panelX + panelW, mx.y), COL_BORDER, 1.0f);
 
     dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(kb->DisplayName.c_str()));
 
-    const char* pressText = Translations::T("Press");
-    const char* toggleText = Translations::T("Toggle");
-    const char* modeText = (kb->Type == KBType::Toggle) ? toggleText : pressText;
-    const char* keyText = kb->IsListening() ? Translations::T("Press key...") : SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key);
     float padX = ImGui::GetStyle().FramePadding.x;
     float pad2 = padX * 2.0f;
-    float modeTextW = ImGui::CalcTextSize(pressText).x;
-    float toggleTextW = ImGui::CalcTextSize(toggleText).x;
-    if (toggleTextW > modeTextW) modeTextW = toggleTextW;
-    float arrowW = 18.0f;
-    float modeGap = 4.0f;
-    float modeTotalW = arrowW + modeGap + modeTextW + pad2 + modeGap + arrowW;
-
-    float keyTextW = ImGui::CalcTextSize(Translations::T("Press key...")).x;
-    float keyNameW = ImGui::CalcTextSize(SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key)).x;
-    float keyBtnW = ((keyTextW > keyNameW) ? keyTextW : keyNameW) + pad2;
-
-    float gap = 6.0f;
-    float totalW = modeTotalW + gap + keyBtnW;
-    float startX = panelX + panelW - totalW - 8.0f;
+    const char* keyText = kb->IsListening() ? Translations::T("Press key...") : SDK::MenuUI::MenuKeyBind::GetKeyName(kb->Key);
+    float keyBtnW = ImGui::CalcTextSize(keyText).x + pad2;
     float btnY = pos.y + 4.0f;
     float btnH = ITEM_H - 8.0f;
 
     ImU32 colBtn = IM_COL32(36, 41, 61, 242);
+    ImU32 colBtnDark = IM_COL32(12, 14, 24, 242);
     ImU32 colKeyActive = IM_COL32(77, 148, 87, 242);
     ImU32 colKeyListening = IM_COL32(180, 130, 40, 242);
 
-    float cx = startX;
-    ImVec2 leftMin = ImVec2(cx, btnY);
-    ImVec2 leftMax = ImVec2(cx + arrowW, btnY + btnH);
-    dl->AddRectFilled(leftMin, leftMax, colBtn, 7.0f);
-    ImVec2 lts = ImGui::CalcTextSize("<");
-    dl->AddText(ImVec2(cx + (arrowW - lts.x) * 0.5f, pos.y + (ITEM_H - lts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), "<");
-
-    cx += arrowW + modeGap;
-    float modeBtnW = modeTextW + pad2;
-    ImVec2 modeMin = ImVec2(cx, btnY);
-    ImVec2 modeMax = ImVec2(cx + modeBtnW, btnY + btnH);
-    dl->AddRectFilled(modeMin, modeMax, colBtn, 7.0f);
-    ImVec2 mts = ImGui::CalcTextSize(modeText);
-    dl->AddText(ImVec2(cx + (modeBtnW - mts.x) * 0.5f, pos.y + (ITEM_H - mts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), modeText);
-
-    cx += modeBtnW + modeGap;
-    ImVec2 rightMin = ImVec2(cx, btnY);
-    ImVec2 rightMax = ImVec2(cx + arrowW, btnY + btnH);
-    dl->AddRectFilled(rightMin, rightMax, colBtn, 7.0f);
-    ImVec2 rts = ImGui::CalcTextSize(">");
-    dl->AddText(ImVec2(cx + (arrowW - rts.x) * 0.5f, pos.y + (ITEM_H - rts.y) * 0.5f),
-                IM_COL32(245, 247, 255, 255), ">");
-
-    cx += arrowW + gap;
-    ImVec2 keyMin = ImVec2(cx, btnY);
-    ImVec2 keyMax = ImVec2(cx + keyBtnW, btnY + btnH);
+    float keyX = panelX + panelW - keyBtnW - 8.0f;
+    ImVec2 keyMin = ImVec2(keyX, btnY);
+    ImVec2 keyMax = ImVec2(keyX + keyBtnW, btnY + btnH);
     ImU32 keyCol = kb->IsListening() ? colKeyListening : (kb->Active ? colKeyActive : colBtn);
     dl->AddRectFilled(keyMin, keyMax, keyCol, 7.0f);
     ImVec2 kts = ImGui::CalcTextSize(keyText);
-    dl->AddText(ImVec2(cx + (keyBtnW - kts.x) * 0.5f, pos.y + (ITEM_H - kts.y) * 0.5f),
+    dl->AddText(ImVec2(keyX + (keyBtnW - kts.x) * 0.5f, pos.y + (ITEM_H - kts.y) * 0.5f),
                 IM_COL32(245, 247, 255, 255), keyText);
 
-    if (g_inputEnabled) {
-        if (ImGui::IsMouseHoveringRect(leftMin, leftMax, false) && ImGui::IsMouseClicked(0)) {
-            if (kb->Type == KBType::Toggle) { kb->Type = KBType::Press; kb->Active = false; }
-            else { kb->Type = KBType::Toggle; }
-        }
-        if (ImGui::IsMouseHoveringRect(rightMin, rightMax, false) && ImGui::IsMouseClicked(0)) {
-            if (kb->Type == KBType::Press) { kb->Type = KBType::Toggle; }
-            else { kb->Type = KBType::Press; kb->Active = false; }
-        }
-        if (ImGui::IsMouseHoveringRect(keyMin, keyMax, false) && ImGui::IsMouseClicked(0)) {
-            kb->StartListening();
+    if (g_inputEnabled && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (ImGui::IsMouseHoveringRect(keyMin, keyMax, false)) {
+            if (!wasListening) kb->StartListening();
+        } else {
+            s_expandedKeyBind = expanded ? nullptr : kb;
         }
     }
 
+    if (expanded) {
+        float row2Y = pos.y + ITEM_H;
+        ImVec2 row2Mn = ImVec2(panelX, row2Y);
+        ImVec2 row2Mx = ImVec2(panelX + panelW, row2Y + ITEM_H);
+        bool row2Hov = g_inputEnabled && ImGui::IsMouseHoveringRect(row2Mn, row2Mx, false);
+        dl->AddRectFilled(ImVec2(row2Mn.x + 1.0f, row2Mn.y), ImVec2(row2Mx.x - 1.0f, row2Mx.y), COL_EXPANDED_BG, 0.0f);
+        if (row2Hov)
+            dl->AddRectFilled(ImVec2(row2Mn.x + 1.0f, row2Mn.y), ImVec2(row2Mx.x - 1.0f, row2Mx.y), COL_ITEM_HOVER, 0.0f);
+
+        const char* toggleText = Translations::T("Toggle");
+        const char* pressText = Translations::T("Press");
+        float halfW = panelW * 0.5f;
+
+        ImVec2 toggleMin = ImVec2(panelX + 8.0f, row2Y + 4.0f);
+        ImVec2 toggleMax = ImVec2(panelX + halfW - 4.0f, row2Y + ITEM_H - 4.0f);
+        bool toggleHov = g_inputEnabled && ImGui::IsMouseHoveringRect(toggleMin, toggleMax, false);
+        ImU32 toggleCol = (kb->Type == KBType::Toggle) ? colKeyActive : colBtnDark;
+        dl->AddRectFilled(toggleMin, toggleMax, toggleCol, 7.0f);
+        ImVec2 tts = ImGui::CalcTextSize(toggleText);
+        dl->AddText(ImVec2(toggleMin.x + (toggleMax.x - toggleMin.x - tts.x) * 0.5f,
+                           row2Y + (ITEM_H - tts.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), toggleText);
+
+        ImVec2 pressMin = ImVec2(panelX + halfW + 4.0f, row2Y + 4.0f);
+        ImVec2 pressMax = ImVec2(panelX + panelW - 8.0f, row2Y + ITEM_H - 4.0f);
+        bool pressHov = g_inputEnabled && ImGui::IsMouseHoveringRect(pressMin, pressMax, false);
+        ImU32 pressCol = (kb->Type == KBType::Press) ? colKeyActive : colBtnDark;
+        dl->AddRectFilled(pressMin, pressMax, pressCol, 7.0f);
+        ImVec2 pts = ImGui::CalcTextSize(pressText);
+        dl->AddText(ImVec2(pressMin.x + (pressMax.x - pressMin.x - pts.x) * 0.5f,
+                           row2Y + (ITEM_H - pts.y) * 0.5f),
+                    IM_COL32(245, 247, 255, 255), pressText);
+
+        if (g_inputEnabled) {
+            if (toggleHov && ImGui::IsMouseClicked(0))
+                kb->Type = KBType::Toggle;
+            if (pressHov && ImGui::IsMouseClicked(0)) {
+                kb->Type = KBType::Press;
+                kb->Active = false;
+            }
+        }
+
+        dl->AddLine(ImVec2(panelX, row2Y), ImVec2(panelX + panelW, row2Y), COL_BORDER, 1.0f);
+    }
+
+    if (drawSep)
+        dl->AddLine(ImVec2(panelX, pos.y + totalH), ImVec2(panelX + panelW, pos.y + totalH), COL_BORDER, 1.0f);
+
     kb->CheckConfigChanged();
+    return totalH;
 }
 
 inline const void* s_expandedSlider = nullptr;
@@ -145,7 +152,7 @@ inline void DrawSliderTrack(ImDrawList* dl, float panelX, float panelW, float ro
     float sliderY = rowY + (ITEM_H - sliderH) * 0.5f;
 
     dl->AddRectFilled(ImVec2(sliderX, sliderY), ImVec2(sliderX + sliderW, sliderY + sliderH),
-                      IM_COL32(36, 41, 61, 242), 3.0f);
+                      IM_COL32(12, 14, 24, 242), 3.0f);
     dl->AddRectFilled(ImVec2(sliderX, sliderY), ImVec2(sliderX + sliderW * t, sliderY + sliderH),
                       IM_COL32(77, 148, 87, 242), 3.0f);
 
@@ -171,8 +178,6 @@ inline void DrawSliderItemInt(ImDrawList* dl, ImVec2 pos, float panelX, float pa
 
     if (hovered)
         dl->AddRectFilled(mn, ImVec2(panelX + panelW, pos.y + ITEM_H), COL_ITEM_HOVER, 3.0f);
-    if (drawSep)
-        dl->AddLine(ImVec2(panelX, pos.y + totalH), ImVec2(panelX + panelW, pos.y + totalH), COL_BORDER, 1.0f);
 
     dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(s->DisplayName.c_str()));
 
@@ -187,6 +192,7 @@ inline void DrawSliderItemInt(ImDrawList* dl, ImVec2 pos, float panelX, float pa
         s->ResetDefault();
 
     if (expanded) {
+        dl->AddRectFilled(ImVec2(panelX + 1.0f, pos.y + ITEM_H), ImVec2(panelX + panelW - 1.0f, pos.y + ITEM_H * 2.0f), COL_EXPANDED_BG, 0.0f);
         float range = (float)(s->MaxValue - s->MinValue);
         float t = (range > 0.0f) ? (float)(s->Value - s->MinValue) / range : 0.0f;
         DrawSliderTrack(dl, panelX, panelW, pos.y + ITEM_H, t, s);
@@ -205,6 +211,9 @@ inline void DrawSliderItemInt(ImDrawList* dl, ImVec2 pos, float panelX, float pa
             }
         }
     }
+
+    if (drawSep)
+        dl->AddLine(ImVec2(panelX, pos.y + totalH), ImVec2(panelX + panelW, pos.y + totalH), COL_BORDER, 1.0f);
 }
 
 inline void DrawSliderItemFloat(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
@@ -218,8 +227,6 @@ inline void DrawSliderItemFloat(ImDrawList* dl, ImVec2 pos, float panelX, float 
 
     if (hovered)
         dl->AddRectFilled(mn, ImVec2(panelX + panelW, pos.y + ITEM_H), COL_ITEM_HOVER, 3.0f);
-    if (drawSep)
-        dl->AddLine(ImVec2(panelX, pos.y + totalH), ImVec2(panelX + panelW, pos.y + totalH), COL_BORDER, 1.0f);
 
     dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, Translations::T(s->DisplayName.c_str()));
 
@@ -234,6 +241,7 @@ inline void DrawSliderItemFloat(ImDrawList* dl, ImVec2 pos, float panelX, float 
         s->ResetDefault();
 
     if (expanded) {
+        dl->AddRectFilled(ImVec2(panelX + 1.0f, pos.y + ITEM_H), ImVec2(panelX + panelW - 1.0f, pos.y + ITEM_H * 2.0f), COL_EXPANDED_BG, 0.0f);
         float range = s->MaxValue - s->MinValue;
         float t = (range > 0.0f) ? (s->Value - s->MinValue) / range : 0.0f;
         DrawSliderTrack(dl, panelX, panelW, pos.y + ITEM_H, t, s);
@@ -252,6 +260,9 @@ inline void DrawSliderItemFloat(ImDrawList* dl, ImVec2 pos, float panelX, float 
             }
         }
     }
+
+    if (drawSep)
+        dl->AddLine(ImVec2(panelX, pos.y + totalH), ImVec2(panelX + panelW, pos.y + totalH), COL_BORDER, 1.0f);
 }
 
 inline const void* s_expandedDropdown = nullptr;
@@ -300,7 +311,9 @@ inline float DrawDropdownExpandedRows(ImDrawList* dl, float startY, float panelX
         bool isSel = (i == selectedIndex);
         bool rHov = g_inputEnabled && ImGui::IsMouseHoveringRect(rMin, rMax, false);
 
-        dl->AddRectFilled(rMin, rMax, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_ITEM), 0.0f);
+        ImVec2 rMinI = ImVec2(rMin.x + 1.0f, rMin.y);
+        ImVec2 rMaxI = ImVec2(rMax.x - 1.0f, rMax.y);
+        dl->AddRectFilled(rMinI, rMaxI, isSel ? COL_ITEM_ACTIVE : (rHov ? COL_ITEM_HOVER : COL_EXPANDED_BG), 0.0f);
         dl->AddLine(ImVec2(rMin.x, rMax.y), ImVec2(rMax.x, rMax.y), COL_BORDER, 1.0f);
 
         ImVec2 its = ImGui::CalcTextSize(labels[i]);
@@ -379,8 +392,10 @@ inline float DrawListItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW
 inline void DrawSeparatorItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
                                 SDK::MenuUI::MenuSeparator* sep) {
     if (!sep->DisplayName.empty()) {
-        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), IM_COL32(128, 179, 255, 255),
-                    Translations::T(sep->DisplayName.c_str()));
+        const char* txt = Translations::T(sep->DisplayName.c_str());
+        ImVec2 ts = ImGui::CalcTextSize(txt);
+        dl->AddText(ImVec2(panelX + (panelW - ts.x) * 0.5f, pos.y + (ITEM_H - ts.y) * 0.5f),
+                    IM_COL32(128, 179, 255, 255), txt);
     }
     dl->AddLine(ImVec2(panelX, pos.y + ITEM_H), ImVec2(panelX + panelW, pos.y + ITEM_H), COL_BORDER, 1.0f);
 }
@@ -457,6 +472,8 @@ inline void DrawGenericItem(ImDrawList* dl, ImVec2 pos, float panelX, float pane
 
 inline float EstimateItemHeight(SDK::MenuItem* item) {
     if (!item) return 0.0f;
+    if (auto* kb = dynamic_cast<SDK::MenuUI::MenuKeyBind*>(item))
+        return (s_expandedKeyBind == kb) ? ITEM_H * 2.0f : ITEM_H;
     if (auto* s = dynamic_cast<SDK::MenuUI::MenuSlider*>(item))
         return (s_expandedSlider == s) ? ITEM_H * 2.0f : ITEM_H;
     if (auto* sf = dynamic_cast<SDK::MenuUI::MenuSliderF*>(item))
@@ -475,8 +492,7 @@ inline float DrawItem(ImDrawList* dl, ImVec2 pos, float panelX, float panelW,
         return ITEM_H;
     }
     if (auto* kb = dynamic_cast<SDK::MenuUI::MenuKeyBind*>(item)) {
-        DrawKeyBindItem(dl, pos, panelX, panelW, kb, drawSep);
-        return ITEM_H;
+        return DrawKeyBindItem(dl, pos, panelX, panelW, kb, drawSep);
     }
     if (auto* s = dynamic_cast<SDK::MenuUI::MenuSlider*>(item)) {
         DrawSliderItemInt(dl, pos, panelX, panelW, s, drawSep);

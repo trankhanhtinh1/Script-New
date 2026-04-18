@@ -1,21 +1,27 @@
 #pragma once
 
 #include "../../Enumerations/DamageType.h"
-#include "../../Enumerations/TargetSelectorMode.h"
 #include "../../Core/Objects.h"
 #include "../Spells/Spell.h"
 #include "../../UI/UI.h"
-#include "HeroVisibleEntry.h"
-#include "TargetSelectorDrawing.h"
-#include "TargetSelectorHumanizer.h"
-#include "TargetSelectorMode.h"
-#include "TargetSelectorSelected.h"
+#include "TargetSelectorDefault.h"
 
-#include <algorithm>
 #include <string>
 #include <vector>
 
 namespace SDK {
+
+enum class TargetSelectorMode : int {
+    Priority = 0,
+    Closest = 1,
+    LeastHealth = 2,
+    MostAttackDamage = 3,
+    MostAbilityPower = 4,
+    NearMouse = 5,
+    LessAttacksToKill = 6,
+    LessCastsToKill = 7,
+    Weight = 8
+};
 
 class TargetSelector {
 public:
@@ -27,22 +33,23 @@ public:
     using OverrideGetPriorityFn = int(*)(const AIHeroClient&);
 
     static void Initialize() {
-        if (s_initialized) {
-            return;
-        }
+        if (s_initialized) return;
         s_initialized = true;
 
         auto root = UI::CreateMenu("targetselector", "Target Selector");
         s_menu = root.Raw();
-        TargetSelectorModes::TargetSelectorModeManager::Initialize(s_menu);
-        TargetSelectorSelected::Initialize(s_menu);
-        TargetSelectorDrawing::Initialize(s_menu);
-        TargetSelectorHumanizer::Initialize(s_menu);
+        TargetSelectorDefault::Initialize(s_menu);
     }
 
-    static Menu* GetMenu() {
-        return s_menu;
+    static void Shutdown() {
+        ClearOverride();
+        TargetSelectorDefault::Reset();
+        s_menu = nullptr;
+        s_mode = TargetSelectorMode::Priority;
+        s_initialized = false;
     }
+
+    static Menu* GetMenu() { return s_menu; }
 
     static void SetOverride(OverrideGetTargetFn getTarget,
                             OverrideGetTargetsFn getTargets,
@@ -72,17 +79,16 @@ public:
     }
 
     static void Update() {
-        if (HasOverride()) {
-            return;
+        if (!HasOverride()) {
+            TargetSelectorDefault::Update();
         }
-        TargetSelectorSelected::Update();
     }
 
     static AIHeroClient GetSelectedTarget() {
         if (HasOverride() && s_overrideGetSelectedTarget) {
             return s_overrideGetSelectedTarget();
         }
-        return TargetSelectorSelected::Target();
+        return TargetSelectorDefault::GetSelectedTarget();
     }
 
     static void SetSelectedTarget(const AIHeroClient& target) {
@@ -90,7 +96,7 @@ public:
             s_overrideSetSelectedTarget(target);
             return;
         }
-        TargetSelectorSelected::SetTarget(target);
+        TargetSelectorDefault::SetSelectedTarget(target);
     }
 
     static void ClearSelectedTarget() {
@@ -98,35 +104,30 @@ public:
             s_overrideClearSelectedTarget();
             return;
         }
-        TargetSelectorSelected::ClearTarget();
+        TargetSelectorDefault::ClearSelectedTarget();
     }
 
     static AIHeroClient GetForcedTarget() {
-        return TargetSelectorSelected::ForcedTarget();
+        return TargetSelectorDefault::ForcedTarget();
     }
 
     static void SetForcedTarget(const AIHeroClient& target) {
-        TargetSelectorSelected::SetForcedTarget(target);
+        TargetSelectorDefault::SetForcedTarget(target);
     }
 
     static void ClearForcedTarget() {
-        TargetSelectorSelected::ClearForcedTarget();
+        TargetSelectorDefault::ClearForcedTarget();
     }
 
     static int GetPriority(const AIHeroClient& hero) {
         if (HasOverride() && s_overrideGetPriority) {
             return s_overrideGetPriority(hero);
         }
-        return TargetSelectorModes::TargetSelectorModeManager::GetPriority(hero);
+        return TargetSelectorDefault::GetPriority(hero);
     }
 
-    static TargetSelectorMode Mode() {
-        return TargetSelectorModes::TargetSelectorModeManager::Current(s_menu);
-    }
-
-    static void SetMode(TargetSelectorMode mode) {
-        TargetSelectorModes::TargetSelectorModeManager::SetCurrent(s_menu, mode);
-    }
+    static TargetSelectorMode Mode() { return s_mode; }
+    static void SetMode(TargetSelectorMode mode) { s_mode = mode; }
 
     static AIHeroClient GetTarget(const Spell& spell, bool ignoreShields = true) {
         (void)ignoreShields;
@@ -137,101 +138,36 @@ public:
         if (HasOverride()) {
             return s_overrideGetTarget(range, damageType, from);
         }
-        const auto targets = GetTargets(range, damageType, from);
-        return targets.empty() ? AIHeroClient() : targets.front();
+        return TargetSelectorDefault::GetTarget(range, damageType, from);
     }
 
     static bool IsValidTarget(const AIHeroClient& hero,
                               float range,
                               DamageType damageType = DamageType::True,
                               const Vector3& from = Vector3()) {
-        if (!hero.IsValid()) {
-            return false;
-        }
+        if (!hero.IsValid()) return false;
         const auto origin = from.IsZero() ? ObjectManager::Player().Position() : from;
-        if (!hero.IsValidTarget(range, origin)) {
-            return false;
-        }
-        return TargetSelectorModes::ITargetSelectorMode::EffectiveHealth(hero, damageType) > 0.0f;
+        if (!hero.IsValidTarget(range, origin)) return false;
+        return TargetSelectorDefault::EffectiveHealth(hero, damageType) > 0.0f;
     }
 
     static std::vector<AIHeroClient> GetTargets(float range, DamageType damageType = DamageType::True, const Vector3& from = Vector3()) {
         if (HasOverride()) {
             return s_overrideGetTargets(range, damageType, from);
         }
-        const auto player = ObjectManager::Player();
-        const Vector3 origin = from.IsZero() ? player.Position() : from;
-
-        std::vector<AIHeroClient> out;
-        out.reserve(16);
-
-        auto pushUnique = [&](const AIHeroClient& hero) {
-            if (!hero.IsValid() || !hero.IsValidTarget(range, origin)) {
-                return;
-            }
-            for (const auto& existing : out) {
-                if (existing.NetworkId() == hero.NetworkId()) {
-                    return;
-                }
-            }
-            out.push_back(hero);
-        };
-
-        const auto forced = TargetSelectorSelected::ForcedTarget();
-        if (forced.IsValidTarget(range, origin)) {
-            pushUnique(forced);
-            return out;
-        }
-
-        const auto selected = TargetSelectorSelected::Target();
-        if (TargetSelectorSelected::Force(s_menu) && selected.IsValidTarget(range, origin)) {
-            pushUnique(selected);
-            return out;
-        }
-
-        const auto enemies = ObjectManager::EnemyHeroes();
-        for (const auto& enemy : enemies) {
-            if (!enemy.IsValidTarget(range, origin)) {
-                continue;
-            }
-            pushUnique(enemy);
-        }
-
-        out = TargetSelectorModes::TargetSelectorModeManager::Order(s_menu, out, origin, damageType);
-        const auto stabilized = TargetSelectorHumanizer::Choose(s_menu, out, range, origin);
-        if (stabilized.IsValid()) {
-            for (auto it = out.begin(); it != out.end(); ++it) {
-                if (it->NetworkId() == stabilized.NetworkId()) {
-                    std::rotate(out.begin(), it, it + 1);
-                    break;
-                }
-            }
-        }
-
-        const auto selectedFocus = TargetSelectorSelected::Target();
-        if (TargetSelectorSelected::Focus(s_menu) && selectedFocus.IsValid()) {
-            for (auto it = out.begin(); it != out.end(); ++it) {
-                if (it->NetworkId() == selectedFocus.NetworkId()) {
-                    std::rotate(out.begin(), it, it + 1);
-                    break;
-                }
-            }
-        }
-
-        return out;
+        return TargetSelectorDefault::GetTargets(range, damageType, from);
     }
 
     static void Render() {
-        if (HasOverride()) {
-            return;
+        if (!HasOverride()) {
+            TargetSelectorDefault::Render();
         }
-        const auto current = GetTarget(1500.0f, DamageType::Physical, ObjectManager::Player().Position());
-        TargetSelectorDrawing::Render(s_menu, TargetSelectorSelected::Target(), TargetSelectorSelected::ForcedTarget(), current);
     }
 
 private:
     static inline bool s_initialized = false;
     static inline Menu* s_menu = nullptr;
+    static inline TargetSelectorMode s_mode = TargetSelectorMode::Priority;
     static inline OverrideGetTargetFn s_overrideGetTarget = nullptr;
     static inline OverrideGetTargetsFn s_overrideGetTargets = nullptr;
     static inline OverrideGetSelectedTargetFn s_overrideGetSelectedTarget = nullptr;

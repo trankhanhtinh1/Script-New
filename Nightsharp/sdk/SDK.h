@@ -30,7 +30,6 @@
 #include "Enumerations\SpellType.h"
 #include "Enumerations\TeleportStatus.h"
 #include "Enumerations\TeleportType.h"
-#include "Enumerations\TargetSelectorMode.h"
 #include "Enumerations\TurretType.h"
 #include "Extensions/Extensions.h"
 #include "Events/AntiGapcloser.h"
@@ -40,6 +39,7 @@
 #include "UI/Utils.h"
 #include "UI/Notifications/Notifications.h"
 #include "Events\Events.h"
+#include "Events\BuffTracker.h"
 #include "Core/Game.h"
 #include "Wrappers/GameObjects.h"
 #include "GameObjects/ObjectManager.h"
@@ -67,12 +67,6 @@
 #include "Wrappers/Spells/SpellTypes.h"
 #include "Wrappers/Spells/SpellTypes/SkillshotMissileArc.h"
 #include "Wrappers/TargetSelector/TargetSelector.h"
-#include "Wrappers/TargetSelector/HeroVisibleEntry.h"
-#include "Wrappers/TargetSelector/ITargetSelectorMode.h"
-#include "Wrappers/TargetSelector/TargetSelectorDrawing.h"
-#include "Wrappers/TargetSelector/TargetSelectorHumanizer.h"
-#include "Wrappers/TargetSelector/TargetSelectorMode.h"
-#include "Wrappers/TargetSelector/TargetSelectorSelected.h"
 #include "UI/IMenu/IMenu.h"
 #include "UI/UI.h"
 #include "Core/Variables.h"
@@ -164,22 +158,82 @@ namespace Bootstrap {
     }
 
     inline void Shutdown() {
-        LastCast::Reset();
-        Events::Reset();
-        Prediction::Reset();
-        SpellTracker::Reset();
-        Signals::SignalManager::Reset();
-        Utils::DelayAction::Reset();
-        Utils::ActionQueue::Reset();
-        Utils::TickOperation::Reset();
-        Utils::Storage::SaveAllRegistered();
-        Utils::Cache::Reset();
-        Utils::Render::Reset();
-        Utils::ResourceLoader::Reset();
-        Utils::ResourceFactory::Reset();
-        Utils::DynamicInitializer::Reset();
-        UI::PermaShow::Reset();
+        TraceInitStage("SDK::Bootstrap::Shutdown::Begin");
+        TraceInitStage("SDK::Bootstrap::Shutdown::LastCast");
+        __try { LastCast::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::LastCast::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::Events");
+        __try { Events::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::Events::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::BuffTracker");
+        __try { Events::BuffTracker::Clear(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::BuffTracker::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::Prediction");
+        __try { Prediction::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::Prediction::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::SpellTracker");
+        __try { SpellTracker::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::SpellTracker::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::Signals");
+        __try { Signals::SignalManager::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::Signals::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::DelayAction");
+        __try { Utils::DelayAction::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::DelayAction::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::ActionQueue");
+        __try { Utils::ActionQueue::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::ActionQueue::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::TickOperation");
+        __try { Utils::TickOperation::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::TickOperation::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::Storage::SaveAll");
+        __try { Utils::Storage::SaveAllRegistered(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::Storage::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::Cache");
+        __try { Utils::Cache::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::Cache::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::Render");
+        __try { Utils::Render::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::Render::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::ResourceLoader");
+        __try { Utils::ResourceLoader::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::ResourceLoader::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::ResourceFactory");
+        __try { Utils::ResourceFactory::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::ResourceFactory::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::DynamicInitializer");
+        __try { Utils::DynamicInitializer::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::DynamicInitializer::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::PermaShow");
+        __try { UI::PermaShow::Reset(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::PermaShow::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::OrbwalkerBase");
+        __try { OrbwalkerBase::ResetHandlers(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::OrbwalkerBase::SEH_CAUGHT"); }
+
+        TraceInitStage("SDK::Bootstrap::Shutdown::TargetSelector");
+        __try { TargetSelector::Shutdown(); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { TraceInitStage("SDK::Bootstrap::Shutdown::TargetSelector::SEH_CAUGHT"); }
+
+        g_targetSelectorPluginIndex = -1;
         g_initialized = false;
+        TraceInitStage("SDK::Bootstrap::Shutdown::Done");
     }
 
     inline void Update() {
