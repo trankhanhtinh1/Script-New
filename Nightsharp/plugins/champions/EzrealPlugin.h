@@ -9,6 +9,9 @@
 #include "sdk/Wrappers/Orbwalking/Orbwalker.h"
 #include "sdk/Wrappers/Spells/Spell.h"
 #include "sdk/Wrappers/TargetSelector/TargetSelector.h"
+#include "core/CrashTelemetry.h"
+
+#include <cstdio>
 
 namespace Plugins {
 
@@ -191,10 +194,93 @@ public:
         }
     }
 
+    // Stage-tracking helper: writes "[NightSharp][Ezreal] <stage>" into the
+    // CrashTelemetry pipeline so when the game crashes we can see exactly which
+    // sub-function ran last.
+    static void EzStage(const char* name) {
+        CrashTelemetry::SetStage(name);
+        char buf[160] = {};
+        std::snprintf(buf, sizeof(buf), "[NightSharp][Ezreal] %s\r\n", name ? name : "?");
+        CrashTelemetry::AppendStageLine(buf);
+    }
+
+    // SEH-safe position-based cast.
+    //
+    // Guards:
+    //  1. Rejects a cast whose target position is further than `spell.Range+50`
+    //     from the local player (xz/2D distance). LoL's internal castSpellFn
+    //     appears to crash in ntdll heap-validation when we push a position
+    //     that overflows the spell's maximum reach, which is the observed
+    //     Ezreal-Q/LaneClear crash signature (rip=ntdll+0x649E6, rdx=-6).
+    //     This filter is a safety net in case upstream `IsValidTarget` became
+    //     stale due to offset drift between patches.
+    //  2. Wraps the actual `spell.Cast` in __try/__except so any remaining
+    //     access violation is caught locally instead of propagating to the
+    //     game loop.
+    //
+    // Logs detailed pre/post telemetry (target addr, cast pos, player pos,
+    // computed distance, spell range) so the last coordinates that crashed
+    // the game are preserved in ns_stage.txt.
+    __declspec(noinline) static bool SafeCastPos(const SDK::Spell& spell,
+                                                 const Vector3& pos,
+                                                 uintptr_t targetAddr,
+                                                 const char* tag) {
+        const Vector3 playerPos = SDK::ObjectManager::Player().Position();
+        const float dist = playerPos.Distance2D(pos);
+        const float range = spell.Range;
+
+        char stageBuf[256] = {};
+        std::snprintf(stageBuf, sizeof(stageBuf),
+            "%s:pre target=0x%llX pos=(%.1f,%.1f,%.1f) "
+            "player=(%.1f,%.1f,%.1f) dist=%.1f range=%.1f",
+            tag ? tag : "SafeCastPos",
+            static_cast<unsigned long long>(targetAddr),
+            pos.x, pos.y, pos.z,
+            playerPos.x, playerPos.y, playerPos.z,
+            dist, range);
+        EzStage(stageBuf);
+
+        // Guard #1: reject clearly out-of-range casts before poking the game.
+        constexpr float kRangeTolerance = 50.0f;
+        if (range > 0.0f && dist > range + kRangeTolerance) {
+            std::snprintf(stageBuf, sizeof(stageBuf),
+                "%s:REJECT_OOR dist=%.1f > range=%.1f+%.0f (skipping cast)",
+                tag ? tag : "SafeCastPos", dist, range, kRangeTolerance);
+            EzStage(stageBuf);
+            return false;
+        }
+
+        // Guard #2: SEH wrap the actual cast so we survive any residual AV.
+        bool ok = false;
+        __try {
+            ok = spell.Cast(pos);
+        }
+        __except (CrashTelemetry::ReportAndHandle(
+            tag ? tag : "SafeCastPos", GetExceptionInformation())) {
+            ok = false;
+        }
+
+        std::snprintf(stageBuf, sizeof(stageBuf),
+            "%s:post ok=%d", tag ? tag : "SafeCastPos", ok ? 1 : 0);
+        EzStage(stageBuf);
+        return ok;
+    }
+
     void OnUpdate() override {
+        __try {
+            OnUpdateImpl();
+        }
+        __except (CrashTelemetry::ReportAndHandle("EzrealPlugin::OnUpdate", GetExceptionInformation())) {
+            return;
+        }
+    }
+
+    void OnUpdateImpl() {
+        EzStage("OnUpdate:enter");
         if (!Player().IsValid() || !m_menu) return;
         if (Player().IsDead() || Player().IsRecalling() || Player().IsWindingUp()) return;
 
+        EzStage("OnUpdate:rangeUpdate");
         if (R.Instance().Level() > 0) {
             auto *rmenu = m_menu->GetSubMenu("rmenu");
             if (rmenu) R.Range = static_cast<float>(rmenu->GetSliderValue("RMaxRange", 3000));
@@ -202,65 +288,118 @@ public:
 
         auto *combo = m_menu->GetSubMenu("combo");
         if (combo && combo->GetKeyBindValue("SemiR")) {
+            EzStage("OnUpdate:OneKeyCastR");
             OneKeyCastR();
         }
 
         auto *rmenu = m_menu->GetSubMenu("rmenu");
         if (rmenu && rmenu->GetBoolValue("AutoR", true) && R.IsReady() &&
             Player().CountEnemyHeroesInRange(1000) == 0) {
+            EzStage("OnUpdate:AutoRLogic");
             AutoRLogic();
         }
 
-        switch (Orbwalker::GetMode()) {
-        case OrbwalkerMode::Combo:    Combo();    break;
-        case OrbwalkerMode::Harass:   Harass();   break;
-        case OrbwalkerMode::Clear:    LaneClear(); JungleClear(); break;
-        case OrbwalkerMode::LastHit:  LastHit();  break;
-        default: break;
+        const auto mode = Orbwalker::GetMode();
+        switch (mode) {
+        case OrbwalkerMode::Combo:
+            EzStage("OnUpdate:Combo");
+            Combo();
+            break;
+        case OrbwalkerMode::Harass:
+            EzStage("OnUpdate:Harass");
+            Harass();
+            break;
+        case OrbwalkerMode::Clear:
+            EzStage("OnUpdate:LaneClear");
+            LaneClear();
+            EzStage("OnUpdate:JungleClear");
+            JungleClear();
+            break;
+        case OrbwalkerMode::LastHit:
+            EzStage("OnUpdate:LastHit");
+            LastHit();
+            break;
+        default:
+            break;
         }
 
+        EzStage("OnUpdate:KillSteal");
         KillSteal();
+        EzStage("OnUpdate:done");
     }
 
 private:
     Menu *m_menu = nullptr;
 
     void Combo() {
+        EzStage("Combo:enter");
         auto *combo = m_menu->GetSubMenu("combo");
-        if (!combo) return;
+        if (!combo) { EzStage("Combo:NO_MENU"); return; }
 
         const bool useQ = combo->GetBoolValue("useQ", true);
         const bool useW = combo->GetBoolValue("useW", true);
         const bool useE = combo->GetBoolValue("useE", true);
         const bool useR = combo->GetBoolValue("useR", true);
 
+        char dbg[160] = {};
+        std::snprintf(dbg, sizeof(dbg),
+            "Combo:flags useQ=%d useW=%d useE=%d useR=%d",
+            useQ ? 1 : 0, useW ? 1 : 0, useE ? 1 : 0, useR ? 1 : 0);
+        EzStage(dbg);
+
         auto target = TargetSelector::GetTarget(EQ.Range, DamageType::Physical);
-        if (!target.IsValid() || !target.IsValidTarget(EQ.Range)) return;
+        if (!target.IsValid() || !target.IsValidTarget(EQ.Range)) {
+            EzStage("Combo:NO_TARGET (EQ.Range)");
+            return;
+        }
+        std::snprintf(dbg, sizeof(dbg),
+            "Combo:target net=%d dist=%.1f",
+            target.NetworkId(), target.DistanceToPlayer());
+        EzStage(dbg);
 
         if (useE && E.IsReady() && target.IsValidTarget(EQ.Range)) {
+            EzStage("Combo:ComboE-call");
             ComboELogic(target);
         }
 
         if (useW && W.IsReady() && target.IsValidTarget(W.Range)) {
+            EzStage("Combo:W-prediction");
             auto wPred = W.GetPrediction(target);
+            std::snprintf(dbg, sizeof(dbg), "Combo:W-HC=%d", static_cast<int>(wPred.Hitchance));
+            EzStage(dbg);
             if (wPred.Hitchance >= HitChance::High) {
                 if (Q.IsReady()) {
                     auto qPred = Q.GetPrediction(target);
                     if (qPred.Hitchance >= HitChance::High) {
-                        W.Cast(qPred.CastPosition);
+                        SafeCastPos(W, qPred.CastPosition, target.Address(), "Combo:W-on-Q");
                     }
                 }
                 if (Player().InAutoAttackRange(target)) {
-                    W.Cast(wPred.CastPosition);
+                    SafeCastPos(W, wPred.CastPosition, target.Address(), "Combo:W-main");
                 }
             }
+        } else if (useW) {
+            std::snprintf(dbg, sizeof(dbg),
+                "Combo:W-skip ready=%d targetInRange=%d",
+                W.IsReady() ? 1 : 0,
+                target.IsValidTarget(W.Range) ? 1 : 0);
+            EzStage(dbg);
         }
 
         if (useQ && Q.IsReady() && target.IsValidTarget(Q.Range)) {
+            EzStage("Combo:Q-prediction");
             auto qp = Q.GetPrediction(target);
+            std::snprintf(dbg, sizeof(dbg), "Combo:Q-HC=%d", static_cast<int>(qp.Hitchance));
+            EzStage(dbg);
             if (qp.Hitchance >= HitChance::Medium) {
-                Q.Cast(qp.CastPosition);
+                SafeCastPos(Q, qp.CastPosition, target.Address(), "Combo:Q");
             }
+        } else if (useQ) {
+            std::snprintf(dbg, sizeof(dbg),
+                "Combo:Q-skip ready=%d targetInRange=%d",
+                Q.IsReady() ? 1 : 0,
+                target.IsValidTarget(Q.Range) ? 1 : 0);
+            EzStage(dbg);
         }
 
         if (useR && R.IsReady()) {
@@ -349,6 +488,7 @@ private:
     }
 
     void LaneClear() {
+        EzStage("LaneClear:enter");
         auto *lc = m_menu->GetSubMenu("laneclear");
         if (!lc || !lc->GetBoolValue("useQ", true)) return;
         if (Player().ManaPercent() < static_cast<float>(lc->GetSliderValue("ManaCL", 15))) return;
@@ -357,22 +497,16 @@ private:
         const float aaRange = Player().AttackRange() + Player().BoundingRadius();
         const bool lastHitOnly = lc->GetBoolValue("QLH", false);
 
-        // Single pass, two priorities:
-        //   (1) Execute — cast Q on a minion that will die to it and cannot be
-        //       comfortably finished with an AA (either out of AA range or too
-        //       tanky for a single AA to kill).
-        //   (2) Push    — if no execute is available and last-hit mode is OFF,
-        //       fire Q at the farthest minion that is already out of AA range
-        //       so we keep shoving the wave instead of idling when nothing is
-        //       executable. Previously this branch required `hp <= qDmg` which
-        //       made the non-last-hit mode identical to last-hit.
         Vector3 pushPos{};
         float pushDist = 0.0f;
         bool hasPush = false;
 
+        EzStage("LaneClear:loop");
         for (const auto &minion : ObjectManager::EnemyMinions()) {
-            if (!minion.IsValid() || !minion.IsValidTarget(Q.Range)) continue;
+            if (!minion.IsValid() || !minion.IsAlive()) continue;
+            if (!minion.IsValidTarget(Q.Range)) continue;
 
+            EzStage("LaneClear:GetSpellDamage");
             const float qDmg = Damage::GetSpellDamage(Player(), minion, SpellSlot::Q, DamageStage::Default);
             if (qDmg <= 0.0f) continue;
 
@@ -381,12 +515,32 @@ private:
             const float hp = minion.Health();
 
             // Priority 1: execute candidate.
+            // Farm with Q any minion that will die to it, whether it's OUT of
+            // AA range (orbwalker can't reach) or INSIDE AA range but too
+            // tanky to finish with a single basic attack. Run a collision-
+            // aware prediction so the line-shot doesn't hit a front minion
+            // and waste the mana.
             if (hp <= qDmg && (outOfAARange || hp > Player().GetAutoAttackDamage(minion))) {
-                Q.Cast(minion.Position());
-                return;
+                EzStage("LaneClear:ExecuteCast");
+                auto qp = Q.GetPrediction(minion);
+                char dbg[160] = {};
+                std::snprintf(dbg, sizeof(dbg),
+                    "LaneClear:Execute-HC=%d dist=%.0f hp=%.0f qDmg=%.0f oar=%d",
+                    static_cast<int>(qp.Hitchance),
+                    minionDist, hp, qDmg,
+                    outOfAARange ? 1 : 0);
+                EzStage(dbg);
+                if (qp.Hitchance >= HitChance::High) {
+                    SafeCastPos(Q, qp.CastPosition, minion.Address(), "LaneClear:Execute");
+                    return;
+                }
+                // Prediction rejected (collision / impossible) — keep scanning.
             }
 
             // Priority 2: push candidate (only when last-hit mode is disabled).
+            // Push intentionally relies on Q's line-collision so the missile
+            // hits the front-most minion and shoves the wave; no prediction
+            // needed here, but we still respect last-hit/OOR constraints.
             if (!lastHitOnly && outOfAARange && minionDist > pushDist) {
                 pushDist = minionDist;
                 pushPos = minion.Position();
@@ -395,11 +549,14 @@ private:
         }
 
         if (hasPush) {
-            Q.Cast(pushPos);
+            EzStage("LaneClear:PushCast");
+            SafeCastPos(Q, pushPos, 0, "LaneClear:Push");
         }
+        EzStage("LaneClear:exit");
     }
 
     void JungleClear() {
+        EzStage("JungleClear:enter");
         auto *jg = m_menu->GetSubMenu("jungle");
         if (!jg) return;
 
@@ -407,33 +564,42 @@ private:
         const bool useW = jg->GetBoolValue("useW", true);
         if (Player().ManaPercent() < static_cast<float>(jg->GetSliderValue("ManaCL", 15))) return;
 
+        EzStage("JungleClear:fetchMobs");
         auto mobs = ObjectManager::JungleMinions();
         if (mobs.empty()) return;
 
+        EzStage("JungleClear:sort");
         std::sort(mobs.begin(), mobs.end(),
             [](const AIMinionClient& a, const AIMinionClient& b) {
                 return Utils::Jungle::GetJungleType(a) > Utils::Jungle::GetJungleType(b);
             });
 
         if (useW && W.IsReady()) {
+            EzStage("JungleClear:W-scan");
             for (const auto &mob : mobs) {
+                if (!mob.IsValid() || !mob.IsAlive()) continue;
                 if (!mob.IsValidTarget(W.Range)) continue;
                 if (Utils::Jungle::GetJungleType(mob) >= JungleType::Legendary) {
-                    W.Cast(mob.Position());
+                    EzStage("JungleClear:W-cast");
+                    SafeCastPos(W, mob.Position(), mob.Address(), "JungleClear:W");
                     return;
                 }
             }
         }
 
         if (useQ && Q.IsReady()) {
+            EzStage("JungleClear:Q-pick");
             const auto &mob = mobs.front();
-            if (mob.IsValidTarget(Q.Range)) {
+            if (mob.IsValid() && mob.IsAlive() && mob.IsValidTarget(Q.Range)) {
+                EzStage("JungleClear:Q-prediction");
                 auto pred = Q.GetPrediction(mob);
                 if (pred.Hitchance >= HitChance::Medium) {
-                    Q.Cast(pred.CastPosition);
+                    EzStage("JungleClear:Q-cast");
+                    SafeCastPos(Q, pred.CastPosition, mob.Address(), "JungleClear:Q");
                 }
             }
         }
+        EzStage("JungleClear:exit");
     }
 
     void LastHit() {

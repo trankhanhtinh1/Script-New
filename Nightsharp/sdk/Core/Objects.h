@@ -843,9 +843,17 @@ namespace ObjectManager {
                 return false;
             }
 
-            const float maxHP = obj.MaxHealth();
+            // NOTE: Do NOT use a "maxHP <= 6" heuristic here — wards have 3-6 HP
+            // and would be misclassified as plants. Rely on the native plant flag
+            // (RuntimeAPI::IsPlant checks 0x8000 + "SRU_Plant" name fallback) and
+            // the explicit jungle-plant name list.
             const std::string lowerName = BestName(obj);
-            return obj.IsPlant() || IsJunglePlantName(lowerName) || (maxHP > 0.0f && maxHP <= 6.0f);
+            // Exclude wards inline (IsWardObject defined later in the same namespace).
+            if (lowerName.find("ward") != std::string::npos ||
+                lowerName.find("jammerdevice") != std::string::npos) {
+                return false;
+            }
+            return obj.IsPlant() || IsJunglePlantName(lowerName);
         }
 
         inline bool IsJungleObject(const AIMinionClient& obj) {

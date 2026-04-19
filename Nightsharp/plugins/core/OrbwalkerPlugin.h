@@ -14,6 +14,9 @@
 #include "../../menu/MenuUI.h"
 #include "../../menu/PluginRegistry.h"
 #include "../../core/CoreAPI.h"
+#include "../../core/CoreClassification.h"
+#include "../../core/CoreObjects.h"
+#include "../../core/Globals.h"
 #include "../../core/CrashTelemetry.h"
 
 #include <Windows.h>
@@ -895,6 +898,13 @@ private:
 
     // ═══════════════════════════════════════════════════════════════════
     // GetSpecialMinion — Pets, Wards, Plants (C# lines 488-517)
+    //
+    // IMPORTANT: every branch MUST cross-check the target type via
+    // CoreClassification::Classify() to filter out FaeLightWardPad (visual
+    // pad that matches "ward" substring), PlantMasterMinion, and other
+    // memory-only objects that IssueOrder(AttackUnit) would silently reject —
+    // otherwise the hero enters a "issue attack → block-orders window → re-issue"
+    // loop that freezes both attack and movement.
     // ═══════════════════════════════════════════════════════════════════
     SDK::AIBaseClient GetSpecialMinion() {
         auto* atkMenu = m_menu ? m_menu->GetSubMenu("attackable") : nullptr;
@@ -904,25 +914,64 @@ private:
         // Pets (C# line 499-503)
         if (atkMenu->GetBoolValue("specialMinions", true)) {
             for (const auto& pet : SDK::ObjectManager::Pets()) {
-                if (pet.IsValid() && pet.IsAlive() && !pet.IsAlly() && p.InAutoAttackRange(pet))
-                    return pet;
+                if (!pet.IsValid() || !pet.IsAlive() || pet.IsAlly()) continue;
+                if (!p.InAutoAttackRange(pet)) continue;
+                if (CoreClassification::ShouldIgnore(pet.Address())) continue;
+                auto ptype = CoreClassification::Classify(pet.Address());
+                if (ptype != CoreClassification::ObjectType::Pet) continue;
+                return pet;
             }
         }
         // Wards — not in combo (C# line 505-509)
+        // Use CoreClassification to avoid FaeLightWardPad and other false positives
         if (atkMenu->GetBoolValue("wards", true) && m_activeMode != SDK::OrbwalkerMode::Combo) {
             for (const auto& w : SDK::ObjectManager::Wards()) {
-                if (w.IsValid() && w.IsAlive() && !w.IsAlly() && p.InAutoAttackRange(w))
-                    return w;
+                if (!w.IsValid() || !w.IsAlive() || w.IsAlly()) continue;
+                if (!p.InAutoAttackRange(w)) continue;
+                if (CoreClassification::ShouldIgnore(w.Address())) continue;
+                auto wtype = CoreClassification::Classify(w.Address());
+                if (wtype != CoreClassification::ObjectType::Ward) continue;
+                return w;
             }
         }
         // Jungle Plants — not in combo (C# line 511-515)
+        // Plants are team=3 (neutral) so NOT in EnemyMinions. Use raw MinionManager scan
+        // + CoreClassification so we only hit real plants and nothing that was falsely
+        // classified as "plant" by a maxHP heuristic.
         if (atkMenu->GetBoolValue("junglePlant", false) && m_activeMode != SDK::OrbwalkerMode::Combo) {
-            for (const auto& pl : SDK::ObjectManager::Plants()) {
-                if (pl.IsValid() && pl.IsAlive() && p.InAutoAttackRange(pl))
-                    return pl;
+            DbgStage("OrbPlugin::SpecialMin::Plants::scan");
+            uintptr_t plantAddr = ScanPlantsSEH(p.Address());
+            if (plantAddr) {
+                SDK::AIBaseClient plantHit(plantAddr);
+                if (plantHit.IsValid()) return plantHit;
             }
         }
         return {};
+    }
+
+    // SEH-isolated plant scan — raw pointer in/out so the helper has no C++
+    // objects that would prevent __try/__except (C2712).
+    __declspec(noinline) uintptr_t ScanPlantsSEH(uintptr_t playerAddr) {
+        uintptr_t hit = 0;
+        __try {
+            uintptr_t plantBuf[256] = {};
+            int plantCount = CoreObjects::EnumerateMinions(plantBuf, 256);
+            SDK::AIBaseClient pCli(playerAddr);
+            for (int pi = 0; pi < plantCount; ++pi) {
+                if (!Globals::IsValidPtr(plantBuf[pi])) continue;
+                auto ptype = CoreClassification::Classify(plantBuf[pi]);
+                if (ptype != CoreClassification::ObjectType::Plant) continue;
+                SDK::AIBaseClient pl(plantBuf[pi]);
+                if (!pl.IsValid() || !pl.IsAlive() || pl.Health() <= 0.0f) continue;
+                if (!pCli.InAutoAttackRange(pl)) continue;
+                hit = plantBuf[pi];
+                break;
+            }
+        }
+        __except (CrashTelemetry::ReportAndHandle("GetSpecialMinion::Plants", GetExceptionInformation())) {
+            hit = 0;
+        }
+        return hit;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -984,6 +1033,12 @@ private:
 
     // ═══════════════════════════════════════════════════════════════════
     // GetStructure — Turret + Inhibitor + Nexus (C# lines 1144-1168)
+    //
+    // NOTE: Inhibitors and the Nexus are inside the MinionManager but do NOT
+    // carry the Minion bitflag. They were missed by the old AllObjects()
+    // name-prefix scan in some builds (causing hero to ignore them). The
+    // correct approach is to enumerate MinionManager directly and filter
+    // via CoreClassification (which does name-based typing).
     // ═══════════════════════════════════════════════════════════════════
     SDK::AIBaseClient GetStructure() {
         auto p = SDK::ObjectManager::Player();
@@ -996,24 +1051,53 @@ private:
             }
         }
 
-        // Inhibitors (C# line 1155-1161) — always attack when in range.
-        // EnemyInhibitors filters AllObjects by "Barracks" CharacterName prefix.
-        for (const auto& inh : SDK::ObjectManager::EnemyInhibitors()) {
-            if (inh.IsValid() && inh.IsAlive() && p.InAutoAttackRange(inh)) return inh;
-        }
-
-        // Nexus (C# line 1162-1166) — always attack when in range.
-        // Single object filtered by "HQ" prefix.
-        if (auto nex = SDK::ObjectManager::EnemyNexus();
-            nex.IsValid() && nex.IsAlive() && p.InAutoAttackRange(nex)) {
-            return nex;
+        // Inhibitors + Nexus — raw MinionManager scan (they don't have IsMinion flag)
+        if (priMenu && priMenu->GetBoolValue("turret", true)) {
+            DbgStage("OrbPlugin::Struct::Inhib+Nexus::scan");
+            uintptr_t structAddr = ScanStructuresSEH(p.Address(), p.Team());
+            if (structAddr) {
+                SDK::AIBaseClient structHit(structAddr);
+                if (structHit.IsValid()) return structHit;
+            }
         }
 
         return {};
     }
 
+    // SEH-isolated structure scan (inhibitors / nexus). Raw pointer in/out so
+    // the helper has no C++ objects that would prevent __try/__except.
+    __declspec(noinline) uintptr_t ScanStructuresSEH(uintptr_t playerAddr, int myTeam) {
+        uintptr_t hit = 0;
+        __try {
+            uintptr_t mgrBuf[512] = {};
+            int mgrCount = CoreObjects::EnumerateMinions(mgrBuf, 512);
+            SDK::AIBaseClient pCli(playerAddr);
+            for (int i = 0; i < mgrCount; ++i) {
+                if (!Globals::IsValidPtr(mgrBuf[i])) continue;
+                auto otype = CoreClassification::Classify(mgrBuf[i]);
+                if (otype != CoreClassification::ObjectType::Inhibitor &&
+                    otype != CoreClassification::ObjectType::Nexus) continue;
+                SDK::AIBaseClient s(mgrBuf[i]);
+                if (!s.IsValid() || !s.IsAlive() || s.Health() <= 0.0f) continue;
+                if (s.Team() == myTeam) continue;
+                if (!pCli.InAutoAttackRange(s)) continue;
+                hit = mgrBuf[i];
+                break;
+            }
+        }
+        __except (CrashTelemetry::ReportAndHandle("GetStructure::Inhib+Nexus", GetExceptionInformation())) {
+            hit = 0;
+        }
+        return hit;
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // GetJungle — with smallJungle priority (C# lines 1190-1213)
+    //
+    // Cross-checks CoreClassification to skip objects that RuntimeAPI's
+    // bitmask labelled as "jungle monster" but that are really plants,
+    // wards, pets or visual placeholders — same anti-freeze guard as for
+    // wards/plants.
     // ═══════════════════════════════════════════════════════════════════
     SDK::AIBaseClient GetJungle() {
         auto p = SDK::ObjectManager::Player();
@@ -1025,7 +1109,13 @@ private:
 
         for (const auto& mob : SDK::ObjectManager::JungleMinions()) {
             if (!mob.IsValid() || !mob.IsAlive() || !mob.IsVisible()) continue;
+            if (CoreClassification::ShouldIgnore(mob.Address())) continue;
             if (!p.InAutoAttackRange(mob)) continue;
+            auto mtype = CoreClassification::Classify(mob.Address());
+            if (mtype == CoreClassification::ObjectType::Unknown ||
+                mtype == CoreClassification::ObjectType::Plant ||
+                mtype == CoreClassification::ObjectType::Ward ||
+                mtype == CoreClassification::ObjectType::Pet) continue;
             float hp = mob.MaxHealth();
             if (smallFirst ? (hp < bestHP) : (hp > bestHP)) {
                 bestHP = hp; best = mob;

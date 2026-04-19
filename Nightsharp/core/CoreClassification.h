@@ -129,9 +129,11 @@ namespace CoreClassification {
             return ObjectType::JungleMonster;
         }
 
-        // === PET (has follow target) ===
-        const auto followId = Globals::Read<uint32_t>(obj + Offset::MinionClass::FollowTargetNetId);
-        if (followId != 0 && (team == 1 || team == 2)) return ObjectType::Pet;
+        // === PET ===
+        // Reference build has a dedicated MinionFieldsLayout::FollowTargetNetId
+        // offset; ours doesn't (yet). Fall back to the RuntimeAPI Pet classifier
+        // which uses the MinionClass byte + follow-target heuristic.
+        if ((team == 1 || team == 2) && RuntimeAPI::IsPet(obj)) return ObjectType::Pet;
 
         // === HERO (team 1/2, none of above) ===
         // Double check with RuntimeAPI flag for accuracy
