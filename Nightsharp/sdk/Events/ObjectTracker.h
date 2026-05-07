@@ -126,22 +126,36 @@ inline bool OnDelete(DeleteHandler h)    { return AddOnDelete(h); }
 inline void Update() {
     if (!detail::EnsureStorage()) return;
 
-    // Build current snapshot
-    detail::BuildSnapshot(*detail::g_curr);
-
-    // Skip diff on first tick (no previous data)
-    if (!detail::g_prev->Heroes.empty() || !detail::g_prev->Minions.empty()
-        || !detail::g_prev->Turrets.empty() || !detail::g_prev->Missiles.empty()) {
-
-        if (!detail::g_onAssign.empty() || !detail::g_onDelete.empty()) {
-            detail::DiffAndFire(detail::g_prev->Heroes,   detail::g_curr->Heroes);
-            detail::DiffAndFire(detail::g_prev->Minions,  detail::g_curr->Minions);
-            detail::DiffAndFire(detail::g_prev->Turrets,  detail::g_curr->Turrets);
-            detail::DiffAndFire(detail::g_prev->Missiles, detail::g_curr->Missiles);
-        }
+    // PERF (May/2026): BuildSnapshot iterates Heroes + AllyMinions +
+    // EnemyMinions + JungleMinions + Missiles + AllyTurrets + EnemyTurrets
+    // every frame. Each minion / missile pass walks up to ~512 entries with
+    // SEH-guarded memory reads, heap allocations and CoreClassification
+    // calls — ~3-4k SEH-guarded reads per frame total. At 60+ FPS this
+    // becomes the dominant per-frame cost (drops overlay to ~10-20 FPS).
+    //
+    // Skip entirely when nobody registered an Assign/Delete handler.
+    // Otherwise throttle to once every ~kPollEveryNTicks frames; OnDelete
+    // is only used for cleanup (HealthPrediction map erase), 100ms latency
+    // is fine and not gameplay-critical.
+    if (detail::g_onAssign.empty() && detail::g_onDelete.empty()) {
+        return;
     }
 
-    // Swap: current becomes previous for next tick
+    static constexpr int kPollEveryNTicks = 6;  // ~100ms @ 60fps overlay
+    static int s_tickCounter = 0;
+    if (++s_tickCounter < kPollEveryNTicks) return;
+    s_tickCounter = 0;
+
+    detail::BuildSnapshot(*detail::g_curr);
+
+    if (!detail::g_prev->Heroes.empty() || !detail::g_prev->Minions.empty()
+        || !detail::g_prev->Turrets.empty() || !detail::g_prev->Missiles.empty()) {
+        detail::DiffAndFire(detail::g_prev->Heroes,   detail::g_curr->Heroes);
+        detail::DiffAndFire(detail::g_prev->Minions,  detail::g_curr->Minions);
+        detail::DiffAndFire(detail::g_prev->Turrets,  detail::g_curr->Turrets);
+        detail::DiffAndFire(detail::g_prev->Missiles, detail::g_curr->Missiles);
+    }
+
     std::swap(detail::g_prev, detail::g_curr);
 }
 

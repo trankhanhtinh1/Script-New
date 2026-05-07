@@ -1,251 +1,144 @@
 #pragma once
 
-// ═══════════════════════════════════════════════════════════════════
-// BuffTracker — SDK event system for OnBuffGain / OnBuffLose
+// ============================================================================
+// BuffTracker — push-driven buff event surface
+// ============================================================================
+// Subscribes to `CoreEventHook::Events::OnBuffUpdate` (id 12). CoreEventHook
+// supplies this from the live BuffManager path, with a poll fallback for add,
+// refresh, and removal edges.
+// manager every tick (12 heroes × up to 64 buffs); that snapshot loop is
+// gone — `Update()` is now a no-op kept only for API compatibility with
 //
-// Usage (in champion script):
-//   SDK::Events::BuffTracker::OnBuffGain([](const AIBaseClient& sender, const BuffEventArgs& args) {
-//       if (sender.IsMe() && args.Name == "ThreshQ") {
-//           // cast E to escape
-//       }
-//   });
+// Public API preserved:
 //
-// Integration (call once per tick in main loop):
-//   SDK::Events::BuffTracker::Update();
-// ═══════════════════════════════════════════════════════════════════
+//     BuffTracker::OnBuffGain(cb)   // alias of OnBuffUpdate
+//     BuffTracker::OnBuffLose(cb)   // see deprecation note below
+//     BuffTracker::OnBuffUpdate(cb) // canonical
+//     BuffTracker::Initialize()     // wires the CoreEventHook callback
+//     BuffTracker::Update()         // no-op
+//     BuffTracker::Reset()          // clears handler list
+//
+// Semantics:
+//   * `OnBuffUpdate` fires exactly when the game's BuffManager dispatcher
+//     processes a buff. The dispatched event has the buff in its **current**
+//     state — newly added, refreshed duration, or new stack count. Consumers
+//     that previously distinguished "gain" vs "refresh" by diffing must now
+//     read `args.Stacks` / `args.EndTime` and decide for themselves.
+//   * `OnBuffLose` is a compatibility filter over OnBuffUpdate removals.
+// ============================================================================
 
-#include "../Core/Objects.h"
 #include "../../core/CoreBuffs.h"
+#include "../../core/CoreEventHook.h"
+#include "../../core/offset.h"
+#include "../../menu/MenuUI.h"
+#include "../GameObjects/AIBaseClient.h"
 
+#include <Windows.h>
 #include <functional>
 #include <string>
-#include <vector>
-#include <unordered_map>
 
 namespace SDK::Events {
 
-// ── BuffEventArgs — matches C# AIBaseClientBuffGainEventArgs ──
 struct BuffEventArgs {
-    std::string Name;          // args.Buff.Name
-    int         Type    = 0;   // args.Buff.Type  (bitmask: 1=Internal, 2=Aura, etc.)
-    int         Stacks  = 0;   // args.Buff.Count
+    std::string Name;          // buff identifier (cosmetic; hash-stable)
+    int         Type      = 0; // BuffData.Type byte (Internal / Aura / …)
+    int         Stacks    = 0; // current stack count
     float       StartTime = 0.0f;
     float       EndTime   = 0.0f;
-    uintptr_t   Address   = 0; // raw buff ptr for advanced use
+    uintptr_t   Address   = 0; // raw BuffData* for advanced reads
 };
 
 namespace BuffTracker {
 
 using BuffCallback = std::function<void(const AIBaseClient&, const BuffEventArgs&)>;
 
-// ── Internal state ──────────────────────────────────────────────
 namespace detail {
 
-    struct BuffSnapshot {
-        char name[96] = {};
-        int type   = 0;
-        int stacks = 0;
-        float startTime = 0.0f;
-        float endTime   = 0.0f;
-    };
-
-    // Fixed-size storage to avoid C++ objects in SEH-sensitive paths
+    // Storage — fixed slots so the handler list does not allocate inside
+    // the SEH-guarded callback path.
     static constexpr int kMaxCallbacks = 32;
-    static constexpr int kMaxHeroes = 12;
-    static constexpr int kMaxBuffsPerHero = 64;
+    inline BuffCallback s_handlers[kMaxCallbacks] = {};
+    inline int          s_count = 0;
+    inline bool         s_registered = false;
 
-    struct HeroBuffState {
-        uintptr_t objAddr = 0;
-        BuffSnapshot buffs[kMaxBuffsPerHero] = {};
-        int count = 0;
-    };
+    // CoreEventHook trampoline. `sender` = hero object*, `context` =
+    // BuffData*, `intParam` = stacks (0 if unavailable). We rebuild the
+    // BuffEventArgs via `CoreBuffs::BuffRef` so the consumer sees the same
+    // shape it always did.
+    inline void OnBuffUpdateThunk(uintptr_t sender, uintptr_t context, int intParam) {
+        if (s_count == 0) return;
 
-    inline BuffCallback  s_gainCbs[kMaxCallbacks] = {};
-    inline int           s_gainCount = 0;
-    inline BuffCallback  s_loseCbs[kMaxCallbacks] = {};
-    inline int           s_loseCount = 0;
-    inline HeroBuffState s_prev[kMaxHeroes] = {};
-    inline int           s_prevCount = 0;
-    inline bool          s_initialized = false;
+        AIBaseClient hero(sender);
+        if (!hero.IsValid()) return;
 
-    // SEH-safe callback invocation — no C++ objects with destructors
-    inline void InvokeGainSafe(BuffCallback* cbs, int count,
-                               uintptr_t senderAddr,
-                               const char* name, int type, int stacks,
-                               float startTime, float endTime) {
-        BuffEventArgs args;
-        args.Name      = name;
-        args.Type      = type;
-        args.Stacks    = stacks;
-        args.StartTime = startTime;
-        args.EndTime   = endTime;
-        AIBaseClient sender(senderAddr);
-        for (int i = 0; i < count; ++i) {
-            if (cbs[i]) {
-                cbs[i](sender, args);
+        BuffEventArgs args = {};
+        args.Address = context;
+        args.Stacks  = intParam;
+
+        // If the dispatcher gave us a BuffData* we can read the canonical
+        // fields. Otherwise fall back to whatever `intParam` carried.
+        CoreBuffs::BuffRef ref{ context };
+        if (ref.IsValid()) {
+            char nameBuf[96] = {};
+            if (ref.ReadName(nameBuf, sizeof(nameBuf))) {
+                args.Name = nameBuf;
             }
+            args.Type      = ref.GetType();
+            const int s    = ref.GetStacks();
+            if (intParam != 0 && s > 0) args.Stacks = s;
+            args.StartTime = ref.GetStartTime();
+            args.EndTime   = ref.GetEndTime();
         }
-    }
 
-    inline void InvokeLoseSafe(BuffCallback* cbs, int count,
-                               uintptr_t senderAddr,
-                               const char* name, int type, int stacks,
-                               float startTime, float endTime) {
-        BuffEventArgs args;
-        args.Name      = name;
-        args.Type      = type;
-        args.Stacks    = stacks;
-        args.StartTime = startTime;
-        args.EndTime   = endTime;
-        AIBaseClient sender(senderAddr);
-        for (int i = 0; i < count; ++i) {
-            if (cbs[i]) {
-                cbs[i](sender, args);
-            }
+        for (int i = 0; i < s_count; ++i) {
+            if (s_handlers[i]) s_handlers[i](hero, args);
         }
-    }
-
-    // Find a buff by name in a snapshot array
-    inline int FindBuff(const HeroBuffState& state, const char* name) {
-        for (int i = 0; i < state.count; ++i) {
-            if (lstrcmpiA(state.buffs[i].name, name) == 0) {
-                return i;
-            }
-        }
-        return -1;
     }
 
 } // namespace detail
 
-// ── Public API ──────────────────────────────────────────────────
-
-/// Subscribe to buff gain events
-inline void OnBuffGain(BuffCallback cb) {
-    if (detail::s_gainCount < detail::kMaxCallbacks) {
-        detail::s_gainCbs[detail::s_gainCount++] = std::move(cb);
-    }
+// ── Lifecycle ──────────────────────────────────────────────────────────
+inline void Initialize() {
+    if (detail::s_registered) return;
+    CoreEventHook::SetCallback(Offset::Events::OnBuffUpdate, detail::OnBuffUpdateThunk);
+    detail::s_registered = true;
 }
 
-/// Subscribe to buff lose events
-inline void OnBuffLose(BuffCallback cb) {
-    if (detail::s_loseCount < detail::kMaxCallbacks) {
-        detail::s_loseCbs[detail::s_loseCount++] = std::move(cb);
-    }
-}
-
-/// Clear all subscriptions
-inline void Clear() {
-    for (int i = 0; i < detail::s_gainCount; ++i) detail::s_gainCbs[i] = nullptr;
-    for (int i = 0; i < detail::s_loseCount; ++i) detail::s_loseCbs[i] = nullptr;
-    detail::s_gainCount = 0;
-    detail::s_loseCount = 0;
-    detail::s_prevCount = 0;
-    detail::s_initialized = false;
-}
-
-/// Call every tick from main update loop
 inline void Update() {
-    // Skip if no subscribers
-    if (detail::s_gainCount == 0 && detail::s_loseCount == 0) {
-        return;
-    }
-
-    // Build current snapshot for all heroes
-    detail::HeroBuffState current[detail::kMaxHeroes] = {};
-    int heroCount = 0;
-
-    for (const auto& hero : ObjectManager::Heroes()) {
-        if (!hero.IsValid() || heroCount >= detail::kMaxHeroes) continue;
-
-        auto& cur = current[heroCount];
-        cur.objAddr = hero.Address();
-        cur.count = 0;
-
-        uintptr_t buffAddrs[256] = {};
-        const int rawCount = CoreBuffs::Enumerate(cur.objAddr, buffAddrs, 256);
-
-        for (int i = 0; i < rawCount && cur.count < detail::kMaxBuffsPerHero; ++i) {
-            CoreBuffs::BuffRef ref{ buffAddrs[i] };
-            if (!ref.IsValid() || ref.GetStacks() <= 0) continue;
-
-            auto& snap = cur.buffs[cur.count];
-            if (!ref.ReadName(snap.name, sizeof(snap.name))) continue;
-            if (snap.name[0] == 0) continue;
-
-            snap.type      = ref.GetType();
-            snap.stacks    = ref.GetStacks();
-            snap.startTime = ref.GetStartTime();
-            snap.endTime   = ref.GetEndTime();
-            cur.count++;
-        }
-        heroCount++;
-    }
-
-    // Skip diff on first tick (avoid false positives on load)
-    if (!detail::s_initialized) {
-        for (int h = 0; h < heroCount; ++h) {
-            detail::s_prev[h] = current[h];
-        }
-        detail::s_prevCount = heroCount;
-        detail::s_initialized = true;
-        return;
-    }
-
-    // Diff: compare current vs previous for each hero
-    for (int h = 0; h < heroCount; ++h) {
-        const auto& cur = current[h];
-
-        // Find matching previous state by objAddr
-        int prevIdx = -1;
-        for (int p = 0; p < detail::s_prevCount; ++p) {
-            if (detail::s_prev[p].objAddr == cur.objAddr) {
-                prevIdx = p;
-                break;
-            }
-        }
-
-        if (prevIdx < 0) {
-            // New hero, skip diff
-            continue;
-        }
-
-        const auto& prev = detail::s_prev[prevIdx];
-
-        // OnBuffGain: in current but NOT in prev
-        if (detail::s_gainCount > 0) {
-            for (int i = 0; i < cur.count; ++i) {
-                if (detail::FindBuff(prev, cur.buffs[i].name) < 0) {
-                    detail::InvokeGainSafe(
-                        detail::s_gainCbs, detail::s_gainCount,
-                        cur.objAddr,
-                        cur.buffs[i].name, cur.buffs[i].type,
-                        cur.buffs[i].stacks, cur.buffs[i].startTime,
-                        cur.buffs[i].endTime);
-                }
-            }
-        }
-
-        // OnBuffLose: in prev but NOT in current
-        if (detail::s_loseCount > 0) {
-            for (int i = 0; i < prev.count; ++i) {
-                if (detail::FindBuff(cur, prev.buffs[i].name) < 0) {
-                    detail::InvokeLoseSafe(
-                        detail::s_loseCbs, detail::s_loseCount,
-                        cur.objAddr,
-                        prev.buffs[i].name, prev.buffs[i].type,
-                        prev.buffs[i].stacks, prev.buffs[i].startTime,
-                        prev.buffs[i].endTime);
-                }
-            }
-        }
-    }
-
-    // Update snapshot
-    for (int h = 0; h < heroCount; ++h) {
-        detail::s_prev[h] = current[h];
-    }
-    detail::s_prevCount = heroCount;
+    // Push-driven now — nothing to poll. Kept so the central
+    // `Events::Update()` dispatcher does not need a special case.
 }
+
+inline void Reset() {
+    for (int i = 0; i < detail::s_count; ++i) detail::s_handlers[i] = nullptr;
+    detail::s_count = 0;
+    // Note: we intentionally leave the CoreEventHook callback installed so
+    // a subsequent Initialize()/subscribe pair re-uses the same trampoline.
+}
+
+// ── Subscription ───────────────────────────────────────────────────────
+inline void OnBuffUpdate(BuffCallback cb) {
+    Initialize();
+    if (detail::s_count < detail::kMaxCallbacks) {
+        detail::s_handlers[detail::s_count++] = std::move(cb);
+    }
+}
+
+// Legacy aliases are filtered over the canonical OnBuffUpdate stream.
+// — see file header for the rationale.
+inline void OnBuffGain(BuffCallback cb) {
+    OnBuffUpdate([cb = std::move(cb)](const AIBaseClient& hero, const BuffEventArgs& args) {
+        if (args.Stacks > 0) cb(hero, args);
+    });
+}
+
+inline void OnBuffLose(BuffCallback cb) {
+    OnBuffUpdate([cb = std::move(cb)](const AIBaseClient& hero, const BuffEventArgs& args) {
+        if (args.Stacks == 0) cb(hero, args);
+    });
+}
+
+inline void Clear() { Reset(); }
 
 } // namespace BuffTracker
 } // namespace SDK::Events

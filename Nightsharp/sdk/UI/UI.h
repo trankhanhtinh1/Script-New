@@ -238,6 +238,11 @@ namespace SDK::UI {
             return m_menu ? m_menu->GetKeyBindValue(name, fallback) : fallback;
         }
 
+        // Phase 2 (Apr 26/2026): forwards used by sdk/Wrappers/TargetSelector.
+        bool HasItem(const std::string& name) const {
+            return m_menu ? m_menu->HasItem(name) : false;
+        }
+
     private:
         Menu* m_menu = nullptr;
         bool m_isRoot = false;

@@ -6,7 +6,6 @@
 #include "../../../Core/Objects.h"
 
 #include <algorithm>
-#include <new>
 #include <string>
 #include <vector>
 
@@ -29,33 +28,30 @@ struct TrackedSpellEntry {
     bool Targeted = false;
 };
 
-inline std::vector<TrackedSpellEntry>* g_trackerEntries = nullptr;
-
-inline bool EnsureEntries() {
-    if (!g_trackerEntries)
-        g_trackerEntries = new(std::nothrow) std::vector<TrackedSpellEntry>();
-    return g_trackerEntries != nullptr;
-}
-
 inline std::vector<TrackedSpellEntry>& Entries() {
-    return *g_trackerEntries;
+    static std::vector<TrackedSpellEntry> entries;
+    return entries;
 }
 
 inline void Initialize() {
-    if (!EnsureEntries()) return;
-    g_trackerEntries->clear();
+    Entries().clear();
 }
 
 inline void Reset() {
-    if (g_trackerEntries) g_trackerEntries->clear();
+    Entries().clear();
 }
 
 inline void Update() {
-    if (!EnsureEntries()) return;
+    static int s_lastUpdateTick = 0;
+    const int now = Game::TickCount();
+    if (now - s_lastUpdateTick < 50) {
+        return;
+    }
+    s_lastUpdateTick = now;
+
     auto& out = Entries();
     out.clear();
 
-    const int now = Game::TickCount();
     for (const auto& hero : ObjectManager::Heroes()) {
         if (!hero.IsValid() || hero.IsDead()) {
             continue;
@@ -112,8 +108,7 @@ inline void Update() {
 }
 
 inline const TrackedSpellEntry* FindByCaster(int networkId) {
-    if (!g_trackerEntries) return nullptr;
-    const auto& entries = *g_trackerEntries;
+    const auto& entries = Entries();
     auto it = std::find_if(entries.begin(), entries.end(), [&](const TrackedSpellEntry& entry) {
         return entry.CasterNetworkId == networkId;
     });
@@ -121,8 +116,7 @@ inline const TrackedSpellEntry* FindByCaster(int networkId) {
 }
 
 inline const TrackedSpellEntry* FindByMissile(int networkId) {
-    if (!g_trackerEntries) return nullptr;
-    const auto& entries = *g_trackerEntries;
+    const auto& entries = Entries();
     auto it = std::find_if(entries.begin(), entries.end(), [&](const TrackedSpellEntry& entry) {
         return entry.MissileNetworkId == networkId;
     });

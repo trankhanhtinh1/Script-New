@@ -1,53 +1,30 @@
 #pragma once
 
 #include "PluginManager.h"
+#include "core/TargetSelectorPlugin.h"
 #include "core/OrbwalkerPlugin.h"
-#include "core/RenderTestPlugin.h"
-#include "core/OffsetScannerPlugin.h"
-#include "champions/EzrealPlugin.h"
-#include "champions/JinxPlugin.h"
-#include "champions/XerathPlugin.h"
-#include "champions/KarthusPlugin.h"
-#include "champions/KogmawPlugin.h"
-#include "champions/ViktorPlugin.h"
-#include "champions/ZedPlugin.h"
-#include "champions/KalistaPlugin.h"
-#include "champions/RTXPower/Ezreal.h"
+#include "core/OffsetInspectorPlugin.h"
+#include "7UPAIO/EzrealPlugin.h"
+
+// NOTE: Built-in plugins (RenderTestPlugin, EzrealPlugin, …) lived in the
+// deleted core/ + sdk/ tree, so there is nothing to register yet. The
+// function is kept as an explicit no-op to preserve the call site in
+// Overlay::Run() without re-plumbing once new plugins are re-added.
 
 namespace Plugins {
 namespace PluginBootstrap {
 
-    inline bool g_bootstrapRegistered = false;
-
     inline void EnsureRegistered() {
-        if (g_bootstrapRegistered) {
-            CrashTelemetry::AppendStageLine("[NightSharp][Bootstrap] EnsureRegistered::AlreadyRegistered\r\n");
+        static bool s_registered = false;
+        if (s_registered) {
             return;
         }
-        g_bootstrapRegistered = true;
+        s_registered = true;
 
-        auto& manager = PluginManager::Get();
-
-        #define NS_REGISTER(NAME, T) \
-            CrashTelemetry::SetStage("Bootstrap::Register::" NAME); \
-            CrashTelemetry::AppendStageLine("[NightSharp][Bootstrap] Register::" NAME " begin\r\n"); \
-            manager.Register<T>(); \
-            CrashTelemetry::AppendStageLine("[NightSharp][Bootstrap] Register::" NAME " done\r\n");
-
-        NS_REGISTER("OrbwalkerPlugin",     OrbwalkerPlugin)
-        NS_REGISTER("RenderTestPlugin",    RenderTestPlugin)
-        NS_REGISTER("OffsetScannerPlugin", OffsetScannerPlugin)
-        NS_REGISTER("EzrealPlugin",        EzrealPlugin)
-        NS_REGISTER("JinxPlugin",          JinxPlugin)
-        NS_REGISTER("XerathPlugin",        XerathPlugin)
-        NS_REGISTER("KarthusPlugin",       KarthusPlugin)
-        NS_REGISTER("KogmawPlugin",        KogmawPlugin)
-        NS_REGISTER("ViktorPlugin",        ViktorPlugin)
-        NS_REGISTER("ZedPlugin",           ZedPlugin)
-        NS_REGISTER("KalistaPlugin",       KalistaPlugin)
-        NS_REGISTER("RTXPowerPlugin",      RTXPowerPlugin)
-
-        #undef NS_REGISTER
+        PluginManager::Get().Register<TargetSelectorPlugin>();
+        PluginManager::Get().Register<OrbwalkerPlugin>();
+        PluginManager::Get().Register<OffsetInspectorPlugin>();
+        PluginManager::Get().Register<SevenUPAIO::EzrealPlugin>();
     }
 
 } // namespace PluginBootstrap

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../generated/InterruptableSpellData.generated.h"
+#include "../Data/InterruptableSpellData.h"
 #include "../../menu/MenuUI.h"
 #include "../Core/Game.h"
 #include "../Core/Objects.h"
@@ -99,6 +99,13 @@ public:
         if (!EnsureStorage()) {
             return;
         }
+
+        static int s_lastUpdateTick = 0;
+        const int now = Game::TickCount();
+        if (now - s_lastUpdateTick < 50) {
+            return;
+        }
+        s_lastUpdateTick = now;
 
         std::unordered_map<int, ActiveState> nextActive = {};
         for (const auto& hero : ObjectManager::EnemyHeroes()) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../generated/GapcloserData.generated.h"
+#include "../Data/GapcloserData.h"
 #include "../../menu/MenuUI.h"
 #include "../Core/Game.h"
 #include "../Core/Objects.h"
@@ -68,6 +68,14 @@ public:
         if (!EnsureStorage()) {
             return;
         }
+
+        static int s_lastUpdateTick = 0;
+        const int now = Game::TickCount();
+        if (now - s_lastUpdateTick < 50) {
+            return;
+        }
+        s_lastUpdateTick = now;
+
         PruneExpired();
         DetectNewGapclosers();
 

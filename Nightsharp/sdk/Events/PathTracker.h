@@ -1,33 +1,32 @@
 #pragma once
 
 // ============================================================================
-// PathTracker — Poll-based OnNewPath event
+// PathTracker — push-driven OnNewPath event surface (cache preserved)
+// ============================================================================
+// Subscribes to `CoreEventHook::Events::OnNewPath` (id 33), fired by the
+// inline detour on the AIBaseClient path-replace path. `sender` = hero,
+// `context` = 0, `intParam` = new waypoint count.
 //
-// EnsoulSharp equivalent: AIBaseClient.OnNewPath
-//
-// How it works (manual-map safe, no hooks):
-//   Each tick we compare each hero's PathEnd / WaypointCount / IsDashing
-//   against the previous tick. If any changed → fire OnNewPath.
-//
-// DEPENDENCY: CoreAi (core/CoreAi.h)
-//   Provides: GetPathEnd, GetPathStart, GetWaypointCount, CopyWaypoints,
-//             IsMoving, IsDashing, GetVelocity
-// DEPENDENCY: SDK ObjectManager::Heroes() (sdk/Core/Objects.h)
+// Per the Phase 2.2 plan we KEEP the per-hero cache: consumers ask
+// `GetCachedPath(hero)` to read the most recent waypoint list without
+// re-issuing a `CopyWaypoints` syscall. The cache is populated from the
+// callback (single dispatch per real path change) instead of being
+// rebuilt on every tick by a poll loop.
 // ============================================================================
 
+#include "../../core/CoreEventHook.h"
+#include "../../core/offset.h"
 #include "../../menu/MenuUI.h"
 #include "../Core/Game.h"
-#include "../Core/Objects.h"
+#include "../GameObjects/AIBaseClient.h"
+#include "../GameObjects/ObjectManager.h"
 
+#include <algorithm>
 #include <new>
 #include <unordered_map>
 #include <vector>
 
 namespace SDK::Events::Path {
-
-// ---------------------------------------------------------------------------
-// Event Args — matches EnsoulSharp: AIBaseClientNewPathEventArgs
-// ---------------------------------------------------------------------------
 
 struct NewPathEventArgs {
     std::vector<Vector3> Path = {};
@@ -39,20 +38,14 @@ struct NewPathEventArgs {
 
 using NewPathHandler = void(*)(const AIBaseClient& sender, const NewPathEventArgs& args);
 
-// ---------------------------------------------------------------------------
-// Internal
-// ---------------------------------------------------------------------------
 namespace detail {
-
     struct PathState {
-        Vector3 LastPathEnd = {};
-        int LastWaypointCount = 0;
-        bool WasDashing = false;
-        bool Initialized = false;
+        NewPathEventArgs LastArgs = {};
     };
 
     inline std::unordered_map<int, PathState>* g_states = nullptr;
     inline MenuUI::FixedList<NewPathHandler, 64> g_handlers = {};
+    inline bool g_registered = false;
 
     inline bool EnsureStorage() {
         if (!g_states) {
@@ -61,27 +54,16 @@ namespace detail {
         return g_states != nullptr;
     }
 
-    inline bool HasChanged(const PathState& s, const Vector3& end, int wpCount, bool dashing) {
-        if (!s.Initialized) return false;
-        if (s.LastPathEnd.Distance2D(end) > 10.0f) return true;
-        if (s.LastWaypointCount != wpCount) return true;
-        if (s.WasDashing != dashing) return true;
-        return false;
-    }
-
-    inline NewPathEventArgs BuildArgs(const AIBaseClient& hero, bool isDash) {
+    inline NewPathEventArgs BuildArgs(const AIBaseClient& hero, int wpCount) {
         NewPathEventArgs args = {};
 
-        // Copy waypoints from core (Vec3 == Vector3)
         Vector3 wpBuf[32] = {};
-        const int count = hero.Ref().CopyWaypoints(
-            reinterpret_cast<Vec3*>(wpBuf), 32);
+        const int requested = (wpCount > 0 && wpCount <= 32) ? wpCount : 32;
+        const int got = hero.Ref().CopyWaypoints(reinterpret_cast<Vec3*>(wpBuf), requested);
 
-        args.Path.reserve(count > 0 ? count : 2);
-        if (count > 0) {
-            for (int i = 0; i < count; ++i) {
-                args.Path.push_back(wpBuf[i]);
-            }
+        args.Path.reserve(got > 0 ? got : 2);
+        if (got > 0) {
+            for (int i = 0; i < got; ++i) args.Path.push_back(wpBuf[i]);
         } else {
             args.Path.push_back(hero.Position());
             const auto end = hero.PathEnd();
@@ -90,55 +72,52 @@ namespace detail {
             }
         }
 
-        args.IsDash = isDash;
-        args.Speed  = isDash
+        args.IsDash = hero.IsDashing();
+        args.Speed  = args.IsDash
             ? std::max(hero.Velocity().Length2D(), hero.MoveSpeed())
             : hero.MoveSpeed();
         if (args.Speed <= 0.0f) args.Speed = hero.MoveSpeed();
-
         return args;
     }
 
-} // namespace detail
+    // CoreEventHook trampoline.
+    inline void OnNewPathThunk(uintptr_t sender, uintptr_t /*context*/, int intParam) {
+        if (!EnsureStorage()) return;
+        AIBaseClient hero(sender);
+        if (!hero.IsValid() || hero.IsDead()) return;
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+        NewPathEventArgs args = BuildArgs(hero, intParam);
+        (*g_states)[hero.NetworkId()].LastArgs = args;
 
-inline void Initialize() { detail::EnsureStorage(); }
-
-inline bool AddOnNewPath(NewPathHandler h) { return h && detail::g_handlers.push_back(h); }
-inline bool OnNewPath(NewPathHandler h)    { return AddOnNewPath(h); }
-
-/// Call once per tick from Events::Update()
-inline void Update() {
-    if (!detail::EnsureStorage()) return;
-
-    for (const auto& hero : ObjectManager::Heroes()) {
-        const int netId = hero.NetworkId();
-        if (!hero.IsValid() || netId == 0 || hero.IsDead()) {
-            if (netId != 0) detail::g_states->erase(netId);
-            continue;
+        for (const auto& h : g_handlers) {
+            if (h) h(hero, args);
         }
-
-        const Vector3 pathEnd  = hero.PathEnd();
-        const int wpCount      = hero.Ref().GetWaypointCount();
-        const bool isDashing   = hero.IsDashing();
-
-        auto& state = (*detail::g_states)[netId];
-
-        if (detail::HasChanged(state, pathEnd, wpCount, isDashing)) {
-            auto args = detail::BuildArgs(hero, isDashing);
-            for (const auto& h : detail::g_handlers) {
-                if (h) h(hero, args);
-            }
-        }
-
-        state.LastPathEnd      = pathEnd;
-        state.LastWaypointCount = wpCount;
-        state.WasDashing       = isDashing;
-        state.Initialized      = true;
     }
+}
+
+inline void Initialize() {
+    detail::EnsureStorage();
+    if (!detail::g_registered) {
+        CoreEventHook::SetCallback(Offset::Events::OnNewPath, detail::OnNewPathThunk);
+        detail::g_registered = true;
+    }
+}
+
+inline bool AddOnNewPath(NewPathHandler h) {
+    Initialize();
+    return h && detail::g_handlers.push_back(h);
+}
+
+inline bool OnNewPath(NewPathHandler h) { return AddOnNewPath(h); }
+
+inline NewPathEventArgs GetCachedPath(const AIBaseClient& hero) {
+    if (!detail::g_states || !hero.IsValid()) return {};
+    const auto it = detail::g_states->find(hero.NetworkId());
+    return (it != detail::g_states->end()) ? it->second.LastArgs : NewPathEventArgs{};
+}
+
+inline void Update() {
+    // Push-driven — nothing to poll.
 }
 
 inline void Reset() {

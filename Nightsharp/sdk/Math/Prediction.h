@@ -1,10 +1,12 @@
 #pragma once
 
+#include "NavGrid.h"
 #include "Prediction/Types.h"
 #include "Prediction/GamePath.h"
 #include "Prediction/Movement.h"
 #include "Prediction/Cluster.h"
 #include "Prediction/Health.h"
+#include "../Core/Game.h"
 
 namespace SDK::Prediction {
 
@@ -14,6 +16,13 @@ inline void Initialize() {
 }
 
 inline void Update() {
+    static int s_lastUpdateTick = 0;
+    const int now = Game::TickCount();
+    if (now - s_lastUpdateTick < 50) {
+        return;
+    }
+    s_lastUpdateTick = now;
+
     GamePath::Update();
     Health::Update();
 }

@@ -7,6 +7,25 @@
 
 namespace SDK::Drawing {
 
+    struct ViewProjectionFrameCache {
+        int Frame = -1;
+        bool Valid = false;
+        float Matrix[16] = {};
+        Vec2 RendererSize = {};
+    };
+
+    inline ViewProjectionFrameCache& GetViewProjectionFrameCache() {
+        static ViewProjectionFrameCache cache = {};
+        const int frame = ImGui::GetFrameCount();
+        if (cache.Frame != frame) {
+            cache.Frame = frame;
+            cache.Valid =
+                CoreAPI::View::ReadViewProjection(cache.Matrix) &&
+                CoreAPI::View::GetRendererSize(cache.RendererSize);
+        }
+        return cache;
+    }
+
     inline ImU32 Color(int r, int g, int b, int a = 255) {
         return IM_COL32(r, g, b, a);
     }
@@ -16,6 +35,15 @@ namespace SDK::Drawing {
     }
 
     inline bool WorldToScreen(const Vector3& world, Vector2& screen) {
+        if (ImGui::GetCurrentContext()) {
+            auto& cache = GetViewProjectionFrameCache();
+            Vec2 projected = {};
+            if (cache.Valid && CoreAPI::View::ProjectWorldToScreen(world, cache.Matrix, cache.RendererSize, projected)) {
+                screen = { projected.x, projected.y };
+                return screen.IsValid();
+            }
+        }
+
         Vec2 out = {};
         if (!CoreAPI::View::WorldToScreen(world, out)) {
             screen = {};
@@ -68,7 +96,7 @@ namespace SDK::Drawing {
         }
     }
 
-    inline void DrawCircle(const Vector3& center, float radius, ImU32 color, float thickness = 1.5f, int segments = 48, bool foreground = true) {
+    inline void DrawCircle(const Vector3& center, float radius, ImU32 color, float thickness = 1.5f, int segments = 32, bool foreground = true) {
         if (radius <= 0.0f || segments < 8) {
             return;
         }
@@ -78,22 +106,41 @@ namespace SDK::Drawing {
             return;
         }
 
+        auto& cache = GetViewProjectionFrameCache();
+
         Vector2 points[128] = {};
         int visible = 0;
         const int cappedSegments = (segments > 127) ? 127 : segments;
 
+        const float step = 6.28318530718f / static_cast<float>(cappedSegments);
+        const float stepCos = std::cos(step);
+        const float stepSin = std::sin(step);
+        float unitX = 1.0f;
+        float unitZ = 0.0f;
+
         for (int i = 0; i <= cappedSegments; ++i) {
-            const float theta = (6.28318530718f * static_cast<float>(i)) / static_cast<float>(cappedSegments);
             const Vector3 point{
-                center.x + std::cos(theta) * radius,
+                center.x + unitX * radius,
                 center.y,
-                center.z + std::sin(theta) * radius
+                center.z + unitZ * radius
             };
 
             Vector2 screen = {};
-            if (WorldToScreen(point, screen)) {
+            Vec2 projected = {};
+            const bool visiblePoint = cache.Valid
+                ? CoreAPI::View::ProjectWorldToScreen(point, cache.Matrix, cache.RendererSize, projected)
+                : WorldToScreen(point, screen);
+            if (visiblePoint) {
+                if (cache.Valid) {
+                    screen = { projected.x, projected.y };
+                }
                 points[visible++] = screen;
             }
+
+            const float nextX = unitX * stepCos - unitZ * stepSin;
+            const float nextZ = unitX * stepSin + unitZ * stepCos;
+            unitX = nextX;
+            unitZ = nextZ;
         }
 
         if (visible >= 2) {

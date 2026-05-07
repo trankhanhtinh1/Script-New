@@ -1,533 +1,722 @@
 #pragma once
 
-#include "../../Enumerations/DamageType.h"
-#include "../../Core/Game.h"
-#include "../../Core/Objects.h"
-#include "../../Utils/AutoAttack.h"
+#include "AttackData.h"
+#include "OrbwalkerBase.h"
 #include "../TargetSelector/TargetSelector.h"
-#include "../Damages/Damage.h"
-#include "../../Math/Prediction/Health.h"
-#include "../../../core/CrashTelemetry.h"
-#include "../../../menu/MenuUI.h"
+#include "../../Core/Game.h"
+#include "../../Events/SpellCastTracker.h"
+#include "../../UI/Drawing.h"
 #include "../../UI/UI.h"
+#include "../../Utils/AutoAttack.h"
 
 #include <Windows.h>
 #include <algorithm>
 #include <cfloat>
-#include <cstdint>
-#include <cstdlib>
-#include <string>
+#include <cmath>
+#include <cstdio>
 #include <vector>
-
-namespace Plugins { class OrbwalkerPlugin; }
 
 namespace SDK {
 
-enum class OrbwalkerMode : int {
-    None = 0,
-    Combo = 1,
-    Harass = 2,
-    Clear = 3,
-    LaneClear = 3,
-    LastHit = 4,
-    Flee = 5
-};
-
-using OrbwalkingMode = OrbwalkerMode;
-
-enum class OrbwalkingType : int {
-    None = 0,
-    Movement = 1,
-    StopMovement = 2,
-    BeforeAttack = 3,
-    AfterAttack = 4,
-    OnAttack = 5,
-    NonKillableMinion = 6,
-    TargetSwitch = 7
-};
-
-// --- Event args matching EnsoulSharp OrbwalkingActionArgs ---
-struct OrbwalkingActionArgs {
-    AIBaseClient Sender = {};
-    AIBaseClient Target = {};
-    Vector3 Position = {};
-    bool Process = true;
-    OrbwalkingType Type = OrbwalkingType::None;
-};
-
-// --- OrbwalkerBase – matches EnsoulSharp OrbwalkerBase<TK, T> ---
-class OrbwalkerBase {
-    friend class ::Plugins::OrbwalkerPlugin;
+class Orbwalker {
 public:
     using ActionHandler = void(*)(OrbwalkingActionArgs&);
 
-    OrbwalkerMode ActiveMode    = OrbwalkerMode::None;
-    int           LastAutoAttackTick = 0;
-    float         LastAutoAttackTime = 0.0f;
-    bool          MissileLaunched    = false;
-    AIBaseClient  LastTarget         = {};
-
-    struct TickDiag {
-        bool canAttack   = false;
-        bool canMove     = false;
-        bool attackIssued = false;
-        bool moveIssued  = false;
-        int  targetNetId = 0;
-    } lastTickDiag = {};
-
-    void ResetSwingTimer() { LastAutoAttackTick = 0; LastAutoAttackTime = 0.0f; }
-
-    bool AddOnAction(ActionHandler handler) {
-        if (!handler) return false;
-        for (int i = 0; i < kMaxHandlers; ++i) {
-            if (s_actionHandlers[i] == nullptr) {
-                s_actionHandlers[i] = handler;
-                return true;
-            }
+    static void Initialize() {
+        if (s_initialized) {
+            return;
         }
-        return false;
+        s_initialized = true;
+
+        s_menu = UI::CreateMenu("orbwalker", "Orbwalker");
+
+        s_drawingMenu = s_menu.AddMenu("drawings", "Drawings");
+        s_drawingMenu.AddBool("drawAARange", "Auto-Attack Range", true);
+        s_drawingMenu.AddBool("drawAARangeEnemy", "Auto-Attack Range Enemy", false);
+        s_drawingMenu.AddBool("drawExtraHoldPosition", "Extra Hold Position", false);
+        s_drawingMenu.AddBool("drawKillableMinion", "Killable Minions", false);
+        s_drawingMenu.AddBool("drawKillableMinionFade", "Killable Minions Fade Effect", false);
+        s_drawingMenu.AddColor("allyRangeColor", "Ally Range Color", ImVec4(0.15f, 0.75f, 1.0f, 0.9f));
+        s_drawingMenu.AddColor("enemyRangeColor", "Enemy Range Color", ImVec4(1.0f, 0.35f, 0.25f, 0.7f));
+        s_drawingMenu.AddColor("killableColor", "Killable Color", ImVec4(1.0f, 0.95f, 0.1f, 0.9f));
+
+        s_advancedMenu = s_menu.AddMenu("advanced", "Advanced");
+        s_advancedMenu.AddSeparator("separatorMovement", "Movement");
+        s_advancedMenu.AddBool("movementRandomize", "Randomize Location", true);
+        s_advancedMenu.AddSlider("movementExtraHold", "Extra Hold Position", 0, 0, 250);
+        s_advancedMenu.AddSlider("movementMaximumDistance", "Maximum Distance", 1500, 500, 1500);
+        s_advancedMenu.AddSeparator("separatorDelay", "Delay");
+        s_advancedMenu.AddSlider("delayMovement", "Movement", 0, 0, 500);
+        s_advancedMenu.AddSlider("delayWindup", "Windup", 80, 0, 200);
+        s_advancedMenu.AddSlider("delayFarm", "Farm", 30, 0, 200);
+        s_advancedMenu.AddSeparator("separatorPrioritization", "Prioritization");
+        s_advancedMenu.AddBool("prioritizeFarm", "Farm Over Harass", true);
+        s_advancedMenu.AddBool("prioritizeMinions", "Minions Over Objectives", false);
+        s_advancedMenu.AddBool("prioritizeSmallJungle", "Small Jungle", false);
+        s_advancedMenu.AddBool("prioritizeWards", "Wards", false);
+        s_advancedMenu.AddBool("prioritizeSpecialMinions", "Special Minions", false);
+        s_advancedMenu.AddSeparator("separatorAttack", "Attack");
+        s_advancedMenu.AddBool("attackWards", "Wards", false);
+        s_advancedMenu.AddBool("attackBarrels", "Barrels", false);
+        s_advancedMenu.AddBool("attackClones", "Clones", false);
+        s_advancedMenu.AddBool("attackSpecialMinions", "Special Minions", true);
+        s_advancedMenu.AddSeparator("separatorMisc", "Miscellaneous");
+        s_advancedMenu.AddBool("miscMissile", "Use Missile Checks", true);
+        s_advancedMenu.AddBool("miscAttackSpeed", "Do Not Kite If Attack Speed > 2.5", true);
+
+        s_menu.AddSeparator("separatorKeys", "Key Bindings");
+        s_menu.AddKeyBind("lasthitKey", "Last Hit", 'X', KeyBindType::Press);
+        s_menu.AddKeyBind("laneclearKey", "Lane Clear", 'V', KeyBindType::Press);
+        s_menu.AddKeyBind("hybridKey", "Hybrid", 'C', KeyBindType::Press);
+        s_menu.AddKeyBind("comboKey", "Combo", VK_SPACE, KeyBindType::Press);
+        s_menu.AddKeyBind("fleeKey", "Flee", 'Z', KeyBindType::Press);
+        s_menu.AddBool("enabledOption", "Enabled", true);
+
+        Events::SpellCast::AddOnProcessSpellCast(&OnProcessSpellCast);
+        Events::SpellCast::AddOnDoCast(&OnDoCast);
+        Events::SpellCast::AddOnStopCast(&OnStopCast);
     }
 
-    bool OnBeforeAttack(ActionHandler h) { return AddOnAction(h); }
-    bool OnAfterAttack(ActionHandler h)  { return AddOnAction(h); }
-
-    static void ResetHandlers() {
-        for (int i = 0; i < kMaxHandlers; ++i) s_actionHandlers[i] = nullptr;
+    static Menu* GetMenu() {
+        Initialize();
+        return s_menu.Raw();
     }
 
-protected:
-    void InvokeAction(OrbwalkingActionArgs& e) const {
-        for (int i = 0; i < kMaxHandlers && s_actionHandlers[i]; ++i) {
-            s_actionHandlers[i](e);
-        }
+    static OrbwalkerMode GetMode() {
+        Initialize();
+        return s_activeMode;
     }
 
-private:
-    static constexpr int kMaxHandlers = 32;
-    static inline ActionHandler s_actionHandlers[kMaxHandlers] = {};
-};
-
-class Orbwalker : public OrbwalkerBase {
-public:
-
-  static Orbwalker& Instance() {
-    static Orbwalker instance = {};
-    return instance;
-  }
-  static void SetMenu(Menu* m) { Instance().s_menu = m; }
-  static Menu* GetMenu() { return Instance().s_menu; }
-  static OrbwalkerMode GetMode() { return Instance().ActiveMode; }
-
-  // It is wrong
-  static float TimeUntilNextAttack() {
-      const float lastTime = Instance().LastAutoAttackTime;
-      if (lastTime <= 0.0f) return 0.0f;
-      const float now = Game::Time();
-      const float ping = static_cast<float>(CoreAPI::Control::GetPing());
-      const float attackDelay = CoreAPI::Control::GetAttackDelay();
-      const float nextAttackTime = lastTime + attackDelay;
-      const float adjusted = now + (ping / 2.0f + 25.0f) / 1000.0f;
-      if (adjusted >= nextAttackTime) return 0.0f;
-      return nextAttackTime - adjusted;
-  }
-
-  static void ForceTarget(const AIBaseClient& t) { Instance().s_forcedTarget = t; }
-  static void ClearForcedTarget() { Instance().s_forcedTarget = AIBaseClient(); }
-  static AIBaseClient GetForcedTarget() { return Instance().s_forcedTarget; }
-
-  static void Update() {}
-
-  static void Render() {}
-
-private:
-  Menu* s_menu = nullptr;
-  AIBaseClient s_forcedTarget = {};
-};
-
-} // namespace SDK
-
-// ── OrbwalkerSelector ──
-namespace SDK::OrbwalkerSelector {
-
-constexpr float LaneClearWaitTime = 2.0f;
-
-inline bool IsSpecialMinion(const std::string& name) {
-    static const char* specials[] = {
-        "annietibbers", "elisespiderling", "heimertyellow", "heimertblue",
-        "ivernminion", "malzaharvoidling", "shacobox", "teemomushroom",
-        "yorickghoulmelee", "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
-    };
-    std::string lower = name;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    for (const auto& s : specials) {
-        if (lower == s) return true;
+    static void SetExternalControl(bool enabled) {
+        Initialize();
+        s_externalControl = enabled;
     }
-    return false;
-}
 
-inline bool IsClone(const std::string& name) {
-    static const char* clones[] = { "leblanc", "monkeyking", "neeko", "shaco" };
-    std::string lower = name;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    for (const auto& c : clones) {
-        if (lower == c) return true;
+    static bool IsExternalControlEnabled() {
+        return s_externalControl;
     }
-    return false;
-}
 
-inline bool IsIgnored(const std::string& name) {
-    std::string lower = name;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    return lower == "jarvanivstandard";
-}
-
-inline float GetAADamage(const AIHeroClient& player, const AIBaseClient& target) {
-    float damage = 0.0f;
-    __try {
-        damage = Damage::GetAutoAttackDamage(player, target, true);
+    static void SetActiveMode(OrbwalkerMode mode) {
+        Initialize();
+        s_activeMode = mode;
     }
-    __except (1) {
-        damage = 0.0f;
-    }
-    if (damage <= 0.0f && player.TotalAttackDamage() > 0.0f) {
-        damage = player.GetAutoAttackDamage(target, false);
-    }
-    return damage;
-}
 
-inline float GetHealthPrediction(const AIBaseClient& target, int time, int farmDelay = 0) {
-    return Prediction::Health::GetPrediction(target, time, farmDelay);
-}
-
-inline AIBaseClient GetNearestEnemyTarget(const AIHeroClient& player, float range) {
-    AIBaseClient best;
-    float bestDist = FLT_MAX;
-    for (const auto& enemy : ObjectManager::EnemyHeroes()) {
-        if (!enemy.IsValidTarget(range, player.Position())) continue;
-        const float dist = enemy.Distance(player.Position());
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = enemy;
-        }
-    }
-    return best;
-}
-
-inline AIBaseClient GetTargetSelectorSafe(const AIHeroClient& player, float range) {
-    __try {
-        return TargetSelector::GetTarget(range, DamageType::Physical, player.Position());
-    }
-    __except (CrashTelemetry::ReportAndHandle("OrbwalkerSelector::TargetSelector", GetExceptionInformation())) {
-        return AIBaseClient();
-    }
-}
-
-template <typename Container>
-inline AIBaseClient FindNearestInAttackRange(const Container& objects, const AIHeroClient& player, float range) {
-    AIBaseClient best;
-    float bestDist = FLT_MAX;
-    for (const auto& obj : objects) {
-        if (!obj.IsValidTarget(range, player.Position())) continue;
-        if (!player.InAutoAttackRange(obj)) continue;
-        const float dist = obj.Distance(player.Position());
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = obj;
-        }
-    }
-    return best;
-}
-
-template <typename Container, typename Pred>
-inline AIBaseClient FindNearestInAttackRangeIf(const Container& objects, const AIHeroClient& player, float range, Pred extra) {
-    AIBaseClient best;
-    float bestDist = FLT_MAX;
-    for (const auto& obj : objects) {
-        if (!extra(obj)) continue;
-        if (!obj.IsValidTarget(range, player.Position())) continue;
-        if (!player.InAutoAttackRange(obj)) continue;
-        const float dist = obj.Distance(player.Position());
-        if (dist < bestDist) {
-            bestDist = dist;
-            best = obj;
-        }
-    }
-    return best;
-}
-
-inline AIBaseClient GetComboTarget(const AIHeroClient& player, float range, Menu* atkMenu = nullptr) {
-    auto ts = GetTargetSelectorSafe(player, range);
-    if (ts.IsValid()) return ts;
-
-    auto nearest = GetNearestEnemyTarget(player, range);
-    if (nearest.IsValid()) return nearest;
-
-    bool hasEnemyNear = false;
-    for (const auto& enemy : ObjectManager::EnemyHeroes()) {
-        if (enemy.IsValidTarget(enemy.AttackRange() * 2.0f + 200.0f, player.Position())) {
-            hasEnemyNear = true;
-            break;
+    static void InvokeAction(OrbwalkingActionArgs& args) {
+        Initialize();
+        if (args.Type == OrbwalkingType::BeforeAttack) {
+            InvokeBeforeAttack(args);
+        } else if (args.Type == OrbwalkingType::AfterAttack ||
+                   args.Type == OrbwalkingType::TargetSwitch) {
+            InvokeAfterAttack(args);
         }
     }
 
-    if (!hasEnemyNear) {
-        const bool doSpecials = atkMenu ? atkMenu->GetBoolValue("specialMinions", true) : true;
-        if (doSpecials) {
-            for (const auto& minion : ObjectManager::SpecialMinions()) {
-                if (minion.IsValidTarget(range, player.Position()) && player.InAutoAttackRange(minion))
-                    return minion;
-            }
-        }
+    static bool OnBeforeAttack(ActionHandler handler) {
+        Initialize();
+        return handler && s_beforeAttackHandlers.push_back(handler);
     }
 
-    return AIBaseClient();
-}
-
-inline AIBaseClient GetLastHitTarget(const AIHeroClient& player, float range, int farmDelay = 0) {
-    AIBaseClient best;
-    float bestHealth = FLT_MAX;
-
-    const auto minions = ObjectManager::EnemyMinions();
-
-    static DWORD s_lastMinDiag = 0;
-    const DWORD minDiagNow = GetTickCount();
-    if ((minDiagNow - s_lastMinDiag) > 5000 && !minions.empty()) {
-        s_lastMinDiag = minDiagNow;
-        char buf[512] = {};
-        std::snprintf(buf, sizeof(buf),
-            "[NightSharp][FarmDiag] GetLastHit: minionCount=%d range=%.0f playerAD=%.0f\r\n",
-            (int)minions.size(), range, player.TotalAttackDamage());
-        CoreControl::AppendIssueOrderDebug(buf);
-        int logged = 0;
-        for (const auto& m : minions) {
-            if (logged >= 5) break;
-            if (!m.IsValidTarget(range, player.Position())) { ++logged; continue; }
-            const float hp = m.Health();
-            const float aaDmg = GetAADamage(player, m);
-            const bool killable = (hp > 0.0f && hp <= aaDmg);
-            std::snprintf(buf, sizeof(buf),
-                "[NightSharp][FarmDiag]   minion=0x%llX hp=%.0f maxHP=%.0f aaDmg=%.0f killable=%d inRange=%d\r\n",
-                (unsigned long long)m.Address(),
-                hp, m.MaxHealth(), aaDmg,
-                killable ? 1 : 0,
-                player.InAutoAttackRange(m) ? 1 : 0);
-            CoreControl::AppendIssueOrderDebug(buf);
-            ++logged;
-        }
+    static bool OnAfterAttack(ActionHandler handler) {
+        Initialize();
+        return handler && s_afterAttackHandlers.push_back(handler);
     }
 
-    for (const auto& minion : minions) {
-        if (!minion.IsValidTarget(range, player.Position())) continue;
-        if (IsIgnored(minion.CharacterName())) continue;
+    static GameObject ForceTarget() {
+        return s_forceTarget;
+    }
 
-        const float health = minion.Health();
-        const float aaDmg = GetAADamage(player, minion);
+    static void ForceTarget(const GameObject& target) {
+        s_forceTarget = target;
+    }
 
-        if (health > 0.0f && health <= aaDmg && health < bestHealth) {
-            bestHealth = health;
-            best = minion;
-            continue;
+    static void ResetSwingTimer() {
+        s_lastAutoAttackTick = 0;
+        s_missileLaunched = false;
+    }
+
+    static void SetAttackState(bool state) {
+        s_attackState = state;
+    }
+
+    static void SetMovementState(bool state) {
+        s_movementState = state;
+    }
+
+    static bool CanAttack(float extraWindup = 0.0f) {
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid() || player.IsDead()) {
+            return false;
         }
 
-        if (minion.MaxHealth() > 10.0f) {
-            const float timeToHit = static_cast<float>(minion.GetTimeToHit());
-            const float predHP = GetHealthPrediction(minion, static_cast<int>(timeToHit), farmDelay);
-            if (predHP > 0.0f && predHP < aaDmg && health < bestHealth) {
-                bestHealth = health;
-                best = minion;
-            }
-        } else if (health <= 1.0f && health < bestHealth) {
-            bestHealth = health;
-            best = minion;
+        if (_stricmp(player.CharacterName().c_str(), "Jhin") == 0 && player.HasBuff("JhinPassiveReload")) {
+            return false;
         }
+
+        const int now = Game::TickCount();
+        return now + (Game::Ping() / 2) + 25 >=
+            s_lastAutoAttackTick + static_cast<int>(player.AttackDelay() * 1000.0f + extraWindup);
     }
 
-    return best;
-}
+    static bool CanMove(float extraWindup = 0.0f, bool disableMissileCheck = false) {
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid() || player.IsDead()) {
+            return false;
+        }
 
-// C# logic (OrbwalkerSelector.cs line 148-156):
-//   if (!prioritizeFarm) → check hero FIRST, before any minion
-//   if (prioritizeFarm) → check killable minion FIRST, then hero
-inline AIBaseClient GetHarassTarget(const AIHeroClient& player, float range, int farmDelay = 0,
-                                     bool prioritizeFarm = true) {
-    if (!prioritizeFarm) {
-        auto tsTarget = GetTargetSelectorSafe(player, range);
-        if (tsTarget.IsValid() && player.InAutoAttackRange(tsTarget))
-            return tsTarget;
-    }
-
-    AIBaseClient killable = GetLastHitTarget(player, range, farmDelay);
-    if (killable.IsValid()) return killable;
-
-    if (prioritizeFarm) {
-        auto tsTarget = GetTargetSelectorSafe(player, range);
-        if (tsTarget.IsValid() && player.InAutoAttackRange(tsTarget))
-            return tsTarget;
-    }
-
-    auto nearTarget = GetNearestEnemyTarget(player, range);
-    if (nearTarget.IsValid() && player.InAutoAttackRange(nearTarget))
-        return nearTarget;
-
-    for (const auto& jungle : ObjectManager::JungleMinions()) {
-        if (jungle.IsValidTarget(range, player.Position())) return jungle;
-    }
-
-    return AIBaseClient();
-}
-
-// ── ShouldWait – C# OrbwalkerSelector.cs line 448-459 ──
-inline bool ShouldWait(const AIHeroClient& player, float range, int farmDelay = 0) {
-    for (const auto& minion : ObjectManager::EnemyMinions()) {
-        if (!minion.IsValidTarget(range, player.Position())) continue;
-        if (IsIgnored(minion.CharacterName())) continue;
-
-        const float predHP = GetHealthPrediction(
-            minion,
-            static_cast<int>(CoreAPI::Control::GetAttackDelay() * 1000.0f * LaneClearWaitTime),
-            farmDelay);
-
-        if (predHP < GetAADamage(player, minion)) {
+        if (s_missileLaunched && !disableMissileCheck) {
             return true;
         }
-    }
-    return false;
-}
 
-// C# OrbwalkerSelector.cs logic:
-//   1. If !prioritizeFarm → hero first (line 148-156)
-//   2. Killable minions (line 164-199)
-//   3. Forced target (line 201-205)
-//   4. Turrets/Inhib/Nexus if !prioritizeMinions || no minions (line 207-227)
-//   5. Heroes (if mode != LastHit) (line 229-237)
-//   6. Jungle minions (line 239-247)
-//   7. Lane clear minions if !ShouldWait (line 383-428)
-inline AIBaseClient GetLaneClearTarget(const AIHeroClient& player, float range, int farmDelay = 0,
-                                        bool prioritizeFarm = true, bool prioritizeMinions = false,
-                                        bool prioritizeSmallJungle = false) {
-    if (!prioritizeFarm) {
-        auto tsTarget = GetTargetSelectorSafe(player, range);
-        if (tsTarget.IsValid() && player.InAutoAttackRange(tsTarget))
-            return tsTarget;
+        const int now = Game::TickCount();
+        const float configuredWindup = static_cast<float>(s_advancedMenu.Slider("delayWindup", 80));
+        return now + (Game::Ping() / 2) >=
+            s_lastAutoAttackTick + static_cast<int>(player.AttackCastDelay() * 1000.0f + extraWindup + configuredWindup);
     }
 
-    AIBaseClient killable = GetLastHitTarget(player, range, farmDelay);
-    if (killable.IsValid()) return killable;
+    static GameObject GetTarget() {
+        Initialize();
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid()) {
+            return GameObject();
+        }
 
-    const auto enemyMinions = ObjectManager::EnemyMinions();
-    if (!prioritizeMinions || enemyMinions.empty()) {
-        for (const auto& turret : ObjectManager::EnemyTurrets()) {
-            if (turret.IsValidTarget(range, player.Position()) && player.InAutoAttackRange(turret))
-                return turret;
+        if (IsAttackCandidate(s_forceTarget, player)) {
+            return s_forceTarget;
+        }
+
+        if ((s_activeMode == OrbwalkerMode::Harass || s_activeMode == OrbwalkerMode::LaneClear) &&
+            !s_advancedMenu.Bool("prioritizeFarm", true)) {
+            auto hero = GetHeroTarget();
+            if (hero.IsValid()) {
+                return hero;
+            }
+        }
+
+        if (s_activeMode == OrbwalkerMode::LastHit ||
+            s_activeMode == OrbwalkerMode::Harass ||
+            s_activeMode == OrbwalkerMode::LaneClear) {
+            auto minion = GetFarmTarget();
+            if (minion.IsValid()) {
+                return minion;
+            }
+        }
+
+        if (s_activeMode != OrbwalkerMode::LastHit) {
+            auto hero = GetHeroTarget();
+            if (hero.IsValid()) {
+                return hero;
+            }
+        }
+
+        if (s_activeMode == OrbwalkerMode::LaneClear) {
+            auto structure = GetStructureTarget();
+            if (structure.IsValid()) {
+                return structure;
+            }
+        }
+
+        return GameObject();
+    }
+
+    static void Attack(const GameObject& target) {
+        Initialize();
+        const int now = Game::TickCount();
+        if (s_blockOrdersUntilTick > now) {
+            return;
+        }
+
+        const auto player = ObjectManager::Player();
+        if (!IsAttackCandidate(target, player, target.IsNeutral())) {
+            DebugAttackState("attack-filter", target);
+            return;
+        }
+
+        OrbwalkingActionArgs args = {};
+        args.Target = target;
+        args.Position = target.Position();
+        args.Process = true;
+        args.Type = OrbwalkingType::BeforeAttack;
+        InvokeBeforeAttack(args);
+        if (!args.Process) {
+            return;
+        }
+
+        if (player.IssueOrder(GameObjectOrder::AttackUnit, target)) {
+            s_lastAutoAttackCommandTick = now;
+            s_lastAutoAttackTick = now - (Game::Ping() / 2);
+            s_missileLaunched = false;
+            s_lastMovementOrderTick = 0;
+            s_lastTarget = target;
+            s_blockOrdersUntilTick = now + 70 + std::min(60, Game::Ping());
+            DebugAttackState("attack-order", target, true);
+        } else {
+            DebugAttackState("attack-issue-false", target);
         }
     }
 
-    if (prioritizeFarm) {
-        auto tsTarget = GetTargetSelectorSafe(player, range);
-        if (tsTarget.IsValid() && player.InAutoAttackRange(tsTarget))
-            return tsTarget;
-    }
+    static void Move(const Vector3& position) {
+        Initialize();
+        const int now = Game::TickCount();
+        if (s_blockOrdersUntilTick > now || !position.IsValid() || position.IsZero()) {
+            return;
+        }
 
-    AIBaseClient bestJungle;
-    float bestJungleHP = prioritizeSmallJungle ? FLT_MAX : -FLT_MAX;
-    for (const auto& jungle : ObjectManager::JungleMinions()) {
-        if (!jungle.IsValidTarget(range, player.Position())) continue;
-        const float hp = jungle.Health();
-        if (prioritizeSmallJungle ? (hp < bestJungleHP) : (hp > bestJungleHP)) {
-            bestJungleHP = hp;
-            bestJungle = jungle;
+        const int delay = s_advancedMenu.Slider("delayMovement", 0);
+        if (now - s_lastMovementOrderTick < delay) {
+            return;
+        }
+
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid()) {
+            return;
+        }
+
+        Vector3 movePos = position;
+        const float maxDistance = static_cast<float>(s_advancedMenu.Slider("movementMaximumDistance", 1500));
+        if (player.Position().Distance2D(movePos) > maxDistance) {
+            movePos = player.Position().Extend(movePos, maxDistance);
+        }
+
+        const int extraHold = s_advancedMenu.Slider("movementExtraHold", 0);
+        if (extraHold > 0 && player.Position().Distance2D(movePos) <= static_cast<float>(extraHold)) {
+            movePos = player.Position();
+        }
+
+        if (movePos.DistanceSqr2D(s_lastMovePosition) < 25.0f * 25.0f && now - s_lastMovementOrderTick < 250) {
+            return;
+        }
+
+        if (player.IssueOrder(GameObjectOrder::MoveTo, movePos)) {
+            s_lastMovementOrderTick = now;
+            s_lastMovePosition = movePos;
         }
     }
-    if (bestJungle.IsValid()) return bestJungle;
 
-    if (!ShouldWait(player, range, farmDelay)) {
-        AIBaseClient bestMinion;
-        float bestMinionHP = -FLT_MAX;
-        for (const auto& minion : enemyMinions) {
-            if (!minion.IsValidTarget(range, player.Position())) continue;
-            if (IsIgnored(minion.CharacterName())) continue;
+    static void Orbwalk(const GameObject& forcedTarget = GameObject(), const Vector3& forcedPosition = Vector3()) {
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid()) {
+            return;
+        }
 
-            const float hp = minion.Health();
-            const float predHP = GetHealthPrediction(
-                minion,
-                static_cast<int>(CoreAPI::Control::GetAttackDelay() * 1000.0f * LaneClearWaitTime),
-                farmDelay);
-            const float aaDmg = GetAADamage(player, minion);
+        if (CanAttack() && s_attackState) {
+            GameObject target = forcedTarget.IsValid() ? forcedTarget : GetTarget();
+            if (IsAttackCandidate(target, player, target.IsNeutral())) {
+                Attack(target);
+            } else {
+                DebugAttackState("no-target", target);
+            }
+        }
 
-            if (predHP >= 2.0f * aaDmg || std::abs(predHP - hp) < 1.0f) {
-                if (hp > bestMinionHP) {
-                    bestMinionHP = hp;
-                    bestMinion = minion;
+        if (CanMove(0.0f, !s_advancedMenu.Bool("miscMissile", true)) && s_movementState) {
+            Move(forcedPosition.IsValid() && !forcedPosition.IsZero() ? forcedPosition : Game::CursorPos());
+        }
+    }
+
+    static void Update() {
+        Initialize();
+        if (s_externalControl) {
+            UpdateKillableCache();
+            return;
+        }
+        s_activeMode = ReadActiveMode();
+
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid() || player.IsDead() || s_activeMode == OrbwalkerMode::None ||
+            Game::IsChatOpen() || Game::IsShopOpen()) {
+            UpdateKillableCache();
+            return;
+        }
+
+        Orbwalk();
+        UpdateKillableCache();
+    }
+
+    static void Render() {
+        Initialize();
+        if (s_externalControl) {
+            return;
+        }
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid() || player.IsDead()) {
+            return;
+        }
+
+        if (s_drawingMenu.Bool("drawAARange", true)) {
+            Drawing::DrawCircle(player.Position(), player.GetRealAutoAttackRange(),
+                ToColor(s_drawingMenu.Raw()->GetColorValue("allyRangeColor", ImVec4(0.15f, 0.75f, 1.0f, 0.9f))),
+                1.6f, 28, true);
+        }
+
+        if (s_drawingMenu.Bool("drawAARangeEnemy", false)) {
+            const auto color = ToColor(s_drawingMenu.Raw()->GetColorValue("enemyRangeColor", ImVec4(1.0f, 0.35f, 0.25f, 0.7f)));
+            for (const auto& hero : ObjectManager::EnemyHeroes()) {
+                if (!hero.IsValid() || hero.IsDead() || !hero.IsVisible()) {
+                    continue;
+                }
+                Drawing::DrawCircle(hero.Position(), hero.GetRealAutoAttackRange(player), color, 1.2f, 22, true);
+            }
+        }
+
+        if (s_drawingMenu.Bool("drawKillableMinion", false)) {
+            const auto color = ToColor(s_drawingMenu.Raw()->GetColorValue("killableColor", ImVec4(1.0f, 0.95f, 0.1f, 0.9f)));
+            for (const auto address : s_killableMinions) {
+                AIMinionClient minion(address);
+                if (!minion.IsValidTarget()) {
+                    continue;
+                }
+                Drawing::DrawCircle(minion.Position(), minion.BoundingRadius() + 18.0f, color, 1.4f, 16, true);
+            }
+        }
+
+        if (s_drawingMenu.Bool("drawExtraHoldPosition", false)) {
+            const Vector3 cursor = Game::CursorPos();
+            if (cursor.IsValid() && !cursor.IsZero()) {
+                Drawing::DrawCircle(cursor, static_cast<float>(std::max(25, s_advancedMenu.Slider("movementExtraHold", 0))),
+                    IM_COL32(255, 255, 255, 160), 1.0f, 16, true);
+            }
+        }
+    }
+
+private:
+    static inline bool s_initialized = false;
+    static inline bool s_externalControl = false;
+    static inline UI::MenuNode s_menu = {};
+    static inline UI::MenuNode s_drawingMenu = {};
+    static inline UI::MenuNode s_advancedMenu = {};
+    static inline OrbwalkerMode s_activeMode = OrbwalkerMode::None;
+    static inline bool s_attackState = true;
+    static inline bool s_movementState = true;
+    static inline bool s_missileLaunched = false;
+    static inline int s_lastAutoAttackCommandTick = 0;
+    static inline int s_lastAutoAttackTick = 0;
+    static inline int s_lastMovementOrderTick = 0;
+    static inline int s_blockOrdersUntilTick = 0;
+    static inline int s_totalAutoAttacks = 0;
+    static inline int s_lastKillableCacheTick = 0;
+    static inline int s_lastAttackDebugTick = 0;
+    static inline int s_lastEnemyHeroCount = 0;
+    static inline int s_lastHeroInRangeCount = 0;
+    static inline int s_lastEnemyMinionCount = 0;
+    static inline int s_lastMinionInRangeCount = 0;
+    static inline GameObject s_lastTarget = {};
+    static inline GameObject s_forceTarget = {};
+    static inline Vector3 s_lastMovePosition = {};
+    static inline std::vector<uintptr_t> s_killableMinions = {};
+    static inline MenuUI::FixedList<ActionHandler, 32> s_beforeAttackHandlers = {};
+    static inline MenuUI::FixedList<ActionHandler, 32> s_afterAttackHandlers = {};
+
+    static ImU32 ToColor(const ImVec4& color) {
+        return IM_COL32(
+            static_cast<int>(std::clamp(color.x, 0.0f, 1.0f) * 255.0f),
+            static_cast<int>(std::clamp(color.y, 0.0f, 1.0f) * 255.0f),
+            static_cast<int>(std::clamp(color.z, 0.0f, 1.0f) * 255.0f),
+            static_cast<int>(std::clamp(color.w, 0.0f, 1.0f) * 255.0f));
+    }
+
+    static OrbwalkerMode ReadActiveMode() {
+        if (!s_menu.Bool("enabledOption", true)) {
+            return OrbwalkerMode::None;
+        }
+        if (s_menu.KeyActive("comboKey", false)) return OrbwalkerMode::Combo;
+        if (s_menu.KeyActive("hybridKey", false)) return OrbwalkerMode::Harass;
+        if (s_menu.KeyActive("laneclearKey", false)) return OrbwalkerMode::LaneClear;
+        if (s_menu.KeyActive("lasthitKey", false)) return OrbwalkerMode::LastHit;
+        if (s_menu.KeyActive("fleeKey", false)) return OrbwalkerMode::Flee;
+        return OrbwalkerMode::None;
+    }
+
+    static void InvokeBeforeAttack(OrbwalkingActionArgs& args) {
+        for (const auto& handler : s_beforeAttackHandlers) {
+            if (handler) {
+                handler(args);
+            }
+        }
+    }
+
+    static void InvokeAfterAttack(OrbwalkingActionArgs& args) {
+        for (const auto& handler : s_afterAttackHandlers) {
+            if (handler) {
+                handler(args);
+            }
+        }
+    }
+
+    static const char* ModeName(OrbwalkerMode mode) {
+        switch (mode) {
+        case OrbwalkerMode::Combo: return "Combo";
+        case OrbwalkerMode::Harass: return "Harass";
+        case OrbwalkerMode::LaneClear: return "LaneClear";
+        case OrbwalkerMode::LastHit: return "LastHit";
+        case OrbwalkerMode::Flee: return "Flee";
+        default: return "None";
+        }
+    }
+
+    static void AppendOrbwalkerDebug(const char* text) {
+        if (!text || !*text) {
+            return;
+        }
+
+        HANDLE hFile = CreateFileA(
+            "C:\\Users\\Public\\ns_orbwalker_debug.txt",
+            FILE_APPEND_DATA,
+            FILE_SHARE_READ,
+            nullptr,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) {
+            return;
+        }
+
+        DWORD written = 0;
+        WriteFile(hFile, text, static_cast<DWORD>(lstrlenA(text)), &written, nullptr);
+        CloseHandle(hFile);
+    }
+
+    static bool IsAttackCandidate(const GameObject& unit,
+                                  const AIBaseClient& player,
+                                  bool allowNeutral = false) {
+        if (!player.IsValid() || !unit.IsValid() || unit.IsDead()) {
+            return false;
+        }
+        if (!allowNeutral && !unit.IsEnemy()) {
+            return false;
+        }
+        if (unit.Health() <= 0.0f || unit.MaxHealth() <= 0.0f) {
+            return false;
+        }
+
+        const float range = player.GetRealAutoAttackRange(unit) + 45.0f;
+        return player.Distance(unit) <= range;
+    }
+
+    static void DebugAttackState(const char* reason,
+                                 const GameObject& target = GameObject(),
+                                 bool force = false) {
+        const int now = Game::TickCount();
+        if (!force && now - s_lastAttackDebugTick < 1000) {
+            return;
+        }
+        s_lastAttackDebugTick = now;
+
+        const auto player = ObjectManager::Player();
+        char buffer[512] = {};
+        std::snprintf(
+            buffer,
+            sizeof(buffer),
+            "[NightSharp][Orbwalker] %s mode=%s canAttack=%d atkState=%d moveState=%d heroes=%d/%d minions=%d/%d target=0x%llX targetValid=%d enemy=%d visible=%d targetable=%d hp=%.1f dist=%.1f range=%.1f tick=%d lastAA=%d\r\n",
+            reason ? reason : "state",
+            ModeName(s_activeMode),
+            CanAttack() ? 1 : 0,
+            s_attackState ? 1 : 0,
+            s_movementState ? 1 : 0,
+            s_lastHeroInRangeCount,
+            s_lastEnemyHeroCount,
+            s_lastMinionInRangeCount,
+            s_lastEnemyMinionCount,
+            static_cast<unsigned long long>(target.Address()),
+            target.IsValid() ? 1 : 0,
+            target.IsValid() && target.IsEnemy() ? 1 : 0,
+            target.IsValid() && target.IsVisible() ? 1 : 0,
+            target.IsValid() && target.IsTargetable() ? 1 : 0,
+            target.IsValid() ? target.Health() : 0.0f,
+            player.IsValid() && target.IsValid() ? player.Distance(target) : 0.0f,
+            player.IsValid() && target.IsValid() ? player.GetRealAutoAttackRange(target) : 0.0f,
+            now,
+            s_lastAutoAttackTick);
+        AppendOrbwalkerDebug(buffer);
+    }
+
+    static GameObject GetHeroTarget() {
+        const auto player = ObjectManager::Player();
+        s_lastEnemyHeroCount = 0;
+        s_lastHeroInRangeCount = 0;
+        if (!player.IsValid()) {
+            return GameObject();
+        }
+
+        auto selected = TargetSelector::GetTarget(-1.0f, DamageType::Physical);
+        if (IsAttackCandidate(selected, player)) {
+            return selected;
+        }
+
+        GameObject best = {};
+        float bestScore = FLT_MAX;
+        for (const auto& hero : ObjectManager::EnemyHeroes()) {
+            ++s_lastEnemyHeroCount;
+            if (!IsAttackCandidate(hero, player)) {
+                continue;
+            }
+            ++s_lastHeroInRangeCount;
+            const float score = hero.Health() + player.Distance(hero) * 0.15f;
+            if (score < bestScore) {
+                best = hero;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    static GameObject GetFarmTarget() {
+        const auto player = ObjectManager::Player();
+        GameObject best = {};
+        float bestHealth = FLT_MAX;
+
+        s_lastEnemyMinionCount = 0;
+        s_lastMinionInRangeCount = 0;
+
+        auto consider = [&](const GameObject& unit, bool requireKillable, bool allowNeutral) {
+            ++s_lastEnemyMinionCount;
+            if (!IsAttackCandidate(unit, player, allowNeutral)) {
+                return;
+            }
+            ++s_lastMinionInRangeCount;
+
+            const float damage = player.GetAutoAttackDamage(unit);
+            const bool killable = unit.MaxHealth() <= 10.0f ? unit.Health() <= 1.0f : unit.Health() <= damage;
+            if (requireKillable && !killable) {
+                return;
+            }
+
+            if (unit.Health() < bestHealth) {
+                best = unit;
+                bestHealth = unit.Health();
+            }
+        };
+
+        const bool lastHitMode = s_activeMode == OrbwalkerMode::LastHit || s_activeMode == OrbwalkerMode::Harass;
+        for (const auto& minion : ObjectManager::EnemyMinions()) {
+            consider(minion, lastHitMode, false);
+        }
+
+        if (!best.IsValid() && s_activeMode == OrbwalkerMode::LaneClear) {
+            for (const auto& jungle : ObjectManager::JungleMinions()) {
+                consider(jungle, false, true);
+            }
+        }
+
+        return best;
+    }
+
+    static GameObject GetStructureTarget() {
+        const auto player = ObjectManager::Player();
+        if (s_advancedMenu.Bool("prioritizeMinions", false)) {
+            for (const auto& minion : ObjectManager::EnemyMinions()) {
+                if (IsAttackCandidate(minion, player)) {
+                    return GameObject();
                 }
             }
         }
-        if (bestMinion.IsValid()) return bestMinion;
+
+        for (const auto& turret : ObjectManager::EnemyTurrets()) {
+            if (IsAttackCandidate(turret, player)) {
+                return turret;
+            }
+        }
+        for (const auto& inhibitor : ObjectManager::EnemyInhibitors()) {
+            if (IsAttackCandidate(inhibitor, player)) {
+                return inhibitor;
+            }
+        }
+        const auto nexus = ObjectManager::EnemyNexus();
+        if (IsAttackCandidate(nexus, player)) {
+            return nexus;
+        }
+        return GameObject();
     }
 
-    return AIBaseClient();
-}
+    static void UpdateKillableCache() {
+        if (!s_drawingMenu.Bool("drawKillableMinion", false)) {
+            s_killableMinions.clear();
+            return;
+        }
 
-inline AIBaseClient GetExtraTarget(const AIHeroClient& player, float range, Menu* atkMenu) {
-    if (!atkMenu) return AIBaseClient();
+        const int now = Game::TickCount();
+        if (now - s_lastKillableCacheTick < 150) {
+            return;
+        }
+        s_lastKillableCacheTick = now;
+        s_killableMinions.clear();
 
-    if (atkMenu->GetBoolValue("wards", false)) {
-        auto best = FindNearestInAttackRangeIf(ObjectManager::Wards(), player, range,
-            [](const auto& w) { return !w.IsAlly(); });
-        if (best.IsValid()) return best;
+        const auto player = ObjectManager::Player();
+        if (!player.IsValid()) {
+            return;
+        }
+
+        for (const auto& minion : ObjectManager::EnemyMinions()) {
+            if (!IsAttackCandidate(minion, player)) {
+                continue;
+            }
+            if (minion.Health() <= player.GetAutoAttackDamage(minion)) {
+                s_killableMinions.push_back(minion.Address());
+                if (s_killableMinions.size() >= 12) {
+                    break;
+                }
+            }
+        }
     }
 
-    if (atkMenu->GetBoolValue("barrels", false)) {
-        auto best = FindNearestInAttackRangeIf(ObjectManager::Barrels(), player, range,
-            [](const auto& b) { return b.Health() <= 1.0f; });
-        if (best.IsValid()) return best;
+    static void OnProcessSpellCast(const AIBaseClient& sender, const Events::SpellCast::ProcessSpellCastEventArgs& args) {
+        if (!sender.IsValid() || !sender.IsMe()) {
+            return;
+        }
+
+        if (Utils::AutoAttack::IsAutoAttackReset(args.SpellName)) {
+            ResetSwingTimer();
+            return;
+        }
+
+        if (!args.IsAutoAttack && !Utils::AutoAttack::IsAutoAttack(args.SpellName)) {
+            return;
+        }
+
+        const int now = Game::TickCount();
+        s_lastAutoAttackTick = now - (Game::Ping() / 2);
+        s_missileLaunched = false;
+        s_lastMovementOrderTick = 0;
+
+        GameObject target = ObjectManager::GetByNetId(args.TargetNetworkId);
+        if (target.IsValid() && !target.Compare(s_lastTarget)) {
+            OrbwalkingActionArgs switchArgs = {};
+            switchArgs.Target = target;
+            switchArgs.Sender = sender;
+            switchArgs.Type = OrbwalkingType::TargetSwitch;
+            InvokeAfterAttack(switchArgs);
+            s_lastTarget = target;
+        }
     }
 
-    if (atkMenu->GetBoolValue("junglePlant", false)) {
-        auto best = FindNearestInAttackRange(ObjectManager::Plants(), player, range);
-        if (best.IsValid()) return best;
+    static void OnDoCast(const AIBaseClient& sender, const Events::SpellCast::ProcessSpellCastEventArgs& args) {
+        if (!sender.IsValid() || !sender.IsMe()) {
+            return;
+        }
+
+        if (Utils::AutoAttack::IsAutoAttackReset(args.SpellName)) {
+            ResetSwingTimer();
+            return;
+        }
+
+        if (!args.IsAutoAttack && !Utils::AutoAttack::IsAutoAttack(args.SpellName)) {
+            return;
+        }
+
+        s_missileLaunched = true;
+        ++s_totalAutoAttacks;
+
+        OrbwalkingActionArgs afterArgs = {};
+        afterArgs.Target = ObjectManager::GetByNetId(args.TargetNetworkId);
+        afterArgs.Sender = sender;
+        afterArgs.Type = OrbwalkingType::AfterAttack;
+        InvokeAfterAttack(afterArgs);
     }
 
-    if (atkMenu->GetBoolValue("specialMinions", true)) {
-        const int myTeam = player.Team();
-        auto best = FindNearestInAttackRangeIf(ObjectManager::Pets(), player, range,
-            [myTeam](const auto& p) { return p.Team() != myTeam; });
-        if (best.IsValid()) return best;
-        auto bestSpecial = FindNearestInAttackRange(ObjectManager::SpecialMinions(), player, range);
-        if (bestSpecial.IsValid()) return bestSpecial;
+    static void OnStopCast(const AIBaseClient& sender, const Events::SpellCast::StopCastEventArgs& args) {
+        (void)args;
+        if (sender.IsValid() && sender.IsMe()) {
+            ResetSwingTimer();
+        }
     }
+};
 
-    return AIBaseClient();
-}
-
-inline AIBaseClient GetTarget(const AIHeroClient& player, OrbwalkerMode mode, float range, Menu* orbMenu = nullptr) {
-    Menu* farmMenu = orbMenu ? orbMenu->GetSubMenu("farm") : nullptr;
-    Menu* priMenu  = orbMenu ? orbMenu->GetSubMenu("prioritize") : nullptr;
-    Menu* atkMenu  = orbMenu ? orbMenu->GetSubMenu("attackable") : nullptr;
-
-    const int farmDelay            = farmMenu ? farmMenu->GetSliderValue("farmDelay", 30) : 30;
-    const bool prioritizeFarm      = priMenu  ? priMenu->GetBoolValue("farmOverHarass", true) : true;
-    const bool prioritizeSmallJung = priMenu  ? priMenu->GetBoolValue("smallJungle", false) : false;
-
-    AIBaseClient target;
-    switch (mode) {
-    case OrbwalkerMode::Combo:
-        target = GetComboTarget(player, range, atkMenu);
-        break;
-    case OrbwalkerMode::Harass:
-        target = GetHarassTarget(player, range, farmDelay, prioritizeFarm);
-        break;
-    case OrbwalkerMode::LastHit:
-        target = GetLastHitTarget(player, range, farmDelay);
-        break;
-    case OrbwalkerMode::Clear:
-        target = GetLaneClearTarget(player, range, farmDelay, prioritizeFarm, false, prioritizeSmallJung);
-        break;
-    default:
-        return AIBaseClient();
-    }
-
-    if (target.IsValid()) return target;
-    return GetExtraTarget(player, range, atkMenu);
-}
-
-} // namespace SDK::OrbwalkerSelector
+} // namespace SDK

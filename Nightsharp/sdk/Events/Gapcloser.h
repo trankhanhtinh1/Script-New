@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../generated/GapcloserData.generated.h"
+#include "../Data/GapcloserData.h"
 #include "AntiGapcloser.h"
 
 namespace SDK::Events {

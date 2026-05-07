@@ -32,13 +32,17 @@ namespace PluginRegistry {
 
     // ── Plugin entry ──
     enum class PluginKind : int { SDK = 0, Plugin = 1, External = 2 };
+    enum class PluginCategory : int { Core = 0, Champion = 1, Utility = 2, Misc = 3 };
 
     struct PluginEntry {
         const char*  Name        = nullptr;  // Display name (e.g. "Orbwalker")
         const char*  InternalId  = nullptr;  // Internal key (e.g. "orbwalker")
         PluginKind   Kind        = PluginKind::SDK;
+        PluginCategory Category  = PluginCategory::Core;
+        const char*  ChampionName = nullptr; // Optional champion this plugin belongs to
         bool         Loaded      = false;    // Currently loaded? (Phase 1: visibility only)
         bool         AlwaysLoad  = true;     // Auto-load on startup? (persisted)
+        bool         AlwaysLoadConfigured = false; // Was this value read/set by user config?
         SDK::MenuUI::Menu* MenuRoot    = nullptr;  // Plugin's own menu subtree
         void*        RuntimeUserData = nullptr;
         bool       (*RuntimeLoad)(void*) = nullptr;
@@ -48,20 +52,9 @@ namespace PluginRegistry {
     };
 
     // ── Fixed-size registry ──
-    constexpr int MAX_PLUGINS = 16;
+    constexpr int MAX_PLUGINS = 128;
     inline PluginEntry Plugins[MAX_PLUGINS] = {};
     inline int PluginCount = 0;
-
-    inline bool IsBuiltInSDKPlugin(int idx) {
-        return idx >= 0 && idx < PluginCount && Plugins[idx].Kind == PluginKind::SDK;
-    }
-
-    inline void Clear() {
-        for (int i = 0; i < MAX_PLUGINS; ++i) {
-            Plugins[i] = {};
-        }
-        PluginCount = 0;
-    }
 
     // ============================================================================
     // Persistence — WinAPI only (manual map safe)
@@ -105,7 +98,6 @@ namespace PluginRegistry {
         // Write each plugin: internalId=0|1
         for (int i = 0; i < PluginCount; i++) {
             if (!Plugins[i].InternalId) continue;
-            if (IsBuiltInSDKPlugin(i)) continue;
             char line[128] = {};
             wsprintfA(line, "%s=%d\r\n", Plugins[i].InternalId, Plugins[i].AlwaysLoad ? 1 : 0);
             WriteFile(hFile, line, (DWORD)lstrlenA(line), &written, nullptr);
@@ -183,12 +175,8 @@ namespace PluginRegistry {
                 if (*a != *b) match = false;
 
                 if (match) {
-                    if (IsBuiltInSDKPlugin(i)) {
-                        Plugins[i].AlwaysLoad = true;
-                        Plugins[i].Loaded = true;
-                        break;
-                    }
                     Plugins[i].AlwaysLoad = (value == 1);
+                    Plugins[i].AlwaysLoadConfigured = true;
                     Plugins[i].Loaded = Plugins[i].AlwaysLoad;
                     break;
                 }
@@ -201,17 +189,21 @@ namespace PluginRegistry {
     // ============================================================================
 
     inline int Register(const char* name, const char* internalId,
-                        PluginKind kind, SDK::MenuUI::Menu* menuRoot, bool autoLoad = true)
+                        PluginKind kind, SDK::MenuUI::Menu* menuRoot, bool autoLoad = true,
+                        PluginCategory category = PluginCategory::Core,
+                        const char* championName = nullptr)
     {
         if (PluginCount >= MAX_PLUGINS) return -1;
         int idx = PluginCount++;
         Plugins[idx].Name       = name;
         Plugins[idx].InternalId = internalId;
         Plugins[idx].Kind       = kind;
+        Plugins[idx].Category   = category;
+        Plugins[idx].ChampionName = championName;
         Plugins[idx].MenuRoot   = menuRoot;
-        const bool builtInSDK = (kind == PluginKind::SDK);
-        Plugins[idx].AlwaysLoad = builtInSDK ? true : autoLoad;
-        Plugins[idx].Loaded     = builtInSDK ? true : autoLoad;
+        Plugins[idx].AlwaysLoad = autoLoad;
+        Plugins[idx].AlwaysLoadConfigured = false;
+        Plugins[idx].Loaded     = autoLoad;
         return idx;
     }
 
@@ -281,12 +273,6 @@ namespace PluginRegistry {
     inline void LoadPlugin(int idx) {
         if (idx >= 0 && idx < PluginCount) {
             auto& p = Plugins[idx];
-            if (IsBuiltInSDKPlugin(idx)) {
-                p.Loaded = true;
-                p.AlwaysLoad = true;
-                RefreshMenuRoot(idx);
-                return;
-            }
             bool ok = true;
             if (p.RuntimeLoad) {
                 ok = p.RuntimeLoad(p.RuntimeUserData);
@@ -301,12 +287,6 @@ namespace PluginRegistry {
     inline void UnloadPlugin(int idx) {
         if (idx >= 0 && idx < PluginCount) {
             auto& p = Plugins[idx];
-            if (IsBuiltInSDKPlugin(idx)) {
-                p.Loaded = true;
-                p.AlwaysLoad = true;
-                RefreshMenuRoot(idx);
-                return;
-            }
             bool ok = true;
             if (p.RuntimeUnload) {
                 ok = p.RuntimeUnload(p.RuntimeUserData);
@@ -320,12 +300,8 @@ namespace PluginRegistry {
 
     inline void SetAlwaysLoad(int idx, bool value) {
         if (idx >= 0 && idx < PluginCount) {
-            if (IsBuiltInSDKPlugin(idx)) {
-                Plugins[idx].AlwaysLoad = true;
-                Plugins[idx].Loaded = true;
-                return;
-            }
             Plugins[idx].AlwaysLoad = value;
+            Plugins[idx].AlwaysLoadConfigured = true;
             SaveConfig();  // Persist immediately
         }
     }
@@ -345,6 +321,16 @@ namespace PluginRegistry {
             if (Plugins[i].Kind == kind)
                 count++;
         return count;
+    }
+
+    inline const char* CategoryName(PluginCategory category) {
+        switch (category) {
+        case PluginCategory::Core:     return "Core Plugin";
+        case PluginCategory::Champion: return "Champion Plugin";
+        case PluginCategory::Utility:  return "Utility Plugin";
+        case PluginCategory::Misc:     return "Misc Plugin";
+        default:                       return "Plugin";
+        }
     }
 
     // Check if a plugin can be loaded (champion compatibility).

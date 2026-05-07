@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../Core/GameObjects.h"
-#include "../../core/RuntimeAPI.h"
+#include "../../core/CoreClassification.h"  // RuntimeAPI removed Phase 2 - use CoreClassification::Classify
 #include "../Math/ConvexHull.h"
 #include "../Math/Prediction.h"
 #include "MathUtils.h"
@@ -223,7 +223,7 @@ inline bool IsClone(const AIMinionClient& minion);
 
 inline bool IsPet(const AIMinionClient& minion, bool includeClones = true) {
     return detail::Matches(minion.CharacterName(), detail::Pets) ||
-           RuntimeAPI::IsPet(minion.Address()) ||
+           CoreClassification::Classify(minion.Address()) == CoreClassification::ObjectType::Pet ||
            (includeClones && IsClone(minion));
 }
 
@@ -232,7 +232,10 @@ inline bool IsWard(const AIMinionClient& minion) {
 }
 
 inline bool IsClone(const AIMinionClient& minion) {
-    return detail::Matches(minion.CharacterName(), detail::Clones) || RuntimeAPI::IsClone(minion.Address());
+    // RuntimeAPI::IsClone removed Phase 2 - clones detected purely by name pattern.
+    // The old game-flag bit was rarely set anyway; the curated list in detail::Clones
+    // covers Shaco/Leblanc/Neeko/Wukong/MFW/Annie+Tibbers etc.
+    return detail::Matches(minion.CharacterName(), detail::Clones);
 }
 
 } // namespace SDK::Utils::Minion

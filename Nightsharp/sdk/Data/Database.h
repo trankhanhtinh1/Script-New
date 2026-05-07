@@ -1,20 +1,16 @@
 #pragma once
 #include "SpellData.h"
 #include <cctype>
-#include <new>
 #include <string>
 #include <vector>
 
 
 namespace SDK {
 namespace Data {
-inline std::vector<SpellData>* g_spellDatabasePtr = nullptr;
 inline std::vector<SpellData> &GetSpellDatabase() {
-  if (g_spellDatabasePtr && !g_spellDatabasePtr->empty()) return *g_spellDatabasePtr;
-  if (!g_spellDatabasePtr)
-    g_spellDatabasePtr = new(std::nothrow) std::vector<SpellData>();
-  auto& Spells = *g_spellDatabasePtr;
-  if (!Spells.empty()) return Spells;
+  static std::vector<SpellData> Spells;
+  if (!Spells.empty())
+    return Spells;
   Spells.reserve(1000);
 
   // ==== AllChampions ====
@@ -5468,6 +5464,177 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     d.spellKey = SpellSlot::E;
     d.spellName = "TrundleTrollSmash";
     d.spellType = SpellType::Circular;
+    return d;
+  }());
+
+  // ============================================================================
+  // ── CDragon audit fill-ins (2026-04-25) ───────────────────────────────────
+  // 16 champions on champion-summary.json are absent from Database.h. Most
+  // are point-and-click only (Garen / Jax / Katarina / MasterYi / MonkeyKing /
+  // Renekton / Udyr / Vayne / Kindred / Yuumi attach) — no skillshots to
+  // predict. Below are entries for the ones that DO have skillshot abilities
+  // worth tracking. Spell names extracted from
+  //   `game/data/characters/<name>/<name>.bin.json` mScriptName.
+  // Numeric values (radius / projectileSpeed / spellDelay / range) from
+  // public LoL wiki patch 14.x baseline.
+  // ============================================================================
+
+  // ==== Akshan ====
+  // Q "Avengerang" — line skillshot, boomerang returns to caster
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Akshan";
+    d.dangerlevel = 2;
+    d.name = "Avengerang";
+    d.spellKey = SpellSlot::Q;
+    d.spellName = "AkshanQ";
+    d.missileName = "AkshanQMis";
+    d.projectileSpeed = 1900;
+    d.radius = 70;
+    d.range = 1100;
+    d.spellDelay = 250;
+    d.spellType = SpellType::Line;
+    d.collisionObjects = {CollisionObjectType::EnemyMinions};
+    d.fixedRange = true;
+    return d;
+  }());
+
+  // R "Comeuppance" — channeled piercing line (fast-firing locked-on bullets)
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Akshan";
+    d.dangerlevel = 5;
+    d.name = "Comeuppance";
+    d.spellKey = SpellSlot::R;
+    d.spellName = "AkshanR";
+    d.missileName = "AkshanRMis";
+    d.projectileSpeed = 5000;
+    d.radius = 80;
+    d.range = 3000;
+    d.spellDelay = 500;
+    d.spellType = SpellType::Line;
+    d.fixedRange = true;
+    return d;
+  }());
+
+  // ==== Alistar ====
+  // Q "Pulverize" — circle AOE around self, 1.0s knockup
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Alistar";
+    d.dangerlevel = 4;
+    d.name = "Pulverize";
+    d.spellKey = SpellSlot::Q;
+    d.spellName = "Pulverize";
+    d.radius = 365;
+    d.range = 0;
+    d.spellDelay = 250;
+    d.spellType = SpellType::Circular;
+    return d;
+  }());
+
+  // ==== Kaisa ====
+  // W "Void Seeker" — long line skillshot, marks target for plasma stack
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Kaisa";
+    d.dangerlevel = 3;
+    d.name = "Void Seeker";
+    d.spellKey = SpellSlot::W;
+    d.spellName = "KaisaW";
+    d.missileName = "KaisaWMissile";
+    d.projectileSpeed = 1750;
+    d.radius = 80;
+    d.range = 3000;
+    d.spellDelay = 400;
+    d.spellType = SpellType::Line;
+    d.collisionObjects = {CollisionObjectType::EnemyMinions};
+    d.fixedRange = true;
+    return d;
+  }());
+
+  // ==== Nasus ====
+  // E "Spirit Fire" — circle AOE on cursor, lingers 5s with armor shred
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Nasus";
+    d.dangerlevel = 2;
+    d.name = "Spirit Fire";
+    d.spellKey = SpellSlot::E;
+    d.spellName = "NasusE";
+    d.radius = 400;
+    d.range = 650;
+    d.spellDelay = 250;
+    d.spellType = SpellType::Circular;
+    return d;
+  }());
+
+  // ==== Rammus ====
+  // R "Soaring Slam" — global jump, AOE on landing with shockwaves
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Rammus";
+    d.dangerlevel = 3;
+    d.name = "Soaring Slam";
+    d.spellKey = SpellSlot::R;
+    d.spellName = "RammusR";
+    d.radius = 250;
+    d.range = 25000; // global cast
+    d.spellDelay = 750;
+    d.spellType = SpellType::Circular;
+    return d;
+  }());
+
+  // ==== Yuumi ====
+  // Q "Prowling Projectile" — line skillshot, charges up for slow + extra damage
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Yuumi";
+    d.dangerlevel = 2;
+    d.name = "Prowling Projectile";
+    d.spellKey = SpellSlot::Q;
+    d.spellName = "YuumiQ";
+    d.missileName = "YuumiQMissile";
+    d.projectileSpeed = 1450;
+    d.radius = 60;
+    d.range = 1150;
+    d.spellDelay = 250;
+    d.spellType = SpellType::Line;
+    d.fixedRange = true;
+    return d;
+  }());
+
+  // R "Final Chapter" — channel 7 waves around herself, root on 3+ hits
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Yuumi";
+    d.dangerlevel = 4;
+    d.name = "Final Chapter";
+    d.spellKey = SpellSlot::R;
+    d.spellName = "YuumiR";
+    d.radius = 525;
+    d.range = 0;
+    d.spellDelay = 500;
+    d.spellType = SpellType::Circular;
+    return d;
+  }());
+
+  // ==== Yunara ====
+  // Q "Holy Mark" — bouncing missile (CDragon: YunaraQBounceMissile).
+  // NEWEST CHAMPION — values approximated, refine with wiki when stable.
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Yunara";
+    d.dangerlevel = 2;
+    d.name = "Holy Mark";
+    d.spellKey = SpellSlot::Q;
+    d.spellName = "YunaraQ";
+    d.extraMissileNames = {"YunaraQBounceMissile", "YunaraQBounceCritMissile"};
+    d.projectileSpeed = 1500;
+    d.radius = 80;
+    d.range = 700;
+    d.spellDelay = 250;
+    d.spellType = SpellType::Line;
     return d;
   }());
 

@@ -1,9 +1,10 @@
 #pragma once
 
-// DamageLibrary — zero-runtime-parse using codegen constexpr data
+// DamageLibrary — zero-runtime-parse using constexpr struct-array data
+// (see `sdk/Data/DamageData.h` for the full 172-champion patch-26.8 dataset).
 // Replaces old nlohmann::json-based init that crashed in manual-map context.
 
-#include "../../Data/DamageData.generated.h"
+#include "../../Data/DamageData.h"
 #include "../../Enumerations/DamageType.h"
 #include "../../Enumerations/SpellSlot.h"
 #include "../../Core/Objects.h"
@@ -153,7 +154,7 @@ public:
         if (!source.IsValid() || !target.IsValid()) {
             return 0.0f;
         }
-        return source.CalculatePhysicalDamage(target, source.TotalAttackDamage());
+        return source.CalculatePhysicalDamage(target, source.AD());
     }
 
 private:
@@ -178,9 +179,9 @@ private:
                                 const AIBaseClient& target) {
         const AIBaseClient& scaler = bonus.Target == 1 ? target : source;
         switch (bonus.Scaling) {
-        case 1:  return scaler.TotalAttackDamage();      // AttackPoints
-        case 2:  return scaler.BonusAttackDamage();       // BonusAttackPoints
-        case 3:  return scaler.AbilityPower();            // AbilityPoints
+        case 1:  return scaler.AD();                     // AttackPoints       (total AD)
+        case 2:  return scaler.BonusAttackDamage();       // BonusAttackPoints  (kept long: no short alias)
+        case 3:  return scaler.AP();                      // AbilityPoints      (= ability power)
         case 4:  return scaler.MaxHealth();               // BonusHealth (approx)
         case 5:  return scaler.Health();                  // CurrentHealth
         case 6:  return scaler.MaxHealth();               // MaxHealth

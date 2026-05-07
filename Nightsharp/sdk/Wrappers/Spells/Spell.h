@@ -393,8 +393,14 @@ public:
             return Cast(position);
         }
 
+        // Skillshots must NOT carry a targetNetId: when the engine sees a NetId
+        // for a non-targeted spell, it overrides the supplied `position` with
+        // `target.Position()` (auto-faces the target), nuking prediction. Only
+        // true targeted spells (Annie Q, etc.) need the NetId routing.
         const Vector3 source = GetSource();
-        const auto targetNetId = static_cast<uint32_t>(target.NetworkId());
+        const auto targetNetId = IsTargetedSpell
+            ? static_cast<uint32_t>(target.NetworkId())
+            : 0u;
         const bool ok = CoreAPI::Control::CastSpell(static_cast<int>(Slot), source, position, targetNetId);
         if (ok) {
             const_cast<Spell*>(this)->LastCastAttemptTime = now;

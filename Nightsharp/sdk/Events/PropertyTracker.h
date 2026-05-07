@@ -1,45 +1,36 @@
 #pragma once
 
 // ============================================================================
-// PropertyTracker — Poll-based OnIntegerPropertyChange
+// PropertyTracker — push-driven OnIntegerPropertyChange (ActionState)
+// ============================================================================
+// Subscribes to `CoreEventHook::Events::OnIntegerPropertyChange` (id 35),
+// the piggy-back fired from `HkOnHeroActionState` after every action-state
+// transition. The hook fires for essentially every hero interaction (move,
+// stop, cast, dash, path rebuild) so this is a complete push surface for
+// `ActionState` changes — no polling needed.
 //
-// EnsoulSharp equivalent: GameObject.OnIntegerPropertyChange
+// `intParam` carries the raw current ActionState int. We dedupe per-hero
+// by comparing against the cached previous value; user callbacks are only
+// invoked when the value genuinely changes.
 //
-// How it works (manual-map safe):
-//   Each tick we poll GetActionState() for every hero.
-//   If the value changed from last tick → fire OnIntegerPropertyChange
-//   with both old and new values.
-//
-// This is the primary source for Stealth detection in EnsoulSharp.
-// NightSharp's Stealth.h already works via visibility polling, but this
-// event provides the raw ActionState change for any subscriber.
-//
-// DEPENDENCY: CoreObjects::ObjectRef::GetActionState() (core/CoreObjects.h)
-// DEPENDENCY: Offset::ActionState flags (core/Offsets.h)
-// DEPENDENCY: SDK ObjectManager::Heroes() (sdk/Core/Objects.h)
-//
-// NOTE: Core đã có GetActionState() + GetActionState2(). Không cần bổ sung.
-//
-// LIMITATION: EnsoulSharp's OnIntegerPropertyChange tracks ANY integer
-// property by name ("ActionState", etc.). This implementation only tracks
-// ActionState, which is the only property used in practice.
+// EnsoulSharp's `OnIntegerPropertyChange` event tracks ANY integer
+// property by name. NightSharp only surfaces `ActionState` because it is
+// the only property scripts actually subscribe to in practice.
 // ============================================================================
 
+#include "../../core/CoreEventHook.h"
+#include "../../core/offset.h"
 #include "../../menu/MenuUI.h"
-#include "../Core/Game.h"
-#include "../Core/Objects.h"
+#include "../GameObjects/AIBaseClient.h"
+#include "../GameObjects/GameObject.h"
 
 #include <new>
 #include <unordered_map>
 
 namespace SDK::Events::PropertyTracker {
 
-// ---------------------------------------------------------------------------
-// Event Args — matches EnsoulSharp: GameObjectIntegerPropertyChangeEventArgs
-// ---------------------------------------------------------------------------
-
 struct IntegerPropertyChangeEventArgs {
-    const char* Property = "ActionState";   // property name (always ActionState for now)
+    const char* Property = "ActionState";
     int OldValue = 0;
     int NewValue = 0;
 
@@ -48,11 +39,7 @@ struct IntegerPropertyChangeEventArgs {
 
 using PropertyChangeHandler = void(*)(const GameObject& sender, const IntegerPropertyChangeEventArgs& args);
 
-// ---------------------------------------------------------------------------
-// Internal
-// ---------------------------------------------------------------------------
 namespace detail {
-
     struct PropertyState {
         int LastActionState = 0;
         bool Initialized = false;
@@ -60,6 +47,7 @@ namespace detail {
 
     inline std::unordered_map<int, PropertyState>* g_states = nullptr;
     inline MenuUI::FixedList<PropertyChangeHandler, 64> g_handlers = {};
+    inline bool g_registered = false;
 
     inline bool EnsureStorage() {
         if (!g_states) {
@@ -68,15 +56,50 @@ namespace detail {
         return g_states != nullptr;
     }
 
-} // namespace detail
+    // CoreEventHook trampoline. `intParam` = current ActionState int.
+    inline void OnPropertyThunk(uintptr_t sender, uintptr_t /*context*/, int intParam) {
+        if (g_handlers.empty()) return;
+        if (!EnsureStorage()) return;
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+        // Resolve hero — keyed by network id so respawned heroes don't
+        // alias each other in the cache.
+        AIBaseClient hero(sender);
+        if (!hero.IsValid()) return;
+        const int netId = hero.NetworkId();
+        if (netId == 0) return;
 
-inline void Initialize() { detail::EnsureStorage(); }
+        auto& state = (*g_states)[netId];
+        if (!state.Initialized) {
+            state.LastActionState = intParam;
+            state.Initialized = true;
+            return;
+        }
+        if (state.LastActionState == intParam) return;
+
+        IntegerPropertyChangeEventArgs args = {};
+        args.Property = "ActionState";
+        args.OldValue = state.LastActionState;
+        args.NewValue = intParam;
+        state.LastActionState = intParam;
+
+        GameObject obj(sender);
+        for (const auto& h : g_handlers) {
+            if (h) h(obj, args);
+        }
+    }
+}
+
+inline void Initialize() {
+    detail::EnsureStorage();
+    if (!detail::g_registered) {
+        CoreEventHook::SetCallback(Offset::Events::OnIntegerPropertyChange,
+                                   detail::OnPropertyThunk);
+        detail::g_registered = true;
+    }
+}
 
 inline bool AddOnIntegerPropertyChange(PropertyChangeHandler h) {
+    Initialize();
     return h && detail::g_handlers.push_back(h);
 }
 inline bool OnIntegerPropertyChange(PropertyChangeHandler h) {
@@ -84,33 +107,7 @@ inline bool OnIntegerPropertyChange(PropertyChangeHandler h) {
 }
 
 inline void Update() {
-    if (!detail::EnsureStorage()) return;
-    if (detail::g_handlers.empty()) return;   // skip work if no subscribers
-
-    for (const auto& hero : ObjectManager::Heroes()) {
-        const int netId = hero.NetworkId();
-        if (!hero.IsValid() || netId == 0 || hero.IsDead()) {
-            if (netId != 0) detail::g_states->erase(netId);
-            continue;
-        }
-
-        const int currentState = hero.Ref().GetActionState();
-        auto& state = (*detail::g_states)[netId];
-
-        if (state.Initialized && state.LastActionState != currentState) {
-            IntegerPropertyChangeEventArgs args = {};
-            args.Property = "ActionState";
-            args.OldValue = state.LastActionState;
-            args.NewValue = currentState;
-
-            for (const auto& h : detail::g_handlers) {
-                if (h) h(hero, args);
-            }
-        }
-
-        state.LastActionState = currentState;
-        state.Initialized = true;
-    }
+    // Push-driven — nothing to poll.
 }
 
 inline void Reset() {

@@ -1,292 +1,317 @@
 #pragma once
+// ============================================================================
+// SDKDiagnostics — "SDK Diagnostics" tab inside NightSharp menu
+// ============================================================================
+// Renders a compact dashboard showing, at a glance, whether every event hook
+// is actually working:
+//
+//   Panel 1 — Core hook (OnProcessSpell Shadow-VMT):
+//       install state, dispatch slot address, trampoline address, fire count.
+//   Panel 2 — Per-event table:
+//       name, hook method, "Ready / Disabled" flag, fire counter (live).
+//
+// The panel does NOT assume `CoreEventHook::PollAllEvents()` has been wired up
+// yet; it just reflects whatever counters the rest of the DLL feeds in.
+// ============================================================================
 
-#include "../core/CoreAPI.h"
-#include "../core/CoreObjects.h"
-#include "../core/CoreRuntime.h"
-#include "../core/CoreValidation.h"
 #include "../imgui/imgui.h"
-#include "../sdk/Core/Objects.h"
-#include "../sdk/Wrappers/Orbwalking/Orbwalker.h"
+#include "../core/CoreEventHook.h"
+
+#include <cstdint>
+#include <cstdio>
 
 namespace SDKDiagnostics {
 
-inline const char* SpellStateName(CoreSpellBook::SpellState state) {
-    switch (state) {
-    case CoreSpellBook::State_Ready: return "Ready";
-    case CoreSpellBook::State_NotLearned: return "NotLearned";
-    case CoreSpellBook::State_Cooldown: return "Cooldown";
-    case CoreSpellBook::State_NoMana: return "NoMana";
-    case CoreSpellBook::State_Disabled: return "Disabled";
-    default: return "Unknown";
-    }
-}
+    namespace detail {
+        inline void Badge(const char* text, ImU32 bg, ImU32 fg = IM_COL32(12, 12, 18, 255)) {
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImVec2 sz = ImGui::CalcTextSize(text);
+            ImVec2 p1 = ImVec2(p0.x + sz.x + 10, p0.y + sz.y + 4);
+            auto* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(p0, p1, bg, 3.0f);
+            dl->AddText(ImVec2(p0.x + 5, p0.y + 2), fg, text);
+            ImGui::Dummy(ImVec2(sz.x + 10, sz.y + 4));
+        }
 
-inline void SectionHeader(const char* title) {
-    ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", title);
-    ImGui::Separator();
-}
-
-inline void Render() {
-    SectionHeader("Runtime Diagnostics");
-    ImGui::TextWrapped("This build is moving to a core-first runtime. SDK will sit on top of core once core primitives are stable.");
-    ImGui::Spacing();
-    ImGui::BulletText("Core runtime init: %s", CoreRuntime::HasInitReady() ? "ready" : "not ready");
-    ImGui::BulletText("Core runtime state: %s", CoreRuntime::IsReady() ? "runtime-ready" : "waiting for live game state");
-    ImGui::BulletText("Retained data file: sdk/Data/Database.h");
-    ImGui::BulletText("Retained data file: sdk/Data/26.6.h");
-    ImGui::Separator();
-
-    const auto& ctx = CoreRuntime::GetContext();
-    ImGui::Text("base            : 0x%llX", (unsigned long long)ctx.moduleBase);
-    ImGui::Text("localPlayer     : 0x%llX", (unsigned long long)ctx.localPlayer);
-    ImGui::Text("objectManager   : 0x%llX", (unsigned long long)ctx.objectManager);
-    ImGui::Text("heroManager     : 0x%llX", (unsigned long long)ctx.heroManager);
-    ImGui::Text("minionManager   : 0x%llX", (unsigned long long)ctx.minionManager);
-    ImGui::Text("turretManager   : 0x%llX", (unsigned long long)ctx.turretManager);
-    ImGui::Text("missileManager  : 0x%llX", (unsigned long long)ctx.missileManager);
-    ImGui::Text("navGrid         : 0x%llX", (unsigned long long)ctx.navGrid);
-    ImGui::Text("netInstance     : 0x%llX", (unsigned long long)ctx.netInstance);
-    ImGui::Text("shopInstance    : 0x%llX", (unsigned long long)ctx.shopInstance);
-    ImGui::Text("renderer        : 0x%llX", (unsigned long long)ctx.renderer);
-    ImGui::Text("viewProjInst    : 0x%llX", (unsigned long long)ctx.viewProjInstance);
-    ImGui::Text("worldToScreenFn : 0x%llX", (unsigned long long)ctx.worldToScreenFn);
-    ImGui::Text("issueOrderFn    : 0x%llX", (unsigned long long)ctx.issueOrderFn);
-    ImGui::Text("castSpellFn     : 0x%llX", (unsigned long long)ctx.castSpellFn);
-    ImGui::Text("gameTime        : %.3f", ctx.gameTime);
-    ImGui::Text("statusMask      : 0x%08X", ctx.statusMask);
-    ImGui::Text("lastErrorMask   : 0x%08X", ctx.lastErrorMask);
-    ImGui::Text("validationMask  : 0x%08X", ctx.validationMask);
-    ImGui::Text("initGeneration  : %u", ctx.initGeneration);
-    ImGui::Text("refreshGen      : %u", ctx.refreshGeneration);
-    ImGui::Text("phaseGen        : %u", ctx.phaseGeneration);
-    ImGui::Text("phase           : %u", ctx.currentPhase);
-    ImGui::Text("spoofTrampoline : 0x%llX", (unsigned long long)ctx.spoofTrampoline);
-    ImGui::Text("detectWatcher2  : 0x%llX", (unsigned long long)ctx.detectionWatcher2);
-    ImGui::Text("ping            : %d", ctx.cachedPing);
-    ImGui::Text("attackDelay     : %.4f", ctx.cachedAttackDelay);
-    ImGui::Text("attackWindup    : %.4f", ctx.cachedAttackWindup);
-    ImGui::Text("issueOrder ok   : %u / %u", ctx.issueOrderSuccesses, ctx.issueOrderAttempts);
-    ImGui::Text("cast ok         : %u / %u", ctx.castSuccesses, ctx.castAttempts);
-    ImGui::Text("canIssueOrder   : %s", CoreAPI::Control::CanIssueOrder() ? "yes" : "no");
-    ImGui::Text("canCastSpell    : %s", CoreAPI::Control::CanCastSpell() ? "yes" : "no");
-    ImGui::Text("canChargedSpell : %s", CoreAPI::Control::CanUpdateChargedSpell() ? "yes" : "no");
-    ImGui::Text("castHelper      : %s", (ctx.validationMask & CoreValidation::Validation_CastHelperPresent) ? "present" : "missing");
-    ImGui::Text("castAbiApproved : %s", (ctx.validationMask & CoreValidation::Validation_CastCallableApproved) ? "yes" : "no");
-
-    uintptr_t heroes[16] = {};
-    uintptr_t allyHeroes[16] = {};
-    uintptr_t enemyHeroes[16] = {};
-    uintptr_t minions[512] = {};
-    uintptr_t allyMinions[512] = {};
-    uintptr_t enemyMinions[512] = {};
-    uintptr_t jungleMinions[512] = {};
-    uintptr_t turrets[64] = {};
-    uintptr_t allyTurrets[64] = {};
-    uintptr_t enemyTurrets[64] = {};
-    uintptr_t missiles[1024] = {};
-    const int heroCount = CoreObjects::EnumerateHeroes(heroes, 16);
-    const int allyHeroCount = CoreObjects::EnumerateAllyHeroes(allyHeroes, 16);
-    const int enemyHeroCount = CoreObjects::EnumerateEnemyHeroes(enemyHeroes, 16);
-    const int minionCount = CoreObjects::EnumerateMinions(minions, 512);
-    const int allyMinionCount = CoreObjects::EnumerateAllyMinions(allyMinions, 512);
-    const int enemyMinionCount = CoreObjects::EnumerateEnemyMinions(enemyMinions, 512);
-    const int jungleMinionCount = CoreObjects::EnumerateJungleMinions(jungleMinions, 512);
-    const int turretCount = CoreObjects::EnumerateTurrets(turrets, 64);
-    const int allyTurretCount = CoreObjects::EnumerateAllyTurrets(allyTurrets, 64);
-    const int enemyTurretCount = CoreObjects::EnumerateEnemyTurrets(enemyTurrets, 64);
-    const int missileCount = CoreObjects::EnumerateMissiles(missiles, 1024);
-
-    ImGui::Separator();
-    ImGui::Text("heroCount       : %d", heroCount);
-    ImGui::Text("hero ally/enemy : %d / %d", allyHeroCount, enemyHeroCount);
-    ImGui::Text("minionCount     : %d", minionCount);
-    ImGui::Text("minion A/E/J    : %d / %d / %d", allyMinionCount, enemyMinionCount, jungleMinionCount);
-    ImGui::Text("turretCount     : %d", turretCount);
-    ImGui::Text("turret ally/en  : %d / %d", allyTurretCount, enemyTurretCount);
-    ImGui::Text("missileCount    : %d", missileCount);
-
-    const auto local = CoreObjects::GetLocalPlayer();
-    char nameBuf[64] = {};
-    char champBuf[64] = {};
-    local.ReadName(nameBuf, (int)sizeof(nameBuf));
-    local.ReadCharacterName(champBuf, (int)sizeof(champBuf));
-    ImGui::Text("playerName      : %s", nameBuf[0] ? nameBuf : "<empty>");
-    ImGui::Text("characterName   : %s", champBuf[0] ? champBuf : "<empty>");
-    ImGui::Text("playerNetId     : %d", local.GetNetId());
-    ImGui::Text("playerTeam      : %d", local.GetTeam());
-    ImGui::Text("playerHP        : %.1f / %.1f", local.GetHealth(), local.GetMaxHealth());
-    ImGui::Text("playerEffHP     : %.1f", local.GetEffectiveHealth());
-    ImGui::Text("playerMP        : %.1f / %.1f", local.GetMana(), local.GetMaxMana());
-    ImGui::Text("playerMS        : %.1f", local.GetMoveSpeed());
-    ImGui::Text("playerRange     : %.1f", local.GetAttackRange());
-    ImGui::Text("playerMelee     : %s", local.IsMelee() ? "yes" : "no");
-    ImGui::Text("playerDeadInvul : %s / %s", local.IsDead() ? "yes" : "no", local.IsInvulnerable() ? "yes" : "no");
-
-    Vec2 screen = {};
-    const bool w2sOk = CoreAPI::View::WorldToScreen(local.GetPosition(), screen);
-    ImGui::Text("playerW2S       : %s  (%.1f, %.1f)", w2sOk ? "OK" : "FAIL", screen.x, screen.y);
-
-    const Vec3 mouseWorld = CoreAPI::View::GetMouseWorldPos();
-    const Vec2 mouseScreen = CoreAPI::View::GetMouseScreenPos();
-    ImGui::Text("mouseWorld      : %.1f %.1f %.1f", mouseWorld.x, mouseWorld.y, mouseWorld.z);
-    ImGui::Text("mouseScreen     : %.1f %.1f", mouseScreen.x, mouseScreen.y);
-    ImGui::Text("selectedNetId   : %u", CoreAPI::View::GetSelectedNetId());
-    ImGui::Text("gameFocused     : %s", CoreAPI::Game::IsGameFocused() ? "yes" : "no");
-    ImGui::Text("chatOpen        : %s", CoreAPI::Game::IsChatOpen() ? "yes" : "no");
-    ImGui::Text("shopOpen        : %s", CoreAPI::Game::IsShopOpen() ? "yes" : "no");
-    ImGui::Text("processInput    : %s", CoreAPI::Game::ShouldProcessInput() ? "yes" : "no");
-    ImGui::Text("sdk.IsRecalling : %s", SDK::ObjectManager::Player().IsRecalling() ? "yes" : "no");
-    const bool recallTypeFlag = RuntimeAPI::CompareTypeFlags(local.address, Offset::TypeFlags::IsRecalling);
-    const int recallStateRaw = local.GetRecallState();
-    const bool recallBuffAura = CoreBuffs::HasBuffContaining(local.address, "recall", 1);
-    const bool recallBuffAny = CoreBuffs::HasBuffContaining(local.address, "recall");
-    const auto recallCast = local.GetActiveSpellCast();
-    char recallCastName[96] = {};
-    recallCast.ReadSpellName(recallCastName, static_cast<int>(sizeof(recallCastName)));
-    char recallAnimName[128] = {};
-    local.ReadCurrentAnimation(recallAnimName, static_cast<int>(sizeof(recallAnimName)));
-    ImGui::Text("sdk.recall flag : %s", recallTypeFlag ? "yes" : "no");
-    ImGui::Text("sdk.recall raw  : %d", recallStateRaw);
-    ImGui::Text("sdk.recall buff : aura=%s any=%s", recallBuffAura ? "yes" : "no", recallBuffAny ? "yes" : "no");
-    ImGui::Text("sdk.recall cast : slot=%d name=%s", recallCast.GetSlot(), recallCastName[0] ? recallCastName : "<empty>");
-    ImGui::Text("sdk.recall anim : %s", recallAnimName[0] ? recallAnimName : "<empty>");
-    ImGui::Text("sdk.recall cancel: moving=%s dashing=%s",
-        local.IsMovingOnPath() ? "yes" : "no",
-        local.IsDashingOnPath() ? "yes" : "no");
-
-    const auto& diag = SDK::Orbwalker::Instance().lastTickDiag;
-    const auto mode = SDK::Orbwalker::GetMode();
-    const int modeIdx = static_cast<int>(mode);
-    static const char* kModeNames[] = { "None","Combo","Harass","Clear","LastHit","Flee" };
-    ImGui::Separator();
-    ImGui::Text("orb.mode        : %s", (modeIdx >= 0 && modeIdx <= 5) ? kModeNames[modeIdx] : "?");
-    ImGui::Text("orb.timeToAtk   : %.0f ms", SDK::Orbwalker::TimeUntilNextAttack() * 1000.0f);
-    ImGui::Text("orb.can A/M     : %s / %s", diag.canAttack ? "yes" : "no", diag.canMove ? "yes" : "no");
-    ImGui::Text("orb.target      : netId=%d", diag.targetNetId);
-    ImGui::Text("orb.orders      : attack=%s move=%s",
-        diag.attackIssued ? "yes" : "no", diag.moveIssued ? "yes" : "no");
-    {
-      const float diagWindup = ctx.cachedAttackWindup * 1000.0f;
-      auto* orbMenu = SDK::Orbwalker::GetMenu();
-      auto* settMenu = orbMenu ? orbMenu->GetSubMenu("settings") : nullptr;
-      const int windupSlider = settMenu ? settMenu->GetSliderValue("windupDelay", 60) : 60;
-      const float windupBuf = diagWindup * (static_cast<float>(windupSlider) / 200.0f);
-      ImGui::Text("orb.windupBuf   : %.0f ms (%d%% of %.0f ms)",
-          windupBuf, windupSlider, diagWindup);
+        inline void Hex64(char* out, size_t cap, uint64_t v) {
+            std::snprintf(out, cap, "0x%016llX", static_cast<unsigned long long>(v));
+        }
     }
 
-    const auto slotQ = CoreAPI::SpellBook::GetSlot(local.address, 0);
-    const auto navGrid = CoreAPI::NavGrid::Get();
-    char spellBuf[96] = {};
-    slotQ.ReadSpellName(spellBuf, (int)sizeof(spellBuf));
-    ImGui::Separator();
-    ImGui::Text("Q slot valid    : %s", slotQ.IsValid() ? "yes" : "no");
-    ImGui::Text("Q spell name    : %s", spellBuf[0] ? spellBuf : "<empty>");
-    ImGui::Text("Q level/cd      : %d / %.3f", slotQ.GetLevel(), slotQ.GetCooldown());
-    ImGui::Text("Q range/speed   : %.1f / %.1f", slotQ.GetCastRange(), slotQ.GetMissileSpeed());
-    ImGui::Text("Q width/type    : %.1f / %d", slotQ.GetLineWidth(), slotQ.GetCastType());
-    ImGui::Text("Q mana/castable : %.1f / %s", slotQ.GetManaCost(), CoreAPI::SpellBook::CanCast(local.address, 0, ctx.gameTime) ? "yes" : "no");
-    ImGui::Text("Q state         : %s", SpellStateName(CoreAPI::SpellBook::GetSpellState(local.address, 0, ctx.gameTime)));
-    ImGui::Text("Q castArg       : 0x%llX", (unsigned long long)slotQ.GetCastArgument());
+    inline void Render() {
+        using namespace CoreEventHook;
 
-    const auto activeCast = CoreAPI::SpellCast::GetActive(local.address);
-    char activeSpellBuf[96] = {};
-    activeCast.ReadSpellName(activeSpellBuf, (int)sizeof(activeSpellBuf));
-    ImGui::Text("activeCast      : %s", activeCast.IsValid() ? "yes" : "no");
-    ImGui::Text("activeSpell     : %s", activeSpellBuf[0] ? activeSpellBuf : "<empty>");
-    ImGui::Text("activeSlot      : %d", activeCast.GetSlot());
-    ImGui::Text("activeSrc/Tgt   : %d / %d", activeCast.GetSourceIndex(), activeCast.GetTargetIndex());
-    const Vec3 castStart = activeCast.GetStartPos();
-    const Vec3 castEnd = activeCast.GetEndPos();
-    ImGui::Text("activeStart     : %.1f %.1f %.1f", castStart.x, castStart.y, castStart.z);
-    ImGui::Text("activeEnd       : %.1f %.1f %.1f", castEnd.x, castEnd.y, castEnd.z);
-    ImGui::Text("activeFlags     : spell=%s auto=%s special=%s",
-        activeCast.IsSpell() ? "yes" : "no",
-        activeCast.IsAutoAttack() ? "yes" : "no",
-        activeCast.IsSpecialAttack() ? "yes" : "no");
+        ImGui::Dummy(ImVec2(0, 4));
 
-    uintptr_t buffAddrs[64] = {};
-    const int buffCount = CoreAPI::Buffs::Enumerate(local.address, buffAddrs, 64);
-    ImGui::Text("buffCount       : %d", buffCount);
-    ImGui::Text("buff stun/snare : %s / %s",
-        CoreAPI::Buffs::HasBuffType(local.address, 5) ? "yes" : "no",
-        CoreAPI::Buffs::HasBuffType(local.address, 11) ? "yes" : "no");
+        // ---------------- Panel 1 — Shadow-VMT core hook status ----------------
+        // The Shadow-VMT hook is now OPTIONAL. `OnProcessSpell` is driven by
+        // the spell-cast poller in `PollSpellCast`, which works on every
+        // build. The VMT hook remains installed as a secondary detector
+        // for legacy builds; on 26.6+ it is expected to show "NOT FIRING".
+        ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Shadow-VMT (legacy, optional)");
+        ImGui::Separator();
 
-    // ── Active Buff List (for recall debugging) ──
-    if (ImGui::TreeNode("Active Buffs (expand to see all)")) {
-        const float gameTime = CoreAPI::Game::GetTime();
-        int activeCount = 0;
-        for (int i = 0; i < buffCount && i < 64; ++i) {
-            CoreBuffs::BuffRef buff{ buffAddrs[i] };
-            if (!buff.IsValid()) continue;
-            if (!buff.IsActive(gameTime)) continue;
+        const bool installed  = diagnostics::HookInstalled();
+        const bool installing = diagnostics::HookInstalling();
+        ImGui::Text("State: ");
+        ImGui::SameLine();
+        if (installed) {
+            detail::Badge(" HOOKED ", IM_COL32(60, 200, 90, 255));
+        } else if (installing) {
+            detail::Badge(" INSTALLING... ", IM_COL32(200, 160, 60, 255));
+        } else {
+            detail::Badge(" NOT HOOKED ", IM_COL32(140, 140, 140, 255), IM_COL32(255, 255, 255, 255));
+        }
 
-            char bName[96] = {};
-            buff.ReadName(bName, static_cast<int>(sizeof(bName)));
-            if (!bName[0]) continue;
+        char buf[64];
+        detail::Hex64(buf, sizeof(buf), diagnostics::DispatchSlotAddr());
+        ImGui::Text("Dispatch slot : %s   (%d writable copies)",
+                    buf, diagnostics::DispatchSlotCount());
+        detail::Hex64(buf, sizeof(buf), diagnostics::TrampolineAddr());
+        ImGui::Text("Trampoline    : %s", buf);
+        detail::Hex64(buf, sizeof(buf), diagnostics::OriginalFnAddr());
+        ImGui::Text("Original fn   : %s", buf);
 
-            const int bType = buff.GetType();
-            const int bStacks = buff.GetStacks();
-            const float bRemaining = buff.GetRemainingTime(gameTime);
+        const auto vmtCount = diagnostics::VmtEventCounter();
+        ImGui::Text("VMT counter   : %llu", static_cast<unsigned long long>(vmtCount));
+        ImGui::SameLine();
+        if (installed) {
+            if (vmtCount > 0) {
+                detail::Badge(" FIRING ", IM_COL32(60, 200, 90, 255));
+            } else {
+                // Expected on 26.6+ where the vtable slot no longer routes
+                // OnProcessSpell. Using grey instead of red so it isn't
+                // mistaken for an error — polling handles the event.
+                detail::Badge(" IDLE (poll fallback) ", IM_COL32(140, 140, 140, 255), IM_COL32(255, 255, 255, 255));
+            }
+        }
+        ImGui::Text("Total events  : %llu",
+                    static_cast<unsigned long long>(diagnostics::TotalFires()));
 
-            // Highlight recall-related buffs in yellow
-            bool isRecallBuff = false;
-            for (const char* p = bName; *p; ++p) {
-                if ((*p == 'r' || *p == 'R') &&
-                    (_strnicmp(p, "recall", 6) == 0)) {
-                    isRecallBuff = true;
-                    break;
+        ImGui::Dummy(ImVec2(0, 8));
+
+        // ---------------- Manual install / uninstall buttons -------------------
+        if (!installed) {
+            if (ImGui::Button("Install Hook")) {
+                (void)InstallAllHooks();
+            }
+        } else {
+            if (ImGui::Button("Uninstall All")) {
+                UninstallAll();
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Force Poll")) {
+            PollAllEvents();
+        }
+
+        ImGui::Dummy(ImVec2(0, 8));
+
+        // ---------------- Panel 2 — Per-event table ----------------------------
+        ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f), "Event Hooks");
+        ImGui::Separator();
+
+        if (ImGui::BeginTable("##event_table", 4,
+                              ImGuiTableFlags_SizingFixedFit |
+                              ImGuiTableFlags_BordersInnerV  |
+                              ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("Event",   ImGuiTableColumnFlags_WidthFixed, 170);
+            ImGui::TableSetupColumn("Method",  ImGuiTableColumnFlags_WidthFixed, 115);
+            ImGui::TableSetupColumn("Status",  ImGuiTableColumnFlags_WidthFixed, 110);
+            ImGui::TableSetupColumn("Fires",   ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0; i < diagnostics::kAllEventCount; ++i) {
+                const int id      = diagnostics::kAllEventIds[i];
+                const auto method = diagnostics::MethodOf(id);
+                const bool ready  = diagnostics::IsEventReady(id);
+                const auto fires  = diagnostics::FireCountOf(id);
+                const bool isVmt  = (method == diagnostics::Method::VmtHook);
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(diagnostics::NameOf(id));
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(diagnostics::MethodLabel(method));
+
+                ImGui::TableSetColumnIndex(2);
+                if (isVmt) {
+                    if (!installed) {
+                        detail::Badge(" FAIL ", IM_COL32(210, 70, 70, 255), IM_COL32(255, 255, 255, 255));
+                    } else if (fires > 0) {
+                        // Any fires count — regardless of whether the VMT
+                        // trampoline is the path that delivered them — means
+                        // the event is functionally live. Poll fallback
+                        // absolutely counts as "working".
+                        detail::Badge(" ACTIVE ", IM_COL32(60, 180, 200, 255));
+                    } else if (vmtCount == 0) {
+                        // Hook installed, but trampoline never fired AND no
+                        // fallback caught the event → dispatch slot bad and
+                        // poll didn't detect either. Truly dead.
+                        detail::Badge(" STALE ", IM_COL32(210, 120, 50, 255), IM_COL32(255, 255, 255, 255));
+                    } else {
+                        // VMT trampoline is alive (other events got dispatched)
+                        // but this specific event hasn't been observed yet.
+                        detail::Badge(" IDLE ", IM_COL32(180, 160, 60, 255));
+                    }
+                } else if (!ready) {
+                    detail::Badge(" DISABLED ", IM_COL32(140, 140, 140, 255), IM_COL32(255, 255, 255, 255));
+                } else if (fires == 0) {
+                    detail::Badge(" IDLE ", IM_COL32(180, 160, 60, 255));
+                } else {
+                    detail::Badge(" ACTIVE ", IM_COL32(60, 180, 200, 255));
+                }
+
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%llu", static_cast<unsigned long long>(fires));
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::Dummy(ImVec2(0, 6));
+        ImGui::TextColored(ImVec4(0.72f, 0.72f, 0.80f, 1.0f),
+            "All events are driven by per-frame polling on this build.");
+        ImGui::TextColored(ImVec4(0.72f, 0.72f, 0.80f, 1.0f),
+            "IDLE = poller armed, waiting for an in-game trigger.");
+        ImGui::TextColored(ImVec4(0.72f, 0.72f, 0.80f, 1.0f),
+            "ACTIVE = event fired at least once; counter on the right.");
+        ImGui::TextColored(ImVec4(0.72f, 0.72f, 0.80f, 1.0f),
+            "DISABLED = offsets still 0x0 in offset.h — re-verify.");
+
+        // ---------------- Panel 3 — Inline Detour install report --------------
+        // Surfaces WHY each of the 8 inline-detour hooks failed, so we can
+        // tell cloak-missed vs decoder-missed vs bad-args from the overlay
+        // without needing debugger output.
+        ImGui::Dummy(ImVec2(0, 10));
+        ImGui::TextColored(ImVec4(0.47f, 0.92f, 0.47f, 1.0f),
+            "Inline Detours (DBVM EPT-cloaked)");
+        ImGui::Separator();
+
+        // --- Direct-syscall stealth probe (tells us whether Packman blocks
+        //     code-page flips, and if so, whether PAGE_READONLY still works). ---
+        {
+            using namespace CoreEventHook::stealth;
+            ImGui::Text("Syscall SSN   : 0x%X  (source: %s)",
+                (unsigned)g_ssnCached,
+                g_ssnSource == 1 ? "in-memory ntdll" :
+                g_ssnSource == 2 ? "ntdll from disk" :
+                                    "NOT RESOLVED");
+            ImGui::Text("Last NTSTATUS : 0x%08X",
+                static_cast<unsigned>(g_lastStatus));
+
+            const int st = g_selfTest;
+            const char* stLabel =
+                st == 0 ? "not run"  :
+                st == 1 ? "RWX flip OK  (Packman NOT blocking protect flips)" :
+                st == 2 ? "RWX blocked, PAGE_READONLY OK  (CoW inline detour path)" :
+                          "BOTH blocked  (kernel-side filter — DBVM/driver needed)";
+            ImGui::Text("Self-test     : %d - %s", st, stLabel);
+            if (st >= 2) {
+                ImGui::Text("  RWX status  : 0x%08X", (unsigned)g_selfTestStatusRWX);
+            }
+            if (st == 3) {
+                ImGui::Text("  RO  status  : 0x%08X", (unsigned)g_selfTestStatusRO);
+            }
+
+            // NtWriteVirtualMemory probe — does the write syscall bypass
+            // STATUS_SECTION_PROTECTION? If so, inline-detour is feasible.
+            const int wst = g_writeSelfTest;
+            const char* wstLabel =
+                wst == 0 ? "not run" :
+                wst == 1 ? "WriteVM OK   (inline detour possible!)" :
+                           "WriteVM FAILED (need DBVM / HWBP fallback)";
+            ImGui::Text("Write probe   : %d - %s  (SSN=0x%X, status=0x%08X)",
+                        wst, wstLabel,
+                        (unsigned)g_writeSsn,
+                        (unsigned)g_writeSelfTestStatus);
+
+            // Copy-on-Write probe — flipping image pages to PAGE_EXECUTE_WRITECOPY
+            // is often allowed even when +W/+RWX is refused (OS lets CoW semantics
+            // through since they don't actually grant persistent write on the
+            // shared mapping — the write upgrades to a private page).
+            const int ct = g_cowSelfTest;
+            const char* ctLabel =
+                ct == 0 ? "not run" :
+                ct == 1 ? "EXECUTE_WRITECOPY OK  (CoW detour feasible!)" :
+                ct == 2 ? "only PAGE_WRITECOPY OK (need RX flip-back)" :
+                          "CoW blocked (kernel enforces no COW on this page)";
+            ImGui::Text("CoW probe     : %d - %s  (EWC=0x%08X, WC=0x%08X)",
+                        ct, ctLabel,
+                        (unsigned)g_cowSelfTestStatusEWC,
+                        (unsigned)g_cowSelfTestStatusWC);
+        }
+        ImGui::Dummy(ImVec2(0, 4));
+
+        int inlineOk = 0;
+        for (int s = 0; s < 8; ++s) {
+            if (CoreEventHook::g_InlineStatus[4 + s] == CoreEventHook::detail::kInst_OK) {
+                ++inlineOk;
+            }
+        }
+        const bool issueOrderOk = CoreEventHook::detail::g_detOnIssueOrder.installed;
+        if (issueOrderOk) ++inlineOk;
+        ImGui::Text("Installed: %d / 9  (8 typed + 1 raw-asm)", inlineOk);
+
+        if (ImGui::BeginTable("##inline_table", 2,
+                              ImGuiTableFlags_SizingFixedFit |
+                              ImGuiTableFlags_BordersInnerV |
+                              ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("Event",  ImGuiTableColumnFlags_WidthFixed, 220);
+            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            for (int s = 0; s < 8; ++s) {
+                const uint8_t code = CoreEventHook::g_InlineStatus[4 + s];
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(CoreEventHook::InlineStatusName(s));
+                ImGui::TableSetColumnIndex(1);
+                if (code == CoreEventHook::detail::kInst_OK) {
+                    detail::Badge(" OK ", IM_COL32(60, 200, 90, 255));
+                } else if (code == CoreEventHook::detail::kInst_NotAttempted) {
+                    detail::Badge(" SKIPPED ", IM_COL32(140, 140, 140, 255),
+                                  IM_COL32(255, 255, 255, 255));
+                } else {
+                    detail::Badge(CoreEventHook::InlineStatusLabel(code),
+                                  IM_COL32(210, 70, 70, 255),
+                                  IM_COL32(255, 255, 255, 255));
                 }
             }
 
-            if (isRecallBuff) {
-                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f),
-                    "[%d] \"%s\" type=%d stacks=%d remain=%.2fs",
-                    activeCount, bName, bType, bStacks, bRemaining);
-            } else {
-                ImGui::Text("[%d] \"%s\" type=%d stacks=%d remain=%.2fs",
-                    activeCount, bName, bType, bStacks, bRemaining);
+            // Extra row: OnIssueOrder (raw-asm trampoline, not in g_InlineStatus).
+            {
+                const auto& d = CoreEventHook::detail::g_detOnIssueOrder;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted("OnIssueOrder (raw-asm)");
+                ImGui::TableSetColumnIndex(1);
+                if (d.installed) {
+                    detail::Badge(" OK ", IM_COL32(60, 200, 90, 255));
+                    ImGui::SameLine();
+                    ImGui::Text("hits=%lld", (long long)d.hitCounter);
+                } else if (d.lastStatus == CoreEventHook::detail::kInst_NotAttempted) {
+                    detail::Badge(" SKIPPED ", IM_COL32(140, 140, 140, 255),
+                                  IM_COL32(255, 255, 255, 255));
+                } else {
+                    detail::Badge(CoreEventHook::InlineStatusLabel(d.lastStatus),
+                                  IM_COL32(210, 70, 70, 255),
+                                  IM_COL32(255, 255, 255, 255));
+                }
             }
-            activeCount++;
+            ImGui::EndTable();
         }
-        if (activeCount == 0) {
-            ImGui::TextDisabled("(no active buffs)");
-        }
-        ImGui::TreePop();
+
+        // Panel 4 (DEP Hook / Vault7) — REMOVED.
+        // The DEP-hook mechanism used to provide a "no-code-write" fallback
+        // for targets where inline detouring hit STATUS_SECTION_PROTECTION.
+        // In practice, arming it flipped live LoL.exe code-page protection
+        // bits which Packman detected as tampering and crashed the game.
+        // We now run ONLY Shadow-VMT (virtual method table swap) and
+        // Inline+EPT (CoW-backed inline detour) — both of which avoid any
+        // page-protection changes that Packman can observe.
     }
-
-    Vec3 waypoints[16] = {};
-    const auto ai = CoreAPI::Ai::Get(local.address);
-    const int waypointCount = CoreAPI::Ai::CopyWaypoints(local.address, waypoints, 16);
-    const Vec3 serverPos = CoreAPI::Ai::GetServerPosition(local.address);
-    ImGui::Text("ai.inner        : 0x%llX", (unsigned long long)ai.inner);
-    ImGui::Text("ai.navBase      : 0x%llX", (unsigned long long)ai.navBase);
-    ImGui::Text("ai.moving       : %s", CoreAPI::Ai::IsMoving(local.address) ? "yes" : "no");
-    ImGui::Text("ai.hasPath      : %s", CoreAPI::Ai::HasPath(local.address) ? "yes" : "no");
-    ImGui::Text("ai.dashing      : %s", CoreAPI::Ai::IsDashing(local.address) ? "yes" : "no");
-    ImGui::Text("ai.dashSpeed    : %.2f", CoreAPI::Ai::GetDashSpeed(local.address));
-    ImGui::Text("ai.serverPos    : %.1f %.1f %.1f", serverPos.x, serverPos.y, serverPos.z);
-    ImGui::Text("ai.waypoints    : %d", waypointCount);
-    const Vec3 velocity = CoreAPI::Ai::GetVelocity(local.address);
-    const Vec3 pathStart = CoreAPI::Ai::GetPathStart(local.address);
-    const Vec3 pathEnd = CoreAPI::Ai::GetPathEnd(local.address);
-    const Vec3 orderPos = CoreAPI::Ai::GetOrderPosition(local.address);
-    ImGui::Text("ai.velocity     : %.1f %.1f %.1f", velocity.x, velocity.y, velocity.z);
-    ImGui::Text("ai.pathStart    : %.1f %.1f %.1f", pathStart.x, pathStart.y, pathStart.z);
-    ImGui::Text("ai.pathEnd      : %.1f %.1f %.1f", pathEnd.x, pathEnd.y, pathEnd.z);
-    ImGui::Text("ai.orderPos     : %.1f %.1f %.1f", orderPos.x, orderPos.y, orderPos.z);
-
-    ImGui::Separator();
-    ImGui::Text("nav.valid       : %s", navGrid.IsValid() ? "yes" : "no");
-    ImGui::Text("nav.manager     : 0x%llX", (unsigned long long)navGrid.manager);
-    ImGui::Text("nav.size        : %d x %d", navGrid.width, navGrid.height);
-    ImGui::Text("nav.scale       : %.3f / %.6f", navGrid.cellSize, navGrid.inverseScale);
-    ImGui::Text("nav.bounds      : %.1f %.1f -> %.1f %.1f", navGrid.minX, navGrid.minZ, navGrid.maxX, navGrid.maxZ);
-    ImGui::Text("nav.local       : wall=%s walk=%s brush=%s",
-        CoreAPI::NavGrid::IsWall(local.GetPosition()) ? "yes" : "no",
-        CoreAPI::NavGrid::IsWalkable(local.GetPosition()) ? "yes" : "no",
-        CoreAPI::NavGrid::IsBrush(local.GetPosition()) ? "yes" : "no");
-}
 
 } // namespace SDKDiagnostics

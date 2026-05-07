@@ -17,9 +17,16 @@ namespace detail {
         "Sru_Crab", "TT_NGolem", "TT_NWraith", "TT_NWolf"
     };
 
-    inline constexpr std::array<const char*, 8> LegendaryNames = {
+    // Object IDs verified against map11.bin.json (Summoner's Rift, Season 15+).
+    //  - "SRU_Horde"        → Voidgrubs (Sâu Hư Không), prefix also matches "SRU_Horde_Mini".
+    //  - "SRU_RiftHerald"   → Rift Herald (Sứ Giả Khe Nứt) + "SRU_RiftHerald_Mercenary".
+    //  - "SRU_Atakhan"      → Atakhan epic boss (added Season 15).
+    //  - "SRU_Dragon_Hextech" / "SRU_Dragon_Chemtech" → newer drake variants.
+    inline constexpr std::array<const char*, 12> LegendaryNames = {
         "SRU_Dragon_Air", "SRU_Dragon_Earth", "SRU_Dragon_Fire", "SRU_Dragon_Water",
-        "SRU_Dragon_Elder", "SRU_RiftHerald", "SRU_Baron", "TT_Spiderboss"
+        "SRU_Dragon_Hextech", "SRU_Dragon_Chemtech", "SRU_Dragon_Elder",
+        "SRU_RiftHerald", "SRU_Horde", "SRU_Atakhan",
+        "SRU_Baron", "TT_Spiderboss"
     };
 
     inline constexpr std::array<const char*, 7> SmallNames = {

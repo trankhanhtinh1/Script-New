@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Globals.h"
-#include "Offsets.h"
+#include "offset.h"
 #include <cstdint>
 
 namespace CoreRuntime {
@@ -99,6 +99,9 @@ namespace CoreRuntime {
         int32_t lastCastResult = 0;
     };
 
+    // Legacy compatibility alias (legacy_stubs.h used "Context")
+    using Context = CoreContext;
+
     inline CoreContext g_ctx = {};
 
     inline uintptr_t ResolveRva(uintptr_t rva) {
@@ -151,27 +154,28 @@ namespace CoreRuntime {
         g_ctx.moduleBase = Globals::base;
         g_ctx.statusMask |= Status_BaseReady;
 
-        g_ctx.localPlayerGlobal = ResolveRva(Offset::Global::LocalPlayer);
-        g_ctx.objectManagerGlobal = ResolveRva(Offset::Global::ObjectManager);
-        g_ctx.heroManagerGlobal = ResolveRva(Offset::Global::HeroManager);
-        g_ctx.minionManagerGlobal = ResolveRva(Offset::Global::MinionManager);
-        g_ctx.turretManagerGlobal = ResolveRva(Offset::Global::TurretManager);
-        g_ctx.missileManagerGlobal = ResolveRva(Offset::Global::MissileManager);
-        g_ctx.navGridGlobal = ResolveRva(Offset::Global::NavGrid);
-        g_ctx.underMouseObjectGlobal = ResolveRva(Offset::Global::UnderMouseObj);
-        g_ctx.netInstanceGlobal = ResolveRva(Offset::Global::NetInstance);
-        g_ctx.gameTimeGlobal = ResolveRva(Offset::Global::GameTime);
-        g_ctx.chatClientGlobal = ResolveRva(Offset::Global::ChatClient);
-        g_ctx.shopInstanceGlobal = ResolveRva(Offset::Global::ShopInstance);
-        g_ctx.openWindowsArrayGlobal = ResolveRva(Offset::Global::OpenWindowsArray);
-        g_ctx.openWindowsCountGlobal = ResolveRva(Offset::Global::OpenWindowsCount);
-        g_ctx.cursorInstanceGlobal = ResolveRva(Offset::Global::CursorInstance);
-        g_ctx.mouseScreenVec2Global = ResolveRva(Offset::Global::MouseScreenVec2);
-        g_ctx.hudInstanceGlobal = ResolveRva(Offset::Global::HudInstance);
-        g_ctx.viewPortGlobal = ResolveRva(Offset::Global::ViewPort);
-        g_ctx.viewPort2Global = ResolveRva(Offset::Global::ViewPort2);
-        g_ctx.rendererGlobal = ResolveRva(Offset::Global::r3dRenderer);
-        g_ctx.viewProjGlobal = ResolveRva(Offset::Extra::ViewMatrixInst);
+        // ── Global pointer table (translated from Offset::Global::* → grouped namespaces) ──
+        g_ctx.localPlayerGlobal     = ResolveRva(Offset::GameObjectsRuntime::Player);
+        g_ctx.objectManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Objects);
+        g_ctx.heroManagerGlobal     = ResolveRva(Offset::GameObjectsRuntime::Heroes);
+        g_ctx.minionManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Minions);
+        g_ctx.turretManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Turrets);
+        g_ctx.missileManagerGlobal  = ResolveRva(Offset::GameObjectsRuntime::Missiles);
+        g_ctx.navGridGlobal         = ResolveRva(Offset::NavGridRuntime::NavGrid);
+        g_ctx.underMouseObjectGlobal = ResolveRva(Offset::GameObjectsRuntime::UnderMouseObject);
+        g_ctx.netInstanceGlobal     = ResolveRva(Offset::GameRuntime::NetInstance);
+        g_ctx.gameTimeGlobal        = ResolveRva(Offset::GameRuntime::GameTime);
+        g_ctx.chatClientGlobal      = ResolveRva(Offset::GameRuntime::ChatClient);
+        g_ctx.shopInstanceGlobal    = ResolveRva(Offset::GameRuntime::ShopInstance);
+        g_ctx.openWindowsArrayGlobal = ResolveRva(Offset::GameRuntime::OpenWindowsArray);
+        g_ctx.openWindowsCountGlobal = ResolveRva(Offset::GameRuntime::OpenWindowsCount);
+        g_ctx.cursorInstanceGlobal  = ResolveRva(Offset::GameRuntime::CursorPosRaw);
+        g_ctx.mouseScreenVec2Global = ResolveRva(Offset::GameRuntime::MouseScreenVec2);
+        g_ctx.hudInstanceGlobal     = ResolveRva(Offset::DrawingRuntime::HudInstance);
+        g_ctx.viewPortGlobal        = ResolveRva(Offset::DrawingRuntime::ViewPort);
+        g_ctx.viewPort2Global       = ResolveRva(Offset::DrawingRuntime::ViewPort2);
+        g_ctx.rendererGlobal        = ResolveRva(Offset::DrawingRuntime::Renderer);
+        g_ctx.viewProjGlobal        = ResolveRva(Offset::DrawingRuntime::ViewProjOffset);
 
         if (g_ctx.localPlayerGlobal &&
             g_ctx.objectManagerGlobal &&
@@ -187,12 +191,13 @@ namespace CoreRuntime {
             g_ctx.lastErrorMask |= 1u << 1;
         }
 
-        g_ctx.worldToScreenFn = ResolveRva(Offset::Function::WorldToScreen);
-        g_ctx.issueOrderFn = ResolveRva(Offset::Function::IssueOrder);
-        g_ctx.castSpellFn = ResolveRva(Offset::Function::CastSpellSafe);
-        g_ctx.getPingFn = ResolveRva(Offset::Function::GetPing);
-        g_ctx.getAttackDelayFn = ResolveRva(Offset::Function::GetAttackDelay);
-        g_ctx.getAttackWindupFn = ResolveRva(Offset::Function::GetAttackWindup);
+        // ── Function call table (translated from Offset::Function::* → grouped namespaces) ──
+        g_ctx.worldToScreenFn   = ResolveRva(Offset::DrawingRuntime::WorldToScreen);
+        g_ctx.issueOrderFn      = ResolveRva(Offset::ControlRuntime::IssueOrder);
+        g_ctx.castSpellFn       = ResolveRva(Offset::ControlRuntime::CastSpellSafe);
+        g_ctx.getPingFn         = ResolveRva(Offset::GameRuntime::GetPing);
+        g_ctx.getAttackDelayFn  = ResolveRva(Offset::ControlRuntime::GetAttackDelay);
+        g_ctx.getAttackWindupFn = ResolveRva(Offset::ControlRuntime::GetAttackWindup);
 
         if (g_ctx.worldToScreenFn &&
             g_ctx.issueOrderFn &&
@@ -236,7 +241,7 @@ namespace CoreRuntime {
         g_ctx.viewPort = ReadGlobalPtr(g_ctx.viewPortGlobal);
         g_ctx.viewPort2 = ReadGlobalPtr(g_ctx.viewPort2Global);
         g_ctx.renderer = ReadGlobalPtr(g_ctx.rendererGlobal);
-        // View/projection matrices live directly at base + ViewMatrixInst in the
+        // View/projection matrices live directly at base + ViewProjOffset in the
         // current NightSharp lineage. This is matrix memory, not a pointer slot.
         g_ctx.viewProjInstance = g_ctx.viewProjGlobal;
 

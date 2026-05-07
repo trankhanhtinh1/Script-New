@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../generated/MapData.generated.h"
+#include "../Data/MapData.h"
 #include "../../core/CoreAPI.h"
 
 namespace SDK::Map {

@@ -14,6 +14,8 @@ namespace CoreView {
     };
 
     inline bool GetRendererSize(Vec2& out);
+    inline bool ReadViewProjection(float out[16]);
+    inline Vec2 GetMouseScreenPos();
 
     inline bool IsFiniteFloat(float value) {
         return value == value && value > -3.4e38f && value < 3.4e38f;
@@ -32,6 +34,200 @@ namespace CoreView {
         }
 
         return value.x >= -8192.0f && value.x <= 8192.0f && value.y >= -8192.0f && value.y <= 8192.0f;
+    }
+
+    inline bool IsPlausibleWorldVec3(const Vec3& value) {
+        if (!IsFiniteFloat(value.x) || !IsFiniteFloat(value.y) || !IsFiniteFloat(value.z)) {
+            return false;
+        }
+        return value.x >= -30000.0f && value.x <= 30000.0f &&
+               value.y >= -5000.0f && value.y <= 5000.0f &&
+               value.z >= -30000.0f && value.z <= 30000.0f;
+    }
+
+    inline float AbsFloat(float value) {
+        return value < 0.0f ? -value : value;
+    }
+
+    inline bool InvertMatrix4(const float m[16], float out[16]) {
+        float inv[16] = {};
+
+        inv[0] = m[5]  * m[10] * m[15] -
+                 m[5]  * m[11] * m[14] -
+                 m[9]  * m[6]  * m[15] +
+                 m[9]  * m[7]  * m[14] +
+                 m[13] * m[6]  * m[11] -
+                 m[13] * m[7]  * m[10];
+
+        inv[4] = -m[4]  * m[10] * m[15] +
+                  m[4]  * m[11] * m[14] +
+                  m[8]  * m[6]  * m[15] -
+                  m[8]  * m[7]  * m[14] -
+                  m[12] * m[6]  * m[11] +
+                  m[12] * m[7]  * m[10];
+
+        inv[8] = m[4]  * m[9] * m[15] -
+                 m[4]  * m[11] * m[13] -
+                 m[8]  * m[5] * m[15] +
+                 m[8]  * m[7] * m[13] +
+                 m[12] * m[5] * m[11] -
+                 m[12] * m[7] * m[9];
+
+        inv[12] = -m[4]  * m[9] * m[14] +
+                   m[4]  * m[10] * m[13] +
+                   m[8]  * m[5] * m[14] -
+                   m[8]  * m[6] * m[13] -
+                   m[12] * m[5] * m[10] +
+                   m[12] * m[6] * m[9];
+
+        inv[1] = -m[1]  * m[10] * m[15] +
+                  m[1]  * m[11] * m[14] +
+                  m[9]  * m[2] * m[15] -
+                  m[9]  * m[3] * m[14] -
+                  m[13] * m[2] * m[11] +
+                  m[13] * m[3] * m[10];
+
+        inv[5] = m[0]  * m[10] * m[15] -
+                 m[0]  * m[11] * m[14] -
+                 m[8]  * m[2] * m[15] +
+                 m[8]  * m[3] * m[14] +
+                 m[12] * m[2] * m[11] -
+                 m[12] * m[3] * m[10];
+
+        inv[9] = -m[0]  * m[9] * m[15] +
+                  m[0]  * m[11] * m[13] +
+                  m[8]  * m[1] * m[15] -
+                  m[8]  * m[3] * m[13] -
+                  m[12] * m[1] * m[11] +
+                  m[12] * m[3] * m[9];
+
+        inv[13] = m[0]  * m[9] * m[14] -
+                  m[0]  * m[10] * m[13] -
+                  m[8]  * m[1] * m[14] +
+                  m[8]  * m[2] * m[13] +
+                  m[12] * m[1] * m[10] -
+                  m[12] * m[2] * m[9];
+
+        inv[2] = m[1]  * m[6] * m[15] -
+                 m[1]  * m[7] * m[14] -
+                 m[5]  * m[2] * m[15] +
+                 m[5]  * m[3] * m[14] +
+                 m[13] * m[2] * m[7] -
+                 m[13] * m[3] * m[6];
+
+        inv[6] = -m[0]  * m[6] * m[15] +
+                  m[0]  * m[7] * m[14] +
+                  m[4]  * m[2] * m[15] -
+                  m[4]  * m[3] * m[14] -
+                  m[12] * m[2] * m[7] +
+                  m[12] * m[3] * m[6];
+
+        inv[10] = m[0]  * m[5] * m[15] -
+                  m[0]  * m[7] * m[13] -
+                  m[4]  * m[1] * m[15] +
+                  m[4]  * m[3] * m[13] +
+                  m[12] * m[1] * m[7] -
+                  m[12] * m[3] * m[5];
+
+        inv[14] = -m[0]  * m[5] * m[14] +
+                   m[0]  * m[6] * m[13] +
+                   m[4]  * m[1] * m[14] -
+                   m[4]  * m[2] * m[13] -
+                   m[12] * m[1] * m[6] +
+                   m[12] * m[2] * m[5];
+
+        inv[3] = -m[1] * m[6] * m[11] +
+                  m[1] * m[7] * m[10] +
+                  m[5] * m[2] * m[11] -
+                  m[5] * m[3] * m[10] -
+                  m[9] * m[2] * m[7] +
+                  m[9] * m[3] * m[6];
+
+        inv[7] = m[0] * m[6] * m[11] -
+                 m[0] * m[7] * m[10] -
+                 m[4] * m[2] * m[11] +
+                 m[4] * m[3] * m[10] +
+                 m[8] * m[2] * m[7] -
+                 m[8] * m[3] * m[6];
+
+        inv[11] = -m[0] * m[5] * m[11] +
+                   m[0] * m[7] * m[9] +
+                   m[4] * m[1] * m[11] -
+                   m[4] * m[3] * m[9] -
+                   m[8] * m[1] * m[7] +
+                   m[8] * m[3] * m[5];
+
+        inv[15] = m[0] * m[5] * m[10] -
+                  m[0] * m[6] * m[9] -
+                  m[4] * m[1] * m[10] +
+                  m[4] * m[2] * m[9] +
+                  m[8] * m[1] * m[6] -
+                  m[8] * m[2] * m[5];
+
+        float det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+        if (AbsFloat(det) < 0.000001f) {
+            return false;
+        }
+
+        det = 1.0f / det;
+        for (int i = 0; i < 16; ++i) {
+            out[i] = inv[i] * det;
+        }
+        return true;
+    }
+
+    inline bool UnprojectNdc(const Vec3& ndc, const float inv[16], Vec3& out) {
+        const Vec4 clip(ndc.x, ndc.y, ndc.z, 1.0f);
+        Vec4 world = {};
+        world.x = clip.x * inv[0] + clip.y * inv[4] + clip.z * inv[8]  + clip.w * inv[12];
+        world.y = clip.x * inv[1] + clip.y * inv[5] + clip.z * inv[9]  + clip.w * inv[13];
+        world.z = clip.x * inv[2] + clip.y * inv[6] + clip.z * inv[10] + clip.w * inv[14];
+        world.w = clip.x * inv[3] + clip.y * inv[7] + clip.z * inv[11] + clip.w * inv[15];
+        if (AbsFloat(world.w) < 0.000001f) {
+            out = {};
+            return false;
+        }
+
+        const float invW = 1.0f / world.w;
+        out = { world.x * invW, world.y * invW, world.z * invW };
+        return IsPlausibleWorldVec3(out);
+    }
+
+    inline bool ScreenToWorldOnPlane(const Vec2& screen, float planeY, Vec3& out) {
+        float matrix[16] = {};
+        float inv[16] = {};
+        Vec2 size = {};
+        if (!IsPlausibleScreenVec2(screen) ||
+            !ReadViewProjection(matrix) ||
+            !GetRendererSize(size) ||
+            size.x <= 0.0f ||
+            size.y <= 0.0f ||
+            !InvertMatrix4(matrix, inv)) {
+            out = {};
+            return false;
+        }
+
+        const float ndcX = (screen.x / size.x) * 2.0f - 1.0f;
+        const float ndcY = 1.0f - (screen.y / size.y) * 2.0f;
+
+        Vec3 nearPoint = {};
+        Vec3 farPoint = {};
+        if (!UnprojectNdc({ ndcX, ndcY, 0.0f }, inv, nearPoint) ||
+            !UnprojectNdc({ ndcX, ndcY, 1.0f }, inv, farPoint)) {
+            out = {};
+            return false;
+        }
+
+        const Vec3 dir = farPoint - nearPoint;
+        if (AbsFloat(dir.y) < 0.0001f) {
+            out = farPoint;
+            return IsPlausibleWorldVec3(out);
+        }
+
+        const float t = (planeY - nearPoint.y) / dir.y;
+        out = nearPoint + dir * t;
+        out.y = planeY;
+        return IsPlausibleWorldVec3(out);
     }
 
     inline bool GetRendererSize(Vec2& out) {
@@ -71,7 +267,7 @@ namespace CoreView {
 
     inline uintptr_t GetViewportW2S() {
         const auto viewport = GetViewport();
-        return Globals::IsValidPtr(viewport) ? (viewport + Offset::Hud::ViewportW2S) : 0;
+        return Globals::IsValidPtr(viewport) ? (viewport + Offset::HudRuntime::ViewportW2S) : 0;
     }
 
     inline uintptr_t GetHudSpellInfo() {
@@ -79,7 +275,7 @@ namespace CoreView {
         if (!Globals::IsValidPtr(hud)) {
             return 0;
         }
-        return Globals::Read<uintptr_t>(hud + Offset::Hud::SpellInfo);
+        return Globals::Read<uintptr_t>(hud + Offset::HudRuntime::SpellInfo);
     }
 
     inline bool ReadViewProjection(float out[16]) {
@@ -93,7 +289,7 @@ namespace CoreView {
         __try {
             for (int i = 0; i < 16; ++i) {
                 view[i] = Globals::Read<float>(inst + static_cast<uintptr_t>(i * sizeof(float)));
-                proj[i] = Globals::Read<float>(inst + Offset::Extra::ProjMatrixRelative + static_cast<uintptr_t>(i * sizeof(float)));
+                proj[i] = Globals::Read<float>(inst + Offset::DrawingMatrixRuntime::ProjMatrixRelative + static_cast<uintptr_t>(i * sizeof(float)));
             }
         }
         __except (1) {
@@ -148,21 +344,17 @@ namespace CoreView {
         return screen.IsValid();
     }
 
-    inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
-        float matrix[16] = {};
-        Vec2 size = {};
-        if (!ReadViewProjection(matrix) || !GetRendererSize(size)) {
-            screen = {};
-            return false;
-        }
-
+    inline bool ProjectWorldToScreen(const Vec3& world,
+                                     const float matrix[16],
+                                     const Vec2& size,
+                                     Vec2& screen) {
         Vec4 clip = {};
         clip.x = world.x * matrix[0] + world.y * matrix[4] + world.z * matrix[8] + matrix[12];
         clip.y = world.x * matrix[1] + world.y * matrix[5] + world.z * matrix[9] + matrix[13];
         clip.z = world.x * matrix[2] + world.y * matrix[6] + world.z * matrix[10] + matrix[14];
         clip.w = world.x * matrix[3] + world.y * matrix[7] + world.z * matrix[11] + matrix[15];
 
-        if (clip.w < 0.01f) {
+        if (clip.w < 0.01f || size.x <= 0.0f || size.y <= 0.0f) {
             screen = {};
             return false;
         }
@@ -175,6 +367,21 @@ namespace CoreView {
         }
 
         screen = {};
+        return false;
+    }
+
+    inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
+        float matrix[16] = {};
+        Vec2 size = {};
+        if (!ReadViewProjection(matrix) || !GetRendererSize(size)) {
+            screen = {};
+            return false;
+        }
+
+        if (ProjectWorldToScreen(world, matrix, size, screen)) {
+            return true;
+        }
+
         return WorldToScreenCall(world, screen);
     }
 
@@ -186,16 +393,23 @@ namespace CoreView {
 
     inline Vec3 GetMouseWorldPos() {
         const auto hud = CoreRuntime::GetContext().hudInstance;
-        if (!Globals::IsValidPtr(hud)) {
-            return {};
+        if (Globals::IsValidPtr(hud)) {
+            const auto input = Globals::Read<uintptr_t>(hud + Offset::HudRuntime::Input);
+            if (Globals::IsValidPtr(input)) {
+                const Vec3 candidate = Globals::Read<Vec3>(input + Offset::HudRuntime::MouseWorldPos);
+                if (!candidate.IsZero() && IsPlausibleWorldVec3(candidate)) {
+                    return candidate;
+                }
+            }
         }
 
-        const auto input = Globals::Read<uintptr_t>(hud + Offset::Hud::Input);
-        if (!Globals::IsValidPtr(input)) {
-            return {};
+        const Vec2 screen = GetMouseScreenPos();
+        Vec3 fallback = {};
+        if (ScreenToWorldOnPlane(screen, 0.0f, fallback)) {
+            return fallback;
         }
 
-        return Globals::Read<Vec3>(input + Offset::Hud::MouseWorldPos);
+        return {};
     }
 
     inline Vec2 GetMouseScreenPos() {
@@ -224,12 +438,12 @@ namespace CoreView {
             return 0;
         }
 
-        const auto input = Globals::Read<uintptr_t>(hud + Offset::Hud::Input);
+        const auto input = Globals::Read<uintptr_t>(hud + Offset::HudRuntime::Input);
         if (!Globals::IsValidPtr(input)) {
             return 0;
         }
 
-        return Globals::Read<uint32_t>(input + Offset::Hud::SelectedObjNetId);
+        return Globals::Read<uint32_t>(input + Offset::HudInputLayout::SelectedObjNetId);
     }
 
 } // namespace CoreView

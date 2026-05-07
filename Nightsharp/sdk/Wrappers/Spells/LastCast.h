@@ -63,18 +63,10 @@ namespace SDK::LastCast {
     }
 
     inline void Reset() {
+        LastCastPacketSentState() = CastPacketEntry{};
+        LastCastedSpellState() = CastPacketEntry{};
         LastCastPacketSent = nullptr;
         LastCastedSpell = nullptr;
-        __try {
-            LastCastPacketSentState().Slot = SpellSlot::Unknown;
-            LastCastPacketSentState().TargetNetworkId = 0;
-            LastCastPacketSentState().Tick = 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-        __try {
-            LastCastedSpellState().Slot = SpellSlot::Unknown;
-            LastCastedSpellState().TargetNetworkId = 0;
-            LastCastedSpellState().Tick = 0;
-        } __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
 } // namespace SDK::LastCast

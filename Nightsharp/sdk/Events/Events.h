@@ -25,6 +25,7 @@
 // ============================================================================
 
 #include "AnimationTracker.h"
+#include "BuffTracker.h"
 #include "Dash.h"
 #include "Gapcloser.h"
 #include "InterruptableSpell.h"
@@ -40,6 +41,7 @@
 namespace SDK::Events {
 
     // ── Re-export arg types ──
+    using BuffArgs                      = BuffEventArgs;
     using DashArgs                      = Dash::DashArgs;
     using TeleportEventArgs             = Teleport::TeleportEventArgs;
     using TurretArgs                    = Turret::TurretArgs;
@@ -97,6 +99,12 @@ namespace SDK::Events {
     inline bool AddOnTurretAttack(Turret::TurretHandler h) { return Turret::AddOnTurretAttack(h); }
     inline bool OnTurretAttack(Turret::TurretHandler h)    { return Turret::AddOnTurretAttack(h); }
 
+    // ── Buff (push: OnBuffUpdate; legacy OnBuffGain/OnBuffLose forwarded) ──
+    inline void AddOnBuffUpdate(BuffTracker::BuffCallback cb) { BuffTracker::OnBuffUpdate(std::move(cb)); }
+    inline void OnBuffUpdate(BuffTracker::BuffCallback cb)    { BuffTracker::OnBuffUpdate(std::move(cb)); }
+    inline void OnBuffGain(BuffTracker::BuffCallback cb)      { BuffTracker::OnBuffGain(std::move(cb)); }
+    inline void OnBuffLose(BuffTracker::BuffCallback cb)      { BuffTracker::OnBuffLose(std::move(cb)); }
+
     // ── Lifecycle ──
     inline void Initialize() {
         SpellCast::Initialize();
@@ -110,17 +118,12 @@ namespace SDK::Events {
         Stealth::Initialize();
         Teleport::Initialize();
         Turret::Initialize();
+        BuffTracker::Initialize();
     }
 
     inline void Update() {
         DispatchLoad();
-        // If hook is installed, use hybrid (hook fires OnProcessSpellCast,
-        // poll handles OnDoCast/OnStopCast). Otherwise pure poll.
-        if (SpellCast::hook::IsInstalled()) {
-            SpellCast::UpdateHybrid();
-        } else {
-            SpellCast::Update();
-        }
+        SpellCast::Update();          // Must run first — Gapcloser/Interrupter depend on cast data
         Path::Update();               // Must run before Dash
         ObjectTracker::Update();      // Track object add/remove
         PropertyTracker::Update();    // Track ActionState changes
@@ -145,6 +148,7 @@ namespace SDK::Events {
         Stealth::Reset();
         Teleport::Reset();
         Turret::Reset();
+        BuffTracker::Reset();
         ResetLoadHandlers();
     }
 

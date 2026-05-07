@@ -117,9 +117,10 @@ inline bool Check(const AIHeroClient& hero,
         return false;
     }
 
-    if (hero.IsInvulnerable()) {
-        return true;
-    }
+    // Do not trust AttackableUnit::IsInvulnerable on the current game build.
+    // The backing offset is unstable and can read true for normal champions,
+    // which makes TargetSelector return no hero targets. Keep this helper
+    // buff-driven until the raw flag is re-verified.
 
     auto* entries = detail::Entries();
     if (!entries) {
@@ -170,4 +171,3 @@ inline bool Check(const AIHeroClient& hero,
 
 } // namespace Invulnerable
 } // namespace SDK::Utils
-

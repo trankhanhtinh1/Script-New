@@ -66,13 +66,11 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <UseMultiToolTask>false</UseMultiToolTask>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core\spoof;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -90,56 +88,18 @@
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <UseMultiToolTask>false</UseMultiToolTask>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)core;$(ProjectDir)core\spoof;$(ProjectDir)generated;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;$(ProjectDir)sdk\Data;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\ImGui-DirectX-11-Kiero-Hook-master\Nightsharp;$(ProjectDir)core\spoof;$(ProjectDir)imgui;$(ProjectDir)menu;$(ProjectDir)overlay;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateManifest>false</GenerateManifest>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;dwmapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
-    <ClCompile Include="generated\DamageData.26_6.chunk00.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk01.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk02.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk03.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk04.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk05.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk06.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk07.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk08.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk09.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.26_6.chunk10.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile Include="generated\DamageData.generated.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
@@ -147,45 +107,15 @@
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="overlay\Overlay.cpp" />
-    <ClCompile Include="sdk\Data\26.6.cpp">
-      <AdditionalOptions>/bigobj /Zm300 %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="core\Globals.h" />
-    <ClInclude Include="core\KeyAuth.h" />
-    <ClInclude Include="core\VerifyUserKey.h" />
-    <ClInclude Include="core\CoreBuffs.h" />
-    <ClInclude Include="core\CoreControl.h" />
-    <ClInclude Include="core\CoreSpellBook.h" />
-    <ClInclude Include="core\CoreValidation.h" />
-    <ClInclude Include="core\CoreView.h" />
-    <ClInclude Include="core\CrashTelemetry.h" />
-    <ClInclude Include="core\NightPackage.h" />
-    <ClInclude Include="core\CoreRuntime.h" />
     <ClInclude Include="core\CoreAPI.h" />
-    <ClInclude Include="core\CoreGame.h" />
-    <ClInclude Include="core\CoreItem.h" />
-    <ClInclude Include="core\CoreNavGrid.h" />
-    <ClInclude Include="core\CoreObjects.h" />
-    <ClInclude Include="core\LeagueObfuscation.h" />
-    <ClInclude Include="core\Offsets.generated.h" />
-    <ClInclude Include="core\Offsets.h" />
-    <ClInclude Include="core\RuntimeAPI.h" />
-    <ClInclude Include="core\CoreSpellCastInfo.h" />
-    <ClInclude Include="core\Vector.h" />
     <ClInclude Include="core\spoof\spoofcall.h" />
-    <ClInclude Include="Third_Party\clipper\clipper.h" />
     <ClInclude Include="crt_shim.h" />
-    <ClInclude Include="generated\DamageData.generated.h" />
-    <ClInclude Include="generated\GapcloserData.generated.h" />
-    <ClInclude Include="generated\InterruptableSpellData.generated.h" />
-    <ClInclude Include="generated\MapData.generated.h" />
-    <ClInclude Include="generated\PriorityData.generated.h" />
-    <ClInclude Include="generated\SpellDatabaseData.generated.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imgui_impl_dx11.h" />
+    <ClInclude Include="imgui\imgui_impl_dx9.h" />
     <ClInclude Include="imgui\imgui_impl_win32.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
     <ClInclude Include="imgui\imstb_rectpack.h" />
@@ -193,235 +123,21 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="imgui\stb_sprintf.h" />
     <ClInclude Include="includes.h" />
+    <ClInclude Include="legacy_stubs.h" />
     <ClInclude Include="menu\MenuConfig.h" />
-    <ClInclude Include="menu\MenuItemRenderers.h" />
     <ClInclude Include="menu\MenuPersistence.h" />
     <ClInclude Include="menu\MenuRendererImGui.h" />
-    <ClInclude Include="menu\MenuTheme.h" />
     <ClInclude Include="menu\MenuUI.h" />
     <ClInclude Include="menu\NightSharpMenu.h" />
     <ClInclude Include="menu\PluginHostBridge.h" />
     <ClInclude Include="menu\PluginRegistry.h" />
     <ClInclude Include="menu\SDKDiagnostics.h" />
-    <ClInclude Include="menu\Translations.h" />
     <ClInclude Include="ns_sscanf.h" />
     <ClInclude Include="ns_strtod.h" />
     <ClInclude Include="overlay\Overlay.h" />
     <ClInclude Include="plugins\IPlugin.h" />
     <ClInclude Include="plugins\PluginBootstrap.h" />
     <ClInclude Include="plugins\PluginManager.h" />
-    <ClInclude Include="plugins\PluginSdkCompat.h" />
-    <ClInclude Include="plugins\champions\EzrealPlugin.h" />
-    <ClInclude Include="plugins\champions\JinxPlugin.h" />
-    <ClInclude Include="plugins\champions\KalistaPlugin.h" />
-    <ClInclude Include="plugins\champions\KarthusPlugin.h" />
-    <ClInclude Include="plugins\champions\KogmawPlugin.h" />
-    <ClInclude Include="plugins\champions\ViktorPlugin.h" />
-    <ClInclude Include="plugins\champions\XerathPlugin.h" />
-    <ClInclude Include="plugins\champions\ZedPlugin.h" />
-    <ClInclude Include="plugins\champions\RTXPower\Ezreal.h" />
-    <ClInclude Include="plugins\core\OrbwalkerPlugin.h" />
-    <ClInclude Include="plugins\core\RenderTestPlugin.h" />
-    <ClInclude Include="sdk\Data\26.6.h" />
-    <ClInclude Include="sdk\Data\DamageData.generated.h" />
-    <ClInclude Include="sdk\Data\Database.h" />
-    <ClInclude Include="sdk\Data\Gapclosers.h" />
-    <ClInclude Include="sdk\Data\GlobalInterruptableSpellsList.h" />
-    <ClInclude Include="sdk\Data\InterruptableSpells.h" />
-    <ClInclude Include="sdk\Data\Map.h" />
-    <ClInclude Include="sdk\Data\Priority.h" />
-    <ClInclude Include="sdk\Data\SpellData.h" />
-    <ClInclude Include="sdk\Extensions\Enumerable.h" />
-    <ClInclude Include="sdk\Extensions\Extensions.h" />
-    <ClInclude Include="sdk\Extensions\Unit.h" />
-    <ClInclude Include="sdk\Extensions\SharpDX\Generic.h" />
-    <ClInclude Include="sdk\Extensions\SharpDX\Vector2Extensions.h" />
-    <ClInclude Include="sdk\Extensions\SharpDX\Vector3Extensions.h" />
-    <ClInclude Include="sdk\Core\Bootstrap.h" />
-    <ClInclude Include="sdk\Core\Constants.h" />
-    <ClInclude Include="sdk\Enumerations\DangerLevel.h" />
-    <ClInclude Include="sdk\Enumerations\CollisionableObjects.h" />
-    <ClInclude Include="sdk\Enumerations\CollisionObjects.h" />
-    <ClInclude Include="sdk\Enumerations\DamageType.h" />
-    <ClInclude Include="sdk\Enumerations\GameObjectOrder.h" />
-    <ClInclude Include="sdk\Enumerations\GapcloserType.h" />
-    <ClInclude Include="sdk\Enumerations\HealthPredictionType.h" />
-    <ClInclude Include="sdk\Enumerations\HitChance.h" />
-    <ClInclude Include="sdk\Enumerations\JungleType.h" />
-    <ClInclude Include="sdk\Enumerations\KeyBindType.h" />
-    <ClInclude Include="sdk\Enumerations\LogLevel.h" />
-    <ClInclude Include="sdk\Enumerations\MinionOrderTypes.h" />
-    <ClInclude Include="sdk\Enumerations\MinionTeam.h" />
-    <ClInclude Include="sdk\Enumerations\MinionTypes.h" />
-    <ClInclude Include="sdk\Enumerations\NotificationIconType.h" />
-    <ClInclude Include="sdk\Enumerations\PerformanceType.h" />
-    <ClInclude Include="sdk\Enumerations\SkillshotType.h" />
-    <ClInclude Include="sdk\Enumerations\SpellSlot.h" />
-    <ClInclude Include="sdk\Enumerations\SpellType.h" />
-    <ClInclude Include="sdk\Enumerations\TeleportStatus.h" />
-    <ClInclude Include="sdk\Enumerations\TeleportType.h" />
-    <ClInclude Include="sdk\Enumerations\TurretType.h" />
-    <ClInclude Include="sdk\Core\Game.h" />
-    <ClInclude Include="sdk\Core\GameObjects.h" />
-    <ClInclude Include="sdk\Core\ItemCatalog.h" />
-    <ClInclude Include="sdk\Core\Items.h" />
-    <ClInclude Include="sdk\Core\MenuUI.h" />
-    <ClInclude Include="sdk\Core\Objects.h" />
-    <ClInclude Include="sdk\Core\Variables.h" />
-    <ClInclude Include="sdk\Events\AnimationTracker.h" />
-    <ClInclude Include="sdk\Events\BuffTracker.h" />
-    <ClInclude Include="sdk\Events\ObjectTracker.h" />
-    <ClInclude Include="sdk\Events\PathTracker.h" />
-    <ClInclude Include="sdk\Events\PropertyTracker.h" />
-    <ClInclude Include="sdk\Events\SpellCastTracker.h" />
-    <ClInclude Include="sdk\Events\AntiGapcloser.h" />
-    <ClInclude Include="sdk\Events\Dash.h" />
-    <ClInclude Include="sdk\Events\Events.h" />
-    <ClInclude Include="sdk\Events\Gapcloser.h" />
-    <ClInclude Include="sdk\Events\InterruptableSpell.h" />
-    <ClInclude Include="sdk\Events\Interrupter.h" />
-    <ClInclude Include="sdk\Events\Load.h" />
-    <ClInclude Include="sdk\Events\Stealth.h" />
-    <ClInclude Include="sdk\Events\Teleport.h" />
-    <ClInclude Include="sdk\Events\Turret.h" />
-    <ClInclude Include="sdk\GameObjects\AIBaseClient.h" />
-    <ClInclude Include="sdk\GameObjects\AIHeroClient.h" />
-    <ClInclude Include="sdk\GameObjects\AIMinionClient.h" />
-    <ClInclude Include="sdk\GameObjects\AITurretClient.h" />
-    <ClInclude Include="sdk\GameObjects\AttackableUnit.h" />
-    <ClInclude Include="sdk\GameObjects\GameObject.h" />
-    <ClInclude Include="sdk\GameObjects\MissileClient.h" />
-    <ClInclude Include="sdk\GameObjects\ObjectManager.h" />
-    <ClInclude Include="sdk\GameObjects\SpellbookClient.h" />
-    <ClInclude Include="sdk\GameObjects\SpellDataInstClient.h" />
-    <ClInclude Include="sdk\Math\Collision.h" />
-    <ClInclude Include="sdk\Math\ConvexHull.h" />
-    <ClInclude Include="sdk\Math\Geometry.h" />
-    <ClInclude Include="sdk\Math\HealthPrediction.h" />
-    <ClInclude Include="sdk\Math\Prediction.h" />
-    <ClInclude Include="sdk\Math\Polygons\ArcPoly.h" />
-    <ClInclude Include="sdk\Math\Polygons\CirclePoly.h" />
-    <ClInclude Include="sdk\Math\Polygons\LinePoly.h" />
-    <ClInclude Include="sdk\Math\Polygons\Polygon.h" />
-    <ClInclude Include="sdk\Math\Polygons\RectanglePoly.h" />
-    <ClInclude Include="sdk\Math\Polygons\RingPoly.h" />
-    <ClInclude Include="sdk\Math\Polygons\SectorPoly.h" />
-    <ClInclude Include="sdk\Math\Prediction\Cluster.h" />
-    <ClInclude Include="sdk\Math\Prediction\GamePath.h" />
-    <ClInclude Include="sdk\Math\Prediction\Health.h" />
-    <ClInclude Include="sdk\Math\Prediction\Movement.h" />
-    <ClInclude Include="sdk\Math\Prediction\Types.h" />
-    <ClInclude Include="sdk\External\NightSharpAPI.h" />
-    <ClInclude Include="sdk\External\nightsharp_plugin.h" />
-    <ClInclude Include="sdk\SDK.h" />
-    <ClInclude Include="sdk\Signals\Signal.h" />
-    <ClInclude Include="sdk\Signals\SignalManager.h" />
-    <ClInclude Include="sdk\Utils\ActionQueue.h" />
-    <ClInclude Include="sdk\Utils\AutoAttack.h" />
-    <ClInclude Include="sdk\Utils\BinarySerializer.h" />
-    <ClInclude Include="sdk\Utils\Cache.h" />
-    <ClInclude Include="sdk\Utils\CallbackPerformance.h" />
-    <ClInclude Include="sdk\Utils\Cursor.h" />
-    <ClInclude Include="sdk\Utils\DelayAction.h" />
-    <ClInclude Include="sdk\Utils\DynamicInitializer.h" />
-    <ClInclude Include="sdk\Utils\IFilter.h" />
-    <ClInclude Include="sdk\Utils\Invulnerable.h" />
-    <ClInclude Include="sdk\Utils\Jungle.h" />
-    <ClInclude Include="sdk\Utils\JsonFactory.h" />
-    <ClInclude Include="sdk\Utils\KeyConvert.h" />
-    <ClInclude Include="sdk\Utils\Logging.h" />
-    <ClInclude Include="sdk\Utils\MathUtils.h" />
-    <ClInclude Include="sdk\Utils\Minion.h" />
-    <ClInclude Include="sdk\Utils\Performance.h" />
-    <ClInclude Include="sdk\Utils\Render.h" />
-    <ClInclude Include="sdk\Utils\ResourceFactory.h" />
-    <ClInclude Include="sdk\Utils\ResourceImportAttribute.h" />
-    <ClInclude Include="sdk\Utils\ResourceLoader.h" />
-    <ClInclude Include="sdk\Utils\StatusCheck.h" />
-    <ClInclude Include="sdk\Utils\Storage.h" />
-    <ClInclude Include="sdk\Utils\TickOperation.h" />
-    <ClInclude Include="sdk\Utils\Utils.h" />
-    <ClInclude Include="sdk\Utils\WeightedRandom.h" />
-    <ClInclude Include="sdk\Utils\WindowsKeys.h" />
-    <ClInclude Include="sdk\UI\Cursor.h" />
-    <ClInclude Include="sdk\UI\Drawing.h" />
-    <ClInclude Include="sdk\UI\PermaShow.h" />
-    <ClInclude Include="sdk\UI\Utils.h" />
-    <ClInclude Include="sdk\UI\Notifications\ANotification.h" />
-    <ClInclude Include="sdk\UI\Notifications\Notification.h" />
-    <ClInclude Include="sdk\UI\Notifications\NotificationIcons.h" />
-    <ClInclude Include="sdk\UI\Notifications\Notifications.h" />
-    <ClInclude Include="sdk\UI\IMenu\IMenu.h" />
-    <ClInclude Include="sdk\UI\IMenu\Abstracts\AMenuComponent.h" />
-    <ClInclude Include="sdk\UI\IMenu\Customizer\MenuCustomizer.h" />
-    <ClInclude Include="sdk\UI\IMenu\ColorSpectrum.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\ADrawable.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\ADrawableAdapter.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\BlueTheme.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\BlueTheme2.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\ColoredTheme.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\DefaultTheme.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\ITheme.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\LightTheme.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\LightTheme2.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\MenuSettings.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\TechTheme.h" />
-    <ClInclude Include="sdk\UI\IMenu\Skins\ThemeManager.h" />
-    <ClInclude Include="sdk\UI\IMenu\Menu.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuBool.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuButton.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuColor.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuKeyBind.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuList.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuManager.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuItem.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuValueChangedEventArgs.h" />
-    <ClInclude Include="sdk\UI\IMenu\RadioMenu.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuSeparator.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuSlider.h" />
-    <ClInclude Include="sdk\UI\IMenu\MenuSliderF.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuBool.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuButton.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuColor.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuKeyBind.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuList.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuSeparator.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuSlider.h" />
-    <ClInclude Include="sdk\UI\IMenu\Values\MenuSliderButton.h" />
-    <ClInclude Include="sdk\UI\UI.h" />
-    <ClInclude Include="sdk\Wrappers\Damages\Damage.h" />
-    <ClInclude Include="sdk\Wrappers\Damages\DamageJson.h" />
-    <ClInclude Include="sdk\Wrappers\Damages\DamageLibrary.h" />
-    <ClInclude Include="sdk\Wrappers\Damages\DamageMastery.h" />
-    <ClInclude Include="sdk\Wrappers\Damages\DamagePassives.h" />
-    <ClInclude Include="sdk\Wrappers\GameObjects.h" />
-    <ClInclude Include="sdk\Wrappers\Map.h" />
-    <ClInclude Include="sdk\Wrappers\Orbwalking\Orbwalker.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\Database\SpellDatabase.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\Database\SpellDatabaseEntry.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\LastCast.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\LastCastPacketSentEntry.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\LastCastedSpellEntry.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\Spell.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\BaseSpell.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\Skillshot.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotCircle.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotCone.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotLine.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissile.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileArc.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileCircle.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileCone.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotMissileLine.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\SkillshotRing.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\Tracker\Detector.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\Tracker\Skillshots\_ZiggsR.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\Tracker\Tracker.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\Targeted.h" />
-    <ClInclude Include="sdk\Wrappers\Spells\SpellTypes\TargetedMissile.h" />
-    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelector.h" />
-    <ClInclude Include="sdk\Wrappers\TargetSelector\TargetSelectorDefault.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="core\spoof\spoof.asm" />

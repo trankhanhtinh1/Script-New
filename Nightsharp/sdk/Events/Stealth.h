@@ -1,8 +1,33 @@
 #pragma once
 
+// ============================================================================
+// Stealth — push-driven stealth event surface
+// ============================================================================
+// Subscribes to `CoreEventHook::Events::OnStealth` (id 51), the piggy-back
+// edge fired from `HkOnBuffAdd` when the added buff name matches a known
+// stealth identifier (Invisible, Camouflage, *Stealth, *HideIn*, …).
+//
+// `sender` = hero, `context` = BuffData*, `intParam` = 1 (entering stealth).
+//
+// The previous visibility-poll loop (per-tick `IsVisible()` diff) is gone.
+// One semantic shift: there is no push edge for "leaving stealth" because
+// the BuffManager dispatcher does not surface buff removals. Consumers
+// that need to react when a hero re-appears should poll `hero.IsVisible()`
+// directly at the point of decision — this is rare in champion scripts
+// (most logic only cares about the hide event).
+//
+// `GetLastVisiblePosition()` and `GetStealthDuration()` continue to work:
+// the last visible position is captured at OnStealth-fire time from the
+// hero's current `Position()` (which the game has not yet hidden when the
+// dispatcher runs — buffs apply before vis is re-evaluated).
+// ============================================================================
+
+#include "../../core/CoreEventHook.h"
+#include "../../core/offset.h"
 #include "../../menu/MenuUI.h"
 #include "../Core/Game.h"
-#include "../Core/Objects.h"
+#include "../GameObjects/AIHeroClient.h"
+#include "../GameObjects/ObjectManager.h"
 
 #include <new>
 #include <unordered_map>
@@ -15,38 +40,64 @@ struct OnStealthEventArgs {
     AIHeroClient Sender = {};
     float Time = 0.0f;
 
-    bool IsValid() const {
-        return Sender.IsValid();
-    }
+    bool IsValid() const { return Sender.IsValid(); }
 };
 
 using StealthHandler = void(*)(const OnStealthEventArgs&);
 
 namespace detail {
     struct StealthState {
-        bool Initialized = false;
-        bool WasVisible = true;
         Vector3 LastVisiblePosition = {};
         float StealthStartTime = 0.0f;
+        bool IsStealthed = false;
     };
 
-    inline std::unordered_map<int, StealthState>* g_stealthStates = nullptr;
-    inline MenuUI::FixedList<StealthHandler, 64> g_stealthHandlers = {};
+    inline std::unordered_map<int, StealthState>* g_states = nullptr;
+    inline MenuUI::FixedList<StealthHandler, 64> g_handlers = {};
+    inline bool g_registered = false;
 
-    inline bool EnsureStealthStorage() {
-        if (!g_stealthStates) {
-            g_stealthStates = new(std::nothrow) std::unordered_map<int, StealthState>();
+    inline bool EnsureStorage() {
+        if (!g_states) {
+            g_states = new(std::nothrow) std::unordered_map<int, StealthState>();
         }
-        return g_stealthStates != nullptr;
+        return g_states != nullptr;
+    }
+
+    // CoreEventHook trampoline.
+    inline void OnStealthThunk(uintptr_t sender, uintptr_t /*context*/, int /*intParam*/) {
+        if (!EnsureStorage()) return;
+        AIHeroClient hero(sender);
+        if (!hero.IsValid() || hero.IsDead()) return;
+
+        const float now = Game::Time();
+        auto& state = (*g_states)[hero.NetworkId()];
+        state.IsStealthed         = true;
+        state.StealthStartTime    = now;
+        state.LastVisiblePosition = hero.Position();
+
+        OnStealthEventArgs args = {};
+        args.Sender       = hero;
+        args.IsStealthed  = true;
+        args.Time         = now;
+        args.LastPosition = state.LastVisiblePosition;
+
+        for (const auto& h : g_handlers) {
+            if (h) h(args);
+        }
     }
 }
 
 inline void Initialize() {
-    detail::EnsureStealthStorage();
+    detail::EnsureStorage();
+    if (!detail::g_registered) {
+        CoreEventHook::SetCallback(Offset::Events::OnStealth, detail::OnStealthThunk);
+        detail::g_registered = true;
+    }
 }
 
 inline bool AddOnStealth(StealthHandler handler) {
-    return handler && detail::g_stealthHandlers.push_back(handler);
+    Initialize();
+    return handler && detail::g_handlers.push_back(handler);
 }
 
 inline bool OnStealth(StealthHandler handler) {
@@ -54,91 +105,29 @@ inline bool OnStealth(StealthHandler handler) {
 }
 
 inline Vector3 GetLastVisiblePosition(const AIHeroClient& hero) {
-    if (!detail::g_stealthStates || !hero.IsValid()) {
-        return {};
-    }
-
-    const auto it = detail::g_stealthStates->find(hero.NetworkId());
-    return (it != detail::g_stealthStates->end()) ? it->second.LastVisiblePosition : Vector3{};
+    if (!detail::g_states || !hero.IsValid()) return {};
+    const auto it = detail::g_states->find(hero.NetworkId());
+    return (it != detail::g_states->end()) ? it->second.LastVisiblePosition : Vector3{};
 }
 
 inline float GetStealthDuration(const AIHeroClient& hero) {
-    if (!detail::g_stealthStates || !hero.IsValid()) {
-        return 0.0f;
-    }
-
-    const auto it = detail::g_stealthStates->find(hero.NetworkId());
-    if (it == detail::g_stealthStates->end() || it->second.WasVisible) {
-        return 0.0f;
-    }
-
+    if (!detail::g_states || !hero.IsValid()) return 0.0f;
+    const auto it = detail::g_states->find(hero.NetworkId());
+    if (it == detail::g_states->end() || !it->second.IsStealthed) return 0.0f;
+    // If the hero is now visible we treat the stealth state as ended even
+    // though we never received a push edge for it. Keeps the duration
+    // reading honest.
+    if (hero.IsVisible()) return 0.0f;
     return Game::Time() - it->second.StealthStartTime;
 }
 
 inline void Update() {
-    if (!detail::EnsureStealthStorage()) {
-        return;
-    }
-
-    const float now = Game::Time();
-    for (const auto& hero : ObjectManager::Heroes()) {
-        const int netId = hero.NetworkId();
-        if (!hero.IsValid() || netId == 0 || hero.IsDead()) {
-            if (netId != 0) {
-                detail::g_stealthStates->erase(netId);
-            }
-            continue;
-        }
-
-        const bool isVisible = hero.IsVisible();
-        auto& state = (*detail::g_stealthStates)[netId];
-        if (!state.Initialized) {
-            state.Initialized = true;
-            state.WasVisible = isVisible;
-            state.LastVisiblePosition = hero.Position();
-            continue;
-        }
-
-        if (state.WasVisible && !isVisible) {
-            state.StealthStartTime = now;
-
-            OnStealthEventArgs args = {};
-            args.Sender = hero;
-            args.IsStealthed = true;
-            args.Time = now;
-            args.LastPosition = state.LastVisiblePosition;
-
-            for (const auto& handler : detail::g_stealthHandlers) {
-                if (handler) {
-                    handler(args);
-                }
-            }
-        } else if (!state.WasVisible && isVisible) {
-            OnStealthEventArgs args = {};
-            args.Sender = hero;
-            args.IsStealthed = false;
-            args.Time = now;
-            args.LastPosition = hero.Position();
-
-            for (const auto& handler : detail::g_stealthHandlers) {
-                if (handler) {
-                    handler(args);
-                }
-            }
-        }
-
-        state.WasVisible = isVisible;
-        if (isVisible) {
-            state.LastVisiblePosition = hero.Position();
-        }
-    }
+    // Push-driven — nothing to poll.
 }
 
 inline void Reset() {
-    if (detail::g_stealthStates) {
-        detail::g_stealthStates->clear();
-    }
-    detail::g_stealthHandlers.clear();
+    if (detail::g_states) detail::g_states->clear();
+    detail::g_handlers.clear();
 }
 
 } // namespace SDK::Events::Stealth

@@ -168,26 +168,28 @@ namespace CoreBypass {
         }
     }
 
+    // Offset::Flag::IssueOrderFlag → Offset::ControlRuntime::IssueOrderFlag
     inline bool PrepareIssueOrder(uint8_t order) {
         const bool ok = MainloopCheck();
-        Globals::Write<int>(CoreRuntime::GetContext().moduleBase + Offset::Flag::IssueOrderFlag, static_cast<int>(order) + 17);
+        Globals::Write<int>(CoreRuntime::GetContext().moduleBase + Offset::ControlRuntime::IssueOrderFlag, static_cast<int>(order) + 17);
         return ok;
     }
 
     inline bool FinalizeIssueOrder(uint8_t order) {
         const bool ok = MainloopCheck();
-        Globals::Write<int>(CoreRuntime::GetContext().moduleBase + Offset::Flag::IssueOrderFlag, static_cast<int>(order) + 17);
+        Globals::Write<int>(CoreRuntime::GetContext().moduleBase + Offset::ControlRuntime::IssueOrderFlag, static_cast<int>(order) + 17);
         return ok;
     }
 
+    // Offset::Flag::CastSpellFlag → Offset::ControlRuntime::CastSpellFlag
     inline bool PrepareCastSpell() {
         const bool ok = MainloopCheck();
-        Globals::Write<uint8_t>(CoreRuntime::GetContext().moduleBase + Offset::Flag::CastSpellFlag, 1);
+        Globals::Write<uint8_t>(CoreRuntime::GetContext().moduleBase + Offset::ControlRuntime::CastSpellFlag, 1);
         return ok;
     }
 
     inline void ClearCastSpellFlag() {
-        Globals::Write<uint8_t>(CoreRuntime::GetContext().moduleBase + Offset::Flag::CastSpellFlag, 0);
+        Globals::Write<uint8_t>(CoreRuntime::GetContext().moduleBase + Offset::ControlRuntime::CastSpellFlag, 0);
     }
 
 } // namespace CoreBypass

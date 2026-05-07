@@ -50,16 +50,16 @@ namespace CoreGame {
 
         uintptr_t chatClient = ctx.chatClient;
         if (!Globals::IsValidPtr(chatClient) && ctx.moduleBase) {
-            chatClient = Globals::Read<uintptr_t>(ctx.moduleBase + Offset::Global::ChatInstance);
+            chatClient = Globals::Read<uintptr_t>(ctx.moduleBase + Offset::GameRuntime::ChatInstance);
         }
         if (!Globals::IsValidPtr(chatClient)) {
             return false;
         }
 
         __try {
-            const auto primary = Globals::Read<uint8_t>(chatClient + Offset::Hud::ChatOpen);
-            const auto editing = Globals::Read<uint8_t>(chatClient + 0x68);
-            const auto focused = Globals::Read<uint8_t>(chatClient + 0x6C);
+            const auto primary = Globals::Read<uint8_t>(chatClient + Offset::ChatClientLayout::PrimaryOpen);
+            const auto editing = Globals::Read<uint8_t>(chatClient + Offset::ChatClientLayout::Editing);
+            const auto focused = Globals::Read<uint8_t>(chatClient + Offset::ChatClientLayout::Focused);
 
             g_inputDebug.chatPrimary = primary;
             g_inputDebug.chatEditing = editing;
@@ -119,6 +119,12 @@ namespace CoreGame {
         return chatIsOpen;
     }
 
+    // OpenWindowsArray / OpenWindowsCount restored as RVAs on 26.6 (see
+    // Offset::GameRuntime::OpenWindowsArray for the hash-anchored signature
+    // used to recover them). The cheat reads the array externally, walks
+    // it as a flat qword[] and reports "shop open" when an entry equals the
+    // ShopInstance pointer - matching the legacy logic that the old build
+    // used and the user confirmed is required for the Orbwalker shop guard.
     inline bool IsShopOpen() {
         const auto& ctx = CoreRuntime::GetContext();
         uintptr_t shopInstance = ctx.shopInstance;
@@ -126,11 +132,11 @@ namespace CoreGame {
         uint32_t openWindowsCount = ctx.openWindowsCount;
 
         if (!Globals::IsValidPtr(shopInstance) && ctx.moduleBase) {
-            shopInstance = Globals::Read<uintptr_t>(ctx.moduleBase + Offset::Global::ShopInstance);
+            shopInstance = Globals::Read<uintptr_t>(ctx.moduleBase + Offset::GameRuntime::ShopInstance);
         }
         if (!Globals::IsValidPtr(openWindowsArray) && ctx.moduleBase) {
-            openWindowsArray = Globals::Read<uintptr_t>(ctx.moduleBase + Offset::Global::OpenWindowsArray);
-            openWindowsCount = Globals::Read<uint32_t>(ctx.moduleBase + Offset::Global::OpenWindowsCount);
+            openWindowsArray = Globals::Read<uintptr_t>(ctx.moduleBase + Offset::GameRuntime::OpenWindowsArray);
+            openWindowsCount = Globals::Read<uint32_t>(ctx.moduleBase + Offset::GameRuntime::OpenWindowsCount);
         }
 
         if (!Globals::IsValidPtr(shopInstance) ||
@@ -210,6 +216,22 @@ namespace CoreGame {
 
     inline InputDebugState GetInputDebugState() {
         return g_inputDebug;
+    }
+
+    // ── Game time (read from `*(float*)(base + Offset::Global::GameTime)`) ─────
+    // Phase 2 finalization (Apr 26/2026): the SDK chain (`sdk/Core/Game.h`,
+    // `sdk/GameObjects/GameObject.h::GetBuffRemainingTime`, `SpellDataInstClient
+    // ::RemainingCooldown / State / IsReady`, NightSharpAPIBinding::API_GetGameTime)
+    // calls `CoreAPI::Game::GetTime()` which aliases to `CoreGame::GetTime()`.
+    // Without this definition, every TU that pulls those default arguments
+    // fails C2039/C3861. The offset (0x1DE5420) is the same one `dllmain.cpp`
+    // already uses to wait for game-load (gt > 3.0f = on fountain).
+    inline float GetTime() {
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!ctx.moduleBase) {
+            return 0.0f;
+        }
+        return Globals::Read<float>(ctx.moduleBase + Offset::GameRuntime::GameTime);
     }
 
 } // namespace CoreGame

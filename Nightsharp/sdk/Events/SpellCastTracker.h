@@ -1,44 +1,44 @@
 #pragma once
 
 // ============================================================================
-// SpellCastTracker — Poll-based OnProcessSpellCast / OnDoCast / OnStopCast
+// SpellCastTracker — push-driven cast event surface
+// ============================================================================
+// Subscribes to the three CoreEventHook ids that cover the cast lifecycle:
 //
-// EnsoulSharp equivalents:
-//   AIBaseClient.OnProcessSpellCast  → SpellCast::AddOnProcessSpellCast()
-//   AIBaseClient.OnDoCast            → SpellCast::AddOnDoCast()
-//   Spellbook.OnStopCast             → SpellCast::AddOnStopCast()
+//   OnProcessSpell (1)  — Shadow-VMT hook on the message-factory dispatcher.
+//                         Fires the moment a hero begins a cast (windup
+//                         start) for EVERY hero on the map. Auto-attacks
+//                         surface here too with `intParam == 64`.
+//   OnDoCast (53)       — Inline detour piggy-back from `HkOnFinishCast`.
+//                         Fires when a cast resolves (projectile released
+//                         or instant hit landed) — paired one-to-one with
+//                         OnFinishCast on every successful cast.
+//   OnStopCast (2)      — Inline detour on the cancel path. Fires when an
+//                         active cast disappears BEFORE its end time
+//                         (interrupt, manual cancel, death during windup).
 //
-// How it works (manual-map safe, no hooks):
-//   Each tick we poll GetActiveSpellCast() for every hero.
-//   - New CastRef.address appears       → fire OnProcessSpellCast
-//   - CastRef disappears after windup   → fire OnDoCast
-//   - CastRef disappears before windup  → fire OnStopCast
+// All three hooks pass `context = SpellCastInfo*` and `intParam = SpellSlot`
+// (0-7 for Q/W/E/R/D/F + items, 64 for auto-attacks). We rebuild the SDK
+// `ProcessSpellCastEventArgs` / `StopCastEventArgs` from the SpellCastInfo
+// using `CoreSpellCastInfo::CastRef`, so the public API and the event-arg
+// shape are identical to the previous poll-based implementation.
 //
-// DEPENDENCY: CoreSpellCastInfo::CastRef (core/CoreSpellCastInfo.h)
-//   Provides: address, GetSlot, GetStartPos, GetEndPos, GetCastPos,
-//             GetCastDelay, IsAutoAttack, IsSpecialAttack, ReadSpellName,
-//             GetTargetIndex
-// DEPENDENCY: CoreObjects::ObjectRef::GetActiveSpellCast (core/CoreObjects.h)
-// DEPENDENCY: SDK ObjectManager::Heroes() (sdk/Core/Objects.h)
+// The previous tick loop (per-hero `GetActiveSpellCast()` diff with manual
+// windup-elapsed bookkeeping for OnDoCast inference) is gone — Update() is
+// a no-op kept only so `Events::Update()` does not need a special case.
 // ============================================================================
 
 #include "../../core/CoreEventHook.h"
+#include "../../core/CoreSpellCastInfo.h"
+#include "../../core/offset.h"
 #include "../../menu/MenuUI.h"
-#include "../Core/Game.h"
-#include "../Core/Objects.h"
+#include "../GameObjects/AIBaseClient.h"
 
-#include <algorithm>
-#include <new>
 #include <string>
-#include <unordered_map>
 
 namespace SDK::Events::SpellCast {
 
-// ---------------------------------------------------------------------------
-// Event Args
-// ---------------------------------------------------------------------------
-
-/// Matches EnsoulSharp: AIBaseClientProcessSpellCastEventArgs
+// ── Args ──────────────────────────────────────────────────────────────
 struct ProcessSpellCastEventArgs {
     Vector3 Start = {};
     Vector3 End = {};            // "To" in EnsoulSharp
@@ -48,7 +48,7 @@ struct ProcessSpellCastEventArgs {
     bool IsAutoAttack = false;
     bool IsSpecialAttack = false;
     float CastDelay = 0.0f;
-    float MissileSpeed = 0.0f;   // from SData.MissileSpeed
+    float MissileSpeed = 0.0f;
     int TargetNetworkId = 0;
 
     bool IsValid() const {
@@ -56,7 +56,6 @@ struct ProcessSpellCastEventArgs {
     }
 };
 
-/// Matches EnsoulSharp: SpellbookStopCastEventArgs
 struct StopCastEventArgs {
     SpellSlot Slot = SpellSlot::Unknown;
     std::string SpellName = {};
@@ -65,59 +64,48 @@ struct StopCastEventArgs {
     bool MissileDestroyed = false;
 };
 
-// ---------------------------------------------------------------------------
-// Handler types
-// ---------------------------------------------------------------------------
-
-/// Fires when cast begins (windup starts). EnsoulSharp: AIBaseClient.OnProcessSpellCast
+// ── Handlers ──────────────────────────────────────────────────────────
 using ProcessSpellCastHandler = void(*)(const AIBaseClient& sender, const ProcessSpellCastEventArgs& args);
+using DoCastHandler           = void(*)(const AIBaseClient& sender, const ProcessSpellCastEventArgs& args);
+using StopCastHandler         = void(*)(const AIBaseClient& sender, const StopCastEventArgs& args);
 
-/// Fires when cast completes (projectile releases). EnsoulSharp: AIBaseClient.OnDoCast
-using DoCastHandler = void(*)(const AIBaseClient& sender, const ProcessSpellCastEventArgs& args);
-
-/// Fires when cast is interrupted. EnsoulSharp: Spellbook.OnStopCast
-using StopCastHandler = void(*)(const AIBaseClient& sender, const StopCastEventArgs& args);
-
-// ---------------------------------------------------------------------------
-// Internal
-// ---------------------------------------------------------------------------
 namespace detail {
-
-    struct CastState {
-        uintptr_t CastAddress = 0;
-        ProcessSpellCastEventArgs Args = {};
-        int StartTick = 0;
-        float CastDelayMs = 0.0f;
-        bool Active = false;
-        bool DoCastFired = false;
-    };
-
-    inline std::unordered_map<int, CastState>* g_states = nullptr;
     inline MenuUI::FixedList<ProcessSpellCastHandler, 64> g_onProcess = {};
     inline MenuUI::FixedList<DoCastHandler, 64>           g_onDoCast  = {};
     inline MenuUI::FixedList<StopCastHandler, 64>         g_onStop    = {};
+    inline bool g_registered = false;
 
-    inline bool EnsureStorage() {
-        if (!g_states) {
-            g_states = new(std::nothrow) std::unordered_map<int, CastState>();
-        }
-        return g_states != nullptr;
-    }
-
-    inline ProcessSpellCastEventArgs BuildArgs(const CoreSpellCastInfo::CastRef& cast) {
+    // Build a ProcessSpellCastEventArgs from the dispatcher's SpellCastInfo*.
+    // Slot is taken from the explicit `intParam` (more reliable than reading
+    // the layout byte, since the OnProcessSpell VMT path injects the slot
+    // index directly into the call frame).
+    inline ProcessSpellCastEventArgs BuildArgs(uintptr_t castInfoAddr, int slotParam) {
         ProcessSpellCastEventArgs args = {};
-        args.Start        = cast.GetStartPos();
-        args.End          = cast.GetEndPos();
-        args.CastPosition = cast.GetCastPos();
-        args.CastDelay    = cast.GetCastDelay();
-        args.IsAutoAttack    = cast.IsAutoAttack();
+        CoreSpellCastInfo::CastRef cast{ castInfoAddr };
+        if (!cast.IsValid()) {
+            // Slot may still be valid even with no SpellCastInfo; keep it.
+            if (slotParam >= 0 && slotParam <= static_cast<int>(SpellSlot::R)) {
+                args.Slot = static_cast<SpellSlot>(slotParam);
+            }
+            return args;
+        }
+
+        args.Start           = cast.GetStartPos();
+        args.End             = cast.GetEndPos();
+        args.CastPosition    = cast.GetCastPos();
+        args.CastDelay       = cast.GetCastDelay();
+        args.IsAutoAttack    = cast.IsAutoAttack() || slotParam == 64;
         args.IsSpecialAttack = cast.IsSpecialAttack();
         args.TargetNetworkId = cast.GetTargetIndex();
         args.MissileSpeed    = cast.GetMissileSpeed();
 
-        const int slot = cast.GetSlot();
+        // Prefer the explicit slot param; fall back to the layout read.
+        const int slot = (slotParam >= 0 && slotParam != 64)
+            ? slotParam
+            : cast.GetSlot();
         args.Slot = (slot >= 0 && slot <= static_cast<int>(SpellSlot::R))
-            ? static_cast<SpellSlot>(slot) : SpellSlot::Unknown;
+            ? static_cast<SpellSlot>(slot)
+            : SpellSlot::Unknown;
 
         char buf[128] = {};
         if (cast.ReadSpellName(buf, static_cast<int>(sizeof(buf)))) {
@@ -126,218 +114,85 @@ namespace detail {
         return args;
     }
 
-    inline void FireProcess(const AIBaseClient& s, const ProcessSpellCastEventArgs& a) {
-        for (const auto& h : g_onProcess) { if (h) h(s, a); }
-    }
-    inline void FireDoCast(const AIBaseClient& s, const ProcessSpellCastEventArgs& a) {
-        for (const auto& h : g_onDoCast) { if (h) h(s, a); }
-    }
-    inline void FireStop(const AIBaseClient& s, const StopCastEventArgs& a) {
-        for (const auto& h : g_onStop) { if (h) h(s, a); }
+    // ── CoreEventHook trampolines ───────────────────────────────────
+    inline void OnProcessThunk(uintptr_t sender, uintptr_t context, int intParam) {
+        if (g_onProcess.empty()) return;
+        AIBaseClient hero(sender);
+        if (!hero.IsValid()) return;
+        ProcessSpellCastEventArgs args = BuildArgs(context, intParam);
+        for (const auto& h : g_onProcess) { if (h) h(hero, args); }
     }
 
-    constexpr int kErrorBufferMs = 50;
+    inline void OnDoCastThunk(uintptr_t sender, uintptr_t context, int intParam) {
+        if (g_onDoCast.empty()) return;
+        AIBaseClient hero(sender);
+        if (!hero.IsValid()) return;
+        ProcessSpellCastEventArgs args = BuildArgs(context, intParam);
+        for (const auto& h : g_onDoCast) { if (h) h(hero, args); }
+    }
+
+    inline void OnStopThunk(uintptr_t sender, uintptr_t context, int intParam) {
+        if (g_onStop.empty()) return;
+        AIBaseClient hero(sender);
+        if (!hero.IsValid()) return;
+
+        StopCastEventArgs sa = {};
+        CoreSpellCastInfo::CastRef cast{ context };
+        if (cast.IsValid()) {
+            const int slot = (intParam >= 0 && intParam != 64) ? intParam : cast.GetSlot();
+            sa.Slot = (slot >= 0 && slot <= static_cast<int>(SpellSlot::R))
+                ? static_cast<SpellSlot>(slot)
+                : SpellSlot::Unknown;
+            char buf[128] = {};
+            if (cast.ReadSpellName(buf, static_cast<int>(sizeof(buf)))) {
+                sa.SpellName = buf;
+            }
+        } else if (intParam >= 0 && intParam <= static_cast<int>(SpellSlot::R)) {
+            sa.Slot = static_cast<SpellSlot>(intParam);
+        }
+        sa.SuccessfullyCasted = false;
+        sa.ForceStop          = true;
+
+        for (const auto& h : g_onStop) { if (h) h(hero, sa); }
+    }
 
 } // namespace detail
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-inline void Initialize() { detail::EnsureStorage(); }
-
-inline bool AddOnProcessSpellCast(ProcessSpellCastHandler h) { return h && detail::g_onProcess.push_back(h); }
-inline bool OnProcessSpellCast(ProcessSpellCastHandler h)    { return AddOnProcessSpellCast(h); }
-
-inline bool AddOnDoCast(DoCastHandler h) { return h && detail::g_onDoCast.push_back(h); }
-inline bool OnDoCast(DoCastHandler h)    { return AddOnDoCast(h); }
-
-inline bool AddOnStopCast(StopCastHandler h) { return h && detail::g_onStop.push_back(h); }
-inline bool OnStopCast(StopCastHandler h)    { return AddOnStopCast(h); }
-
-/// Poll spell cast state for a single unit
-inline void PollUnit(const AIBaseClient& unit, int now) {
-    const int netId = unit.NetworkId();
-    if (!unit.IsValid() || netId == 0) {
-        if (netId != 0) detail::g_states->erase(netId);
-        return;
-    }
-
-    const auto cast = CoreSpellCastInfo::GetActive(unit.Address());
-    auto& state = (*detail::g_states)[netId];
-
-    if (cast.IsValid()) {
-        if (!state.Active || state.CastAddress != cast.address) {
-            // ── NEW CAST detected ──
-            state.Active      = true;
-            state.CastAddress = cast.address;
-            state.Args        = detail::BuildArgs(cast);
-            state.StartTick   = now;
-            state.CastDelayMs = std::max(state.Args.CastDelay, 0.0f) * 1000.0f;
-            state.DoCastFired = false;
-
-            detail::FireProcess(unit, state.Args);
-        }
-        else if (state.Active && !state.DoCastFired) {
-            // ── Same cast, check if windup elapsed → OnDoCast ──
-            const int elapsed = now - state.StartTick;
-            if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
-                state.DoCastFired = true;
-                detail::FireDoCast(unit, state.Args);
-            }
-        }
-    }
-    else if (state.Active) {
-        // ── Cast disappeared ──
-        if (!state.DoCastFired) {
-            const int elapsed = now - state.StartTick;
-            if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
-                detail::FireDoCast(unit, state.Args);
-            } else {
-                StopCastEventArgs sa = {};
-                sa.Slot              = state.Args.Slot;
-                sa.SpellName         = state.Args.SpellName;
-                sa.SuccessfullyCasted = false;
-                sa.ForceStop         = true;
-                detail::FireStop(unit, sa);
-            }
-        }
-        state.Active      = false;
-        state.CastAddress = 0;
-        state.DoCastFired = false;
-    }
+// ── Lifecycle ─────────────────────────────────────────────────────────
+inline void Initialize() {
+    if (detail::g_registered) return;
+    CoreEventHook::SetCallback(Offset::Events::OnProcessSpell, detail::OnProcessThunk);
+    CoreEventHook::SetCallback(Offset::Events::OnDoCast,       detail::OnDoCastThunk);
+    CoreEventHook::SetCallback(Offset::Events::OnStopCast,     detail::OnStopThunk);
+    detail::g_registered = true;
 }
 
-/// Call once per tick from Events::Update()
+inline bool AddOnProcessSpellCast(ProcessSpellCastHandler h) {
+    Initialize();
+    return h && detail::g_onProcess.push_back(h);
+}
+inline bool OnProcessSpellCast(ProcessSpellCastHandler h) { return AddOnProcessSpellCast(h); }
+
+inline bool AddOnDoCast(DoCastHandler h) {
+    Initialize();
+    return h && detail::g_onDoCast.push_back(h);
+}
+inline bool OnDoCast(DoCastHandler h) { return AddOnDoCast(h); }
+
+inline bool AddOnStopCast(StopCastHandler h) {
+    Initialize();
+    return h && detail::g_onStop.push_back(h);
+}
+inline bool OnStopCast(StopCastHandler h) { return AddOnStopCast(h); }
+
 inline void Update() {
-    if (!detail::EnsureStorage()) return;
-
-    // Drain the ShadowVMT counter — shellcode just bumps a counter, we scan
-    // heroes for a new ActiveSpellCast each tick. No-op if hook not installed.
-    CoreEventHook::PollVmtSpellEvents();
-
-    const int now = Game::TickCount();
-
-    // Poll heroes only — minion/turret AA tracking done via MissileTracker
-    // in HealthPrediction::Update() using RuntimeAPI::ClassifyMissile
-    for (const auto& hero : ObjectManager::Heroes()) {
-        PollUnit(hero, now);
-    }
+    // Push-driven — nothing to poll.
 }
 
 inline void Reset() {
-    if (detail::g_states) detail::g_states->clear();
     detail::g_onProcess.clear();
     detail::g_onDoCast.clear();
     detail::g_onStop.clear();
-    CoreEventHook::UninstallAll();
-}
-
-// ---------------------------------------------------------------------------
-// Hook-based mode (alternative to poll-based)
-//
-// IDA reverse of OnProcessSpell @ 0x9362A0:
-//   rcx = SpellBook* = (AIBaseClient + 0x30E8)
-//   rdx = SpellCastInfo*
-//
-// The hook fires our ProcessSpellCast callbacks with EXACT timing,
-// covering ALL units (not just heroes like poll mode).
-// ---------------------------------------------------------------------------
-namespace hook {
-
-    inline void OnRawProcessSpell(uintptr_t senderObj, uintptr_t castInfoAddr) {
-        if (!senderObj || !castInfoAddr) return;
-
-        CoreSpellCastInfo::CastRef cast = { castInfoAddr };
-        if (!cast.IsValid()) return;
-
-        AIBaseClient sender(senderObj);
-        if (!sender.IsValid()) return;
-
-        auto args = detail::BuildArgs(cast);
-        detail::FireProcess(sender, args);
-
-        // Also update poll state so DoCast/StopCast still work via polling
-        if (detail::EnsureStorage()) {
-            const int netId = sender.NetworkId();
-            if (netId != 0) {
-                auto& state = (*detail::g_states)[netId];
-                state.Active      = true;
-                state.CastAddress = castInfoAddr;
-                state.Args        = args;
-                state.StartTick   = Game::TickCount();
-                state.CastDelayMs = std::max(args.CastDelay, 0.0f) * 1000.0f;
-                state.DoCastFired = false;
-            }
-        }
-    }
-
-    inline bool Install() {
-        CoreEventHook::SetOnProcessSpellCallback(OnRawProcessSpell);
-        return CoreEventHook::InstallProcessSpellHook();
-    }
-
-    inline bool IsInstalled() {
-        return CoreEventHook::IsProcessSpellHooked();
-    }
-
-} // namespace hook
-
-// ---------------------------------------------------------------------------
-// Hybrid Update: if hook installed, skip poll for OnProcessSpellCast
-// but still poll for OnDoCast / OnStopCast transitions.
-// ---------------------------------------------------------------------------
-inline void UpdateHybrid() {
-    if (!detail::EnsureStorage()) return;
-
-    // Drain the ShadowVMT counter FIRST so that OnRawProcessSpell runs before
-    // we test cast-vs-state transitions in the DoCast/StopCast poll below.
-    CoreEventHook::PollVmtSpellEvents();
-
-    const int now = Game::TickCount();
-
-    for (const auto& hero : ObjectManager::Heroes()) {
-        const int netId = hero.NetworkId();
-        if (!hero.IsValid() || netId == 0) continue;
-
-        auto it = detail::g_states->find(netId);
-        if (it == detail::g_states->end()) continue;
-
-        auto& state = it->second;
-        if (!state.Active) continue;
-
-        const auto cast = CoreSpellCastInfo::GetActive(hero.Address());
-
-        if (cast.IsValid() && cast.address == state.CastAddress) {
-            // Same cast still active — check DoCast timing
-            if (!state.DoCastFired) {
-                const int elapsed = now - state.StartTick;
-                if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
-                    state.DoCastFired = true;
-                    detail::FireDoCast(hero, state.Args);
-                }
-            }
-        }
-        else if (!cast.IsValid() || cast.address != state.CastAddress) {
-            // Cast disappeared or changed
-            if (!state.DoCastFired) {
-                const int elapsed = now - state.StartTick;
-                if (elapsed >= static_cast<int>(state.CastDelayMs) - detail::kErrorBufferMs) {
-                    detail::FireDoCast(hero, state.Args);
-                } else {
-                    StopCastEventArgs sa = {};
-                    sa.Slot              = state.Args.Slot;
-                    sa.SpellName         = state.Args.SpellName;
-                    sa.SuccessfullyCasted = false;
-                    sa.ForceStop         = true;
-                    detail::FireStop(hero, sa);
-                }
-            }
-            state.Active      = false;
-            state.CastAddress = 0;
-            state.DoCastFired = false;
-        }
-    }
 }
 
 } // namespace SDK::Events::SpellCast

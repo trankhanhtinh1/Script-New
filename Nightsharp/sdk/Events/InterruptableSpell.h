@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../generated/InterruptableSpellData.generated.h"
+#include "../Data/InterruptableSpellData.h"
 #include "Interrupter.h"
 
 namespace SDK::Events {

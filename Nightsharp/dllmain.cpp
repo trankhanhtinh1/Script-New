@@ -25,9 +25,11 @@
 #include <cstdint>
 #include <new>
 
+// Phase 2 finalization (Apr 26/2026): legacy_stubs.h retired.
+// Real CrashTelemetry pulled directly. Offsets come via core/offset.h
+// (transitively through CoreRuntime.h consumers).
 #include "core/CrashTelemetry.h"
-#include "core/Offsets.h"
-#include "core/KeyAuth.h"
+#include "core/CoreRuntime.h"
 
 #pragma comment(lib, "user32.lib")
 
@@ -96,11 +98,7 @@ void* operator new(size_t sz, std::align_val_t al) {
 
 void operator delete(void* ptr, std::align_val_t) noexcept {
     if (ptr) {
-        void* raw = ((void**)ptr)[-1];
-        uintptr_t r = (uintptr_t)raw;
-        if (r >= 0x10000ULL && r < 0x7FFFFFFFFFFF0000ULL) {
-            HeapFree(GetProcessHeap(), 0, raw);
-        }
+        HeapFree(GetProcessHeap(), 0, ((void**)ptr)[-1]);
     }
 }
 
@@ -129,12 +127,26 @@ void operator delete[](void* ptr, size_t, std::align_val_t al) noexcept {
 }
 
 // ========================================================================
-// Telemetry flag page
+// Telemetry flag page — shared between injector & DLL via:
+//     uintptr_t flagAddr = *(uintptr_t*)(base + imageSize - 8);
+// Offsets used:
+//   flag[0..15]  — injection telemetry (written by shellcode + entry)
+//   flag[16]     — OverlayWorker progress    (0x30/0x31 = overlay exited)
+//   flag[17]     — reserved
+//   flag[18]     — INJECTOR→DLL unload request (0x01 = please shut down)
+//   flag[19]     — DLL→INJECTOR overlay-exited-clean marker (optional)
 // ========================================================================
 static volatile uint8_t* g_mmFlagPage = nullptr;
 
 static void MmFlag(int offset, uint8_t value) {
     if (g_mmFlagPage) g_mmFlagPage[offset] = value;
+}
+
+// Accessor used by Overlay::Run() to poll flag[18] for a remote unload
+// request issued by the injector on Ctrl+R.
+extern "C" __declspec(dllexport)
+volatile uint8_t* NightSharp_GetFlagPage() {
+    return g_mmFlagPage;
 }
 
 // ========================================================================
@@ -267,9 +279,18 @@ static DWORD WINAPI OverlayWorker(LPVOID param)
 // ManualMapEntry — called by injector shellcode (WinAPI-only, NO CRT)
 // Identical to dllmain copy.cpp + CreateThread for overlay worker
 // ========================================================================
+// NOTE on DLL_PROCESS_DETACH: we intentionally do NOT perform a clean
+// shutdown here. The manual-map injector does not deliver a legitimate
+// DETACH (there is no loader entry to invoke), so this path never fires
+// during normal operation. The user tears the current session down by
+// pressing VK_END inside the game — that hotkey drives the overlay's
+// own cleanup (which calls `CoreEventHook::UninstallAll()` and exits the
+// render loop). Re-inject from the external injector afterwards.
 extern "C" __declspec(dllexport)
 BOOL WINAPI ManualMapEntry(HMODULE hModule, DWORD reason, LPVOID reserved)
 {
+    (void)hModule; (void)reserved;
+
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
 
     CrashTelemetry::Install();

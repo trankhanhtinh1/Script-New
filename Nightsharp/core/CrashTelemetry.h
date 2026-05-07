@@ -57,43 +57,8 @@ namespace CrashTelemetry {
         CloseHandle(hFile);
     }
 
-    // Look up which loaded module contains a given code address.
-    // Writes "<module.dll>+0xOFFSET" into outBuf, or "???" if unresolvable.
-    inline void ResolveAddrModule(unsigned long long addr, char* outBuf, size_t outLen) {
-        if (!outBuf || outLen == 0) return;
-        outBuf[0] = 0;
-
-        HMODULE hMod = nullptr;
-        if (addr == 0 ||
-            !GetModuleHandleExA(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                reinterpret_cast<LPCSTR>(static_cast<uintptr_t>(addr)),
-                &hMod) ||
-            !hMod) {
-            std::snprintf(outBuf, outLen, "???");
-            return;
-        }
-
-        char path[MAX_PATH] = {};
-        if (!GetModuleFileNameA(hMod, path, sizeof(path))) {
-            std::snprintf(outBuf, outLen, "???+0x%llX",
-                          addr - reinterpret_cast<unsigned long long>(hMod));
-            return;
-        }
-
-        // Extract base name (strip path).
-        const char* base = path;
-        for (const char* p = path; *p; ++p) {
-            if (*p == '\\' || *p == '/') base = p + 1;
-        }
-
-        std::snprintf(outBuf, outLen, "%s+0x%llX",
-                      base,
-                      addr - reinterpret_cast<unsigned long long>(hMod));
-    }
-
     inline void LogExceptionRecord(const char* source, EXCEPTION_POINTERS* ep) {
-        char buf[1536] = {};
+        char buf[1024] = {};
         const EXCEPTION_RECORD* er = ep ? ep->ExceptionRecord : nullptr;
         const CONTEXT* ctx = ep ? ep->ContextRecord : nullptr;
 
@@ -108,24 +73,16 @@ namespace CrashTelemetry {
         const unsigned long long r9 = ctx ? (unsigned long long)ctx->R9 : 0ull;
         const LONG count = InterlockedIncrement(&g_exceptionCount);
 
-        char ripModule[128] = {};
-        char addrModule[128] = {};
-        ResolveAddrModule(rip, ripModule, sizeof(ripModule));
-        ResolveAddrModule(reinterpret_cast<unsigned long long>(address),
-                          addrModule, sizeof(addrModule));
-
         std::snprintf(
             buf, sizeof(buf),
-            "[NightSharp][Crash] #%ld source=%s stage=%s tid=%lu code=0x%08lX "
-            "addr=0x%p (%s) rip=0x%llX (%s) rsp=0x%llX rbp=0x%llX "
-            "rcx=0x%llX rdx=0x%llX r8=0x%llX r9=0x%llX\r\n",
+            "[NightSharp][Crash] #%ld source=%s stage=%s tid=%lu code=0x%08lX addr=0x%p rip=0x%llX rsp=0x%llX rbp=0x%llX rcx=0x%llX rdx=0x%llX r8=0x%llX r9=0x%llX\r\n",
             count,
             source ? source : "unknown",
             g_stage ? g_stage : "unknown",
             GetCurrentThreadId(),
             code,
-            address, addrModule,
-            rip, ripModule,
+            address,
+            rip,
             rsp,
             rbp,
             rcx,

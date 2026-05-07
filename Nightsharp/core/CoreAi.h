@@ -1,7 +1,7 @@
 #pragma once
 
 #include "LeagueObfuscation.h"
-#include "Offsets.h"
+#include "offset.h"
 #include "Vector.h"
 #include "Globals.h"
 
@@ -10,6 +10,9 @@
 namespace CoreAi {
 
     inline int CopyWaypoints(uintptr_t obj, Vec3* out, int maxOut);
+    inline Vec3 GetServerPosition(uintptr_t obj);
+    inline Vec3 GetPathEnd(uintptr_t obj);
+    inline Vec3 GetVelocity(uintptr_t obj);
 
     struct ManagerRef {
         uintptr_t raw = 0;
@@ -26,7 +29,7 @@ namespace CoreAi {
             return 0;
         }
 
-        const auto obf = Globals::Read<LeagueObfuscation<uint64_t>>(obj + Offset::AiManager::Offset);
+        const auto obf = Globals::Read<LeagueObfuscation<uint64_t>>(obj + Offset::AiManagerInnerCompatLayout::Offset);
         if (!obf.isInit) {
             return 0;
         }
@@ -41,7 +44,7 @@ namespace CoreAi {
             return 0;
         }
 
-        const auto inner = Globals::Read<uintptr_t>(raw + Offset::AiManager::InnerManager);
+        const auto inner = Globals::Read<uintptr_t>(raw + Offset::AiManagerInnerCompatLayout::InnerManager);
         return Globals::IsValidPtr(inner) ? inner : 0;
     }
 
@@ -50,13 +53,13 @@ namespace CoreAi {
             return 0;
         }
 
-        const auto typePtr = Globals::Read<uintptr_t>(inner + Offset::AiManager::NavBase::InnerTypePtr);
+        const auto typePtr = Globals::Read<uintptr_t>(inner + Offset::AiManagerNavBaseLayout::InnerTypePtr);
         if (!Globals::IsValidPtr(typePtr)) {
             return 0;
         }
 
-        const auto adjust = Globals::Read<int>(typePtr + Offset::AiManager::NavBase::InnerTypeAdjust);
-        const auto navBase = inner + static_cast<uintptr_t>(adjust) + Offset::AiManager::NavBase::FinalBaseAdd;
+        const auto adjust = Globals::Read<int>(typePtr + Offset::AiManagerNavBaseLayout::InnerTypeAdjust);
+        const auto navBase = inner + static_cast<uintptr_t>(adjust) + Offset::AiManagerNavBaseLayout::FinalBaseAdd;
         return Globals::IsValidPtr(navBase) ? navBase : 0;
     }
 
@@ -69,8 +72,20 @@ namespace CoreAi {
     }
 
     inline bool IsMoving(uintptr_t obj) {
-        const auto inner = ResolveInnerManager(obj);
-        return Globals::Read<int>(inner + Offset::AiManager::IsMoving) != 0;
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        if (!Globals::IsValidPtr(navBase)) {
+            return false;
+        }
+
+        const int count = Globals::Read<int>(
+            navBase + Offset::AiManagerNavBaseLayout::PathState + Offset::AiManagerPathStateLayout::Count);
+        if (count > 0) {
+            const Vec3 start = GetServerPosition(obj);
+            const Vec3 end = GetPathEnd(obj);
+            return !end.IsZero() && (start.IsZero() || start.Distance2D(end) > 5.0f);
+        }
+
+        return Globals::Read<uint8_t>(navBase + Offset::AiManagerNavDataLayout::NavFlag) != 0;
     }
 
     inline bool HasPath(uintptr_t obj) {
@@ -79,76 +94,157 @@ namespace CoreAi {
             return false;
         }
 
-        const int hasPath = Globals::Read<int>(inner + Offset::AiManager::HasPath);
-        if (hasPath != 0) {
+        const auto navBase = ResolveNavBase(inner);
+        if (!Globals::IsValidPtr(navBase)) {
+            return false;
+        }
+
+        const auto pathState = navBase + Offset::AiManagerNavBaseLayout::PathState;
+        const int count = Globals::Read<int>(pathState + Offset::AiManagerPathStateLayout::Count);
+        if (count > 0) {
             return true;
         }
 
-        const auto navBase = ResolveNavBase(inner);
-        const int count = Globals::Read<int>(navBase + Offset::AiManager::PathStateLayout::Count);
-        return count > 0;
+        const Vec3 fallback = Globals::Read<Vec3>(pathState + Offset::AiManagerPathStateLayout::FallbackEnd);
+        return !fallback.IsZero();
     }
 
     inline bool IsDashing(uintptr_t obj) {
         const auto inner = ResolveInnerManager(obj);
-        return Globals::Read<int>(inner + Offset::AiManager::NavBase::IsDashingInner) != 0;
+        if (!Globals::IsValidPtr(inner)) {
+            return false;
+        }
+
+        return Globals::Read<uint8_t>(inner + Offset::AiManagerInnerCompatLayout::IsDashing) != 0;
     }
 
     inline int GetCurrentSegment(uintptr_t obj) {
         const auto inner = ResolveInnerManager(obj);
-        return Globals::Read<int>(inner + Offset::AiManager::CurrentSegment);
+        if (!Globals::IsValidPtr(inner)) {
+            return 0;
+        }
+
+        return Globals::Read<int>(inner + Offset::AiManagerInnerCompatLayout::CurrentSegment);
     }
 
     inline float GetDashSpeed(uintptr_t obj) {
         const auto inner = ResolveInnerManager(obj);
-        return Globals::Read<float>(inner + Offset::AiManager::NavBase::DashSpeedInner);
+        const float speed = Globals::Read<float>(inner + Offset::AiManagerInnerCompatLayout::DashSpeed);
+        if (speed > 0.0f && speed < 5000.0f) {
+            return speed;
+        }
+
+        return GetVelocity(obj).Length2D();
     }
 
     inline Vec3 GetVelocity(uintptr_t obj) {
         const auto inner = ResolveInnerManager(obj);
-        return Globals::Read<Vec3>(inner + Offset::AiManager::Velocity);
+        const auto navBase = ResolveNavBase(inner);
+        if (!Globals::IsValidPtr(navBase)) {
+            return {};
+        }
+
+        const float objMoveSpeed = Globals::Read<float>(obj + Offset::AIHeroClient::MoveSpeed);
+        float moveSpeed = Globals::Read<float>(navBase + Offset::AiManagerNavDataLayout::MoveSpeed);
+        if (moveSpeed <= 0.0f || moveSpeed > 5000.0f) {
+            moveSpeed = (objMoveSpeed > 0.0f && objMoveSpeed < 5000.0f) ? objMoveSpeed : 0.0f;
+        }
+
+        Vec3 moveVector = Globals::Read<Vec3>(navBase + Offset::AiManagerNavBaseLayout::MoveVector);
+        moveVector.y = 0.0f;
+        if (moveVector.IsValid() && !moveVector.IsZero()) {
+            const float len = moveVector.Length2D();
+            if (len > 0.01f && len <= 2.0f && moveSpeed > 0.0f) {
+                return moveVector.Normalized2D() * moveSpeed;
+            }
+            if (len > 2.0f && len < 5000.0f) {
+                return moveVector;
+            }
+        }
+
+        const Vec3 start = GetServerPosition(obj);
+        const Vec3 end = GetPathEnd(obj);
+        if (!start.IsZero() && !end.IsZero() && start.Distance2D(end) > 1.0f) {
+            Vec3 dir = end - start;
+            dir.y = 0.0f;
+            return dir.Normalized2D() * moveSpeed;
+        }
+
+        return {};
     }
 
     inline Vec3 GetPathStart(uintptr_t obj) {
-        const auto inner = ResolveInnerManager(obj);
-        return Globals::Read<Vec3>(inner + Offset::AiManager::PathStart);
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        return Globals::Read<Vec3>(navBase + Offset::AiManagerNavDataLayout::PathStart);
     }
 
     inline Vec3 GetPathEnd(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        const auto fallback = Globals::Read<Vec3>(navBase + Offset::AiManager::NavBase::PathEndFallback);
-        if (!fallback.IsZero()) {
-            return fallback;
-        }
-
         Vec3 points[64] = {};
         const int count = CopyWaypoints(obj, points, static_cast<int>(sizeof(points) / sizeof(points[0])));
-        return count > 0 ? points[count - 1] : Vec3{};
+        if (count > 0) {
+            return points[count - 1];
+        }
+
+        const auto pathState = navBase + Offset::AiManagerNavBaseLayout::PathState;
+        const Vec3 pathFallback = Globals::Read<Vec3>(pathState + Offset::AiManagerPathStateLayout::FallbackEnd);
+        if (!pathFallback.IsZero()) {
+            return pathFallback;
+        }
+
+        return Globals::Read<Vec3>(navBase + Offset::AiManagerNavDataLayout::PathEndFallback);
     }
 
     inline Vec3 GetServerPosition(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<Vec3>(navBase + Offset::AiManager::NavBase::ServerPosition);
+        return Globals::Read<Vec3>(navBase + Offset::AiManagerNavBaseLayout::ServerPosition);
     }
 
     inline Vec3 GetMoveVector(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<Vec3>(navBase + Offset::AiManager::NavBase::MoveVector);
+        return Globals::Read<Vec3>(navBase + Offset::AiManagerNavBaseLayout::MoveVector);
     }
 
     inline Vec3 GetPreviousPosition(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<Vec3>(navBase + Offset::AiManager::NavBase::PreviousPosition);
+        return Globals::Read<Vec3>(navBase + Offset::AiManagerNavBaseLayout::PreviousPosition);
     }
 
     inline Vec3 GetOrderPosition(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<Vec3>(navBase + Offset::AiManager::NavBase::OrderPosition);
+        return Globals::Read<Vec3>(navBase + Offset::AiManagerNavBaseLayout::OrderPosition);
+    }
+
+    // ── New accessors from Offset reference (AiManagerNavDataLayout) ──
+
+    inline bool HasArrived(uintptr_t obj) {
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        return Globals::Read<uint8_t>(navBase + Offset::AiManagerNavDataLayout::ArrivedFlag) != 0;
+    }
+
+    inline uint32_t GetDashTargetNetId(uintptr_t obj) {
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        return Globals::Read<uint32_t>(navBase + Offset::AiManagerNavDataLayout::DashTargetNetId);
+    }
+
+    inline uint32_t GetDashSecondaryNetId(uintptr_t obj) {
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        return Globals::Read<uint32_t>(navBase + Offset::AiManagerNavDataLayout::DashSecondaryId);
+    }
+
+    inline float GetDashDuration(uintptr_t obj) {
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        return Globals::Read<float>(navBase + Offset::AiManagerNavDataLayout::DashDuration);
+    }
+
+    inline float GetDashDistRemaining(uintptr_t obj) {
+        const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
+        return Globals::Read<float>(navBase + Offset::AiManagerNavDataLayout::DashDistRemain);
     }
 
     inline int GetWaypointCount(uintptr_t obj) {
         const auto navBase = ResolveNavBase(ResolveInnerManager(obj));
-        return Globals::Read<int>(navBase + Offset::AiManager::PathStateLayout::Count);
+        return Globals::Read<int>(navBase + Offset::AiManagerPathStateLayout::Count);
     }
 
     inline int CopyWaypoints(uintptr_t obj, Vec3* out, int maxOut) {
@@ -161,11 +257,11 @@ namespace CoreAi {
             return 0;
         }
 
-        const auto pathState = navBase + Offset::AiManager::NavBase::PathState;
-        const int count = Globals::Read<int>(pathState + Offset::AiManager::PathStateLayout::Count);
-        const auto points = Globals::Read<uintptr_t>(pathState + Offset::AiManager::PathStateLayout::PointsPtr);
+        const auto pathState = navBase + Offset::AiManagerNavBaseLayout::PathState;
+        const int count = Globals::Read<int>(pathState + Offset::AiManagerPathStateLayout::Count);
+        const auto points = Globals::Read<uintptr_t>(pathState + Offset::AiManagerPathStateLayout::PointsPtr);
         if (count <= 0 || count > maxOut || count > 128 || !Globals::IsValidPtr(points)) {
-            const Vec3 fallback = Globals::Read<Vec3>(pathState + Offset::AiManager::PathStateLayout::FallbackEnd);
+            const Vec3 fallback = Globals::Read<Vec3>(pathState + Offset::AiManagerPathStateLayout::FallbackEnd);
             if (fallback.IsZero()) {
                 return 0;
             }

@@ -72,12 +72,8 @@ namespace Globals {
             if (len == 0 || len >= (size_t)maxOut) { out[0] = 0; return false; }
             if (capacity < len || capacity > 0x100000) { out[0] = 0; return false; }
 
-            // MSVC std::string SSO: inline buffer (16 bytes = 15 chars + NUL)
-            // is used while capacity <= 15; heap-allocated when capacity >= 16.
-            // (Same threshold as ReadRiotString below — keep both branches in
-            // sync to avoid off-by-one string reads.)
             const char* src;
-            if (capacity >= 16) {
+            if (capacity > 15) {
                 uintptr_t ptr = *(uintptr_t*)(nameAddr);
                 if (ptr < 0x10000 || ptr > 0x7FFFFFFFFFFF) { out[0] = 0; return false; }
                 src = (const char*)ptr;

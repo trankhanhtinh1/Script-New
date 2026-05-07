@@ -1,25 +1,34 @@
 #include "Overlay.h"
 
-#include "../core/CoreValidation.h"
+// Phase 2 finalization (Apr 26/2026): legacy_stubs.h retired. Real headers
+// pulled directly. SDK::Bootstrap re-enabled May/2026 to register Orbwalker
+// and TargetSelector as primary sidebar categories.
 #include "../core/CrashTelemetry.h"
-#include "../core/CoreRuntime.h"
+#include "../core/CoreAPI.h"
 #include "../crt_shim.h"
 #include "../imgui/imgui.h"
 #include "../imgui/imgui_impl_dx11.h"
 #include "../imgui/imgui_impl_win32.h"
 #include "../menu/NightSharpMenu.h"
 #include "../menu/MenuConfig.h"
-#include "../menu/MenuPersistence.h"
 #include "../menu/PluginHostBridge.h"
 #include "../menu/PluginRegistry.h"
 #include "../plugins/PluginBootstrap.h"
 #include "../plugins/PluginManager.h"
-
 #include "../menu/MenuUI.h"
+#include "../core/CoreEventHook.h"
+#include "../core/CoreZoomHack.h"
+#include "../core/CoreSkinChanger.h"
 #include "../sdk/SDK.h"
 
 #include <d3d11.h>
 #include <dxgi.h>
+
+// Telemetry flag-page accessor exported by dllmain.cpp. Offset 18 carries
+// the "please shut down" request written by the external injector on
+// Ctrl+R; we poll it each frame so a reload initiated from the injector
+// triggers the same clean teardown as pressing VK_END in-game.
+extern "C" volatile uint8_t* NightSharp_GetFlagPage();
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -45,6 +54,7 @@ volatile LONG g_bMenuVisible = 1;
 bool g_antiCaptureEnabled = false;
 
 const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
+constexpr DWORD kTargetOverlayFrameMs = 8; // ~125 FPS cap when the frame is cheap.
 
 void WriteStage(const char* msg) {
     OutputDebugStringA(msg);
@@ -65,6 +75,41 @@ void WriteStageFmt(const char* format, ...) {
     std::vsnprintf(buffer, sizeof(buffer), format ? format : "", args);
     va_end(args);
     WriteStage(buffer);
+}
+
+void MarkFramePerf(DWORD& lastTick, DWORD& slowMs, const char*& slowStage, const char* completedStage) {
+    const DWORD now = GetTickCount();
+    const DWORD elapsed = now - lastTick;
+    if (elapsed > slowMs) {
+        slowMs = elapsed;
+        slowStage = completedStage ? completedStage : "unknown";
+    }
+    lastTick = now;
+}
+
+void LogSlowFrame(int frameCount, DWORD frameStart, DWORD slowMs, const char* slowStage) {
+    // Enabled May/2026 to diagnose the overlay-FPS regression. Logs at most
+    // once per second and only when the frame exceeded ~30 ms total OR a
+    // single stage took >20 ms — so steady-state 60 FPS output stays silent.
+    constexpr bool kEnableSlowFrameLog = false;
+    if (!kEnableSlowFrameLog) {
+        return;
+    }
+
+    const DWORD now = GetTickCount();
+    const DWORD total = now - frameStart;
+    static DWORD s_lastPerfLogTick = 0;
+    if ((total < 30 && slowMs < 20) || now - s_lastPerfLogTick < 1000) {
+        return;
+    }
+
+    s_lastPerfLogTick = now;
+    WriteStageFmt(
+        "[NightSharp][Perf] slow frame=%d total=%lu ms slowStage=%s slow=%lu ms\r\n",
+        frameCount,
+        static_cast<unsigned long>(total),
+        slowStage ? slowStage : "unknown",
+        static_cast<unsigned long>(slowMs));
 }
 
 bool CreateRenderTarget() {
@@ -94,7 +139,7 @@ bool CreateDeviceD3D11(HWND hWnd) {
     DXGI_SWAP_CHAIN_DESC sd = {};
     sd.BufferCount = 2;
     sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    sd.BufferDesc.RefreshRate.Numerator = 60;
+    sd.BufferDesc.RefreshRate.Numerator = 0;
     sd.BufferDesc.RefreshRate.Denominator = 1;
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     sd.OutputWindow = hWnd;
@@ -143,7 +188,7 @@ void CleanupDeviceD3D11() {
 }
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (g_bMenuVisible || NightSharpMenu::debugWindowEnabled) {
+    if (g_bMenuVisible) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }
@@ -204,52 +249,65 @@ bool IsGameWindowAlive() {
     return pid == GetCurrentProcessId();
 }
 
+// Re-position the overlay to sit directly on top of the game client area.
+//
+// IMPORTANT: we use HWND_TOP (not HWND_TOPMOST) because the overlay is
+// created as a POPUP window *owned* by the game HWND — see the
+// `CreateWindowExW` call below. With that ownership relationship, Windows
+// automatically:
+//
+//   - hides the overlay when the game minimises or is hidden;
+//   - drops the overlay behind any window that gets focus in front of the
+//     game (so alt-tabbing to the desktop hides the overlay);
+//   - re-raises the overlay with the game when the user comes back to it.
+//
+// Requesting HWND_TOPMOST would break that behaviour — the overlay would
+// float over every desktop window (browsers, Discord, etc.) even when the
+// LoL client is not focused, which is exactly the "drawing onto the
+// desktop" bug the user reported.
 void MoveOverlayToTarget() {
     if (!g_hGameWindow || !g_hOverlay) {
         return;
     }
 
+    const DWORD now = GetTickCount();
+    static DWORD s_lastRectCheckTick = 0;
+    if (now - s_lastRectCheckTick < 100) {
+        return;
+    }
+    s_lastRectCheckTick = now;
+
     RECT rc = {};
     GetWindowRect(g_hGameWindow, &rc);
-    SetWindowPos(g_hOverlay, HWND_TOPMOST,
+
+    static RECT s_lastRect = {};
+    static DWORD s_lastSetWindowPosTick = 0;
+    const bool sameRect = EqualRect(&rc, &s_lastRect) != FALSE;
+    if (sameRect && now - s_lastSetWindowPosTick < 500) {
+        return;
+    }
+
+    SetWindowPos(g_hOverlay, HWND_TOP,
         rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
         SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    s_lastRect = rc;
+    s_lastSetWindowPosTick = now;
 }
 
 void SetClickThrough(bool through) {
-    if (!g_hOverlay) return;
+    if (!g_hOverlay) {
+        return;
+    }
+
     LONG_PTR cur = GetWindowLongPtrW(g_hOverlay, GWL_EXSTYLE);
     LONG_PTR desired = through ? (cur | WS_EX_TRANSPARENT) : (cur & ~WS_EX_TRANSPARENT);
-    if (desired == cur) return;
+    if (desired == cur) {
+        return;
+    }
+
     SetWindowLongPtrW(g_hOverlay, GWL_EXSTYLE, desired);
     SetWindowPos(g_hOverlay, nullptr, 0, 0, 0, 0,
         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-}
-
-void UpdateClickThroughState() {
-    if (!g_bMenuVisible && !NightSharpMenu::debugWindowEnabled) {
-        SetClickThrough(true);
-        return;
-    }
-    if (ImGui::GetIO().WantCaptureMouse) {
-        SetClickThrough(false);
-        return;
-    }
-    if (g_bMenuVisible && g_hOverlay) {
-        POINT pt = {};
-        GetCursorPos(&pt);
-        ScreenToClient(g_hOverlay, &pt);
-        const float cx = (float)pt.x;
-        const float cy = (float)pt.y;
-        for (int i = 0; i < NightSharpMenu::menuPanelCount; i++) {
-            auto& p = NightSharpMenu::menuPanels[i];
-            if (cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h) {
-                SetClickThrough(false);
-                return;
-            }
-        }
-    }
-    SetClickThrough(true);
 }
 
 // Anti-capture: hide overlay from OBS / screenshots / screen recording
@@ -264,6 +322,37 @@ void SetAntiCapture(bool enabled) {
     }
 }
 
+void UpdateClickThroughFromMenuBounds() {
+    const bool menuVisible = g_bMenuVisible != 0;
+    const DWORD now = GetTickCount();
+    static DWORD s_lastClickThroughTick = 0;
+    static bool s_lastMenuVisible = false;
+    if (menuVisible == s_lastMenuVisible && now - s_lastClickThroughTick < 33) {
+        return;
+    }
+    s_lastMenuVisible = menuVisible;
+    s_lastClickThroughTick = now;
+
+    if (!menuVisible) {
+        SetClickThrough(true);
+        return;
+    }
+
+    POINT cursorPt = {};
+    GetCursorPos(&cursorPt);
+    ScreenToClient(g_hOverlay, &cursorPt);
+
+    const float cx = (float)cursorPt.x;
+    const float cy = (float)cursorPt.y;
+    const bool overMenu =
+        (NightSharpMenu::menuBoundsRight > 0.0f) &&
+        cx >= NightSharpMenu::menuPosX &&
+        cx <= NightSharpMenu::menuBoundsRight &&
+        cy >= NightSharpMenu::menuPosY &&
+        cy <= NightSharpMenu::menuBoundsBottom;
+
+    SetClickThrough(!overMenu);
+}
 
 void ToggleMenuVisible() {
     LONG vis = !g_bMenuVisible;
@@ -339,8 +428,22 @@ void Overlay::Run() {
     RECT gameRect = {};
     GetWindowRect(g_hGameWindow, &gameRect);
 
+    // Create the overlay as a POPUP OWNED by the game window.
+    //
+    // - hWndParent (9th arg) = `g_hGameWindow` makes the overlay's owner the
+    //   LoL client. In Win32, a popup with an owner is automatically shown
+    //   only when its owner is visible, and is z-ordered just above the
+    //   owner. That single parameter is what makes the overlay behave like
+    //   an in-game HUD (tab out → overlay disappears) instead of like a
+    //   desktop gadget.
+    // - We deliberately OMIT `WS_EX_TOPMOST` — it was forcing the overlay
+    //   to float over every desktop window, which defeats the "owned by
+    //   game" ordering above.
+    // - WS_EX_TOOLWINDOW keeps the overlay out of the taskbar / alt-tab UI.
+    // - WS_EX_NOACTIVATE + WS_EX_TRANSPARENT + WS_EX_LAYERED give the usual
+    //   "draw-only, never-steal-focus, alpha-composited" behaviour.
     g_hOverlay = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
         overlayClassName,
         L"NightSharp Overlay",
         WS_POPUP,
@@ -348,7 +451,7 @@ void Overlay::Run() {
         gameRect.top,
         gameRect.right - gameRect.left,
         gameRect.bottom - gameRect.top,
-        nullptr,
+        g_hGameWindow,  // owner — ties the overlay's visibility to the game
         nullptr,
         wc.hInstance,
         nullptr);
@@ -399,32 +502,6 @@ void Overlay::Run() {
     io.LogFilename = nullptr;
     io.Fonts->AddFontDefault();
 
-    {
-        HANDLE hFont = CreateFileA("C:\\Windows\\Fonts\\msyh.ttc",
-            GENERIC_READ, FILE_SHARE_READ, nullptr,
-            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFont != INVALID_HANDLE_VALUE) {
-            DWORD fileSize = GetFileSize(hFont, nullptr);
-            if (fileSize > 0 && fileSize != INVALID_FILE_SIZE) {
-                void* fontData = ImGui::MemAlloc(fileSize);
-                if (fontData) {
-                    DWORD bytesRead = 0;
-                    if (ReadFile(hFont, fontData, fileSize, &bytesRead, nullptr) && bytesRead == fileSize) {
-                        ImFontConfig mergeCfg;
-                        mergeCfg.MergeMode = true;
-                        mergeCfg.PixelSnapH = true;
-                        mergeCfg.FontDataOwnedByAtlas = true;
-                        io.Fonts->AddFontFromMemoryTTF(fontData, (int)fileSize, 14.0f, &mergeCfg,
-                            io.Fonts->GetGlyphRangesChineseFull());
-                    } else {
-                        ImGui::MemFree(fontData);
-                    }
-                }
-            }
-            CloseHandle(hFont);
-        }
-    }
-
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
 
@@ -436,29 +513,50 @@ void Overlay::Run() {
     MoveOverlayToTarget();
 
     SDK::MenuManager::Init();
-    NightSharpMenu::LoadGlobals();
     NightSharpMenu::showMenu = true;
     SDK::MenuManager::SetMenuVisible(true);
-    SetClickThrough(true);
+    SetClickThrough(false);
+
+    // Install the Shadow-VMT OnProcessSpell hook on a BACKGROUND thread.
+    // FindAllDispatchSlots sweeps every writable region in the process, which
+    // on a 64-bit LoL can take hundreds of milliseconds — doing it inline
+    // would freeze the overlay right after inject. The worker exits as soon
+    // as the scan finishes; the menu's "SDK Diagnostics" badge flips from
+    // NOT HOOKED → HOOKED the frame it completes.
+    CloseHandle(CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
+        CoreEventHook::InstallAllHooks();
+        return 0;
+    }, nullptr, 0, nullptr));
+
+    Plugins::PluginBootstrap::EnsureRegistered();
+    PluginRegistry::LoadConfig();
+
+    // Phase 3.1 (Apr 26/2026): NightPackageLoader retired - all plugins are
+    // now built-in (no external .night encrypted package format).
+
+    WriteStage("[NightSharp] STAGE 6: Menu + plugin substrate initialized\r\n");
 
     CrashTelemetry::SetStage("Overlay::Run::InitCore");
     const bool coreInitOk = CoreRuntime::Initialize();
     WriteStage(coreInitOk
         ? "[NightSharp] STAGE 7: CoreRuntime initialized\r\n"
         : "[NightSharp] STAGE 7: CoreRuntime init incomplete\r\n");
+    if (coreInitOk) {
+        __try { CoreRuntime::TickRead(); } __except (1) {}
+    }
 
     CrashTelemetry::SetStage("Overlay::Run::InitSDK");
     bool sdkInitFault = false;
     __try {
         SDK::Bootstrap::Init(nullptr);
-    } __except(CrashTelemetry::ReportAndHandle("Overlay::Run::InitSDK", GetExceptionInformation())) {
+    } __except (1) {
         sdkInitFault = true;
     }
     if (sdkInitFault) {
         WriteStageFmt(
             "[NightSharp] STAGE 8: FAILED - SDK bootstrap crashed at %s\r\n",
             CrashTelemetry::g_stage ? CrashTelemetry::g_stage : "unknown");
-        SDK::Bootstrap::Shutdown();
+        __try { SDK::Bootstrap::Shutdown(); } __except (1) {}
         CoreRuntime::Shutdown();
         SDK::MenuManager::Shutdown();
         ImGui_ImplDX11_Shutdown();
@@ -478,43 +576,24 @@ void Overlay::Run() {
     }
     WriteStage("[NightSharp] STAGE 8: SDK bootstrap initialized\r\n");
 
-    CrashTelemetry::SetStage("Overlay::Run::PluginBootstrap::EnsureRegistered");
-    WriteStage("[NightSharp] STAGE 8.1: PluginBootstrap::EnsureRegistered begin\r\n");
-    Plugins::PluginBootstrap::EnsureRegistered();
-    WriteStage("[NightSharp] STAGE 8.1: PluginBootstrap::EnsureRegistered done\r\n");
-
-    CrashTelemetry::SetStage("Overlay::Run::PluginRegistry::LoadConfig");
-    WriteStage("[NightSharp] STAGE 8.2: PluginRegistry::LoadConfig begin\r\n");
+    // SDK::Bootstrap registers SDK menu entries after the first config load.
+    // Re-apply config now, then load runtime plugins only after Core/SDK state
+    // exists so champion checks and event wiring are valid on startup.
     PluginRegistry::LoadConfig();
-    WriteStage("[NightSharp] STAGE 8.2: PluginRegistry::LoadConfig done\r\n");
-
-    CrashTelemetry::SetStage("Overlay::Run::PluginHostBridge::WireHostAPI");
-    WriteStage("[NightSharp] STAGE 8.3: PluginHostBridge::WireHostAPI begin\r\n");
-    PluginHostBridge::WireHostAPI();
-    WriteStage("[NightSharp] STAGE 8.3: PluginHostBridge::WireHostAPI done\r\n");
-
-    WriteStage("[NightSharp] STAGE 8a: Plugin substrate registered (post-SDK)\r\n");
-
-    // Load plugins AFTER SDK init — plugins need SDK menus to exist for override
-    CrashTelemetry::SetStage("Overlay::Run::PluginManager::LoadAuto");
     Plugins::PluginManager::Get().LoadAuto();
-    WriteStage("[NightSharp] STAGE 8b: Plugins loaded (post-SDK)\r\n");
-
-    CrashTelemetry::SetStage("Overlay::PreLoadAll");
-    __try {
-        MenuPersistence::LoadAll();
-    }
-    __except (CrashTelemetry::ReportAndHandle("Overlay::LoadAll", GetExceptionInformation())) {
-        WriteStage("[NightSharp] STAGE 8c: FAILED (LoadAll crash)\r\n");
-    }
-    CrashTelemetry::SetStage("Overlay::PostLoadAll");
-    WriteStage("[NightSharp] STAGE 8c: MenuPersistence::LoadAll done\r\n");
+    PluginHostBridge::WireHostAPI();
 
     const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     int frameCount = 0;
+    DWORD lastGameAliveCheckTick = 0;
+    bool cachedGameAlive = true;
 
     while (!g_bShutdown) {
         bool frameFault = false;
+        const DWORD perfFrameStart = GetTickCount();
+        DWORD perfLastTick = perfFrameStart;
+        DWORD perfSlowMs = 0;
+        const char* perfSlowStage = "FrameStart";
         const auto traceFrameStage = [&](const char* stage) {
             if (frameCount < 2 && stage && *stage) {
                 WriteStageFmt("[NightSharp] FRAME %d: %s\r\n", frameCount, stage);
@@ -531,6 +610,7 @@ void Overlay::Run() {
                     InterlockedExchange(&g_bShutdown, 1);
                 }
             }
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "PumpMessages");
 
             if (g_bShutdown) {
                 __leave;
@@ -538,11 +618,17 @@ void Overlay::Run() {
 
             CrashTelemetry::SetStage("Overlay::Frame::CheckGameWindow");
             traceFrameStage("CheckGameWindow");
-            if (!IsGameWindowAlive()) {
+            const DWORD nowAliveCheck = GetTickCount();
+            if (nowAliveCheck - lastGameAliveCheckTick >= 500) {
+                lastGameAliveCheckTick = nowAliveCheck;
+                cachedGameAlive = IsGameWindowAlive();
+            }
+            if (!cachedGameAlive) {
                 WriteStage("[NightSharp] RENDER LOOP: Game window gone, breaking\r\n");
                 InterlockedExchange(&g_bShutdown, 1);
                 __leave;
             }
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "CheckGameWindow");
 
             CrashTelemetry::SetStage("Overlay::Frame::Resize");
             traceFrameStage("Resize");
@@ -572,7 +658,24 @@ void Overlay::Run() {
                 __leave;
             }
 
+            // Remote unload request: the external injector writes flag[18]=0x01
+            // when the user presses Ctrl+R. We drop out of the render loop,
+            // run the full cleanup path (uninstall hook + destroy ImGui + free
+            // heap) and ONLY THEN mark flag[16]=0x31 so the injector knows
+            // it is safe to VirtualFreeEx(remoteBase).
+            if (auto* fp = NightSharp_GetFlagPage()) {
+                if (fp[18] == 0x01) {
+                    WriteStage("[NightSharp] RENDER LOOP: injector unload request (flag[18]=1), breaking\r\n");
+                    fp[18] = 0x00;                                 // consume the request
+                    InterlockedExchange(&g_bShutdown, 1);
+                    __leave;
+                }
+            }
 
+            CrashTelemetry::SetStage("Overlay::Frame::ClickThrough");
+            traceFrameStage("ClickThrough");
+            UpdateClickThroughFromMenuBounds();
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "WindowState");
 
             CrashTelemetry::SetStage("Overlay::Frame::TickRead");
             traceFrameStage("TickRead");
@@ -592,19 +695,33 @@ void Overlay::Run() {
                     CrashTelemetry::g_stage ? CrashTelemetry::g_stage : "unknown");
                 CoreRuntime::g_ctx.validationMask = 0;
             }
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "CoreReadValidate");
             CrashTelemetry::SetStage("Overlay::Frame::BeginWrite");
             traceFrameStage("BeginWrite");
             CoreRuntime::BeginWritePhase();
             CrashTelemetry::SetStage("Overlay::Frame::SDKUpdate");
             traceFrameStage("SDKUpdate");
-            SDK::Bootstrap::Update();
+            __try { SDK::Bootstrap::Update(); } __except (1) {}
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "SDKUpdate");
+
+            // Heap-only memory hacks (CRC-safe). Run inside write phase.
+            CrashTelemetry::SetStage("Overlay::Frame::ZoomHack");
+            __try {
+                CoreZoomHack::Tick(Config::ZoomHack::enabled, Config::ZoomHack::maxZoom);
+            } __except(1) {}
+
+            CrashTelemetry::SetStage("Overlay::Frame::SkinChanger");
+            __try {
+                CoreSkinChanger::Tick(Config::SkinChanger::enabled, Config::SkinChanger::skinId);
+            } __except(1) {}
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "CoreHacks");
 
             CrashTelemetry::SetStage("Overlay::Frame::ImGuiBackends");
             traceFrameStage("ImGuiBackends");
             ImGui_ImplDX11_NewFrame();
             ImGui_ImplWin32_NewFrame();
 
-            if (g_bMenuVisible || NightSharpMenu::debugWindowEnabled) {
+            if (g_bMenuVisible) {
                 POINT mp = {};
                 GetCursorPos(&mp);
                 ScreenToClient(g_hOverlay, &mp);
@@ -618,23 +735,30 @@ void Overlay::Run() {
             CrashTelemetry::SetStage("Overlay::Frame::ImGuiNewFrame");
             traceFrameStage("ImGuiNewFrame");
             ImGui::NewFrame();
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "ImGuiFrame");
 
             CrashTelemetry::SetStage("Overlay::Frame::PluginsUpdate");
             traceFrameStage("PluginsUpdate");
             Plugins::PluginManager::Get().OnUpdate();
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "PluginsUpdate");
 
+            // Drive the event-hook pollers every frame. No-op until the
+            // Shadow-VMT hook is installed (via CoreEventHook::InstallAllHooks
+            // above or the "Install Hook" button in SDK Diagnostics).
+            CrashTelemetry::SetStage("Overlay::Frame::EventHookPoll");
+            traceFrameStage("EventHookPoll");
+            CoreEventHook::PollAllEvents();
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "EventHookPoll");
             CrashTelemetry::SetStage("Overlay::Frame::MenuRender");
             traceFrameStage("MenuRender");
             NightSharpMenu::Render();
-            NightSharpMenu::RenderDebugWindow();
-            UpdateClickThroughState();
             CrashTelemetry::SetStage("Overlay::Frame::PluginsRender");
             traceFrameStage("PluginsRender");
             Plugins::PluginManager::Get().OnRender();
-
             CrashTelemetry::SetStage("Overlay::Frame::SDKRender");
             traceFrameStage("SDKRender");
-            SDK::Bootstrap::Render();
+            __try { SDK::Bootstrap::Render(); } __except (1) {}
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "DrawBuild");
             CrashTelemetry::SetStage("Overlay::Frame::EndWrite");
             traceFrameStage("EndWrite");
             CoreRuntime::EndWritePhase();
@@ -643,13 +767,23 @@ void Overlay::Run() {
             traceFrameStage("ImGuiRender");
             ImGui::EndFrame();
             ImGui::Render();
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "ImGuiRender");
 
             CrashTelemetry::SetStage("Overlay::Frame::D3DPresent");
             traceFrameStage("D3DPresent");
             g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
             g_pd3dContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-            g_pSwapChain->Present(1, 0);
+            // Present without v-sync; the loop below applies a light cap so
+            // the overlay can reach 100+ FPS without spinning uncapped.
+            g_pSwapChain->Present(0, 0);
+            MarkFramePerf(perfLastTick, perfSlowMs, perfSlowStage, "D3DPresent");
+            LogSlowFrame(frameCount, perfFrameStart, perfSlowMs, perfSlowStage);
+
+            const DWORD frameElapsed = GetTickCount() - perfFrameStart;
+            if (frameElapsed < kTargetOverlayFrameMs) {
+                Sleep(kTargetOverlayFrameMs - frameElapsed);
+            }
 
             ++frameCount;
             if (frameCount <= 2) {
@@ -665,147 +799,43 @@ void Overlay::Run() {
         }
 
         if (frameFault) {
-            __try { WriteStage("[NightSharp] RENDER LOOP: frame exception, breaking\r\n"); }
-            __except (EXCEPTION_EXECUTE_HANDLER) {}
+            WriteStage("[NightSharp] RENDER LOOP: frame exception, breaking\r\n");
             break;
         }
     }
 
     CrashTelemetry::SetStage("Overlay::Run::Cleanup");
-    WriteStage("[NightSharp] CLEANUP: Begin\r\n");
 
-    CrashTelemetry::SetStage("Overlay::Cleanup::UnloadAll");
-    WriteStage("[NightSharp] CLEANUP 1: UnloadAll::Begin\r\n");
-    __try {
-        Plugins::PluginManager::Get().UnloadAll();
-        WriteStage("[NightSharp] CLEANUP 1: UnloadAll::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::UnloadAll", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 1: UnloadAll::SEH_CAUGHT\r\n");
+    // IMPORTANT: uninstall the Shadow-VMT hook FIRST. While the shadow
+    // dispatch slot still points at our shellcode trampoline, any spell
+    // dispatched on another game thread would jump into memory we are
+    // about to free — silent crash. Restoring the original vtable pointer
+    // makes subsequent dispatches safe before we tear everything else down.
+    __try { CoreEventHook::UninstallAll(); } __except (1) {}
+
+    Plugins::PluginManager::Get().UnloadAll();
+    __try { SDK::Bootstrap::Shutdown(); } __except (1) {}
+    CoreRuntime::Shutdown();
+    SDK::MenuManager::Shutdown();
+
+    ImGui_ImplDX11_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
+
+    CleanupDeviceD3D11();
+
+    if (g_hOverlay) {
+        DestroyWindow(g_hOverlay);
+        g_hOverlay = nullptr;
     }
 
-    CrashTelemetry::SetStage("Overlay::Cleanup::SDKShutdown");
-    WriteStage("[NightSharp] CLEANUP 2: SDK::Shutdown::Begin\r\n");
-    __try {
-        SDK::Bootstrap::Shutdown();
-        WriteStage("[NightSharp] CLEANUP 2: SDK::Shutdown::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::SDKShutdown", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 2: SDK::Shutdown::SEH_CAUGHT\r\n");
+    if (classRegistered) {
+        UnregisterClassW(overlayClassName, wc.hInstance);
     }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::PluginManagerClear");
-    WriteStage("[NightSharp] CLEANUP 2a: PluginManager::ClearAll::Begin\r\n");
-    __try {
-        Plugins::PluginManager::Get().ClearAll();
-        WriteStage("[NightSharp] CLEANUP 2a: PluginManager::ClearAll::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::PluginManagerClear", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 2a: PluginManager::ClearAll::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::PluginRegistryClear");
-    WriteStage("[NightSharp] CLEANUP 2b: PluginRegistry::Clear::Begin\r\n");
-    __try {
-        PluginRegistry::Clear();
-        WriteStage("[NightSharp] CLEANUP 2b: PluginRegistry::Clear::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::PluginRegistryClear", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 2b: PluginRegistry::Clear::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::CoreRuntimeShutdown");
-    WriteStage("[NightSharp] CLEANUP 3: CoreRuntime::Shutdown::Begin\r\n");
-    __try {
-        CoreRuntime::Shutdown();
-        WriteStage("[NightSharp] CLEANUP 3: CoreRuntime::Shutdown::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::CoreRuntimeShutdown", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 3: CoreRuntime::Shutdown::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::MenuPersistenceSave");
-    __try {
-        MenuPersistence::SaveAll();
-        WriteStage("[NightSharp] CLEANUP 3b: MenuPersistence::SaveAll::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::MenuPersistenceSave", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 3b: MenuPersistence::SaveAll::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::MenuManagerShutdown");
-    WriteStage("[NightSharp] CLEANUP 4: MenuManager::Shutdown::Begin\r\n");
-    __try {
-        SDK::MenuManager::Shutdown();
-        WriteStage("[NightSharp] CLEANUP 4: MenuManager::Shutdown::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::MenuManagerShutdown", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 4: MenuManager::Shutdown::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::ImGuiDX11Shutdown");
-    WriteStage("[NightSharp] CLEANUP 5: ImGui_ImplDX11_Shutdown::Begin\r\n");
-    __try {
-        ImGui_ImplDX11_Shutdown();
-        WriteStage("[NightSharp] CLEANUP 5: ImGui_ImplDX11_Shutdown::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::ImGuiDX11Shutdown", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 5: ImGui_ImplDX11_Shutdown::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::ImGuiWin32Shutdown");
-    WriteStage("[NightSharp] CLEANUP 6: ImGui_ImplWin32_Shutdown::Begin\r\n");
-    __try {
-        ImGui_ImplWin32_Shutdown();
-        WriteStage("[NightSharp] CLEANUP 6: ImGui_ImplWin32_Shutdown::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::ImGuiWin32Shutdown", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 6: ImGui_ImplWin32_Shutdown::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::ImGuiDestroyContext");
-    WriteStage("[NightSharp] CLEANUP 7: ImGui::DestroyContext::Begin\r\n");
-    __try {
-        ImGui::DestroyContext();
-        WriteStage("[NightSharp] CLEANUP 7: ImGui::DestroyContext::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::ImGuiDestroyContext", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 7: ImGui::DestroyContext::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::CleanupDeviceD3D11");
-    WriteStage("[NightSharp] CLEANUP 8: CleanupDeviceD3D11::Begin\r\n");
-    __try {
-        CleanupDeviceD3D11();
-        WriteStage("[NightSharp] CLEANUP 8: CleanupDeviceD3D11::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::CleanupDeviceD3D11", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 8: CleanupDeviceD3D11::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::DestroyWindow");
-    WriteStage("[NightSharp] CLEANUP 9: DestroyWindow::Begin\r\n");
-    __try {
-        if (g_hOverlay) {
-            DestroyWindow(g_hOverlay);
-            g_hOverlay = nullptr;
-        }
-        WriteStage("[NightSharp] CLEANUP 9: DestroyWindow::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::DestroyWindow", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 9: DestroyWindow::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::UnregisterClass");
-    WriteStage("[NightSharp] CLEANUP 10: UnregisterClass::Begin\r\n");
-    __try {
-        if (classRegistered) {
-            UnregisterClassW(overlayClassName, wc.hInstance);
-        }
-        WriteStage("[NightSharp] CLEANUP 10: UnregisterClass::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::UnregisterClass", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 10: UnregisterClass::SEH_CAUGHT\r\n");
-    }
-
-    CrashTelemetry::SetStage("Overlay::Cleanup::NsHeapDestroy");
-    WriteStage("[NightSharp] CLEANUP 11: NsHeapDestroy::Begin\r\n");
-    __try {
-        NsHeapDestroy();
-        WriteStage("[NightSharp] CLEANUP 11: NsHeapDestroy::OK\r\n");
-    } __except (CrashTelemetry::ReportAndHandle("Cleanup::NsHeapDestroy", GetExceptionInformation())) {
-        WriteStage("[NightSharp] CLEANUP 11: NsHeapDestroy::SEH_CAUGHT\r\n");
-    }
+    NsHeapDestroy();
 
     InterlockedExchange(&g_bRunning, 0);
-    WriteStage("[NightSharp] CLEANUP: Complete\r\n");
+    WriteStage("[NightSharp] Overlay cleanup complete\r\n");
 }
 
 void Overlay::RequestShutdown() {
