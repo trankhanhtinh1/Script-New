@@ -11,10 +11,12 @@
 #include <Windows.h>
 #include <dwmapi.h>
 #include <d3d11.h>
+#include <dcomp.h>
 #include <cstdint>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "dcomp.lib")
 
 namespace Overlay {
 

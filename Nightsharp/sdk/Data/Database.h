@@ -589,7 +589,7 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     d.name = "Eye of Destruction";
     d.radius = 280;
     d.range = 1000;
-    d.spellDelay = 250.0f; // Patched wiki
+    d.spellDelay = 500.0f; // CommunityDragon DamageDelay
     d.spellKey = SpellSlot::W;
     d.spellName = "XerathArcaneBarrage2";
     d.spellType = SpellType::Circular;
@@ -608,6 +608,7 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     d.spellDelay = 500;
     d.spellKey = SpellSlot::Q;
     d.spellName = "XerathArcanopulse2";
+    d.extraSpellNames = {"XerathArcanopulseChargeUp"};
     d.useEndPosition = true;
     d.spellType = SpellType::Line;
     return d;
@@ -928,13 +929,19 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     SpellData d;
     d.charName = "Smolder";
     d.dangerlevel = 1;
+    d.extraMissileNames = {"Smolder_Q_Mis_Lvl1",
+                           "Smolder_Q_Mis_Lvl2",
+                           "Smolder_Q_Mis_Lvl3",
+                           "Smolder_Q_Mis_Lvl4"};
     d.name = "Dragon's Breath";
+    d.projectileSpeed = 2200;
     d.radius = 50;
     d.range = 550;
     d.spellDelay = 250.0f;
     d.spellKey = SpellSlot::Q;
     d.spellName = "SmolderQ";
-    d.spellType = SpellType::Line;
+    d.spellType = SpellType::None;
+    d.noProcess = true;
     return d;
   }());
 
@@ -942,14 +949,34 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     SpellData d;
     d.charName = "Smolder";
     d.dangerlevel = 2;
+    d.extraMissileNames = {"Smolder_W_mis"};
+    d.missileName = "SmolderW";
     d.name = "ACHOO!";
-    d.projectileSpeed = 1500;
-    d.radius = 125;
-    d.range = 1200;
+    d.projectileSpeed = 2000;
+    d.radius = 115;
+    d.range = 1500;
     d.spellDelay = 350.0f;
     d.spellKey = SpellSlot::W;
     d.spellName = "SmolderW";
     d.spellType = SpellType::Line;
+    return d;
+  }());
+
+  Spells.push_back([]() {
+    SpellData d;
+    d.charName = "Smolder";
+    d.dangerlevel = 4;
+    d.missileName = "SmolderRMomMissile";
+    d.extraMissileNames = {"SmolderRMomMissileSweetspot", "Smolder_R_mis"};
+    d.name = "MMOOOMMMM!";
+    d.projectileSpeed = 1700;
+    d.radius = 300;
+    d.range = 4250;
+    d.spellDelay = 1000.0f;
+    d.spellKey = SpellSlot::R;
+    d.spellName = "SmolderR";
+    d.spellType = SpellType::Line;
+    d.fixedRange = true;
     return d;
   }());
 
@@ -4838,11 +4865,13 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     SpellData d;
     d.charName = "Morgana";
     d.dangerlevel = 3;
+    d.extraMissileNames = {"MorganaQ", "Morgana_Q_Mis"};
+    d.extraSpellNames = {"MorganaQ"};
     d.missileName = "DarkBindingMissile";
     d.name = "Dark Binding";
     d.projectileSpeed = 1200;
     d.radius = 70;
-    d.range = 1175;
+    d.range = 1300;
     d.spellDelay = 250.0f;
     d.spellKey = SpellSlot::Q;
     d.spellName = "DarkBindingMissile";

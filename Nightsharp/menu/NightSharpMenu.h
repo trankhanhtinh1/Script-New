@@ -165,8 +165,11 @@ namespace NightSharpMenu {
             ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "Skin ID: %d");
         }
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
+        // Slider removed (May 2026): ON = unlimited wheel zoom, OFF = vanilla.
+        // Ngu?i ch?i ch? c?n l?n chu?t d? zoom xa tu? ?, kh?ng c?n c?u h?nh.
         if (Config::ZoomHack::enabled) {
-            ImGui::SliderFloat("##zoom_max", &Config::ZoomHack::maxZoom, 1500.0f, 8000.0f, "Max Zoom: %.0f");
+            ImGui::TextColored(ImVec4(0.5f,0.5f,0.6f,1.0f),
+                "Lan chuot de zoom xa tuy y");
         }
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
         ImGui::Separator();

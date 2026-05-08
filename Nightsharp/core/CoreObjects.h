@@ -294,11 +294,18 @@ namespace CoreObjects {
 
         uintptr_t GetMissileSpellData() const { return Globals::Read<uintptr_t>(address + Offset::MissileClient::SpellDataPtr); }
         CoreSpellCastInfo::MissileCastRef GetMissileCastInfo() const { return CoreSpellCastInfo::GetMissileCast(address); }
+        int  GetMissileNetId() const { return Globals::Read<int>(address + Offset::MissileClient::MissileNetId); }
         int  GetMissileCasterNetId() const { return Globals::Read<int>(address + Offset::MissileClient::CasterNetId); }
         int  GetMissileTargetNetId() const { return Globals::Read<int>(address + Offset::MissileClient::TargetNetId); }
         Vec3 GetMissileStartPos() const    { return Globals::Read<Vec3>(address + Offset::MissileClient::StartPos); }
         Vec3 GetMissileEndPos() const      { return Globals::Read<Vec3>(address + Offset::MissileClient::EndPos); }
         Vec3 GetMissileCastEndPos() const  { return Globals::Read<Vec3>(address + Offset::MissileClient::CastEndPos); }
+        bool ReadMissileSpellName(char* out, int maxOut) const {
+            return IsValid() && Globals::ReadRuntimeStringField(address + Offset::MissileClient::SpellName, out, maxOut);
+        }
+        bool ReadMissileName(char* out, int maxOut) const {
+            return IsValid() && Globals::ReadRuntimeStringField(address + Offset::MissileClient::MissileName, out, maxOut);
+        }
 
         // ── Distance / team comparison ──
 
@@ -693,6 +700,56 @@ namespace CoreObjects {
         return Globals::ReadPtrArray(view.items, view.count, out, maxOut);
     }
 
+    inline bool IsMissileTreeNil(uintptr_t node) {
+        return !Globals::IsValidPtr(node) ||
+               Globals::Read<unsigned char>(node + 0x19) != 0;
+    }
+
+    inline int CopyMissileTreeObjects(uintptr_t manager, uintptr_t* out, int maxOut) {
+        if (!out || maxOut <= 0 || !Globals::IsValidPtr(manager)) {
+            return 0;
+        }
+
+        const auto head = Globals::Read<uintptr_t>(manager + 0x8);
+        const int size = Globals::Read<int>(manager + 0x10);
+        if (!Globals::IsValidPtr(head) || size <= 0 || size > 4096) {
+            return 0;
+        }
+
+        uintptr_t stack[256] = {};
+        int stackSize = 0;
+        int written = 0;
+        int visited = 0;
+        uintptr_t current = Globals::Read<uintptr_t>(head + 0x8);
+        const int visitLimit = size * 2 + 32;
+
+        while ((!IsMissileTreeNil(current) || stackSize > 0) && visited < visitLimit) {
+            while (!IsMissileTreeNil(current)) {
+                if (stackSize >= static_cast<int>(sizeof(stack) / sizeof(stack[0]))) {
+                    return written;
+                }
+                stack[stackSize++] = current;
+                current = Globals::Read<uintptr_t>(current);
+            }
+
+            if (stackSize <= 0) {
+                break;
+            }
+
+            const auto node = stack[--stackSize];
+            ++visited;
+
+            const auto missile = Globals::Read<uintptr_t>(node + 0x28);
+            if (Globals::IsValidPtr(missile) && written < maxOut) {
+                out[written++] = missile;
+            }
+
+            current = Globals::Read<uintptr_t>(node + 0x10);
+        }
+
+        return written;
+    }
+
     inline ManagerView GetHeroManagerView()    { return ReadManager(CoreRuntime::GetContext().heroManager); }
     inline ManagerView GetMinionManagerView()  { return ReadManager(CoreRuntime::GetContext().minionManager); }
     inline ManagerView GetTurretManagerView()  { return ReadManager(CoreRuntime::GetContext().turretManager); }
@@ -701,7 +758,7 @@ namespace CoreObjects {
     inline int EnumerateHeroes(uintptr_t* out, int maxOut)    { return CopyManagerObjects(GetHeroManagerView(), out, maxOut); }
     inline int EnumerateMinions(uintptr_t* out, int maxOut)   { return CopyManagerObjects(GetMinionManagerView(), out, maxOut); }
     inline int EnumerateTurrets(uintptr_t* out, int maxOut)   { return CopyManagerObjects(GetTurretManagerView(), out, maxOut); }
-    inline int EnumerateMissiles(uintptr_t* out, int maxOut)  { return CopyManagerObjects(GetMissileManagerView(), out, maxOut); }
+    inline int EnumerateMissiles(uintptr_t* out, int maxOut)  { return CopyMissileTreeObjects(CoreRuntime::GetContext().missileManager, out, maxOut); }
 
     inline int FilterObjects(const uintptr_t* src, int srcCount,
                              uintptr_t* out, int maxOut,

@@ -123,11 +123,11 @@ public:
         const auto mode = SDK::Orbwalker::GetMode();
         if (mode == SDK::OrbwalkerMode::Combo) {
             if (ComboBool("useQ", true) && m_q.IsReady() && target.IsValidTarget(m_q.Range)) {
-                CastPredicted(m_q, target, SDK::HitChance::High);
+                m_q.CastPredicted(target, SDK::HitChance::High);
             }
         } else if (mode == SDK::OrbwalkerMode::Harass || mode == SDK::OrbwalkerMode::LaneClear) {
             if (HarassBool("useQ", true) && m_q.IsReady() && target.IsValidTarget(m_q.Range)) {
-                CastPredicted(m_q, target, SDK::HitChance::High);
+                m_q.CastPredicted(target, SDK::HitChance::High);
             }
         }
     }
@@ -222,29 +222,18 @@ private:
 
     static bool HasNoDeathBuff(const SDK::AIHeroClient& target) {
         return !target.HasBuff("JudicatorIntervention") &&
+               !target.HasBuff("KayleR") &&
                !target.HasBuff("kindredrnodeathbuff") &&
                !target.HasBuff("Undying Rage") &&
+               !target.HasBuff("UndyingRage") &&
+               !target.HasBuff("Undying_Rage") &&
                !target.HasBuff("FioraW") &&
-               !target.HasBuff("BlitzcrankManaBarrierCO");
-    }
-
-    bool CastPredicted(const SDK::Spell& spell,
-                       const SDK::AIBaseClient& target,
-                       SDK::HitChance minimum,
-                       bool collisionCheck = true,
-                       float rangeOverride = -1.0f,
-                       std::initializer_list<SDK::CollisionObjects> collisions = {}) const {
-        if (!spell.IsReady() || !target.IsValidTarget(rangeOverride >= 0.0f ? rangeOverride : spell.Range)) {
-            return false;
-        }
-
-        SDK::PredictionOutput pred = collisions.size() > 0
-            ? spell.GetPrediction(target, collisionCheck, rangeOverride, collisions)
-            : spell.GetPrediction(target, collisionCheck, rangeOverride);
-        if (pred.Hitchance < minimum) {
-            return false;
-        }
-        return spell.Cast(target, pred.CastPosition);
+               !target.HasBuff("BlitzcrankManaBarrierCO") &&
+               !target.HasBuff("BlitzcrankManaBarrierCD") &&
+               !target.HasBuff("ChronoShift") &&
+               !target.HasBuff("zhonyasringshield") &&
+               !target.HasBuff("BardRStasis") &&
+               !target.HasBuff("MelW");
     }
 
     void OneKeyCastR() {
@@ -257,7 +246,7 @@ private:
 
         const auto target = SDK::TargetSelector::GetTarget(m_r.Range, SDK::DamageType::Physical);
         if (target.IsValidTarget(m_r.Range) && !target.IsValidTarget(static_cast<float>(RSlider("RRange", 900)))) {
-            CastPredicted(m_r, target, SDK::HitChance::High, false);
+            m_r.CastPredicted(target, SDK::HitChance::High);
         }
     }
 
@@ -328,7 +317,7 @@ private:
 
         if (!castedThisTick && ComboBool("useQ", true) && m_q.IsReady() &&
             target.IsValidTarget(m_q.Range)) {
-            CastPredicted(m_q, target, SDK::HitChance::High, true);
+            m_q.CastPredicted(target, SDK::HitChance::High);
         }
 
         if (!ComboBool("useR", true) || !m_r.IsReady()) {
@@ -416,7 +405,7 @@ private:
 
         const auto target = SDK::TargetSelector::GetTarget(m_q.Range, SDK::DamageType::Physical);
         if (target.IsValidTarget(m_q.Range)) {
-            CastPredicted(m_q, target, SDK::HitChance::High, true);
+            m_q.CastPredicted(target, SDK::HitChance::High);
         }
     }
 
@@ -462,7 +451,7 @@ private:
                 }
             }
 
-            if (m_q.Cast(minion.Position())) {
+            if (m_q.CastPredicted(minion, SDK::HitChance::Medium)) {
                 return;
             }
         }
@@ -488,15 +477,16 @@ private:
 
             if (useW && m_w.IsReady() && obj.IsValidTarget(m_w.Range) &&
                 static_cast<int>(SDK::Utils::Jungle::GetJungleType(obj)) >= static_cast<int>(SDK::JungleType::Legendary)) {
-                if (CastPredicted(m_w, obj, SDK::HitChance::High, false, -1.0f,
+                if (m_w.CastPredicted(obj, SDK::HitChance::High, false, -1.0f,
                     { SDK::CollisionObjects::YasuoWall, SDK::CollisionObjects::Heroes })) {
                     return;
                 }
             }
 
             if (useQ && m_q.IsReady()) {
-                m_q.Cast(obj, obj.Position());
-                return;
+                if (m_q.CastPredicted(obj, SDK::HitChance::Medium)) {
+                    return;
+                }
             }
         }
     }
@@ -515,7 +505,7 @@ private:
                 continue;
             }
             if (minion.Health() < player.GetSpellDamage(minion, SDK::SpellSlot::Q)) {
-                CastPredicted(m_q, minion, SDK::HitChance::Medium, true);
+                m_q.CastPredicted(minion, SDK::HitChance::Medium);
                 return;
             }
         }
@@ -550,7 +540,7 @@ private:
                 continue;
             }
 
-            if (CastPredicted(m_q, target, SDK::HitChance::High, true)) {
+            if (m_q.CastPredicted(target, SDK::HitChance::High)) {
                 return;
             }
         }

@@ -451,9 +451,12 @@ namespace SpellBookLayout {
     //   * Active SpellCast (from `hero + ActiveSpellCast`): a fully
     //     populated >= 0x300-byte struct allocated only while a cast is in
     //     flight. ALL the offsets below apply, including `CasterNetId`.
-    // Verified 26.6: `sub_2A04B0` (GetSpellCastInfo) computes
+    // Verified 26.6:
+    //   * `GetSpellCastInfo` computes
     //   `(a4+0x4058 - a4+0x4050) / 408` to count slots and returns
     //   `array_begin + 408 * slot`, confirming the 0x198 stride.
+    //   * process-spell setup writes caster position to SpellCastInfo+0xD0
+    //     and the decrypted cast/end position to SpellCastInfo+0xDC.
     namespace SpellCastInfoLayout {
         constexpr auto SpellSlot     = 0x08;   // uint8  0..3 = QWER, 4..5 = D/F, 64=attack
         constexpr auto State         = 0x0C;   // uint32 enum (Ready/Cast/Channel/Finished)
@@ -461,8 +464,8 @@ namespace SpellBookLayout {
         constexpr auto EndTime       = 0x2C;   // float  game time the cast finishes
         constexpr auto ChannelStart  = 0x30;   // float  0 when not channeled
         constexpr auto ChannelEnd    = 0x34;   // float  0 when not channeled
-        constexpr auto StartPosition = 0x70;   // Vec3   cast start position
-        constexpr auto EndPosition   = 0x7C;   // Vec3   cast end position
+        constexpr auto StartPosition = 0xD0;   // Vec3   cast start/caster position
+        constexpr auto EndPosition   = 0xDC;   // Vec3   cast end/cast position
         constexpr auto TargetNetId   = 0x138;  // uint32 primary target (0xFFFFFFFF if unit-less)
         constexpr auto CasterNetId   = 0x2DC;  // uint32 caster net id  (active-cast only - per-slot stride is 0x198)
     } // namespace SpellCastInfoLayout
@@ -972,9 +975,9 @@ namespace SpellBookLayout {
         constexpr auto CasterNetId   = 0x358;
         constexpr auto TargetNetId   = 0x35C;
         constexpr auto MissileNetId  = 0x364;
-        constexpr auto StartPos      = 0x330;
-        constexpr auto EndPos        = 0x33C;
-        constexpr auto CastEndPos    = 0x34C;
+        constexpr auto StartPos      = 0x390;
+        constexpr auto EndPos        = 0x39C;
+        constexpr auto CastEndPos    = 0x39C;
         constexpr auto Position      = 0x25C;
     } // namespace MissileClient
 
@@ -997,6 +1000,7 @@ namespace SpellBookLayout {
     } // namespace DirectInputRuntime
 
     namespace ZoomRuntime {
+        constexpr auto CameraInstance   = 0x1E21698;  // 26.6 IDA: qword_1E21698, camera object global
         constexpr auto HudToCameraPtr   = 0x18;
         constexpr auto CurrentZoom      = 0x324;
         constexpr auto ZoomConfigPtr    = 0x3D0;
@@ -1010,6 +1014,38 @@ namespace SpellBookLayout {
     } // namespace ZoomRuntime
 
     namespace SkinRuntime {
+        // Do not write CharacterDataSkinId directly for live skin changes.
+        // The animation stack reads CharacterDataStack; direct CharacterData
+        // writes can leave model resources out of sync and crash while moving.
+        constexpr auto CharacterDataSkinId = 0x68;
+
+        // R3nzSkin-style runtime path, IDA/CE verified on 26.7 (May 2026):
+        // local + CharacterDataStack -> std::vector + base_skin.
+        // base_skin.skin = stack + BaseSkin + CharacterStackSkin.
+        // CharacterDataStackUpdate is sub_20BEF0(stack, change).
+        // CharacterDataStackPush is sub_22A1D0(this, model, skin, ...).
+        constexpr auto CharacterDataStack       = 0x4100;
+        constexpr auto CharacterDataStackUpdate = 0x20BEF0;
+        constexpr auto CharacterDataStackPush   = 0x22A1D0;  // (May 2026) verified
+        constexpr auto CharacterDataStackBegin  = 0x00;
+        constexpr auto CharacterDataStackEnd    = 0x08;
+        constexpr auto CharacterDataStackCap    = 0x10;
+        constexpr auto CharacterDataStackBaseSkin = 0x18;
+        constexpr auto CharacterStackModelPtr   = 0x00;
+        constexpr auto CharacterStackModelLen   = 0x08;
+        constexpr auto CharacterStackModelCap   = 0x0C;
+        constexpr auto CharacterStackSkin       = 0x20;
+        constexpr auto CharacterStackGear       = 0x84;  // base_skin.gear (int8)
+
+        // ── Encrypted skin id on the hero object (NEW May 2026) ──
+        // Pattern `88 86 ?? ?? 00 00 48 89 45 ?? 0F B6 45 A8 88 86 ?? 13`
+        // → mov [rsi+1334h], al at sub_28F2E0+0x545. Field is xor_value<int>.
+        // R3nzSkin AIBaseCommon::change_skin writes BOTH this AND
+        // base_skin.skin; writing only one of them desyncs animation
+        // resources and can crash on the next animation tick.
+        constexpr auto AiBaseSkinId = 0x1334;
+
+        // Legacy fields kept for ABI/reference compatibility only.
         constexpr auto SkinNetID      = 0x1440;
         constexpr auto SkinName       = 0x1448;
         constexpr auto ModelName      = 0x1468;

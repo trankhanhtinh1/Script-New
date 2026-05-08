@@ -23,6 +23,9 @@
 
 #include <d3d11.h>
 #include <dxgi.h>
+#include <dxgi1_2.h>
+#include <dcomp.h>
+#include <windowsx.h>
 
 // Telemetry flag-page accessor exported by dllmain.cpp. Offset 18 carries
 // the "please shut down" request written by the external injector on
@@ -33,6 +36,7 @@ extern "C" volatile uint8_t* NightSharp_GetFlagPage();
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "dcomp.lib")
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -40,8 +44,11 @@ namespace {
 
 ID3D11Device* g_pd3dDevice = nullptr;
 ID3D11DeviceContext* g_pd3dContext = nullptr;
-IDXGISwapChain* g_pSwapChain = nullptr;
+IDXGISwapChain1* g_pSwapChain = nullptr;
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
+IDCompositionDevice* g_pDcompDevice = nullptr;
+IDCompositionTarget* g_pDcompTarget = nullptr;
+IDCompositionVisual* g_pDcompVisual = nullptr;
 
 HWND g_hOverlay = nullptr;
 HWND g_hGameWindow = nullptr;
@@ -55,6 +62,14 @@ bool g_antiCaptureEnabled = false;
 
 const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
 constexpr DWORD kTargetOverlayFrameMs = 8; // ~125 FPS cap when the frame is cheap.
+
+template <typename T>
+void SafeRelease(T*& ptr) {
+    if (ptr) {
+        ptr->Release();
+        ptr = nullptr;
+    }
+}
 
 void WriteStage(const char* msg) {
     OutputDebugStringA(msg);
@@ -129,65 +144,184 @@ bool CreateRenderTarget() {
 }
 
 void CleanupRenderTarget() {
-    if (g_pRenderTargetView) {
-        g_pRenderTargetView->Release();
-        g_pRenderTargetView = nullptr;
-    }
-}
-
-bool CreateDeviceD3D11(HWND hWnd) {
-    DXGI_SWAP_CHAIN_DESC sd = {};
-    sd.BufferCount = 2;
-    sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    sd.BufferDesc.RefreshRate.Numerator = 0;
-    sd.BufferDesc.RefreshRate.Denominator = 1;
-    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow = hWnd;
-    sd.SampleDesc.Count = 1;
-    sd.Windowed = TRUE;
-    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-    const D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
-    D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
-
-    HRESULT hr = D3D11CreateDeviceAndSwapChain(
-        nullptr,
-        D3D_DRIVER_TYPE_HARDWARE,
-        nullptr,
-        0,
-        levels,
-        2,
-        D3D11_SDK_VERSION,
-        &sd,
-        &g_pSwapChain,
-        &g_pd3dDevice,
-        &featureLevel,
-        &g_pd3dContext);
-
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    return CreateRenderTarget();
+    SafeRelease(g_pRenderTargetView);
 }
 
 void CleanupDeviceD3D11() {
     CleanupRenderTarget();
-    if (g_pSwapChain) {
-        g_pSwapChain->Release();
-        g_pSwapChain = nullptr;
+    SafeRelease(g_pDcompVisual);
+    SafeRelease(g_pDcompTarget);
+    SafeRelease(g_pDcompDevice);
+    SafeRelease(g_pSwapChain);
+    SafeRelease(g_pd3dContext);
+    SafeRelease(g_pd3dDevice);
+}
+
+bool CreateDeviceD3D11(HWND hWnd) {
+    CleanupDeviceD3D11();
+
+    const D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
+    D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
+
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,
+        D3D_DRIVER_TYPE_HARDWARE,
+        nullptr,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        levels,
+        2,
+        D3D11_SDK_VERSION,
+        &g_pd3dDevice,
+        &featureLevel,
+        &g_pd3dContext);
+
+    if (FAILED(hr) || !g_pd3dDevice || !g_pd3dContext) {
+        CleanupDeviceD3D11();
+        return false;
     }
-    if (g_pd3dContext) {
-        g_pd3dContext->Release();
-        g_pd3dContext = nullptr;
+
+    IDXGIDevice* dxgiDevice = nullptr;
+    IDXGIAdapter* adapter = nullptr;
+    IDXGIFactory2* factory = nullptr;
+
+    hr = g_pd3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
+    if (FAILED(hr) || !dxgiDevice) {
+        CleanupDeviceD3D11();
+        return false;
     }
-    if (g_pd3dDevice) {
-        g_pd3dDevice->Release();
-        g_pd3dDevice = nullptr;
+
+    hr = dxgiDevice->GetAdapter(&adapter);
+    if (FAILED(hr) || !adapter) {
+        SafeRelease(dxgiDevice);
+        CleanupDeviceD3D11();
+        return false;
     }
+
+    hr = adapter->GetParent(IID_PPV_ARGS(&factory));
+    SafeRelease(adapter);
+    if (FAILED(hr) || !factory) {
+        SafeRelease(dxgiDevice);
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    RECT rc = {};
+    GetClientRect(hWnd, &rc);
+    UINT width = static_cast<UINT>(rc.right - rc.left);
+    UINT height = static_cast<UINT>(rc.bottom - rc.top);
+    if (width == 0) {
+        width = 1;
+    }
+    if (height == 0) {
+        height = 1;
+    }
+
+    DXGI_SWAP_CHAIN_DESC1 desc = {};
+    desc.Width = width;
+    desc.Height = height;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.BufferCount = 2;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+    desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+    desc.Scaling = DXGI_SCALING_STRETCH;
+
+    hr = factory->CreateSwapChainForComposition(g_pd3dDevice, &desc, nullptr, &g_pSwapChain);
+    SafeRelease(factory);
+    if (FAILED(hr) || !g_pSwapChain) {
+        SafeRelease(dxgiDevice);
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    hr = DCompositionCreateDevice(dxgiDevice, IID_PPV_ARGS(&g_pDcompDevice));
+    SafeRelease(dxgiDevice);
+    if (FAILED(hr) || !g_pDcompDevice) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    hr = g_pDcompDevice->CreateTargetForHwnd(hWnd, TRUE, &g_pDcompTarget);
+    if (FAILED(hr) || !g_pDcompTarget) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    hr = g_pDcompDevice->CreateVisual(&g_pDcompVisual);
+    if (FAILED(hr) || !g_pDcompVisual) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    hr = g_pDcompVisual->SetContent(g_pSwapChain);
+    if (FAILED(hr)) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    hr = g_pDcompTarget->SetRoot(g_pDcompVisual);
+    if (FAILED(hr)) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    hr = g_pDcompDevice->Commit();
+    if (FAILED(hr)) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    if (!CreateRenderTarget()) {
+        CleanupDeviceD3D11();
+        return false;
+    }
+
+    return true;
+}
+
+bool IsClientPointOverMenu(POINT pt) {
+    if (g_bMenuVisible == 0) {
+        return false;
+    }
+
+    const float fallbackRight =
+        NightSharpMenu::menuPosX +
+        NightSharpMenu::PRIMARY_W +
+        NightSharpMenu::SECONDARY_W +
+        NightSharpMenu::CONTENT_W +
+        NightSharpMenu::PANEL_GAP * 2.0f;
+    const float fallbackBottom = NightSharpMenu::menuPosY + NightSharpMenu::MAX_CONTENT_H;
+    const float right = NightSharpMenu::menuBoundsRight > 0.0f
+        ? NightSharpMenu::menuBoundsRight
+        : fallbackRight;
+    const float bottom = NightSharpMenu::menuBoundsBottom > 0.0f
+        ? NightSharpMenu::menuBoundsBottom
+        : fallbackBottom;
+
+    const float x = static_cast<float>(pt.x);
+    const float y = static_cast<float>(pt.y);
+    return x >= NightSharpMenu::menuPosX &&
+        x <= right &&
+        y >= NightSharpMenu::menuPosY &&
+        y <= bottom;
+}
+
+bool IsScreenPointOverMenu(POINT pt) {
+    if (!g_hOverlay) {
+        return false;
+    }
+
+    ScreenToClient(g_hOverlay, &pt);
+    return IsClientPointOverMenu(pt);
 }
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_NCHITTEST) {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        return IsScreenPointOverMenu(pt) ? HTCLIENT : HTTRANSPARENT;
+    }
+
     if (g_bMenuVisible) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
@@ -340,18 +474,7 @@ void UpdateClickThroughFromMenuBounds() {
 
     POINT cursorPt = {};
     GetCursorPos(&cursorPt);
-    ScreenToClient(g_hOverlay, &cursorPt);
-
-    const float cx = (float)cursorPt.x;
-    const float cy = (float)cursorPt.y;
-    const bool overMenu =
-        (NightSharpMenu::menuBoundsRight > 0.0f) &&
-        cx >= NightSharpMenu::menuPosX &&
-        cx <= NightSharpMenu::menuBoundsRight &&
-        cy >= NightSharpMenu::menuPosY &&
-        cy <= NightSharpMenu::menuBoundsBottom;
-
-    SetClickThrough(!overMenu);
+    SetClickThrough(!IsScreenPointOverMenu(cursorPt));
 }
 
 void ToggleMenuVisible() {
@@ -440,10 +563,13 @@ void Overlay::Run() {
     //   to float over every desktop window, which defeats the "owned by
     //   game" ordering above.
     // - WS_EX_TOOLWINDOW keeps the overlay out of the taskbar / alt-tab UI.
-    // - WS_EX_NOACTIVATE + WS_EX_TRANSPARENT + WS_EX_LAYERED give the usual
-    //   "draw-only, never-steal-focus, alpha-composited" behaviour.
+    // - WS_EX_LAYERED is kept only for Win32 hit-test pass-through when
+    //   WS_EX_TRANSPARENT is set. Do not call SetLayeredWindowAttributes:
+    //   DirectComposition owns the visible premultiplied-alpha surface.
+    // - WM_NCHITTEST below also rejects non-menu points before they can
+    //   activate the overlay.
     g_hOverlay = CreateWindowExW(
-        WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
         overlayClassName,
         L"NightSharp Overlay",
         WS_POPUP,
@@ -474,12 +600,8 @@ void Overlay::Run() {
     WriteStage("[NightSharp] STAGE 3: Overlay window created\r\n");
 
     CrashTelemetry::SetStage("Overlay::Run::InitD3D11");
-    SetLayeredWindowAttributes(g_hOverlay, 0, 255, LWA_ALPHA);
-    const MARGINS margins = { -1, -1, -1, -1 };
-    DwmExtendFrameIntoClientArea(g_hOverlay, &margins);
-
     if (!CreateDeviceD3D11(g_hOverlay)) {
-        WriteStage("[NightSharp] STAGE 4: FAILED - D3D11 init failed\r\n");
+        WriteStage("[NightSharp] STAGE 4: FAILED - D3D11+DComp init failed\r\n");
         DestroyWindow(g_hOverlay);
         g_hOverlay = nullptr;
         if (classRegistered) {
@@ -489,7 +611,7 @@ void Overlay::Run() {
         return;
     }
 
-    WriteStage("[NightSharp] STAGE 4: D3D11 device + swap chain created OK\r\n");
+    WriteStage("[NightSharp] STAGE 4: D3D11 + DirectComposition created OK\r\n");
 
     CrashTelemetry::SetStage("Overlay::Run::InitImGui");
     NsHeapInit();

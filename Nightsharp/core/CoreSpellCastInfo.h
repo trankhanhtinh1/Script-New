@@ -5,7 +5,8 @@
 // ----------------------------------------------------------------------------
 // The game exposes TWO different SpellCastInfo layouts (see offset.h):
 //
-//   1. `SpellCastInfoLayout`        - pointed to by hero->spellBook->activeSpellCast.
+//   1. `SpellCastInfoLayout`        - pointed to by hero->spellBook->activeSpellCast
+//                                     and used by GetSpellCastInfo(slot).
 //                                     Verified for build 26.6.
 //                                     Has: SpellSlot / State / StartTime / EndTime /
 //                                          ChannelStart / ChannelEnd / StartPosition /

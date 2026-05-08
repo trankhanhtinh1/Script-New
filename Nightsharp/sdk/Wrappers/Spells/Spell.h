@@ -422,16 +422,30 @@ public:
     }
 
     bool CastPredicted(const AIBaseClient& target, HitChance minimum = HitChance::High) const {
-        const auto prediction = GetPrediction(target);
-        if (prediction.Hitchance < minimum) {
-            return false;
-        }
+        return CastPredictionResult(target, GetPrediction(target), minimum);
+    }
 
-        if (IsTargetedSpell) {
-            return Cast(target);
-        }
+    bool CastPredicted(const AIBaseClient& target,
+                       HitChance minimum,
+                       float rangeOverride) const {
+        return CastPredictionResult(target, GetPrediction(target, Collision, rangeOverride), minimum);
+    }
 
-        return Cast(prediction.CastPosition);
+    bool CastPredicted(const AIBaseClient& target,
+                       HitChance minimum,
+                       bool collisionCheck,
+                       float rangeOverride = -1.0f) const {
+        return CastPredictionResult(target, GetPrediction(target, collisionCheck, rangeOverride), minimum);
+    }
+
+    bool CastPredicted(const AIBaseClient& target,
+                       HitChance minimum,
+                       bool collisionCheck,
+                       float rangeOverride,
+                       std::initializer_list<CollisionObjects> collisions) const {
+        return CastPredictionResult(target,
+            GetPrediction(target, collisionCheck, rangeOverride, collisions),
+            minimum);
     }
 
     bool CastIfHitchanceEquals(const AIBaseClient& target, HitChance minimum = HitChance::High) const {
@@ -467,6 +481,16 @@ public:
     }
 
 private:
+    bool CastPredictionResult(const AIBaseClient& target,
+                              const PredictionOutput& prediction,
+                              HitChance minimum) const {
+        if (prediction.Hitchance < minimum) {
+            return false;
+        }
+
+        return Cast(target, prediction.CastPosition);
+    }
+
     // ── Charged spell internal timing ──
     int m_chargedCastedT = 0;    // TickCount when charge started / spell was cast
     int m_chargedReqSentT = 0;   // TickCount when start-charge request was sent (throttle)
