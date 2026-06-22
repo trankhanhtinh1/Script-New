@@ -1,45 +1,126 @@
 #pragma once
+
+#include <Windows.h>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
-#include <Windows.h>
-
-// ============================================================================
-// Globals - Cached module base and pointers
-// ============================================================================
 
 namespace Globals {
-    // Module base address (set once at init)
+
     inline uintptr_t base = 0;
 
-    // Initialize module base
     inline bool Init() {
-        base = (uintptr_t)GetModuleHandleW(nullptr);
+        base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
         if (!base) {
-            base = (uintptr_t)GetModuleHandleA("League of Legends.exe");
+            base = reinterpret_cast<uintptr_t>(GetModuleHandleA("League of Legends.exe"));
         }
         return base != 0;
     }
 
-    // Safe memory read
-    template<typename T>
+    inline bool IsValidPtr(uintptr_t addr) {
+        if constexpr (sizeof(void*) == 8) {
+            return addr > 0x10000 && addr < 0x7FFFFFFFFFFF;
+        } else {
+            return addr > 0x10000 && addr < 0x7FFFFFFF;
+        }
+    }
+
+    inline bool IsReadablePtr(uintptr_t addr, size_t bytes = 1) {
+        if (!IsValidPtr(addr) || bytes == 0) {
+            return false;
+        }
+
+        MEMORY_BASIC_INFORMATION mbi = {};
+        if (!VirtualQuery(reinterpret_cast<const void*>(addr), &mbi, sizeof(mbi))) {
+            return false;
+        }
+        if (mbi.State != MEM_COMMIT) {
+            return false;
+        }
+        if ((mbi.Protect & PAGE_GUARD) || (mbi.Protect & PAGE_NOACCESS)) {
+            return false;
+        }
+
+        const uintptr_t base = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+        const uintptr_t regionEnd = base + mbi.RegionSize;
+        if (regionEnd < base || addr >= regionEnd) {
+            return false;
+        }
+        return bytes <= (regionEnd - addr);
+    }
+
+    inline bool IsWritablePtr(uintptr_t addr, size_t bytes = 1) {
+        if (!IsReadablePtr(addr, bytes)) {
+            return false;
+        }
+
+        MEMORY_BASIC_INFORMATION mbi = {};
+        if (!VirtualQuery(reinterpret_cast<const void*>(addr), &mbi, sizeof(mbi))) {
+            return false;
+        }
+
+        const DWORD protect = mbi.Protect & 0xFF;
+        return protect == PAGE_READWRITE ||
+               protect == PAGE_WRITECOPY ||
+               protect == PAGE_EXECUTE_READWRITE ||
+               protect == PAGE_EXECUTE_WRITECOPY;
+    }
+
+    inline bool IsExecutablePtr(uintptr_t addr, size_t bytes = 1) {
+        if (!IsValidPtr(addr) || bytes == 0) {
+            return false;
+        }
+
+        MEMORY_BASIC_INFORMATION mbi = {};
+        if (!VirtualQuery(reinterpret_cast<const void*>(addr), &mbi, sizeof(mbi))) {
+            return false;
+        }
+        if (mbi.State != MEM_COMMIT) {
+            return false;
+        }
+        if ((mbi.Protect & PAGE_GUARD) || (mbi.Protect & PAGE_NOACCESS)) {
+            return false;
+        }
+
+        const DWORD protect = mbi.Protect & 0xFF;
+        if (protect != PAGE_EXECUTE &&
+            protect != PAGE_EXECUTE_READ &&
+            protect != PAGE_EXECUTE_READWRITE &&
+            protect != PAGE_EXECUTE_WRITECOPY) {
+            return false;
+        }
+
+        const uintptr_t baseAddress = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
+        const uintptr_t regionEnd = baseAddress + mbi.RegionSize;
+        return regionEnd >= baseAddress && addr < regionEnd && bytes <= (regionEnd - addr);
+    }
+
+    template <typename T>
     inline T Read(uintptr_t addr) {
         static_assert(std::is_trivially_copyable_v<T>,
-            "Globals::Read<T> only works with trivially-copyable types");
+                      "Globals::Read<T> only supports trivially-copyable types");
+        if (!IsValidPtr(addr)) {
+            return T{};
+        }
+
         __try {
-            return *(T*)(addr);
+            return *reinterpret_cast<T*>(addr);
         }
         __except (1) {
             return T{};
         }
     }
 
-    // Safe memory write
-    template<typename T>
+    template <typename T>
     inline bool Write(uintptr_t addr, T value) {
         static_assert(std::is_trivially_copyable_v<T>,
-            "Globals::Write<T> only works with trivially-copyable types");
+                      "Globals::Write<T> only supports trivially-copyable types");
+        if (!IsValidPtr(addr)) {
+            return false;
+        }
+
         __try {
-            *(T*)(addr) = value;
+            *reinterpret_cast<T*>(addr) = value;
             return true;
         }
         __except (1) {
@@ -47,74 +128,104 @@ namespace Globals {
         }
     }
 
-    // Read pointer chain
     inline uintptr_t ReadPtr(uintptr_t addr) {
         return Read<uintptr_t>(addr);
     }
 
-    // Check if address is valid (works for both x86 and x64)
-    inline bool IsValidPtr(uintptr_t addr) {
-        if constexpr (sizeof(void*) == 8)
-            return addr > 0x10000 && addr < 0x7FFFFFFFFFFF;
-        else
-            return addr > 0x10000 && addr < 0x7FFFFFFF;
-    }
-
-    // ====================================================================
-    // SEH-safe helpers (no C++ objects → compatible with __try)
-    // ====================================================================
-
-    // Read a MSVC std::string (SSO) into raw char buffer.
     inline bool ReadStdString(uintptr_t nameAddr, char* out, int maxOut) {
-        __try {
-            size_t len = *(size_t*)(nameAddr + 0x10);
-            size_t capacity = *(size_t*)(nameAddr + 0x18);
-            if (len == 0 || len >= (size_t)maxOut) { out[0] = 0; return false; }
-            if (capacity < len || capacity > 0x100000) { out[0] = 0; return false; }
+        if (!out || maxOut <= 1 || !IsReadablePtr(nameAddr, 0x20)) {
+            if (out && maxOut > 0) {
+                out[0] = 0;
+            }
+            return false;
+        }
 
-            const char* src;
+        __try {
+            const size_t len = *reinterpret_cast<const size_t*>(nameAddr + 0x10);
+            const size_t capacity = *reinterpret_cast<const size_t*>(nameAddr + 0x18);
+            if (len == 0 || len >= static_cast<size_t>(maxOut) || capacity < len || capacity > 0x100000) {
+                out[0] = 0;
+                return false;
+            }
+
+            uintptr_t src = 0;
             if (capacity > 15) {
-                uintptr_t ptr = *(uintptr_t*)(nameAddr);
-                if (ptr < 0x10000 || ptr > 0x7FFFFFFFFFFF) { out[0] = 0; return false; }
-                src = (const char*)ptr;
+                const uintptr_t ptr = *reinterpret_cast<const uintptr_t*>(nameAddr);
+                if (!IsReadablePtr(ptr, len)) {
+                    out[0] = 0;
+                    return false;
+                }
+                src = ptr;
             } else {
-                src = (const char*)nameAddr;
+                if (!IsReadablePtr(nameAddr, len)) {
+                    out[0] = 0;
+                    return false;
+                }
+                src = nameAddr;
             }
 
-            for (size_t i = 0; i < len; i++) out[i] = src[i];
+            for (size_t i = 0; i < len; ++i) {
+                out[i] = *reinterpret_cast<const char*>(src + i);
+            }
             out[len] = 0;
             return true;
-        } __except(1) { out[0] = 0; return false; }
+        }
+        __except (1) {
+            out[0] = 0;
+            return false;
+        }
     }
 
-    // Read Riot/LolString into raw char buffer.
     inline bool ReadRiotString(uintptr_t nameAddr, char* out, int maxOut) {
+        if (!out || maxOut <= 1 || !IsReadablePtr(nameAddr, 0x18)) {
+            if (out && maxOut > 0) {
+                out[0] = 0;
+            }
+            return false;
+        }
+
         __try {
-            int len = *(int*)(nameAddr + 0x10);
-            int maxLen = *(int*)(nameAddr + 0x14);
-            if (len <= 0 || len >= maxOut) { out[0] = 0; return false; }
-            if (maxLen < 0 || maxLen > 0x10000) { out[0] = 0; return false; }
-            const char* src;
-            if (maxLen >= 16) {
-                uintptr_t ptr = *(uintptr_t*)(nameAddr);
-                if (ptr < 0x10000 || ptr > 0x7FFFFFFFFFFF) { out[0] = 0; return false; }
-                src = (const char*)ptr;
-            } else {
-                src = (const char*)nameAddr;
+            const int len = *reinterpret_cast<const int*>(nameAddr + 0x10);
+            const int maxLen = *reinterpret_cast<const int*>(nameAddr + 0x14);
+            if (len <= 0 || len >= maxOut || maxLen < 0 || maxLen > 0x10000) {
+                out[0] = 0;
+                return false;
             }
 
-            for (int i = 0; i < len; i++) out[i] = src[i];
+            uintptr_t src = 0;
+            if (maxLen >= 16) {
+                const uintptr_t ptr = *reinterpret_cast<const uintptr_t*>(nameAddr);
+                if (!IsReadablePtr(ptr, static_cast<size_t>(len))) {
+                    out[0] = 0;
+                    return false;
+                }
+                src = ptr;
+            } else {
+                if (!IsReadablePtr(nameAddr, static_cast<size_t>(len))) {
+                    out[0] = 0;
+                    return false;
+                }
+                src = nameAddr;
+            }
+
+            for (int i = 0; i < len; ++i) {
+                out[i] = *reinterpret_cast<const char*>(src + static_cast<uintptr_t>(i));
+            }
             out[len] = 0;
             return true;
-        } __except(1) { out[0] = 0; return false; }
+        }
+        __except (1) {
+            out[0] = 0;
+            return false;
+        }
     }
 
-    // Read a game string into raw char buffer. Tries std::string first, then Riot/LolString.
     inline bool ReadGameString(uintptr_t nameAddr, char* out, int maxOut) {
         if (!out || maxOut <= 1) {
             return false;
         }
         out[0] = 0;
+
         if (ReadStdString(nameAddr, out, maxOut)) {
             return true;
         }
@@ -122,7 +233,7 @@ namespace Globals {
     }
 
     inline bool ReadCString(uintptr_t strAddr, char* out, int maxOut) {
-        if (!out || maxOut <= 1 || !IsValidPtr(strAddr)) {
+        if (!out || maxOut <= 1 || !IsReadablePtr(strAddr, static_cast<size_t>(maxOut))) {
             if (out && maxOut > 0) {
                 out[0] = 0;
             }
@@ -132,7 +243,7 @@ namespace Globals {
         __try {
             int count = 0;
             for (; count < (maxOut - 1); ++count) {
-                const char ch = *((const char*)strAddr + count);
+                const char ch = *(reinterpret_cast<const char*>(strAddr) + count);
                 if (ch == 0) {
                     out[count] = 0;
                     return count > 0;
@@ -149,7 +260,8 @@ namespace Globals {
 
             out[maxOut - 1] = 0;
             return true;
-        } __except(1) {
+        }
+        __except (1) {
             out[0] = 0;
             return false;
         }
@@ -166,23 +278,28 @@ namespace Globals {
         }
 
         const uintptr_t ptr = Read<uintptr_t>(fieldAddr);
-        if (IsValidPtr(ptr) && ReadCString(ptr, out, maxOut)) {
+        if (IsReadablePtr(ptr, 1) && ReadCString(ptr, out, maxOut)) {
             return true;
         }
 
         return ReadCString(fieldAddr, out, maxOut);
     }
 
-    // Read a pointer array from a manager struct (SEH safe)
-    // Returns number of valid entries read into out[]
     inline int ReadPtrArray(uintptr_t listAddr, int count, uintptr_t* out, int maxOut) {
+        if (!out || count <= 0 || count > maxOut ||
+            !IsReadablePtr(listAddr, static_cast<size_t>(count) * sizeof(uintptr_t))) {
+            return 0;
+        }
+
         __try {
-            if (count <= 0 || count > maxOut) return 0;
-            if (!IsValidPtr(listAddr)) return 0;
-            for (int i = 0; i < count; i++) {
-                out[i] = *(uintptr_t*)(listAddr + i * sizeof(uintptr_t));
+            for (int i = 0; i < count; ++i) {
+                out[i] = Read<uintptr_t>(listAddr + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
             }
             return count;
-        } __except(1) { return 0; }
+        }
+        __except (1) {
+            return 0;
+        }
     }
-}
+
+} // namespace Globals

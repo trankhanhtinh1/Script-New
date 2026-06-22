@@ -1,77 +1,68 @@
 #pragma once
 
+// ============================================================================
+// RingPoly.h - 1:1 port of EnsoulSharp.SDK / Core/Math/Polygons/RingPoly.cs
+// ----------------------------------------------------------------------------
+// Represents a Ring Polygon (annulus) defined by Center, Width (ring thickness)
+// and OuterRadius. UpdatePolygon emits two concentric rings of `quality+1`
+// vertices each — the outer loop first, the inner loop second — exactly like
+// the C# version.
+// ============================================================================
+
 #include "Polygon.h"
 
-#include <cmath>
+namespace SDK {
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+    class RingPoly : public Polygon {
+    public:
+        Vec2  Center      = {};
+        float Width       = 0.0f;
+        float OuterRadius = 0.0f;
 
-namespace SDK::Geometry {
+        RingPoly(const Vec3& center, float width, float outerRadius, int quality = 20)
+            : RingPoly(center.To2D(), width, outerRadius, quality) {}
 
-/// <summary>
-///     Represents a Ring Polygon (donut shape: outer circle + inner circle).
-///     Port of EnsoulSharp.SDK RingPoly.cs — exact behavioral parity.
-///     Parameters: center, width (ring thickness), outerRadius, quality.
-///     NOTE: C# uses "Width" not "InnerRadius". Inner is computed as (Width - OuterRadius - offset).
-/// </summary>
-class RingPoly : public Polygon {
-public:
-    Vec2  Center      = {};
-    float Width       = 0.0f;   // Ring width (NOT inner radius)
-    float OuterRadius = 0.0f;
-    int   Quality     = 20;
+        RingPoly(const Vec2& center, float width, float outerRadius, int quality = 20)
+            : quality_(quality) {
+            Center      = center;
+            Width       = width;
+            OuterRadius = outerRadius;
 
-    RingPoly() = default;
-
-    RingPoly(const Vec3& center, float width, float outerRadius, int quality = 20)
-        : RingPoly(center.To2D(), width, outerRadius, quality) {}
-
-    RingPoly(const Vec2& center, float width, float outerRadius, int quality = 20) {
-        Center      = center;
-        Width       = width;
-        OuterRadius = outerRadius;
-        Quality     = quality;
-
-        UpdatePolygon();
-    }
-
-    /// <summary>
-    ///     Updates the Ring polygon.
-    ///     Matches C# UpdatePolygon(int offset = 0) exactly.
-    ///     outRadius   = (offset + Width + OuterRadius) / cos(2π/quality)
-    ///     innerRadius = Width - OuterRadius - offset
-    ///     Outer ring: Center - outR*cos, Center - outR*sin  (i=0..quality)
-    ///     Inner ring: Center + innerR*cos, Center - innerR*sin (i=0..quality)
-    /// </summary>
-    void UpdatePolygon(int offset = 0) {
-        Points.clear();
-
-        const float outRadius = (static_cast<float>(offset) + Width + OuterRadius)
-                                / static_cast<float>(std::cos(2.0 * M_PI / static_cast<double>(Quality)));
-        const float innerRadius = Width - OuterRadius - static_cast<float>(offset);
-
-        // Outer ring
-        for (int i = 0; i <= Quality; ++i) {
-            const float angle = static_cast<float>(i) * 2.0f * static_cast<float>(M_PI)
-                                / static_cast<float>(Quality);
-            Points.emplace_back(
-                Center.x - outRadius * std::cos(angle),
-                Center.y - outRadius * std::sin(angle)
-            );
+            UpdatePolygon();
         }
 
-        // Inner ring
-        for (int i = 0; i <= Quality; ++i) {
-            const float angle = static_cast<float>(i) * 2.0f * static_cast<float>(M_PI)
-                                / static_cast<float>(Quality);
-            Points.emplace_back(
-                Center.x + innerRadius * std::cos(angle),
-                Center.y - innerRadius * std::sin(angle)
-            );
-        }
-    }
-};
+        // Call this after changing something. `offset` adds extra radius.
+        void UpdatePolygon(int offset = 0) {
+            Points.clear();
 
-} // namespace SDK::Geometry
+            const float twoPi = 6.28318530717958647692f;
+            const float pi    = 3.14159265358979323846f;
+            const float outRadius =
+                (static_cast<float>(offset) + Width + OuterRadius) /
+                std::cos(twoPi / static_cast<float>(quality_));
+            const float innerRadius = Width - OuterRadius - static_cast<float>(offset);
+
+            for (int i = 0; i <= quality_; ++i) {
+                const float angle =
+                    static_cast<float>(i) * 2.0f * pi /
+                    static_cast<float>(quality_);
+                Points.emplace_back(
+                    Center.x - (outRadius * std::cos(angle)),
+                    Center.y - (outRadius * std::sin(angle)));
+            }
+
+            for (int i = 0; i <= quality_; ++i) {
+                const float angle =
+                    static_cast<float>(i) * 2.0f * pi /
+                    static_cast<float>(quality_);
+                Points.emplace_back(
+                    Center.x + (innerRadius * std::cos(angle)),
+                    Center.y - (innerRadius * std::sin(angle)));
+            }
+        }
+
+    private:
+        int quality_;
+    };
+
+} // namespace SDK

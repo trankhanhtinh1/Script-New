@@ -2,6 +2,7 @@
 
 #include "Globals.h"
 #include "offset.h"
+
 #include <cstdint>
 
 namespace CoreRuntime {
@@ -50,11 +51,11 @@ namespace CoreRuntime {
         uintptr_t worldToScreenFn = 0;
         uintptr_t issueOrderFn = 0;
         uintptr_t castSpellFn = 0;
-        uintptr_t sendSpellCastPacketFn = 0;
-        uintptr_t updateChargedSpellFn = 0;
         uintptr_t getPingFn = 0;
         uintptr_t getAttackDelayFn = 0;
         uintptr_t getAttackWindupFn = 0;
+        uintptr_t getBoundingRadiusFn = 0;
+        uintptr_t getAiManagerFn = 0;
         uintptr_t detectionWatcher2 = 0;
         uintptr_t spoofTrampoline = 0;
 
@@ -99,7 +100,6 @@ namespace CoreRuntime {
         int32_t lastCastResult = 0;
     };
 
-    // Legacy compatibility alias (legacy_stubs.h used "Context")
     using Context = CoreContext;
 
     inline CoreContext g_ctx = {};
@@ -109,10 +109,7 @@ namespace CoreRuntime {
     }
 
     inline uintptr_t ReadGlobalPtr(uintptr_t globalAddr) {
-        if (!globalAddr) {
-            return 0;
-        }
-        return Globals::Read<uintptr_t>(globalAddr);
+        return globalAddr ? Globals::Read<uintptr_t>(globalAddr) : 0;
     }
 
     inline void ResetContext() {
@@ -154,28 +151,27 @@ namespace CoreRuntime {
         g_ctx.moduleBase = Globals::base;
         g_ctx.statusMask |= Status_BaseReady;
 
-        // ── Global pointer table (translated from Offset::Global::* → grouped namespaces) ──
-        g_ctx.localPlayerGlobal     = ResolveRva(Offset::GameObjectsRuntime::Player);
-        g_ctx.objectManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Objects);
-        g_ctx.heroManagerGlobal     = ResolveRva(Offset::GameObjectsRuntime::Heroes);
-        g_ctx.minionManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Minions);
-        g_ctx.turretManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Turrets);
-        g_ctx.missileManagerGlobal  = ResolveRva(Offset::GameObjectsRuntime::Missiles);
-        g_ctx.navGridGlobal         = ResolveRva(Offset::NavGridRuntime::NavGrid);
+        g_ctx.localPlayerGlobal      = ResolveRva(Offset::GameObjectsRuntime::Player);
+        g_ctx.objectManagerGlobal    = ResolveRva(Offset::GameObjectsRuntime::Objects);
+        g_ctx.heroManagerGlobal      = ResolveRva(Offset::GameObjectsRuntime::Heroes);
+        g_ctx.minionManagerGlobal    = ResolveRva(Offset::GameObjectsRuntime::Minions);
+        g_ctx.turretManagerGlobal    = ResolveRva(Offset::GameObjectsRuntime::Turrets);
+        g_ctx.missileManagerGlobal   = ResolveRva(Offset::GameObjectsRuntime::Missiles);
+        g_ctx.navGridGlobal          = ResolveRva(Offset::NavGridRuntime::NavGrid);
         g_ctx.underMouseObjectGlobal = ResolveRva(Offset::GameObjectsRuntime::UnderMouseObject);
-        g_ctx.netInstanceGlobal     = ResolveRva(Offset::GameRuntime::NetInstance);
-        g_ctx.gameTimeGlobal        = ResolveRva(Offset::GameRuntime::GameTime);
-        g_ctx.chatClientGlobal      = ResolveRva(Offset::GameRuntime::ChatClient);
-        g_ctx.shopInstanceGlobal    = ResolveRva(Offset::GameRuntime::ShopInstance);
+        g_ctx.netInstanceGlobal      = ResolveRva(Offset::GameRuntime::NetInstance);
+        g_ctx.gameTimeGlobal         = ResolveRva(Offset::GameRuntime::GameTime);
+        g_ctx.chatClientGlobal       = ResolveRva(Offset::GameRuntime::ChatClient);
+        g_ctx.shopInstanceGlobal     = ResolveRva(Offset::GameRuntime::ShopInstance);
         g_ctx.openWindowsArrayGlobal = ResolveRva(Offset::GameRuntime::OpenWindowsArray);
         g_ctx.openWindowsCountGlobal = ResolveRva(Offset::GameRuntime::OpenWindowsCount);
-        g_ctx.cursorInstanceGlobal  = ResolveRva(Offset::GameRuntime::CursorPosRaw);
-        g_ctx.mouseScreenVec2Global = ResolveRva(Offset::GameRuntime::MouseScreenVec2);
-        g_ctx.hudInstanceGlobal     = ResolveRva(Offset::DrawingRuntime::HudInstance);
-        g_ctx.viewPortGlobal        = ResolveRva(Offset::DrawingRuntime::ViewPort);
-        g_ctx.viewPort2Global       = ResolveRva(Offset::DrawingRuntime::ViewPort2);
-        g_ctx.rendererGlobal        = ResolveRva(Offset::DrawingRuntime::Renderer);
-        g_ctx.viewProjGlobal        = ResolveRva(Offset::DrawingRuntime::ViewProjOffset);
+        g_ctx.cursorInstanceGlobal   = ResolveRva(Offset::GameRuntime::CursorPosRaw);
+        g_ctx.mouseScreenVec2Global  = ResolveRva(Offset::GameRuntime::MouseScreenVec2);
+        g_ctx.hudInstanceGlobal      = ResolveRva(Offset::DrawingRuntime::HudInstance);
+        g_ctx.viewPortGlobal         = ResolveRva(Offset::DrawingRuntime::ViewPort);
+        g_ctx.viewPort2Global        = ResolveRva(Offset::DrawingRuntime::ViewPort2);
+        g_ctx.rendererGlobal         = ResolveRva(Offset::DrawingRuntime::Renderer);
+        g_ctx.viewProjGlobal         = ResolveRva(Offset::DrawingRuntime::ViewProjOffset);
 
         if (g_ctx.localPlayerGlobal &&
             g_ctx.objectManagerGlobal &&
@@ -191,20 +187,21 @@ namespace CoreRuntime {
             g_ctx.lastErrorMask |= 1u << 1;
         }
 
-        // ── Function call table (translated from Offset::Function::* → grouped namespaces) ──
         g_ctx.worldToScreenFn   = ResolveRva(Offset::DrawingRuntime::WorldToScreen);
         g_ctx.issueOrderFn      = ResolveRva(Offset::ControlRuntime::IssueOrder);
-        g_ctx.castSpellFn       = ResolveRva(Offset::ControlRuntime::CastSpellSafe);
+        g_ctx.castSpellFn       = 0;
         g_ctx.getPingFn         = ResolveRva(Offset::GameRuntime::GetPing);
         g_ctx.getAttackDelayFn  = ResolveRva(Offset::ControlRuntime::GetAttackDelay);
         g_ctx.getAttackWindupFn = ResolveRva(Offset::ControlRuntime::GetAttackWindup);
+        g_ctx.getBoundingRadiusFn = ResolveRva(Offset::ControlRuntime::GetBoundingRadius);
+        g_ctx.getAiManagerFn    = ResolveRva(Offset::NavGridRuntime::GetAiManager);
 
         if (g_ctx.worldToScreenFn &&
             g_ctx.issueOrderFn &&
-            g_ctx.castSpellFn &&
             g_ctx.getPingFn &&
             g_ctx.getAttackDelayFn &&
-            g_ctx.getAttackWindupFn) {
+            g_ctx.getAttackWindupFn &&
+            g_ctx.getBoundingRadiusFn) {
             g_ctx.statusMask |= Status_CallTableReady;
         } else {
             g_ctx.lastErrorMask |= 1u << 2;
@@ -212,12 +209,15 @@ namespace CoreRuntime {
 
         g_ctx.statusMask |= Status_Initialized;
         ++g_ctx.initGeneration;
-
         return HasInitReady();
     }
 
+    inline bool EnsureInitialized() {
+        return HasInitReady() || Initialize();
+    }
+
     inline bool RefreshReadState() {
-        if (!HasInitReady()) {
+        if (!EnsureInitialized()) {
             g_ctx.lastErrorMask |= 1u << 3;
             return false;
         }
@@ -241,16 +241,12 @@ namespace CoreRuntime {
         g_ctx.viewPort = ReadGlobalPtr(g_ctx.viewPortGlobal);
         g_ctx.viewPort2 = ReadGlobalPtr(g_ctx.viewPort2Global);
         g_ctx.renderer = ReadGlobalPtr(g_ctx.rendererGlobal);
-        // View/projection matrices live directly at base + ViewProjOffset in the
-        // current NightSharp lineage. This is matrix memory, not a pointer slot.
         g_ctx.viewProjInstance = g_ctx.viewProjGlobal;
-
         g_ctx.gameTime = Globals::Read<float>(g_ctx.gameTimeGlobal);
 
         g_ctx.statusMask &= ~(Status_RuntimeObjectsReady | Status_GameTimeReady);
 
-        if (Globals::IsValidPtr(g_ctx.objectManager) &&
-            Globals::IsValidPtr(g_ctx.localPlayer)) {
+        if (Globals::IsValidPtr(g_ctx.objectManager) && Globals::IsValidPtr(g_ctx.localPlayer)) {
             g_ctx.statusMask |= Status_RuntimeObjectsReady;
         } else {
             g_ctx.lastErrorMask |= 1u << 4;
@@ -273,6 +269,8 @@ namespace CoreRuntime {
     }
 
     inline void BeginWritePhase() {
+        EnsureInitialized();
+        RefreshReadState();
         g_ctx.currentPhase = Phase_Write;
         ++g_ctx.phaseGeneration;
     }

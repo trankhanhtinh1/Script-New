@@ -1,9 +1,15 @@
 #pragma once
 
-#include "OrbwalkerMode.h"
+#include <cstdint>
 
 namespace SDK {
 
-using OrbwalkingMode = OrbwalkerMode;
+enum class OrbwalkingMode : std::int32_t {
+    None,
+    Combo,
+    Hybrid,
+    LastHit,
+    LaneClear,
+};
 
 } // namespace SDK

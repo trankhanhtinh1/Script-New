@@ -1,12 +1,14 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class DamageType : int {
+enum class DamageType : std::int32_t {
     Physical = 0,
     Magical = 1,
-    True = 2,
-    Mixed = 3
+    Mixed = 2,
+    True = 3,
 };
 
 } // namespace SDK

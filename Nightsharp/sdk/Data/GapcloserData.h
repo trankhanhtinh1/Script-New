@@ -2,6 +2,8 @@
 #include "../Enumerations/GapcloserType.h"
 #include "../Enumerations/SpellSlot.h"
 
+#include <cctype>
+
 namespace SDK::Generated::GapcloserData {
 
 struct GapcloserEntry {
@@ -112,5 +114,39 @@ inline const GapcloserEntry kGapcloserEntries[] = {
     GapcloserEntry{ "Zed", SDK::GapcloserType::Targeted, SDK::SpellSlot::R, "zedr", false },
     GapcloserEntry{ "Zeri", SDK::GapcloserType::Skillshot, SDK::SpellSlot::E, "zerie", false }
 };
+
+namespace detail {
+    inline char Lower(char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    inline bool EqualsIgnoreCase(const char* a, const char* b) {
+        if (!a || !b) {
+            return false;
+        }
+
+        while (*a && *b) {
+            if (Lower(*a++) != Lower(*b++)) {
+                return false;
+            }
+        }
+
+        return *a == 0 && *b == 0;
+    }
+} // namespace detail
+
+inline const GapcloserEntry* FindBySpellName(const char* spellName) {
+    if (!spellName || !spellName[0]) {
+        return nullptr;
+    }
+
+    for (int i = 0; i < kGapcloserEntryCount; ++i) {
+        if (detail::EqualsIgnoreCase(kGapcloserEntries[i].SpellName, spellName)) {
+            return &kGapcloserEntries[i];
+        }
+    }
+
+    return nullptr;
+}
 
 } // namespace SDK::Generated::GapcloserData

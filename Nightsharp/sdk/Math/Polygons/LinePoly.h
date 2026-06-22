@@ -1,58 +1,53 @@
 #pragma once
 
+// ============================================================================
+// LinePoly.h - 1:1 port of EnsoulSharp.SDK / Core/Math/Polygons/LinePoly.cs
+// ----------------------------------------------------------------------------
+// Represents a Line Polygon (2 points). The Length property is computed from
+// LineStart/LineEnd; setting Length re-extends LineEnd along the start->end
+// direction so the segment matches the requested length.
+// ============================================================================
+
 #include "Polygon.h"
 
-namespace SDK::Geometry {
+namespace SDK {
 
-/// <summary>
-///     Represents a Line Polygon (just 2 points: start and end).
-///     Port of EnsoulSharp.SDK LinePoly.cs — exact behavioral parity.
-///     NOTE: This is NOT a rectangle.  It inherits directly from Polygon.
-/// </summary>
-class LinePoly : public Polygon {
-public:
-    Vec2 LineStart = {};
-    Vec2 LineEnd   = {};
+    class LinePoly : public Polygon {
+    public:
+        Vec2 LineStart = {};
+        Vec2 LineEnd   = {};
 
-    LinePoly() = default;
+        // length=-1 keeps the original distance between start/end.
+        LinePoly(const Vec3& start, const Vec3& end, float length = -1.0f)
+            : LinePoly(start.To2D(), end.To2D(), length) {}
 
-    LinePoly(const Vec3& start, const Vec3& end, float length = -1.0f)
-        : LinePoly(start.To2D(), end.To2D(), length) {}
+        LinePoly(const Vec2& start, const Vec2& end, float length = -1.0f) {
+            LineStart = start;
+            LineEnd   = end;
 
-    LinePoly(const Vec2& start, const Vec2& end, float length = -1.0f) {
-        LineStart = start;
-        LineEnd   = end;
+            if (length > 0.0f) {
+                SetLength(length);
+            }
 
-        if (length > 0.0f) {
-            SetLength(length);
+            UpdatePolygon();
         }
 
-        UpdatePolygon();
-    }
+        // Distance between LineStart and LineEnd (does not need an update).
+        float GetLength() const {
+            return LineStart.Distance(LineEnd);
+        }
 
-    /// <summary>
-    ///     Get the distance between LineStart and LineEnd.
-    /// </summary>
-    float GetLength() const {
-        return LineStart.Distance(LineEnd);
-    }
+        // Re-extend LineEnd so that the segment has the requested length.
+        void SetLength(float value) {
+            LineEnd = ((LineEnd - LineStart).Normalized() * value) + LineStart;
+        }
 
-    /// <summary>
-    ///     Set the length by adjusting LineEnd along the (LineEnd - LineStart) direction.
-    ///     Equivalent to C# Length setter: LineEnd = (LineEnd - LineStart).Normalized() * value + LineStart
-    /// </summary>
-    void SetLength(float value) {
-        LineEnd = (LineEnd - LineStart).Normalized() * value + LineStart;
-    }
+        // Use this after changing something.
+        void UpdatePolygon() {
+            Points.clear();
+            Points.push_back(LineStart);
+            Points.push_back(LineEnd);
+        }
+    };
 
-    /// <summary>
-    ///     Updates the polygon.  Simply clears and adds the two endpoints.
-    /// </summary>
-    void UpdatePolygon() {
-        Points.clear();
-        Points.push_back(LineStart);
-        Points.push_back(LineEnd);
-    }
-};
-
-} // namespace SDK::Geometry
+} // namespace SDK

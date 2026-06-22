@@ -1,18 +1,16 @@
 #pragma once
 /*
- * NightSharp v2.0 — D3D11 Overlay Engine
+ * NightSharp - D3D11 ImGui Overlay
  *
- * Creates a transparent topmost window with its own D3D11 device.
- * Renders ImGui with CRT-free custom allocator (HeapAlloc).
- * NightSharpMenu 3-panel sidebar drawn each frame.
- * F1 toggles menu visibility / click-through.
+ * Creates a transparent Win32 overlay window, initializes D3D11 +
+ * DirectComposition, and renders a minimal ImGui menu.
  */
 
 #include <Windows.h>
-#include <dwmapi.h>
+#include <cstdint>
 #include <d3d11.h>
 #include <dcomp.h>
-#include <cstdint>
+#include <dwmapi.h>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -21,19 +19,19 @@
 namespace Overlay {
 
     // Initialize and run the overlay. Blocks until overlay is closed.
-    // Call from a worker thread — this runs the message pump + render loop.
+    // Call from a worker thread because this owns the message pump.
     void Run();
 
-    // Signal the overlay to shut down (thread-safe).
+    // Signal the overlay to shut down.
     void RequestShutdown();
 
     // True while the render loop is active.
     bool IsRunning();
 
-    // Toggle menu visibility (no-op in raw substrate experiment).
+    // Toggle menu visibility.
     void ToggleMenu();
 
-    // Check if menu is currently visible (always false in raw substrate).
+    // Current menu visibility.
     bool IsMenuVisible();
 
 } // namespace Overlay

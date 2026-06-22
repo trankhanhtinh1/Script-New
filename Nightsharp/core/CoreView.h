@@ -1,449 +1,399 @@
 #pragma once
 
+#include "CoreMap.h"
 #include "CoreRuntime.h"
+#include "Globals.h"
 #include "Vector.h"
-#include "../imgui/imgui.h"
+#include "offset.h"
 
+#include <DirectXMath.h>
+#include <Windows.h>
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace CoreView {
 
-    struct ScreenPoint {
-        Vec2 position = {};
-        bool onScreen = false;
-    };
+struct Matrix4x4 {
+    float m[16] = {};
 
-    inline bool GetRendererSize(Vec2& out);
-    inline bool ReadViewProjection(float out[16]);
-    inline Vec2 GetMouseScreenPos();
+    float* Data() { return m; }
+    const float* Data() const { return m; }
+    float operator[](int index) const { return m[index]; }
+    float& operator[](int index) { return m[index]; }
 
-    inline bool IsFiniteFloat(float value) {
-        return value == value && value > -3.4e38f && value < 3.4e38f;
+    bool IsValid() const {
+        for (float value : m) {
+            if (!std::isfinite(value)) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+namespace detail {
+    inline HWND FindProcessWindow() {
+        struct EnumData {
+            DWORD processId = 0;
+            HWND window = nullptr;
+        } data{ GetCurrentProcessId(), nullptr };
+
+        EnumWindows([](HWND window, LPARAM parameter) -> BOOL {
+            auto* state = reinterpret_cast<EnumData*>(parameter);
+            DWORD processId = 0;
+            GetWindowThreadProcessId(window, &processId);
+            if (processId != state->processId ||
+                !IsWindowVisible(window) ||
+                (GetWindowLongPtrW(window, GWL_STYLE) & WS_CHILD) != 0) {
+                return TRUE;
+            }
+
+            RECT rect = {};
+            if (!GetClientRect(window, &rect) ||
+                rect.right <= rect.left ||
+                rect.bottom <= rect.top) {
+                return TRUE;
+            }
+
+            state->window = window;
+            return FALSE;
+        }, reinterpret_cast<LPARAM>(&data));
+        return data.window;
     }
 
-    inline bool IsPlausibleScreenVec2(const Vec2& value) {
-        if (!IsFiniteFloat(value.x) || !IsFiniteFloat(value.y)) {
-            return false;
-        }
-
-        Vec2 size = {};
-        if (GetRendererSize(size)) {
-            const float maxX = (size.x > 0.0f ? size.x * 2.0f : 8192.0f);
-            const float maxY = (size.y > 0.0f ? size.y * 2.0f : 8192.0f);
-            return value.x >= -maxX && value.x <= maxX && value.y >= -maxY && value.y <= maxY;
-        }
-
-        return value.x >= -8192.0f && value.x <= 8192.0f && value.y >= -8192.0f && value.y <= 8192.0f;
-    }
-
-    inline bool IsPlausibleWorldVec3(const Vec3& value) {
-        if (!IsFiniteFloat(value.x) || !IsFiniteFloat(value.y) || !IsFiniteFloat(value.z)) {
-            return false;
-        }
-        return value.x >= -30000.0f && value.x <= 30000.0f &&
+    inline bool IsPlausibleWorld(const Vec3& value) {
+        return value.IsValid() &&
+               value.x >= -30000.0f && value.x <= 30000.0f &&
                value.y >= -5000.0f && value.y <= 5000.0f &&
                value.z >= -30000.0f && value.z <= 30000.0f;
     }
 
-    inline float AbsFloat(float value) {
-        return value < 0.0f ? -value : value;
-    }
-
-    inline bool InvertMatrix4(const float m[16], float out[16]) {
-        float inv[16] = {};
-
-        inv[0] = m[5]  * m[10] * m[15] -
-                 m[5]  * m[11] * m[14] -
-                 m[9]  * m[6]  * m[15] +
-                 m[9]  * m[7]  * m[14] +
-                 m[13] * m[6]  * m[11] -
-                 m[13] * m[7]  * m[10];
-
-        inv[4] = -m[4]  * m[10] * m[15] +
-                  m[4]  * m[11] * m[14] +
-                  m[8]  * m[6]  * m[15] -
-                  m[8]  * m[7]  * m[14] -
-                  m[12] * m[6]  * m[11] +
-                  m[12] * m[7]  * m[10];
-
-        inv[8] = m[4]  * m[9] * m[15] -
-                 m[4]  * m[11] * m[13] -
-                 m[8]  * m[5] * m[15] +
-                 m[8]  * m[7] * m[13] +
-                 m[12] * m[5] * m[11] -
-                 m[12] * m[7] * m[9];
-
-        inv[12] = -m[4]  * m[9] * m[14] +
-                   m[4]  * m[10] * m[13] +
-                   m[8]  * m[5] * m[14] -
-                   m[8]  * m[6] * m[13] -
-                   m[12] * m[5] * m[10] +
-                   m[12] * m[6] * m[9];
-
-        inv[1] = -m[1]  * m[10] * m[15] +
-                  m[1]  * m[11] * m[14] +
-                  m[9]  * m[2] * m[15] -
-                  m[9]  * m[3] * m[14] -
-                  m[13] * m[2] * m[11] +
-                  m[13] * m[3] * m[10];
-
-        inv[5] = m[0]  * m[10] * m[15] -
-                 m[0]  * m[11] * m[14] -
-                 m[8]  * m[2] * m[15] +
-                 m[8]  * m[3] * m[14] +
-                 m[12] * m[2] * m[11] -
-                 m[12] * m[3] * m[10];
-
-        inv[9] = -m[0]  * m[9] * m[15] +
-                  m[0]  * m[11] * m[13] +
-                  m[8]  * m[1] * m[15] -
-                  m[8]  * m[3] * m[13] -
-                  m[12] * m[1] * m[11] +
-                  m[12] * m[3] * m[9];
-
-        inv[13] = m[0]  * m[9] * m[14] -
-                  m[0]  * m[10] * m[13] -
-                  m[8]  * m[1] * m[14] +
-                  m[8]  * m[2] * m[13] +
-                  m[12] * m[1] * m[10] -
-                  m[12] * m[2] * m[9];
-
-        inv[2] = m[1]  * m[6] * m[15] -
-                 m[1]  * m[7] * m[14] -
-                 m[5]  * m[2] * m[15] +
-                 m[5]  * m[3] * m[14] +
-                 m[13] * m[2] * m[7] -
-                 m[13] * m[3] * m[6];
-
-        inv[6] = -m[0]  * m[6] * m[15] +
-                  m[0]  * m[7] * m[14] +
-                  m[4]  * m[2] * m[15] -
-                  m[4]  * m[3] * m[14] -
-                  m[12] * m[2] * m[7] +
-                  m[12] * m[3] * m[6];
-
-        inv[10] = m[0]  * m[5] * m[15] -
-                  m[0]  * m[7] * m[13] -
-                  m[4]  * m[1] * m[15] +
-                  m[4]  * m[3] * m[13] +
-                  m[12] * m[1] * m[7] -
-                  m[12] * m[3] * m[5];
-
-        inv[14] = -m[0]  * m[5] * m[14] +
-                   m[0]  * m[6] * m[13] +
-                   m[4]  * m[1] * m[14] -
-                   m[4]  * m[2] * m[13] -
-                   m[12] * m[1] * m[6] +
-                   m[12] * m[2] * m[5];
-
-        inv[3] = -m[1] * m[6] * m[11] +
-                  m[1] * m[7] * m[10] +
-                  m[5] * m[2] * m[11] -
-                  m[5] * m[3] * m[10] -
-                  m[9] * m[2] * m[7] +
-                  m[9] * m[3] * m[6];
-
-        inv[7] = m[0] * m[6] * m[11] -
-                 m[0] * m[7] * m[10] -
-                 m[4] * m[2] * m[11] +
-                 m[4] * m[3] * m[10] +
-                 m[8] * m[2] * m[7] -
-                 m[8] * m[3] * m[6];
-
-        inv[11] = -m[0] * m[5] * m[11] +
-                   m[0] * m[7] * m[9] +
-                   m[4] * m[1] * m[11] -
-                   m[4] * m[3] * m[9] -
-                   m[8] * m[1] * m[7] +
-                   m[8] * m[3] * m[5];
-
-        inv[15] = m[0] * m[5] * m[10] -
-                  m[0] * m[6] * m[9] -
-                  m[4] * m[1] * m[10] +
-                  m[4] * m[2] * m[9] +
-                  m[8] * m[1] * m[6] -
-                  m[8] * m[2] * m[5];
-
-        float det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
-        if (AbsFloat(det) < 0.000001f) {
+    inline bool IsPlausibleScreen(const Vec2& value, const Vec2& size = {}) {
+        if (!value.IsValid()) {
             return false;
         }
 
-        det = 1.0f / det;
-        for (int i = 0; i < 16; ++i) {
-            out[i] = inv[i] * det;
+        const float maxX = size.x > 0.0f ? size.x * 2.0f : 8192.0f;
+        const float maxY = size.y > 0.0f ? size.y * 2.0f : 8192.0f;
+        return value.x >= -maxX && value.x <= maxX &&
+               value.y >= -maxY && value.y <= maxY;
+    }
+
+    inline bool ReadMatrix(uintptr_t address, Matrix4x4& out) {
+        out = {};
+        if (!Globals::IsReadablePtr(address, sizeof(out.m))) {
+            return false;
         }
+
+        __try {
+            for (int i = 0; i < 16; ++i) {
+                out.m[i] = Globals::Read<float>(
+                    address + static_cast<uintptr_t>(i) * sizeof(float));
+            }
+        } __except (1) {
+            out = {};
+            return false;
+        }
+        return out.IsValid();
+    }
+
+    inline Matrix4x4 Multiply(const Matrix4x4& left, const Matrix4x4& right) {
+        Matrix4x4 out = {};
+        for (int row = 0; row < 4; ++row) {
+            for (int column = 0; column < 4; ++column) {
+                float value = 0.0f;
+                for (int k = 0; k < 4; ++k) {
+                    value += left.m[row * 4 + k] * right.m[k * 4 + column];
+                }
+                out.m[row * 4 + column] = value;
+            }
+        }
+        return out;
+    }
+
+    inline float PlayerPlaneY() {
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!Globals::IsValidPtr(ctx.localPlayer)) {
+            return 0.0f;
+        }
+
+        __try {
+            const Vec3 position = Globals::Read<Vec3>(ctx.localPlayer + Offset::All::Position);
+            if (position.IsValid() && std::isfinite(position.y)) {
+                return position.y;
+            }
+        } __except (1) {}
+        return 0.0f;
+    }
+} // namespace detail
+
+inline bool GetRendererSize(Vec2& out) {
+    out = {};
+    const auto& ctx = CoreRuntime::GetContext();
+    if (Globals::IsValidPtr(ctx.renderer)) {
+        __try {
+            const int width = Globals::Read<int>(ctx.renderer + 0xC);
+            const int height = Globals::Read<int>(ctx.renderer + 0x10);
+            if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+                out = { static_cast<float>(width), static_cast<float>(height) };
+                return true;
+            }
+        } __except (1) {
+            out = {};
+        }
+    }
+
+    const HWND window = detail::FindProcessWindow();
+    RECT rect = {};
+    if (window && GetClientRect(window, &rect) &&
+        rect.right > rect.left && rect.bottom > rect.top) {
+        out = {
+            static_cast<float>(rect.right - rect.left),
+            static_cast<float>(rect.bottom - rect.top)
+        };
         return true;
     }
 
-    inline bool UnprojectNdc(const Vec3& ndc, const float inv[16], Vec3& out) {
-        const Vec4 clip(ndc.x, ndc.y, ndc.z, 1.0f);
-        Vec4 world = {};
-        world.x = clip.x * inv[0] + clip.y * inv[4] + clip.z * inv[8]  + clip.w * inv[12];
-        world.y = clip.x * inv[1] + clip.y * inv[5] + clip.z * inv[9]  + clip.w * inv[13];
-        world.z = clip.x * inv[2] + clip.y * inv[6] + clip.z * inv[10] + clip.w * inv[14];
-        world.w = clip.x * inv[3] + clip.y * inv[7] + clip.z * inv[11] + clip.w * inv[15];
-        if (AbsFloat(world.w) < 0.000001f) {
-            out = {};
-            return false;
-        }
-
-        const float invW = 1.0f / world.w;
-        out = { world.x * invW, world.y * invW, world.z * invW };
-        return IsPlausibleWorldVec3(out);
-    }
-
-    inline bool ScreenToWorldOnPlane(const Vec2& screen, float planeY, Vec3& out) {
-        float matrix[16] = {};
-        float inv[16] = {};
-        Vec2 size = {};
-        if (!IsPlausibleScreenVec2(screen) ||
-            !ReadViewProjection(matrix) ||
-            !GetRendererSize(size) ||
-            size.x <= 0.0f ||
-            size.y <= 0.0f ||
-            !InvertMatrix4(matrix, inv)) {
-            out = {};
-            return false;
-        }
-
-        const float ndcX = (screen.x / size.x) * 2.0f - 1.0f;
-        const float ndcY = 1.0f - (screen.y / size.y) * 2.0f;
-
-        Vec3 nearPoint = {};
-        Vec3 farPoint = {};
-        if (!UnprojectNdc({ ndcX, ndcY, 0.0f }, inv, nearPoint) ||
-            !UnprojectNdc({ ndcX, ndcY, 1.0f }, inv, farPoint)) {
-            out = {};
-            return false;
-        }
-
-        const Vec3 dir = farPoint - nearPoint;
-        if (AbsFloat(dir.y) < 0.0001f) {
-            out = farPoint;
-            return IsPlausibleWorldVec3(out);
-        }
-
-        const float t = (planeY - nearPoint.y) / dir.y;
-        out = nearPoint + dir * t;
-        out.y = planeY;
-        return IsPlausibleWorldVec3(out);
-    }
-
-    inline bool GetRendererSize(Vec2& out) {
-        const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-        if (displaySize.x > 0.0f && displaySize.y > 0.0f) {
-            out = { displaySize.x, displaySize.y };
-            return true;
-        }
-
-        const auto renderer = CoreRuntime::GetContext().renderer;
-        if (!Globals::IsValidPtr(renderer)) {
-            out = {};
-            return false;
-        }
-
-        const int width = Globals::Read<int>(renderer + 0xC);
-        const int height = Globals::Read<int>(renderer + 0x10);
-        if (width <= 0 || height <= 0) {
-            out = {};
-            return false;
-        }
-
+    const int width = GetSystemMetrics(SM_CXSCREEN);
+    const int height = GetSystemMetrics(SM_CYSCREEN);
+    if (width > 0 && height > 0 && width < 20000 && height < 20000) {
         out = { static_cast<float>(width), static_cast<float>(height) };
         return true;
     }
+    return false;
+}
 
-    inline uintptr_t GetViewport() {
-        const auto& ctx = CoreRuntime::GetContext();
-        if (Globals::IsValidPtr(ctx.viewPort)) {
-            return ctx.viewPort;
-        }
-        if (Globals::IsValidPtr(ctx.viewPort2)) {
-            return ctx.viewPort2;
-        }
-        return 0;
+inline int Width() {
+    Vec2 size = {};
+    return GetRendererSize(size) ? static_cast<int>(size.x) : 0;
+}
+
+inline int Height() {
+    Vec2 size = {};
+    return GetRendererSize(size) ? static_cast<int>(size.y) : 0;
+}
+
+inline bool ReadView(Matrix4x4& out) {
+    (void)CoreRuntime::EnsureInitialized();
+    const uintptr_t instance = CoreRuntime::GetContext().viewProjInstance;
+    return detail::ReadMatrix(instance, out);
+}
+
+inline bool ReadProjection(Matrix4x4& out) {
+    (void)CoreRuntime::EnsureInitialized();
+    const uintptr_t instance = CoreRuntime::GetContext().viewProjInstance;
+    return detail::ReadMatrix(
+        instance + Offset::DrawingMatrixRuntime::ProjMatrixRelative,
+        out);
+}
+
+inline bool ReadViewProjection(Matrix4x4& out) {
+    Matrix4x4 view = {};
+    Matrix4x4 projection = {};
+    if (!ReadView(view) || !ReadProjection(projection)) {
+        out = {};
+        return false;
     }
 
-    inline uintptr_t GetViewportW2S() {
-        const auto viewport = GetViewport();
-        return Globals::IsValidPtr(viewport) ? (viewport + Offset::HudRuntime::ViewportW2S) : 0;
+    out = detail::Multiply(view, projection);
+    return out.IsValid();
+}
+
+inline bool ReadViewProjection(float out[16]) {
+    if (!out) {
+        return false;
     }
 
-    inline uintptr_t GetHudSpellInfo() {
-        const auto hud = CoreRuntime::GetContext().hudInstance;
-        if (!Globals::IsValidPtr(hud)) {
-            return 0;
-        }
-        return Globals::Read<uintptr_t>(hud + Offset::HudRuntime::SpellInfo);
+    Matrix4x4 matrix = {};
+    if (!ReadViewProjection(matrix)) {
+        return false;
     }
 
-    inline bool ReadViewProjection(float out[16]) {
-        const auto inst = CoreRuntime::GetContext().viewProjInstance;
-        if (!Globals::IsValidPtr(inst) || !out) {
-            return false;
-        }
+    for (int i = 0; i < 16; ++i) {
+        out[i] = matrix.m[i];
+    }
+    return true;
+}
 
-        float view[16] = {};
-        float proj[16] = {};
-        __try {
-            for (int i = 0; i < 16; ++i) {
-                view[i] = Globals::Read<float>(inst + static_cast<uintptr_t>(i * sizeof(float)));
-                proj[i] = Globals::Read<float>(inst + Offset::DrawingMatrixRuntime::ProjMatrixRelative + static_cast<uintptr_t>(i * sizeof(float)));
-            }
-        }
-        __except (1) {
-            return false;
-        }
+inline bool ProjectWorldToScreen(const Vec3& world,
+                                 const Matrix4x4& matrix,
+                                 const Vec2& size,
+                                 Vec2& screen) {
+    screen = {};
+    if (!detail::IsPlausibleWorld(world) ||
+        !matrix.IsValid() ||
+        size.x <= 0.0f ||
+        size.y <= 0.0f) {
+        return false;
+    }
 
-        for (int row = 0; row < 4; ++row) {
-            for (int col = 0; col < 4; ++col) {
-                float sum = 0.0f;
-                for (int k = 0; k < 4; ++k) {
-                    sum += view[row * 4 + k] * proj[k * 4 + col];
-                }
-                out[row * 4 + col] = sum;
-            }
-        }
+    Vec4 clip = {};
+    clip.x = world.x * matrix.m[0] + world.y * matrix.m[4] +
+             world.z * matrix.m[8] + matrix.m[12];
+    clip.y = world.x * matrix.m[1] + world.y * matrix.m[5] +
+             world.z * matrix.m[9] + matrix.m[13];
+    clip.w = world.x * matrix.m[3] + world.y * matrix.m[7] +
+             world.z * matrix.m[11] + matrix.m[15];
+    if (!std::isfinite(clip.w) || clip.w < 0.01f) {
+        return false;
+    }
 
+    const float ndcX = clip.x / clip.w;
+    const float ndcY = clip.y / clip.w;
+    screen = {
+        size.x * 0.5f * (1.0f + ndcX),
+        size.y * 0.5f * (1.0f - ndcY)
+    };
+    return detail::IsPlausibleScreen(screen, size);
+}
+
+inline bool WorldToScreenNative(const Vec3& world, Vec2& screen) {
+    screen = {};
+    if (!detail::IsPlausibleWorld(world)) {
+        return false;
+    }
+
+    const auto& ctx = CoreRuntime::GetContext();
+    if (!Globals::IsExecutablePtr(ctx.worldToScreenFn)) {
+        return false;
+    }
+
+    const uintptr_t rootGlobal =
+        CoreRuntime::ResolveRva(Offset::DrawingRuntime::ViewProjectionRoot);
+    const uintptr_t root = Globals::Read<uintptr_t>(rootGlobal);
+    if (!Globals::IsValidPtr(root)) {
+        return false;
+    }
+
+    using WorldToScreenFn = bool(__fastcall*)(uintptr_t, const Vec3*, Vec3*);
+    Vec3 output = {};
+    bool result = false;
+    __try {
+        result = reinterpret_cast<WorldToScreenFn>(ctx.worldToScreenFn)(
+            root + Offset::DrawingRuntime::WorldToScreenContextOffset,
+            &world,
+            &output);
+    } __except (1) {
+        return false;
+    }
+
+    screen = { output.x, output.y };
+    Vec2 size = {};
+    (void)GetRendererSize(size);
+    return (result || detail::IsPlausibleScreen(screen, size)) &&
+           screen.IsValid();
+}
+
+inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
+    screen = {};
+    (void)CoreRuntime::RefreshReadState();
+    if (WorldToScreenNative(world, screen)) {
         return true;
     }
 
-    inline bool WorldToScreenCall(const Vec3& world, Vec2& screen) {
-        const auto fn = CoreRuntime::GetContext().worldToScreenFn;
-        const auto viewportW2S = GetViewportW2S();
-        if (!Globals::IsValidPtr(viewportW2S) || !fn) {
-            screen = {};
-            return false;
-        }
+    Matrix4x4 matrix = {};
+    Vec2 size = {};
+    return ReadViewProjection(matrix) &&
+           GetRendererSize(size) &&
+           ProjectWorldToScreen(world, matrix, size, screen);
+}
 
-        // Current generated RVA for WorldToScreen is only boundary-validated, not
-        // ABI-approved for the 3-arg fastcall used below. Calling the wrong
-        // target every frame is extremely expensive due to repeated exceptions
-        // and can tank FPS, so keep the native path disabled until the callable
-        // contract is re-proven on the live build.
-        screen = {};
-        return false;
+inline Vec2 WorldToScreen(const Vec3& world) {
+    Vec2 screen = {};
+    (void)WorldToScreen(world, screen);
+    return screen;
+}
 
-        using fnWorldToScreen = bool(__fastcall*)(uintptr_t, const Vec3*, Vec3*);
-        Vec3 out = {};
-        bool ok = false;
-        __try {
-            ok = reinterpret_cast<fnWorldToScreen>(fn)(viewportW2S, &world, &out);
-        }
-        __except (1) {
-            ok = false;
-        }
-
-        if (!ok) {
-            screen = {};
-            return false;
-        }
-
-        screen = { out.x, out.y };
-        return screen.IsValid();
-    }
-
-    inline bool ProjectWorldToScreen(const Vec3& world,
-                                     const float matrix[16],
-                                     const Vec2& size,
-                                     Vec2& screen) {
-        Vec4 clip = {};
-        clip.x = world.x * matrix[0] + world.y * matrix[4] + world.z * matrix[8] + matrix[12];
-        clip.y = world.x * matrix[1] + world.y * matrix[5] + world.z * matrix[9] + matrix[13];
-        clip.z = world.x * matrix[2] + world.y * matrix[6] + world.z * matrix[10] + matrix[14];
-        clip.w = world.x * matrix[3] + world.y * matrix[7] + world.z * matrix[11] + matrix[15];
-
-        if (clip.w < 0.01f || size.x <= 0.0f || size.y <= 0.0f) {
-            screen = {};
-            return false;
-        }
-
-        const Vec3 ndc = { clip.x / clip.w, clip.y / clip.w, clip.z / clip.w };
-        screen.x = (size.x * 0.5f) * (1.0f + ndc.x);
-        screen.y = (size.y * 0.5f) * (1.0f - ndc.y);
-        if (screen.IsValid()) {
-            return true;
-        }
-
-        screen = {};
+inline bool ScreenToWorldOnPlane(const Vec2& screen, float planeY, Vec3& out) {
+    out = {};
+    Vec2 size = {};
+    Matrix4x4 matrix = {};
+    if (!GetRendererSize(size) ||
+        !detail::IsPlausibleScreen(screen, size) ||
+        !ReadViewProjection(matrix)) {
         return false;
     }
 
-    inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
-        float matrix[16] = {};
-        Vec2 size = {};
-        if (!ReadViewProjection(matrix) || !GetRendererSize(size)) {
-            screen = {};
-            return false;
-        }
+    using namespace DirectX;
+    XMMATRIX viewProjection(
+        matrix.m[0], matrix.m[1], matrix.m[2], matrix.m[3],
+        matrix.m[4], matrix.m[5], matrix.m[6], matrix.m[7],
+        matrix.m[8], matrix.m[9], matrix.m[10], matrix.m[11],
+        matrix.m[12], matrix.m[13], matrix.m[14], matrix.m[15]);
 
-        if (ProjectWorldToScreen(world, matrix, size, screen)) {
-            return true;
-        }
-
-        return WorldToScreenCall(world, screen);
+    XMVECTOR determinant = XMVectorZero();
+    XMMATRIX inverse = XMMatrixInverse(&determinant, viewProjection);
+    if (XMVectorGetX(determinant) == 0.0f) {
+        return false;
     }
 
-    inline ScreenPoint ToScreen(const Vec3& world) {
-        ScreenPoint pt = {};
-        pt.onScreen = WorldToScreen(world, pt.position);
-        return pt;
+    const float ndcX = (screen.x / size.x) * 2.0f - 1.0f;
+    const float ndcY = 1.0f - (screen.y / size.y) * 2.0f;
+
+    XMVECTOR nearClip = XMVectorSet(ndcX, ndcY, 0.0f, 1.0f);
+    XMVECTOR farClip = XMVectorSet(ndcX, ndcY, 1.0f, 1.0f);
+    XMVECTOR nearWorld = XMVector3TransformCoord(nearClip, inverse);
+    XMVECTOR farWorld = XMVector3TransformCoord(farClip, inverse);
+
+    const Vec3 nearPoint{
+        XMVectorGetX(nearWorld),
+        XMVectorGetY(nearWorld),
+        XMVectorGetZ(nearWorld)
+    };
+    const Vec3 farPoint{
+        XMVectorGetX(farWorld),
+        XMVectorGetY(farWorld),
+        XMVectorGetZ(farWorld)
+    };
+
+    if (!detail::IsPlausibleWorld(nearPoint) && !detail::IsPlausibleWorld(farPoint)) {
+        return false;
     }
 
-    inline Vec3 GetMouseWorldPos() {
-        const auto hud = CoreRuntime::GetContext().hudInstance;
-        if (Globals::IsValidPtr(hud)) {
-            const auto input = Globals::Read<uintptr_t>(hud + Offset::HudRuntime::Input);
-            if (Globals::IsValidPtr(input)) {
-                const Vec3 candidate = Globals::Read<Vec3>(input + Offset::HudRuntime::MouseWorldPos);
-                if (!candidate.IsZero() && IsPlausibleWorldVec3(candidate)) {
-                    return candidate;
-                }
-            }
-        }
-
-        const Vec2 screen = GetMouseScreenPos();
-        Vec3 fallback = {};
-        if (ScreenToWorldOnPlane(screen, 0.0f, fallback)) {
-            return fallback;
-        }
-
-        return {};
+    const Vec3 dir = farPoint - nearPoint;
+    if (std::fabs(dir.y) < 0.0001f) {
+        out = farPoint;
+        return detail::IsPlausibleWorld(out);
     }
 
-    inline Vec2 GetMouseScreenPos() {
-        const auto mouseVec2 = CoreRuntime::GetContext().mouseScreenVec2;
-        if (Globals::IsValidPtr(mouseVec2)) {
-            const Vec2 candidate = Globals::Read<Vec2>(mouseVec2);
-            if (IsPlausibleScreenVec2(candidate)) {
-                return candidate;
-            }
-        }
+    const float t = (planeY - nearPoint.y) / dir.y;
+    out = nearPoint + dir * t;
+    out.y = planeY;
+    return detail::IsPlausibleWorld(out);
+}
 
-        const auto cursor = CoreRuntime::GetContext().cursorInstance;
-        if (Globals::IsValidPtr(cursor)) {
-            const Vec2 candidate = Globals::Read<Vec2>(cursor + 0x2C);
-            if (IsPlausibleScreenVec2(candidate)) {
-                return candidate;
-            }
-        }
+inline bool ScreenToWorld(const Vec2& screen, Vec3& out) {
+    (void)CoreRuntime::RefreshReadState();
+    return ScreenToWorldOnPlane(screen, detail::PlayerPlaneY(), out);
+}
 
-        return {};
-    }
+inline Vec3 ScreenToWorld(const Vec2& screen) {
+    Vec3 out = {};
+    (void)ScreenToWorld(screen, out);
+    return out;
+}
 
-    inline uint32_t GetSelectedNetId() {
-        const auto hud = CoreRuntime::GetContext().hudInstance;
-        if (!Globals::IsValidPtr(hud)) {
-            return 0;
-        }
+inline bool WorldToMinimap(const Vec3& world, Vec2& out) {
+    return CoreMap::WorldToMinimap(world, out);
+}
 
-        const auto input = Globals::Read<uintptr_t>(hud + Offset::HudRuntime::Input);
-        if (!Globals::IsValidPtr(input)) {
-            return 0;
-        }
+inline Vec2 WorldToMinimap(const Vec3& world) {
+    return CoreMap::WorldToMinimap(world);
+}
 
-        return Globals::Read<uint32_t>(input + Offset::HudInputLayout::SelectedObjNetId);
-    }
+inline bool MinimapToWorld(const Vec2& minimap, Vec3& out) {
+    return CoreMap::MinimapToWorld(minimap, out, detail::PlayerPlaneY());
+}
+
+inline Vec3 MinimapToWorld(const Vec2& minimap) {
+    return CoreMap::MinimapToWorld(minimap, detail::PlayerPlaneY());
+}
+
+inline bool OnScreen(const Vec2& point) {
+    return point.x > 0.0f && point.y > 0.0f &&
+           point.x < static_cast<float>(Width()) &&
+           point.y < static_cast<float>(Height());
+}
 
 } // namespace CoreView

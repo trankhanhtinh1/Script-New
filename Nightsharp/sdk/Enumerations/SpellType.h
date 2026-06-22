@@ -1,16 +1,26 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class SpellType : int {
-    Unknown = 0,
-    Targeted = 1,
-    Line = 2,
-    Circle = 3,
-    Cone = 4,
-    SkillshotLine = 2,
-    SkillshotCircle = 3,
-    SkillshotCone = 4
+enum class SpellType : std::int32_t {
+    SkillshotCircle,
+    SkillshotMissileCircle,
+    SkillshotLine,
+    SkillshotMissileLine,
+    SkillshotCone,
+    SkillshotMissileCone,
+    SkillshotMissileArc,
+    SkillshotRing,
+    SkillshotArc,
+    Targeted,
+    TargetedMissile,
+    Toggled,
+    Activated,
+    Passive,
+    Position,
+    Vector,
 };
 
 } // namespace SDK

@@ -1,61 +1,57 @@
 #pragma once
 
+// ============================================================================
+// CirclePoly.h - 1:1 port of EnsoulSharp.SDK / Core/Math/Polygons/CirclePoly.cs
+// ----------------------------------------------------------------------------
+// Represents a Circle Polygon. UpdatePolygon walks `quality` evenly-spaced
+// angles around `Center` at radius `Radius` (with optional `offset` /
+// `overrideWidth`).
+// ============================================================================
+
 #include "Polygon.h"
 
-#include <cmath>
+namespace SDK {
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+    class CirclePoly : public Polygon {
+    public:
+        Vec2  Center = {};
+        float Radius = 0.0f;
 
-namespace SDK::Geometry {
+        CirclePoly(const Vec3& center, float radius, int quality = 20)
+            : CirclePoly(center.To2D(), radius, quality) {}
 
-/// <summary>
-///     Represents a Circle Polygon.
-///     Port of EnsoulSharp.SDK CirclePoly.cs — exact behavioral parity.
-/// </summary>
-class CirclePoly : public Polygon {
-public:
-    Vec2  Center  = {};
-    float Radius  = 0.0f;
-    int   Quality = 20;
+        CirclePoly(const Vec2& center, float radius, int quality = 20)
+            : quality_(quality) {
+            Center = center;
+            Radius = radius;
 
-    CirclePoly() = default;
-
-    CirclePoly(const Vec3& center, float radius, int quality = 20)
-        : CirclePoly(center.To2D(), radius, quality) {}
-
-    CirclePoly(const Vec2& center, float radius, int quality = 20) {
-        Center  = center;
-        Radius  = radius;
-        Quality = quality;
-
-        UpdatePolygon();
-    }
-
-    /// <summary>
-    ///     Updates the Circle polygon.
-    ///     Matches C# UpdatePolygon(int offset = 0, float overrideWidth = -1) exactly.
-    ///     When overrideWidth > 0, it is used directly (no cosine expansion).
-    ///     Otherwise, (offset + Radius) / cos(2π/quality) is used.
-    /// </summary>
-    void UpdatePolygon(int offset = 0, float overrideWidth = -1.0f) {
-        Points.clear();
-
-        const float outRadius = overrideWidth > 0.0f
-            ? overrideWidth
-            : (static_cast<float>(offset) + Radius)
-              / static_cast<float>(std::cos(2.0 * M_PI / static_cast<double>(Quality)));
-
-        for (int i = 1; i <= Quality; ++i) {
-            const float angle = static_cast<float>(i) * 2.0f * static_cast<float>(M_PI)
-                                / static_cast<float>(Quality);
-            Points.emplace_back(
-                Center.x + outRadius * std::cos(angle),
-                Center.y + outRadius * std::sin(angle)
-            );
+            UpdatePolygon();
         }
-    }
-};
 
-} // namespace SDK::Geometry
+        // Call this after changing something.
+        // `offset`        : extra radius added to the configured Radius
+        // `overrideWidth` : if > 0, used directly as outRadius (ignores offset)
+        void UpdatePolygon(int offset = 0, float overrideWidth = -1.0f) {
+            Points.clear();
+
+            const float twoPi = 6.28318530717958647692f;
+            const float outRadius = overrideWidth > 0.0f
+                ? overrideWidth
+                : (static_cast<float>(offset) + Radius) /
+                  std::cos(twoPi / static_cast<float>(quality_));
+
+            for (int i = 1; i <= quality_; ++i) {
+                const float angle =
+                    static_cast<float>(i) * 2.0f * 3.14159265358979323846f /
+                    static_cast<float>(quality_);
+                Points.emplace_back(
+                    Center.x + (outRadius * std::cos(angle)),
+                    Center.y + (outRadius * std::sin(angle)));
+            }
+        }
+
+    private:
+        int quality_;
+    };
+
+} // namespace SDK

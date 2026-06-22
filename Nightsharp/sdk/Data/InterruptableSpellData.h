@@ -2,6 +2,8 @@
 #include "../Enumerations/DangerLevel.h"
 #include "../Enumerations/SpellSlot.h"
 
+#include <cctype>
+
 namespace SDK::Generated::InterruptableSpellData {
 
 struct InterruptableEntry {
@@ -51,5 +53,67 @@ inline const InterruptableEntry kChampionInterruptables[] = {
 inline const InterruptableEntry kGlobalInterruptables[] = {
     InterruptableEntry{ "", SDK::DangerLevel::Medium, true, "summonerteleport", SDK::SpellSlot::Unknown }
 };
+
+namespace detail {
+    inline char Lower(char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    inline bool EqualsIgnoreCase(const char* a, const char* b) {
+        if (!a || !b) {
+            return false;
+        }
+
+        while (*a && *b) {
+            if (Lower(*a++) != Lower(*b++)) {
+                return false;
+            }
+        }
+
+        return *a == 0 && *b == 0;
+    }
+
+    inline bool HasText(const char* value) {
+        return value && value[0] != 0;
+    }
+} // namespace detail
+
+inline const InterruptableEntry* FindGlobalBySpellName(const char* spellName) {
+    if (!spellName || !spellName[0]) {
+        return nullptr;
+    }
+
+    for (int i = 0; i < kGlobalInterruptableCount; ++i) {
+        if (detail::HasText(kGlobalInterruptables[i].Name) &&
+            detail::EqualsIgnoreCase(kGlobalInterruptables[i].Name, spellName)) {
+            return &kGlobalInterruptables[i];
+        }
+    }
+
+    return nullptr;
+}
+
+inline const InterruptableEntry* FindChampionByNameAndSlot(const char* championName, SDK::SpellSlot slot) {
+    if (!championName || !championName[0]) {
+        return nullptr;
+    }
+
+    for (int i = 0; i < kChampionInterruptableCount; ++i) {
+        const auto& entry = kChampionInterruptables[i];
+        if (entry.Slot == slot && detail::EqualsIgnoreCase(entry.ChampionName, championName)) {
+            return &entry;
+        }
+    }
+
+    return nullptr;
+}
+
+inline const InterruptableEntry* FindBySpell(const char* championName, SDK::SpellSlot slot, const char* spellName) {
+    if (const auto* global = FindGlobalBySpellName(spellName)) {
+        return global;
+    }
+
+    return FindChampionByNameAndSlot(championName, slot);
+}
 
 } // namespace SDK::Generated::InterruptableSpellData

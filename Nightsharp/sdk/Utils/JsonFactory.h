@@ -1,146 +1,75 @@
 #pragma once
 
-#include "ResourceFactory.h"
 #include "../../libs/nlohmann/json.hpp"
+#include "ResourceFactory.h"
 
+#include <filesystem>
 #include <fstream>
+#include <sstream>
+#include <stdexcept>
 #include <string>
-#include <type_traits>
 
-namespace SDK::Utils::JsonFactory {
+namespace SDK::Core::Utils {
 
-using Json = nlohmann::json;
+class JsonFactory {
+public:
+    template <typename T>
+    static T JsonResource(const std::string& file) {
+        return nlohmann::json::parse(ResourceFactory::StringResource(file)).get<T>();
+    }
 
-struct Settings {
-    int Indent = 4;
-    bool AllowExceptions = true;
+    static nlohmann::json JsonResource(const std::string& file) {
+        return nlohmann::json::parse(ResourceFactory::StringResource(file));
+    }
+
+    template <typename T>
+    static T JsonFile(const std::string& file) {
+        return ReadJsonFile(file).get<T>();
+    }
+
+    static nlohmann::json JsonFile(const std::string& file) {
+        return ReadJsonFile(file);
+    }
+
+    template <typename T>
+    static T JsonString(const std::string& text) {
+        return nlohmann::json::parse(text).get<T>();
+    }
+
+    static nlohmann::json JsonString(const std::string& text) {
+        return nlohmann::json::parse(text);
+    }
+
+    template <typename T>
+    static void ToFile(const std::string& file, const T& value) {
+        std::ofstream stream(file, std::ios::trunc);
+        if (!stream) {
+            throw std::runtime_error("JsonFactory::ToFile cannot open file");
+        }
+        stream << nlohmann::json(value).dump(4);
+    }
+
+    template <typename T>
+    static std::string ToString(const T& value) {
+        return nlohmann::json(value).dump(4);
+    }
+
+private:
+    static nlohmann::json ReadJsonFile(const std::string& file) {
+        if (file.empty()) {
+            throw std::invalid_argument("file");
+        }
+
+        std::ifstream stream(file);
+        if (!stream) {
+            throw std::runtime_error("JsonFactory::JsonFile cannot open file");
+        }
+        return nlohmann::json::parse(stream);
+    }
 };
 
-inline Settings& DefaultSettings() {
-    static Settings settings = {};
-    return settings;
-}
+} // namespace SDK::Core::Utils
 
-template<typename T>
-inline T JsonString(const std::string& text, const Settings& settings = DefaultSettings()) {
-    return Json::parse(text, nullptr, settings.AllowExceptions).template get<T>();
-}
-
-template<typename T>
-inline bool TryJsonString(const std::string& text, T& value, const Settings& settings = DefaultSettings()) {
-    try {
-        value = JsonString<T>(text, settings);
-        return true;
-    } catch (...) {
-        value = T{};
-        return false;
-    }
-}
-
-inline Json JsonString(const std::string& text, const Settings& settings = DefaultSettings()) {
-    return Json::parse(text, nullptr, settings.AllowExceptions);
-}
-
-inline bool TryJsonString(const std::string& text, Json& value, const Settings& settings = DefaultSettings()) {
-    try {
-        value = JsonString(text, settings);
-        return true;
-    } catch (...) {
-        value = Json();
-        return false;
-    }
-}
-
-template<typename T>
-inline T JsonFile(const std::string& file, const Settings& settings = DefaultSettings()) {
-    std::ifstream stream(file, std::ios::binary);
-    return Json::parse(stream, nullptr, settings.AllowExceptions).template get<T>();
-}
-
-template<typename T>
-inline bool TryJsonFile(const std::string& file, T& value, const Settings& settings = DefaultSettings()) {
-    try {
-        value = JsonFile<T>(file, settings);
-        return true;
-    } catch (...) {
-        value = T{};
-        return false;
-    }
-}
-
-inline Json JsonFile(const std::string& file, const Settings& settings = DefaultSettings()) {
-    std::ifstream stream(file, std::ios::binary);
-    return Json::parse(stream, nullptr, settings.AllowExceptions);
-}
-
-inline bool TryJsonFile(const std::string& file, Json& value, const Settings& settings = DefaultSettings()) {
-    try {
-        value = JsonFile(file, settings);
-        return true;
-    } catch (...) {
-        value = Json();
-        return false;
-    }
-}
-
-template<typename T>
-inline T JsonResource(const std::string& file, const Settings& settings = DefaultSettings()) {
-    return JsonString<T>(ResourceFactory::StringResource(file), settings);
-}
-
-template<typename T>
-inline bool TryJsonResource(const std::string& file, T& value, const Settings& settings = DefaultSettings()) {
-    try {
-        value = JsonResource<T>(file, settings);
-        return true;
-    } catch (...) {
-        value = T{};
-        return false;
-    }
-}
-
-inline Json JsonResource(const std::string& file, const Settings& settings = DefaultSettings()) {
-    return JsonString(ResourceFactory::StringResource(file), settings);
-}
-
-inline bool TryJsonResource(const std::string& file, Json& value, const Settings& settings = DefaultSettings()) {
-    try {
-        value = JsonResource(file, settings);
-        return true;
-    } catch (...) {
-        value = Json();
-        return false;
-    }
-}
-
-template<typename T, typename Parser>
-inline T JsonResource(const std::string& file, Parser&& parser, const Settings& settings = DefaultSettings()) {
-    if constexpr (std::is_invocable_r_v<T, Parser, const Json&>) {
-        return parser(JsonResource(file, settings));
-    } else {
-        return parser(ResourceFactory::StringResource(file));
-    }
-}
-
-template<typename T>
-inline void ToFile(const std::string& file, const T& object, const Settings& settings = DefaultSettings()) {
-    std::ofstream stream(file, std::ios::binary | std::ios::trunc);
-    stream << Json(object).dump(settings.Indent);
-}
-
-template<typename T>
-inline bool TryToFile(const std::string& file, const T& object, const Settings& settings = DefaultSettings()) {
-    try {
-        ToFile(file, object, settings);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-template<typename T>
-inline std::string ToString(const T& object, const Settings& settings = DefaultSettings()) {
-    return Json(object).dump(settings.Indent);
-}
-
-} // namespace SDK::Utils::JsonFactory
+namespace SDK::Utils {
+    using JsonFactory = ::SDK::Core::Utils::JsonFactory;
+} // namespace SDK::Utils

@@ -1,53 +1,88 @@
 #pragma once
 
-#include "../../menu/MenuUI.h"
+#include "Events.h"
 
 namespace SDK::Events {
 
-    using LoadHandler = void(*)();
+struct LoadEventArgs {};
 
-    inline MenuUI::FixedList<LoadHandler, 32>& GetLoadHandlers() {
-        static MenuUI::FixedList<LoadHandler, 32> s_handlers = {};
-        return s_handlers;
+using LoadHandler = void(*)(const LoadEventArgs&);
+
+namespace detail {
+    inline constexpr int MaxLoadHandlers = 32;
+    inline LoadHandler LoadHandlers[MaxLoadHandlers] = {};
+    inline bool LoadInvoked[MaxLoadHandlers] = {};
+    inline int LoadHandlerCount = 0;
+} // namespace detail
+
+inline bool AddOnLoad(LoadHandler handler) {
+    if (!handler) {
+        return false;
     }
 
-    inline MenuUI::FixedList<LoadHandler, 32>& GetInvokedLoadHandlers() {
-        static MenuUI::FixedList<LoadHandler, 32> s_handlers = {};
-        return s_handlers;
-    }
+    Initialize();
 
-    inline bool AddOnLoad(LoadHandler handler) {
-        return handler && GetLoadHandlers().push_back(handler);
-    }
-
-    inline bool OnLoad(LoadHandler handler) {
-        return AddOnLoad(handler);
-    }
-
-    inline void DispatchLoad() {
-        for (const auto& handler : GetLoadHandlers()) {
-            bool alreadyInvoked = false;
-            for (const auto& invoked : GetInvokedLoadHandlers()) {
-                if (invoked == handler) {
-                    alreadyInvoked = true;
-                    break;
-                }
-            }
-
-            if (handler && !alreadyInvoked) {
-                handler();
-                GetInvokedLoadHandlers().push_back(handler);
-            }
+    for (int i = 0; i < detail::LoadHandlerCount; ++i) {
+        if (detail::LoadHandlers[i] == handler) {
+            return true;
         }
     }
 
-    inline void ResetLoadState() {
-        GetInvokedLoadHandlers().clear();
-        GetLoadHandlers().clear();
+    if (detail::LoadHandlerCount >= detail::MaxLoadHandlers) {
+        return false;
     }
 
-    inline void ResetLoadHandlers() {
-        ResetLoadState();
+    const int index = detail::LoadHandlerCount++;
+    detail::LoadHandlers[index] = handler;
+    detail::LoadInvoked[index] = false;
+    return true;
+}
+
+inline bool RemoveOnLoad(LoadHandler handler) {
+    if (!handler) {
+        return false;
     }
+
+    for (int i = 0; i < detail::LoadHandlerCount; ++i) {
+        if (detail::LoadHandlers[i] != handler) {
+            continue;
+        }
+
+        for (int j = i; j + 1 < detail::LoadHandlerCount; ++j) {
+            detail::LoadHandlers[j] = detail::LoadHandlers[j + 1];
+            detail::LoadInvoked[j] = detail::LoadInvoked[j + 1];
+        }
+        --detail::LoadHandlerCount;
+        detail::LoadHandlers[detail::LoadHandlerCount] = nullptr;
+        detail::LoadInvoked[detail::LoadHandlerCount] = false;
+        return true;
+    }
+
+    return false;
+}
+
+inline bool OnLoad(LoadHandler handler) {
+    return AddOnLoad(handler);
+}
+
+namespace detail {
+    inline void EventLoad() {
+        if (!IsGameLoaded()) {
+            return;
+        }
+
+        const LoadEventArgs args{};
+        for (int i = 0; i < LoadHandlerCount; ++i) {
+            if (!LoadHandlers[i] || LoadInvoked[i]) {
+                continue;
+            }
+
+            LoadInvoked[i] = true;
+            __try {
+                LoadHandlers[i](args);
+            } __except (1) {}
+        }
+    }
+} // namespace detail
 
 } // namespace SDK::Events

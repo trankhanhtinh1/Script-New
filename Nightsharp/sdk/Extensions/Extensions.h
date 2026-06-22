@@ -46,6 +46,3 @@ namespace SDK::Extensions {
 
 #include "Enumerable.h"
 #include "Unit.h"
-#include "SharpDX/Generic.h"
-#include "SharpDX/Vector2Extensions.h"
-#include "SharpDX/Vector3Extensions.h"

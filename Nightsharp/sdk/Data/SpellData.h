@@ -40,6 +40,8 @@
 #include <string>
 #include <vector>
 
+#include "../Enumerations/SpellSlot.h"
+
 namespace SDK {
 namespace Data {
 
@@ -68,9 +70,7 @@ enum class SkillshotType {
 };
 
 // ── Spell slot letter ───────────────────────────────────────────────────────
-enum class SpellSlot {
-    Q, W, E, R, Unknown
-};
+using SpellSlot = SDK::SpellSlot;
 
 // ── `CollisionableObjects` — EnsoulSharp port ───────────────────────────────
 // Ported from `Core/Enumerations/CollisionableObjects.cs`.  C# marks the enum
@@ -103,7 +103,7 @@ enum CollisionObjectType : uint32_t {
 
 // Legacy bit-flag enum (Nightsharp pre-port). Kept so existing
 // `d.collisionObjectsMask = CollisionMinions | CollisionChampions` lines work.
-enum CollisionFlags : uint32_t {
+enum SpellCollisionFlags : uint32_t {
     CollisionNone       = 0,
     CollisionMinions    = Collision_Minions,
     CollisionChampions  = Collision_Heroes,
@@ -335,4 +335,3 @@ struct SpellData {
 
 } // namespace Data
 } // namespace SDK
-

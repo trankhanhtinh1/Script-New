@@ -1,104 +1,743 @@
 #pragma once
 
-#include "../../core/CoreAPI.h"
-#include "../../menu/MenuUI.h"
-#include "Objects.h"
+#include "../../Core/CoreRuntime.h"
+#include "../../Core/CoreMap.h"
+#include "../../Core/Globals.h"
+#include "../../Core/Vector.h"
+#include "../../DebugLog.h"
+#include "../Events/Events.h"
 
+#include <DirectXMath.h>
 #include <Windows.h>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
 
-namespace SDK {
+namespace SDK::Game {
 
-namespace Game {
+enum InputBlockFlags : std::uint32_t {
+    InputBlock_None       = 0,
+    InputBlock_NotInGame  = 1u << 0,
+    InputBlock_NotFocused = 1u << 1,
+    InputBlock_ChatMemory = 1u << 2,
+    InputBlock_ChatKey    = 1u << 3,
+    InputBlock_ShopOpen   = 1u << 4,
+};
 
-    using UpdateHandler = void(*)();
-    using DrawHandler = void(*)();
+struct InputDebugState {
+    bool inGame = false;
+    bool focused = false;
+    bool chatMemory = false;
+    bool chatKeyboard = false;
+    bool shopOpen = false;
+    std::uint8_t chatPrimary = 0;
+    std::uint8_t chatEditing = 0;
+    std::uint8_t chatFocused = 0;
+    std::uint32_t blockMask = InputBlock_None;
+};
 
-    inline MenuUI::FixedList<UpdateHandler, 64> g_onUpdate = {};
-    inline MenuUI::FixedList<DrawHandler, 64> g_onDraw = {};
+namespace detail {
+    template <typename Handler, int MaxHandlers = 64>
+    struct HandlerList {
+        Handler handlers[MaxHandlers] = {};
+        int count = 0;
 
-    inline bool AddOnUpdate(UpdateHandler handler) {
-        return handler && g_onUpdate.push_back(handler);
+        bool Add(Handler handler) {
+            if (!handler) {
+                return false;
+            }
+            for (int i = 0; i < count; ++i) {
+                if (handlers[i] == handler) {
+                    return true;
+                }
+            }
+            if (count >= MaxHandlers) {
+                return false;
+            }
+            handlers[count++] = handler;
+            return true;
+        }
+
+        bool Remove(Handler handler) {
+            if (!handler) {
+                return false;
+            }
+            for (int i = 0; i < count; ++i) {
+                if (handlers[i] != handler) {
+                    continue;
+                }
+                for (int j = i; j + 1 < count; ++j) {
+                    handlers[j] = handlers[j + 1];
+                }
+                handlers[--count] = nullptr;
+                return true;
+            }
+            return false;
+        }
+
+        void Clear() {
+            for (int i = 0; i < count; ++i) {
+                handlers[i] = nullptr;
+            }
+            count = 0;
+        }
+    };
+} // namespace detail
+
+struct WndEventArgs {
+    HWND HWnd = nullptr;
+    std::uint32_t Msg = 0;
+    std::uintptr_t WParam = 0;
+    std::intptr_t LParam = 0;
+    bool Process = true;
+};
+
+using UpdateHandler = void(*)();
+using WndProcHandler = void(*)(WndEventArgs&);
+
+namespace detail {
+    inline HandlerList<UpdateHandler> UpdateHandlers;
+    inline HandlerList<WndProcHandler> WndProcHandlers;
+    inline bool UpdateBridgeInstalled = false;
+    inline InputDebugState InputDebug = {};
+
+    inline bool IsFiniteFloat(float value) {
+        return std::isfinite(value);
     }
 
-    inline bool OnUpdate(UpdateHandler handler) {
-        return AddOnUpdate(handler);
+    inline float AbsFloat(float value) {
+        return value < 0.0f ? -value : value;
     }
 
-    inline bool AddOnDraw(DrawHandler handler) {
-        return handler && g_onDraw.push_back(handler);
+    inline bool IsPlausibleWorldVec3(const Vec3& value) {
+        return IsFiniteFloat(value.x) && IsFiniteFloat(value.y) && IsFiniteFloat(value.z) &&
+               value.x >= -30000.0f && value.x <= 30000.0f &&
+               value.y >= -5000.0f && value.y <= 5000.0f &&
+               value.z >= -30000.0f && value.z <= 30000.0f &&
+               (AbsFloat(value.x) > 1.0f || AbsFloat(value.z) > 1.0f);
     }
 
-    inline bool OnDraw(DrawHandler handler) {
-        return AddOnDraw(handler);
+    inline bool IsPlausibleScreenVec2(const Vec2& value, const Vec2& size = {}) {
+        if (!IsFiniteFloat(value.x) || !IsFiniteFloat(value.y)) {
+            return false;
+        }
+
+        const float maxX = size.x > 0.0f ? size.x * 2.0f : 8192.0f;
+        const float maxY = size.y > 0.0f ? size.y * 2.0f : 8192.0f;
+        return value.x >= -maxX && value.x <= maxX &&
+               value.y >= -maxY && value.y <= maxY &&
+               (AbsFloat(value.x) > 0.5f || AbsFloat(value.y) > 0.5f);
     }
 
-    inline void DispatchUpdate() {
-        for (const auto& cb : g_onUpdate) {
-            if (cb) {
-                cb();
+    inline void OnCoreUpdate(const SDK::Events::GameUpdateEventArgs&) {
+        for (int i = 0; i < UpdateHandlers.count; ++i) {
+            if (auto handler = UpdateHandlers.handlers[i]) {
+                __try {
+                    handler();
+                } __except (1) {}
             }
         }
     }
 
-    inline void DispatchDraw() {
-        for (const auto& cb : g_onDraw) {
-            if (cb) {
-                cb();
+    inline void EnsureUpdateBridge() {
+        if (UpdateBridgeInstalled) {
+            return;
+        }
+        UpdateBridgeInstalled = true;
+        SDK::Events::AddOnGameUpdate(&OnCoreUpdate);
+    }
+
+    inline HWND FindProcessWindow() {
+        struct EnumData {
+            DWORD pid;
+            HWND result;
+        } data = { GetCurrentProcessId(), nullptr };
+
+        EnumWindows([](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* d = reinterpret_cast<EnumData*>(lParam);
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hWnd, &pid);
+            if (pid != d->pid || !IsWindowVisible(hWnd)) {
+                return TRUE;
+            }
+            if ((GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD) != 0) {
+                return TRUE;
+            }
+
+            RECT rc = {};
+            GetClientRect(hWnd, &rc);
+            if ((rc.right - rc.left) <= 0 || (rc.bottom - rc.top) <= 0) {
+                return TRUE;
+            }
+
+            d->result = hWnd;
+            return FALSE;
+        }, reinterpret_cast<LPARAM>(&data));
+
+        return data.result;
+    }
+
+    inline bool GetRendererSize(Vec2& out) {
+        out = {};
+        const auto& ctx = CoreRuntime::GetContext();
+
+        if (Globals::IsValidPtr(ctx.renderer)) {
+            __try {
+                const int width = Globals::Read<int>(ctx.renderer + 0xC);
+                const int height = Globals::Read<int>(ctx.renderer + 0x10);
+                if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+                    out = { static_cast<float>(width), static_cast<float>(height) };
+                    return true;
+                }
+            } __except (1) {
+                out = {};
             }
         }
+
+        HWND gameWindow = FindProcessWindow();
+        if (gameWindow) {
+            RECT rc = {};
+            if (GetClientRect(gameWindow, &rc) &&
+                rc.right > rc.left &&
+                rc.bottom > rc.top) {
+                out = {
+                    static_cast<float>(rc.right - rc.left),
+                    static_cast<float>(rc.bottom - rc.top)
+                };
+                return true;
+            }
+        }
+
+        const int width = GetSystemMetrics(SM_CXSCREEN);
+        const int height = GetSystemMetrics(SM_CYSCREEN);
+        if (width > 0 && height > 0) {
+            out = { static_cast<float>(width), static_cast<float>(height) };
+            return true;
+        }
+        return false;
     }
 
-    inline float Time() {
-        return CoreAPI::Game::GetTime();
+    inline bool ReadViewProjection(float out[16]) {
+        if (!out) {
+            return false;
+        }
+
+        const auto& ctx = CoreRuntime::GetContext();
+        const uintptr_t inst = ctx.viewProjInstance;
+        if (!Globals::IsValidPtr(inst)) {
+            return false;
+        }
+
+        float view[16] = {};
+        float proj[16] = {};
+        __try {
+            for (int i = 0; i < 16; ++i) {
+                view[i] = Globals::Read<float>(inst + static_cast<uintptr_t>(i * sizeof(float)));
+                proj[i] = Globals::Read<float>(
+                    inst + Offset::DrawingMatrixRuntime::ProjMatrixRelative +
+                    static_cast<uintptr_t>(i * sizeof(float)));
+            }
+        } __except (1) {
+            return false;
+        }
+
+        for (int row = 0; row < 4; ++row) {
+            for (int col = 0; col < 4; ++col) {
+                float sum = 0.0f;
+                for (int k = 0; k < 4; ++k) {
+                    sum += view[row * 4 + k] * proj[k * 4 + col];
+                }
+                out[row * 4 + col] = sum;
+            }
+        }
+        return true;
     }
 
-    inline int Ping() {
-        return CoreAPI::Control::GetPing();
+    inline float PlayerPlaneY() {
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!Globals::IsValidPtr(ctx.localPlayer)) {
+            return 0.0f;
+        }
+
+        __try {
+            const Vec3 position = Globals::Read<Vec3>(ctx.localPlayer + Offset::All::Position);
+            if (position.IsValid() && std::isfinite(position.y)) {
+                return position.y;
+            }
+        } __except (1) {}
+        return 0.0f;
     }
 
-    inline int TickCount() {
-        return static_cast<int>(::GetTickCount());
+    inline bool ScreenToWorldOnPlane(const Vec2& screen, float planeY, Vec3& out) {
+        out = {};
+
+        Vec2 size = {};
+        float matrix[16] = {};
+        if (!GetRendererSize(size) ||
+            !IsPlausibleScreenVec2(screen, size) ||
+            !ReadViewProjection(matrix)) {
+            return false;
+        }
+
+        using namespace DirectX;
+        XMMATRIX viewProj(
+            matrix[0], matrix[1], matrix[2], matrix[3],
+            matrix[4], matrix[5], matrix[6], matrix[7],
+            matrix[8], matrix[9], matrix[10], matrix[11],
+            matrix[12], matrix[13], matrix[14], matrix[15]);
+
+        XMVECTOR det = XMVectorZero();
+        XMMATRIX inv = XMMatrixInverse(&det, viewProj);
+        if (XMVectorGetX(det) == 0.0f) {
+            return false;
+        }
+
+        const float ndcX = (screen.x / size.x) * 2.0f - 1.0f;
+        const float ndcY = 1.0f - (screen.y / size.y) * 2.0f;
+
+        XMVECTOR nearClip = XMVectorSet(ndcX, ndcY, 0.0f, 1.0f);
+        XMVECTOR farClip = XMVectorSet(ndcX, ndcY, 1.0f, 1.0f);
+        XMVECTOR nearWorld = XMVector3TransformCoord(nearClip, inv);
+        XMVECTOR farWorld = XMVector3TransformCoord(farClip, inv);
+
+        Vec3 nearPoint{
+            XMVectorGetX(nearWorld),
+            XMVectorGetY(nearWorld),
+            XMVectorGetZ(nearWorld)
+        };
+        Vec3 farPoint{
+            XMVectorGetX(farWorld),
+            XMVectorGetY(farWorld),
+            XMVectorGetZ(farWorld)
+        };
+
+        if (!IsPlausibleWorldVec3(nearPoint) && !IsPlausibleWorldVec3(farPoint)) {
+            return false;
+        }
+
+        const Vec3 dir = farPoint - nearPoint;
+        if (AbsFloat(dir.y) < 0.0001f) {
+            out = farPoint;
+            return IsPlausibleWorldVec3(out);
+        }
+
+        const float t = (planeY - nearPoint.y) / dir.y;
+        out = nearPoint + dir * t;
+        out.y = planeY;
+        return IsPlausibleWorldVec3(out);
     }
 
-    inline Vector3 CursorPos() {
-        return CoreAPI::View::GetMouseWorldPos();
+    inline bool ReadHudMouseWorld(Vec3& out) {
+        out = {};
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!Globals::IsValidPtr(ctx.hudInstance)) {
+            return false;
+        }
+
+        __try {
+            const uintptr_t hudInput = Globals::Read<uintptr_t>(ctx.hudInstance + Offset::HudRuntime::Input);
+            if (Globals::IsValidPtr(hudInput)) {
+                const Vec3 mouseWorld = Globals::Read<Vec3>(hudInput + Offset::HudRuntime::MouseWorldPos);
+                if (IsPlausibleWorldVec3(mouseWorld)) {
+                    out = mouseWorld;
+                    return true;
+                }
+            }
+        } __except (1) {
+            out = {};
+        }
+        return false;
+    }
+
+    inline bool ReadCursorGlobals(Vec3& out) {
+        out = {};
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!ctx.cursorInstanceGlobal) {
+            return false;
+        }
+
+        __try {
+            const uintptr_t globals[] = {
+                ctx.cursorInstanceGlobal,
+                ctx.cursorInstanceGlobal + sizeof(uintptr_t)
+            };
+
+            for (uintptr_t global : globals) {
+                const uintptr_t maybePtr = Globals::Read<uintptr_t>(global);
+                if (Globals::IsValidPtr(maybePtr)) {
+                    const Vec3 value = Globals::Read<Vec3>(maybePtr);
+                    if (IsPlausibleWorldVec3(value)) {
+                        out = value;
+                        return true;
+                    }
+
+                    const Vec2 screen = Globals::Read<Vec2>(maybePtr + 0x2C);
+                    Vec3 projected{};
+                    if (ScreenToWorldOnPlane(screen, PlayerPlaneY(), projected)) {
+                        out = projected;
+                        return true;
+                    }
+                }
+
+                const Vec3 direct = Globals::Read<Vec3>(global);
+                if (IsPlausibleWorldVec3(direct)) {
+                    out = direct;
+                    return true;
+                }
+            }
+        } __except (1) {
+            out = {};
+        }
+        return false;
+    }
+
+    inline bool GetMouseScreenPos(Vec2& out) {
+        out = {};
+        const auto& ctx = CoreRuntime::GetContext();
+        Vec2 size = {};
+        (void)GetRendererSize(size);
+
+        if (Globals::IsValidPtr(ctx.mouseScreenVec2) && ctx.mouseScreenVec2 != ctx.objectManager) {
+            __try {
+                // Native getter sub_5999D0 returns the two int32 fields at
+                // MouseInput + 0x0C and MouseInput + 0x10.
+                const Vec2 candidate(
+                    static_cast<float>(Globals::Read<std::int32_t>(
+                        ctx.mouseScreenVec2 + Offset::MouseInputLayout::ScreenX)),
+                    static_cast<float>(Globals::Read<std::int32_t>(
+                        ctx.mouseScreenVec2 + Offset::MouseInputLayout::ScreenY)));
+                if (IsPlausibleScreenVec2(candidate, size)) {
+                    out = candidate;
+                    return true;
+                }
+            } __except (1) {
+                out = {};
+            }
+        }
+
+        POINT pt = {};
+        if (GetCursorPos(&pt)) {
+            HWND gameWindow = FindProcessWindow();
+            if (gameWindow) {
+                ScreenToClient(gameWindow, &pt);
+            }
+            const Vec2 candidate(static_cast<float>(pt.x), static_cast<float>(pt.y));
+            if (IsPlausibleScreenVec2(candidate, size)) {
+                out = candidate;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline bool ReadCursorRaw(Vec3& out) {
+        out = {};
+        (void)CoreRuntime::RefreshReadState();
+
+        if (ReadHudMouseWorld(out) || ReadCursorGlobals(out)) {
+            return true;
+        }
+
+        Vec2 screen{};
+        if (GetMouseScreenPos(screen)) {
+            return ScreenToWorldOnPlane(screen, PlayerPlaneY(), out);
+        }
+        return false;
+    }
+
+    inline float ReadTime() {
+        auto& ctx = CoreRuntime::g_ctx;
+        if ((ctx.statusMask & CoreRuntime::Status_GameTimeReady) == 0) {
+            (void)CoreRuntime::RefreshReadState();
+        }
+        return ctx.gameTime >= 0.0f && ctx.gameTime < 1000000.0f
+            ? ctx.gameTime
+            : 0.0f;
+    }
+
+    inline int ReadPing() {
+        auto& ctx = CoreRuntime::g_ctx;
+        if (ctx.cachedPing > 0 && ctx.cachedPing < 5000) {
+            return ctx.cachedPing;
+        }
+
+        (void)CoreRuntime::RefreshReadState();
+        if (!ctx.getPingFn || !Globals::IsValidPtr(ctx.netInstance)) {
+            return 0;
+        }
+
+        using GetPingFn = int(__fastcall*)(uintptr_t);
+        __try {
+            const int ping =
+                reinterpret_cast<GetPingFn>(ctx.getPingFn)(ctx.netInstance);
+            if (ping > 0 && ping < 5000) {
+                ctx.cachedPing = ping;
+                return ping;
+            }
+        }
+        __except (1) {}
+        return 0;
+    }
+
+    inline bool IsInGame() {
+        (void)CoreRuntime::RefreshReadState();
+        const auto& ctx = CoreRuntime::GetContext();
+        return Globals::IsValidPtr(ctx.localPlayer) &&
+               Globals::IsValidPtr(ctx.objectManager) &&
+               ReadTime() > 0.0f;
+    }
+
+    inline bool IsGameFocused() {
+        const HWND foreground = GetForegroundWindow();
+        if (!foreground) {
+            return false;
+        }
+
+        DWORD processId = 0;
+        GetWindowThreadProcessId(foreground, &processId);
+        return processId == GetCurrentProcessId();
     }
 
     inline bool IsChatOpen() {
-        return CoreAPI::Game::IsChatOpen();
-    }
+        InputDebug.chatPrimary = 0;
+        InputDebug.chatEditing = 0;
+        InputDebug.chatFocused = 0;
+        InputDebug.chatMemory = false;
 
-    inline bool IsShopOpen() {
-        return CoreAPI::Game::IsShopOpen();
+        const auto& ctx = CoreRuntime::GetContext();
+        uintptr_t chatClient = ctx.chatClient;
+        if (!Globals::IsValidPtr(chatClient) && ctx.chatClientGlobal) {
+            chatClient = Globals::Read<uintptr_t>(ctx.chatClientGlobal);
+        }
+        if (!Globals::IsValidPtr(chatClient)) {
+            return false;
+        }
+
+        const auto primary =
+            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::PrimaryOpen);
+        const auto editing =
+            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Editing);
+        const auto focused =
+            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Focused);
+
+        InputDebug.chatPrimary = primary;
+        InputDebug.chatEditing = editing;
+        InputDebug.chatFocused = focused;
+        if (primary > 1 || editing > 1 || focused > 1) {
+            return false;
+        }
+
+        InputDebug.chatMemory = primary != 0 || editing != 0 || focused != 0;
+        return InputDebug.chatMemory;
     }
 
     inline bool IsChatOpenByKeyboard() {
-        return CoreAPI::Game::IsChatOpenByKeyboard();
+        static bool chatOpen = false;
+        static bool enterWasDown = false;
+
+        if (!IsGameFocused()) {
+            enterWasDown = false;
+            return false;
+        }
+
+        const bool enterDown = (GetAsyncKeyState(VK_RETURN) & 0x8000) != 0;
+        if (enterDown && !enterWasDown) {
+            chatOpen = !chatOpen;
+        }
+        enterWasDown = enterDown;
+
+        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0 ||
+            (chatOpen && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0)) {
+            chatOpen = false;
+        }
+        return chatOpen;
     }
 
-    inline bool IsFocused() {
-        return CoreAPI::Game::IsGameFocused();
-    }
+    inline bool IsShopOpen() {
+        const auto& ctx = CoreRuntime::GetContext();
+        uintptr_t shop = ctx.shopInstance;
+        uintptr_t windows = ctx.openWindowsArray;
+        std::uint32_t count = ctx.openWindowsCount;
 
-    inline uint32_t InputBlockMask() {
-        return CoreAPI::Game::GetInputBlockMask();
-    }
+        if (!Globals::IsValidPtr(shop) && ctx.shopInstanceGlobal) {
+            shop = Globals::Read<uintptr_t>(ctx.shopInstanceGlobal);
+        }
+        if (!Globals::IsValidPtr(windows) && ctx.openWindowsArrayGlobal) {
+            windows = Globals::Read<uintptr_t>(ctx.openWindowsArrayGlobal);
+            count = Globals::Read<std::uint32_t>(ctx.openWindowsCountGlobal);
+        }
 
-    inline bool CanProcessInput() {
-        return CoreAPI::Game::ShouldProcessInput();
+        if (!Globals::IsValidPtr(shop) ||
+            !Globals::IsValidPtr(windows) ||
+            count == 0 ||
+            count > 64) {
+            return false;
+        }
+
+        for (std::uint32_t i = 0; i < count; ++i) {
+            if (Globals::Read<uintptr_t>(
+                    windows + static_cast<uintptr_t>(i) * sizeof(uintptr_t)) == shop) {
+                return true;
+            }
+        }
+        return false;
     }
 
     inline bool ShouldProcessInput() {
-        return CanProcessInput();
+        InputDebug = {};
+        InputDebug.inGame = IsInGame();
+        if (!InputDebug.inGame) {
+            InputDebug.blockMask |= InputBlock_NotInGame;
+            return false;
+        }
+
+        InputDebug.focused = IsGameFocused();
+        if (!InputDebug.focused) {
+            InputDebug.blockMask |= InputBlock_NotFocused;
+        }
+
+        InputDebug.chatMemory = IsChatOpen();
+        if (InputDebug.chatMemory) {
+            InputDebug.blockMask |= InputBlock_ChatMemory;
+        }
+
+        InputDebug.chatKeyboard = IsChatOpenByKeyboard();
+        if (InputDebug.chatKeyboard) {
+            InputDebug.blockMask |= InputBlock_ChatKey;
+        }
+
+        InputDebug.shopOpen = IsShopOpen();
+        if (InputDebug.shopOpen) {
+            InputDebug.blockMask |= InputBlock_ShopOpen;
+        }
+        return InputDebug.blockMask == InputBlock_None;
     }
+} // namespace detail
+
+inline float Time() {
+    return detail::ReadTime();
 }
 
-namespace Variables {
-    inline int TickCount() { return Game::TickCount(); }
+inline int Ping() {
+    return detail::ReadPing();
 }
 
-namespace MenuGUI {
-    inline bool IsChatOpen() { return Game::IsChatOpen(); }
+inline int TickCount() {
+    return static_cast<int>(Time() * 1000.0f);
 }
 
-} // namespace SDK
+inline Vec3 CursorPosRaw() {
+    Vec3 out = {};
+    return detail::ReadCursorRaw(out) ? out : Vec3{};
+}
+
+inline Vec3 CursorPos() {
+    return CursorPosRaw();
+}
+
+inline bool IsReady() {
+    return CoreRuntime::IsReady();
+}
+
+inline bool IsChatOpen() {
+    return detail::IsChatOpen();
+}
+
+inline bool IsShopOpen() {
+    return detail::IsShopOpen();
+}
+
+inline bool IsFocused() {
+    return detail::IsGameFocused();
+}
+
+inline bool ShouldProcessInput() {
+    return detail::ShouldProcessInput();
+}
+
+inline bool CanProcessInput() {
+    return ShouldProcessInput();
+}
+
+inline std::uint32_t InputBlockMask() {
+    return detail::InputDebug.blockMask;
+}
+
+inline int MapId() {
+    return static_cast<int>(::CoreMap::GetMapId());
+}
+
+inline bool AddOnUpdate(UpdateHandler handler) {
+    detail::EnsureUpdateBridge();
+    return detail::UpdateHandlers.Add(handler);
+}
+
+inline bool RemoveOnUpdate(UpdateHandler handler) {
+    return detail::UpdateHandlers.Remove(handler);
+}
+
+inline bool AddOnWndProc(WndProcHandler handler) {
+    return detail::WndProcHandlers.Add(handler);
+}
+
+inline bool RemoveOnWndProc(WndProcHandler handler) {
+    return detail::WndProcHandlers.Remove(handler);
+}
+
+inline bool DispatchWndProc(HWND hWnd, std::uint32_t msg, std::uintptr_t wParam, std::intptr_t lParam) {
+    WndEventArgs args{};
+    args.HWnd = hWnd;
+    args.Msg = msg;
+    args.WParam = wParam;
+    args.LParam = lParam;
+    args.Process = true;
+
+    for (int i = 0; i < detail::WndProcHandlers.count; ++i) {
+        if (auto handler = detail::WndProcHandlers.handlers[i]) {
+            __try {
+                handler(args);
+            } __except (1) {}
+        }
+    }
+    return args.Process;
+}
+
+inline void Reset() {
+    if (detail::UpdateBridgeInstalled) {
+        SDK::Events::RemoveOnGameUpdate(&detail::OnCoreUpdate);
+    }
+    detail::UpdateHandlers.Clear();
+    detail::WndProcHandlers.Clear();
+    detail::UpdateBridgeInstalled = false;
+    detail::InputDebug = {};
+}
+
+inline void Print(const char* text, bool /*triggerEvent*/ = true) {
+    NightSharpDebug::Logf("[SDK.Game] %s", text ? text : "");
+}
+
+template <typename... Args>
+inline void Print(const char* fmt, Args... args) {
+    char buffer[1024] = {};
+    if (fmt) {
+        _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt, args...);
+    }
+    Print(buffer, true);
+}
+
+struct UpdateEventSlot {
+    bool operator+=(UpdateHandler handler) const { return AddOnUpdate(handler); }
+    bool operator-=(UpdateHandler handler) const { return RemoveOnUpdate(handler); }
+    bool operator()(UpdateHandler handler) const { return AddOnUpdate(handler); }
+};
+
+struct WndProcEventSlot {
+    bool operator+=(WndProcHandler handler) const { return AddOnWndProc(handler); }
+    bool operator-=(WndProcHandler handler) const { return RemoveOnWndProc(handler); }
+    bool operator()(WndProcHandler handler) const { return AddOnWndProc(handler); }
+};
+
+inline UpdateEventSlot OnUpdate{};
+inline WndProcEventSlot OnWndProc{};
+
+} // namespace SDK::Game

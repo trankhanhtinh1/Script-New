@@ -1,12 +1,13 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class PerformanceType : int {
-    TickCount = 0,
-    Ticks = TickCount,
-    Milliseconds = 1,
-    TimeSpan = 2
+enum class PerformanceType : std::int32_t {
+    TickCount,
+    Milliseconds,
+    TimeSpan,
 };
 
 } // namespace SDK

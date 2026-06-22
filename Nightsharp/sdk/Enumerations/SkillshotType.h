@@ -1,9 +1,13 @@
 #pragma once
 
-#include "SpellType.h"
+#include <cstdint>
 
 namespace SDK {
 
-using SkillshotType = SpellType;
+enum class SkillshotType : std::int32_t {
+    SkillshotLine,
+    SkillshotCircle,
+    SkillshotCone,
+};
 
 } // namespace SDK

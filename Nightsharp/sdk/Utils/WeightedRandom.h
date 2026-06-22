@@ -2,37 +2,48 @@
 
 #include "../Core/Variables.h"
 
-#include <algorithm>
+#include <cstdint>
+#include <cstddef>
 #include <cmath>
-#include <new>
+#include <numeric>
 #include <random>
+#include <vector>
 
-namespace SDK::Utils::WeightedRandom {
+namespace SDK::Core::Utils {
 
-namespace detail {
-    inline std::mt19937*& Engine() {
-        static auto* engine = new(std::nothrow) std::mt19937(static_cast<uint32_t>(Variables::TickCount()));
-        return engine;
-    }
-}
-
-inline std::mt19937& Random() {
-    return *detail::Engine();
-}
-
-inline int Next(int min, int max) {
-    if (min >= max) {
-        return min;
+class WeightedRandom {
+public:
+    static std::mt19937& Random() {
+        static std::mt19937 rng(static_cast<std::uint32_t>(SDK::Variables::TickCount()));
+        return rng;
     }
 
-    const double mean = (static_cast<double>(min) + static_cast<double>(max - 1)) * 0.5;
-    const double variance = std::max(1.0, (static_cast<double>(max - min) * static_cast<double>(max - min)) / 12.0);
-    const double stddev = std::sqrt(variance);
+    static int Next(int min, int max) {
+        if (max <= 0) {
+            return min;
+        }
 
-    std::normal_distribution<double> distribution(mean, stddev);
-    const int value = static_cast<int>(std::llround(distribution(Random())));
-    return std::clamp(value, min, max - 1);
-}
+        std::vector<int> values;
+        values.reserve(static_cast<std::size_t>(max));
+        for (int i = 0; i < max; ++i) {
+            values.push_back(min + i);
+        }
 
-} // namespace SDK::Utils::WeightedRandom
+        const double mean = std::accumulate(values.begin(), values.end(), 0.0) / values.size();
+        double variance = 0.0;
+        for (int value : values) {
+            const double delta = static_cast<double>(value) - mean;
+            variance += delta * delta;
+        }
+        variance /= values.size();
 
+        std::normal_distribution<double> distribution(mean, std::sqrt(variance));
+        return static_cast<int>(distribution(Random()));
+    }
+};
+
+} // namespace SDK::Core::Utils
+
+namespace SDK::Utils {
+    using WeightedRandom = ::SDK::Core::Utils::WeightedRandom;
+} // namespace SDK::Utils

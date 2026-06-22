@@ -1,22 +1,22 @@
 #pragma once
 
-#include "../Core/Game.h"
+#include "../Events/Events.h"
+#include "../Core/Variables.h"
 
 #include <algorithm>
 #include <functional>
-#include <new>
+#include <utility>
 #include <vector>
 
-namespace SDK::Utils {
+namespace SDK::Core::Utils {
 
 class TickOperation {
 public:
     TickOperation(int tickDelay, std::function<void()> action, bool runOnce = false)
-        : Action(std::move(action))
-        , IsRunning(true)
-        , TickDelay(tickDelay)
-        , m_nextTick(runOnce ? Variables::TickCount() : Variables::TickCount() + tickDelay) {
-        Initialize();
+        : Action(std::move(action)),
+          IsRunning(true),
+          TickDelay(tickDelay),
+          nextTick_(runOnce ? SDK::Variables::TickCount() : SDK::Variables::TickCount() + tickDelay) {
         Register(this);
     }
 
@@ -24,45 +24,31 @@ public:
         Dispose();
     }
 
-    TickOperation* Start(bool runOnce = false) {
-        if (!IsRunning) {
-            IsRunning = true;
-            m_nextTick = runOnce ? Variables::TickCount() : Variables::TickCount() + TickDelay;
-            Register(this);
-        }
-        return this;
-    }
-
-    TickOperation* Stop() {
+    void Dispose() {
         if (IsRunning) {
-            IsRunning = false;
             Unregister(this);
         }
-        return this;
+        Action = {};
+        TickDelay = 0;
+        nextTick_ = 0;
+        IsRunning = false;
     }
 
-    void Dispose() {
-        if (!m_disposed) {
-            m_disposed = true;
-            Stop();
-            Action = {};
-            TickDelay = 0;
-            m_nextTick = 0;
+    TickOperation& Start(bool runOnce = false) {
+        if (!IsRunning) {
+            nextTick_ = runOnce ? SDK::Variables::TickCount() : SDK::Variables::TickCount() + TickDelay;
+            IsRunning = true;
+            Register(this);
         }
+        return *this;
     }
 
-    static void Initialize() {
-        if (detail::g_initialized) {
-            return;
+    TickOperation& Stop() {
+        if (IsRunning) {
+            Unregister(this);
+            IsRunning = false;
         }
-        detail::g_initialized = true;
-        Game::OnUpdate(DispatchUpdate);
-    }
-
-    static void Reset() {
-        if (auto* ops = detail::Operations()) {
-            ops->clear();
-        }
+        return *this;
     }
 
     std::function<void()> Action = {};
@@ -70,53 +56,53 @@ public:
     int TickDelay = 0;
 
 private:
-    struct detail {
-        static inline std::vector<TickOperation*>*& Operations() {
-            static auto* storage = new(std::nothrow) std::vector<TickOperation*>();
-            return storage;
-        }
-        static inline bool g_initialized = false;
-    };
+    int nextTick_ = 0;
+
+    static std::vector<TickOperation*>& Operations() {
+        static std::vector<TickOperation*> operations;
+        return operations;
+    }
 
     static void Register(TickOperation* operation) {
-        auto* ops = detail::Operations();
-        if (!ops || !operation) {
-            return;
-        }
-        if (std::find(ops->begin(), ops->end(), operation) == ops->end()) {
-            ops->push_back(operation);
+        EnsureInstalled();
+        auto& operations = Operations();
+        if (std::find(operations.begin(), operations.end(), operation) == operations.end()) {
+            operations.push_back(operation);
         }
     }
 
     static void Unregister(TickOperation* operation) {
-        auto* ops = detail::Operations();
-        if (!ops) {
-            return;
-        }
-        ops->erase(std::remove(ops->begin(), ops->end(), operation), ops->end());
+        auto& operations = Operations();
+        operations.erase(std::remove(operations.begin(), operations.end(), operation), operations.end());
     }
 
-    static void DispatchUpdate() {
-        auto* ops = detail::Operations();
-        if (!ops) {
-            return;
-        }
-
-        const int now = Variables::TickCount();
-        for (auto* operation : *ops) {
-            if (!operation || !operation->IsRunning || !operation->Action) {
+    static void OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
+        const int now = SDK::Variables::TickCount();
+        auto snapshot = Operations();
+        for (TickOperation* operation : snapshot) {
+            if (!operation || !operation->IsRunning || operation->nextTick_ > now) {
                 continue;
             }
-            if (operation->m_nextTick <= now) {
-                operation->Action();
-                operation->m_nextTick = now + operation->TickDelay;
+            if (operation->Action) {
+                try {
+                    operation->Action();
+                } catch (...) {}
             }
+            operation->nextTick_ = SDK::Variables::TickCount() + operation->TickDelay;
         }
     }
 
-    int m_nextTick = 0;
-    bool m_disposed = false;
+    static void EnsureInstalled() {
+        static bool installed = false;
+        if (!installed) {
+            installed = true;
+            SDK::Events::AddOnGameUpdate(&OnUpdate);
+        }
+    }
 };
 
-} // namespace SDK::Utils
+} // namespace SDK::Core::Utils
 
+namespace SDK::Utils {
+    using TickOperation = ::SDK::Core::Utils::TickOperation;
+} // namespace SDK::Utils

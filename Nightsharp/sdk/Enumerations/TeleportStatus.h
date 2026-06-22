@@ -1,12 +1,14 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class TeleportStatus : int {
+enum class TeleportStatus : std::int32_t {
     Start,
     Abort,
     Finish,
-    Unknown
+    Unknown,
 };
 
 } // namespace SDK

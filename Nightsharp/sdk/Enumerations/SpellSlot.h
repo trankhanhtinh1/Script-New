@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class SpellSlot : int {
+enum class SpellSlot : std::int32_t {
     Q = 0,
     W = 1,
     E = 2,
@@ -17,7 +19,8 @@ enum class SpellSlot : int {
     Item6 = 11,
     Trinket = 12,
     Recall = 13,
-    Unknown = 14
+    BasicAttack = 64,
+    Unknown = -1,
 };
 
 } // namespace SDK

@@ -1,224 +1,187 @@
 #pragma once
 
-#include "../../menu/MenuUI.h"
-#include "../Core/Game.h"
-#include "../Core/Objects.h"
+#include "Events.h"
 #include "../Enumerations/TeleportStatus.h"
 #include "../Enumerations/TeleportType.h"
 
-#include <new>
-#include <string>
-#include <unordered_map>
+#include <cstring>
 
 namespace SDK::Events::Teleport {
 
 struct TeleportEventArgs {
+    uintptr_t Object = 0;
+    uint32_t NetworkId = 0;
     int Duration = 0;
-    bool IsTarget = false;
-    AIBaseClient Object = {};
     int Start = 0;
-    TeleportStatus Status = TeleportStatus::Unknown;
-    TeleportType Type = TeleportType::Unknown;
-
-    bool IsValid() const {
-        return Object.IsValid() && Type != TeleportType::Unknown;
-    }
+    bool IsTarget = false;
+    SDK::TeleportStatus Status = SDK::TeleportStatus::Unknown;
+    SDK::TeleportType Type = SDK::TeleportType::Unknown;
+    char RecallType[64] = {};
+    char RecallName[64] = {};
+    ::Core::Events::TeleportEventArgs Raw = {};
 };
 
 using TeleportHandler = void(*)(const TeleportEventArgs&);
 
 namespace detail {
-    struct TeleportState {
-        TeleportEventArgs Args = {};
-        bool Active = false;
-        std::string RecallName = {};
-        int LastUpdateTick = 0;
-    };
+    inline constexpr int ErrorBuffer = 100;
+    inline SDK::Events::detail::EventList<TeleportEventArgs> TeleportHandlers;
+    inline TeleportEventArgs TeleportData[64] = {};
+    inline int TeleportDataCount = 0;
 
-    inline std::unordered_map<int, TeleportState>* g_teleports = nullptr;
-    inline MenuUI::FixedList<TeleportHandler, 64> g_handlers = {};
-
-    inline bool EnsureStorage() {
-        if (!g_teleports) {
-            g_teleports = new(std::nothrow) std::unordered_map<int, TeleportState>();
-        }
-        return g_teleports != nullptr;
+    inline int TickCount() {
+        return static_cast<int>(GetTickCount64() & 0x7FFFFFFF);
     }
 
-    inline int GetRecallDurationMs(const std::string& recallName) {
-        if (recallName.empty()) {
-            return 8000;
-        }
-
-        if (lstrcmpiA(recallName.c_str(), "recall") == 0) {
-            return 8000;
-        }
-        if (lstrcmpiA(recallName.c_str(), "recallimproved") == 0) {
-            return 7000;
-        }
-        if (lstrcmpiA(recallName.c_str(), "odinrecall") == 0) {
-            return 4500;
-        }
-        if (lstrcmpiA(recallName.c_str(), "odinrecallimproved") == 0 ||
-            lstrcmpiA(recallName.c_str(), "superrecall") == 0 ||
-            lstrcmpiA(recallName.c_str(), "superrecallimproved") == 0) {
-            return 4000;
-        }
-
-        return 8000;
+    inline uint32_t KeyFor(const ::Core::Events::ObjectInfo& object) {
+        return object.NetworkId ? object.NetworkId : static_cast<uint32_t>(object.Ptr & 0xFFFFFFFFu);
     }
 
-    inline bool ReadActiveSpellName(const AIHeroClient& hero, std::string& outName) {
-        const auto cast = hero.Ref().GetActiveSpellCast();
-        if (!cast.IsValid()) {
+    inline TeleportEventArgs* Find(uint32_t networkId, bool create) {
+        if (!networkId) {
+            return nullptr;
+        }
+
+        for (int i = 0; i < TeleportDataCount; ++i) {
+            if (TeleportData[i].NetworkId == networkId) {
+                return &TeleportData[i];
+            }
+        }
+
+        if (!create || TeleportDataCount >= 64) {
+            return nullptr;
+        }
+
+        TeleportEventArgs& entry = TeleportData[TeleportDataCount++];
+        entry = {};
+        entry.NetworkId = networkId;
+        return &entry;
+    }
+
+    inline bool EqualsIgnoreCase(const char* a, const char* b) {
+        return a && b && _stricmp(a, b) == 0;
+    }
+
+    inline void Copy(char* dst, int dstCount, const char* src) {
+        if (!dst || dstCount <= 0) {
+            return;
+        }
+        dst[0] = 0;
+        if (!src) {
+            return;
+        }
+        strncpy_s(dst, static_cast<size_t>(dstCount), src, _TRUNCATE);
+    }
+
+    inline int RecallDuration(const char* recallName) {
+        if (EqualsIgnoreCase(recallName, "recall")) return 8000;
+        if (EqualsIgnoreCase(recallName, "recallimproved")) return 7000;
+        if (EqualsIgnoreCase(recallName, "odinrecall")) return 4500;
+        if (EqualsIgnoreCase(recallName, "odinrecallimproved")) return 4000;
+        if (EqualsIgnoreCase(recallName, "superrecall")) return 4000;
+        if (EqualsIgnoreCase(recallName, "superrecallimproved")) return 4000;
+        return 0;
+    }
+
+    inline SDK::TeleportType TypeFrom(const char* recallType) {
+        if (EqualsIgnoreCase(recallType, "Recall")) return SDK::TeleportType::Recall;
+        if (EqualsIgnoreCase(recallType, "Teleport")) return SDK::TeleportType::Teleport;
+        if (EqualsIgnoreCase(recallType, "Gate")) return SDK::TeleportType::TwistedFate;
+        if (EqualsIgnoreCase(recallType, "Shen")) return SDK::TeleportType::Shen;
+        return SDK::TeleportType::Unknown;
+    }
+
+    inline int DurationFor(SDK::TeleportType type, const char* recallName) {
+        switch (type) {
+        case SDK::TeleportType::Recall:      return RecallDuration(recallName);
+        case SDK::TeleportType::Teleport:    return 4000;
+        case SDK::TeleportType::TwistedFate: return 1500;
+        case SDK::TeleportType::Shen:        return 3000;
+        default:                             return 0;
+        }
+    }
+
+    inline bool IsTarget(SDK::TeleportType type, const char* recallName) {
+        switch (type) {
+        case SDK::TeleportType::Teleport:
+            return !EqualsIgnoreCase(recallName, "summonerteleport");
+        case SDK::TeleportType::TwistedFate:
+            return !EqualsIgnoreCase(recallName, "gate");
+        case SDK::TeleportType::Shen:
+            return !EqualsIgnoreCase(recallName, "shenrchannelmanager");
+        default:
             return false;
         }
-
-        char spellNameBuffer[128] = {};
-        if (!cast.ReadSpellName(spellNameBuffer, static_cast<int>(sizeof(spellNameBuffer)))) {
-            return false;
-        }
-
-        outName.assign(spellNameBuffer);
-        return !outName.empty();
     }
-
-    inline TeleportType DetectTeleportType(const AIHeroClient& hero, std::string& recallName, int& durationMs) {
-        recallName.clear();
-        durationMs = 0;
-
-        if (hero.IsRecalling()) {
-            const auto recallSpell = hero.GetSpell(SpellSlot::Recall);
-            recallName = recallSpell.Name();
-            durationMs = GetRecallDurationMs(recallName);
-            return TeleportType::Recall;
-        }
-
-        if (hero.HasBuff("summonerteleport") ||
-            hero.HasBuff("SummonerTeleport") ||
-            hero.HasBuff("teleport_target")) {
-            durationMs = 4000;
-            return TeleportType::Teleport;
-        }
-
-        if (hero.HasBuff("gate") ||
-            hero.HasBuff("TwistedFateR") ||
-            hero.HasBuff("Destiny")) {
-            durationMs = 1500;
-            return TeleportType::TwistedFate;
-        }
-
-        if (hero.HasBuff("ShenRChannel") ||
-            hero.HasBuff("shenrchannelbuff") ||
-            hero.HasBuff("ShenStandUnited")) {
-            durationMs = 3000;
-            return TeleportType::Shen;
-        }
-
-        std::string activeSpellName = {};
-        if (ReadActiveSpellName(hero, activeSpellName)) {
-            if (lstrcmpiA(activeSpellName.c_str(), "summonerteleport") == 0) {
-                durationMs = 4000;
-                return TeleportType::Teleport;
-            }
-            if (lstrcmpiA(activeSpellName.c_str(), "gate") == 0) {
-                durationMs = 1500;
-                return TeleportType::TwistedFate;
-            }
-            if (_strnicmp(activeSpellName.c_str(), "shenr", 5) == 0) {
-                durationMs = 3000;
-                return TeleportType::Shen;
-            }
-        }
-
-        return TeleportType::Unknown;
-    }
-
-    inline void FireEvent(const TeleportEventArgs& args) {
-        for (const auto& handler : g_handlers) {
-            if (handler) {
-                handler(args);
-            }
-        }
-    }
-}
-
-inline void Initialize() {
-    detail::EnsureStorage();
-}
+} // namespace detail
 
 inline bool AddOnTeleport(TeleportHandler handler) {
-    return handler && detail::g_handlers.push_back(handler);
+    SDK::Events::Initialize();
+    return detail::TeleportHandlers.Add(handler);
+}
+
+inline bool RemoveOnTeleport(TeleportHandler handler) {
+    return detail::TeleportHandlers.Remove(handler);
 }
 
 inline bool OnTeleport(TeleportHandler handler) {
     return AddOnTeleport(handler);
 }
 
-inline TeleportEventArgs GetTeleportData(const AIBaseClient& object) {
-    if (!detail::g_teleports || !object.IsValid()) {
-        return {};
+inline TeleportEventArgs GetTeleportData(uint32_t networkId) {
+    if (auto* data = detail::Find(networkId, false)) {
+        return *data;
     }
-
-    const auto it = detail::g_teleports->find(object.NetworkId());
-    return (it != detail::g_teleports->end()) ? it->second.Args : TeleportEventArgs{};
+    return {};
 }
 
-inline void Update() {
-    if (!detail::EnsureStorage()) {
-        return;
-    }
-
-    const int now = Game::TickCount();
-    for (const auto& hero : ObjectManager::Heroes()) {
-        const int netId = hero.NetworkId();
-        if (!hero.IsValid() || netId == 0 || hero.IsDead()) {
-            if (netId != 0) {
-                detail::g_teleports->erase(netId);
-            }
-            continue;
-        }
-
-        std::string recallName = {};
-        int durationMs = 0;
-        const TeleportType detectedType = detail::DetectTeleportType(hero, recallName, durationMs);
-        auto& state = (*detail::g_teleports)[netId];
-
-        if (detectedType != TeleportType::Unknown) {
-            if (!state.Active || state.Args.Type != detectedType) {
-                state.Active = true;
-                state.RecallName = recallName;
-                state.LastUpdateTick = now;
-                state.Args = {};
-                state.Args.Object = hero;
-                state.Args.Type = detectedType;
-                state.Args.Status = TeleportStatus::Start;
-                state.Args.Duration = durationMs > 0 ? durationMs : 4000;
-                state.Args.Start = now;
-                state.Args.IsTarget = false;
-                detail::FireEvent(state.Args);
-            } else {
-                state.LastUpdateTick = now;
-            }
-            continue;
-        }
-
-        if (!state.Active) {
-            continue;
-        }
-
-        const int elapsed = now - state.Args.Start;
-        state.Active = false;
-        state.Args.Status = (elapsed + 100 >= state.Args.Duration) ? TeleportStatus::Finish : TeleportStatus::Abort;
-        detail::FireEvent(state.Args);
-    }
+inline TeleportEventArgs GetTeleportData(uintptr_t unitPtr) {
+    return GetTeleportData(static_cast<uint32_t>(unitPtr & 0xFFFFFFFFu));
 }
 
-inline void Reset() {
-    if (detail::g_teleports) {
-        detail::g_teleports->clear();
-    }
-    detail::g_handlers.clear();
+template <typename T>
+inline TeleportEventArgs GetTeleportData(const T& unit) {
+    return GetTeleportData(static_cast<uint32_t>(unit.NetworkId()));
 }
 
 } // namespace SDK::Events::Teleport
+
+namespace SDK::Events {
+    inline bool AddOnTeleport(Teleport::TeleportHandler handler) { return Teleport::AddOnTeleport(handler); }
+    inline bool RemoveOnTeleport(Teleport::TeleportHandler handler) { return Teleport::RemoveOnTeleport(handler); }
+    inline bool OnTeleport(Teleport::TeleportHandler handler) { return Teleport::OnTeleport(handler); }
+
+namespace detail {
+    inline void EventTeleport(const TeleportRawEventArgs& args) {
+        const uint32_t key = Teleport::detail::KeyFor(args.Sender);
+        auto* eventArgs = Teleport::detail::Find(key, true);
+        if (!eventArgs) {
+            return;
+        }
+
+        if (args.RecallType[0] != 0) {
+            // TODO(EnsoulSharp parity): confirm RecallType/RecallName mapping for
+            // every current teleport source. Newer map gates/portal-like systems
+            // may require extra status/type fields beyond old FOWRecall strings.
+            eventArgs->Object = args.Sender.Ptr;
+            eventArgs->NetworkId = key;
+            eventArgs->Type = Teleport::detail::TypeFrom(args.RecallType);
+            eventArgs->Status = SDK::TeleportStatus::Start;
+            eventArgs->Start = Teleport::detail::TickCount();
+            eventArgs->Duration = Teleport::detail::DurationFor(eventArgs->Type, args.RecallName);
+            eventArgs->IsTarget = Teleport::detail::IsTarget(eventArgs->Type, args.RecallName);
+            eventArgs->Raw = args;
+            Teleport::detail::Copy(eventArgs->RecallType, static_cast<int>(sizeof(eventArgs->RecallType)), args.RecallType);
+            Teleport::detail::Copy(eventArgs->RecallName, static_cast<int>(sizeof(eventArgs->RecallName)), args.RecallName);
+        } else {
+            const int elapsed = Teleport::detail::TickCount() - eventArgs->Start;
+            eventArgs->Status = elapsed < eventArgs->Duration - Teleport::detail::ErrorBuffer
+                ? SDK::TeleportStatus::Abort
+                : SDK::TeleportStatus::Finish;
+            eventArgs->Raw = args;
+        }
+
+        Teleport::detail::TeleportHandlers.Fire(*eventArgs);
+    }
+} // namespace detail
+} // namespace SDK::Events

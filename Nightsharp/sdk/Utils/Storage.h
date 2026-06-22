@@ -1,257 +1,138 @@
 #pragma once
 
-#include "BinarySerializer.h"
-#include "JsonFactory.h"
-#include "../Core/Constants.h"
+#include "../../libs/nlohmann/json.hpp"
+#include "Logging.h"
 
 #include <Windows.h>
-
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
-#include <functional>
-#include <new>
+#include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
-namespace SDK::Utils {
+namespace SDK::Core::Utils {
 
 class Storage {
 public:
-    struct Binding {
-        std::string Key = {};
-        std::function<JsonFactory::Json()> Getter = {};
-        std::function<void(const JsonFactory::Json&)> Setter = {};
-    };
-
-    struct FileEnvelope {
-        std::string StorageName = {};
-        std::vector<std::string> StorageTypes = {};
-        std::string JsonText = {};
-
-        void Serialize(BinarySerializer::BinaryWriter& writer) const {
-            BinarySerializer::SerializeValue(writer, StorageName);
-            BinarySerializer::SerializeValue(writer, StorageTypes);
-            BinarySerializer::SerializeValue(writer, JsonText);
-        }
-
-        void Deserialize(BinarySerializer::BinaryReader& reader) {
-            BinarySerializer::DeserializeValue(reader, StorageName);
-            BinarySerializer::DeserializeValue(reader, StorageTypes);
-            BinarySerializer::DeserializeValue(reader, JsonText);
-        }
-    };
-
-    explicit Storage(std::string storageName = "Generic", std::vector<std::string> storageTypes = {})
-        : m_storageName(IsValidStorageName(storageName) ? std::move(storageName) : std::string("Generic"))
-        , m_storageTypes(std::move(storageTypes)) {}
-
-    static bool IsValidStorageName(const std::string& storageName) {
-        if (storageName.empty()) {
-            return false;
-        }
-
-        const std::string chars = "\\/:*?\"<>|";
-        return std::none_of(storageName.begin(), storageName.end(), [&](char ch) {
-            return chars.find(ch) != std::string::npos;
-        });
+    explicit Storage(std::string storageName = "Generic")
+        : storageName_(std::move(storageName)) {
+        ValidateName(storageName_);
+        StorageList().push_back(this);
     }
 
-    static std::string StoragePath() {
-        const std::string path = Constants::PublicLogDirectory() + "\\NightSharpStorage";
-        ::CreateDirectoryA(path.c_str(), nullptr);
-        return path;
-    }
-
-    static std::string ResolveFile(const std::string& storageName) {
-        return StoragePath() + "\\" + storageName + ".storage";
+    ~Storage() {
+        auto& list = StorageList();
+        list.erase(std::remove(list.begin(), list.end(), this), list.end());
     }
 
     static bool Exists(const std::string& storageName = "Generic") {
-        if (!IsValidStorageName(storageName)) {
-            return false;
-        }
-        std::ifstream stream(ResolveFile(storageName), std::ios::binary);
-        return stream.good();
+        ValidateName(storageName);
+        return std::filesystem::exists(PathFor(storageName));
     }
 
-    static Storage Load(const std::string& storageName = "Generic", std::vector<std::string> storageTypes = {}) {
-        Storage storage(storageName, std::move(storageTypes));
-        if (!Exists(storage.m_storageName)) {
-            TrackStorageName(storage.m_storageName);
+    static Storage Load(const std::string& storageName = "Generic") {
+        ValidateName(storageName);
+        Storage storage(storageName);
+        const auto path = PathFor(storageName);
+        if (!std::filesystem::exists(path)) {
             return storage;
         }
 
-        FileEnvelope envelope;
-        if (BinarySerializer::DeserializeFromFile(ResolveFile(storage.m_storageName), envelope)) {
-            if (!envelope.StorageName.empty()) {
-                storage.m_storageName = envelope.StorageName;
-            }
-            storage.m_storageTypes = std::move(envelope.StorageTypes);
-            if (!envelope.JsonText.empty()) {
-                storage.m_json = JsonFactory::JsonString(envelope.JsonText);
-            }
+        std::ifstream stream(path);
+        if (stream) {
+            stream >> storage.contents_;
         }
-
-        TrackStorageName(storage.m_storageName);
         return storage;
     }
 
-    static Storage LoadOrCreate(const std::string& storageName = "Generic", std::vector<std::string> storageTypes = {}) {
-        return Load(storageName, std::move(storageTypes));
-    }
-
-    static void RegisterBinding(const std::string& storageName, Binding binding) {
-        auto* registry = GetBindings();
-        if (!registry || !IsValidStorageName(storageName) || binding.Key.empty()) {
-            return;
-        }
-
-        TrackStorageName(storageName);
-        (*registry)[storageName].push_back(std::move(binding));
-    }
-
-    static void SaveRegistered(const std::string& storageName = "Generic") {
-        Storage storage = Load(storageName);
-        if (auto* registry = GetBindings(); registry) {
-            auto it = registry->find(storage.storageName());
-            if (it != registry->end()) {
-                for (const auto& binding : it->second) {
-                    if (binding.Getter) {
-                        storage.m_json[binding.Key] = binding.Getter();
-                    }
-                }
-            }
-        }
-        storage.Save();
-    }
-
-    static void LoadRegistered(const std::string& storageName = "Generic") {
-        const Storage storage = Load(storageName);
-        if (auto* registry = GetBindings(); registry) {
-            auto it = registry->find(storage.storageName());
-            if (it != registry->end()) {
-                for (const auto& binding : it->second) {
-                    if (binding.Setter && storage.m_json.contains(binding.Key)) {
-                        binding.Setter(storage.m_json.at(binding.Key));
-                    }
-                }
-            }
-        }
-    }
-
-    static void SaveAllRegistered() {
-        if (auto* names = GetTrackedStorageNames(); names) {
-            for (const auto& name : *names) {
-                SaveRegistered(name);
-            }
-        }
-    }
-
-    static void LoadAllRegistered() {
-        if (auto* names = GetTrackedStorageNames(); names) {
-            for (const auto& name : *names) {
-                LoadRegistered(name);
-            }
-        }
-    }
-
-    template<typename T>
-    T Get(const std::string& key, const T& fallback = T{}) const {
-        if (!m_json.contains(key)) {
-            return fallback;
-        }
-        try {
-            return m_json.at(key).template get<T>();
-        } catch (...) {
-            return fallback;
-        }
-    }
-
-    template<typename T>
+    template <typename T>
     bool Add(const std::string& key, const T& value) {
-        if (m_json.contains(key)) {
+        if (contents_.contains(key)) {
             return false;
         }
-        m_json[key] = value;
+        contents_[key] = value;
         return true;
     }
 
-    template<typename T>
-    void Set(const std::string& key, const T& value) {
-        m_json[key] = value;
-    }
-
-    template<typename T>
-    bool Update(const std::string& key, const T& value) {
-        if (!m_json.contains(key)) {
-            return false;
-        }
-        m_json[key] = value;
-        return true;
-    }
-
-    bool Contains(const std::string& key) const {
-        return m_json.contains(key);
+    template <typename T>
+    T Get(const std::string& key) const {
+        const auto it = contents_.find(key);
+        return it != contents_.end() ? it->template get<T>() : T{};
     }
 
     bool Remove(const std::string& key) {
-        return m_json.erase(key) > 0;
-    }
-
-    void RegisterType(std::string typeName) {
-        if (!typeName.empty() &&
-            std::find(m_storageTypes.begin(), m_storageTypes.end(), typeName) == m_storageTypes.end()) {
-            m_storageTypes.push_back(std::move(typeName));
-        }
-    }
-
-    const std::vector<std::string>& storageTypes() const {
-        return m_storageTypes;
-    }
-
-    const std::string& storageName() const {
-        return m_storageName;
+        return contents_.erase(key) != 0;
     }
 
     void Save() const {
-        FileEnvelope envelope;
-        envelope.StorageName = m_storageName;
-        envelope.StorageTypes = m_storageTypes;
-        envelope.JsonText = JsonFactory::ToString(m_json);
-        BinarySerializer::SerializeToFile(ResolveFile(m_storageName), envelope);
+        std::filesystem::create_directories(StoragePath());
+        std::ofstream stream(PathFor(storageName_), std::ios::trunc);
+        stream << contents_.dump(4);
     }
 
-    const JsonFactory::Json& Contents() const {
-        return m_json;
+    template <typename T>
+    bool Update(const std::string& key, const T& value) {
+        if (!contents_.contains(key)) {
+            return false;
+        }
+        contents_[key] = value;
+        return true;
+    }
+
+    const nlohmann::json& Contents() const {
+        return contents_;
+    }
+
+    const std::string& StorageName() const {
+        return storageName_;
+    }
+
+    static void SaveAll() {
+        for (auto* storage : StorageList()) {
+            if (storage) {
+                try {
+                    storage->Save();
+                } catch (...) {
+                    Logging::Write()(LogLevel::Error, "Storage::SaveAll failed");
+                }
+            }
+        }
     }
 
 private:
-    static void TrackStorageName(const std::string& storageName) {
-        auto* names = GetTrackedStorageNames();
-        if (!names || storageName.empty()) {
-            return;
+    static std::vector<Storage*>& StorageList() {
+        static std::vector<Storage*> list;
+        return list;
+    }
+
+    static std::filesystem::path StoragePath() {
+        char appData[MAX_PATH] = {};
+        DWORD len = GetEnvironmentVariableA("APPDATA", appData, MAX_PATH);
+        std::filesystem::path root = (len > 0 && len < MAX_PATH)
+            ? std::filesystem::path(appData)
+            : std::filesystem::path("C:\\Users\\Public");
+        return root / "NightSharp" / "Storage";
+    }
+
+    static std::filesystem::path PathFor(const std::string& storageName) {
+        return StoragePath() / (storageName + ".storage");
+    }
+
+    static void ValidateName(const std::string& storageName) {
+        if (storageName.empty() ||
+            storageName.find_first_of("\\/:*?\"<>|") != std::string::npos) {
+            throw std::invalid_argument("Storage name can't have invalid file name characters.");
         }
-
-        if (std::find(names->begin(), names->end(), storageName) == names->end()) {
-            names->push_back(storageName);
-        }
     }
 
-    static std::unordered_map<std::string, std::vector<Binding>>*& GetBindings() {
-        static auto* bindings = new(std::nothrow) std::unordered_map<std::string, std::vector<Binding>>();
-        return bindings;
-    }
-
-    static std::vector<std::string>*& GetTrackedStorageNames() {
-        static auto* names = new(std::nothrow) std::vector<std::string>();
-        return names;
-    }
-
-    std::string m_storageName = {};
-    std::vector<std::string> m_storageTypes = {};
-    JsonFactory::Json m_json = JsonFactory::Json::object();
+    nlohmann::json contents_ = nlohmann::json::object();
+    std::string storageName_ = "Generic";
 };
 
+} // namespace SDK::Core::Utils
+
+namespace SDK::Utils {
+    using Storage = ::SDK::Core::Utils::Storage;
 } // namespace SDK::Utils

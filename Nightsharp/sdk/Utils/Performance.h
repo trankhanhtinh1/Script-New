@@ -4,69 +4,83 @@
 #include "Logging.h"
 
 #include <chrono>
+#include <string>
 
-namespace SDK::Utils {
+namespace SDK::Core::Utils {
 
 class Performance {
 public:
-    explicit Performance(PerformanceType performanceType = PerformanceType::Ticks,
-                         bool printOnDispose = true,
+    explicit Performance(PerformanceType performanceType = PerformanceType::TickCount,
+                         bool printDispose = true,
                          const char* memberName = "")
-        : m_memberName(memberName ? memberName : "")
-        , m_type(performanceType)
-        , m_printOnDispose(printOnDispose)
-        , m_started(std::chrono::high_resolution_clock::now()) {}
+        : memberName_(memberName ? memberName : ""),
+          performanceType_(performanceType),
+          printDispose_(printDispose),
+          start_(Clock::now()) {}
 
     ~Performance() {
         Dispose();
     }
 
     void Dispose() {
-        if (m_disposed) {
+        if (disposed_) {
             return;
         }
-        m_disposed = true;
+        disposed_ = true;
 
-        if (!m_printOnDispose) {
+        if (!printDispose_) {
             return;
         }
 
-        switch (m_type) {
+        switch (performanceType_) {
         case PerformanceType::Milliseconds:
-            Logging::Write()(LogLevel::Info, "%s took %lld ms.", m_memberName.c_str(), GetMilliseconds());
+            Logging::Write()(LogLevel::Info,
+                             "%s has taken %lld elapsed milliseconds to execute, and was executed successfuly.",
+                             memberName_.c_str(),
+                             GetMilliseconds());
             break;
         case PerformanceType::TimeSpan:
-            Logging::Write()(LogLevel::Info, "%s took %lld us.", m_memberName.c_str(), GetMicroseconds());
+            Logging::Write()(LogLevel::Info,
+                             "%s has taken %lld elapsed nanoseconds to execute, and was executed successfuly.",
+                             memberName_.c_str(),
+                             static_cast<long long>(GetTimeSpan().count()));
             break;
-        case PerformanceType::Ticks:
+        case PerformanceType::TickCount:
         default:
-            Logging::Write()(LogLevel::Info, "%s took %lld ticks.", m_memberName.c_str(), GetTickCount());
+            Logging::Write()(LogLevel::Info,
+                             "%s has taken %lld elapsed ticks to execute, and was executed successfuly.",
+                             memberName_.c_str(),
+                             GetTickCount());
             break;
         }
     }
 
     long long GetMilliseconds() const {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(Elapsed()).count();
-    }
-
-    long long GetMicroseconds() const {
-        return std::chrono::duration_cast<std::chrono::microseconds>(Elapsed()).count();
+        return static_cast<long long>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start_).count());
     }
 
     long long GetTickCount() const {
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(Elapsed()).count();
+        return static_cast<long long>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start_).count());
+    }
+
+    std::chrono::nanoseconds GetTimeSpan() const {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start_);
     }
 
 private:
-    std::chrono::high_resolution_clock::duration Elapsed() const {
-        return std::chrono::high_resolution_clock::now() - m_started;
-    }
+    using Clock = std::chrono::high_resolution_clock;
 
-    std::string m_memberName = {};
-    PerformanceType m_type = PerformanceType::Ticks;
-    bool m_printOnDispose = true;
-    bool m_disposed = false;
-    std::chrono::high_resolution_clock::time_point m_started;
+    std::string memberName_;
+    PerformanceType performanceType_ = PerformanceType::TickCount;
+    bool printDispose_ = true;
+    bool disposed_ = false;
+    Clock::time_point start_;
 };
 
+} // namespace SDK::Core::Utils
+
+namespace SDK::Utils {
+    using Performance = ::SDK::Core::Utils::Performance;
 } // namespace SDK::Utils

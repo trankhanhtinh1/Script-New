@@ -1,11 +1,13 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class DangerLevel : int {
-    Low = 0,
-    Medium = 1,
-    High = 2
+enum class DangerLevel : std::int32_t {
+    Low,
+    Medium,
+    High,
 };
 
 } // namespace SDK

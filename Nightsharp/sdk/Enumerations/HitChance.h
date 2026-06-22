@@ -1,23 +1,20 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class HitChance : int {
-    Impossible = 0,
-    OutOfRange = 1,
-    Collision = 2,
-    Low = 3,
-    Medium = 4,
-    High = 5,
-    VeryHigh = 6,
+enum class HitChance : std::int32_t {
+    Immobile = 8,
     Dashing = 7,
-    Immobile = 8
+    VeryHigh = 6,
+    High = 5,
+    Medium = 4,
+    Low = 3,
+    Impossible = 2,
+    OutOfRange = 1,
+    Collision = 0,
+    None = -1,
 };
-
-// Comparison operators so you can write: pred.Hitchance >= HitChance::High
-inline bool operator>=(HitChance lhs, HitChance rhs) { return static_cast<int>(lhs) >= static_cast<int>(rhs); }
-inline bool operator<=(HitChance lhs, HitChance rhs) { return static_cast<int>(lhs) <= static_cast<int>(rhs); }
-inline bool operator>(HitChance lhs, HitChance rhs)  { return static_cast<int>(lhs) >  static_cast<int>(rhs); }
-inline bool operator<(HitChance lhs, HitChance rhs)  { return static_cast<int>(lhs) <  static_cast<int>(rhs); }
 
 } // namespace SDK

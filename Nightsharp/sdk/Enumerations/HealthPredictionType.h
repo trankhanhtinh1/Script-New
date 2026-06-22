@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class HealthPredictionType : int {
-    Default = 0,
-    Simulated = 1
+enum class HealthPredictionType : std::int32_t {
+    Default,
+    Simulated,
 };
 
 } // namespace SDK

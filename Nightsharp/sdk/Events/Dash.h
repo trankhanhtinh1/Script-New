@@ -1,158 +1,163 @@
 #pragma once
 
-// ============================================================================
-// Dash — push-driven dash event surface
-// ============================================================================
-// Subscribes to `CoreEventHook::Events::OnDash` (id 50), the piggy-back
-// edge fired from `HkOnHeroActionState` when an `AIManager.IsDashing` byte
-// transitions false→true. The previous tick-based `IsDashing()` polling
-// loop has been removed — this header is now zero-cost when no handlers
-// are registered, and the per-hero state map is populated directly from
-// the OnDash callback.
-//
-// `IsDashing()` and `GetDashInfo()` continue to work because the dash end
-// tick is computed at start time from the start/end position + estimated
-// speed, so we do not need to observe the false→true→false edge to know
-// when a dash visually ends.
-// ============================================================================
-
-#include "../../core/CoreEventHook.h"
-#include "../../core/offset.h"
-#include "../../menu/MenuUI.h"
-#include "../Core/Game.h"
-#include "../GameObjects/AIBaseClient.h"
-#include "../GameObjects/ObjectManager.h"
-
-#include <algorithm>
-#include <new>
-#include <unordered_map>
-#include <vector>
+#include "Events.h"
 
 namespace SDK::Events::Dash {
 
 struct DashArgs {
-    int Duration = 0;
-    Vector2 EndPos = {};
-    int EndTick = 0;
-    bool IsBlink = false;
-    std::vector<Vector2> Path = {};
+    uintptr_t Unit = 0;
+    uint32_t NetworkId = 0;
+    Vec3 Path[32] = {};
+    int PathCount = 0;
     float Speed = 0.0f;
-    Vector2 StartPos = {};
+    Vec3 StartPos = {};
+    Vec3 EndPos = {};
+    float StartTime = 0.0f;
+    float EndTime = 0.0f;
     int StartTick = 0;
-    AIBaseClient Unit = {};
-
-    bool IsValid() const {
-        return Unit.IsValid() && EndTick > StartTick;
-    }
+    int EndTick = 0;
+    int Duration = 0;
+    bool IsDash = false;
+    ::Core::Events::NewPathEventArgs Raw = {};
 };
 
 using DashHandler = void(*)(const DashArgs&);
 
 namespace detail {
-    struct DashState {
-        DashArgs Args = {};
-    };
+    inline SDK::Events::detail::EventList<DashArgs> DashHandlers;
+    inline DashArgs DetectedDashes[64] = {};
+    inline int DetectedDashCount = 0;
 
-    inline std::unordered_map<int, DashState>* g_dashStates = nullptr;
-    inline MenuUI::FixedList<DashHandler, 64> g_dashHandlers = {};
-    inline bool g_registered = false;
+    inline int TickCount() {
+        return static_cast<int>(GetTickCount64() & 0x7FFFFFFF);
+    }
 
-    inline bool EnsureStorage() {
-        if (!g_dashStates) {
-            g_dashStates = new(std::nothrow) std::unordered_map<int, DashState>();
+    inline uint32_t KeyFor(const ::Core::Events::ObjectInfo& object) {
+        return object.NetworkId ? object.NetworkId : static_cast<uint32_t>(object.Ptr & 0xFFFFFFFFu);
+    }
+
+    inline float Distance2D(const Vec3& a, const Vec3& b) {
+        return a.Distance2D(b);
+    }
+
+    inline DashArgs* Find(uint32_t networkId, bool create) {
+        if (!networkId) {
+            return nullptr;
         }
-        return g_dashStates != nullptr;
-    }
 
-    inline Vector2 ResolveStart(const AIBaseClient& hero) {
-        Vector3 start = hero.PreviousPosition();
-        if (start.IsZero()) start = hero.Position();
-        return start.To2D();
-    }
-
-    inline Vector2 ResolveEnd(const AIBaseClient& hero) {
-        Vector3 end = hero.PathEnd();
-        if (end.IsZero()) end = hero.OrderPosition();
-        if (end.IsZero()) end = hero.Position();
-        return end.To2D();
-    }
-
-    inline float ResolveSpeed(const AIBaseClient& hero) {
-        const float v = hero.Velocity().Length2D();
-        if (v > 50.0f) return v;
-        const float ms = hero.MoveSpeed();
-        return ms > 0.0f ? ms * 2.0f : 0.0f;
-    }
-
-    inline DashArgs BuildArgs(const AIBaseClient& hero) {
-        DashArgs a = {};
-        a.Unit      = hero;
-        a.StartPos  = ResolveStart(hero);
-        a.EndPos    = ResolveEnd(hero);
-        a.Speed     = ResolveSpeed(hero);
-        a.StartTick = Game::TickCount() - (Game::Ping() / 2);
-        const float dist = a.StartPos.Distance(a.EndPos);
-        a.Duration  = (a.Speed > 1.0f) ? static_cast<int>((dist / a.Speed) * 1000.0f) : 0;
-        if (a.Duration <= 0) a.Duration = 50;
-        a.EndTick   = a.StartTick + a.Duration;
-        a.IsBlink   = a.Speed > 5000.0f || a.Duration <= 10;
-        a.Path.clear();
-        a.Path.push_back(a.StartPos);
-        a.Path.push_back(a.EndPos);
-        return a;
-    }
-
-    // CoreEventHook trampoline. Fires when a hero begins dashing.
-    inline void OnDashThunk(uintptr_t sender, uintptr_t /*context*/, int /*intParam*/) {
-        if (!EnsureStorage()) return;
-        AIBaseClient hero(sender);
-        if (!hero.IsValid() || hero.IsDead()) return;
-
-        DashArgs args = BuildArgs(hero);
-        (*g_dashStates)[hero.NetworkId()] = DashState{ args };
-
-        for (const auto& h : g_dashHandlers) {
-            if (h) h(args);
+        for (int i = 0; i < DetectedDashCount; ++i) {
+            if (DetectedDashes[i].NetworkId == networkId) {
+                return &DetectedDashes[i];
+            }
         }
-    }
-}
 
-inline void Initialize() {
-    detail::EnsureStorage();
-    if (!detail::g_registered) {
-        CoreEventHook::SetCallback(Offset::Events::OnDash, detail::OnDashThunk);
-        detail::g_registered = true;
+        if (!create || DetectedDashCount >= 64) {
+            return nullptr;
+        }
+
+        DashArgs& entry = DetectedDashes[DetectedDashCount++];
+        entry = {};
+        entry.NetworkId = networkId;
+        return &entry;
     }
-}
+} // namespace detail
 
 inline bool AddOnDash(DashHandler handler) {
-    Initialize();
-    return handler && detail::g_dashHandlers.push_back(handler);
+    SDK::Events::Initialize();
+    return detail::DashHandlers.Add(handler);
+}
+
+inline bool RemoveOnDash(DashHandler handler) {
+    return detail::DashHandlers.Remove(handler);
 }
 
 inline bool OnDash(DashHandler handler) {
     return AddOnDash(handler);
 }
 
-inline DashArgs GetDashInfo(const AIBaseClient& unit) {
-    if (!detail::g_dashStates || !unit.IsValid()) return {};
-    const auto it = detail::g_dashStates->find(unit.NetworkId());
-    return (it != detail::g_dashStates->end()) ? it->second.Args : DashArgs{};
+inline DashArgs GetDashInfo(uint32_t networkId) {
+    if (auto* dash = detail::Find(networkId, false)) {
+        return *dash;
+    }
+    return {};
 }
 
-inline bool IsDashing(const AIBaseClient& unit) {
-    const DashArgs info = GetDashInfo(unit);
-    return info.IsValid() && Game::TickCount() <= info.EndTick;
+inline DashArgs GetDashInfo(uintptr_t unitPtr) {
+    return GetDashInfo(static_cast<uint32_t>(unitPtr & 0xFFFFFFFFu));
 }
 
-inline void Update() {
-    // Push-driven — nothing to poll. Kept so the central Events::Update()
-    // dispatcher remains uniform.
+template <typename T>
+inline DashArgs GetDashInfo(const T& unit) {
+    return GetDashInfo(static_cast<uint32_t>(unit.NetworkId()));
 }
 
-inline void Reset() {
-    if (detail::g_dashStates) detail::g_dashStates->clear();
-    detail::g_dashHandlers.clear();
+inline bool IsDashing(uint32_t networkId) {
+    const auto dash = GetDashInfo(networkId);
+    return dash.IsDash && dash.EndTick != 0 && dash.EndTick > detail::TickCount();
+}
+
+inline bool IsDashing(uintptr_t unitPtr) {
+    return IsDashing(static_cast<uint32_t>(unitPtr & 0xFFFFFFFFu));
+}
+
+template <typename T>
+inline bool IsDashing(const T& unit) {
+    return IsDashing(static_cast<uint32_t>(unit.NetworkId()));
 }
 
 } // namespace SDK::Events::Dash
+
+namespace SDK::Events {
+    inline bool AddOnDash(Dash::DashHandler handler) { return Dash::AddOnDash(handler); }
+    inline bool RemoveOnDash(Dash::DashHandler handler) { return Dash::RemoveOnDash(handler); }
+    inline bool OnDash(Dash::DashHandler handler) { return Dash::OnDash(handler); }
+
+namespace detail {
+    inline void EventDash(const NewPathEventArgs& args) {
+        const uint32_t key = Dash::detail::KeyFor(args.Sender);
+        auto* dash = Dash::detail::Find(key, true);
+        if (!dash) {
+            return;
+        }
+
+        if (!args.IsDash) {
+            dash->IsDash = false;
+            dash->Duration = 0;
+            dash->EndTick = 0;
+            dash->EndTime = 0.0f;
+            return;
+        }
+
+        dash->Unit = args.Sender.Ptr;
+        dash->NetworkId = key;
+        dash->PathCount = 0;
+        dash->Speed = args.Speed;
+        dash->StartPos = args.Sender.Position;
+        dash->StartTime = SDK::Events::GameTime();
+        dash->StartTick = Dash::detail::TickCount();
+        dash->IsDash = true;
+        dash->Raw = args;
+
+        if (dash->StartPos.IsValid()) {
+            dash->Path[dash->PathCount++] = dash->StartPos;
+        }
+
+        for (int i = 0; i < args.PathCount && dash->PathCount < 32; ++i) {
+            dash->Path[dash->PathCount++] = args.Path[i];
+        }
+
+        dash->EndPos = dash->PathCount > 0 ? dash->Path[dash->PathCount - 1] : args.Sender.Position;
+        if (dash->Speed > 1.0f) {
+            dash->Duration = static_cast<int>((Dash::detail::Distance2D(dash->StartPos, dash->EndPos) / dash->Speed) * 1000.0f);
+            dash->EndTick = dash->StartTick + dash->Duration;
+            dash->EndTime = dash->StartTime + (static_cast<float>(dash->Duration) / 1000.0f);
+        } else {
+            dash->Duration = 0;
+            dash->EndTick = 0;
+            dash->EndTime = 0.0f;
+        }
+
+        Dash::detail::DashHandlers.Fire(*dash);
+    }
+} // namespace detail
+} // namespace SDK::Events

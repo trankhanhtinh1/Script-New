@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreRuntime.h"
+#include "Globals.h"
+#include "offset.h"
 #include "spoof/spoofcall.h"
 
 #include <Windows.h>

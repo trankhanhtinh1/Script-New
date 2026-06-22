@@ -1,24 +1,41 @@
 #pragma once
 
-#include "../Core/Game.h"
+#include "DelayAction.h"
+#include "Logging.h"
 
+#include <algorithm>
 #include <any>
-#include <cstdint>
+#include <chrono>
 #include <functional>
-#include <limits>
-#include <new>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-namespace SDK::Utils::Cache {
+namespace SDK::Core::Utils {
 
-using Tick = uint64_t;
-inline constexpr Tick InfiniteAbsoluteExpiration = std::numeric_limits<Tick>::max();
+enum class CacheEntryRemovedReason {
+    Removed,
+    Expired,
+};
 
-struct Entry {
+struct CacheItem {
+    std::string Key = {};
     std::any Value = {};
-    Tick Expiration = InfiniteAbsoluteExpiration;
+    std::string RegionName = "Default";
+};
+
+struct CacheItemPolicy {
+    int AbsoluteExpirationMs = 0;
+    std::function<void(const CacheItem&, CacheEntryRemovedReason)> RemovedCallback = {};
+    std::function<void(const std::string&, CacheEntryRemovedReason)> UpdateCallback = {};
+};
+
+struct ValueChangedArgs {
+    std::string Key = {};
+    std::any OldValue = {};
+    std::any NewValue = {};
+    std::string RegionName = {};
 };
 
 struct EntryAddedArgs {
@@ -27,237 +44,252 @@ struct EntryAddedArgs {
     std::any Value = {};
 };
 
-struct ValueChangedArgs {
-    std::string Key = {};
-    std::string RegionName = {};
-    std::any OldValue = {};
-    std::any NewValue = {};
+class Cache {
+public:
+    using OnEntryAddedDelegate = void(*)(Cache&, const EntryAddedArgs&);
+    using OnValueChangedDelegate = void(*)(Cache&, const ValueChangedArgs&);
+
+    static Cache& Instance() {
+        static Cache instance;
+        return instance;
+    }
+
+    std::any& operator[](const std::string& key) {
+        return regions_["Default"][key];
+    }
+
+    void CreateRegion(const std::string& regionName) {
+        regions_.try_emplace(regionName);
+    }
+
+    std::any AddOrGetExisting(const std::string& key,
+                              const std::function<std::any()>& function,
+                              const std::string& regionName = "Default") {
+        auto& region = Region(regionName);
+        auto it = region.find(key);
+        if (it != region.end()) {
+            return it->second;
+        }
+
+        std::any value = function ? function() : std::any{};
+        region.emplace(key, value);
+        FireEntryAdded({ key, regionName, value });
+        return value;
+    }
+
+    std::any AddOrGetExisting(const std::string& key,
+                              const std::any& value,
+                              int absoluteExpirationMs = 0,
+                              const std::string& regionName = "Default") {
+        auto& region = Region(regionName);
+        auto it = region.find(key);
+        if (it != region.end()) {
+            return it->second;
+        }
+
+        region.emplace(key, value);
+        FireEntryAdded({ key, regionName, value });
+        ScheduleExpiration(key, regionName, absoluteExpirationMs);
+        return value;
+    }
+
+    CacheItem AddOrGetExisting(const CacheItem& item, const CacheItemPolicy& policy) {
+        const std::string regionName = item.RegionName.empty() ? "Default" : item.RegionName;
+        const std::any value = AddOrGetExisting(item.Key, item.Value, policy.AbsoluteExpirationMs, regionName);
+        RegisterPolicy(item.Key, regionName, policy);
+        return CacheItem{ item.Key, value, regionName };
+    }
+
+    bool Contains(const std::string& key, const std::string& regionName = "Default") const {
+        const auto region = regions_.find(regionName);
+        return region != regions_.end() && region->second.find(key) != region->second.end();
+    }
+
+    std::any Get(const std::string& key, const std::string& regionName = "Default") const {
+        const auto region = regions_.find(regionName);
+        if (region == regions_.end()) {
+            return {};
+        }
+        const auto value = region->second.find(key);
+        return value != region->second.end() ? value->second : std::any{};
+    }
+
+    template <typename T>
+    T Get(const std::string& key, const std::string& regionName = "Default") const {
+        const std::any value = Get(key, regionName);
+        return value.has_value() && value.type() == typeid(T) ? std::any_cast<T>(value) : T{};
+    }
+
+    CacheItem GetCacheItem(const std::string& key, const std::string& regionName = "Default") const {
+        return CacheItem{ key, Get(key, regionName), regionName };
+    }
+
+    long long GetCount(const std::string& regionName = "Default") const {
+        const auto region = regions_.find(regionName);
+        return region != regions_.end() ? static_cast<long long>(region->second.size()) : 0;
+    }
+
+    std::any Remove(const std::string& key, const std::string& regionName = "Default") {
+        auto& region = Region(regionName);
+        auto it = region.find(key);
+        if (it == region.end()) {
+            return {};
+        }
+
+        const std::any value = it->second;
+        CallEntryUpdates(key, CacheEntryRemovedReason::Removed, regionName);
+        region.erase(it);
+        CallEntryRemoved(key, value, CacheEntryRemovedReason::Removed, regionName);
+        return value;
+    }
+
+    void Set(const std::string& key,
+             const std::any& value,
+             int absoluteExpirationMs = 0,
+             const std::string& regionName = "Default") {
+        auto& region = Region(regionName);
+        auto it = region.find(key);
+        if (it != region.end()) {
+            FireValueChanged({ key, it->second, value, regionName });
+        }
+        region[key] = value;
+        ScheduleExpiration(key, regionName, absoluteExpirationMs);
+    }
+
+    void Set(const CacheItem& item, const CacheItemPolicy& policy) {
+        const std::string regionName = item.RegionName.empty() ? "Default" : item.RegionName;
+        RegisterPolicy(item.Key, regionName, policy);
+        Set(item.Key, item.Value, policy.AbsoluteExpirationMs, regionName);
+    }
+
+    bool TryGetValue(const std::string& key, std::any& value, const std::string& regionName = "Default") const {
+        if (!Contains(key, regionName)) {
+            value.reset();
+            return false;
+        }
+        value = Get(key, regionName);
+        return true;
+    }
+
+    static bool AddOnEntryAdded(OnEntryAddedDelegate handler) {
+        return AddHandler(EntryAddedHandlers(), handler);
+    }
+
+    static bool AddOnValueChanged(OnValueChangedDelegate handler) {
+        return AddHandler(ValueChangedHandlers(), handler);
+    }
+
+private:
+    Cache() {
+        CreateRegion("Default");
+    }
+
+    using RegionMap = std::unordered_map<std::string, std::any>;
+
+    RegionMap& Region(const std::string& name) {
+        auto regionName = name.empty() ? std::string("Default") : name;
+        return regions_[regionName];
+    }
+
+    static std::string KeyRegion(const std::string& key, const std::string& regionName) {
+        return key + "\x1F" + regionName;
+    }
+
+    void RegisterPolicy(const std::string& key, const std::string& regionName, const CacheItemPolicy& policy) {
+        const auto id = KeyRegion(key, regionName);
+        if (policy.RemovedCallback) {
+            removedCallbacks_[id] = policy.RemovedCallback;
+        }
+        if (policy.UpdateCallback) {
+            updateCallbacks_[id] = policy.UpdateCallback;
+        }
+    }
+
+    void ScheduleExpiration(std::string key, std::string regionName, int ms) {
+        if (ms <= 0) {
+            return;
+        }
+
+        DelayAction::Add(ms, [this, key = std::move(key), regionName = std::move(regionName)] {
+            if (!Contains(key, regionName)) {
+                return;
+            }
+            auto& region = Region(regionName);
+            const std::any value = region[key];
+            CallEntryUpdates(key, CacheEntryRemovedReason::Expired, regionName);
+            region.erase(key);
+            CallEntryRemoved(key, value, CacheEntryRemovedReason::Expired, regionName);
+        });
+    }
+
+    void CallEntryRemoved(const std::string& key,
+                          const std::any& value,
+                          CacheEntryRemovedReason reason,
+                          const std::string& regionName) {
+        const auto callback = removedCallbacks_.find(KeyRegion(key, regionName));
+        if (callback != removedCallbacks_.end() && callback->second) {
+            callback->second(CacheItem{ key, value, regionName }, reason);
+        }
+    }
+
+    void CallEntryUpdates(const std::string& key,
+                          CacheEntryRemovedReason reason,
+                          const std::string& regionName) {
+        const auto callback = updateCallbacks_.find(KeyRegion(key, regionName));
+        if (callback != updateCallbacks_.end() && callback->second) {
+            callback->second(key, reason);
+        }
+    }
+
+    static std::vector<OnEntryAddedDelegate>& EntryAddedHandlers() {
+        static std::vector<OnEntryAddedDelegate> handlers;
+        return handlers;
+    }
+
+    static std::vector<OnValueChangedDelegate>& ValueChangedHandlers() {
+        static std::vector<OnValueChangedDelegate> handlers;
+        return handlers;
+    }
+
+    template <typename Handler>
+    static bool AddHandler(std::vector<Handler>& handlers, Handler handler) {
+        if (!handler) {
+            return false;
+        }
+        if (std::find(handlers.begin(), handlers.end(), handler) == handlers.end()) {
+            handlers.push_back(handler);
+        }
+        return true;
+    }
+
+    void FireEntryAdded(const EntryAddedArgs& args) {
+        for (auto handler : EntryAddedHandlers()) {
+            if (handler) {
+                handler(*this, args);
+            }
+        }
+    }
+
+    void FireValueChanged(const ValueChangedArgs& args) {
+        for (auto handler : ValueChangedHandlers()) {
+            if (handler) {
+                handler(*this, args);
+            }
+        }
+    }
+
+    std::unordered_map<std::string, RegionMap> regions_;
+    std::unordered_map<std::string, std::function<void(const CacheItem&, CacheEntryRemovedReason)>> removedCallbacks_;
+    std::unordered_map<std::string, std::function<void(const std::string&, CacheEntryRemovedReason)>> updateCallbacks_;
 };
 
-using OnEntryAddedDelegate = std::function<void(const EntryAddedArgs&)>;
-using OnValueChangedDelegate = std::function<void(const ValueChangedArgs&)>;
+} // namespace SDK::Core::Utils
 
-namespace detail {
-    struct State {
-        std::unordered_map<std::string, std::unordered_map<std::string, Entry>> Regions = {};
-        std::vector<OnEntryAddedDelegate> EntryAddedCallbacks = {};
-        std::vector<OnValueChangedDelegate> ValueChangedCallbacks = {};
-    };
-
-    inline State*& GetState() {
-        static auto* state = new(std::nothrow) State();
-        return state;
-    }
-}
-
-inline void CreateRegion(const std::string& regionName = "Default") {
-    auto* state = detail::GetState();
-    if (!state) {
-        return;
-    }
-
-    if (!state->Regions.contains(regionName)) {
-        state->Regions[regionName] = {};
-    }
-}
-
-inline void Reset() {
-    if (auto* state = detail::GetState()) {
-        state->Regions.clear();
-        state->EntryAddedCallbacks.clear();
-        state->ValueChangedCallbacks.clear();
-    }
-}
-
-inline void OnEntryAdded(OnEntryAddedDelegate callback) {
-    auto* state = detail::GetState();
-    if (!state || !callback) {
-        return;
-    }
-    state->EntryAddedCallbacks.push_back(std::move(callback));
-}
-
-inline void OnValueChanged(OnValueChangedDelegate callback) {
-    auto* state = detail::GetState();
-    if (!state || !callback) {
-        return;
-    }
-    state->ValueChangedCallbacks.push_back(std::move(callback));
-}
-
-inline void Update() {
-    auto* state = detail::GetState();
-    if (!state) {
-        return;
-    }
-
-    const Tick now = static_cast<Tick>(Game::TickCount());
-    for (auto& [regionName, region] : state->Regions) {
-        (void)regionName;
-        for (auto it = region.begin(); it != region.end();) {
-            if (it->second.Expiration != InfiniteAbsoluteExpiration && now >= it->second.Expiration) {
-                it = region.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-}
-
-inline bool Contains(const std::string& key, const std::string& regionName = "Default") {
-    CreateRegion(regionName);
-    auto* state = detail::GetState();
-    return state && state->Regions.contains(regionName) && state->Regions[regionName].contains(key);
-}
-
-template<typename T>
-inline T Get(const std::string& key, const std::string& regionName = "Default", const T& fallback = T{}) {
-    Update();
-    auto* state = detail::GetState();
-    if (!state || !Contains(key, regionName)) {
-        return fallback;
-    }
-    try {
-        return std::any_cast<T>(state->Regions[regionName][key].Value);
-    } catch (...) {
-        return fallback;
-    }
-}
-
-template<typename T>
-inline bool TryGetValue(const std::string& key, T& value, const std::string& regionName = "Default") {
-    if (!Contains(key, regionName)) {
-        return false;
-    }
-
-    try {
-        value = std::any_cast<T>(detail::GetState()->Regions[regionName][key].Value);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
-
-template<typename T>
-inline T AddOrGetExisting(const std::string& key,
-                          std::function<T()> function,
-                          const std::string& regionName = "Default") {
-    Update();
-    if (Contains(key, regionName)) {
-        return Get<T>(key, regionName);
-    }
-
-    const T value = function ? function() : T{};
-    CreateRegion(regionName);
-    detail::GetState()->Regions[regionName][key] = Entry{ value, InfiniteAbsoluteExpiration };
-
-    const EntryAddedArgs args{ key, regionName, value };
-    for (const auto& callback : detail::GetState()->EntryAddedCallbacks) {
-        if (callback) {
-            callback(args);
-        }
-    }
-
-    return value;
-}
-
-template<typename T>
-inline T AddOrGetExisting(const std::string& key,
-                          const T& value,
-                          Tick absoluteExpiration = InfiniteAbsoluteExpiration,
-                          const std::string& regionName = "Default") {
-    Update();
-    if (Contains(key, regionName)) {
-        return Get<T>(key, regionName);
-    }
-
-    CreateRegion(regionName);
-    detail::GetState()->Regions[regionName][key] = Entry{
-        value,
-        absoluteExpiration == InfiniteAbsoluteExpiration
-            ? InfiniteAbsoluteExpiration
-            : (static_cast<Tick>(Game::TickCount()) + absoluteExpiration)
-    };
-
-    const EntryAddedArgs args{ key, regionName, value };
-    for (const auto& callback : detail::GetState()->EntryAddedCallbacks) {
-        if (callback) {
-            callback(args);
-        }
-    }
-
-    return value;
-}
-
-template<typename T>
-inline void Set(const std::string& key,
-                const T& value,
-                Tick absoluteExpiration = InfiniteAbsoluteExpiration,
-                const std::string& regionName = "Default") {
-    CreateRegion(regionName);
-    auto* state = detail::GetState();
-    if (!state) {
-        return;
-    }
-
-    if (state->Regions[regionName].contains(key)) {
-        const ValueChangedArgs args{
-            key,
-            regionName,
-            state->Regions[regionName][key].Value,
-            std::any(value)
-        };
-        for (const auto& callback : state->ValueChangedCallbacks) {
-            if (callback) {
-                callback(args);
-            }
-        }
-    } else {
-        const EntryAddedArgs args{ key, regionName, value };
-        for (const auto& callback : state->EntryAddedCallbacks) {
-            if (callback) {
-                callback(args);
-            }
-        }
-    }
-
-    state->Regions[regionName][key] = Entry{
-        value,
-        absoluteExpiration == InfiniteAbsoluteExpiration
-            ? InfiniteAbsoluteExpiration
-            : (static_cast<Tick>(Game::TickCount()) + absoluteExpiration)
-    };
-}
-
-inline size_t GetCount(const std::string& regionName = "Default") {
-    CreateRegion(regionName);
-    auto* state = detail::GetState();
-    return state ? state->Regions[regionName].size() : 0U;
-}
-
-inline std::unordered_map<std::string, std::any> GetValues(const std::vector<std::string>& keys,
-                                                           const std::string& regionName = "Default") {
-    std::unordered_map<std::string, std::any> values = {};
-    auto* state = detail::GetState();
-    if (!state || !state->Regions.contains(regionName)) {
-        return values;
-    }
-
-    for (const auto& key : keys) {
-        auto it = state->Regions[regionName].find(key);
-        if (it != state->Regions[regionName].end()) {
-            values[key] = it->second.Value;
-        }
-    }
-    return values;
-}
-
-inline bool Remove(const std::string& key, const std::string& regionName = "Default") {
-    auto* state = detail::GetState();
-    if (!state || !Contains(key, regionName)) {
-        return false;
-    }
-    return state->Regions[regionName].erase(key) > 0;
-}
-
-} // namespace SDK::Utils::Cache
+namespace SDK::Utils {
+    using Cache = ::SDK::Core::Utils::Cache;
+    using CacheEntryRemovedReason = ::SDK::Core::Utils::CacheEntryRemovedReason;
+    using CacheItem = ::SDK::Core::Utils::CacheItem;
+    using CacheItemPolicy = ::SDK::Core::Utils::CacheItemPolicy;
+    using EntryAddedArgs = ::SDK::Core::Utils::EntryAddedArgs;
+    using ValueChangedArgs = ::SDK::Core::Utils::ValueChangedArgs;
+} // namespace SDK::Utils

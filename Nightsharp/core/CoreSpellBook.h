@@ -1,379 +1,316 @@
 #pragma once
 
+#include "CoreCastSpell.h"
+#include "CoreSpellDataInst.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
 
 #include <cstdint>
-#include <cstddef>
 
 namespace CoreSpellBook {
 
-    enum SpellSlotId : int {
-        Slot_Q         = 0,
-        Slot_W         = 1,
-        Slot_E         = 2,
-        Slot_R         = 3,
-        Slot_Summoner1 = 4,
-        Slot_Summoner2 = 5,
-        Slot_Item1     = 6,
-        Slot_Item2     = 7,
-        Slot_Item3     = 8,
-        Slot_Item4     = 9,
-        Slot_Item5     = 10,
-        Slot_Item6     = 11,
-        Slot_Trinket   = 12,
-        Slot_Recall    = 13,
-        Slot_Other     = 14
+struct CastInfoRef {
+    uintptr_t address = 0;
+
+    bool IsValid() const {
+        return Globals::IsValidPtr(address);
+    }
+};
+
+inline uintptr_t Spellbook(uintptr_t owner) {
+    return CoreSpellDataInst::Spellbook(owner);
+}
+
+inline bool IsValidSlot(std::int32_t slot) {
+    return CoreSpellDataInst::IsValidSlot(slot);
+}
+
+inline uintptr_t Owner(uintptr_t spellbook) {
+    if (!Globals::IsValidPtr(spellbook)) {
+        return 0;
+    }
+
+    const uintptr_t owner = Globals::Read<uintptr_t>(
+        spellbook + Offset::SpellBookLayout::Owner);
+    return Globals::IsValidPtr(owner) ? owner : 0;
+}
+
+inline std::uint32_t CasterNetworkId(uintptr_t spellbook) {
+    if (!Globals::IsValidPtr(spellbook)) {
+        return 0;
+    }
+
+    return Globals::Read<std::uint32_t>(
+        spellbook + Offset::SpellBookLayout::CasterNetId);
+}
+
+inline std::int32_t ActiveSlot(uintptr_t owner) {
+    const uintptr_t spellbook = Spellbook(owner);
+    if (!Globals::IsValidPtr(spellbook)) {
+        return -1;
+    }
+
+    return Globals::Read<std::int32_t>(
+        spellbook + Offset::SpellBookLayout::ActiveSlot);
+}
+
+inline CoreSpellDataInst::SpellSlotRef GetSpell(uintptr_t owner,
+                                                std::int32_t slot) {
+    return CoreSpellDataInst::Resolve(owner, slot);
+}
+
+inline int GetSpells(uintptr_t owner,
+                     CoreSpellDataInst::SpellSlotRef* out,
+                     int maxOut) {
+    if (!out || maxOut <= 0) {
+        return 0;
+    }
+
+    int written = 0;
+    for (int slot = 0;
+         slot < CoreSpellDataInst::kMaxSpellSlots && written < maxOut;
+         ++slot) {
+        const auto ref = GetSpell(owner, slot);
+        if (!ref.IsValid() || !Globals::IsValidPtr(CoreSpellDataInst::SpellData(ref))) {
+            continue;
+        }
+        out[written++] = ref;
+    }
+    return written;
+}
+
+inline State CanUseSpell(uintptr_t owner,
+                         std::int32_t slot,
+                         float gameTime = 0.0f) {
+    return CoreSpellDataInst::State(owner, slot, gameTime);
+}
+
+inline std::uint32_t RawState(uintptr_t owner, std::int32_t slot) {
+    return CoreSpellDataInst::RawState(GetSpell(owner, slot));
+}
+
+inline CastInfoRef ActiveSpell(uintptr_t owner) {
+    CastInfoRef ref{};
+    const uintptr_t spellbook = Spellbook(owner);
+    if (!Globals::IsValidPtr(spellbook)) {
+        return ref;
+    }
+
+    ref.address = Globals::Read<uintptr_t>(
+        spellbook + Offset::SpellRuntime::ActiveSpellCast);
+    return ref;
+}
+
+inline CastInfoRef GetSpellCastInfo(uintptr_t owner, std::int32_t slot) {
+    CastInfoRef ref{};
+    if (!Globals::IsValidPtr(owner) || slot < 0) {
+        return ref;
+    }
+
+    const uintptr_t fn = CoreRuntime::ResolveRva(
+        Offset::ControlRuntime::GetSpellCastInfo);
+    if (!Globals::IsExecutablePtr(fn, 16)) {
+        return ref;
+    }
+
+    using FnGetSpellCastInfo = uintptr_t(__fastcall*)(uintptr_t, std::uint32_t);
+    __try {
+        ref.address = reinterpret_cast<FnGetSpellCastInfo>(fn)(
+            owner,
+            static_cast<std::uint32_t>(slot));
+    }
+    __except (1) {
+        ref.address = 0;
+    }
+    return ref;
+}
+
+inline float CastStartTime(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::StartTime)
+        : 0.0f;
+}
+
+inline float CastEndTime(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::EndTime)
+        : 0.0f;
+}
+
+inline float ChannelStartTime(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::ChannelStart)
+        : 0.0f;
+}
+
+inline float ChannelEndTime(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::ChannelEnd)
+        : 0.0f;
+}
+
+inline std::int32_t CastSlot(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<std::int32_t>(ref.address + Offset::SpellCastInfoLayout::SpellSlot)
+        : -1;
+}
+
+inline std::uint32_t TargetNetworkId(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<std::uint32_t>(ref.address + Offset::SpellCastInfoLayout::TargetNetId)
+        : 0;
+}
+
+inline Vec3 StartPosition(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<Vec3>(ref.address + Offset::SpellCastInfoLayout::StartPosition)
+        : Vec3{};
+}
+
+inline Vec3 EndPosition(CastInfoRef ref) {
+    return ref.IsValid()
+        ? Globals::Read<Vec3>(ref.address + Offset::SpellCastInfoLayout::EndPosition)
+        : Vec3{};
+}
+
+inline bool IsCastingSpell(uintptr_t owner, float gameTime = 0.0f) {
+    const CastInfoRef active = ActiveSpell(owner);
+    if (!active.IsValid()) {
+        return false;
+    }
+
+    if (gameTime <= 0.0f) {
+        gameTime = CoreRuntime::GetContext().gameTime;
+    }
+
+    const float endTime = CastEndTime(active);
+    return endTime <= 0.0f || gameTime <= (endTime + 0.25f);
+}
+
+inline bool IsChanneling(uintptr_t owner, float gameTime = 0.0f) {
+    const CastInfoRef active = ActiveSpell(owner);
+    if (!active.IsValid()) {
+        return false;
+    }
+
+    if (gameTime <= 0.0f) {
+        gameTime = CoreRuntime::GetContext().gameTime;
+    }
+
+    const float channelStart = ChannelStartTime(active);
+    const float channelEnd = ChannelEndTime(active);
+    return channelStart > 0.0f && channelEnd > channelStart && gameTime <= channelEnd;
+}
+
+inline bool IsCharging(uintptr_t owner) {
+    const std::int32_t slot = ActiveSlot(owner);
+    if (!IsValidSlot(slot)) {
+        return false;
+    }
+
+    const auto ref = GetSpell(owner, slot);
+    if (!ref.IsValid()) {
+        return false;
+    }
+
+    const uintptr_t fn = CoreRuntime::ResolveRva(
+        Offset::ControlRuntime::SpellTypeClassify);
+    if (!Globals::IsExecutablePtr(fn, 16)) {
+        return false;
+    }
+
+    using FnSpellTypeClassify = std::uint8_t(__fastcall*)(uintptr_t);
+    __try {
+        return reinterpret_cast<FnSpellTypeClassify>(fn)(ref.slot) == 18;
+    }
+    __except (1) {
+        return false;
+    }
+}
+
+namespace detail {
+    class ScopedWritePhase {
+    public:
+        ScopedWritePhase() {
+            started_ = !CoreRuntime::IsWritePhase();
+            if (started_) {
+                CoreRuntime::BeginWritePhase();
+            }
+        }
+
+        ~ScopedWritePhase() {
+            if (started_) {
+                CoreRuntime::EndWritePhase();
+            }
+        }
+
+    private:
+        bool started_ = false;
     };
 
-    enum SpellState : int {
-        State_Unknown    = -1,
-        State_Ready      = 0,
-        State_NotLearned = 1,
-        State_Cooldown   = 2,
-        State_NoMana     = 3,
-        State_Disabled   = 4
-    };
-
-    struct SlotRef {
-        uintptr_t address = 0;
-
-        static int ClampRank(int rank) {
-            if (rank < 0) return 0;
-            if (rank > 6) return 6;
-            return rank;
-        }
-
-        bool IsValid() const {
-            return Globals::IsValidPtr(address);
-        }
-
-        int GetLevel() const {
-            return Globals::Read<int>(address + Offset::SpellSlotLayout::SlotLevel);
-        }
-
-        int GetLevelAlt() const {
-            return Globals::Read<int>(address + Offset::SpellSlotLayout::SlotLevelAlt);
-        }
-
-        float GetReadyAt() const {
-            return Globals::Read<float>(address + Offset::SpellSlotLayout::SlotCooldown);
-        }
-
-        float GetCooldown() const {
-            return GetReadyAt();
-        }
-
-        float GetTotalCooldown() const {
-            return Globals::Read<float>(address + Offset::SpellSlotLayout::SlotTotalCd);
-        }
-
-        float GetCooldownExpires() const {
-            return Globals::Read<float>(address + Offset::SpellSlotLayout::SlotCooldownExpires);
-        }
-
-        float GetChargeTimer() const {
-            return Globals::Read<float>(address + Offset::SpellSlotLayout::SlotChargeTimer);
-        }
-
-        int GetStacks() const {
-            return Globals::Read<int>(address + Offset::SpellSlotLayout::SlotStacks);
-        }
-
-        uintptr_t GetSlotActiveSpellCast() const {
-            return Globals::Read<uintptr_t>(address + Offset::SpellSlotLayout::SlotActiveSpellCast);
-        }
-
-        bool IsSlotCasting() const {
-            return Globals::IsValidPtr(GetSlotActiveSpellCast());
-        }
-
-        uint32_t GetSpellNameHash() const {
-            return Globals::Read<uint32_t>(address + Offset::SpellSlotLayout::SlotSpellNameHash);
-        }
-
-        uintptr_t GetSpellInstanceVars() const {
-            return Globals::Read<uintptr_t>(address + Offset::SpellSlotLayout::SlotSpellInstanceVars);
-        }
-
-        // Alternative spell-name reader — walks SpellDataResource name SSO instead of DataSpellName.
-        bool ReadSpellNameFromResource(char* out, int maxOut) const {
-            if (!out || maxOut <= 0) { return false; }
-            out[0] = 0;
-
-            const auto sdr = Globals::Read<uintptr_t>(address + Offset::SpellSlotLayout::SlotSpellInput);
-            if (!Globals::IsValidPtr(sdr)) {
-                return false;
-            }
-
-            const auto cap = Globals::Read<size_t>(sdr + Offset::SpellDataResourceNameLayout::SpellNameCap);
-            if (cap > 0xF) {
-                const auto heapPtr = Globals::Read<uintptr_t>(sdr + Offset::SpellDataResourceNameLayout::SpellNameStr);
-                if (!Globals::IsValidPtr(heapPtr)) {
-                    return false;
-                }
-                return Globals::ReadCString(heapPtr, out, maxOut);
-            }
-            return Globals::ReadCString(sdr + Offset::SpellDataResourceNameLayout::SpellNameStr, out, maxOut);
-        }
-
-        uintptr_t GetSpellInput() const {
-            return Globals::Read<uintptr_t>(address + Offset::SpellSlotLayout::SlotSpellInput);
-        }
-
-        bool HasSpellInput() const {
-            return Globals::IsValidPtr(GetSpellInput());
-        }
-
-        uintptr_t GetSpellInfo() const {
-            return Globals::Read<uintptr_t>(address + Offset::SpellSlotLayout::SlotSpellInfo);
-        }
-
-        bool HasSpellInfo() const {
-            return Globals::IsValidPtr(GetSpellInfo());
-        }
-
-        uintptr_t GetSpellData() const {
-            const auto info = GetSpellInfo();
-            if (!Globals::IsValidPtr(info)) return 0;
-            return Globals::Read<uintptr_t>(info + Offset::SpellInfoLayout::InfoSpellData);
-        }
-
-        uintptr_t GetSpellResource() const {
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) return 0;
-            return Globals::Read<uintptr_t>(data + Offset::SpellDataLayout::DataResource);
-        }
-
-        float GetManaCost() const {
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) return 0.0f;
-            return Globals::Read<float>(data + Offset::SpellDataLayout::DataManaCost);
-        }
-
-        float GetAmmoRechargeTime() const {
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) return 0.0f;
-            return Globals::Read<float>(data + Offset::SpellDataResourceLayout::ResAmmoRecharge);
-        }
-
-        float GetBaseCooldownTime(int rank = 0) const {
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) return 0.0f;
-            const auto safeRank = ClampRank(rank);
-            return Globals::Read<float>(data + Offset::SpellDataResourceLayout::ResCooldownTime +
-                                        static_cast<uintptr_t>(safeRank * sizeof(float)));
-        }
-
-        float GetRemainingCooldown(float gameTime) const {
-            const float remaining = GetReadyAt() - gameTime;
-            return remaining > 0.0f ? remaining : 0.0f;
-        }
-
-        bool IsOnCooldown(float gameTime) const {
-            return GetRemainingCooldown(gameTime) > 0.0f;
-        }
-
-        bool IsLearned() const {
-            return IsValid() && GetLevel() > 0;
-        }
-
-        bool IsReady(float gameTime) const {
-            return IsLearned() && GetRemainingCooldown(gameTime) <= 0.0f;
-        }
-
-        uintptr_t GetCastArgument() const {
-            const auto input = GetSpellInput();
-            return Globals::IsValidPtr(input) ? (input + 0x8) : 0;
-        }
-
-        uint32_t GetInputTargetNetId() const {
-            const auto input = GetSpellInput();
-            if (!Globals::IsValidPtr(input)) return 0;
-            return Globals::Read<uint32_t>(input + Offset::SpellInputLayout::InputTargetNetId);
-        }
-
-        Vec3 GetInputStartPos() const {
-            const auto input = GetSpellInput();
-            if (!Globals::IsValidPtr(input)) return {};
-            return Globals::Read<Vec3>(input + Offset::SpellInputLayout::InputStartPos);
-        }
-
-        Vec3 GetInputEndPos() const {
-            const auto input = GetSpellInput();
-            if (!Globals::IsValidPtr(input)) return {};
-            return Globals::Read<Vec3>(input + Offset::SpellInputLayout::InputEndPos);
-        }
-
-        // NOTE (preserved from old NightSharp): the mutable spell input actually
-        // lives inside the SpellInfo struct (base = SlotSpellInfo value), NOT the
-        // SlotSpellInput pointer. The name `SpellInput*` here is kept for parity
-        // with the legacy API so downstream call sites don't need refactoring.
-        bool SetInputData(uint32_t targetNetId, const Vec3& start, const Vec3& end) const {
-            const auto input = GetSpellInfo();
-            if (!Globals::IsValidPtr(input)) {
-                return false;
-            }
-
-            bool ok = true;
-            ok &= Globals::Write<uint32_t>(input + Offset::SpellInputLayout::InputTargetNetId, targetNetId);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellInputLayout::InputStartPos, start);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellInputLayout::InputEndPos, end);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3), end);
-            ok &= Globals::Write<Vec3>(input + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2, end);
-            return ok;
-        }
-
-        float GetCastRange(int rank = 0) const {
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) return 0.0f;
-            const auto safeRank = ClampRank(rank);
-            return Globals::Read<float>(data + Offset::SpellDataResourceLayout::ResCastRange +
-                                        static_cast<uintptr_t>(safeRank * sizeof(float)));
-        }
-
-        float GetMissileSpeed() const {
-            const auto resource = GetSpellResource();
-            if (!Globals::IsValidPtr(resource)) return 0.0f;
-            return Globals::Read<float>(resource +
-                                        Offset::SpellDataResourceLayout::DataResourceBase +
-                                        Offset::SpellDataResourceLayout::ResMissileSpeed);
-        }
-
-        float GetLineWidth() const {
-            const auto resource = GetSpellResource();
-            if (!Globals::IsValidPtr(resource)) return 0.0f;
-            return Globals::Read<float>(resource +
-                                        Offset::SpellDataResourceLayout::DataResourceBase +
-                                        Offset::SpellDataResourceLayout::ResLineWidth);
-        }
-
-        int GetCastType() const {
-            const auto resource = GetSpellResource();
-            if (!Globals::IsValidPtr(resource)) return 0;
-            return Globals::Read<int>(resource +
-                                      Offset::SpellDataResourceLayout::DataResourceBase +
-                                      Offset::SpellDataResourceLayout::ResCastType);
-        }
-
-        int GetMaxAmmo(int rank = 0) const {
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) return 0;
-            const auto safeRank = ClampRank(rank);
-            return Globals::Read<int>(data + Offset::SpellDataResourceLayout::ResMaxAmmo +
-                                      static_cast<uintptr_t>(safeRank * sizeof(int)));
-        }
-
-        int GetAmmo() const {
-            const int stacks = GetStacks();
-            if (stacks > 0) {
-                return stacks;
-            }
-            const int maxAmmo = GetMaxAmmo();
-            return maxAmmo > 0 ? maxAmmo : 0;
-        }
-
-        bool ReadSpellName(char* out, int maxOut) const {
-            if (!out || maxOut <= 0) return false;
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) { out[0] = 0; return false; }
-            return Globals::ReadRuntimeStringField(data + Offset::SpellDataLayout::DataSpellName, out, maxOut);
-        }
-
-        bool ReadScriptName(char* out, int maxOut) const {
-            if (!out || maxOut <= 0) return false;
-            const auto data = GetSpellData();
-            if (!Globals::IsValidPtr(data)) { out[0] = 0; return false; }
-            return Globals::ReadRuntimeStringField(data + Offset::SpellDataResourceLayout::ResScriptName, out, maxOut);
-        }
-
-        bool ReadIconName(char* out, int maxOut) const {
-            if (!out || maxOut <= 0) return false;
-            const auto resource = GetSpellResource();
-            if (!Globals::IsValidPtr(resource)) { out[0] = 0; return false; }
-            return Globals::ReadGameString(resource +
-                                           Offset::SpellDataResourceLayout::DataResourceBase +
-                                           Offset::SpellDataResourceLayout::ResImgIconName,
-                                           out, maxOut);
-        }
-
-        bool CanCastNow(float gameTime) const {
-            return IsValid() && IsLearned() && GetRemainingCooldown(gameTime) <= 0.0f;
-        }
-
-        SpellState GetApproxState(float currentMana, float gameTime) const {
-            if (!IsValid() || !HasSpellInfo() || !HasSpellInput()) {
-                return State_Disabled;
-            }
-            if (!IsLearned())          return State_NotLearned;
-            if (IsOnCooldown(gameTime)) return State_Cooldown;
-
-            const float manaCost = GetManaCost();
-            if (manaCost > 0.0f && currentMana < manaCost) {
-                return State_NoMana;
-            }
-            return State_Ready;
-        }
-    };
-
-    // ── Top-level accessors ──
-
-    // Phase 2 (Apr 26/2026): SDK alias used by sdk/GameObjects/SpellbookClient.h.
-    // Same as `GetSpellBook` - returns the spellbook embedded address inside obj.
-    inline uintptr_t Get(uintptr_t obj) {
-        if (!Globals::IsValidPtr(obj)) {
-            return 0;
-        }
-        return obj + Offset::SpellRuntime::SpellBookOffset;
-    }
-
-    inline uintptr_t GetSpellBook(uintptr_t obj) {
-        if (!Globals::IsValidPtr(obj)) return 0;
-        return obj + Offset::SpellRuntime::SpellBookOffset;
-    }
-
-    inline uintptr_t GetActiveSpellCast(uintptr_t obj) {
-        if (!Globals::IsValidPtr(obj)) return 0;
-        // Offset::SpellRuntime::ActiveSpellCast is hero-relative (0x3158), not
-        // spellbook-relative, so read directly from the hero.
-        return Globals::Read<uintptr_t>(obj + Offset::SpellRuntime::ActiveSpellCast);
-    }
-
-    inline SlotRef GetSlot(uintptr_t obj, int slotId) {
-        const auto spellBook = GetSpellBook(obj);
-        if (!Globals::IsValidPtr(spellBook)) return {};
-        const auto slotAddr = spellBook + Offset::SpellBookLayout::SpellSlotArray +
-                              static_cast<uintptr_t>(slotId * sizeof(uintptr_t));
-        const auto slot = Globals::Read<uintptr_t>(slotAddr);
-        return { slot };
-    }
-
-    inline bool HasEnoughMana(uintptr_t obj, int slotId) {
-        const auto slot = GetSlot(obj, slotId);
-        if (!slot.IsValid()) return false;
-
-        const float manaCost = slot.GetManaCost();
-        if (manaCost <= 0.0f) return true;
-
-        return Globals::Read<float>(obj + Offset::AIHeroClient::MP) >= manaCost;
-    }
-
-    inline bool CanCast(uintptr_t obj, int slotId, float gameTime) {
-        const auto slot = GetSlot(obj, slotId);
-        if (!slot.IsValid() || !slot.HasSpellInfo() || !slot.HasSpellInput()) {
+    inline bool IsLocalOwner(uintptr_t owner) {
+        if (!CoreRuntime::EnsureInitialized()) {
             return false;
         }
-        return slot.CanCastNow(gameTime) && HasEnoughMana(obj, slotId);
+        (void)CoreRuntime::RefreshReadState();
+        return Globals::IsValidPtr(owner) &&
+               owner == CoreRuntime::GetContext().localPlayer;
+    }
+} // namespace detail
+
+inline bool CastSpell(uintptr_t owner, std::int32_t slot) {
+    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+        return false;
     }
 
-    inline SpellState GetSpellState(uintptr_t obj, int slotId, float gameTime) {
-        const auto slot = GetSlot(obj, slotId);
-        if (!slot.IsValid()) return State_Disabled;
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastSelfSpell(static_cast<std::uint8_t>(slot));
+}
 
-        const float currentMana = Globals::Read<float>(obj + Offset::AIHeroClient::MP);
-        return slot.GetApproxState(currentMana, gameTime);
+inline bool CastSpell(uintptr_t owner, std::int32_t slot, const Vec3& position) {
+    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+        return false;
     }
+
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastPositionSpell(static_cast<std::uint8_t>(slot), position);
+}
+
+inline bool CastSpell(uintptr_t owner,
+                      std::int32_t slot,
+                      const Vec3& /*startPosition*/,
+                      const Vec3& endPosition) {
+    return CastSpell(owner, slot, endPosition);
+}
+
+inline bool CastSpellOnTarget(uintptr_t owner,
+                              std::int32_t slot,
+                              uintptr_t target) {
+    if (!detail::IsLocalOwner(owner) ||
+        !Globals::IsValidPtr(target) ||
+        slot < 0 ||
+        slot > CoreCastSpell::SlotSummonerF) {
+        return false;
+    }
+
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastTargetSpell(static_cast<std::uint8_t>(slot), target);
+}
+
+inline bool UpdateChargedSpell(uintptr_t owner,
+                               std::int32_t slot,
+                               const Vec3& position,
+                               bool releaseCast) {
+    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+        return false;
+    }
+
+    detail::ScopedWritePhase writePhase;
+    return releaseCast
+        ? CoreCastSpell::ReleaseChargeSpell(static_cast<std::uint8_t>(slot), position)
+        : CoreCastSpell::BeginChargeSpell(static_cast<std::uint8_t>(slot), position);
+}
 
 } // namespace CoreSpellBook

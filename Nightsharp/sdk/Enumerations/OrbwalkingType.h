@@ -1,16 +1,18 @@
 #pragma once
 
+#include <cstdint>
+
 namespace SDK {
 
-enum class OrbwalkingType : int {
-    None = 0,
-    Movement = 1,
-    StopMovement = 2,
-    BeforeAttack = 3,
-    AfterAttack = 4,
-    OnAttack = 5,
-    NonKillableMinion = 6,
-    TargetSwitch = 7
+enum class OrbwalkingType : std::int32_t {
+    None,
+    Movement,
+    StopMovement,
+    BeforeAttack,
+    AfterAttack,
+    OnAttack,
+    NonKillableMinion,
+    TargetSwitch,
 };
 
 } // namespace SDK

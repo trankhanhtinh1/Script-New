@@ -1,62 +1,161 @@
 #pragma once
 
-// ============================================================================
-// CoreValidation.h - per-frame readiness audit of CoreRuntime subsystems
-// ----------------------------------------------------------------------------
-// Refresh() walks every CoreRuntime dependency (globals, native helpers,
-// object managers, NavGrid, spellbook, AI manager, HUD...) and writes a
-// 32-bit bitmask to `CoreRuntime::g_ctx.validationMask`. Callers can query
-// `GetMask()` or check individual `Validation_*` bits. Every stage is wrapped
-// in SEH so a single failure does NOT take down the whole audit — the bit
-// simply stays clear until the next refresh.
-//
-// NOTE: `CrashTelemetry::AppendStageLine` is a no-op stub in legacy_stubs.h
-// for this Phase 1 build. The early-refresh log buffer is therefore dropped;
-// a real implementation can be restored later without changing this file.
-// ============================================================================
-
-#include "CoreAi.h"
-#include "CoreBuffs.h"
 #include "CoreBypass.h"
-#include "CoreGame.h"
-#include "CoreNavGrid.h"
-#include "CoreObjects.h"
 #include "CoreRuntime.h"
-#include "CoreSpellBook.h"
-#include "CoreView.h"
-
-#include "CrashTelemetry.h"   // Phase 2 (Apr 26/2026): real CrashTelemetry replaces legacy_stubs.h
+#include "Globals.h"
+#include "Vector.h"
+#include "offset.h"
 
 #include <Windows.h>
+#include <cmath>
 #include <cstdint>
-#include <cstdio>
 
 namespace CoreValidation {
 
     enum Flags : uint32_t {
-        Validation_None                   = 0,
-        Validation_LocalPlayer            = 1u <<  0,
-        Validation_DetectionWatcher       = 1u <<  1,
-        Validation_SpoofTrampoline        = 1u <<  2,
-        Validation_ViewProjection         = 1u <<  3,
-        Validation_Renderer               = 1u <<  4,
-        Validation_Ping                   = 1u <<  5,
-        Validation_AttackDelay            = 1u <<  6,
-        Validation_AttackWindupEstimated  = 1u <<  7,
-        Validation_IssueOrder             = 1u <<  8,
-        Validation_SpellBook              = 1u <<  9,
-        Validation_Buffs                  = 1u << 10,
-        Validation_AiManager              = 1u << 11,
-        Validation_CastHelperPresent      = 1u << 12,
-        Validation_HudSpellInfo           = 1u << 13,
-        Validation_ObjectManagers         = 1u << 14,
-        Validation_ObjectEnumeration      = 1u << 15,
-        Validation_CastCallableApproved   = 1u << 16,
-        Validation_NavGrid                = 1u << 17,
-        Validation_InputReady             = 1u << 18,
+        Validation_None                  = 0,
+        Validation_LocalPlayer           = 1u << 0,
+        Validation_DetectionWatcher      = 1u << 1,
+        Validation_SpoofTrampoline       = 1u << 2,
+        Validation_ViewProjection        = 1u << 3,
+        Validation_Renderer              = 1u << 4,
+        Validation_Ping                  = 1u << 5,
+        Validation_AttackDelay           = 1u << 6,
+        Validation_AttackWindupEstimated = 1u << 7,
+        Validation_IssueOrder            = 1u << 8,
+        Validation_SpellBook             = 1u << 9,
+        Validation_Buffs                 = 1u << 10,
+        Validation_CastHelperPresent     = 1u << 12,
+        Validation_HudSpellInfo          = 1u << 13,
+        Validation_ObjectManagers        = 1u << 14,
+        Validation_ObjectEnumeration     = 1u << 15,
+        Validation_CastCallableApproved  = 1u << 16,
+        Validation_NavGrid               = 1u << 17,
+        Validation_InputReady            = 1u << 18,
     };
 
-    // ── Result-tracking shortcuts ──
+    inline bool ReadViewProjection(float out[16]) {
+        if (!out) {
+            return false;
+        }
+
+        const auto instance = CoreRuntime::GetContext().viewProjInstance;
+        if (!Globals::IsValidPtr(instance)) {
+            return false;
+        }
+
+        __try {
+            for (int i = 0; i < 16; ++i) {
+                const float view = Globals::Read<float>(
+                    instance + static_cast<uintptr_t>(i) * sizeof(float));
+                const float projection = Globals::Read<float>(
+                    instance + Offset::DrawingMatrixRuntime::ProjMatrixRelative +
+                    static_cast<uintptr_t>(i) * sizeof(float));
+                if (!std::isfinite(view) || !std::isfinite(projection)) {
+                    return false;
+                }
+                out[i] = view;
+            }
+            return true;
+        }
+        __except (1) {
+            return false;
+        }
+    }
+
+    inline bool GetRendererSize(Vec2& out) {
+        out = {};
+        const auto renderer = CoreRuntime::GetContext().renderer;
+        if (!Globals::IsValidPtr(renderer)) {
+            return false;
+        }
+
+        __try {
+            const int width = Globals::Read<int>(renderer + 0xC);
+            const int height = Globals::Read<int>(renderer + 0x10);
+            if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+                out = { static_cast<float>(width), static_cast<float>(height) };
+                return true;
+            }
+        }
+        __except (1) {}
+        return false;
+    }
+
+    inline bool IsChatOpen() {
+        const auto& ctx = CoreRuntime::GetContext();
+        uintptr_t chatClient = ctx.chatClient;
+        if (!Globals::IsValidPtr(chatClient) && ctx.chatClientGlobal) {
+            chatClient = Globals::Read<uintptr_t>(ctx.chatClientGlobal);
+        }
+        if (!Globals::IsValidPtr(chatClient)) {
+            return false;
+        }
+
+        const auto primary =
+            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::PrimaryOpen);
+        const auto editing =
+            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Editing);
+        const auto focused =
+            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Focused);
+        return primary == 1 || editing == 1 || focused == 1;
+    }
+
+    inline bool IsShopOpen() {
+        const auto& ctx = CoreRuntime::GetContext();
+        uintptr_t shop = ctx.shopInstance;
+        uintptr_t windows = ctx.openWindowsArray;
+        std::uint32_t count = ctx.openWindowsCount;
+
+        if (!Globals::IsValidPtr(shop) && ctx.shopInstanceGlobal) {
+            shop = Globals::Read<uintptr_t>(ctx.shopInstanceGlobal);
+        }
+        if (!Globals::IsValidPtr(windows) && ctx.openWindowsArrayGlobal) {
+            windows = Globals::Read<uintptr_t>(ctx.openWindowsArrayGlobal);
+            count = Globals::Read<std::uint32_t>(ctx.openWindowsCountGlobal);
+        }
+        if (!Globals::IsValidPtr(shop) ||
+            !Globals::IsValidPtr(windows) ||
+            count == 0 ||
+            count > 64) {
+            return false;
+        }
+
+        for (std::uint32_t i = 0; i < count; ++i) {
+            if (Globals::Read<uintptr_t>(
+                    windows + static_cast<uintptr_t>(i) * sizeof(uintptr_t)) == shop) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline bool ShouldProcessInput() {
+        const auto& ctx = CoreRuntime::GetContext();
+        if (!Globals::IsValidPtr(ctx.localPlayer) ||
+            !Globals::IsValidPtr(ctx.objectManager) ||
+            ctx.gameTime <= 0.0f) {
+            return false;
+        }
+
+        const HWND foreground = GetForegroundWindow();
+        if (foreground) {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(foreground, &processId);
+            if (processId != GetCurrentProcessId()) {
+                return false;
+            }
+        }
+
+        return !IsChatOpen() && !IsShopOpen();
+    }
+
+    inline uintptr_t GetHudSpellInfo() {
+        const auto hud = CoreRuntime::GetContext().hudInstance;
+        return Globals::IsValidPtr(hud)
+            ? Globals::Read<uintptr_t>(hud + Offset::HudRuntime::SpellInfo)
+            : 0;
+    }
 
     inline void MarkIssueOrderResult(bool ok) {
         ++CoreRuntime::g_ctx.issueOrderAttempts;
@@ -78,110 +177,62 @@ namespace CoreValidation {
         }
     }
 
-    inline void TraceStage(const char* stage) {
-        CrashTelemetry::SetStage(stage);
-        if (CoreRuntime::g_ctx.refreshGeneration <= 2 && stage && *stage) {
-            char buffer[256] = {};
-            std::snprintf(buffer, sizeof(buffer), "[NightSharp] %s\r\n", stage);
-            CrashTelemetry::AppendStageLine(buffer);
-        }
-    }
-
-    // ── Per-frame validation refresh ──
-
     inline uint32_t Refresh() {
         auto& ctx = CoreRuntime::g_ctx;
         static uint32_t s_cachedMask = Validation_None;
         static DWORD s_lastRefresh = 0;
-        const DWORD refreshNow = GetTickCount();
-        if (s_lastRefresh != 0 && refreshNow - s_lastRefresh < 50) {
+
+        const DWORD now = GetTickCount();
+        if (s_lastRefresh != 0 && now - s_lastRefresh < 50) {
             ctx.validationMask = s_cachedMask;
             return ctx.validationMask;
         }
+        s_lastRefresh = now;
 
-        s_lastRefresh = refreshNow;
+        CoreRuntime::EnsureInitialized();
+        CoreRuntime::RefreshReadState();
         ctx.validationMask = Validation_None;
 
-        TraceStage("CoreValidation::Refresh::LocalPlayer");
         if (Globals::IsValidPtr(ctx.localPlayer)) {
             ctx.validationMask |= Validation_LocalPlayer;
         }
 
-        TraceStage("CoreValidation::Refresh::DetectionWatcher");
         __try {
             if (Globals::IsValidPtr(CoreBypass::ResolveDetectionWatcher2())) {
                 ctx.validationMask |= Validation_DetectionWatcher;
             }
-        } __except (1) {}
+        }
+        __except (1) {}
 
-        TraceStage("CoreValidation::Refresh::SpoofTrampoline");
         __try {
             if (Globals::IsValidPtr(CoreBypass::ResolveSpoofTrampoline())) {
                 ctx.validationMask |= Validation_SpoofTrampoline;
             }
-        } __except (1) {}
+        }
+        __except (1) {}
 
-        TraceStage("CoreValidation::Refresh::ViewProjection");
-        __try {
-            float matrix[16] = {};
-            if (CoreView::ReadViewProjection(matrix)) {
-                ctx.validationMask |= Validation_ViewProjection;
-            }
-        } __except (1) {}
-
-        TraceStage("CoreValidation::Refresh::Renderer");
-        __try {
-            Vec2 rendererSize = {};
-            if (CoreView::GetRendererSize(rendererSize)) {
-                ctx.validationMask |= Validation_Renderer;
-            }
-        } __except (1) {}
-
-        TraceStage("CoreValidation::Refresh::HudSpellInfo");
-        __try {
-            if (Globals::IsValidPtr(CoreView::GetHudSpellInfo())) {
-                ctx.validationMask |= Validation_HudSpellInfo;
-            }
-        } __except (1) {}
-
-        TraceStage("CoreValidation::Refresh::CastHelper");
-        if (ctx.castSpellFn) {
-            ctx.validationMask |= Validation_CastHelperPresent;
+        float viewProjection[16] = {};
+        if (ReadViewProjection(viewProjection)) {
+            ctx.validationMask |= Validation_ViewProjection;
         }
 
-        TraceStage("CoreValidation::Refresh::InputReady");
-        __try {
-            if (CoreGame::ShouldProcessInput()) {
-                ctx.validationMask |= Validation_InputReady;
-            }
-        } __except (1) {}
+        Vec2 rendererSize = {};
+        if (GetRendererSize(rendererSize)) {
+            ctx.validationMask |= Validation_Renderer;
+        }
 
-        TraceStage("CoreValidation::Refresh::Ping");
         if (ctx.getPingFn && Globals::IsValidPtr(ctx.netInstance)) {
             ctx.validationMask |= Validation_Ping;
         }
 
-        TraceStage("CoreValidation::Refresh::AttackDelay");
         if (ctx.getAttackDelayFn && Globals::IsValidPtr(ctx.localPlayer)) {
             ctx.validationMask |= Validation_AttackDelay;
         }
 
-        TraceStage("CoreValidation::Refresh::AttackWindup");
         if (ctx.getAttackWindupFn && Globals::IsValidPtr(ctx.localPlayer)) {
             ctx.validationMask |= Validation_AttackWindupEstimated;
         }
 
-        TraceStage("CoreValidation::Refresh::SpellBook");
-        __try {
-            auto slotQ = CoreSpellBook::GetSlot(ctx.localPlayer, CoreSpellBook::Slot_Q);
-            if (slotQ.IsValid() &&
-                Globals::IsValidPtr(slotQ.GetSpellInput()) &&
-                Globals::IsValidPtr(slotQ.GetSpellInfo())) {
-                ctx.validationMask |= Validation_SpellBook;
-            }
-        } __except (1) {}
-
-        TraceStage("CoreValidation::Refresh::ObjectManagers");
         if (Globals::IsValidPtr(ctx.heroManager) &&
             Globals::IsValidPtr(ctx.minionManager) &&
             Globals::IsValidPtr(ctx.turretManager) &&
@@ -189,73 +240,37 @@ namespace CoreValidation {
             ctx.validationMask |= Validation_ObjectManagers;
         }
 
-        static uint32_t s_cachedSlowMask = Validation_None;
-        static DWORD s_lastSlowRefresh = 0;
-        const DWORD now = refreshNow;
-        if (s_lastSlowRefresh == 0 || now - s_lastSlowRefresh >= 250) {
-            s_lastSlowRefresh = now;
-            uint32_t slowMask = Validation_None;
-
-            TraceStage("CoreValidation::Refresh::NavGrid");
-            __try {
-                if (CoreNavGrid::Get().IsValid()) {
-                    slowMask |= Validation_NavGrid;
-                }
-            } __except (1) {}
-
-            TraceStage("CoreValidation::Refresh::Buffs");
-            __try {
-                uintptr_t buffs[64] = {};
-                if (CoreBuffs::Enumerate(ctx.localPlayer, buffs, 64) >= 0) {
-                    slowMask |= Validation_Buffs;
-                }
-            } __except (1) {}
-
-            TraceStage("CoreValidation::Refresh::ObjectEnumeration");
-            __try {
-                uintptr_t objects[8] = {};
-                if (CoreObjects::EnumerateAllObjects(objects,
-                        static_cast<int>(sizeof(objects) / sizeof(objects[0]))) >= 0) {
-                    slowMask |= Validation_ObjectEnumeration;
-                }
-            } __except (1) {}
-
-            TraceStage("CoreValidation::Refresh::AiManager");
-            __try {
-                auto ai = CoreAi::Get(ctx.localPlayer);
-                if (ai.IsValid()) {
-                    slowMask |= Validation_AiManager;
-                }
-            } __except (1) {}
-
-            s_cachedSlowMask = slowMask;
-        } else {
-            TraceStage("CoreValidation::Refresh::SlowCached");
+        if (Globals::IsValidPtr(ctx.navGrid)) {
+            ctx.validationMask |= Validation_NavGrid;
         }
-        ctx.validationMask |= s_cachedSlowMask;
 
-        TraceStage("CoreValidation::Refresh::IssueOrderReady");
-        constexpr uint32_t kIssueOrderDeps = Validation_SpoofTrampoline | Validation_DetectionWatcher;
-        if ((ctx.validationMask & kIssueOrderDeps) == kIssueOrderDeps && ctx.issueOrderFn) {
+        __try {
+            if (Globals::IsValidPtr(ctx.hudInstance)) {
+                if (Globals::IsValidPtr(GetHudSpellInfo())) {
+                    ctx.validationMask |= Validation_HudSpellInfo;
+                }
+                const auto hudInput = Globals::Read<uintptr_t>(ctx.hudInstance + Offset::HudRuntime::Input);
+                if (Globals::IsValidPtr(hudInput) &&
+                    ShouldProcessInput()) {
+                    ctx.validationMask |= Validation_InputReady;
+                }
+            }
+        }
+        __except (1) {}
+
+        constexpr uint32_t issueOrderDeps =
+            Validation_DetectionWatcher |
+            Validation_SpoofTrampoline;
+        if ((ctx.validationMask & issueOrderDeps) == issueOrderDeps && ctx.issueOrderFn) {
             ctx.validationMask |= Validation_IssueOrder;
         }
 
-        TraceStage("CoreValidation::Refresh::CastCallableApproved");
-        constexpr uint32_t kCastDeps = Validation_SpoofTrampoline |
-                                       Validation_DetectionWatcher |
-                                       Validation_SpellBook |
-                                       Validation_HudSpellInfo;
-        if ((ctx.validationMask & kCastDeps) == kCastDeps && ctx.castSpellFn) {
-            ctx.validationMask |= Validation_CastCallableApproved;
-        }
-
-        TraceStage("CoreValidation::Refresh::Done");
         s_cachedMask = ctx.validationMask;
         return ctx.validationMask;
     }
 
     inline uint32_t GetMask() {
-        return CoreRuntime::GetContext().validationMask;
+        return Refresh();
     }
 
 } // namespace CoreValidation

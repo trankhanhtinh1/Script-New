@@ -4,6 +4,6 @@
 
 namespace SDK::UI::IMenu::Abstracts {
 
-    using AMenuComponent = ::SDK::MenuItem;
+    using AMenuComponent = ::SDK::UI::AMenuComponent;
 
 }

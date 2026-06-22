@@ -1,61 +1,81 @@
 #pragma once
+// ============================================================================
+// PluginBootstrap.h — Plugin registration entry point
+//
+// Ported from Old/plugins/PluginBootstrap.h.
+// Registers all plugins with PluginManager, then triggers auto-load.
+// ============================================================================
 
 #include "PluginManager.h"
-#include "core/TargetSelectorPlugin.h"
-#include "core/OrbwalkerPlugin.h"
-#include "7UPAIO/EzrealPlugin.h"
 
-#ifndef NIGHTSHARP_ENABLE_EZREAL_MISSILE_DEBUG
-#define NIGHTSHARP_ENABLE_EZREAL_MISSILE_DEBUG 0
-#endif
+#include "Core/PlayerEventFilterPlugin.h"
+#include "Core/SpellTrackingDebugPlugin.h"
+#include "Utility/AttackRangeDrawPlugin.h"
+#include "Utility/NavGridDrawPlugin.h"
+#include "Champion/EzrealSemiPlugin.h"
+#include "Champion/EzrealMissileLifecyclePlugin.h"
+#include "Champion/JaxSemiPlugin.h"
+#include "Champion/XerathSemiPlugin.h"
+#include "../DebugLog.h"
 
-#if NIGHTSHARP_ENABLE_EZREAL_MISSILE_DEBUG
-#include "debug/EzrealMissileDebugPlugin.h"
-#endif
-
-#ifndef NIGHTSHARP_ENABLE_EZEVADE
-#define NIGHTSHARP_ENABLE_EZEVADE 1
-#endif
-
-#if NIGHTSHARP_ENABLE_EZEVADE
-#include "EzEvade/Program.h"
-#endif
-
-#ifndef NIGHTSHARP_ENABLE_OFFSET_INSPECTOR
-#define NIGHTSHARP_ENABLE_OFFSET_INSPECTOR 0
-#endif
-
-#if NIGHTSHARP_ENABLE_OFFSET_INSPECTOR
-#include "core/OffsetInspectorPlugin.h"
-#endif
-
-// NOTE: Built-in plugins (RenderTestPlugin, EzrealPlugin, …) lived in the
-// deleted core/ + sdk/ tree, so there is nothing to register yet. The
-// function is kept as an explicit no-op to preserve the call site in
-// Overlay::Run() without re-plumbing once new plugins are re-added.
 
 namespace Plugins {
 namespace PluginBootstrap {
 
+    inline bool g_registered = false;
+    inline bool g_shutdown = false;
+
+    inline void ApplyDebugAutoLoadOverrides() {
+    }
+
     inline void EnsureRegistered() {
-        static bool s_registered = false;
-        if (s_registered) {
+        if (g_registered) {
+            NightSharpDebug::Logf("[PluginBootstrap] EnsureRegistered skipped: already registered");
             return;
         }
-        s_registered = true;
+        g_registered = true;
+        g_shutdown = false;
 
-        PluginManager::Get().Register<TargetSelectorPlugin>();
-        PluginManager::Get().Register<OrbwalkerPlugin>();
-#if NIGHTSHARP_ENABLE_OFFSET_INSPECTOR
-        PluginManager::Get().Register<OffsetInspectorPlugin>();
-#endif
-        PluginManager::Get().Register<SevenUPAIO::EzrealPlugin>();
-#if NIGHTSHARP_ENABLE_EZEVADE
-        PluginManager::Get().Register<EzEvadePlugin::Plugin>();
-#endif
-#if NIGHTSHARP_ENABLE_EZREAL_MISSILE_DEBUG
-        PluginManager::Get().Register<Debug::EzrealMissileDebugPlugin>();
-#endif
+        // ─── Core plugins ────────────────────────────────────────────────
+        NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
+        PluginManager::Get().Register<PlayerEventFilterPlugin>();
+        PluginManager::Get().Register<SpellTrackingDebugPlugin>();
+        NightSharpDebug::Logf("[PluginBootstrap] Register core plugins complete");
+
+        NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins begin");
+        PluginManager::Get().Register<AttackRangeDrawPlugin>();
+        PluginManager::Get().Register<NavGridDrawPlugin>();
+        NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
+
+        NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins begin");
+        PluginManager::Get().Register<EzrealSemiPlugin>();
+        PluginManager::Get().Register<EzrealMissileLifecyclePlugin>();
+        PluginManager::Get().Register<JaxSemiPlugin>();
+        PluginManager::Get().Register<XerathSemiPlugin>();
+        NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
+
+        // Load persisted config (AlwaysLoad state from plugins.ini)
+        NightSharpDebug::Logf("[PluginBootstrap] LoadConfig begin");
+        PluginRegistry::LoadConfig();
+        NightSharpDebug::Logf("[PluginBootstrap] LoadConfig complete");
+        ApplyDebugAutoLoadOverrides();
+
+        // Auto-load plugins that have AlwaysLoad=true
+        NightSharpDebug::Logf("[PluginBootstrap] LoadAuto begin");
+        PluginManager::Get().LoadAuto();
+        NightSharpDebug::Logf("[PluginBootstrap] LoadAuto complete");
+    }
+
+    inline void Shutdown() {
+        if (g_shutdown) {
+            return;
+        }
+        g_shutdown = true;
+        NightSharpDebug::Logf("[PluginBootstrap] Shutdown begin");
+        PluginManager::Get().Shutdown();
+        PluginRegistry::Reset();
+        g_registered = false;
+        NightSharpDebug::Logf("[PluginBootstrap] Shutdown complete");
     }
 
 } // namespace PluginBootstrap
