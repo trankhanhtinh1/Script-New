@@ -35,6 +35,18 @@
 #define NIGHTSHARP_ENABLE_ONMISSILEDELETE_HOOK 1
 #endif
 
+
+#ifndef NIGHTSHARP_ENABLE_ONCREATE_HOOK
+// Enabled: hooks AssignNetworkId (0x562610). RCX = object, RDX = netId.
+// Call original first, then fire create event — object is fully initialized.
+#define NIGHTSHARP_ENABLE_ONCREATE_HOOK 1
+#endif
+
+#ifndef NIGHTSHARP_ENABLE_ONDELETE_HOOK
+// Enabled: hooks DestroyObject (0x54CC30). RCX = manager, RDX = object.
+// Event fires BEFORE original runs — object is still valid at hook entry.
+#define NIGHTSHARP_ENABLE_ONDELETE_HOOK 1
+#endif
 namespace CoreEventHook {
 
 namespace shim {
@@ -549,6 +561,8 @@ namespace Hooks {
     constexpr uintptr_t OnBuffRemove            = ::Offset::Hooks::OnBuffRemove;
     constexpr uintptr_t OnBuffUpdate            = ::Offset::Hooks::OnBuffUpdate;
     constexpr uintptr_t OnBuffGain              = ::Offset::Hooks::OnBuffGain;
+    constexpr uintptr_t OnCreate                = ::Offset::Hooks::OnCreate;
+    constexpr uintptr_t OnDelete                = ::Offset::Hooks::OnDelete;
     constexpr uintptr_t OnMissileCreate         = ::Offset::Hooks::OnMissileCreate;
     constexpr uintptr_t OnMissileDelete         = ::Offset::Hooks::OnMissileDelete;
     constexpr uintptr_t OnDamage                = ::Offset::Hooks::OnDamage;
@@ -595,6 +609,8 @@ enum HookId : int {
     ProcessCastSpell,
     OnUpdateChargeableSpell,
     OnBuffGain,
+    OnCreate,
+    OnDelete,
     OnMissileCreate,
     OnMissileDelete,
     OnNewPath,
@@ -632,6 +648,8 @@ inline constexpr HookSpec kHookSpecs[HookCount] = {
     { "ProcessCastSpell",        Offsets::ProcessCastSpell },
     { "OnUpdateChargeableSpell", Offsets::OnUpdateChargeableSpell },
     { "OnBuffGain",              Offsets::OnBuffGain },
+    { "OnCreate",                Offsets::OnCreate },
+    { "OnDelete",                Offsets::OnDelete },
     { "OnMissileCreate",         Offsets::OnMissileCreate },
     { "OnMissileDelete",         Offsets::OnMissileDelete },
     { "OnNewPath",               Offsets::OnNewPath },
@@ -747,6 +765,16 @@ inline bool IsInlineAllowed(HookId id) {
         return false;
     }
 #endif
+#if !NIGHTSHARP_ENABLE_ONCREATE_HOOK
+    if (id == OnCreate) {
+        return false;
+    }
+#endif
+#if !NIGHTSHARP_ENABLE_ONDELETE_HOOK
+    if (id == OnDelete) {
+        return false;
+    }
+#endif
     return id >= 0 && id < HookCount && HookInstallRva(id) != 0;
 }
 
@@ -759,6 +787,16 @@ inline const char* InstallNote(HookId id) {
 #if !NIGHTSHARP_ENABLE_ONMISSILEDELETE_HOOK
     if (id == OnMissileDelete) {
         return "temporarily disabled; missile destructor/remove hook can run while missile memory is being destroyed";
+    }
+#endif
+#if !NIGHTSHARP_ENABLE_ONCREATE_HOOK
+    if (id == OnCreate) {
+        return "disabled by default; old ObjectManager tree-insert hook was unstable";
+    }
+#endif
+#if !NIGHTSHARP_ENABLE_ONDELETE_HOOK
+    if (id == OnDelete) {
+        return "disabled by default; DestroyObject hook was prone to vfunc crashes";
     }
 #endif
     if (id >= 0 && id < HookCount && HookInstallRva(id) == 0) {
@@ -781,6 +819,12 @@ inline const char* InstallNote(HookId id) {
     }
     if (id == OnBuffGain) {
         return "native AIBaseClient OnBuffGain/OnBuffAdd dispatcher";
+    }
+    if (id == OnCreate) {
+        return "AssignNetworkId; RCX object, RDX networkId. Call original first";
+    }
+    if (id == OnDelete) {
+        return "DestroyObject; RCX manager, RDX object. Fires before original";
     }
     if (id == OnMissileCreate) {
         return "MissileClient init path; inserts into MissileManager";
@@ -831,6 +875,8 @@ inline bool IsEventGated(HookId id) {
         case OnBuffRemove:
         case OnBuffUpdate:
         case OnBuffGain:
+        case OnCreate:
+        case OnDelete:
         case OnMissileCreate:
         case OnMissileDelete:
         case OnNewPath:
@@ -1206,6 +1252,8 @@ extern "C" __declspec(dllexport) inline const uintptr_t g_CoreHookTestRVAs[] = {
     CoreHookTest::Offsets::ProcessCastSpell,
     CoreHookTest::Offsets::OnUpdateChargeableSpell,
     CoreHookTest::Offsets::OnBuffGain,
+    CoreHookTest::Offsets::OnCreate,
+    CoreHookTest::Offsets::OnDelete,
     CoreHookTest::Offsets::OnMissileCreate,
     CoreHookTest::Offsets::OnMissileDelete,
     CoreHookTest::Offsets::OnNewPath,

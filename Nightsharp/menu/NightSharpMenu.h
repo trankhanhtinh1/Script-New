@@ -8,6 +8,7 @@
  * PermaShow overlay.
  */
 
+#include "../Core/CoreEvents.h"
 #include "../imgui/imgui.h"
 #include "../Plugins/PluginRegistry.h"
 #include "../SDK/UI/UI.h"
@@ -236,6 +237,24 @@ namespace NightSharpMenu {
         if (ImGui::GetIO().Framerate > 0.0f) {
             ImGui::Text("Frame: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
         }
+        ImGui::Separator();
+        ImGui::Text("Hook status (installed / hits)");
+        auto drawHookStatus = [](::Core::Events::HookId id) {
+            const bool installed = ::Core::Events::IsInstalled(id);
+            const long long hits = ::Core::Events::HitCount(id);
+            const char* name = ::Core::Events::Name(id);
+            if (installed) {
+                ImGui::TextColored(ImVec4(0.3f, 0.86f, 0.34f, 1.0f), "[ON]  %s", name);
+            } else {
+                ImGui::TextColored(ImVec4(0.62f, 0.64f, 0.70f, 1.0f), "[OFF] %s", name);
+            }
+            ImGui::SameLine(0, 8);
+            ImGui::Text("hits: %lld", hits);
+        };
+        drawHookStatus(::Core::Events::Hooks::OnCreate);
+        drawHookStatus(::Core::Events::Hooks::OnDelete);
+        drawHookStatus(::Core::Events::Hooks::OnMissileCreate);
+        drawHookStatus(::Core::Events::Hooks::OnMissileDelete);
     }
 
     inline void DrawPluginsSection() {

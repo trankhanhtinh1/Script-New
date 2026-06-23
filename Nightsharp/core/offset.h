@@ -374,11 +374,12 @@ namespace SpellBookLayout {
         constexpr uintptr_t OnBuffRemove            = 0x223A40; //OnBuffLose
         constexpr uintptr_t OnBuffUpdate            = 0x2234A0;
         constexpr uintptr_t OnBuffGain              = 0xC10A00;
-        // Common ObjectManager NetworkId-tree insertion helper:
-        //   RCX = manager, RDX = GameObject*, R8D = NetworkId.
-        // CoreEvents accepts it only for the global ObjectManager and delays
-        // publication until the object has completed initialization.
-        constexpr uintptr_t OnCreate                = 0x560700; //OnCreateObject
+        // AssignNetworkId: writes networkId to obj+0xCC, inserts into
+        // ObjectManager tree, then calls post-init vfunc. Hook this instead
+        // of the raw tree-insert so the object is fully ready when event fires.
+        //   RCX = GameObject*, RDX = networkId (uint32_t).
+        // IDA sig: 40 56 48 83 EC ? 45 33 C9
+        constexpr uintptr_t OnCreate                = 0x562610; //AssignNetworkId
         constexpr uintptr_t OnMissileCreate         = 0x93ADA0;
         // sub_54CC30(ObjectManager*, GameObject*) removes an object from all
         // ObjectManager lists/trees. The object argument is RDX at hook entry.

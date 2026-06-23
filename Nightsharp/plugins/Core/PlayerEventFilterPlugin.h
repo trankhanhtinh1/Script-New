@@ -39,6 +39,8 @@ public:
         const bool buffAdd = SDK::Events::hook.OnBuffAdd += &PlayerEventFilterPlugin::OnBuffAdd;
         const bool buffRemove = SDK::Events::hook.OnBuffRemove += &PlayerEventFilterPlugin::OnBuffRemove;
         const bool buffUpdate = SDK::Events::hook.OnBuffUpdate += &PlayerEventFilterPlugin::OnBuffUpdate;
+        const bool objectNew = SDK::Events::hook.OnCreateObject += &PlayerEventFilterPlugin::OnObjectCreate;
+        const bool objectDel = SDK::Events::hook.OnDeleteObject += &PlayerEventFilterPlugin::OnObjectDelete;
         const bool missileNew = SDK::Events::hook.OnMissileCreate += &PlayerEventFilterPlugin::OnMissileCreate;
         const bool missileDel = SDK::Events::hook.OnMissileDelete += &PlayerEventFilterPlugin::OnMissileDelete;
 
@@ -49,7 +51,8 @@ public:
 
         Appendf(
             "[PlayerEventFilter] loaded doCast=%d processSpell=%d playAnimation=%d stopCast=%d "
-            "newPath=%d buffAdd=%d buffRemove=%d buffUpdate=%d missileNew=%d missileDel=%d damage=%d finishCast=%d\r\n",
+            "newPath=%d buffAdd=%d buffRemove=%d buffUpdate=%d objectNew=%d objectDel=%d "
+            "missileNew=%d missileDel=%d damage=%d finishCast=%d\r\n",
             doCast ? 1 : 0,
             processSpell ? 1 : 0,
             playAnimation ? 1 : 0,
@@ -58,6 +61,8 @@ public:
             buffAdd ? 1 : 0,
             buffRemove ? 1 : 0,
             buffUpdate ? 1 : 0,
+            objectNew ? 1 : 0,
+            objectDel ? 1 : 0,
             missileNew ? 1 : 0,
             missileDel ? 1 : 0,
             damage ? 1 : 0,
@@ -70,6 +75,8 @@ public:
         ::Core::Events::Remove(::Core::Events::Hooks::OnDamage,        &PlayerEventFilterPlugin::OnRawDamage);
         SDK::Events::hook.OnMissileDelete -= &PlayerEventFilterPlugin::OnMissileDelete;
         SDK::Events::hook.OnMissileCreate -= &PlayerEventFilterPlugin::OnMissileCreate;
+        SDK::Events::hook.OnDeleteObject -= &PlayerEventFilterPlugin::OnObjectDelete;
+        SDK::Events::hook.OnCreateObject -= &PlayerEventFilterPlugin::OnObjectCreate;
         SDK::Events::hook.OnBuffUpdate -= &PlayerEventFilterPlugin::OnBuffUpdate;
         SDK::Events::hook.OnBuffRemove -= &PlayerEventFilterPlugin::OnBuffRemove;
         SDK::Events::hook.OnBuffAdd -= &PlayerEventFilterPlugin::OnBuffAdd;
@@ -119,6 +126,10 @@ public:
                     ReadCounter(m_buffRemoveReceived), ReadCounter(m_buffRemoveLocal));
         ImGui::Text("OnBuffUpdate:    %lld / %lld",
                     ReadCounter(m_buffUpdateReceived), ReadCounter(m_buffUpdateLocal));
+        ImGui::Text("OnCreateObject:  %lld / %lld",
+                    ReadCounter(m_objectNewReceived), ReadCounter(m_objectNewLocal));
+        ImGui::Text("OnDeleteObject:  %lld / %lld",
+                    ReadCounter(m_objectDelReceived), ReadCounter(m_objectDelLocal));
         ImGui::Text("OnMissileCreate: %lld / %lld",
                     ReadCounter(m_missileNewReceived), ReadCounter(m_missileNewLocal));
         ImGui::Text("OnMissileDelete: %lld / %lld",
@@ -127,6 +138,8 @@ public:
                     ReadCounter(m_damageReceived),    ReadCounter(m_damageLocal));
         ImGui::Text("OnFinishCast:    %lld / %lld",
                     ReadCounter(m_finishCastReceived),ReadCounter(m_finishCastLocal));
+        ImGui::Separator();
+        DrawRuneManagerDebug();
         ImGui::Text("Log: %s", kLogPath);
     }
 
@@ -158,6 +171,10 @@ private:
     volatile long long m_buffRemoveLocal = 0;
     volatile long long m_buffUpdateReceived = 0;
     volatile long long m_buffUpdateLocal = 0;
+    volatile long long m_objectNewReceived = 0;
+    volatile long long m_objectNewLocal = 0;
+    volatile long long m_objectDelReceived = 0;
+    volatile long long m_objectDelLocal = 0;
     volatile long long m_missileNewReceived = 0;
     volatile long long m_missileNewLocal = 0;
     volatile long long m_missileDelReceived = 0;
@@ -391,6 +408,10 @@ private:
         InterlockedExchange64(&m_buffRemoveLocal, 0);
         InterlockedExchange64(&m_buffUpdateReceived, 0);
         InterlockedExchange64(&m_buffUpdateLocal, 0);
+        InterlockedExchange64(&m_objectNewReceived, 0);
+        InterlockedExchange64(&m_objectNewLocal, 0);
+        InterlockedExchange64(&m_objectDelReceived, 0);
+        InterlockedExchange64(&m_objectDelLocal, 0);
         InterlockedExchange64(&m_missileNewReceived, 0);
         InterlockedExchange64(&m_missileNewLocal, 0);
         InterlockedExchange64(&m_missileDelReceived, 0);
@@ -591,6 +612,97 @@ private:
             args.Raw.HitCount);
     }
 
+    void DrawRuneManagerDebug() const {
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid()) {
+            ImGui::Text("RuneManager: player unavailable");
+            return;
+        }
+
+        const uintptr_t heroAddr = player.Address();
+        ImGui::Text("AIHeroClient: 0x%llX", static_cast<unsigned long long>(heroAddr));
+
+        const uintptr_t rawFieldValue = Globals::Read<uintptr_t>(
+            heroAddr + Offset::AIHeroClient::RuneManager);
+        ImGui::Text("Field @ +0x%X = 0x%llX",
+                    Offset::AIHeroClient::RuneManager,
+                    static_cast<unsigned long long>(rawFieldValue));
+
+        const uintptr_t fieldResolved = ::CoreRuneManager::ResolveFromField(heroAddr);
+        const uintptr_t vfuncResolved = ::CoreRuneManager::ResolveFromVFunc(heroAddr);
+        ImGui::Text("Resolve: field=0x%llX vfunc=0x%llX",
+                    static_cast<unsigned long long>(fieldResolved),
+                    static_cast<unsigned long long>(vfuncResolved));
+
+        const auto manager = player.RuneManager();
+        const auto snapshot = manager.Snapshot();
+        ImGui::Text("Manager: 0x%llX primary=%d secondary=%d entries=%d",
+                    static_cast<unsigned long long>(manager.Address()),
+                    snapshot.primaryTree.id,
+                    snapshot.secondaryTree.id,
+                    snapshot.entryCount);
+
+        if (manager.IsValid()) {
+            for (int index = 0; index < snapshot.entryCount && index < 8; ++index) {
+                const auto& entry = snapshot.entries[index];
+                ImGui::Text("  [%d] id=%d name=%s",
+                            index,
+                            entry.data.id,
+                            entry.data.displayName[0] ? entry.data.displayName : "?");
+            }
+            ImGui::Text("Primary tree: id=%d name=%s desc=%s",
+                        snapshot.primaryTree.id,
+                        snapshot.primaryTree.displayName[0] ? snapshot.primaryTree.displayName : "?",
+                        snapshot.primaryTree.description[0] ? snapshot.primaryTree.description : "?");
+            ImGui::Text("Secondary tree: id=%d name=%s desc=%s",
+                        snapshot.secondaryTree.id,
+                        snapshot.secondaryTree.displayName[0] ? snapshot.secondaryTree.displayName : "?",
+                        snapshot.secondaryTree.description[0] ? snapshot.secondaryTree.description : "?");
+        } else {
+            ImGui::TextColored(ImVec4(1,0.6f,0,1), "Manager not valid at resolved address");
+        }
+    }
+
+    void HandleObjectEvent(const char* eventName,
+                           const SDK::Events::ObjectEventArgs& args,
+                           volatile long long& receivedCounter,
+                           volatile long long& localCounter) {
+        const long long received = InterlockedIncrement64(&receivedCounter);
+        if (!Enabled()) {
+            return;
+        }
+
+        const bool local = SDK::Events::IsLocalPlayer(args.Sender);
+        if (local) {
+            InterlockedIncrement64(&localCounter);
+        }
+        if (!WriteLog()) {
+            return;
+        }
+
+        const long long logged = local ? ReadCounter(localCounter) : received;
+        if (logged > kRawLogCapPerHook) {
+            return;
+        }
+
+        Appendf(
+            "[PlayerEventFilter] %s received=%lld playerHit=%d object=0x%llX net=%u index=%u type=%d name='%s' char='%s' rawRcx=0x%llX rawRdx=0x%llX rawR8=0x%llX rawR9=0x%llX hookHit=%lld\r\n",
+            eventName ? eventName : "?",
+            received,
+            local ? 1 : 0,
+            static_cast<unsigned long long>(args.Sender.Ptr),
+            args.Sender.NetworkId,
+            args.Sender.Index,
+            static_cast<int>(args.Sender.Type),
+            args.Sender.Name,
+            args.Sender.CharacterName,
+            static_cast<unsigned long long>(args.Raw.Rcx),
+            static_cast<unsigned long long>(args.Raw.Rdx),
+            static_cast<unsigned long long>(args.Raw.R8),
+            static_cast<unsigned long long>(args.Raw.R9),
+            args.Raw.HitCount);
+    }
+
     void HandleMissileEvent(const char* eventName,
                             const SDK::Events::ObjectEventArgs& args,
                             volatile long long& receivedCounter,
@@ -650,6 +762,14 @@ private:
     static void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
         if (s_instance) s_instance->HandleBuffEvent(
             "OnBuffUpdate", args, s_instance->m_buffUpdateReceived, s_instance->m_buffUpdateLocal);
+    }
+    static void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
+        if (s_instance) s_instance->HandleObjectEvent(
+            "OnCreateObject", args, s_instance->m_objectNewReceived, s_instance->m_objectNewLocal);
+    }
+    static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        if (s_instance) s_instance->HandleObjectEvent(
+            "OnDeleteObject", args, s_instance->m_objectDelReceived, s_instance->m_objectDelLocal);
     }
     static void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
         if (s_instance) s_instance->HandleMissileEvent(

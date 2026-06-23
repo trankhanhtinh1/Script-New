@@ -43,6 +43,8 @@ namespace Hooks {
     inline constexpr HookId ProcessCastSpell = ::CoreHookTest::ProcessCastSpell;
     inline constexpr HookId OnUpdateChargeableSpell = ::CoreHookTest::OnUpdateChargeableSpell;
     inline constexpr HookId OnBuffGain = ::CoreHookTest::OnBuffGain;
+    inline constexpr HookId OnCreate = ::CoreHookTest::OnCreate;
+    inline constexpr HookId OnDelete = ::CoreHookTest::OnDelete;
     inline constexpr HookId OnMissileCreate = ::CoreHookTest::OnMissileCreate;
     inline constexpr HookId OnMissileDelete = ::CoreHookTest::OnMissileDelete;
     inline constexpr HookId OnNewPath = ::CoreHookTest::OnNewPath;
@@ -990,6 +992,44 @@ inline BuffEventArgs DecodeBuffEvent(const RawEventArgs& raw) {
     return args;
 }
 
+inline ObjectEventArgs DecodeObjectLifecycleEvent(const RawEventArgs& raw) {
+    ObjectEventArgs args{};
+    args.Raw = raw;
+
+    uintptr_t object = 0;
+
+    if (raw.Id == Hooks::OnCreate) {
+        // AssignNetworkId (0x562610): RCX = GameObject*, RDX = networkId
+        object = raw.Rcx;
+        if (detail::IsValidAddress(object)) {
+            args.Sender = detail::ReadObject(object);
+            const auto networkId = static_cast<uint32_t>(raw.Rdx & 0xFFFFFFFF);
+            if ((args.Sender.NetworkId == 0 || args.Sender.NetworkId == 0xFFFFFFFFu) &&
+                networkId != 0 && networkId != 0xFFFFFFFFu) {
+                args.Sender.NetworkId = networkId;
+            }
+        }
+    } else if (raw.Id == Hooks::OnDelete) {
+        // DestroyObject (0x54CC30): RCX = ObjectManager*, RDX = GameObject*
+        (void)CoreRuntime::RefreshReadState();
+        if (raw.Rcx != CoreRuntime::GetContext().objectManager) {
+            return args;
+        }
+        object = static_cast<uintptr_t>(raw.Rdx);
+        if (detail::IsValidAddress(object)) {
+            args.Sender = detail::ReadObject(object);
+        }
+    } else {
+        return args;
+    }
+
+    if (args.Sender.NetworkId == 0 || args.Sender.NetworkId == 0xFFFFFFFFu) {
+        return ObjectEventArgs{};
+    }
+
+    return args;
+}
+
 inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     // OnMissileCreate hooks the init routine before the packet has been
     // copied into MissileClient+0x2C0, so resolve the caster from RDX+0xA0.
@@ -1595,6 +1635,10 @@ NS_CORE_EVENT_FORWARD(OnProcessWorldEvent, ProcessWorldEvent)
 NS_CORE_EVENT_FORWARD(OnProcessCastSpell, ProcessCastSpell)
 NS_CORE_EVENT_FORWARD(OnUpdateChargeableSpell, OnUpdateChargeableSpell)
 NS_CORE_EVENT_FORWARD(OnBuffGain, OnBuffGain)
+NS_CORE_EVENT_FORWARD(OnCreateObject, OnCreate)
+NS_CORE_EVENT_FORWARD(OnDeleteObject, OnDelete)
+NS_CORE_EVENT_FORWARD(OnCreate, OnCreate)
+NS_CORE_EVENT_FORWARD(OnDelete, OnDelete)
 NS_CORE_EVENT_FORWARD(OnMissileCreate, OnMissileCreate)
 NS_CORE_EVENT_FORWARD(OnMissileDelete, OnMissileDelete)
 NS_CORE_EVENT_FORWARD(OnNewPath, OnNewPath)
