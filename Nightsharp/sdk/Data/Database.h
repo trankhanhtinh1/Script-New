@@ -3843,7 +3843,8 @@ inline std::vector<SpellData> &GetSpellDatabase() {
     d.range = 1150;
     d.spellDelay = 250.0f;
     d.spellKey = SpellSlot::Q;
-    d.spellName = "EzrealMysticShot";
+    d.spellName = "EzrealQ";
+    d.extraSpellNames = {"EzrealQ", "ezrealq"};
     d.spellType = SpellType::Line;
     d.collisionObjects = {CollisionObjectType::EnemyChampions,
                           CollisionObjectType::EnemyMinions};

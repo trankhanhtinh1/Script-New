@@ -1,11 +1,14 @@
 #pragma once
 
+#include "CoreAiManager.h"
 #include "CoreObjectManager.h"
 #include "CoreRuntime.h"
+#include "CoreSpellDataInst.h"
 #include "Corehook.h"
 #include "Vector.h"
 #include "offset.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -144,6 +147,7 @@ struct ProcessSpellEventArgs {
     ObjectInfo Target = {};
     uintptr_t Spellbook = 0;
     uintptr_t CastInfo = 0;
+    uintptr_t SpellInput = 0;
     uintptr_t SpellData = 0;
     uintptr_t SpellDataResource = 0;
     int Slot = -1;
@@ -162,6 +166,9 @@ struct ProcessSpellEventArgs {
     char SpellName[96] = {};
     char MissileName[96] = {};
     char ScriptName[96] = {};
+    char SpellSlotName[96] = {};
+    char PayloadSpellName[96] = {};
+    char PayloadMissileName[96] = {};
 };
 
 struct CastSpellEventArgs {
@@ -342,6 +349,48 @@ namespace detail {
             }
         }
         return length >= 2 && length < 95;
+    }
+
+    inline bool EqualsInsensitive(const char* left, const char* right) {
+        if (!left || !right) {
+            return false;
+        }
+
+        while (*left && *right) {
+            char a = *left++;
+            char b = *right++;
+            if (a >= 'A' && a <= 'Z') {
+                a = static_cast<char>(a + ('a' - 'A'));
+            }
+            if (b >= 'A' && b <= 'Z') {
+                b = static_cast<char>(b + ('a' - 'A'));
+            }
+            if (a != b) {
+                return false;
+            }
+        }
+        return *left == 0 && *right == 0;
+    }
+
+    inline void CopyText(char* out, int outCount, const char* value) {
+        if (!out || outCount <= 0) {
+            return;
+        }
+
+        out[0] = 0;
+        if (!value) {
+            return;
+        }
+
+        int i = 0;
+        for (; i + 1 < outCount && value[i]; ++i) {
+            out[i] = value[i];
+        }
+        out[i] = 0;
+    }
+
+    inline bool IsValidAddress(uintptr_t address) {
+        return address > 0x10000 && address < 0x7FFFFFFFFFFF;
     }
 
     inline bool CopyStringView(uintptr_t address, char* out, int outCount) {
@@ -551,6 +600,90 @@ namespace detail {
         return out.IsValid();
     }
 
+    inline bool IsPlausibleWorldPosition(const Vec3& value) {
+        return value.IsValid() &&
+               std::fabs(value.x) <= 30000.0f &&
+               std::fabs(value.y) <= 5000.0f &&
+               std::fabs(value.z) <= 30000.0f &&
+               (std::fabs(value.x) > 1.0f || std::fabs(value.z) > 1.0f);
+    }
+
+    inline bool IsValidCastLine(const Vec3& start, const Vec3& end) {
+        return IsPlausibleWorldPosition(start) &&
+               IsPlausibleWorldPosition(end) &&
+               start.Distance2D(end) >= 5.0f;
+    }
+
+    inline bool ReadActiveCastLine(uintptr_t cast, int expectedSlot,
+                                   Vec3& start, Vec3& end) {
+        start = {};
+        end = {};
+        if (!IsValidAddress(cast) || !IsSlotValid(expectedSlot)) {
+            return false;
+        }
+
+        int slot = -1;
+        Read(cast + Offset::SpellCastInfoLayout::SpellSlot, slot);
+        if (slot != expectedSlot) {
+            uint8_t slotByte = 0xFF;
+            Read(cast + Offset::SpellCastInfoLayout::SpellSlot, slotByte);
+            if (static_cast<int>(slotByte) != expectedSlot) {
+                return false;
+            }
+        }
+
+        ReadVector3(cast + Offset::SpellCastInfoLayout::StartPosition, start);
+        ReadVector3(cast + Offset::SpellCastInfoLayout::EndPosition, end);
+        return IsValidCastLine(start, end);
+    }
+
+    inline void ResolveActiveCastPositions(ProcessSpellEventArgs& args) {
+        if (!IsSlotValid(args.Slot) || args.Slot == 64) {
+            return;
+        }
+
+        Vec3 start = {};
+        Vec3 end = {};
+        uintptr_t activeCast = 0;
+        if (args.Spellbook) {
+            Read(args.Spellbook + Offset::SpellRuntime::ActiveSpellCast, activeCast);
+            if (ReadActiveCastLine(activeCast, args.Slot, start, end)) {
+                args.StartPosition = start;
+                args.EndPosition = end;
+                args.CastPosition = end;
+                return;
+            }
+        }
+
+        if (!args.Sender.IsValid()) {
+            return;
+        }
+
+        Read(
+            args.Sender.Ptr +
+                Offset::SpellRuntime::SpellBookOffset +
+                Offset::SpellRuntime::ActiveSpellCast,
+            activeCast);
+        if (ReadActiveCastLine(activeCast, args.Slot, start, end)) {
+            args.StartPosition = start;
+            args.EndPosition = end;
+            args.CastPosition = end;
+            return;
+        }
+
+        const auto ref = ::CoreSpellDataInst::Resolve(args.Sender.Ptr, args.Slot);
+        if (!ref.IsValid()) {
+            return;
+        }
+
+        Read(ref.slot + Offset::SpellSlotLayout::SlotActiveSpellCast, activeCast);
+        if (ReadActiveCastLine(activeCast, args.Slot, start, end)) {
+            args.StartPosition = start;
+            args.EndPosition = end;
+            args.CastPosition = end;
+        }
+    }
+
     inline int ReadPath(uintptr_t pathArray, Vec3* out, int maxCount) {
         if (!pathArray || !out || maxCount <= 0) {
             return 0;
@@ -655,7 +788,8 @@ namespace detail {
         }
         args.CastInfo = castInfo;
         args.Slot = ReadEventSlot(castInfo);
-        Read(castInfo + Offset::SpellCastInfoEventLayout::SpellData, args.SpellData);
+        Read(castInfo + Offset::SpellCastInfoEventLayout::SpellData, args.SpellInput);
+        args.SpellData = args.SpellInput;
         Read(castInfo + Offset::SpellCastInfoEventLayout::SrcIndex, args.SourceIndex);
         Read(castInfo + Offset::SpellCastInfoEventLayout::TargetIndex, args.TargetIndex);
         ReadVector3(
@@ -677,12 +811,26 @@ namespace detail {
             ReadBoolByte(castInfo + Offset::SpellCastInfoEventLayout::IsAuto) ||
             ReadBoolByte(castInfo + Offset::SpellCastInfoEventLayout::IsAutoAlt);
 
-        if (args.SpellData) {
-            Read(args.SpellData + Offset::SpellDataLayout::DataResource, args.SpellDataResource);
-            CopyRuntimeStringField(
-                args.SpellData + Offset::SpellDataLayout::DataSpellName,
-                args.SpellName,
-                static_cast<int>(sizeof(args.SpellName)));
+        if (args.SpellInput) {
+            uintptr_t innerData = 0;
+            Read(args.SpellInput + Offset::SpellInfoLayout::InfoSpellData, innerData);
+            if (IsValidAddress(innerData)) {
+                args.SpellData = innerData;
+            }
+            Read(
+                args.SpellInput + Offset::SpellDataLayout::DataResource,
+                args.SpellDataResource);
+            char inputSpellName[sizeof(args.SpellName)] = {};
+            if (CopyRuntimeStringField(
+                    args.SpellInput + Offset::SpellInputLayout::SpellNameKey,
+                    inputSpellName,
+                    static_cast<int>(sizeof(inputSpellName))) &&
+                IsPlausibleIdentifier(inputSpellName)) {
+                CopyText(
+                    args.SpellName,
+                    static_cast<int>(sizeof(args.SpellName)),
+                    inputSpellName);
+            }
 
             if (args.SpellDataResource) {
                 Read(
@@ -695,33 +843,18 @@ namespace detail {
             }
         }
 
-        // The cast payload copied into MissileClient+0x2C0 owns two runtime
-        // strings directly. They remain reliable when SpellData resource
-        // offsets drift (the June/2026 build produced non-ASCII names through
-        // the old pointer chain).
-        char payloadSpellName[sizeof(args.SpellName)] = {};
-        char payloadMissileName[sizeof(args.MissileName)] = {};
+        // The missile/cast payload copied into MissileClient+0x2C0 still keeps
+        // two legacy runtime strings. On 26.6 these are not canonical names
+        // (`+0x20` resolves to "Ezreal" for Ezreal Q), so expose them for debug
+        // but do not let them overwrite the SpellBook-derived name.
         CopyRuntimeStringField(
             castInfo + Offset::MissileEventLayout::SpellName,
-            payloadSpellName,
-            static_cast<int>(sizeof(payloadSpellName)));
+            args.PayloadSpellName,
+            static_cast<int>(sizeof(args.PayloadSpellName)));
         CopyRuntimeStringField(
             castInfo + Offset::MissileEventLayout::MissileName,
-            payloadMissileName,
-            static_cast<int>(sizeof(payloadMissileName)));
-
-        if (IsPlausibleIdentifier(payloadSpellName)) {
-            CopyAnsi(
-                reinterpret_cast<uintptr_t>(payloadSpellName),
-                args.SpellName,
-                static_cast<int>(sizeof(args.SpellName)));
-        }
-        if (IsPlausibleIdentifier(payloadMissileName)) {
-            CopyAnsi(
-                reinterpret_cast<uintptr_t>(payloadMissileName),
-                args.MissileName,
-                static_cast<int>(sizeof(args.MissileName)));
-        }
+            args.PayloadMissileName,
+            static_cast<int>(sizeof(args.PayloadMissileName)));
 
         if (args.TargetIndex > 0) {
             args.Target = ResolveObjectByIndex(args.TargetIndex);
@@ -733,6 +866,68 @@ namespace detail {
             args.TargetNetworkId = static_cast<uint32_t>(args.TargetIndex);
         }
     }
+
+    inline void ResolveSpellBookFields(ProcessSpellEventArgs& args) {
+        if (!args.Sender.IsValid() || !IsSlotValid(args.Slot) || args.Slot == 64) {
+            return;
+        }
+
+        const auto ref = ::CoreSpellDataInst::Resolve(args.Sender.Ptr, args.Slot);
+        if (!ref.IsValid()) {
+            return;
+        }
+
+        const uintptr_t slotInput = ::CoreSpellDataInst::SpellInput(ref);
+        char slotName[sizeof(args.SpellSlotName)] = {};
+        if (IsValidAddress(slotInput) &&
+            CopyRuntimeStringField(
+                slotInput + Offset::SpellInputLayout::SpellNameKey,
+                slotName,
+                static_cast<int>(sizeof(slotName))) &&
+            IsPlausibleIdentifier(slotName)) {
+            CopyText(
+                args.SpellSlotName,
+                static_cast<int>(sizeof(args.SpellSlotName)),
+                slotName);
+        } else if (::CoreSpellDataInst::ReadName(
+                       ref,
+                       slotName,
+                       static_cast<int>(sizeof(slotName))) &&
+                   IsPlausibleIdentifier(slotName)) {
+            CopyText(
+                args.SpellSlotName,
+                static_cast<int>(sizeof(args.SpellSlotName)),
+                slotName);
+        }
+
+        if (IsPlausibleIdentifier(args.SpellSlotName)) {
+            const bool missingName = !args.SpellName[0];
+            const bool invalidName = !IsPlausibleIdentifier(args.SpellName);
+            const bool championName =
+                EqualsInsensitive(args.SpellName, args.Sender.CharacterName) ||
+                EqualsInsensitive(args.SpellName, args.Sender.Name);
+            if (missingName || invalidName || championName) {
+                CopyText(
+                    args.SpellName,
+                    static_cast<int>(sizeof(args.SpellName)),
+                    args.SpellSlotName);
+            }
+        }
+
+        if (IsValidAddress(slotInput)) {
+            args.SpellInput = slotInput;
+            uintptr_t innerData = 0;
+            Read(slotInput + Offset::SpellInfoLayout::InfoSpellData, innerData);
+            if (IsValidAddress(innerData)) {
+                args.SpellData = innerData;
+            }
+            uintptr_t resource = 0;
+            Read(slotInput + Offset::SpellDataLayout::DataResource, resource);
+            if (IsValidAddress(resource)) {
+                args.SpellDataResource = resource;
+            }
+        }
+    }
 } // namespace detail
 
 
@@ -741,13 +936,20 @@ inline NewPathEventArgs DecodeNewPath(const RawEventArgs& raw) {
     args.Raw = raw;
     args.Sender = raw.Object;
     args.PathArray = static_cast<uintptr_t>(raw.Rdx);
-    // sub_562E60(AIBaseClient*, StlArray<Vector3f>*, count, pathState,
-    //            isDash, ...)
-    // The normal path packet handler passes stack0=0; the dash variant
-    // passes stack0=1. Its lower path-apply call receives speed=0.0f.
+    // IDA 13337: sub_562E60(AIBaseClient*, pathArray, count, payload,
+    //                      isDash, flags, ...)
+    // RDX is the native path-array wrapper, R8D is the path count, R9 is the
+    // path-state payload, and stack0 is the dash flag. The hook fires before
+    // the native apply call, so dash speed is decoded from payload+0x2C.
     args.IsDash = (raw.Stack0 & 0xFF) != 0;
-    args.Speed = 0.0f;
-    args.PathCount = detail::ReadPath(args.PathArray, args.Path, 32);
+    const int explicitCount =
+        raw.R8 > 0 && raw.R8 <= ::CoreAiManager::kMaxEventWaypoints
+            ? static_cast<int>(raw.R8)
+            : 0;
+    args.Speed = ::CoreAiManager::DecodeNewPathSpeed(
+        raw.Rcx, static_cast<uintptr_t>(raw.R9), args.IsDash);
+    args.PathCount = ::CoreAiManager::CopyNativePathArray(
+        args.PathArray, explicitCount, args.Path, 32);
     return args;
 }
 
@@ -857,6 +1059,29 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     if (args.Source.IsValid()) {
         args.SourceNetworkId = args.Source.NetworkId;
     }
+
+    if (!args.MissileName[0]) {
+        if (detail::IsPlausibleIdentifier(args.Sender.Name)) {
+            detail::CopyText(
+                args.MissileName,
+                static_cast<int>(sizeof(args.MissileName)),
+                args.Sender.Name);
+        } else if (detail::IsPlausibleIdentifier(args.Sender.CharacterName)) {
+            detail::CopyText(
+                args.MissileName,
+                static_cast<int>(sizeof(args.MissileName)),
+                args.Sender.CharacterName);
+        }
+    }
+    if ((!args.SpellName[0] ||
+         (args.Source.IsValid() &&
+          detail::EqualsInsensitive(args.SpellName, args.Source.CharacterName))) &&
+        detail::IsPlausibleIdentifier(args.MissileName)) {
+        detail::CopyText(
+            args.SpellName,
+            static_cast<int>(sizeof(args.SpellName)),
+            args.MissileName);
+    }
     return args;
 }
 
@@ -957,6 +1182,9 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
         detail::Read(args.Spellbook + Offset::SpellBookLayout::CasterNetId, args.CasterNetworkId);
     }
 
+    detail::ResolveActiveCastPositions(args);
+    detail::ResolveSpellBookFields(args);
+
     return args;
 }
 
@@ -993,6 +1221,7 @@ inline ProcessSpellEventArgs DecodeDoCast(const RawEventArgs& raw) {
     if (args.Sender.IsValid()) {
         args.CasterNetworkId = args.Sender.NetworkId;
     }
+    detail::ResolveSpellBookFields(args);
     return args;
 }
 

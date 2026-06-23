@@ -5,6 +5,7 @@
 #include "../../Core/Globals.h"
 #include "../../Core/offset.h"
 #include "../../DebugLog.h"
+#include "../../SDK/Data/Database.h"
 #include "../../SDK/SDK.h"
 #include "../../imgui/imgui.h"
 
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace Plugins {
 
@@ -36,10 +38,12 @@ public:
         ResetCache();
         SDK::Events::hook.OnProcessSpell += &SpellTrackingDebugPlugin::OnProcessSpell;
         SDK::Events::hook.OnDoCast += &SpellTrackingDebugPlugin::OnDoCast;
+        SDK::Events::hook.OnMissileCreate += &SpellTrackingDebugPlugin::OnMissileCreate;
         NightSharpDebug::Logf("[SpellTrackingDebug] loaded");
     }
 
     void OnUnload() override {
+        SDK::Events::hook.OnMissileCreate -= &SpellTrackingDebugPlugin::OnMissileCreate;
         SDK::Events::hook.OnDoCast -= &SpellTrackingDebugPlugin::OnDoCast;
         SDK::Events::hook.OnProcessSpell -= &SpellTrackingDebugPlugin::OnProcessSpell;
         ResetRecords();
@@ -114,7 +118,18 @@ private:
         float castTime = 0.0f;
         float cooldown = 0.0f;
         float expireTime = 0.0f;
+        uintptr_t castInfo = 0;
+        uintptr_t spellInput = 0;
+        uintptr_t spellData = 0;
+        uintptr_t spellDataResource = 0;
         char source[12] = {};
+        char unitName[32] = {};
+        char runtimeSpellName[64] = {};
+        char slotSpellName[64] = {};
+        char payloadSpellName[64] = {};
+        char payloadMissileName[64] = {};
+        char canonicalSpellName[64] = {};
+        char missileName[64] = {};
     };
 
     struct SpellSnapshot {
@@ -170,6 +185,108 @@ private:
 
     static bool IsSaneCooldown(float value) {
         return std::isfinite(value) && value >= 0.0f && value < 1000.0f;
+    }
+
+    static void CopyText(char* out, int outCount, const char* value) {
+        if (!out || outCount <= 0) {
+            return;
+        }
+
+        out[0] = 0;
+        if (value) {
+            strncpy_s(out, static_cast<std::size_t>(outCount), value, _TRUNCATE);
+        }
+    }
+
+    static bool SameText(const char* left, const char* right) {
+        return left && right && left[0] && right[0] && _stricmp(left, right) == 0;
+    }
+
+    static const SDK::Data::SpellData* FindChampionSlotData(
+        const char* champion,
+        int slot) {
+        if (!champion || !champion[0] || slot < 0) {
+            return nullptr;
+        }
+
+        for (const auto* spell : SDK::Data::GetSpellsForChampion(champion)) {
+            if (spell && static_cast<int>(spell->spellKey) == slot) {
+                return spell;
+            }
+        }
+        return nullptr;
+    }
+
+    static const SDK::Data::SpellData* ResolveSpellData(
+        const SDK::Events::ProcessSpellEventArgs& args) {
+        const char* names[] = {
+            args.SpellName,
+            args.SpellSlotName,
+            args.ScriptName,
+            args.PayloadSpellName,
+            args.MissileName,
+            args.PayloadMissileName,
+        };
+
+        for (const char* name : names) {
+            if (!name || !name[0]) {
+                continue;
+            }
+
+            if (const auto* spell = SDK::Data::GetSpellByName(name)) {
+                return spell;
+            }
+            if (const auto* spell = SDK::Data::GetSpellByMissile(name)) {
+                return spell;
+            }
+        }
+
+        return FindChampionSlotData(args.Sender.CharacterName, args.Slot);
+    }
+
+    static const SDK::Data::SpellData* ResolveMissileData(
+        const SDK::Events::ObjectEventArgs& args) {
+        const char* names[] = {
+            args.MissileName,
+            args.SpellName,
+            args.Sender.Name,
+            args.Sender.CharacterName,
+        };
+
+        for (const char* name : names) {
+            if (!name || !name[0]) {
+                continue;
+            }
+
+            if (const auto* spell = SDK::Data::GetSpellByMissile(name)) {
+                return spell;
+            }
+            if (const auto* spell = SDK::Data::GetSpellByName(name)) {
+                return spell;
+            }
+        }
+        return nullptr;
+    }
+
+    static void FillDatabaseNames(const SDK::Data::SpellData* data,
+                                  CastRecord& record) {
+        if (!data) {
+            return;
+        }
+
+        CopyText(
+            record.canonicalSpellName,
+            static_cast<int>(sizeof(record.canonicalSpellName)),
+            data->spellName.c_str());
+
+        const std::string& missile =
+            !data->missileName.empty()
+                ? data->missileName
+                : data->missileSpellName;
+        CopyText(
+            record.missileName,
+            static_cast<int>(sizeof(record.missileName)),
+            missile.c_str());
     }
 
     static float ReadAbilityHaste(uintptr_t hero) {
@@ -481,7 +598,44 @@ private:
         record.expireTime = record.cooldown > 0.0f
             ? record.castTime + record.cooldown
             : 0.0f;
+        record.castInfo = args.CastInfo;
+        record.spellInput = args.SpellInput;
+        record.spellData = args.SpellData;
+        record.spellDataResource = args.SpellDataResource;
         strncpy_s(record.source, source ? source : "", _TRUNCATE);
+        CopyText(
+            record.unitName,
+            static_cast<int>(sizeof(record.unitName)),
+            args.Sender.CharacterName[0] ? args.Sender.CharacterName : args.Sender.Name);
+        CopyText(
+            record.runtimeSpellName,
+            static_cast<int>(sizeof(record.runtimeSpellName)),
+            args.SpellName[0] ? args.SpellName : args.ScriptName);
+        CopyText(
+            record.slotSpellName,
+            static_cast<int>(sizeof(record.slotSpellName)),
+            args.SpellSlotName);
+        CopyText(
+            record.payloadSpellName,
+            static_cast<int>(sizeof(record.payloadSpellName)),
+            args.PayloadSpellName);
+        CopyText(
+            record.payloadMissileName,
+            static_cast<int>(sizeof(record.payloadMissileName)),
+            args.PayloadMissileName);
+        CopyText(
+            record.missileName,
+            static_cast<int>(sizeof(record.missileName)),
+            args.MissileName);
+
+        const auto* data = ResolveSpellData(args);
+        FillDatabaseNames(data, record);
+        if (!record.canonicalSpellName[0]) {
+            CopyText(
+                record.canonicalSpellName,
+                static_cast<int>(sizeof(record.canonicalSpellName)),
+                record.runtimeSpellName);
+        }
 
         AcquireSRWLockExclusive(&m_recordLock);
         int index = -1;
@@ -500,6 +654,45 @@ private:
         ReleaseSRWLockExclusive(&m_recordLock);
     }
 
+    void RecordMissile(const SDK::Events::ObjectEventArgs& args) {
+        if (!args.Source.IsValid()) {
+            return;
+        }
+
+        const auto* data = ResolveMissileData(args);
+        if (!data && !args.MissileName[0] && !args.SpellName[0]) {
+            return;
+        }
+
+        CastRecord record{};
+        record.active = true;
+        record.networkId = args.Source.NetworkId;
+        record.slot = -1;
+        record.tick = SDK::Game::TickCount();
+        record.castTime = SDK::Game::Time();
+        record.level = 0;
+        record.castInfo = args.Raw.Rdx ? static_cast<uintptr_t>(args.Raw.Rdx) : args.Raw.Rcx;
+        strncpy_s(record.source, "M", _TRUNCATE);
+        CopyText(
+            record.unitName,
+            static_cast<int>(sizeof(record.unitName)),
+            args.Source.CharacterName[0] ? args.Source.CharacterName : args.Source.Name);
+        CopyText(
+            record.runtimeSpellName,
+            static_cast<int>(sizeof(record.runtimeSpellName)),
+            args.SpellName);
+        CopyText(
+            record.missileName,
+            static_cast<int>(sizeof(record.missileName)),
+            args.MissileName);
+        FillDatabaseNames(data, record);
+
+        AcquireSRWLockExclusive(&m_recordLock);
+        const int index = m_recordCursor++ % kMaxRecords;
+        m_records[index] = record;
+        ReleaseSRWLockExclusive(&m_recordLock);
+    }
+
     static void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         if (s_instance) {
             s_instance->RecordCast(args, "P");
@@ -509,6 +702,12 @@ private:
     static void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
         if (s_instance) {
             s_instance->RecordCast(args, "D");
+        }
+    }
+
+    static void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
+        if (s_instance) {
+            s_instance->RecordMissile(args);
         }
     }
 
@@ -756,6 +955,90 @@ private:
         }
     }
 
+    void DrawRecentNameSources(float gameTime, int now) const {
+        CastRecord records[kMaxRecords] = {};
+        AcquireSRWLockShared(&m_recordLock);
+        for (int i = 0; i < kMaxRecords; ++i) {
+            records[i] = m_records[i];
+        }
+        ReleaseSRWLockShared(&m_recordLock);
+
+        ImGui::Separator();
+        ImGui::Text("Recent name sources");
+        if (!ImGui::BeginTable(
+                "SpellTrackingNameSourceTable",
+                9,
+                ImGuiTableFlags_Borders |
+                    ImGuiTableFlags_RowBg |
+                    ImGuiTableFlags_SizingFixedFit)) {
+            return;
+        }
+
+        ImGui::TableSetupColumn("Src");
+        ImGui::TableSetupColumn("Age");
+        ImGui::TableSetupColumn("Unit");
+        ImGui::TableSetupColumn("Slot");
+        ImGui::TableSetupColumn("Runtime");
+        ImGui::TableSetupColumn("Canonical");
+        ImGui::TableSetupColumn("Missile");
+        ImGui::TableSetupColumn("Payload");
+        ImGui::TableSetupColumn("Ptrs");
+        ImGui::TableHeadersRow();
+
+        for (const auto& record : records) {
+            if (!record.active || record.tick <= 0) {
+                continue;
+            }
+            const int age = now >= record.tick ? now - record.tick : 0;
+            if (age > 12000) {
+                continue;
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(record.source[0] ? record.source : "?");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%dms", age);
+            ImGui::TableSetColumnIndex(2);
+            ImGui::TextUnformatted(record.unitName[0] ? record.unitName : "--");
+            ImGui::TableSetColumnIndex(3);
+            ImGui::TextUnformatted(record.slot >= 0 ? SlotLabel(record.slot) : "?");
+            ImGui::TableSetColumnIndex(4);
+            if (record.slotSpellName[0] &&
+                !SameText(record.runtimeSpellName, record.slotSpellName)) {
+                ImGui::Text("%s / %s",
+                            record.runtimeSpellName[0] ? record.runtimeSpellName : "--",
+                            record.slotSpellName);
+            } else {
+                ImGui::TextUnformatted(
+                    record.runtimeSpellName[0] ? record.runtimeSpellName : "--");
+            }
+            ImGui::TableSetColumnIndex(5);
+            ImGui::TextUnformatted(
+                record.canonicalSpellName[0] ? record.canonicalSpellName : "--");
+            ImGui::TableSetColumnIndex(6);
+            ImGui::TextUnformatted(record.missileName[0] ? record.missileName : "--");
+            ImGui::TableSetColumnIndex(7);
+            if (record.payloadSpellName[0] || record.payloadMissileName[0]) {
+                ImGui::Text("%s / %s",
+                            record.payloadSpellName[0] ? record.payloadSpellName : "--",
+                            record.payloadMissileName[0] ? record.payloadMissileName : "--");
+            } else {
+                ImGui::TextUnformatted("--");
+            }
+            ImGui::TableSetColumnIndex(8);
+            ImGui::Text(
+                "ci=%llX in=%llX sd=%llX res=%llX",
+                static_cast<unsigned long long>(record.castInfo),
+                static_cast<unsigned long long>(record.spellInput),
+                static_cast<unsigned long long>(record.spellData),
+                static_cast<unsigned long long>(record.spellDataResource));
+        }
+
+        ImGui::EndTable();
+        (void)gameTime;
+    }
+
     void DrawDebugWindow(const UnitSnapshot* units,
                          int count,
                          float gameTime,
@@ -819,6 +1102,7 @@ private:
             }
             ImGui::EndTable();
         }
+        DrawRecentNameSources(gameTime, now);
         ImGui::End();
     }
 };

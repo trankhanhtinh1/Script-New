@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../Core/CoreBuffs.h"
+#include "../../Core/CoreAiManager.h"
+#include "../../Core/CoreItem.h"
 #include "../../Core/CoreSpellBook.h"
 #include "../../Core/CoreSpellDataInst.h"
 #include "../../Core/CoreObjectManager.h"
@@ -26,6 +28,7 @@ using Vector3 = Vec3;
 
 class AIBaseClient;
 class GameObject;
+class InventorySlot;
 
 namespace CoreSpellBook = ::CoreSpellBook;
 
@@ -597,6 +600,112 @@ public:
     float AttackSpeedMod() const { return Snapshot().attackSpeedMod; }
     int Level() const { return Snapshot().level; }
 
+    uintptr_t AiManagerAddress() const {
+        return ::CoreAiManager::Address(Address());
+    }
+
+    ::CoreAiManager::ManagerRef GetAiManager() const {
+        return ::CoreAiManager::Get(Address());
+    }
+
+    ::CoreAiManager::Snapshot AiManagerSnapshot() const {
+        return ::CoreAiManager::ReadSnapshot(Address());
+    }
+
+    Vector3 ServerPosition() const {
+        return ::CoreAiManager::GetServerPosition(Address());
+    }
+
+    Vector3 PreviousPosition() const {
+        return ::CoreAiManager::GetPreviousPosition(Address());
+    }
+
+    Vector3 Direction() const {
+        return ::CoreAiManager::GetDirection(Address());
+    }
+
+    Vector3 Velocity() const {
+        return ::CoreAiManager::GetVelocity(Address());
+    }
+
+    Vector3 PathStart() const {
+        return ::CoreAiManager::GetPathStart(Address());
+    }
+
+    Vector3 PathEnd() const {
+        return ::CoreAiManager::GetPathEnd(Address());
+    }
+
+    Vector3 OrderPosition() const {
+        return ::CoreAiManager::GetOrderPosition(Address());
+    }
+
+    bool HasPath() const {
+        return ::CoreAiManager::HasPath(Address());
+    }
+
+    bool IsMoving() const {
+        return ::CoreAiManager::IsMoving(Address());
+    }
+
+    bool IsDashing() const {
+        return ::CoreAiManager::IsDashing(Address());
+    }
+
+    bool HasArrived() const {
+        return ::CoreAiManager::HasArrived(Address());
+    }
+
+    int CurrentPathSegment() const {
+        return ::CoreAiManager::GetCurrentSegment(Address());
+    }
+
+    int WaypointCount() const {
+        return ::CoreAiManager::GetWaypointCount(Address());
+    }
+
+    float DashSpeed() const {
+        return ::CoreAiManager::GetDashSpeed(Address());
+    }
+
+    float DashDistanceRemaining() const {
+        return ::CoreAiManager::GetDashDistRemaining(Address());
+    }
+
+    int CopyWaypoints(Vector3* out, int maxOut) const {
+        return ::CoreAiManager::CopyWaypoints(
+            Address(), reinterpret_cast<Vec3*>(out), maxOut);
+    }
+
+    std::vector<Vector3> GetWaypoints(int maxPoints = 32) const {
+        std::vector<Vector3> path;
+        if (!IsValid() || maxPoints <= 0) {
+            return path;
+        }
+
+        maxPoints = std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints);
+        Vec3 points[::CoreAiManager::kMaxWaypoints] = {};
+        const int count = ::CoreAiManager::CopyPath(
+            Address(), points, maxPoints);
+        path.reserve(static_cast<std::size_t>(std::max(0, count)));
+        for (int i = 0; i < count; ++i) {
+            path.push_back(points[i]);
+        }
+        return path;
+    }
+
+    std::vector<Vector3> GetPath(int maxPoints = 32) const {
+        return GetWaypoints(maxPoints);
+    }
+
+    std::vector<Vector3> Path() const {
+        return GetWaypoints();
+    }
+
+    int GetPathLength() const {
+        return static_cast<int>(GetWaypoints().size());
+    }
+
     bool IsMelee() const {
         return AttackRange() < 400.0f;
     }
@@ -604,6 +713,32 @@ public:
     bool HasBuff(const char* name) const {
         return CoreBuffs::HasBuff(Address(), name);
     }
+
+    bool HasItem(int id) const {
+        return ::CoreItem::HasItemId(Address(), id);
+    }
+
+    bool HasItemInSlot(int slotIndex) const {
+        return ::CoreItem::HasItem(Address(), slotIndex);
+    }
+
+    int GetItemId(int slotIndex) const {
+        return ::CoreItem::GetItemId(Address(), slotIndex);
+    }
+
+    uintptr_t GetItemInfo(int slotIndex) const {
+        return ::CoreItem::GetItemInfo(Address(), slotIndex);
+    }
+
+    int GetItemCount() const {
+        return ::CoreItem::GetItemCount(Address());
+    }
+
+    bool HasTrinket() const {
+        return ::CoreItem::HasTrinket(Address());
+    }
+
+    std::vector<InventorySlot> InventoryItems() const;
 
     bool IsRecalling() const {
         return HasBuff("recall");

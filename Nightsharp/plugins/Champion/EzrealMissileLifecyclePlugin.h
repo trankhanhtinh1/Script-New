@@ -299,6 +299,23 @@ private:
                EqualsInsensitive(value, kSpell.SpellName);
     }
 
+    static bool IsKnownQProcessName(const char* value) {
+        if (!value || !value[0]) {
+            return false;
+        }
+
+        if (EqualsInsensitive(value, "EzrealQ") ||
+            EqualsInsensitive(value, "ezrealq") ||
+            EqualsInsensitive(value, kSpell.SpellName)) {
+            return true;
+        }
+
+        const auto* data = SDK::Data::GetSpellByName(value);
+        return data &&
+               EqualsInsensitive(data->charName.c_str(), kSpell.Champion) &&
+               static_cast<int>(data->spellKey) == kSpell.Slot;
+    }
+
     static bool IsPlausibleWorld(const Vec3& value) {
         return value.IsValid() &&
                std::fabs(value.x) <= 30000.0f &&
@@ -348,10 +365,10 @@ private:
     static Vec3 ResolveEnd(
         const SDK::Events::ProcessSpellEventArgs& args,
         const Vec3& start) {
-        Vec3 candidate = args.EndPosition;
+        Vec3 candidate = args.CastPosition;
         if (!IsPlausibleWorld(candidate) ||
             candidate.Distance2D(start) < 5.0f) {
-            candidate = args.CastPosition;
+            candidate = args.EndPosition;
         }
         if (!IsPlausibleWorld(candidate) ||
             candidate.Distance2D(start) < 5.0f) {
@@ -405,18 +422,36 @@ private:
             return;
         }
 
+        if (!IsKnownQProcessName(args.SpellName) &&
+            !IsKnownQProcessName(args.SpellSlotName)) {
+            self->SetLastEvent("ProcessSpell rejected: name mismatch");
+            self->Appendf(
+                "[EzrealQMissile] PROCESS_REJECT tick=%d casterNet=%u slot=%d "
+                "spell='%s' slotSpell='%s' missile='%s' reason=name\r\n",
+                SDK::Game::TickCount(),
+                args.Sender.NetworkId,
+                args.Slot,
+                args.SpellName,
+                args.SpellSlotName,
+                args.MissileName);
+            return;
+        }
+
         const Vec3 start = ResolveStart(args);
         const Vec3 end = ResolveEnd(args, start);
         if (!IsPlausibleWorld(start) || !IsPlausibleWorld(end)) {
             self->SetLastEvent("ProcessSpell rejected: invalid geometry");
             self->Appendf(
-                "[EzrealQMissile] PROCESS_REJECT tick=%d slot=%d spell='%s' missile='%s' "
-                "start=%.1f %.1f %.1f end=%.1f %.1f %.1f\r\n",
+                "[EzrealQMissile] PROCESS_REJECT tick=%d slot=%d spell='%s' "
+                "slotSpell='%s' missile='%s' start=%.1f %.1f %.1f "
+                "cast=%.1f %.1f %.1f end=%.1f %.1f %.1f\r\n",
                 SDK::Game::TickCount(),
                 args.Slot,
                 args.SpellName,
+                args.SpellSlotName,
                 args.MissileName,
                 start.x, start.y, start.z,
+                args.CastPosition.x, args.CastPosition.y, args.CastPosition.z,
                 end.x, end.y, end.z);
             return;
         }
@@ -436,14 +471,17 @@ private:
         InterlockedIncrement64(&self->m_processCount);
         self->SetLastEvent("OnProcessSpell: Ezreal Q pending");
         self->Appendf(
-            "[EzrealQMissile] PROCESS tick=%d casterNet=%u slot=%d spell='%s' missile='%s' "
-            "start=%.1f %.1f %.1f end=%.1f %.1f %.1f\r\n",
+            "[EzrealQMissile] PROCESS tick=%d casterNet=%u slot=%d spell='%s' "
+            "slotSpell='%s' missile='%s' start=%.1f %.1f %.1f "
+            "cast=%.1f %.1f %.1f end=%.1f %.1f %.1f\r\n",
             pending.ProcessTick,
             pending.CasterNetworkId,
             args.Slot,
             args.SpellName,
+            args.SpellSlotName,
             args.MissileName,
             pending.Start.x, pending.Start.y, pending.Start.z,
+            args.CastPosition.x, args.CastPosition.y, args.CastPosition.z,
             pending.End.x, pending.End.y, pending.End.z);
     }
 

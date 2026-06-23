@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../../Core/CoreEvents.h"
+#include "../Data/Database.h"
 
 #include <cstdint>
+#include <cstring>
 
 namespace SDK::Events {
 
@@ -136,6 +138,86 @@ namespace detail {
         CoreHookHandlers.Fire(raw);
     }
 
+    inline void CopyText(char* out, int outCount, const char* value) {
+        if (!out || outCount <= 0) {
+            return;
+        }
+
+        out[0] = 0;
+        if (value) {
+            strncpy_s(out, static_cast<std::size_t>(outCount), value, _TRUNCATE);
+        }
+    }
+
+    inline bool IsPlausibleIdentifier(const char* value) {
+        if (!value || !value[0]) {
+            return false;
+        }
+
+        int length = 0;
+        for (; value[length] && length < 95; ++length) {
+            const unsigned char ch =
+                static_cast<unsigned char>(value[length]);
+            if (ch < 0x20 || ch > 0x7E) {
+                return false;
+            }
+        }
+        return length >= 2 && length < 95;
+    }
+
+    inline const SDK::Data::SpellData* ResolveMissileSpellData(
+        const ObjectEventArgs& args) {
+        const char* names[] = {
+            args.MissileName,
+            args.SpellName,
+            args.Sender.Name,
+            args.Sender.CharacterName,
+        };
+
+        for (const char* name : names) {
+            if (!name || !name[0]) {
+                continue;
+            }
+
+            if (const auto* data = SDK::Data::GetSpellByMissile(name)) {
+                return data;
+            }
+            if (const auto* data = SDK::Data::GetSpellByName(name)) {
+                return data;
+            }
+        }
+
+        return nullptr;
+    }
+
+    inline void CanonicalizeMissileNames(ObjectEventArgs& args) {
+        const auto* data = ResolveMissileSpellData(args);
+        if (!data || data->spellName.empty()) {
+            return;
+        }
+
+        // Keep runtime names intact when the client already exposed them.
+        // SpellName is the cast/slot key (EzrealQ), while MissileName is the
+        // missile runtime key (EzrealMysticShot). Database names are only a
+        // fallback for older builds or partially decoded payloads.
+        if (!IsPlausibleIdentifier(args.SpellName)) {
+            const auto& fallback =
+                !data->extraSpellNames.empty()
+                    ? data->extraSpellNames.front()
+                    : data->spellName;
+            CopyText(
+                args.SpellName,
+                static_cast<int>(sizeof(args.SpellName)),
+                fallback.c_str());
+        }
+        if (!IsPlausibleIdentifier(args.MissileName)) {
+            CopyText(
+                args.MissileName,
+                static_cast<int>(sizeof(args.MissileName)),
+                data->spellName.c_str());
+        }
+    }
+
     inline void OnRawGameUpdate(const CoreHookArgs& raw) {
         (void)CoreRuntime::RefreshReadState();
 
@@ -149,11 +231,15 @@ namespace detail {
     }
 
     inline void OnRawMissileCreate(const CoreHookArgs& raw) {
-        MissileCreateHandlers.Fire(::Core::Events::DecodeMissileEvent(raw));
+        ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
+        CanonicalizeMissileNames(args);
+        MissileCreateHandlers.Fire(args);
     }
 
     inline void OnRawMissileDelete(const CoreHookArgs& raw) {
-        MissileDeleteHandlers.Fire(::Core::Events::DecodeMissileEvent(raw));
+        ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
+        CanonicalizeMissileNames(args);
+        MissileDeleteHandlers.Fire(args);
     }
 
     inline void OnRawBuffAdd(const CoreHookArgs& raw) {

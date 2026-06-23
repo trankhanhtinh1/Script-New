@@ -33,6 +33,8 @@ enum class DamageScalingType {
     PhysicalLethality
 };
 
+#ifndef NIGHTSHARP_SDK_DAMAGE_STAGE_DEFINED
+#define NIGHTSHARP_SDK_DAMAGE_STAGE_DEFINED
 enum class DamageStage {
     Default,
     WayBack,
@@ -53,6 +55,7 @@ enum class DamageStage {
     EmpoweredDamagePerHalfSecond,
     EmpoweredDamagePerQuarterSecond
 };
+#endif
 
 class DamageLibrary {
 public:

@@ -212,11 +212,11 @@ EnsoulSharp:
 - `AIBaseClient.GetPath(...)`
 - `AIBaseClient.OnNewPath`
 
-NightSharp files to write:
-- New: `NightSharp/Core/CoreAiManager.h`
-- Update: `NightSharp/Core/CoreEvents.h`
-- Update: `NightSharp/SDK/GameObjects/GameObjects.h`
-- New SDK facade if desired: `NightSharp/SDK/GameObjects/AiManager.h`
+NightSharp files/status:
+- Implemented: `NightSharp/Core/CoreAiManager.h`
+- Updated: `NightSharp/Core/CoreEvents.h`
+- Updated: `NightSharp/SDK/Core/Objects.h` (`AIBaseClient` movement facade)
+- No public `NightSharp/SDK/GameObjects/AiManager.h` facade added; EnsoulSharp exposes movement through `AIBaseClient`, not a public `AiManager` type.
 
 Offsets used:
 - `Offset::AiManager::AiManager`
@@ -230,14 +230,26 @@ Offsets used:
 - `Offset::AiManager::SegmentsCount`
 - `Offset::AiManager::ServerPos`
 - `Offset::AiManager::StartPath`
+- `Offset::AiManager::TargetPos`
 - `Offset::AiManager::TargetPosition`
 - `Offset::AiManager::Velocity`
 - `Offset::NavGridRuntime::GetAiManager`
 - `Offset::Hooks::OnNewPath`
 
 Current status:
-- `OnNewPath` event exists.
-- Full AiManager reader is missing.
+- `CoreAiManager` resolves the inner manager through `Offset::NavGridRuntime::GetAiManager`, reads server/order/path positions, move vector, velocity, path segment/count state, dash state/speed, and copies remaining waypoints.
+- `SDK::AIBaseClient` now exposes `ServerPosition`, `PreviousPosition`, `Direction`, `Velocity`, `PathStart`, `PathEnd`, `OrderPosition`, `HasPath`, `IsMoving`, `IsDashing`, `HasArrived`, `GetWaypoints`, `GetPath`, `Path`, and path/dash helper accessors.
+- `OnNewPath` decode now uses native `R8D` as path-count fallback and decodes dash speed from the path-state payload instead of returning `0.0f`.
+- Implemented visual debug plugin: `NightSharp/Plugins/Utility/MovementStateDrawPlugin.h`. It draws the player's current movement path, waypoint rings, server-position rings, velocity/direction arrow, and a compact `IsMoving` / `IsDashing` AiManager HUD panel.
+
+IDA 13337 verification used for this implementation:
+- `Offset::NavGridRuntime::GetAiManager = 0x285900`: `sub_285900(AIBaseClient*)` decodes `object + 0x4230` and returns `*(decodedWrapper + 0x10)`, the inner AiManager pointer used by the offsets above.
+- `Offset::Hooks::OnNewPath = 0x562E60`: entry ABI is `RCX = AIBaseClient*`, `RDX = path-array wrapper`, `R8D = waypoint count`, `R9 = path-state payload`, `stack0 = isDash`.
+- `sub_300890` lower path apply receives speed as `0.0f`; for dash events it writes `payload + 0x2C` into `AiManager + 0x360` (`DashSpeed`). `CoreEvents::DecodeNewPath` therefore decodes dash speed directly from `R9 + 0x2C`.
+
+Build verification:
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` succeeded and produced `NightSharp/bin/Release/NightSharp.dll`.
+- 2026-06-23: same Release x64 build succeeded after adding `MovementStateDrawPlugin`.
 
 Note:
 - EnsoulSharp has no public type literally named `AiManager`; this is a NightSharp core helper for EnsoulSharp `AIBaseClient` movement parity.
@@ -436,6 +448,18 @@ ProcessWorldEvent note:
 - EnsoulSharp equivalent is closest to `Game.OnNotify(GameEventId, otherNetworkId, byte[256])`.
 - NightSharp should treat `Offset::Hooks::ProcessWorldEvent` as native event source for a `GameNotify` style wrapper, not as public API name parity.
 
+Current status:
+- `NightSharp/SDK/Core/Game.h` has Old-style `IsChatOpen` / `IsShopOpen` input guards: chat reads the ChatClient `PrimaryOpen`, `Editing`, and `Focused` bytes with sane-byte validation and falls back through `moduleBase + Offset::GameRuntime::ChatInstance`; shop scans `OpenWindowsArray`/`OpenWindowsCount` for `ShopInstance`.
+- Added compatibility aliases: `SDK::Game::IsOpenChat`, `SDK::Game::IsOpenShop`, `SDK::MenuGUI::IsChatOpen`, `SDK::MenuGUI::IsShopOpen`, `SDK::MenuGUI::IsOpenChat`, `SDK::MenuGUI::IsOpenShop`, plus global `MenuGUI` facade alias.
+- `NightSharp/Core/CoreValidation.h` now uses the same Old-style chat/shop memory logic for `ShouldProcessInput`.
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` succeeded and produced `NightSharp/bin/Release/NightSharp.dll`.
+- 2026-06-23: added `NightSharp/Core/CoreGame.h` and routed the public `SDK::Game` state helpers through it (`Time`, `Ping`, `IsReady`, `IsChatOpen/IsOpenChat`, `IsShopOpen/IsOpenShop`, `IsFocused`, `ShouldProcessInput`, `InputBlockMask`, `MapId`).
+- Added EnsoulSharp-style chat events in `NightSharp/SDK/Core/Game.h`: `GameSendChatEventArgs`, `GameDisplayChatEventArgs`, `OnSendChat`, `OnDisplayChat`, plus add/remove helpers. `Game.Say` fires `OnSendChat`; `Game.Print` fires `OnDisplayChat`; `Process=false` cancels the Core call.
+- Added `Game.Say`, `Game.Print`, `Game.SendPing`, `Game.ShowPing`, `Game.SendEmote`, `Game.SendMasteryBadge`, `Game.SendSummonerEmote`, with facade aliases for `PingCategory`, `EmoteId`, `SummonerEmoteSlot`, and the chat event args.
+- ILSpy parity notes from `EnsoulSharp.dll`: `Say` forwards to `MultiplayerClient.SendChat`; `Print` forwards to `ChatViewController.DisplayChat`; `SendPing` uses `SmartPingClientManager.CallCurrentPing`; `ShowPing` uses `MenuGUI.PingMiniMap`; emote/mastery use `MenuGUI.DoEmote` / `DoDisplayChampMasteryBadge`; summoner emote uses `EmoteRadialViewController.FireEventForSlot`.
+- IDA note: current `Offset::GameRuntime::PrintChat = 0x1136A00` decompiles as a UTF-8/string helper called from chat UI code, not a verified `DisplayChat` entrypoint. Native `SendChat`, `DisplayChat`, `CallCurrentPing`, and `PingMiniMap` remain disabled until their RVAs/signatures are verified. `Game.Say` currently uses a focused-window clipboard fallback; `SendEmote` / `SendMasteryBadge` use LoL control-key fallbacks.
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` succeeded and produced `NightSharp/bin/Release/NightSharp.dll`.
+
 ### 8. CoreHud
 
 EnsoulSharp:
@@ -461,7 +485,13 @@ Offsets used:
 - `Offset::GameRuntime::CursorPosRaw`
 
 Current status:
-- Missing dedicated core.
+- 2026-06-23: added `NightSharp/Core/CoreHud.h`.
+- 2026-06-23: added SDK facade `NightSharp/SDK/Core/Hud.h`, included from `NightSharp/SDK/SDK.h`, and exposed global `Hud` alias plus `PingResourceType`, `PingStatType`, `ClickType`, `HudSnapshot`, `HudSelectedSpellInfo`, `DragonSRXInfo` in `NightSharp/SDK/Facade.h`.
+- Implemented memory-backed HUD helpers: `Hud.Address`, `Hud.HudRoot`, `Hud.InputAddress`, `Hud.SelectLogicAddress`, `Hud.SpellLogicAddress`, `Hud.CameraAddress`, `Hud.TargetChampionsOnly` get/set, `Hud.MouseWorldPosition`, `Hud.SelectedNetworkId`, `Hud.SelectedObjectIndex`, `Hud.TargetingState`, `Hud.IsCameraLocked`, `Hud.SetCameraLockState`, `Hud.CurrentZoom/MinZoom/MaxZoom` get/set, and `Hud.GetSnapshot`.
+- ILSpy parity notes from `EnsoulSharp.dll`: `TargetChampionsOnly` uses `HudSelectLogic.GetTargetChampionsOnly`; `SelectedSpell` uses `HudSpellLogic.GetSpell`; `DragonSRX` uses `ScoreboardViewController.GetTeamScoresDefinitions -> GetDragonTracker`; `PingBar` uses `HudPlayerResourceBars.OnPing`; `PingSpell` uses `HudSpellLogic.HandleSpellPingClick`; `PingStat` uses `HudUnitStats.OnPing`; `SetCameraLockState` uses `ClientCameraPositionClient.SetLockedInternal`; `ShowClick` uses `HudCursorTargetLogic.UpdateGroundAttackMode`.
+- IDA note: `evtChampionOnly` handler `sub_C0CFC0` writes `[HudSelectLogic + 0x3C]`; `sub_B9BBC0` stores the HUD instance at `qword_1E76E08`; `sub_BBB1E0` wires `hud + 0x60` through the `evtChampionOnly` handler, so `Offset::HudSpellTargetingLayout::TargetChampionsOnly = 0x3C` is now documented.
+- Native-only calls remain disabled until their concrete RVAs/signatures are verified: `Hud.SelectedSpell`, `Hud.DragonSRX`, `Hud.PingBar`, `Hud.PingSpell`, `Hud.PingStat`, and `Hud.ShowClick` return null/false with one-shot debug logs. This intentionally avoids touching Inventory/ItemData or Perks; those stay separate.
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` succeeded and produced `NightSharp/bin/Release/NightSharp.dll`.
 
 ### 9. Inventory / ItemData / Shop
 
@@ -474,11 +504,14 @@ EnsoulSharp:
 - `ShopClient`
 
 NightSharp files to write:
-- New: `NightSharp/Core/CoreInventory.h`
-- New: `NightSharp/Core/CoreItemData.h`
-- New SDK facade: `NightSharp/SDK/GameObjects/InventorySlot.h`
+- Implemented: `NightSharp/Core/CoreItem.h`
+- Implemented SDK facade: `NightSharp/SDK/GameObjects/InventorySlot.h`
+- Updated: `NightSharp/SDK/Core/Objects.h` (`AIBaseClient::InventoryItems`, `HasItem`, `GetItemId`, slot helpers)
+- Updated: `NightSharp/SDK/SDK.h`
+- Updated: `NightSharp/SDK/Facade.h`
+- Deferred: `NightSharp/Core/CoreItemData.h`
 - Expand: `NightSharp/SDK/Data/ItemInfo.h`
-- Optional: `NightSharp/Core/CoreShop.h`
+- TODO: `NightSharp/Core/CoreShop.h`
 
 Offsets used:
 - `Offset::ItemRuntime::InventoryComponent`
@@ -486,20 +519,28 @@ Offsets used:
 - `Offset::ItemRuntime::SlotCount`
 - `Offset::ItemRuntime::ItemNode`
 - `Offset::ItemRuntime::ItemInfo`
-- `Offset::ItemRuntime::DataItemId`
-- `Offset::ItemRuntime::DataAbilityHaste`
-- `Offset::ItemRuntime::DataHealth`
-- `Offset::ItemRuntime::DataArmor`
-- `Offset::ItemRuntime::DataMR`
-- `Offset::ItemRuntime::DataAD`
-- `Offset::ItemRuntime::DataAP`
-- `Offset::ItemRuntime::DataAtkSpeedMult`
+- `Offset::ItemRuntime::DataItemIdString = 0x08`
+- `Offset::ItemRuntime::DataItemId` is kept as a compatibility alias to `DataItemIdString` on this build.
 - `Offset::All::ItemList`
 - `Offset::GameRuntime::ShopInstance`
 
 Current status:
 - Static item info exists.
-- Native inventory/item wrapper missing.
+- 2026-06-23: implemented native inventory slot reader and `InventorySlot` SDK facade.
+- MCP Cheat Engine/ReClass verification on live `League of Legends.exe`:
+  - `player = *(base + Offset::GameObjectsRuntime::Player)`
+  - `player + 0x4E08` is the inline inventory component.
+  - `component + 0x50 + slot * 8` reads 39 slot pointers.
+  - `slot + 0x10` reads item node; null means empty.
+  - `node + 0x00` reads item info.
+  - visible slot0 item info `+0x08` contained inline ASCII `"3003"`; old `+0xB4` produced stale pointer-high data (`0x248`) and is not a uint32 item id on this build.
+- `CoreItem` parses the native id string into real item ids, so `AIBaseClient::HasItem(3003)` and `InventoryItems()` work without the old encrypted-id comparison.
+- `InventorySlot::ItemData()` resolves static stats through `SDK::Data::GameData::GetItemInfoById(id)`.
+- Native item stat offsets (`DataHealth`, `DataAD`, etc.) are not consumed in this pass; CE/ReClass showed the old offsets no longer map cleanly to item stats. Static `ItemData.json` remains the source for item stats.
+- TODO: Shop/buy/sell are not implemented yet. Needed later for scripts such as auto Yuumi item flow.
+- TODO: reverse and expose `CoreShop` / `ShopClient` buy APIs, including `BuyItem`, `SellItem`, undo/refund if available, and `BuyItemResult`.
+- TODO: verify native shop access through `Offset::GameRuntime::ShopInstance` and the packet/native call path before wiring any write action.
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.sln /m /p:Configuration=Release /p:Platform=x64` succeeded, 0 warnings, 0 errors, after CoreItem/InventorySlot.
 
 ### 10. Perks
 
@@ -508,15 +549,49 @@ EnsoulSharp:
 - `Perk`
 
 NightSharp files to write:
-- New: `NightSharp/Core/CorePerks.h`
-- New SDK facade: `NightSharp/SDK/GameObjects/Perk.h`
+- Deferred: `NightSharp/Core/CoreRuneManager.h`
+- Deferred SDK facade: `NightSharp/SDK/GameObjects/Perk.h`
+- Deferred/debug-only: `NightSharp/Plugins/Utility/RuneDebugPlugin.h`
+- Current code keeps only the reversed offsets in `NightSharp/Core/offset.h`.
 
 Offsets used:
-- `offset.h` currently has no verified public `Perk` layout offsets.
+- `Offset::AIHeroClient::RuneManager = 0x5318`
+- `Offset::RuneManagerRuntime::GetRuneManagerVFunc = 0x808`
+- `Offset::RuneManagerLayout::PrimaryRuneTree = 0x198`
+- `Offset::RuneManagerLayout::SecondaryRuneTree = 0x1E8`
+- `Offset::RuneManagerLayout::RuneEntriesBegin = 0x230`
+- `Offset::RuneManagerLayout::RuneEntriesEnd = 0x238`
+- `Offset::RuneEntryLayout::Stride = 0x50`
+- `Offset::RuneEntryLayout::RuneData = 0x00`
+- `Offset::RuneDataLayout::Id = 0x08`
+- `Offset::RuneDataLayout::DisplayName = 0x20`
+- `Offset::RuneDataLayout::Description = 0x30`
+- `Offset::RuneTreeDataLayout::Id = 0x00`
+- `Offset::RuneTreeDataLayout::DisplayName = 0x18`
+- `Offset::RuneTreeDataLayout::Description = 0x28`
 
 Current status:
-- Missing.
-- Needs IDA reverse before implementation.
+- 2026-06-23: removed CoreRuneManager logic on request; only offsets remain.
+- Removed `NightSharp/Core/CoreRuneManager.h`, `NightSharp/SDK/GameObjects/Perk.h`, and `NightSharp/Plugins/Utility/RuneDebugPlugin.h`.
+- Removed `AIHeroClient.Perks`, `RuneManagerAddress`, `RuneManagerSnapshot`, `CopyPerks`, `HasPerk`, the `SDK::RuneManager` facade aliases, and RuneDebug plugin registration.
+- Perks/CoreRuneManager implementation is deferred until the runtime layout and desired API are revisited.
+- Inventory/ItemData remains intentionally separate and is not touched in this pass.
+
+ILSpy notes:
+- `EnsoulSharp.Perk` only stores `int Id` and `string Name`.
+- `EnsoulSharp.AIHeroClient.Perks` builds `Perk[]` by walking `StlVector<EnsoulSharp::Native::BasePerkInfo>`, getting the native perk pointer, then reading native perk id/name.
+- `EnsoulSharp.Native.BasePerkInfo` has native size `136` (`0x88`) in the wrapper metadata; NightSharp does not use that older wrapper layout directly because the current client exposes a direct rune manager layout in IDA.
+
+IDA 13337 verification:
+- `sub_70EE80` (`/liveclientdata/activeplayerrunes`) calls local player vfunc `+0x808` to get the rune manager, then reads `manager + 0x230/+0x238` as a vector of rune entries.
+- `sub_70EE80` walks the vector with stride `0x50`; each entry's first qword is the rune data pointer.
+- `sub_716180` builds a rune object from rune data: `id = *(data + 0x08)`, display string at `data + 0x20`, description at `data + 0x30`.
+- `sub_711C60` (`/liveclientdata/playermainrunes`) reads the same manager layout for any player slot and uses `manager + 0x198` / `manager + 0x1E8` for primary and secondary rune trees.
+- `sub_716260` builds a rune tree object: `id = *(tree + 0x00)`, display string at `tree + 0x18`, description at `tree + 0x28`.
+
+Build verification:
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.vcxproj /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` succeeded and produced `NightSharp/bin/Release/NightSharp.dll`.
+- 2026-06-23: `E:\Visual Studio\Community\MSBuild\Current\Bin\amd64\MSBuild.exe NightSharp\NightSharp.sln /m /p:Configuration=Release /p:Platform=x64` succeeded, 0 warnings, 0 errors, after removing CoreRuneManager logic and RuneDebug plugin.
 
 ### 11. Buffs
 

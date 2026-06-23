@@ -11,6 +11,7 @@
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
+#include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
@@ -44,6 +45,7 @@ namespace PluginBootstrap {
 
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins begin");
         PluginManager::Get().Register<AttackRangeDrawPlugin>();
+        PluginManager::Get().Register<MovementStateDrawPlugin>();
         PluginManager::Get().Register<NavGridDrawPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 

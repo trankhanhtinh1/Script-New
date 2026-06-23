@@ -19,6 +19,7 @@
 
 namespace UI = ::SDK::UI;
 namespace Game = ::SDK::Game;
+namespace Hud = ::SDK::Hud;
 namespace Drawing = ::SDK::Drawing;
 namespace View = ::SDK::View;
 namespace Map = ::SDK::Map;
@@ -29,6 +30,7 @@ namespace GameObjects = ::SDK::GameObjects;
 namespace Events = ::SDK::Events;
 namespace Signals = ::SDK::Signals;
 namespace Utils = ::SDK::Utils;
+namespace MenuGUI = ::SDK::MenuGUI;
 namespace MenuUI = ::SDK::MenuUI;
 namespace PermaShow = ::SDK::UI::PermaShow;
 namespace Icons = ::SDK::UI::Icons;
@@ -40,6 +42,7 @@ using AIHeroClient = ::SDK::AIHeroClient;
 using AIMinionClient = ::SDK::AIMinionClient;
 using AITurretClient = ::SDK::AITurretClient;
 using MissileClient = ::SDK::MissileClient;
+using InventorySlot = ::SDK::InventorySlot;
 using SpellBookClient = ::SDK::SpellBookClient;
 using SpellDataInstClient = ::SDK::SpellDataInstClient;
 using BarracksDampenerClient = ::SDK::BarracksDampenerClient;
@@ -110,5 +113,18 @@ using Performance = ::SDK::Utils::Performance;
 using Storage = ::SDK::Utils::Storage;
 using WeightedRandom = ::SDK::Utils::WeightedRandom;
 using WindowsKeys = ::SDK::Utils::WindowsKeys;
+using PingCategory = ::SDK::Game::PingCategory;
+using EmoteId = ::SDK::Game::EmoteId;
+using SummonerEmoteSlot = ::SDK::Game::SummonerEmoteSlot;
+using GameSendChatEventArgs = ::SDK::Game::GameSendChatEventArgs;
+using GameDisplayChatEventArgs = ::SDK::Game::GameDisplayChatEventArgs;
+using SendChatEventArgs = ::SDK::Game::SendChatEventArgs;
+using DisplayChatEventArgs = ::SDK::Game::DisplayChatEventArgs;
+using PingResourceType = ::SDK::Hud::PingResourceType;
+using PingStatType = ::SDK::Hud::PingStatType;
+using ClickType = ::SDK::Hud::ClickType;
+using HudSnapshot = ::SDK::Hud::Snapshot;
+using HudSelectedSpellInfo = ::SDK::Hud::SelectedSpellInfo;
+using DragonSRXInfo = ::SDK::Hud::DragonSRXInfo;
 
 #endif

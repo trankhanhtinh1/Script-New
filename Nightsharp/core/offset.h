@@ -68,6 +68,10 @@ namespace DrawingRuntime {
     // qword_1E79D20 + 0x2F8 as its first argument.
     constexpr auto ViewProjectionRoot = 0x1E79D20;
     constexpr auto WorldToScreenContextOffset = 0x2F8;
+    // Hud root/controller object. IDA 13337: sub_B9BBC0 stores constructor
+    // arg into qword_1E76E08; qword_1E76E00 is the adjacent HUD config/event
+    // owner used by Hud logic constructors.
+    constexpr auto HudRoot = 0x1E76E00;
     constexpr auto HudInstance = 0x1E76E08;
     constexpr auto ViewPort = 0x1E885F8;
     constexpr auto ViewPort2 = 0x1F4A738;
@@ -109,6 +113,8 @@ namespace HudSpellTargetingLayout {
     // Read-only target picker state verified while manually casting Jax Q.
     constexpr auto State = 0x20;       // 8 while a target is selected
     constexpr auto ObjectIndex = 0x30; // uint32, equals target object + 0x20
+    // IDA 13337: `evtChampionOnly` handler sub_C0CFC0 writes `[HudSelectLogic+0x3C]`.
+    constexpr auto TargetChampionsOnly = 0x3C;
 } // namespace HudSpellTargetingLayout
 
 // HudZoomLayout removed Apr 25/2026 - duplicate of ZoomRuntime::ZC_MinZoom/ZC_MaxZoom
@@ -298,6 +304,44 @@ namespace SpellRuntime {
     // when SpellBookOffset shifts on a patch.
     constexpr auto ActiveSpellCast =0x38;  // = 0x3160 on 26.6
 } // namespace SpellRuntime
+
+namespace RuneManagerRuntime {
+    // AIHeroClient::GetRuneManager virtual getter. IDA 13337:
+    // /liveclientdata/activeplayerrunes calls localPlayer->vfunc[0x808],
+    // then reads the returned manager at the RuneManagerLayout offsets below.
+    constexpr auto GetRuneManagerVFunc = 0x808;
+} // namespace RuneManagerRuntime
+
+namespace RuneManagerLayout {
+    // Manager fields verified from sub_70EE80/sub_711C60 on IDA 13337.
+    constexpr auto PrimaryRuneTree = 0x198;   // rune tree data pointer
+    constexpr auto SecondaryRuneTree = 0x1E8; // rune tree data pointer
+    constexpr auto RuneEntriesBegin = 0x230;  // std::vector<RuneEntry> begin
+    constexpr auto RuneEntriesEnd = 0x238;    // std::vector<RuneEntry> end
+    constexpr auto RuneEntriesCapacityEnd = 0x240;
+} // namespace RuneManagerLayout
+
+namespace RuneEntryLayout {
+    // sub_70EE80 walks manager+[0x230,0x238) in 0x50-byte records and treats
+    // the first qword in each record as the BasePerk/Rune data pointer.
+    constexpr auto Stride = 0x50;
+    constexpr auto RuneData = 0x00;
+} // namespace RuneEntryLayout
+
+namespace RuneDataLayout {
+    // sub_716180 builds rune JSON: id at +0x08, display/raw strings at +0x20/+0x30.
+    constexpr auto Id = 0x08;
+    constexpr auto DisplayName = 0x20;
+    constexpr auto Description = 0x30;
+} // namespace RuneDataLayout
+
+namespace RuneTreeDataLayout {
+    // sub_716260 builds primary/secondary tree JSON: id at +0x00,
+    // display/raw strings at +0x18/+0x28.
+    constexpr auto Id = 0x00;
+    constexpr auto DisplayName = 0x18;
+    constexpr auto Description = 0x28;
+} // namespace RuneTreeDataLayout
 
 namespace SpellBookLayout {
     constexpr auto Owner = 0x08;        // SpellBookClient -> owner AIBaseClient
@@ -651,7 +695,10 @@ namespace SpellBookLayout {
         constexpr auto SlotCount          = 39;
         constexpr auto ItemNode           = 0x10;
         constexpr auto ItemInfo           = 0x00;
-        constexpr auto DataItemId         = 0xB4;
+        // CE/ReClass 2026-06-23: current item info stores the id as an
+        // inline ASCII string here, e.g. slot0 item info +0x08 == "3003".
+        constexpr auto DataItemIdString   = 0x08;
+        constexpr auto DataItemId         = DataItemIdString;
         constexpr auto DataAbilityHaste   = 0x160;
         constexpr auto DataHealth         = 0x164;
         constexpr auto DataArmor          = 0x19C;
@@ -846,6 +893,11 @@ namespace SpellBookLayout {
         constexpr auto Exp                      = 0x4D78;
         constexpr auto LevelRef                 = 0x4DA0;
         constexpr auto LevelUpPoints            = 0x4DC8;
+        // Community reverse confirmation + IDA 13337 parity path:
+        // AIHeroClient::GetRuneManager returns the same manager consumed by
+        // /liveclientdata/activeplayerrunes. The manager layout is documented
+        // in RuneManagerLayout above.
+        constexpr auto RuneManager              = 0x5318;
         constexpr auto VisionScore              = 0x55A8;
         constexpr auto ShutdownValue            = 0x55D0;
         constexpr auto BaseGoldOnDeath          = 0x55F8;
@@ -853,38 +905,39 @@ namespace SpellBookLayout {
     } // namespace AIHeroClient
 
     namespace MissileClient {
+        // IDA 13337:
+        // OnMissileCreate (sub_93ADA0) copies the network spell payload into
+        // object + 0x2C0 via sub_923450. The copied payload is the source for
+        // SData, names, caster/target indexes and trajectory vectors used by
+        // missile tracking / evade.
         constexpr auto CastInfoBase  = 0x2C0;
-        // IDA 13337: sub_93ADA0 copies the missile/cast payload into
-        // MissileClient+0x2C0 via sub_923450. These aliases point inside that
-        // embedded payload; they are not independent fields on the outer
-        // MissileClient object.
         constexpr auto SpellDataPtr  = CastInfoBase + 0x00;
         constexpr auto SpellName     = CastInfoBase + 0x20;
         constexpr auto MissileName   = CastInfoBase + 0x48;
         constexpr auto TargetIndex   = CastInfoBase + 0x9C;
         constexpr auto CasterIndex   = CastInfoBase + 0xA0;
         constexpr auto MissileNetId  = CastInfoBase + 0xAC;
+        constexpr auto ObjectNetId   = All::NetId;
         constexpr auto StartPos      = CastInfoBase + 0xD0;
         constexpr auto EndPos        = CastInfoBase + 0xDC;
         constexpr auto CastEndPos    = CastInfoBase + 0xE8;
-        constexpr auto Position      = 0x25C;
-        constexpr auto ObjectNetId   = All::NetId;
-        // Legacy names kept for source compatibility. The payload stores
-        // object indices here, not network ids; resolve through ObjectManager
-        // when a real NetworkId is required.
-        constexpr auto CasterNetId   = CasterIndex;
-        constexpr auto TargetNetId   = TargetIndex;
+        constexpr auto Position      = All::Position;
+        constexpr auto StartTime     = 0x478;
     } // namespace MissileClient
 
     namespace MissileEventLayout {
-        constexpr auto SpellName              = 0x20;
-        constexpr auto MissileName            = 0x48;
-        constexpr auto CreatePacketCasterIndex = 0xA0;
-        constexpr auto CreatePacketMissileNetId = 0xAC;
-        constexpr auto StartPos               = 0xD0;
-        constexpr auto EndPos                 = 0xDC;
-        constexpr auto CastEndPos             = 0xE8;
+        constexpr auto SpellData                 = 0x00;
+        constexpr auto Slot                      = 0x08;
+        constexpr auto SpellName                 = 0x20;
+        constexpr auto MissileName               = 0x48;
+        constexpr auto TargetIndex               = 0x9C;
+        constexpr auto CreatePacketCasterIndex   = 0xA0;
+        constexpr auto CreatePacketMissileNetId  = 0xAC;
+        constexpr auto StartPos                  = 0xD0;
+        constexpr auto EndPos                    = 0xDC;
+        constexpr auto CastEndPos                = 0xE8;
     } // namespace MissileEventLayout
+
 
     // ── Hack / bypass plumbing (old source SDK used these for zoom,
     //    skin change, DirectInput hook, etc.) ──────────────────────────

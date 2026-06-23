@@ -1,17 +1,21 @@
 #pragma once
 
+#include "../../Core/CoreGame.h"
 #include "../../Core/CoreRuntime.h"
 #include "../../Core/CoreMap.h"
 #include "../../Core/Globals.h"
 #include "../../Core/Vector.h"
 #include "../../DebugLog.h"
 #include "../Events/Events.h"
+#include "../GameObjects/ObjectManager.h"
+#include "Objects.h"
 
 #include <DirectXMath.h>
 #include <Windows.h>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <string>
 
 namespace SDK::Game {
 
@@ -92,12 +96,35 @@ struct WndEventArgs {
     bool Process = true;
 };
 
+using PingCategory = ::CoreGame::PingCategory;
+using EmoteId = ::CoreGame::EmoteId;
+using SummonerEmoteSlot = ::CoreGame::SummonerEmoteSlot;
+
+struct GameSendChatEventArgs {
+    const char* Msg = "";
+    bool SendToAll = false;
+    bool Process = true;
+};
+
+struct GameDisplayChatEventArgs {
+    const char* Msg = "";
+    int Flags = 0;
+    bool Process = true;
+};
+
+using SendChatEventArgs = GameSendChatEventArgs;
+using DisplayChatEventArgs = GameDisplayChatEventArgs;
+
 using UpdateHandler = void(*)();
 using WndProcHandler = void(*)(WndEventArgs&);
+using SendChatHandler = void(*)(GameSendChatEventArgs&);
+using DisplayChatHandler = void(*)(GameDisplayChatEventArgs&);
 
 namespace detail {
     inline HandlerList<UpdateHandler> UpdateHandlers;
     inline HandlerList<WndProcHandler> WndProcHandlers;
+    inline HandlerList<SendChatHandler> SendChatHandlers;
+    inline HandlerList<DisplayChatHandler> DisplayChatHandlers;
     inline bool UpdateBridgeInstalled = false;
     inline InputDebugState InputDebug = {};
 
@@ -145,6 +172,28 @@ namespace detail {
         }
         UpdateBridgeInstalled = true;
         SDK::Events::AddOnGameUpdate(&OnCoreUpdate);
+    }
+
+    inline bool DispatchSendChat(GameSendChatEventArgs& args) {
+        for (int i = 0; i < SendChatHandlers.count; ++i) {
+            if (auto handler = SendChatHandlers.handlers[i]) {
+                __try {
+                    handler(args);
+                } __except (1) {}
+            }
+        }
+        return args.Process;
+    }
+
+    inline bool DispatchDisplayChat(GameDisplayChatEventArgs& args) {
+        for (int i = 0; i < DisplayChatHandlers.count; ++i) {
+            if (auto handler = DisplayChatHandlers.handlers[i]) {
+                __try {
+                    handler(args);
+                } __except (1) {}
+            }
+        }
+        return args.Process;
     }
 
     inline HWND FindProcessWindow() {
@@ -506,45 +555,55 @@ namespace detail {
 
         const auto& ctx = CoreRuntime::GetContext();
         uintptr_t chatClient = ctx.chatClient;
-        if (!Globals::IsValidPtr(chatClient) && ctx.chatClientGlobal) {
-            chatClient = Globals::Read<uintptr_t>(ctx.chatClientGlobal);
+        if (!Globals::IsValidPtr(chatClient) && ctx.moduleBase) {
+            chatClient = Globals::Read<uintptr_t>(
+                ctx.moduleBase + Offset::GameRuntime::ChatInstance);
         }
         if (!Globals::IsValidPtr(chatClient)) {
             return false;
         }
 
-        const auto primary =
-            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::PrimaryOpen);
-        const auto editing =
-            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Editing);
-        const auto focused =
-            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Focused);
+        __try {
+            const auto primary = Globals::Read<std::uint8_t>(
+                chatClient + Offset::ChatClientLayout::PrimaryOpen);
+            const auto editing = Globals::Read<std::uint8_t>(
+                chatClient + Offset::ChatClientLayout::Editing);
+            const auto focused = Globals::Read<std::uint8_t>(
+                chatClient + Offset::ChatClientLayout::Focused);
 
-        InputDebug.chatPrimary = primary;
-        InputDebug.chatEditing = editing;
-        InputDebug.chatFocused = focused;
-        if (primary > 1 || editing > 1 || focused > 1) {
+            InputDebug.chatPrimary = primary;
+            InputDebug.chatEditing = editing;
+            InputDebug.chatFocused = focused;
+
+            const bool sane = primary <= 1 && editing <= 1 && focused <= 1;
+            if (!sane) {
+                return false;
+            }
+
+            InputDebug.chatMemory =
+                primary != 0 || editing != 0 || focused != 0;
+            return InputDebug.chatMemory;
+        }
+        __except (1) {
             return false;
         }
-
-        InputDebug.chatMemory = primary != 0 || editing != 0 || focused != 0;
-        return InputDebug.chatMemory;
     }
 
     inline bool IsChatOpenByKeyboard() {
         static bool chatOpen = false;
-        static bool enterWasDown = false;
+        static DWORD lastToggleTick = 0;
 
         if (!IsGameFocused()) {
-            enterWasDown = false;
             return false;
         }
 
-        const bool enterDown = (GetAsyncKeyState(VK_RETURN) & 0x8000) != 0;
-        if (enterDown && !enterWasDown) {
-            chatOpen = !chatOpen;
+        const DWORD now = GetTickCount();
+        if ((GetAsyncKeyState(VK_RETURN) & 0x8000) != 0) {
+            if (now - lastToggleTick > 300) {
+                chatOpen = !chatOpen;
+                lastToggleTick = now;
+            }
         }
-        enterWasDown = enterDown;
 
         if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0 ||
             (chatOpen && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0)) {
@@ -559,12 +618,15 @@ namespace detail {
         uintptr_t windows = ctx.openWindowsArray;
         std::uint32_t count = ctx.openWindowsCount;
 
-        if (!Globals::IsValidPtr(shop) && ctx.shopInstanceGlobal) {
-            shop = Globals::Read<uintptr_t>(ctx.shopInstanceGlobal);
+        if (!Globals::IsValidPtr(shop) && ctx.moduleBase) {
+            shop = Globals::Read<uintptr_t>(
+                ctx.moduleBase + Offset::GameRuntime::ShopInstance);
         }
-        if (!Globals::IsValidPtr(windows) && ctx.openWindowsArrayGlobal) {
-            windows = Globals::Read<uintptr_t>(ctx.openWindowsArrayGlobal);
-            count = Globals::Read<std::uint32_t>(ctx.openWindowsCountGlobal);
+        if (!Globals::IsValidPtr(windows) && ctx.moduleBase) {
+            windows = Globals::Read<uintptr_t>(
+                ctx.moduleBase + Offset::GameRuntime::OpenWindowsArray);
+            count = Globals::Read<std::uint32_t>(
+                ctx.moduleBase + Offset::GameRuntime::OpenWindowsCount);
         }
 
         if (!Globals::IsValidPtr(shop) ||
@@ -615,11 +677,11 @@ namespace detail {
 } // namespace detail
 
 inline float Time() {
-    return detail::ReadTime();
+    return ::CoreGame::GetTime();
 }
 
 inline int Ping() {
-    return detail::ReadPing();
+    return ::CoreGame::GetPing();
 }
 
 inline int TickCount() {
@@ -636,23 +698,31 @@ inline Vec3 CursorPos() {
 }
 
 inline bool IsReady() {
-    return CoreRuntime::IsReady();
+    return ::CoreGame::IsInGame();
 }
 
 inline bool IsChatOpen() {
-    return detail::IsChatOpen();
+    return ::CoreGame::IsChatOpen();
+}
+
+inline bool IsOpenChat() {
+    return IsChatOpen();
 }
 
 inline bool IsShopOpen() {
-    return detail::IsShopOpen();
+    return ::CoreGame::IsShopOpen();
+}
+
+inline bool IsOpenShop() {
+    return IsShopOpen();
 }
 
 inline bool IsFocused() {
-    return detail::IsGameFocused();
+    return ::CoreGame::IsGameFocused();
 }
 
 inline bool ShouldProcessInput() {
-    return detail::ShouldProcessInput();
+    return ::CoreGame::ShouldProcessInput();
 }
 
 inline bool CanProcessInput() {
@@ -660,11 +730,11 @@ inline bool CanProcessInput() {
 }
 
 inline std::uint32_t InputBlockMask() {
-    return detail::InputDebug.blockMask;
+    return ::CoreGame::GetInputBlockMask();
 }
 
 inline int MapId() {
-    return static_cast<int>(::CoreMap::GetMapId());
+    return static_cast<int>(::CoreGame::GetMapId());
 }
 
 inline bool AddOnUpdate(UpdateHandler handler) {
@@ -682,6 +752,22 @@ inline bool AddOnWndProc(WndProcHandler handler) {
 
 inline bool RemoveOnWndProc(WndProcHandler handler) {
     return detail::WndProcHandlers.Remove(handler);
+}
+
+inline bool AddOnSendChat(SendChatHandler handler) {
+    return detail::SendChatHandlers.Add(handler);
+}
+
+inline bool RemoveOnSendChat(SendChatHandler handler) {
+    return detail::SendChatHandlers.Remove(handler);
+}
+
+inline bool AddOnDisplayChat(DisplayChatHandler handler) {
+    return detail::DisplayChatHandlers.Add(handler);
+}
+
+inline bool RemoveOnDisplayChat(DisplayChatHandler handler) {
+    return detail::DisplayChatHandlers.Remove(handler);
 }
 
 inline bool DispatchWndProc(HWND hWnd, std::uint32_t msg, std::uintptr_t wParam, std::intptr_t lParam) {
@@ -708,21 +794,154 @@ inline void Reset() {
     }
     detail::UpdateHandlers.Clear();
     detail::WndProcHandlers.Clear();
+    detail::SendChatHandlers.Clear();
+    detail::DisplayChatHandlers.Clear();
     detail::UpdateBridgeInstalled = false;
     detail::InputDebug = {};
 }
 
-inline void Print(const char* text, bool /*triggerEvent*/ = true) {
-    NightSharpDebug::Logf("[SDK.Game] %s", text ? text : "");
+inline bool Print(const char* text, bool triggerEvent = true, int flags = 0) {
+    if (!text) {
+        text = "";
+    }
+
+    if (triggerEvent) {
+        GameDisplayChatEventArgs args{};
+        args.Msg = text;
+        args.Flags = flags;
+        args.Process = true;
+        if (!detail::DispatchDisplayChat(args)) {
+            return false;
+        }
+    }
+
+    return ::CoreGame::Print(text, triggerEvent, static_cast<std::uint32_t>(flags));
 }
 
 template <typename... Args>
-inline void Print(const char* fmt, Args... args) {
+inline bool Print(const char* fmt, Args... args) {
     char buffer[1024] = {};
     if (fmt) {
         _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt, args...);
     }
-    Print(buffer, true);
+    return Print(buffer, true);
+}
+
+inline bool Say(const char* text, bool sendToAll = false, bool triggerEvent = true) {
+    if (!text) {
+        text = "";
+    }
+
+    if (triggerEvent) {
+        GameSendChatEventArgs args{};
+        args.Msg = text;
+        args.SendToAll = sendToAll;
+        args.Process = true;
+        if (!detail::DispatchSendChat(args)) {
+            return false;
+        }
+    }
+
+    return ::CoreGame::Say(text, sendToAll, triggerEvent);
+}
+
+template <typename... Args>
+inline bool Say(const char* fmt, bool sendToAll, bool triggerEvent, Args... args) {
+    char buffer[1024] = {};
+    if (fmt) {
+        _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt, args...);
+    }
+    return Say(buffer, sendToAll, triggerEvent);
+}
+
+inline bool SendPing(PingCategory pingType, const Vector2& position) {
+    return ::CoreGame::SendPing(pingType, position, 0);
+}
+
+inline bool SendPing(PingCategory pingType, const Vector3& position) {
+    return ::CoreGame::SendPing(pingType, position, 0);
+}
+
+inline bool SendPing(PingCategory pingType, const GameObject& target) {
+    if (!target.IsValid()) {
+        return false;
+    }
+    return ::CoreGame::SendPing(
+        pingType,
+        target.Position(),
+        static_cast<std::uint32_t>(target.NetworkId()));
+}
+
+inline bool ShowPing(PingCategory pingType,
+                     const Vector2& position,
+                     bool playAudio = true,
+                     bool showChat = true) {
+    const AIHeroClient player = SDK::ObjectManager::Player();
+    const auto sourceIndex = player.IsValid()
+        ? static_cast<std::uint32_t>(player.Index())
+        : 0u;
+    return ::CoreGame::ShowPing(pingType, position, 0, sourceIndex, playAudio, showChat);
+}
+
+inline bool ShowPing(PingCategory pingType,
+                     const Vector3& position,
+                     bool playAudio = true,
+                     bool showChat = true) {
+    const AIHeroClient player = SDK::ObjectManager::Player();
+    const auto sourceIndex = player.IsValid()
+        ? static_cast<std::uint32_t>(player.Index())
+        : 0u;
+    return ::CoreGame::ShowPing(pingType, position, 0, sourceIndex, playAudio, showChat);
+}
+
+inline bool ShowPing(PingCategory pingType,
+                     const GameObject& target,
+                     bool playAudio = true,
+                     bool showChat = true) {
+    if (!target.IsValid()) {
+        return false;
+    }
+
+    const AIHeroClient player = SDK::ObjectManager::Player();
+    const auto sourceIndex = player.IsValid()
+        ? static_cast<std::uint32_t>(player.Index())
+        : 0u;
+    return ::CoreGame::ShowPing(
+        pingType,
+        target.Position(),
+        static_cast<std::uint32_t>(target.Index()),
+        sourceIndex,
+        playAudio,
+        showChat);
+}
+
+inline bool ShowPing(PingCategory pingType,
+                     const GameObject& source,
+                     const GameObject& target,
+                     bool playAudio = true,
+                     bool showChat = true) {
+    if (!source.IsValid() || !target.IsValid()) {
+        return false;
+    }
+    return ::CoreGame::ShowPing(
+        pingType,
+        target.Position(),
+        static_cast<std::uint32_t>(target.Index()),
+        static_cast<std::uint32_t>(source.Index()),
+        playAudio,
+        showChat);
+}
+
+inline bool SendEmote(EmoteId emoteId) {
+    return ::CoreGame::SendEmote(emoteId);
+}
+
+inline bool SendMasteryBadge() {
+    return ::CoreGame::SendMasteryBadge();
+}
+
+inline bool SendSummonerEmote(SummonerEmoteSlot emoteSlot) {
+    return ::CoreGame::SendSummonerEmote(emoteSlot);
 }
 
 struct UpdateEventSlot {
@@ -737,7 +956,28 @@ struct WndProcEventSlot {
     bool operator()(WndProcHandler handler) const { return AddOnWndProc(handler); }
 };
 
+struct SendChatEventSlot {
+    bool operator+=(SendChatHandler handler) const { return AddOnSendChat(handler); }
+    bool operator-=(SendChatHandler handler) const { return RemoveOnSendChat(handler); }
+    bool operator()(SendChatHandler handler) const { return AddOnSendChat(handler); }
+};
+
+struct DisplayChatEventSlot {
+    bool operator+=(DisplayChatHandler handler) const { return AddOnDisplayChat(handler); }
+    bool operator-=(DisplayChatHandler handler) const { return RemoveOnDisplayChat(handler); }
+    bool operator()(DisplayChatHandler handler) const { return AddOnDisplayChat(handler); }
+};
+
 inline UpdateEventSlot OnUpdate{};
 inline WndProcEventSlot OnWndProc{};
+inline SendChatEventSlot OnSendChat{};
+inline DisplayChatEventSlot OnDisplayChat{};
 
 } // namespace SDK::Game
+
+namespace SDK::MenuGUI {
+    inline bool IsChatOpen() { return SDK::Game::IsChatOpen(); }
+    inline bool IsShopOpen() { return SDK::Game::IsShopOpen(); }
+    inline bool IsOpenChat() { return SDK::Game::IsOpenChat(); }
+    inline bool IsOpenShop() { return SDK::Game::IsOpenShop(); }
+} // namespace SDK::MenuGUI

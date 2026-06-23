@@ -85,20 +85,34 @@ namespace CoreValidation {
     inline bool IsChatOpen() {
         const auto& ctx = CoreRuntime::GetContext();
         uintptr_t chatClient = ctx.chatClient;
-        if (!Globals::IsValidPtr(chatClient) && ctx.chatClientGlobal) {
-            chatClient = Globals::Read<uintptr_t>(ctx.chatClientGlobal);
+        if (!Globals::IsValidPtr(chatClient) && ctx.moduleBase) {
+            chatClient = Globals::Read<uintptr_t>(
+                ctx.moduleBase + Offset::GameRuntime::ChatInstance);
         }
         if (!Globals::IsValidPtr(chatClient)) {
             return false;
         }
 
-        const auto primary =
-            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::PrimaryOpen);
-        const auto editing =
-            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Editing);
-        const auto focused =
-            Globals::Read<std::uint8_t>(chatClient + Offset::ChatClientLayout::Focused);
-        return primary == 1 || editing == 1 || focused == 1;
+        __try {
+            const auto primary = Globals::Read<std::uint8_t>(
+                chatClient + Offset::ChatClientLayout::PrimaryOpen);
+            const auto editing = Globals::Read<std::uint8_t>(
+                chatClient + Offset::ChatClientLayout::Editing);
+            const auto focused = Globals::Read<std::uint8_t>(
+                chatClient + Offset::ChatClientLayout::Focused);
+
+            if (primary > 1 || editing > 1 || focused > 1) {
+                return false;
+            }
+            return primary != 0 || editing != 0 || focused != 0;
+        }
+        __except (1) {
+            return false;
+        }
+    }
+
+    inline bool IsOpenChat() {
+        return IsChatOpen();
     }
 
     inline bool IsShopOpen() {
@@ -107,12 +121,15 @@ namespace CoreValidation {
         uintptr_t windows = ctx.openWindowsArray;
         std::uint32_t count = ctx.openWindowsCount;
 
-        if (!Globals::IsValidPtr(shop) && ctx.shopInstanceGlobal) {
-            shop = Globals::Read<uintptr_t>(ctx.shopInstanceGlobal);
+        if (!Globals::IsValidPtr(shop) && ctx.moduleBase) {
+            shop = Globals::Read<uintptr_t>(
+                ctx.moduleBase + Offset::GameRuntime::ShopInstance);
         }
-        if (!Globals::IsValidPtr(windows) && ctx.openWindowsArrayGlobal) {
-            windows = Globals::Read<uintptr_t>(ctx.openWindowsArrayGlobal);
-            count = Globals::Read<std::uint32_t>(ctx.openWindowsCountGlobal);
+        if (!Globals::IsValidPtr(windows) && ctx.moduleBase) {
+            windows = Globals::Read<uintptr_t>(
+                ctx.moduleBase + Offset::GameRuntime::OpenWindowsArray);
+            count = Globals::Read<std::uint32_t>(
+                ctx.moduleBase + Offset::GameRuntime::OpenWindowsCount);
         }
         if (!Globals::IsValidPtr(shop) ||
             !Globals::IsValidPtr(windows) ||
@@ -128,6 +145,10 @@ namespace CoreValidation {
             }
         }
         return false;
+    }
+
+    inline bool IsOpenShop() {
+        return IsShopOpen();
     }
 
     inline bool ShouldProcessInput() {

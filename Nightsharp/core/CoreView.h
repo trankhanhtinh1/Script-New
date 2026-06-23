@@ -5,10 +5,9 @@
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
+#include "../imgui/imgui.h"
 
-#include <DirectXMath.h>
 #include <Windows.h>
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -33,33 +32,26 @@ struct Matrix4x4 {
 };
 
 namespace detail {
-    inline HWND FindProcessWindow() {
-        struct EnumData {
-            DWORD processId = 0;
-            HWND window = nullptr;
-        } data{ GetCurrentProcessId(), nullptr };
+    struct FrameViewCache {
+        int frame = -1;
+        Matrix4x4 viewProjection = {};
+        Vec2 rendererSize = {};
+        bool hasViewProjection = false;
+        bool hasRendererSize = false;
+    };
 
-        EnumWindows([](HWND window, LPARAM parameter) -> BOOL {
-            auto* state = reinterpret_cast<EnumData*>(parameter);
-            DWORD processId = 0;
-            GetWindowThreadProcessId(window, &processId);
-            if (processId != state->processId ||
-                !IsWindowVisible(window) ||
-                (GetWindowLongPtrW(window, GWL_STYLE) & WS_CHILD) != 0) {
-                return TRUE;
-            }
+    inline FrameViewCache& GetFrameCache() {
+        static FrameViewCache cache = {};
+        return cache;
+    }
 
-            RECT rect = {};
-            if (!GetClientRect(window, &rect) ||
-                rect.right <= rect.left ||
-                rect.bottom <= rect.top) {
-                return TRUE;
-            }
-
-            state->window = window;
-            return FALSE;
-        }, reinterpret_cast<LPARAM>(&data));
-        return data.window;
+    inline void SyncFrameCache() {
+        FrameViewCache& cache = GetFrameCache();
+        const int frame = ImGui::GetFrameCount();
+        if (cache.frame != frame) {
+            cache = {};
+            cache.frame = frame;
+        }
     }
 
     inline bool IsPlausibleWorld(const Vec3& value) {
@@ -129,7 +121,21 @@ namespace detail {
 } // namespace detail
 
 inline bool GetRendererSize(Vec2& out) {
-    out = {};
+    detail::SyncFrameCache();
+    detail::FrameViewCache& cache = detail::GetFrameCache();
+    if (cache.hasRendererSize) {
+        out = cache.rendererSize;
+        return true;
+    }
+
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    if (displaySize.x > 0.0f && displaySize.y > 0.0f) {
+        out = { displaySize.x, displaySize.y };
+        cache.rendererSize = out;
+        cache.hasRendererSize = true;
+        return true;
+    }
+
     const auto& ctx = CoreRuntime::GetContext();
     if (Globals::IsValidPtr(ctx.renderer)) {
         __try {
@@ -137,30 +143,15 @@ inline bool GetRendererSize(Vec2& out) {
             const int height = Globals::Read<int>(ctx.renderer + 0x10);
             if (width > 0 && height > 0 && width < 20000 && height < 20000) {
                 out = { static_cast<float>(width), static_cast<float>(height) };
+                cache.rendererSize = out;
+                cache.hasRendererSize = true;
                 return true;
             }
         } __except (1) {
             out = {};
         }
     }
-
-    const HWND window = detail::FindProcessWindow();
-    RECT rect = {};
-    if (window && GetClientRect(window, &rect) &&
-        rect.right > rect.left && rect.bottom > rect.top) {
-        out = {
-            static_cast<float>(rect.right - rect.left),
-            static_cast<float>(rect.bottom - rect.top)
-        };
-        return true;
-    }
-
-    const int width = GetSystemMetrics(SM_CXSCREEN);
-    const int height = GetSystemMetrics(SM_CYSCREEN);
-    if (width > 0 && height > 0 && width < 20000 && height < 20000) {
-        out = { static_cast<float>(width), static_cast<float>(height) };
-        return true;
-    }
+    out = {};
     return false;
 }
 
@@ -189,6 +180,13 @@ inline bool ReadProjection(Matrix4x4& out) {
 }
 
 inline bool ReadViewProjection(Matrix4x4& out) {
+    detail::SyncFrameCache();
+    detail::FrameViewCache& cache = detail::GetFrameCache();
+    if (cache.hasViewProjection) {
+        out = cache.viewProjection;
+        return true;
+    }
+
     Matrix4x4 view = {};
     Matrix4x4 projection = {};
     if (!ReadView(view) || !ReadProjection(projection)) {
@@ -197,7 +195,14 @@ inline bool ReadViewProjection(Matrix4x4& out) {
     }
 
     out = detail::Multiply(view, projection);
-    return out.IsValid();
+    if (!out.IsValid()) {
+        out = {};
+        return false;
+    }
+
+    cache.viewProjection = out;
+    cache.hasViewProjection = true;
+    return true;
 }
 
 inline bool ReadViewProjection(float out[16]) {
@@ -249,54 +254,26 @@ inline bool ProjectWorldToScreen(const Vec3& world,
 }
 
 inline bool WorldToScreenNative(const Vec3& world, Vec2& screen) {
+    (void)world;
     screen = {};
-    if (!detail::IsPlausibleWorld(world)) {
-        return false;
-    }
-
-    const auto& ctx = CoreRuntime::GetContext();
-    if (!Globals::IsExecutablePtr(ctx.worldToScreenFn)) {
-        return false;
-    }
-
-    const uintptr_t rootGlobal =
-        CoreRuntime::ResolveRva(Offset::DrawingRuntime::ViewProjectionRoot);
-    const uintptr_t root = Globals::Read<uintptr_t>(rootGlobal);
-    if (!Globals::IsValidPtr(root)) {
-        return false;
-    }
-
-    using WorldToScreenFn = bool(__fastcall*)(uintptr_t, const Vec3*, Vec3*);
-    Vec3 output = {};
-    bool result = false;
-    __try {
-        result = reinterpret_cast<WorldToScreenFn>(ctx.worldToScreenFn)(
-            root + Offset::DrawingRuntime::WorldToScreenContextOffset,
-            &world,
-            &output);
-    } __except (1) {
-        return false;
-    }
-
-    screen = { output.x, output.y };
-    Vec2 size = {};
-    (void)GetRendererSize(size);
-    return (result || detail::IsPlausibleScreen(screen, size)) &&
-           screen.IsValid();
+    // Old source disables the native W2S call: a bad ABI target throws every
+    // frame and makes drawing stutter. Matrix projection is the fast path.
+    return false;
 }
 
 inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
     screen = {};
-    (void)CoreRuntime::RefreshReadState();
-    if (WorldToScreenNative(world, screen)) {
+    Matrix4x4 matrix = {};
+    Vec2 size = {};
+    if (!ReadViewProjection(matrix) || !GetRendererSize(size)) {
+        return false;
+    }
+
+    if (ProjectWorldToScreen(world, matrix, size, screen)) {
         return true;
     }
 
-    Matrix4x4 matrix = {};
-    Vec2 size = {};
-    return ReadViewProjection(matrix) &&
-           GetRendererSize(size) &&
-           ProjectWorldToScreen(world, matrix, size, screen);
+    return WorldToScreenNative(world, screen);
 }
 
 inline Vec2 WorldToScreen(const Vec3& world) {
