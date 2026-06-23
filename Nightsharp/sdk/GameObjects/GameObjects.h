@@ -372,6 +372,24 @@ namespace detail {
         }
     }
 
+    inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
+        if (!Loaded || !args.Sender.IsValid()) {
+            return;
+        }
+
+        AddObject(args.Sender.Ptr, args.Sender.Type);
+    }
+
+    inline void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        if (!Loaded || !args.Sender.IsValid()) {
+            return;
+        }
+
+        RemoveObject(GameObject(::Core::ObjectManager::MakeHandle(
+            args.Sender.Ptr,
+            args.Sender.Type)));
+    }
+
     inline void Rebuild() {
         Clear();
         PlayerObject = SDK::ObjectManager::Player();
@@ -397,6 +415,8 @@ inline void Initialize() {
     }
 
     detail::Initialized = true;
+    SDK::Events::AddOnCreateObject(&detail::OnObjectCreate);
+    SDK::Events::AddOnDeleteObject(&detail::OnObjectDelete);
     SDK::Events::AddOnLoad([](const SDK::Events::LoadEventArgs&) {
         detail::OnLoad();
         SDK::Events::AddOnGameUpdate(&detail::OnGameUpdate);

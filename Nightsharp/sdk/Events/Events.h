@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../../Core/CoreEvents.h"
+#include "../Data/Database.h"
 
 #include <cstdint>
+#include <cstring>
 
 namespace SDK::Events {
 
@@ -103,6 +105,8 @@ namespace detail {
 
     inline EventList<CoreHookArgs> CoreHookHandlers;
     inline EventList<GameUpdateEventArgs> GameUpdateHandlers;
+    inline EventList<ObjectEventArgs> ObjectCreateHandlers;
+    inline EventList<ObjectEventArgs> ObjectDeleteHandlers;
     inline EventList<ObjectEventArgs> MissileCreateHandlers;
     inline EventList<ObjectEventArgs> MissileDeleteHandlers;
     inline EventList<BuffEventArgs> BuffAddHandlers;
@@ -136,8 +140,163 @@ namespace detail {
         CoreHookHandlers.Fire(raw);
     }
 
+    inline void CopyText(char* out, int outCount, const char* value) {
+        if (!out || outCount <= 0) {
+            return;
+        }
+
+        out[0] = 0;
+        if (value) {
+            strncpy_s(out, static_cast<std::size_t>(outCount), value, _TRUNCATE);
+        }
+    }
+
+    inline bool IsPlausibleIdentifier(const char* value) {
+        if (!value || !value[0]) {
+            return false;
+        }
+
+        int length = 0;
+        for (; value[length] && length < 95; ++length) {
+            const unsigned char ch =
+                static_cast<unsigned char>(value[length]);
+            if (ch < 0x20 || ch > 0x7E) {
+                return false;
+            }
+        }
+        return length >= 2 && length < 95;
+    }
+
+    inline const SDK::Data::SpellData* ResolveMissileSpellData(
+        const ObjectEventArgs& args) {
+        const char* names[] = {
+            args.MissileName,
+            args.SpellName,
+            args.Sender.Name,
+            args.Sender.CharacterName,
+        };
+
+        for (const char* name : names) {
+            if (!name || !name[0]) {
+                continue;
+            }
+
+            if (const auto* data = SDK::Data::GetSpellByMissile(name)) {
+                return data;
+            }
+            if (const auto* data = SDK::Data::GetSpellByName(name)) {
+                return data;
+            }
+        }
+
+        return nullptr;
+    }
+
+    inline void CanonicalizeMissileNames(ObjectEventArgs& args) {
+        const auto* data = ResolveMissileSpellData(args);
+        if (!data || data->spellName.empty()) {
+            return;
+        }
+
+        // Keep runtime names intact when the client already exposed them.
+        // SpellName is the cast/slot key (EzrealQ), while MissileName is the
+        // missile runtime key (EzrealMysticShot). Database names are only a
+        // fallback for older builds or partially decoded payloads.
+        if (!IsPlausibleIdentifier(args.SpellName)) {
+            const auto& fallback =
+                !data->extraSpellNames.empty()
+                    ? data->extraSpellNames.front()
+                    : data->spellName;
+            CopyText(
+                args.SpellName,
+                static_cast<int>(sizeof(args.SpellName)),
+                fallback.c_str());
+        }
+        if (!IsPlausibleIdentifier(args.MissileName)) {
+            CopyText(
+                args.MissileName,
+                static_cast<int>(sizeof(args.MissileName)),
+                data->spellName.c_str());
+        }
+    }
+
+    inline constexpr int MaxPendingObjectCreates = 512;
+    inline CoreHookArgs PendingObjectCreates[MaxPendingObjectCreates] = {};
+    inline int PendingObjectCreateCount = 0;
+
+    inline void QueueObjectCreate(const CoreHookArgs& raw) {
+        const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
+        if (!args.Sender.IsValid()) {
+            return;
+        }
+
+        for (int index = 0; index < PendingObjectCreateCount; ++index) {
+            auto& pending = PendingObjectCreates[index];
+            if (pending.Rdx == raw.Rdx ||
+                (pending.R8 != 0 && pending.R8 == raw.R8)) {
+                pending = raw;
+                return;
+            }
+        }
+
+        if (PendingObjectCreateCount < MaxPendingObjectCreates) {
+            PendingObjectCreates[PendingObjectCreateCount++] = raw;
+            return;
+        }
+
+        ObjectCreateHandlers.Fire(args);
+    }
+
+    inline void RemovePendingObjectCreate(uintptr_t object, uint32_t networkId) {
+        for (int index = 0; index < PendingObjectCreateCount;) {
+            const auto& pending = PendingObjectCreates[index];
+            const bool sameObject = pending.Rdx == object;
+            const bool sameNetworkId = networkId != 0 &&
+                networkId != 0xFFFFFFFFu &&
+                static_cast<uint32_t>(pending.R8) == networkId;
+            if (!sameObject && !sameNetworkId) {
+                ++index;
+                continue;
+            }
+
+            for (int moveIndex = index; moveIndex + 1 < PendingObjectCreateCount; ++moveIndex) {
+                PendingObjectCreates[moveIndex] = PendingObjectCreates[moveIndex + 1];
+            }
+            PendingObjectCreates[--PendingObjectCreateCount] = {};
+        }
+    }
+
+    inline void FlushObjectCreates() {
+        const int count = PendingObjectCreateCount;
+        PendingObjectCreateCount = 0;
+
+        for (int index = 0; index < count; ++index) {
+            const CoreHookArgs raw = PendingObjectCreates[index];
+            PendingObjectCreates[index] = {};
+            const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
+            if (args.Sender.IsValid()) {
+                ObjectCreateHandlers.Fire(args);
+            }
+        }
+    }
+
+    inline void OnRawObjectCreate(const CoreHookArgs& raw) {
+        QueueObjectCreate(raw);
+    }
+
+    inline void OnRawObjectDelete(const CoreHookArgs& raw) {
+        const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
+        if (!args.Sender.IsValid()) {
+            return;
+        }
+
+        RemovePendingObjectCreate(args.Sender.Ptr, args.Sender.NetworkId);
+        ObjectDeleteHandlers.Fire(args);
+    }
+
     inline void OnRawGameUpdate(const CoreHookArgs& raw) {
         (void)CoreRuntime::RefreshReadState();
+        FlushObjectCreates();
 
         GameUpdateEventArgs args{};
         args.Raw = raw;
@@ -149,11 +308,15 @@ namespace detail {
     }
 
     inline void OnRawMissileCreate(const CoreHookArgs& raw) {
-        MissileCreateHandlers.Fire(::Core::Events::DecodeMissileEvent(raw));
+        ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
+        CanonicalizeMissileNames(args);
+        MissileCreateHandlers.Fire(args);
     }
 
     inline void OnRawMissileDelete(const CoreHookArgs& raw) {
-        MissileDeleteHandlers.Fire(::Core::Events::DecodeMissileEvent(raw));
+        ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
+        CanonicalizeMissileNames(args);
+        MissileDeleteHandlers.Fire(args);
     }
 
     inline void OnRawBuffAdd(const CoreHookArgs& raw) {
@@ -240,6 +403,8 @@ inline void Initialize() {
         ::Core::Events::Add(static_cast<CoreHookId>(i), &detail::OnRawCoreHook);
     }
     ::Core::Events::AddOnGameUpdate(&detail::OnRawGameUpdate);
+    ::Core::Events::AddOnCreateObject(&detail::OnRawObjectCreate);
+    ::Core::Events::AddOnDeleteObject(&detail::OnRawObjectDelete);
     ::Core::Events::AddOnMissileCreate(&detail::OnRawMissileCreate);
     ::Core::Events::AddOnMissileDelete(&detail::OnRawMissileDelete);
     ::Core::Events::AddOnBuffAdd(&detail::OnRawBuffAdd);
@@ -270,6 +435,9 @@ inline void Initialize() {
 inline void Reset() {
     detail::CoreHookHandlers.Clear();
     detail::GameUpdateHandlers.Clear();
+    detail::ObjectCreateHandlers.Clear();
+    detail::ObjectDeleteHandlers.Clear();
+    detail::PendingObjectCreateCount = 0;
     detail::MissileCreateHandlers.Clear();
     detail::MissileDeleteHandlers.Clear();
     detail::BuffAddHandlers.Clear();
@@ -334,6 +502,14 @@ inline bool IsLocalPlayer(const Core::Events::ObjectInfo& sender) {
 inline bool AddOnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) { Initialize(); return detail::GameUpdateHandlers.Add(handler); }
 inline bool RemoveOnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) { return detail::GameUpdateHandlers.Remove(handler); }
 inline bool OnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) { return AddOnGameUpdate(handler); }
+
+inline bool AddOnCreateObject(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::ObjectCreateHandlers.Add(handler); }
+inline bool RemoveOnCreateObject(void(*handler)(const ObjectEventArgs&)) { return detail::ObjectCreateHandlers.Remove(handler); }
+inline bool OnCreateObject(void(*handler)(const ObjectEventArgs&)) { return AddOnCreateObject(handler); }
+
+inline bool AddOnDeleteObject(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::ObjectDeleteHandlers.Add(handler); }
+inline bool RemoveOnDeleteObject(void(*handler)(const ObjectEventArgs&)) { return detail::ObjectDeleteHandlers.Remove(handler); }
+inline bool OnDeleteObject(void(*handler)(const ObjectEventArgs&)) { return AddOnDeleteObject(handler); }
 
 inline bool AddOnMissileCreate(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::MissileCreateHandlers.Add(handler); }
 inline bool RemoveOnMissileCreate(void(*handler)(const ObjectEventArgs&)) { return detail::MissileCreateHandlers.Remove(handler); }
@@ -455,6 +631,8 @@ struct HookEvents {
     };
     EventSlot<GameUpdateEventArgs> OnUpdate{ &AddOnGameUpdate, &RemoveOnGameUpdate };
     EventSlot<GameUpdateEventArgs> OnGameUpdate{ &AddOnGameUpdate, &RemoveOnGameUpdate };
+    EventSlot<ObjectEventArgs> OnCreateObject{ &AddOnCreateObject, &RemoveOnCreateObject };
+    EventSlot<ObjectEventArgs> OnDeleteObject{ &AddOnDeleteObject, &RemoveOnDeleteObject };
     EventSlot<ObjectEventArgs> OnMissileCreate{ &AddOnMissileCreate, &RemoveOnMissileCreate };
     EventSlot<ObjectEventArgs> OnMissileDelete{ &AddOnMissileDelete, &RemoveOnMissileDelete };
     EventSlot<BuffEventArgs> OnBuffAdd{ &AddOnBuffAdd, &RemoveOnBuffAdd };

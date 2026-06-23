@@ -5,6 +5,7 @@
 #include "../../Core/CoreSpellDataInst.h"
 #include "../../Core/CoreObjectManager.h"
 #include "../../Core/CoreObjects.h"
+#include "../../Core/CoreRuneManager.h"
 #include "../../Core/Vector.h"
 #include "../Enumerations/JungleType.h"
 #include "../Enumerations/MinionTypes.h"
@@ -652,6 +653,45 @@ inline AIBaseClient SpellBookClient::Owner() const {
     return AIBaseClient(owner_, ::Core::ObjectManager::InferType(owner_));
 }
 
+class RuneManagerClient {
+public:
+    RuneManagerClient() = default;
+    explicit RuneManagerClient(uintptr_t address)
+        : address_(address) {}
+
+    uintptr_t Address() const { return address_; }
+    bool IsValid() const { return ::CoreRuneManager::LooksLikeManager(address_); }
+
+    ::CoreRuneManager::RuneTreeData PrimaryTree() const {
+        return ::CoreRuneManager::ReadPrimaryTree(address_);
+    }
+
+    ::CoreRuneManager::RuneTreeData SecondaryTree() const {
+        return ::CoreRuneManager::ReadSecondaryTree(address_);
+    }
+
+    ::CoreRuneManager::ManagerSnapshot Snapshot() const {
+        return ::CoreRuneManager::ReadManager(address_);
+    }
+
+    std::vector<::CoreRuneManager::RuneEntry> Entries() const {
+        ::CoreRuneManager::RuneEntry entries[::CoreRuneManager::kMaxRuneEntries] = {};
+        const int count = ::CoreRuneManager::ReadEntries(
+            address_,
+            entries,
+            ::CoreRuneManager::kMaxRuneEntries);
+        std::vector<::CoreRuneManager::RuneEntry> result;
+        result.reserve(count > 0 ? static_cast<std::size_t>(count) : 0);
+        for (int index = 0; index < count; ++index) {
+            result.push_back(entries[index]);
+        }
+        return result;
+    }
+
+private:
+    uintptr_t address_ = 0;
+};
+
 class AIHeroClient : public AIBaseClient {
 public:
     AIHeroClient() = default;
@@ -668,6 +708,10 @@ public:
 
     SpellSlot GetSpellSlot(const char* name) const {
         return AIBaseClient::GetSpellSlot(name);
+    }
+
+    RuneManagerClient RuneManager() const {
+        return RuneManagerClient(::CoreRuneManager::Resolve(Address()));
     }
 };
 
