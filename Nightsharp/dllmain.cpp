@@ -155,6 +155,14 @@ static void StartOverlayWorker() {
 }
 
 // ========================================================================
+// NextHook — Exported hook procedure for SetWindowsHookEx injection
+// ========================================================================
+extern "C" __declspec(dllexport) LRESULT CALLBACK NextHook(int code, WPARAM wParam, LPARAM lParam) {
+    // Simply pass the hook along so we don't break the game's message chain
+    return CallNextHookEx(NULL, code, wParam, lParam);
+}
+
+// ========================================================================
 // DllMain
 // ========================================================================
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
