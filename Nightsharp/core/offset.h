@@ -898,7 +898,7 @@ namespace SpellBookLayout {
         // AIHeroClient::GetRuneManager returns the same manager consumed by
         // /liveclientdata/activeplayerrunes. The manager layout is documented
         // in RuneManagerLayout above.
-        constexpr auto RuneManager              = 0x5318;
+        constexpr auto RuneManager              = 0x50E8;
         constexpr auto VisionScore              = 0x55A8;
         constexpr auto ShutdownValue            = 0x55D0;
         constexpr auto BaseGoldOnDeath          = 0x55F8;

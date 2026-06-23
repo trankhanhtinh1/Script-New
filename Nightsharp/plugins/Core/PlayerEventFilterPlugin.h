@@ -628,11 +628,9 @@ private:
                     Offset::AIHeroClient::RuneManager,
                     static_cast<unsigned long long>(rawFieldValue));
 
-        const uintptr_t fieldResolved = ::CoreRuneManager::ResolveFromField(heroAddr);
-        const uintptr_t vfuncResolved = ::CoreRuneManager::ResolveFromVFunc(heroAddr);
-        ImGui::Text("Resolve: field=0x%llX vfunc=0x%llX",
-                    static_cast<unsigned long long>(fieldResolved),
-                    static_cast<unsigned long long>(vfuncResolved));
+        const uintptr_t resolved = ::CoreRuneManager::Resolve(heroAddr);
+        ImGui::Text("Resolve: 0x%llX",
+                    static_cast<unsigned long long>(resolved));
 
         const auto manager = player.RuneManager();
         const auto snapshot = manager.Snapshot();

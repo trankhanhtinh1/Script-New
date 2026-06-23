@@ -35,14 +35,57 @@ struct ManagerView {
     }
 };
 
+// -------------------------------------------------------------------------
+// Object type cache
+// InferType calls 6+ native game predicates (IsHero, IsMinion, IsTurret…)
+// per object. For a typical game state (80+ objects) this was hundreds of
+// calls per frame. Cache the result by object address — types are stable for
+// an object's lifetime. 512 buckets covers a full game without eviction.
+// Same-address reuse after object death is safe: a new object of the same
+// type produces the same cached result; a different type (rare pool reuse)
+// overwrites the slot on first access via the hash collision path.
+// -------------------------------------------------------------------------
+namespace TypeCache {
+    constexpr int kBuckets = 512; // must be power of 2
+    struct Slot { uintptr_t address = 0; ObjectType type = ObjectType::Unknown; };
+    inline Slot g_slots[kBuckets] = {};
+
+    inline int Bucket(uintptr_t address) {
+        // Shift by 4 to discard alignment bits; mask to bucket count.
+        return static_cast<int>((address >> 4) & (kBuckets - 1));
+    }
+
+    // Returns Unknown when address is not cached.
+    inline ObjectType Lookup(uintptr_t address) {
+        const int b = Bucket(address);
+        return (g_slots[b].address == address) ? g_slots[b].type : ObjectType::Unknown;
+    }
+
+    // Unknown types are not stored (Unknown is the "empty" sentinel).
+    inline void Store(uintptr_t address, ObjectType type) {
+        if (type == ObjectType::Unknown) return;
+        const int b = Bucket(address);
+        g_slots[b] = {address, type};
+    }
+
+    // Invalidate a single entry (e.g. on object death if hooked).
+    inline void Invalidate(uintptr_t address) {
+        const int b = Bucket(address);
+        if (g_slots[b].address == address) g_slots[b] = {};
+    }
+
+    // Full clear — call on major reinitialisation.
+    inline void InvalidateAll() {
+        for (auto& s : g_slots) s = {};
+    }
+} // namespace TypeCache
+
+// EnsureReady no longer forces RefreshReadState on every manager access.
+// The overlay calls CoreRuntime::TickRead() once per frame before plugins run,
+// so the context is always fresh by the time enumeration happens.
 inline bool EnsureReady() {
     if (!CoreRuntime::EnsureInitialized()) {
         return false;
-    }
-
-    const auto& ctx = CoreRuntime::GetContext();
-    if (!Globals::IsValidPtr(ctx.objectManager) || !Globals::IsValidPtr(ctx.localPlayer)) {
-        CoreRuntime::RefreshReadState();
     }
     return Globals::IsValidPtr(CoreRuntime::GetContext().objectManager);
 }
@@ -390,51 +433,61 @@ inline ObjectType InferType(uintptr_t object) {
         return ObjectType::Unknown;
     }
 
+    // Fast path: check type cache before making any native game calls.
+    const ObjectType cached = TypeCache::Lookup(object);
+    if (cached != ObjectType::Unknown) {
+        return cached;
+    }
+
+    ObjectType result = ObjectType::GameObject;
     if (object == PlayerAddress()) {
-        return ObjectType::AIHeroClient;
+        result = ObjectType::AIHeroClient;
+    } else if (Core::Objects::IsHero(object)) {
+        result = ObjectType::AIHeroClient;
+    } else if (Core::Objects::IsMinion(object)) {
+        result = ObjectType::AIMinionClient;
+    } else if (Core::Objects::IsTurret(object)) {
+        result = ObjectType::AITurretClient;
+    } else if (Core::Objects::IsBarracksDampener(object)) {
+        result = ObjectType::BarracksDampenerClient;
+    } else if (Core::Objects::IsHQ(object)) {
+        result = ObjectType::HQClient;
+    } else if (Core::Objects::IsShop(object)) {
+        result = ObjectType::ShopClient;
+    } else if (ManagerContains(ManagerKind::Heroes, object)) {
+        result = ObjectType::AIHeroClient;
+    } else if (ManagerContains(ManagerKind::Minions, object)) {
+        result = ObjectType::AIMinionClient;
+    } else if (ManagerContains(ManagerKind::Turrets, object)) {
+        result = ObjectType::AITurretClient;
+    } else if (ManagerContains(ManagerKind::Missiles, object)) {
+        result = ObjectType::MissileClient;
     }
-    if (Core::Objects::IsHero(object)) {
-        return ObjectType::AIHeroClient;
-    }
-    if (Core::Objects::IsMinion(object)) {
-        return ObjectType::AIMinionClient;
-    }
-    if (Core::Objects::IsTurret(object)) {
-        return ObjectType::AITurretClient;
-    }
-    if (Core::Objects::IsBarracksDampener(object)) {
-        return ObjectType::BarracksDampenerClient;
-    }
-    if (Core::Objects::IsHQ(object)) {
-        return ObjectType::HQClient;
-    }
-    if (Core::Objects::IsShop(object)) {
-        return ObjectType::ShopClient;
-    }
-    if (ManagerContains(ManagerKind::Heroes, object)) {
-        return ObjectType::AIHeroClient;
-    }
-    if (ManagerContains(ManagerKind::Minions, object)) {
-        return ObjectType::AIMinionClient;
-    }
-    if (ManagerContains(ManagerKind::Turrets, object)) {
-        return ObjectType::AITurretClient;
-    }
-    if (ManagerContains(ManagerKind::Missiles, object)) {
-        return ObjectType::MissileClient;
-    }
-    return ObjectType::GameObject;
+
+    TypeCache::Store(object, result);
+    return result;
 }
 
 inline ObjectType InferLifecycleType(uintptr_t object) {
+    // InferType already consults and populates the type cache for the common
+    // typed objects (Hero/Minion/Turret/Missile). Only proceed to the slower
+    // name-scan path for objects InferType leaves as GameObject/Unknown.
     ObjectType type = InferType(object);
     if (type != ObjectType::GameObject && type != ObjectType::Unknown) {
         return type;
     }
 
-    // MissileClient has no verified direct predicate in this build. Once the
-    // object has completed registration, the typed manager is authoritative.
+    // Check cache again before the expensive name-based scan.
+    // (InferType stores non-Unknown results, so a cache hit here means the
+    // name scan already ran and produced a specific type on a prior frame.)
+    const ObjectType cached = TypeCache::Lookup(object);
+    if (cached != ObjectType::Unknown) {
+        return cached;
+    }
+
+    // MissileClient has no verified direct predicate in this build.
     if (ManagerContains(ManagerKind::Missiles, object)) {
+        TypeCache::Store(object, ObjectType::MissileClient);
         return ObjectType::MissileClient;
     }
 
@@ -444,27 +497,26 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
         ? snapshot.characterName
         : snapshot.name;
 
+    ObjectType resolved = type;
     if (Core::Objects::ContainsInsensitive(name, "barracksdampener") ||
         Core::Objects::ContainsInsensitive(name, "inhibitor")) {
-        return ObjectType::BarracksDampenerClient;
+        resolved = ObjectType::BarracksDampenerClient;
+    } else if (Core::Objects::ContainsInsensitive(name, "nexus") ||
+               Core::Objects::ContainsInsensitive(name, "hq")) {
+        resolved = ObjectType::HQClient;
+    } else if (Core::Objects::ContainsInsensitive(name, "shop")) {
+        resolved = ObjectType::ShopClient;
+    } else if (Core::Objects::ContainsInsensitive(name, "spawnpoint") ||
+               Core::Objects::ContainsInsensitive(name, "spawn_point")) {
+        resolved = ObjectType::Obj_SpawnPoint;
+    } else if (Core::Objects::ContainsInsensitive(name, "effect") ||
+               Core::Objects::ContainsInsensitive(name, "emitter") ||
+               Core::Objects::ContainsInsensitive(name, "particle")) {
+        resolved = ObjectType::EffectEmitter;
     }
-    if (Core::Objects::ContainsInsensitive(name, "nexus") ||
-        Core::Objects::ContainsInsensitive(name, "hq")) {
-        return ObjectType::HQClient;
-    }
-    if (Core::Objects::ContainsInsensitive(name, "shop")) {
-        return ObjectType::ShopClient;
-    }
-    if (Core::Objects::ContainsInsensitive(name, "spawnpoint") ||
-        Core::Objects::ContainsInsensitive(name, "spawn_point")) {
-        return ObjectType::Obj_SpawnPoint;
-    }
-    if (Core::Objects::ContainsInsensitive(name, "effect") ||
-        Core::Objects::ContainsInsensitive(name, "emitter") ||
-        Core::Objects::ContainsInsensitive(name, "particle")) {
-        return ObjectType::EffectEmitter;
-    }
-    return type;
+
+    TypeCache::Store(object, resolved);
+    return resolved;
 }
 
 inline ObjectSnapshot ReadObject(uintptr_t object, ObjectType type = ObjectType::Unknown) {

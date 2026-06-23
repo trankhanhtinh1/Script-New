@@ -45,83 +45,16 @@ struct ManagerSnapshot {
     bool IsValid() const { return Globals::IsValidPtr(address); }
 };
 
-inline bool IsVectorRangeSane(uintptr_t begin, uintptr_t end) {
-    if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end < begin) {
-        return false;
-    }
-
-    const uintptr_t bytes = end - begin;
-    return bytes % Offset::RuneEntryLayout::Stride == 0 &&
-           bytes / Offset::RuneEntryLayout::Stride <= kMaxRuneEntries;
-}
-
-inline bool LooksLikeManager(uintptr_t manager) {
-    if (!Globals::IsValidPtr(manager)) {
-        return false;
-    }
-
-    const uintptr_t begin = Globals::Read<uintptr_t>(
-        manager + Offset::RuneManagerLayout::RuneEntriesBegin);
-    const uintptr_t end = Globals::Read<uintptr_t>(
-        manager + Offset::RuneManagerLayout::RuneEntriesEnd);
-    if (IsVectorRangeSane(begin, end)) {
-        return true;
-    }
-
-    const uintptr_t primaryTree = Globals::Read<uintptr_t>(
-        manager + Offset::RuneManagerLayout::PrimaryRuneTree);
-    const uintptr_t secondaryTree = Globals::Read<uintptr_t>(
-        manager + Offset::RuneManagerLayout::SecondaryRuneTree);
-    return Globals::IsValidPtr(primaryTree) || Globals::IsValidPtr(secondaryTree);
-}
-
-inline uintptr_t ResolveFromField(uintptr_t hero) {
-    if (!Globals::IsValidPtr(hero)) {
-        return 0;
-    }
-
-    const uintptr_t pointed = Globals::Read<uintptr_t>(
-        hero + Offset::AIHeroClient::RuneManager);
-    if (LooksLikeManager(pointed)) {
-        return pointed;
-    }
-
-    const uintptr_t embedded = hero + Offset::AIHeroClient::RuneManager;
-    return LooksLikeManager(embedded) ? embedded : 0;
-}
-
-inline uintptr_t ResolveFromVFunc(uintptr_t hero) {
-    if (!Globals::IsValidPtr(hero)) {
-        return 0;
-    }
-
-    __try {
-        const uintptr_t vtable = Globals::Read<uintptr_t>(hero);
-        if (!Globals::IsValidPtr(vtable)) {
-            return 0;
-        }
-
-        const uintptr_t function = Globals::Read<uintptr_t>(
-            vtable + Offset::RuneManagerRuntime::GetRuneManagerVFunc);
-        if (!Globals::IsExecutablePtr(function)) {
-            return 0;
-        }
-
-        using GetRuneManagerFn = uintptr_t(__fastcall*)(uintptr_t);
-        const uintptr_t manager = reinterpret_cast<GetRuneManagerFn>(function)(hero);
-        return LooksLikeManager(manager) ? manager : 0;
-    }
-    __except (1) {
-        return 0;
-    }
-}
-
+// Resolve the IRuneManager sub-object address from AIHeroClient.
+// vfunc[0x808] returns hero + 0x50E8 (confirmed via sub_7FF72E8CA650).
+// The RuneManager is an EMBEDDED sub-object (not a pointer), so we use
+// hero + offset directly (constructor sub_7FF72E8A5DA0 writes the vtable
+// at player+0x50E8).
 inline uintptr_t Resolve(uintptr_t hero) {
-    const uintptr_t fromField = ResolveFromField(hero);
-    if (fromField) {
-        return fromField;
+    if (!Globals::IsValidPtr(hero)) {
+        return 0;
     }
-    return ResolveFromVFunc(hero);
+    return hero + Offset::AIHeroClient::RuneManager;
 }
 
 inline RuneData ReadRuneData(uintptr_t data) {
@@ -219,11 +152,15 @@ inline int ReadEntries(uintptr_t manager, RuneEntry* out, int maxOut) {
         manager + Offset::RuneManagerLayout::RuneEntriesBegin);
     const uintptr_t end = Globals::Read<uintptr_t>(
         manager + Offset::RuneManagerLayout::RuneEntriesEnd);
-    if (!IsVectorRangeSane(begin, end)) {
+    if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end <= begin) {
         return 0;
     }
 
-    const uintptr_t count = (end - begin) / Offset::RuneEntryLayout::Stride;
+    const uintptr_t bytes = end - begin;
+    const uintptr_t count = bytes / Offset::RuneEntryLayout::Stride;
+    if (count > static_cast<uintptr_t>(kMaxRuneEntries)) {
+        return 0;
+    }
     const int clipped = count < static_cast<uintptr_t>(maxOut)
         ? static_cast<int>(count)
         : maxOut;
@@ -244,9 +181,9 @@ inline int ReadEntries(uintptr_t manager, RuneEntry* out, int maxOut) {
     return written;
 }
 
-inline ManagerSnapshot ReadManager(uintptr_t manager) {
+inline ManagerSnapshot ReadFromManager(uintptr_t manager) {
     ManagerSnapshot snapshot{};
-    if (!LooksLikeManager(manager)) {
+    if (!Globals::IsValidPtr(manager)) {
         return snapshot;
     }
 
@@ -260,8 +197,8 @@ inline ManagerSnapshot ReadManager(uintptr_t manager) {
     return snapshot;
 }
 
-inline ManagerSnapshot Read(uintptr_t hero) {
-    return ReadManager(Resolve(hero));
+inline ManagerSnapshot ReadFromHero(uintptr_t hero) {
+    return ReadFromManager(Resolve(hero));
 }
 
 } // namespace CoreRuneManager

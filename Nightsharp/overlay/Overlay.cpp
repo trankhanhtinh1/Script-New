@@ -47,7 +47,7 @@ volatile LONG g_bShutdown = 0;
 volatile LONG g_bMenuVisible = 1;
 
 const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
-constexpr DWORD kTargetOverlayFrameMs = 8;
+constexpr DWORD kTargetOverlayFrameMs = 16; // ~60 Hz — halves per-frame CPU vs 125 Hz
 constexpr DWORD kGameReadyPollMs = 500;
 constexpr int kGameReadyMaxPolls = 240;
 constexpr float kMenuStartGameTimeSeconds = 3.0f;
@@ -687,6 +687,11 @@ void Overlay::Run() {
         ImGui_ImplWin32_NewFrame();
         SyncImGuiMouse();
         ImGui::NewFrame();
+
+        // Refresh game state once per frame before any plugin accesses it.
+        // EnsureReady() in CoreObjectManager no longer calls RefreshReadState
+        // on every manager lookup, so this single tick is the only refresh.
+        CoreRuntime::TickRead();
 
         Plugins::PluginManager::Get().OnUpdate();
         Plugins::PluginManager::Get().OnRender();

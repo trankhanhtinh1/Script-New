@@ -795,7 +795,7 @@ public:
         : address_(address) {}
 
     uintptr_t Address() const { return address_; }
-    bool IsValid() const { return ::CoreRuneManager::LooksLikeManager(address_); }
+    bool IsValid() const { return Globals::IsValidPtr(address_); }
 
     ::CoreRuneManager::RuneTreeData PrimaryTree() const {
         return ::CoreRuneManager::ReadPrimaryTree(address_);
@@ -806,7 +806,7 @@ public:
     }
 
     ::CoreRuneManager::ManagerSnapshot Snapshot() const {
-        return ::CoreRuneManager::ReadManager(address_);
+        return ::CoreRuneManager::ReadFromManager(address_);
     }
 
     std::vector<::CoreRuneManager::RuneEntry> Entries() const {

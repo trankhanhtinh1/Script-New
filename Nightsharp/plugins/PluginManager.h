@@ -159,17 +159,11 @@ namespace Plugins {
         void OnUpdate() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
-                    char stage[160] = {};
-                    _snprintf_s(stage,
-                                sizeof(stage),
-                                _TRUNCATE,
-                                "PluginManager::OnUpdate/%s",
-                                plugin->GetInternalId());
                     __try {
                         plugin->OnUpdate();
                     }
                     __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                                  stage,
+                                  plugin->GetInternalId(),
                                   GetExceptionInformation())) {
                         NightSharpDebug::Logf("[PluginManager] OnUpdate crashed; disabling name=%s id=%s",
                                               plugin->GetName(),
@@ -184,17 +178,11 @@ namespace Plugins {
         void OnRender() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
-                    char stage[160] = {};
-                    _snprintf_s(stage,
-                                sizeof(stage),
-                                _TRUNCATE,
-                                "PluginManager::OnRender/%s",
-                                plugin->GetInternalId());
                     __try {
                         plugin->OnRender();
                     }
                     __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                                  stage,
+                                  plugin->GetInternalId(),
                                   GetExceptionInformation())) {
                         NightSharpDebug::Logf("[PluginManager] OnRender crashed; disabling name=%s id=%s",
                                               plugin->GetName(),

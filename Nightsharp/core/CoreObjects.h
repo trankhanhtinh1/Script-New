@@ -326,10 +326,50 @@ inline uintptr_t RuntimeAddress(uintptr_t rva) {
     return Globals::base ? Globals::base + rva : 0;
 }
 
+// -------------------------------------------------------------------------
+// RVA function pointer cache
+// VirtualQuery (kernel syscall) is expensive. Static game function addresses
+// never change after module load, so we validate once and cache the result.
+// kFnCacheCapacity of 64 comfortably covers all ClassificationRuntime RVAs
+// plus spell/control/drawing functions used every frame.
+// -------------------------------------------------------------------------
+namespace FnCache {
+    constexpr int kCapacity = 64;
+    struct Entry { uintptr_t rva = 0; uintptr_t address = 0; };
+    inline Entry g_entries[kCapacity] = {};
+    inline int   g_count = 0;
+
+    inline uintptr_t Lookup(uintptr_t rva) {
+        for (int i = 0; i < g_count; ++i) {
+            if (g_entries[i].rva == rva) return g_entries[i].address;
+        }
+        return ~static_cast<uintptr_t>(0); // sentinel = not found
+    }
+
+    inline void Store(uintptr_t rva, uintptr_t address) {
+        if (g_count < kCapacity) {
+            g_entries[g_count++] = {rva, address};
+        }
+    }
+
+    // Call on module reinitialization so stale base+RVA mappings are cleared.
+    inline void Invalidate() {
+        for (int i = 0; i < g_count; ++i) g_entries[i] = {};
+        g_count = 0;
+    }
+} // namespace FnCache
+
 template <typename Fn>
 inline Fn RuntimeFunction(uintptr_t rva) {
+    constexpr uintptr_t kNotFound = ~static_cast<uintptr_t>(0);
+    const uintptr_t cached = FnCache::Lookup(rva);
+    if (cached != kNotFound) {
+        return reinterpret_cast<Fn>(cached);
+    }
     const uintptr_t address = RuntimeAddress(rva);
-    return Globals::IsExecutablePtr(address) ? reinterpret_cast<Fn>(address) : nullptr;
+    const uintptr_t result  = Globals::IsExecutablePtr(address) ? address : 0;
+    FnCache::Store(rva, result);
+    return reinterpret_cast<Fn>(result);
 }
 
 inline bool TryCallObjectPredicate(uintptr_t object, uintptr_t rva, bool& out) {
