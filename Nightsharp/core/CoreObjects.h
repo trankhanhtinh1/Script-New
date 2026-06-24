@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CoreAIHeroClient.h"
+#include "CoreAttackableUnit.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
@@ -694,26 +696,28 @@ inline void ReadBase(ObjectSnapshot& out, uintptr_t object) {
 }
 
 inline void ReadAttackable(ObjectSnapshot& out, uintptr_t object) {
-    out.health = ReadField<float>(object, Offset::AttackableUnit::HP);
-    out.maxHealth = ReadField<float>(object, Offset::AttackableUnit::MaxHP);
-    out.allShield = ReadField<float>(object, Offset::AttackableUnit::AllShield);
-    out.physicalShield = ReadField<float>(object, Offset::AttackableUnit::PhysicalShield);
-    out.magicalShield = ReadField<float>(object, Offset::AttackableUnit::MagicalShield);
-    out.isTargetable = ReadBoolByte(object, Offset::AttackableUnit::IsTargetable);
+    const auto attackable = CoreAttackableUnit::Read(object);
+    out.health = attackable.health;
+    out.maxHealth = attackable.maxHealth;
+    out.allShield = attackable.allShield;
+    out.physicalShield = attackable.physicalShield;
+    out.magicalShield = attackable.magicalShield;
+    out.isTargetable = attackable.isTargetable;
 }
 
 inline void ReadAIBase(ObjectSnapshot& out, uintptr_t object) {
-    out.mana = ReadField<float>(object, Offset::AIHeroClient::MP);
-    out.maxMana = ReadField<float>(object, Offset::AIHeroClient::MaxMP);
-    out.moveSpeed = ReadField<float>(object, Offset::AIHeroClient::MoveSpeed);
-    out.attackRange = ReadField<float>(object, Offset::AIHeroClient::AttackRange);
-    out.baseAttackDamage = ReadField<float>(object, Offset::AIHeroClient::BaseAttackDamage);
-    out.totalAttackDamage = out.baseAttackDamage + ReadField<float>(object, Offset::AIHeroClient::FlatPhysicalDmgMod);
-    out.abilityPower = ReadField<float>(object, Offset::AIHeroClient::BaseAbilityDamage);
-    out.armor = ReadField<float>(object, Offset::AIHeroClient::Armor);
-    out.spellBlock = ReadField<float>(object, Offset::AIHeroClient::SpellBlock);
-    out.attackSpeedMod = ReadField<float>(object, Offset::AIHeroClient::AttackSpeedMod);
-    out.level = ReadField<int>(object, Offset::AIHeroClient::LevelRef);
+    const auto hero = CoreAIHeroClient::Read(object);
+    out.mana = hero.mana;
+    out.maxMana = hero.maxMana;
+    out.moveSpeed = hero.moveSpeed;
+    out.attackRange = hero.attackRange;
+    out.baseAttackDamage = hero.baseAttackDamage;
+    out.totalAttackDamage = hero.TotalAttackDamage();
+    out.abilityPower = hero.baseAbilityDamage;
+    out.armor = hero.armor;
+    out.spellBlock = hero.spellBlock;
+    out.attackSpeedMod = hero.attackSpeedMod;
+    out.level = hero.level;
 }
 
 inline void ReadMinion(ObjectSnapshot& out, uintptr_t object) {
