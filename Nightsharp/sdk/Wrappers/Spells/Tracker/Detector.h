@@ -35,10 +35,7 @@ public:
         Initialized() = true;
         Events::AddOnProcessSpell(&Obj_AI_Base_OnProcessSpellCast);
         Events::AddOnMissileCreate(&MissileClient_OnCreate);
-
-        // TODO(SDK parity): EnsoulSharp also listens to GameObject.OnCreate
-        // for SourceObjectName spells. NightSharp currently exposes missile
-        // create/delete only; wire generic object create here once available.
+        Events::AddOnCreateObject(&GameObject_OnCreate);
     }
 
     static bool AddOnDetectSkillshot(OnDetectSkillshotH handler) {
@@ -84,6 +81,24 @@ private:
         return info.Ptr != 0 ? AIBaseClient(info.Ptr, info.Type) : AIBaseClient();
     }
 
+    static AIBaseClient MakeSourceObjectCaster(const SpellDatabaseEntry& entry) {
+        for (const auto& hero : GameObjects::Heroes()) {
+            if (hero.IsValid() &&
+                !hero.IsAlly() &&
+                hero.CharacterName() == entry.ChampionName) {
+                return AIBaseClient(hero.Handle());
+            }
+        }
+
+        for (const auto& hero : GameObjects::Heroes()) {
+            if (hero.IsValid()) {
+                return AIBaseClient(hero.Handle());
+            }
+        }
+
+        return AIBaseClient();
+    }
+
     static void Obj_AI_Base_OnProcessSpellCast(const Events::ProcessSpellEventArgs& args) {
         const auto* spellDatabaseEntry = SpellDatabase::GetByName(args.SpellName);
         if (!spellDatabaseEntry) {
@@ -96,6 +111,26 @@ private:
             SkillshotDetectionType::ProcessSpell,
             args.StartPosition.To2D(),
             args.EndPosition.To2D(),
+            Variables::TickCount() - Game::Ping() / 2);
+    }
+
+    static void GameObject_OnCreate(const Events::ObjectEventArgs& args) {
+        if (!args.Sender.IsValid()) {
+            return;
+        }
+
+        const auto* spellDatabaseEntry =
+            SpellDatabase::GetBySourceObjectName(args.Sender.Name);
+        if (!spellDatabaseEntry) {
+            return;
+        }
+
+        TriggerOnDetectSkillshot(
+            *spellDatabaseEntry,
+            MakeSourceObjectCaster(*spellDatabaseEntry),
+            SkillshotDetectionType::CreateObject,
+            args.Sender.Position.To2D(),
+            args.Sender.Position.To2D(),
             Variables::TickCount() - Game::Ping() / 2);
     }
 

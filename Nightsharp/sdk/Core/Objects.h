@@ -106,6 +106,34 @@ public:
         return ::CoreSpellDataInst::ManaCost(Ref());
     }
 
+    float CastRange() const {
+        return ::CoreSpellDataInst::CastRange(Ref());
+    }
+
+    float LineWidth() const {
+        return ::CoreSpellDataInst::LineWidth(Ref());
+    }
+
+    float CastRadius() const {
+        return ::CoreSpellDataInst::CastRadius(Ref());
+    }
+
+    float MissileSpeed() const {
+        return ::CoreSpellDataInst::MissileSpeed(Ref());
+    }
+
+    std::uint8_t CastType() const {
+        return ::CoreSpellDataInst::CastType(Ref());
+    }
+
+    std::string ScriptName() const {
+        return ::CoreSpellDataInst::ScriptName(Ref());
+    }
+
+    std::string IconName() const {
+        return ::CoreSpellDataInst::IconName(Ref());
+    }
+
     int Ammo() const {
         return ::CoreSpellDataInst::Ammo(Ref());
     }

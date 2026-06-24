@@ -177,6 +177,7 @@ struct CastSpellEventArgs {
     RawEventArgs Raw = {};
     ObjectInfo Sender = {};
     uintptr_t CastRequest = 0;
+    int Slot = -1;
     uint32_t TargetNetworkId = 0;
     Vec3 StartPosition = {};
     Vec3 EndPosition = {};
@@ -566,6 +567,42 @@ namespace detail {
 
     inline bool IsSlotValid(int slot) {
         return (slot >= 0 && slot <= 13) || slot == 64;
+    }
+
+    inline bool ReadProcessCastSpellSlot(uintptr_t request, int& outSlot) {
+        outSlot = -1;
+        if (!request) {
+            return false;
+        }
+
+        const uintptr_t base = CoreEventHook::shim::GetGameBase();
+        const uintptr_t table = base + Offset::ProcessCastSpellRequestLayout::DecodeTable;
+        if (!base || !IsValidAddress(table)) {
+            return false;
+        }
+
+        uint8_t encoded = 0;
+        if (!Read(request + Offset::ProcessCastSpellRequestLayout::EncodedSlot, encoded)) {
+            return false;
+        }
+
+        uint8_t lut0 = 0;
+        if (!Read(table + static_cast<uint8_t>(~encoded), lut0)) {
+            return false;
+        }
+
+        const uint8_t v62 = static_cast<uint8_t>((lut0 + 91u) ^ 0x44u);
+        const uint8_t v63 = static_cast<uint8_t>(
+            static_cast<uint8_t>(((v62 >> 1) & 0x55u) | (2u * (v62 & 0xD5u))) ^ 0xE3u);
+        const int slot = static_cast<int>(
+            static_cast<uint8_t>(((v63 >> 1) & 0x55u) | (2u * (v63 & 0xD5u))) + 102u);
+
+        if (!IsSlotValid(slot)) {
+            return false;
+        }
+
+        outSlot = slot;
+        return true;
     }
 
     inline int ReadEventSlot(uintptr_t castInfo) {
@@ -1273,6 +1310,7 @@ inline CastSpellEventArgs DecodeProcessCastSpell(const RawEventArgs& raw) {
     args.CastRequest = static_cast<uintptr_t>(raw.Rdx);
 
     if (args.CastRequest) {
+        detail::ReadProcessCastSpellSlot(args.CastRequest, args.Slot);
         detail::Read(
             args.CastRequest + Offset::SpellInputLayout::InputTargetNetId,
             args.TargetNetworkId);

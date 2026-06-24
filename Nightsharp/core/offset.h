@@ -232,7 +232,8 @@ namespace ControlRuntime {
     // Signature: 4C 8B DC 55 57 49 8D AB ?? ?? ?? ?? 48 81 EC 28 02 00 00
     constexpr auto ProcessCastSpell = 0x292310; // 4C 8B DC 55 57 49 8D AB ?? ?? ?? ?? 48 81 EC 28 02 00 00
     constexpr auto GetSpellState = 0x95F2E0;
-    // IDA 13337: sub_962210 calls sub_932C70(slot) for remaining cooldown.
+    // IDA 13339: sub_95F2E0 calls sub_912E30(slot) for remaining cooldown.
+    // sub_912E30 reads slot+0x30, checks slot+0x68 ammo recharge, then clamps.
     // 0x92D820 resolves inside another function and is not a safe entry point.
     constexpr auto GetSpellRemainingCooldown = 0x912E30;
     constexpr auto IsAlive = 0x2B0B00;
@@ -612,6 +613,14 @@ namespace SpellBookLayout {
         constexpr auto SpellNameKey = 0x28;
     } // namespace SpellInputLayout
 
+    namespace ProcessCastSpellRequestLayout {
+        // IDA 13339: sub_292310 calls sub_910A80(parsedCastInfo, request + 0x18).
+        // sub_910A80 decodes the request byte at +0xC4 into parsedCastInfo+0x154,
+        // the same slot field used by OnProcessSpell.
+        constexpr auto EncodedSlot = 0xC4;
+        constexpr auto DecodeTable = 0x1A6E320;
+    } // namespace ProcessCastSpellRequestLayout
+
     namespace SpellInfoLayout {
         // CE/hotfix verified: Info+0x08 = SpellData ptr, Info+0x60 = owner slot/backref.
         constexpr auto InfoSpellData    = 0x8;
@@ -630,19 +639,22 @@ namespace SpellBookLayout {
 
     namespace SpellDataResourceLayout {
         constexpr auto DataResourceBase = 0x60;
-        // Legacy direct-field aliases kept for source compatibility.
-        // Current 13337 build and old 13338 build both still expose the
-        // SPELLPARAM table in the equivalent of old sub_339430:
+        // IDA 13339: sub_3544A0 registers the SPELLPARAM enum:
         //   CASTRANGE    = 0x0F
+        //   CASTRADIUS   = 0x19
         //   LINEWIDTH    = 0x1D
+        //   CASTFRAME    = 0x26
         //   MISSILESPEED = 0x27
-        // The game now routes these through param-indexed getters instead of
-        // treating 0x478/0x568/0x518 as stable float fields.
+        // The serializer at sub_954850 confirms CastRange at +0x478.
+        // LineWidth/MissileSpeed direct aliases are kept behind sanity
+        // checks; CastRadius is not exposed as a verified direct field yet.
         constexpr auto ResCastRange     = 0x478;
         constexpr auto ResMissileSpeed  = 0x518;
         constexpr auto ResLineWidth     = 0x568;
         constexpr auto ResMaxAmmo       = 0x3C0;
-        constexpr auto ResCastType      = 0x510;
+        // IDA 13339: SpellTypeClassify reads resource+0x2F.
+        constexpr auto ResCastType      = 0x2F;
+        constexpr auto ResCastRangeDisplayOverride = 0x548;
         constexpr auto ResMissileSpec   = 0x508;
         constexpr auto ResScriptName    = 0x80;
         // IDA 13337: sub_96CB90(spellDataResource, level) returns

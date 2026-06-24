@@ -68,10 +68,8 @@ private:
             return;
         }
 
-        // TODO(SDK parity): Decode SpellbookCastSpellEventArgs.Slot in
-        // Core::Events::DecodeProcessCastSpell, then store the real slot.
         LastCastPacketSentStorage() = LastCastPacketSentEntry(
-            SpellSlot::Unknown,
+            static_cast<SpellSlot>(args.Slot),
             Variables::TickCount(),
             args.TargetNetworkId);
     }

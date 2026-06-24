@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 
 namespace CoreSpellBook {
@@ -61,6 +62,14 @@ inline bool IsSaneSeconds(float value) {
 
 inline bool IsSaneDuration(float value) {
     return IsFinite(value) && value >= 0.0f && value < 300.0f;
+}
+
+inline bool IsSaneDistance(float value) {
+    return IsFinite(value) && value >= 0.0f && value < 100000.0f;
+}
+
+inline bool IsSaneMissileSpeed(float value) {
+    return IsFinite(value) && value >= 0.0f && value < 1000000.0f;
 }
 
 inline bool IsValidSlot(std::int32_t slot) {
@@ -261,6 +270,98 @@ inline float ManaCost(const SpellSlotRef& ref) {
     const float firstValue = Globals::Read<float>(
         data + Offset::SpellDataLayout::DataManaCost);
     return IsSaneDuration(firstValue) ? firstValue : 0.0f;
+}
+
+inline float ResourceFloat(const SpellSlotRef& ref,
+                           uintptr_t offset,
+                           bool (*validator)(float),
+                           float fallback = 0.0f) {
+    if (!ref.IsValid() || offset == 0 || !validator) {
+        return fallback;
+    }
+
+    const uintptr_t resource = SpellDataResource(ref);
+    if (!Globals::IsValidPtr(resource)) {
+        return fallback;
+    }
+
+    const float value = Globals::Read<float>(resource + offset);
+    return validator(value) ? value : fallback;
+}
+
+inline std::uint8_t CastType(const SpellSlotRef& ref) {
+    const uintptr_t resource = SpellDataResource(ref);
+    if (!Globals::IsValidPtr(resource)) {
+        return 0;
+    }
+
+    return Globals::Read<std::uint8_t>(
+        resource + Offset::SpellDataResourceLayout::ResCastType);
+}
+
+inline float CastRange(const SpellSlotRef& ref) {
+    return ResourceFloat(
+        ref,
+        Offset::SpellDataResourceLayout::ResCastRange,
+        &IsSaneDistance);
+}
+
+inline float LineWidth(const SpellSlotRef& ref) {
+    return ResourceFloat(
+        ref,
+        Offset::SpellDataResourceLayout::ResLineWidth,
+        &IsSaneDistance);
+}
+
+inline float MissileSpeed(const SpellSlotRef& ref) {
+    return ResourceFloat(
+        ref,
+        Offset::SpellDataResourceLayout::ResMissileSpeed,
+        &IsSaneMissileSpeed);
+}
+
+inline float CastRadius(const SpellSlotRef& ref) {
+    (void)ref;
+    // IDA 13339 confirms the SPELLPARAM_CASTRADIUS enum value, but not a
+    // stable direct float field. Keep this explicit until the native getter
+    // path is reversed; SDK Spell falls back to SpellDatabase radius.
+    return 0.0f;
+}
+
+inline bool ReadResourceString(const SpellSlotRef& ref,
+                               uintptr_t offset,
+                               char* out,
+                               int maxOut) {
+    if (!out || maxOut <= 1 || offset == 0) {
+        return false;
+    }
+    out[0] = 0;
+
+    const uintptr_t resource = SpellDataResource(ref);
+    return Globals::IsValidPtr(resource) &&
+           Globals::ReadRuntimeStringField(resource + offset, out, maxOut);
+}
+
+inline std::string ScriptName(const SpellSlotRef& ref) {
+    char buffer[128] = {};
+    return ReadResourceString(
+            ref,
+            Offset::SpellDataResourceLayout::ResScriptName,
+            buffer,
+            static_cast<int>(sizeof(buffer)))
+        ? std::string(buffer)
+        : std::string();
+}
+
+inline std::string IconName(const SpellSlotRef& ref) {
+    char buffer[128] = {};
+    return ReadResourceString(
+            ref,
+            Offset::SpellDataResourceLayout::ResImgIconName,
+            buffer,
+            static_cast<int>(sizeof(buffer)))
+        ? std::string(buffer)
+        : std::string();
 }
 
 inline std::uint32_t SpellNameHash(const SpellSlotRef& ref) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Database/SpellDatabase.h"
+
 #include "../../Core/Game.h"
 #include "../../Core/Objects.h"
 #include "../../Core/Variables.h"
@@ -17,6 +19,8 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <limits>
+#include <string>
 #include <vector>
 
 namespace SDK {
@@ -83,10 +87,44 @@ public:
             return;
         }
 
-        // TODO(SDK parity): SpellDataInstClient does not expose CastRange,
-        // LineWidth, CastRadius or MissileSpeed yet. Populate these from
-        // native SpellDataResource once those accessors are ported.
-        (void)player.Spellbook().GetSpell(slot);
+        const auto spellData = player.Spellbook().GetSpell(slot);
+        const auto isSanePositive = [](float value, float maxValue) {
+            return std::isfinite(value) && value > 0.0f && value < maxValue;
+        };
+
+        const std::string spellName = spellData.Name();
+        const auto* databaseEntry = SpellDatabase::GetByName(spellName);
+
+        const float nativeRange = spellData.CastRange();
+        if (isSanePositive(nativeRange, 100000.0f)) {
+            Range = nativeRange;
+        } else if (databaseEntry && databaseEntry->Range > 0 &&
+                   databaseEntry->Range < std::numeric_limits<int>::max()) {
+            Range = static_cast<float>(databaseEntry->Range);
+        }
+
+        const float nativeLineWidth = spellData.LineWidth();
+        const float nativeCastRadius = spellData.CastRadius();
+        if (isSanePositive(nativeLineWidth, 100000.0f)) {
+            Width = nativeLineWidth;
+        } else if (isSanePositive(nativeCastRadius, 100000.0f)) {
+            Width = nativeCastRadius;
+        } else if (databaseEntry) {
+            const int databaseWidth = databaseEntry->Width > 0
+                ? databaseEntry->Width
+                : databaseEntry->Radius;
+            if (databaseWidth > 0) {
+                Width = static_cast<float>(databaseWidth);
+            }
+        }
+
+        const float nativeSpeed = spellData.MissileSpeed();
+        if (isSanePositive(nativeSpeed, 1000000.0f)) {
+            Speed = nativeSpeed;
+        } else if (databaseEntry && databaseEntry->MissileSpeed > 0) {
+            Speed = static_cast<float>(databaseEntry->MissileSpeed);
+        }
+
         Delay = 0.25f;
         MinHitChance = hitChance;
     }

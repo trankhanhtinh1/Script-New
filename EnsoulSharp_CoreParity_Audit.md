@@ -176,18 +176,34 @@ Current status:
 - `CoreCastSpell` already covers direct cast execution: position/skillshot, self, target, charge begin, and charge release.
 - Do not expand `CoreCastSpell` for Spellbook read-side state or SDK facade work.
 - `CoreSpellBook` now owns Spellbook read-side state: owner, caster network id, active spell pointer, active slot, spell array, cast info, spell state, readiness, cast/channel/charge checks, and local-player cast routing through `CoreCastSpell`.
-- `CoreSpellDataInst` now owns per-slot spell data: slot pointer resolution, `SpellInfo`, `SpellData`, resource pointer, name, level, learned, cooldown expires, remaining cooldown, total cooldown, mana cost, ammo, recharge fields, raw native state.
+- `CoreSpellDataInst` now owns per-slot spell data: slot pointer resolution, `SpellInfo`, `SpellData`, resource pointer, name, level, learned, cooldown expires, remaining cooldown, total cooldown, mana cost, ammo, recharge fields, raw native state, and the basic `SpellDataResource` parameters used by `Spell.h` (`CastRange`, `LineWidth`, `MissileSpeed`, `CastType`, script name, icon name).
 - `SDK/Core/Objects.h` now exposes the first EnsoulSharp-like facade for `SpellDataInstClient` and `SpellBookClient`.
+- `SDK/Wrappers/Spells/Spell.h` now follows the EnsoulSharp SDK constructor path for `Spell(slot, true)`: it fills `Range` from native `CastRange`, `Width` from native `LineWidth`/`CastRadius`, `Speed` from native `MissileSpeed`, and keeps `Delay = 0.25f`. If native width/range/speed is missing, it falls back to `SpellDatabase`.
 - `Plugins/Core/SpellTrackingDebugPlugin.h` now draws player/enemy Q/W/E/R/D/F level, remaining cooldown, total cooldown, simplified state, and recent `OnProcessSpell`/`OnDoCast` hits. It refreshes spell memory on a timer and uses event-based cooldown fallback for enemy spells.
 - `SpellState` values are kept compatible with EnsoulSharp (`Ready=0`, `Cooldown=0x20`, `NoMana=0x40`, etc.). `RawState()` keeps the native bitmask; `State()` returns a simplified state for SDK readiness checks.
 - SDK wrappers should still follow `EnsoulSharp.SDK/Core/Wrappers/Spells/*` 1-1, using `CoreCastSpell` only when a public `Spell.Cast(...)`/`Spellbook.CastSpell(...)` call needs to execute a cast.
 
-IDA 13337 verification used for this implementation:
-- `Offset::ControlRuntime::GetSpellState = 0x962210`: `sub_962210(spellbook, slot, outByte)` reads `*(spellbook + 0xAE0 + 8 * slot)` and returns an EnsoulSharp-style state bitmask.
-- `Offset::ControlRuntime::GetSpellRemainingCooldown = 0x932C70`: `sub_932C70(spellSlot)` reads `slot + 0x30` cooldown expiry, uses game time, checks ammo/recharge fields including `slot + 0x68`, then clamps at zero.
+IDA 13339 verification used for the current SpellBook implementation:
+- `Offset::ControlRuntime::GetSpellState = 0x95F2E0`: `sub_95F2E0(spellbook, slot, outByte)` reads `*(spellbook + 0xAE0 + 8 * slot)` and returns an EnsoulSharp-style state bitmask.
+- `Offset::ControlRuntime::GetSpellRemainingCooldown = 0x912E30`: `sub_912E30(spellSlot)` reads `slot + 0x30` cooldown expiry, uses game time, checks ammo/recharge fields including `slot + 0x68`, then clamps at zero.
 - `SpellDataResourceLayout::ResCooldownTime = 0x6C8`: `sub_96CB90(spellDataResource, level)` returns `*(resource + 0x6C8 + 4 * max(level - 1, 0))`.
 - Previous `0x92D820` was inside another function and is not a safe callable entry point; it was corrected in `offset.h`.
 - `Offset::ControlRuntime::GetSpellCastInfo = 0x27DD20`: returns per-slot cast info from the owner cast-info array. Use mainly for diagnostics; active cast should prefer `Spellbook + Offset::SpellRuntime::ActiveSpellCast`.
+
+IDA 13339 local cast request verification:
+- `Offset::ControlRuntime::ProcessCastSpell = 0x292310`: this is not EnsoulSharp `OnProcessSpellCast`; it parses the local/server cast request and later calls `OnProcessSpell(0x97E4C0)`.
+- EnsoulSharp `Obj_AI_Base.OnProcessSpellCast` maps to NightSharp `OnProcessSpell`.
+- `sub_292310` calls `sub_910A80(parsedCastInfo, request + 0x18)`.
+- `sub_910A80` decodes the request byte at `request + 0xC4` and writes the real slot to `parsedCastInfo + 0x154`.
+- `OnProcessSpell(0x97E4C0)` reads `parsedCastInfo + 0x154` as the slot.
+- NightSharp now exposes this in `CastSpellEventArgs::Slot` through `ProcessCastSpellRequestLayout::EncodedSlot = 0xC4` and `DecodeTable = 0x1A6E320`.
+
+IDA 13339 SpellDataResource parameter verification:
+- `sub_3544A0` registers the current SPELLPARAM enum values: `CASTRANGE=0x0F`, `CASTRADIUS=0x19`, `LINEWIDTH=0x1D`, `CASTFRAME=0x26`, `MISSILESPEED=0x27`.
+- `sub_916640` (`SpellTypeClassify`) reads the cast/type byte from `SpellDataResource + 0x2F`.
+- `sub_954850` confirms `SpellDataResource + 0x478` is a serialized float field used for cast range.
+- `SpellDataResource + 0x548` is used as a cast-range display override sentinel in `GetSpellState`; do not treat it as cast radius.
+- `CastRadius` direct offset is still not pinned. NightSharp exposes `CastRadius()` as 0 for now and `Spell.h` uses `SpellDatabaseEntry.Radius` when native `LineWidth` is unavailable.
 
 Enemy cooldown tracking note:
 - Native `GetSpellState` and `GetSpellRemainingCooldown` only report what exists in that object's replicated `SpellSlot` timer fields. They are enough for the local player, but enemy `slot + 0x30` is not always updated/replicated after an observed cast.
