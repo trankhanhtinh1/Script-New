@@ -62,17 +62,10 @@ public:
                 m_gameReady = true;
             }
             m_lastCalcMs = now;
-            __try {
-                m_output = SDK::Prediction::GetPrediction(BuildInput(target));
-            } __except (1) {
-                m_lastCalcMs = now + 1000; // don't retry for 1 second
-            }
+            m_output = SDK::Prediction::GetPrediction(BuildInput(target));
         }
 
-        __try {
-            DrawAll(target);
-        } __except (1) {}
-    }
+        DrawAll(target);
     }
 
     void OnMenu() override {
