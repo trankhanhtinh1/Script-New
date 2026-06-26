@@ -665,22 +665,18 @@ namespace SpellBookLayout {
     } // namespace SpellDataResourceLayout
 
     // ── Extended SpellCastInfo layout (event-received version) ───────────
-    // NOTE: This is DIFFERENT from `SpellCastInfoLayout` above. The layout
-    // defined higher up describes the object pointed to by
-    // `SpellRuntime::ActiveSpellCast` (the spellbook's currently-casting
-    // handle). The layout below describes what the game passes into the
-    // OnProcessSpell / OnFinishCast / OnStopCast callbacks as `castInfo`.
-    // Both layouts happen to overlap on some fields (e.g. CasterNetId)
-    // but have different slot offsets for most members.
-    //
-    // Preferred by downstream SDK wrappers that consume hook callbacks.
+    // IDA 13337 verification (Jun/2026): sub_959810 copies event CastInfo
+    // field-by-field into missile CastInfoBase (0x2C0). The position fields
+    // (StartPos/EndPos/CastPos) use the SAME offsets as SpellCastInfoLayout
+    // and MissileClient::CastInfoBase. Verified via sub_9700D0 (OnMissileCreate).
+    // Other fields (Slot, IsSpell, etc.) differ from SpellCastInfoLayout.
     namespace SpellCastInfoEventLayout {
         constexpr auto SpellData        = 0x0;
         constexpr auto SrcIndex         = 0x98;
         constexpr auto TargetIndex      = 0x9C;
-        constexpr auto StartPos         = 0xD8;
-        constexpr auto EndPos           = 0xE4;
-        constexpr auto CastPos          = 0xF0;
+        constexpr auto StartPos         = 0xD0;
+        constexpr auto EndPos           = 0xDC;
+        constexpr auto CastPos          = 0xE8;
         constexpr auto CastDelay        = 0x118;
         constexpr auto IsSpell          = 0x134;
         constexpr auto IsSpecialAttack  = 0x13E;

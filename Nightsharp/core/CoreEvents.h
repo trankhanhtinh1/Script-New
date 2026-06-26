@@ -1259,7 +1259,6 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
         detail::Read(args.Spellbook + Offset::SpellBookLayout::CasterNetId, args.CasterNetworkId);
     }
 
-    detail::ResolveActiveCastPositions(args);
     detail::ResolveSpellBookFields(args);
 
     return args;

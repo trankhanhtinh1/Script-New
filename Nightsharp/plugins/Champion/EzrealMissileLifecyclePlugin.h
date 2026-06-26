@@ -147,7 +147,7 @@ public:
         const int now = SDK::Game::TickCount();
         if (DrawPending()) {
             for (const auto& pending : pendingSnapshot) {
-                if (!pending.Active ||
+                if (!pending.Active || !pending.Confirmed ||
                     now - pending.ProcessTick > kPendingTimeoutMs) {
                     continue;
                 }
@@ -231,10 +231,10 @@ private:
 
     inline static constexpr SpellSpec kSpell = {
         "Ezreal",
-        "EzrealMysticShot",
-        "ezrealq",
+        "EzrealQ",
+        "EzrealMysticShotMissile",
         0,
-        2,
+        1,
         250,
         2000.0f,
         1150.0f,
@@ -244,6 +244,7 @@ private:
 
     struct PendingCast {
         bool Active = false;
+        bool Confirmed = false;
         uint32_t CasterNetworkId = 0;
         int ProcessTick = 0;
         Vec3 Start = {};
@@ -294,26 +295,11 @@ private:
 
     static bool IsKnownQMissileName(const char* value) {
         return EqualsInsensitive(value, kSpell.MissileName) ||
-               EqualsInsensitive(value, "EzrealMysticShotMissile") ||
-               EqualsInsensitive(value, "EzrealMysticShotPulseMissile") ||
                EqualsInsensitive(value, kSpell.SpellName);
     }
 
     static bool IsKnownQProcessName(const char* value) {
-        if (!value || !value[0]) {
-            return false;
-        }
-
-        if (EqualsInsensitive(value, "EzrealQ") ||
-            EqualsInsensitive(value, "ezrealq") ||
-            EqualsInsensitive(value, kSpell.SpellName)) {
-            return true;
-        }
-
-        const auto* data = SDK::Data::GetSpellByName(value);
-        return data &&
-               EqualsInsensitive(data->charName.c_str(), kSpell.Champion) &&
-               static_cast<int>(data->spellKey) == kSpell.Slot;
+        return EqualsInsensitive(value, kSpell.SpellName);
     }
 
     static bool IsPlausibleWorld(const Vec3& value) {
@@ -514,7 +500,6 @@ private:
         }
         if (bestIndex >= 0) {
             matched = self->m_pending[bestIndex];
-            self->m_pending[bestIndex] = {};
             foundPending = true;
         }
         ReleaseSRWLockExclusive(&self->m_stateLock);
@@ -522,8 +507,19 @@ private:
         const bool nameMatch =
             IsKnownQMissileName(args.SpellName) ||
             IsKnownQMissileName(args.MissileName);
-        if (!foundPending && !nameMatch) {
+        if (!nameMatch) {
+            if (foundPending) {
+                AcquireSRWLockExclusive(&self->m_stateLock);
+                self->m_pending[bestIndex] = {};
+                ReleaseSRWLockExclusive(&self->m_stateLock);
+            }
             return;
+        }
+
+        if (foundPending) {
+            AcquireSRWLockExclusive(&self->m_stateLock);
+            self->m_pending[bestIndex].Confirmed = true;
+            ReleaseSRWLockExclusive(&self->m_stateLock);
         }
 
         const Vec3 start =

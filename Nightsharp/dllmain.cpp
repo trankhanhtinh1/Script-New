@@ -14,7 +14,10 @@
 
 #include "CrashReporter.h"
 #include "DebugLog.h"
+#include "Core/PackmanHook.h"
 #include "overlay/Overlay.h"
+
+using namespace PackmanTest;
 
 #pragma comment(lib, "user32.lib")
 
@@ -174,6 +177,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         NightSharpDebug::CrashReporter::Install(hModule);
         NightSharpDebug::Phase("dll-attach");
         NightSharpDebug::Logf("[NightSharp] DllMain attach module=%p", hModule);
+        PackmanTest::InstallAndLog(hModule);
         StartOverlayWorker();
         break;
     case DLL_PROCESS_DETACH:
