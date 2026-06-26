@@ -13,6 +13,7 @@
 #include "Utility/AttackRangeDrawPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
+#include "Utility/PredictionDebugPlugin.h"
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
@@ -47,6 +48,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<AttackRangeDrawPlugin>();
         PluginManager::Get().Register<MovementStateDrawPlugin>();
         PluginManager::Get().Register<NavGridDrawPlugin>();
+        PluginManager::Get().Register<PredictionDebugPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins begin");

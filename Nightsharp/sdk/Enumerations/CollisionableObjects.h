@@ -43,4 +43,6 @@ constexpr bool HasFlag(CollisionableObjects value, CollisionableObjects flag) {
     return (static_cast<U>(value) & static_cast<U>(flag)) == static_cast<U>(flag);
 }
 
+using CollisionObjects = CollisionableObjects;
+
 } // namespace SDK

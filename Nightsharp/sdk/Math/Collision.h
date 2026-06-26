@@ -48,7 +48,7 @@ namespace SDK::Collision {
                 continue;
             }
 
-            if (input.Collision && input.Type == SkillshotType::Line) {
+            if (input.Collision && input.Type == SkillshotType::SkillshotLine) {
                 const auto collisions = Prediction::Movement::CollectLineCollisions(
                     source,
                     position,

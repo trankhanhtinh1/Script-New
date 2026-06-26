@@ -35,9 +35,9 @@ namespace VTable {
         constexpr auto NetworkIdTreeNodeIsNil = 0x19;
         constexpr auto NetworkIdTreeNodeKey = 0x20;
         constexpr auto NetworkIdTreeNodeObject = 0x28;
-        constexpr auto GetFirstObject = 0xA666A0;
-        constexpr auto GetNextObject = 0x553B20;
-        constexpr auto FindObject = 0x5520A0;
+        constexpr auto GetFirstObject = 0xA66760;
+        constexpr auto GetNextObject = 0x553C30;
+        constexpr auto FindObject = 0x5521B0;
     } // namespace ObjectManagerRuntime
 
 namespace GameRuntime {
@@ -46,15 +46,15 @@ namespace GameRuntime {
     constexpr auto ChatClient = 0x1EA01F0;
     constexpr auto ChatInstance = 0x1EA0458;
     constexpr auto ShopInstance = 0x1EB34F0;
-    constexpr auto OpenWindowsArray = 0x1F79038;
-    constexpr auto OpenWindowsCount = 0x1F79040;
+    constexpr auto OpenWindowsArray = 0x1F79028;
+    constexpr auto OpenWindowsCount = 0x1F79030;
     constexpr auto MySpellState = 0x1ECC618;
     constexpr auto CursorPosRaw = 0x1F3B618;
     // Global MouseInput pointer. sub_5999D0 reads screen X/Y from +0x0C/+0x10.
     constexpr auto MouseScreenVec2 = 0x1EA0200;
-    constexpr auto GetPing = 0x6CC760;
+    constexpr auto GetPing = 0x6CC720;
     constexpr auto GetMapID = 0x27E660;
-    constexpr auto PrintChat = 0x1158BF0;
+    constexpr auto PrintChat = 0x1158CB0;
 } // namespace GameRuntime
 
 namespace MouseInputLayout {
@@ -63,7 +63,7 @@ namespace MouseInputLayout {
 } // namespace MouseInputLayout
 
 namespace DrawingRuntime {
-    constexpr auto WorldToScreen = 0x13160E0;
+    constexpr auto WorldToScreen = 0x13161A0;
     // qword_1E79D20 points to the render/view state. Native W2S receives
     // qword_1E79D20 + 0x2F8 as its first argument.
     constexpr auto ViewProjectionRoot = 0x1EA01F8;
@@ -74,8 +74,8 @@ namespace DrawingRuntime {
     constexpr auto HudRoot = 0x1E9D140;
     constexpr auto HudInstance = 0x1E9D148;
     constexpr auto ViewPort = 0x1EAED80;
-    constexpr auto ViewPort2 = 0x1F7AA18;
-    constexpr auto Renderer = 0x1F7AA28;
+    constexpr auto ViewPort2 = 0x1F7AA08;
+    constexpr auto Renderer = 0x1F7AA18;
     constexpr auto ViewProjOffset = 0x1F644A0;
 } // namespace DrawingRuntime
 
@@ -177,7 +177,7 @@ namespace ControlRuntime {
     constexpr auto IssueOrder = 0x2899D0;
     // sub_984130(clientSpellMgr, spellSlot, slotIndex, position, releaseFlag)
     // is the native charge update/release packet sender.
-    constexpr auto UpdateChargeableSpell = 0x980F00;
+    constexpr auto UpdateChargeableSpell = 0x980FC0;
 
     // ─────────────────────────────────────────────────────────────────────
     // Cast spell pipeline (verified IDB 13337 via EnsoulSharp.dll ILSpy map).
@@ -188,58 +188,59 @@ namespace ControlRuntime {
     //
     // CastSpellSafe is the regular cast dispatcher. Charge input is a
     // separate state machine driven by HudSpellHandler and sub_984130.
-    constexpr auto CastSpellSafe          = 0xC13030; // programmatic CastSpell dispatcher
-    constexpr auto SendSpellCastPacket    = 0x97E4C0; // HUD SendSpellCastPacket (== Hooks::OnProcessSpell)
-    constexpr auto BuildCastPacket        = 0x965130; // build cast-spell packet payload
-    constexpr auto SendNetworkPacket      = 0x6EE380; // send packet via NetInstance
-    constexpr auto InitChargeChanneling   = 0xBFE3B0; // server ack/timer helper; not charge begin
-    constexpr auto InitChargeState        = 0xC14870; // stores SpellInput at HudSpellState+0x38
-    constexpr auto ReleaseActiveCharge    = 0xBF3730; // resolves slot and sends release
+    constexpr auto CastSpellSafe          = 0xC130F0; // programmatic CastSpell dispatcher
+    constexpr auto SendSpellCastPacket    = 0x97E580; // HUD SendSpellCastPacket (== Hooks::OnProcessSpell)
+    constexpr auto BuildCastPacket        = 0x9651F0; // build cast-spell packet payload
+    constexpr auto SendNetworkPacket      = 0x6EE340; // send packet via NetInstance
+    constexpr auto InitChargeChanneling   = 0xBFE470; // server ack/timer helper; not charge begin
+    constexpr auto InitChargeState        = 0xC14930; // stores SpellInput at HudSpellState+0x38
+    constexpr auto ReleaseActiveCharge    = 0xBF37F0; // resolves slot and sends release
     constexpr auto GetPlayerClient        = 0x27C6F0; // charge sender uses return value + 0x3128
     // Cast dispatch helpers (offsets corrected against IDB 13337 decompile —
     // see CastSpellSafe_Reverse_13337.md §7-§10 for full reverse notes).
-    constexpr auto FindOwnerSlot          = 0xBFBB00; // sub_BEF3A0: match slot whose SpellInput(+0x130)==arg → SpellSlot*
-    constexpr auto GetOwnerSlotIndex      = 0xBFBBC0; // sub_BEF460: slot index 0..63 (highest-level match)
-    constexpr auto NormalCastGate         = 0x2F7D20; // sub_2FEE90: gate slot<=3 && ready-flag (NOT a full can-cast check)
+    constexpr auto FindOwnerSlot          = 0xBFBBC0; // sub_BEF3A0: match slot whose SpellInput(+0x130)==arg → SpellSlot*
+    constexpr auto GetOwnerSlotIndex      = 0xBFBC80; // sub_BEF460: slot index 0..63 (highest-level match)
+    constexpr auto NormalCastGate         = 0x2F7E30; // sub_2FEE90: gate slot<=3 && ready-flag (NOT a full can-cast check)
     constexpr auto ServiceRegistryLookup  = 0x23FC00; // RB-tree spell-service lookup from CastSpellSafe
-    constexpr auto IsSlotQWER             = 0x3F13D0; // sub_3F4440: pure `slot <= 3` range check (NOT a self classifier)
-    constexpr auto PrepareCast            = 0x979FF0; // sub_97E0F0: prepare/build normal cast (flag -2 = self-cast)
-    constexpr auto ValidateProcessCast    = 0x30D5A0; // sub_314B20: validate & process normal cast
-    constexpr auto ExecuteNormalCast      = 0x32DE40; // sub_334EC0: cooldown accounting for normal cast
-    constexpr auto ExecuteSelfCast        = 0x3383D0; // sub_33F150: cooldown accounting for self-cast / toggle
-    constexpr auto ValidateTarget         = 0x30A2A0; // sub_311890: validate target (targeted) — not re-derived this session
-    constexpr auto RangeCheck             = 0x310B30; // sub_3180B0: range check (targeted) — not re-derived this session
-    constexpr auto ExecuteTargetCast      = 0x3382A0; // sub_33F020: execute cast on target — not re-derived this session
+    constexpr auto IsSlotQWER             = 0x3F14E0; // sub_3F4440: pure `slot <= 3` range check (NOT a self classifier)
+    constexpr auto PrepareCast            = 0x97A0B0; // sub_97E0F0: prepare/build normal cast (flag -2 = self-cast)
+    constexpr auto ValidateProcessCast    = 0x30D6B0; // sub_314B20: validate & process normal cast
+    constexpr auto ExecuteNormalCast      = 0x32DF50; // sub_334EC0: cooldown accounting for normal cast
+    constexpr auto ExecuteSelfCast        = 0x3384E0; // sub_33F150: cooldown accounting for self-cast / toggle
+    constexpr auto ValidateTarget         = 0x30A3B0; // sub_311890: validate target (targeted) — not re-derived this session
+    constexpr auto RangeCheck             = 0x310C40; // sub_3180B0: range check (targeted) — not re-derived this session
+    constexpr auto ExecuteTargetCast      = 0x3383B0; // sub_33F020: execute cast on target — not re-derived this session
 
     // ── Pre-cast gate + position priming (REQUIRED before CastSpellSafe) ───
     // Native callers run CanCastCheck (sub_C12220) before CastSpellSafe.
     // It resolves the target/current cursor and primes internal HUD cast state.
-    constexpr auto CanCastCheck           = 0xC20DF0; // sub_C12220: real CanCastCheck/ValidateCast (a3=targetNetId; 0=skillshot)
-    constexpr auto PrimeCastPosition      = 0xBFA680; // sub_BEDF20: resolve world/mouse pos via raycast → cast position
+    constexpr auto CanCastCheck           = 0xC20EB0; // sub_C12220: real CanCastCheck/ValidateCast (a3=targetNetId; 0=skillshot)
+    constexpr auto PrimeCastPosition      = 0xBFA740; // sub_BEDF20: resolve world/mouse pos via raycast → cast position
     // HUD spell handler (the function the game itself calls when the player
     // presses/releases a hotkey). Signature confirmed in IDB 13337:
     //   sub_BF1EF0(__int64 hudSpellInfo, unsigned int slot,
     //              int castMode, __int64 keyState)
     // arg3 is the hotkey/cast mode (2 = Smart/Quick Cast).
     // arg4 is key state (1 = press, 2 = release).
-    constexpr auto HudSpellHandler        = 0xBFE9A0;
-    constexpr auto SpellTypeClassify      = 0x916640; // sub_936DF0: spell-type byte +0x2F (1/6=targetable, 18=chargeable)
-    constexpr auto GetSpellLevel          = 0x3A8A80; // sub_9342B0: spell level (used by GetOwnerSlotIndex to pick slot)
+    constexpr auto HudSpellHandler        = 0xBFEA60;
+    constexpr auto SpellTypeClassify      = 0x916700; // sub_936DF0: spell-type byte +0x2F (1/6=targetable, 18=chargeable)
+    constexpr auto GetSpellLevel          = 0x3A8B90; // sub_9342B0: spell level (used by GetOwnerSlotIndex to pick slot)
     // Cast packet opcode (chargeable/normal): 609 (0x261), vtable off_1A4BDF8
     constexpr auto CastPacketOpcode       = 0x261;
 
     // AIBaseClient handler registered for PKT_NPC_CastSpellAns_s (packet 0x370).
     // Signature: 4C 8B DC 55 57 49 8D AB ?? ?? ?? ?? 48 81 EC 28 02 00 00
     constexpr auto ProcessCastSpell = 0x292310; // 4C 8B DC 55 57 49 8D AB ?? ?? ?? ?? 48 81 EC 28 02 00 00
-    constexpr auto GetSpellState = 0x95F2E0;
-    // IDA 13337: sub_962210 calls sub_932C70(slot) for remaining cooldown.
+    constexpr auto GetSpellState = 0x95F3A0;
+    // IDA 13339: sub_95F2E0 calls sub_912E30(slot) for remaining cooldown.
+    // sub_912E30 reads slot+0x30, checks slot+0x68 ammo recharge, then clamps.
     // 0x92D820 resolves inside another function and is not a safe entry point.
-    constexpr auto GetSpellRemainingCooldown = 0x912E30;
-    constexpr auto IsAlive = 0x2B0B00;
+    constexpr auto GetSpellRemainingCooldown = 0x912EF0;
+    constexpr auto IsAlive = 0x2B0C10;
     constexpr auto GetSpellCastInfo = 0x2771C0;
     constexpr auto GetResourceType = 0x274DA0;
-    constexpr auto GetAttackDelay = 0x573480;
-    constexpr auto GetAttackWindup = 0x573380;
+    constexpr auto GetAttackDelay = 0x573590;
+    constexpr auto GetAttackWindup = 0x573490;
     constexpr auto GetBoundingRadius = 0x278010;
     constexpr auto IssueOrderFlag = 0x1DFEFD8;
     constexpr auto CastSpellFlag = 0x1DFEF70;
@@ -292,7 +293,7 @@ namespace NavGridRuntime {
     constexpr auto NavGrid = 0x1EA0198;
     // IDA 13337: 0x1243760 is a path-neighbor expansion helper that calls
     // sub_124AEA0; CoreNavGrid reads cell flags directly instead of calling it.
-    constexpr auto GetCollisionFlags = 0x1269B50;
+    constexpr auto GetCollisionFlags = 0x1269C10;
     constexpr auto GetAiManager = 0x27ECA0; // inner AiManager pointer resolver
 } // namespace NavGridRuntime
 
@@ -356,49 +357,49 @@ namespace SpellBookLayout {
     }*/ // namespace HookSignatures
 
     namespace Hooks {
-        constexpr uintptr_t OnIntegerPropertyChange = 0x376140; //OnIntegerPropertyChange
+        constexpr uintptr_t OnIntegerPropertyChange = 0x376250; //OnIntegerPropertyChange
         // ClientMainLoop is intentionally 0: NIGHTSHARP_ENABLE_CLIENTMAINLOOP_HOOK
         // is off by default and CoreHook::IsInlineAllowed() skips RVA == 0.
         constexpr uintptr_t ClientMainLoop          = 0x0;
         // Central animation request wrapper. It stores the AIBaseClient
         // callback receiver at *(RCX+0x08) and accepts an RDX string-view.
-        constexpr uintptr_t OnPlayAnimationWrapper  = 0xE2D750;
-        constexpr uintptr_t CreateClientEffect      = 0x90B180;
+        constexpr uintptr_t OnPlayAnimationWrapper  = 0xE2D810;
+        constexpr uintptr_t CreateClientEffect      = 0x90B240;
 
-        constexpr uintptr_t DispatchEvent           = 0x4B8830;
-        constexpr uintptr_t OnTeleport              = 0x72EC30; //OnTeleport
-        constexpr uintptr_t Hud_OnDisconnect        = 0x6D1240;
+        constexpr uintptr_t DispatchEvent           = 0x4B8940;
+        constexpr uintptr_t OnTeleport              = 0x72ECF0; //OnTeleport
+        constexpr uintptr_t Hud_OnDisconnect        = 0x6D1200;
         constexpr uintptr_t ProcessCastSpell        = ControlRuntime::ProcessCastSpell;
         constexpr uintptr_t OnUpdateChargeableSpell = ControlRuntime::UpdateChargeableSpell;
         constexpr uintptr_t OnBuffAdd               = 0x21DA30; //OnBuffGain
         constexpr uintptr_t OnBuffRemove            = 0x21DB50; //OnBuffLose
         constexpr uintptr_t OnBuffUpdate            = 0x21D5B0;
-        constexpr uintptr_t OnBuffGain              = 0xC1F590;
+        constexpr uintptr_t OnBuffGain              = 0xC1F650;
         // AssignNetworkId: writes networkId to obj+0xCC, inserts into
         // ObjectManager tree, then calls post-init vfunc. Hook this instead
         // of the raw tree-insert so the object is fully ready when event fires.
         //   RCX = GameObject*, RDX = networkId (uint32_t).
         // IDA sig: 40 56 48 83 EC ? 45 33 C9
-        constexpr uintptr_t OnCreate                = 0x563D70; //AssignNetworkId
-        constexpr uintptr_t OnMissileCreate         = 0x9700D0;
+        constexpr uintptr_t OnCreate                = 0x563E80; //AssignNetworkId
+        constexpr uintptr_t OnMissileCreate         = 0x970190;
         // sub_54CC30(ObjectManager*, GameObject*) removes an object from all
         // ObjectManager lists/trees. The object argument is RDX at hook entry.
-        constexpr uintptr_t OnDelete                = 0x562CD0; //OnDeleteObject
-        constexpr uintptr_t OnMissileDelete         = 0x958390;
+        constexpr uintptr_t OnDelete                = 0x562DE0; //OnDeleteObject
+        constexpr uintptr_t OnMissileDelete         = 0x958450;
         constexpr uintptr_t OnDamage                = 0x29A6F0;
-        constexpr uintptr_t OnDoCast                = 0x9780E0;
+        constexpr uintptr_t OnDoCast                = 0x9781A0;
         constexpr uintptr_t OnFinishCast            = 0x29B0E0;
-        constexpr uintptr_t OnGameUpdate            = 0x54FB60; //OnUpdate
+        constexpr uintptr_t OnGameUpdate            = 0x54FC70; //OnUpdate
         constexpr uintptr_t OnLevelUp               = 0x28FC40;
         // Packet callback for ids 0x11D/0x1F1. RCX is AIBaseClient and the
         // internal animation-name view is at RDX+0x18.
         constexpr uintptr_t OnPlayAnimation         = 0x295080;
-        constexpr uintptr_t OnProcessSpell          = 0x97E4C0; //OnProcessSpellCast
-        constexpr uintptr_t OnSpellImpact           = 0x976820;
-        constexpr uintptr_t OnStopCast              = 0x97E7D0;
+        constexpr uintptr_t OnProcessSpell          = 0x97E580; //OnProcessSpellCast
+        constexpr uintptr_t OnSpellImpact           = 0x9768E0;
+        constexpr uintptr_t OnStopCast              = 0x97E890;
         constexpr uintptr_t OnStealth               = 0x299C70;
-        constexpr uintptr_t OnSurrender             = 0xE8D363;
-        constexpr uintptr_t ProcessWorldEvent       = 0x6D2290;
+        constexpr uintptr_t OnSurrender             = 0xE8D423;
+        constexpr uintptr_t ProcessWorldEvent       = 0x6D2250;
 
         // ─────────────────────────────────────────────────────────────────
         // EnsoulSharp-derived event hooks (verified against EnsoulSharp.dll
@@ -416,7 +417,7 @@ namespace SpellBookLayout {
         //   It calls sub_271720 -> sub_300890 after resolving the movement
         //   component. Hooking sub_300890 directly loses the GameObject
         //   sender and exposes a different seven-argument ABI.
-        constexpr uintptr_t OnNewPath               = 0x5645D0;
+        constexpr uintptr_t OnNewPath               = 0x5646E0;
         //
         // OnTeleport (EnsoulSharp: AttackableUnit.OnTeleport)
         //   Native signature: void(AttackableUnit*, StlString* recallType,
@@ -612,6 +613,14 @@ namespace SpellBookLayout {
         constexpr auto SpellNameKey = 0x28;
     } // namespace SpellInputLayout
 
+    namespace ProcessCastSpellRequestLayout {
+        // IDA 13339: sub_292310 calls sub_910A80(parsedCastInfo, request + 0x18).
+        // sub_910A80 decodes the request byte at +0xC4 into parsedCastInfo+0x154,
+        // the same slot field used by OnProcessSpell.
+        constexpr auto EncodedSlot = 0xC4;
+        constexpr auto DecodeTable = 0x1A6E320;
+    } // namespace ProcessCastSpellRequestLayout
+
     namespace SpellInfoLayout {
         // CE/hotfix verified: Info+0x08 = SpellData ptr, Info+0x60 = owner slot/backref.
         constexpr auto InfoSpellData    = 0x8;
@@ -630,19 +639,22 @@ namespace SpellBookLayout {
 
     namespace SpellDataResourceLayout {
         constexpr auto DataResourceBase = 0x60;
-        // Legacy direct-field aliases kept for source compatibility.
-        // Current 13337 build and old 13338 build both still expose the
-        // SPELLPARAM table in the equivalent of old sub_339430:
+        // IDA 13339: sub_3544A0 registers the SPELLPARAM enum:
         //   CASTRANGE    = 0x0F
+        //   CASTRADIUS   = 0x19
         //   LINEWIDTH    = 0x1D
+        //   CASTFRAME    = 0x26
         //   MISSILESPEED = 0x27
-        // The game now routes these through param-indexed getters instead of
-        // treating 0x478/0x568/0x518 as stable float fields.
+        // The serializer at sub_954850 confirms CastRange at +0x478.
+        // LineWidth/MissileSpeed direct aliases are kept behind sanity
+        // checks; CastRadius is not exposed as a verified direct field yet.
         constexpr auto ResCastRange     = 0x478;
         constexpr auto ResMissileSpeed  = 0x518;
         constexpr auto ResLineWidth     = 0x568;
         constexpr auto ResMaxAmmo       = 0x3C0;
-        constexpr auto ResCastType      = 0x510;
+        // IDA 13339: SpellTypeClassify reads resource+0x2F.
+        constexpr auto ResCastType      = 0x2F;
+        constexpr auto ResCastRangeDisplayOverride = 0x548;
         constexpr auto ResMissileSpec   = 0x508;
         constexpr auto ResScriptName    = 0x80;
         // IDA 13337: sub_96CB90(spellDataResource, level) returns
@@ -734,23 +746,23 @@ namespace SpellBookLayout {
 
     namespace ClassificationRuntime {
         constexpr auto CompareTypeFlags = 0x2881F0;
-        constexpr auto IsHero           = 0x2C5180;
-        constexpr auto IsMinion         = 0x2C51E0;
-        constexpr auto IsTurret         = 0x2C5330;
-        constexpr auto IsBarracksDampener = 0x2C50C0;
-        constexpr auto IsHQ               = 0x2C5140;
-        constexpr auto IsShop             = 0x2C5270;
-        constexpr auto IsJungleMonster    = 0x30D310;
-        constexpr auto IsLaneMinion       = 0x30D580;
-        constexpr auto GetJungleType      = 0x6FD520;
+        constexpr auto IsHero           = 0x2C5290;
+        constexpr auto IsMinion         = 0x2C52F0;
+        constexpr auto IsTurret         = 0x2C5440;
+        constexpr auto IsBarracksDampener = 0x2C51D0;
+        constexpr auto IsHQ               = 0x2C5250;
+        constexpr auto IsShop             = 0x2C5380;
+        constexpr auto IsJungleMonster    = 0x30D420;
+        constexpr auto IsLaneMinion       = 0x30D690;
+        constexpr auto GetJungleType      = 0x6FD620;
         constexpr auto IsClone            = 0x376DC0;
-        constexpr auto IsBuilding         = 0x2C52B0;
+        constexpr auto IsBuilding         = 0x2C53C0;
         constexpr auto IsDead             = 0x287000;
         constexpr auto IsVulnerable       = 0x287890;
-        constexpr auto IsDragon           = 0x30CD00;
-        constexpr auto IsElderDragon      = 0x30CD60;
-        constexpr auto IsBaron            = 0x30C6D0;
-        constexpr auto IsRiftHerald       = 0x30D850;
+        constexpr auto IsDragon           = 0x30CE10;
+        constexpr auto IsElderDragon      = 0x30CE70;
+        constexpr auto IsBaron            = 0x30C7E0;
+        constexpr auto IsRiftHerald       = 0x30D960;
         constexpr auto IsSelectable       = 0x228630;
         constexpr auto IsFleeing          = 0x225580;
         constexpr auto IsNoRender         = 0x2255D0;
@@ -807,8 +819,8 @@ namespace SpellBookLayout {
         constexpr auto Dead                = 0x250;
         constexpr auto Position            = 0x25C;
         constexpr auto Visibility          = 0x2E0;
-        constexpr auto Visible             = 0x310;
-        constexpr auto IsVisible           = 0x310;
+        constexpr auto Visible             = 0x2E0;
+        constexpr auto IsVisible           = 0x2E0;
         constexpr auto IsInvulnerable      = 0x5A0;
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
         // pointer on 26.6 (sub_9F18FE constructor / sub_9F18A0 destructor pair
@@ -912,23 +924,23 @@ namespace SpellBookLayout {
         // SData, names, caster/target indexes and trajectory vectors used by
         // missile tracking / evade.
         constexpr auto CastInfoBase  = 0x2C0;
-        constexpr auto SpellDataPtr  = CastInfoBase + 0x00;
-        constexpr auto SpellName     = CastInfoBase + 0x20;
-        constexpr auto MissileName   = CastInfoBase + 0x48;
-        constexpr auto TargetIndex   = CastInfoBase + 0x9C;
-        constexpr auto CasterIndex   = CastInfoBase + 0xA0;
-        constexpr auto MissileNetId  = CastInfoBase + 0xAC;
+        constexpr auto SpellDataPtr  = 0x2C0;
+        constexpr auto SpellName     = 0x2E0;
+        constexpr auto MissileName   = 0x308;
+        constexpr auto TargetIndex   = 0x35C;
+        constexpr auto CasterIndex   = 0x360;
+        constexpr auto MissileNetId  = 0x36C;
         constexpr auto ObjectNetId   = All::NetId;
-        constexpr auto StartPos      = CastInfoBase + 0xD0;
-        constexpr auto EndPos        = CastInfoBase + 0xDC;
-        constexpr auto CastEndPos    = CastInfoBase + 0xE8;
+        constexpr auto StartPos      = 0x390;
+        constexpr auto EndPos        = 0x39C;
+        constexpr auto CastEndPos    = 0x3A8;
         constexpr auto Position      = All::Position;
         constexpr auto StartTime     = 0x478;
     } // namespace MissileClient
 
     namespace MissileEventLayout {
-        constexpr auto SpellData                 = 0x00;
-        constexpr auto Slot                      = 0x08;
+        constexpr auto SpellData                 = 0x0;
+        constexpr auto Slot                      = 0x8;
         constexpr auto SpellName                 = 0x20;
         constexpr auto MissileName               = 0x48;
         constexpr auto TargetIndex               = 0x9C;
@@ -945,8 +957,8 @@ namespace SpellBookLayout {
     // GadgetRuntime::ThreadTrampoline removed Apr 25/2026 - replaced by CoreEventHook::FindSpoofGadget (dynamic byte-pattern 'FF 23' search)
 
     namespace DirectInputRuntime {
-        constexpr auto KeyboardInput     = 0x11B3AE0;
-        constexpr auto MouseInput        = 0x11B3CF0;
+        constexpr auto KeyboardInput     = 0x11B3BA0;
+        constexpr auto MouseInput        = 0x11B3DB0;
         constexpr auto KeyboardDevice    = 0x1F546B0;
         constexpr auto KeyboardBuffer    = 0x1F546C0;
         constexpr auto KeyboardCount     = 0x1F546E0;

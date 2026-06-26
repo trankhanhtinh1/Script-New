@@ -1,10 +1,4 @@
 #pragma once
-/*
- * NightSharp - D3D11 ImGui Overlay
- *
- * Creates a transparent Win32 overlay window, initializes D3D11 +
- * DirectComposition, and renders a minimal ImGui menu.
- */
 
 #include <Windows.h>
 #include <cstdint>

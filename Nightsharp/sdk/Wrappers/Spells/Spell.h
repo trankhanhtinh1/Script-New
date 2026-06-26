@@ -11,6 +11,9 @@
 #include "../../Extensions/Extensions.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../Utils/Minion.h"
+#include "../../Math/Prediction.h"
+#include "../../Math/Collision.h"
+#include "../../Math/HealthPrediction.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -44,29 +47,6 @@ enum class DamageStage : std::int32_t {
     EmpoweredDamagePerQuarterSecond
 };
 #endif
-
-struct PredictionInput {
-    AIBaseClient Unit;
-    float Delay = 0.0f;
-    float Radius = 0.0f;
-    float Speed = FLT_MAX;
-    Vector3 From = {};
-    float Range = FLT_MAX;
-    bool Collision = false;
-    SkillshotType Type = SkillshotType::SkillshotLine;
-    Vector3 RangeCheckFrom = {};
-    bool AoE = false;
-    CollisionableObjects CollisionObjects =
-        CollisionableObjects::Heroes | CollisionableObjects::Minions;
-};
-
-struct PredictionOutput {
-    Vector3 CastPosition = {};
-    Vector3 UnitPosition = {};
-    HitChance Hitchance = HitChance::None;
-    int AoeTargetsHitCount = 0;
-    std::vector<GameObject> CollisionObjects;
-};
 
 class Spell {
 public:
@@ -230,7 +210,7 @@ public:
         }
 
         const auto prediction = GetPrediction(unit, areaOfEffect);
-        if (minTargets != -1 && prediction.AoeTargetsHitCount <= minTargets) {
+        if (minTargets != -1 && prediction.AoeTargetsHitCount() <= minTargets) {
             return CastStates::NotEnoughTargets;
         }
 
@@ -369,12 +349,26 @@ public:
             CurrentRange());
     }
 
-    std::vector<AIBaseClient> GetCollision(const Vector2& /*fromVector2*/,
-                                           const std::vector<Vector2>& /*to*/,
-                                           float /*delayOverride*/ = -1.0f) const {
-        // TODO(SDK parity): port SDK::Collision/Movement prediction; current
-        // Collision.h references missing Prediction.h.
-        return {};
+    std::vector<AIBaseClient> GetCollision(const Vector2& fromVector2,
+                                           const std::vector<Vector2>& to,
+                                           float delayOverride = -1.0f) const {
+        PredictionInput input;
+        input.Unit = AIBaseClient();
+        input.From = Vector3::From2D(fromVector2);
+        input.RangeCheckFrom = From.IsValid() && !From.IsZero() ? From : Vector3::From2D(fromVector2);
+        input.Radius = Width;
+        input.Delay = delayOverride >= 0.0f ? delayOverride : Delay;
+        input.Speed = Speed;
+        input.Type = Type;
+        input.Collision = true;
+        input.CollisionObjects = CollisionableObjects::Heroes | CollisionableObjects::Minions;
+
+        std::vector<Vector3> positions;
+        positions.reserve(to.size());
+        for (const auto& v : to) {
+            positions.push_back(Vector3::From2D(v));
+        }
+        return SDK::Collision::GetCollision(positions, input);
     }
 
     float GetDamage(const AIBaseClient& /*target*/, DamageStage /*stage*/ = DamageStage::Default) const {
@@ -384,9 +378,13 @@ public:
     }
 
     float GetHealthPrediction(const AIBaseClient& unit) const {
-        // TODO(SDK parity): restore HealthPrediction after Prediction/Health.h
-        // is ported into NightSharp/SDK/Math/Prediction.
-        return unit.IsValid() ? unit.Health() : 0.0f;
+        if (!unit.IsValid()) {
+            return 0.0f;
+        }
+        if (!IsSkillshot) {
+            return SDK::Health::GetPrediction(unit, static_cast<int>(Delay * 1000.0f) + 70);
+        }
+        return SDK::Health::GetPrediction(unit, 1000);
     }
 
     float GetHitCount(HitChance hitChance = HitChance::High) {
@@ -424,20 +422,21 @@ public:
     PredictionOutput GetPrediction(const AIBaseClient& unit,
                                    bool aoe = false,
                                    float overrideRange = -1.0f,
-                                   CollisionableObjects /*collisionable*/ =
+                                   CollisionableObjects collisionable =
                                        CollisionableObjects::Heroes | CollisionableObjects::Minions) const {
-        // TODO(SDK parity): replace current-position fallback with
-        // Movement.GetPrediction once NightSharp prediction is ported.
-        PredictionOutput output;
-        output.UnitPosition = unit.Position();
-        output.CastPosition = unit.Position();
-        output.AoeTargetsHitCount = aoe ? 1 : 0;
-
-        const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();
-        output.Hitchance = RangeCheckSource().DistanceSqr2D(output.CastPosition) <= range * range
-            ? HitChance::High
-            : HitChance::OutOfRange;
-        return output;
+        PredictionInput input;
+        input.Unit = unit;
+        input.Delay = Delay;
+        input.Radius = Width;
+        input.Speed = Speed;
+        input.From = SourcePosition();
+        input.Range = overrideRange > 0.0f ? overrideRange : CurrentRange();
+        input.RangeCheckFrom = RangeCheckSource();
+        input.Type = Type;
+        input.Collision = Collision;
+        input.CollisionObjects = collisionable;
+        input.AoE = aoe;
+        return SDK::Prediction::GetPrediction(input);
     }
 
     AIHeroClient GetTarget(float extraRange = 0.0f,

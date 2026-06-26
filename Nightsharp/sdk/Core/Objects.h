@@ -402,19 +402,25 @@ public:
     }
 
     GameObjectTeam Team() const {
-        return ObjectDetail::MapTeam(Snapshot().team);
+        return ObjectDetail::MapTeam(::Core::Objects::ReadTeamValue(Address()));
     }
 
     bool IsEnemy() const {
-        const auto player = ::Core::ObjectManager::Player();
-        const auto self = Snapshot();
-        return player.IsValid() && self.IsValid() && player.team != 0 && self.team != 0 && player.team != self.team;
+        const uintptr_t addr = Address();
+        const uintptr_t paddr = ::Core::ObjectManager::PlayerAddress();
+        if (!Globals::IsValidPtr(addr) || !Globals::IsValidPtr(paddr)) return false;
+        const std::uint32_t st = ::Core::Objects::ReadTeamValue(addr);
+        const std::uint32_t pt = ::Core::Objects::ReadTeamValue(paddr);
+        return st != 0 && pt != 0 && st != pt;
     }
 
     bool IsAlly() const {
-        const auto player = ::Core::ObjectManager::Player();
-        const auto self = Snapshot();
-        return player.IsValid() && self.IsValid() && player.team != 0 && player.team == self.team;
+        const uintptr_t addr = Address();
+        const uintptr_t paddr = ::Core::ObjectManager::PlayerAddress();
+        if (!Globals::IsValidPtr(addr) || !Globals::IsValidPtr(paddr)) return false;
+        const std::uint32_t st = ::Core::Objects::ReadTeamValue(addr);
+        const std::uint32_t pt = ::Core::Objects::ReadTeamValue(paddr);
+        return st != 0 && st == pt;
     }
 
     bool IsMe() const {
@@ -423,39 +429,43 @@ public:
     }
 
     bool IsDead() const {
-        return Snapshot().isDead;
+        return ::Core::Objects::IsDead(Address());
     }
 
     bool IsVisible() const {
-        return Snapshot().isVisible;
+        return ::Core::Objects::ReadBoolByte(Address(), Offset::All::Visible);
     }
 
     bool IsTargetable() const {
-        return Snapshot().isTargetable;
+        return ::Core::Objects::ReadBoolByte(Address(), Offset::AttackableUnit::IsTargetable);
     }
 
     bool IsInvulnerable() const {
-        return Snapshot().isInvulnerable;
+        return ::Core::Objects::ReadBoolByte(Address(), Offset::All::IsInvulnerable);
     }
 
     float BoundingRadius() const {
-        return Snapshot().boundingRadius;
+        return ::Core::Objects::ReadBoundingRadius(Address());
     }
 
     Vector3 Position() const {
-        return Snapshot().position;
+        return ::Core::Objects::ReadPosition(Address());
     }
 
     Vector3 Direction() const {
-        return Snapshot().direction;
+        return ::Core::Objects::ReadDirection(Address());
     }
 
     std::string Name() const {
-        return Snapshot().name;
+        char buf[96] = {};
+        ::Core::Objects::ReadName(Address(), buf, static_cast<int>(sizeof(buf)));
+        return std::string(buf);
     }
 
     std::string CharacterName() const {
-        return Snapshot().characterName;
+        char buf[96] = {};
+        ::Core::Objects::ReadCharacterName(Address(), buf, static_cast<int>(sizeof(buf)));
+        return std::string(buf);
     }
 
     // Gap #2 fix: EnsoulSharp Compare is strict — only matches when both
@@ -534,15 +544,14 @@ public:
             return false;
         }
 
-        const auto snapshot = Snapshot();
-        if (static_cast<::Core::Objects::MinionClass>(snapshot.minionClass) ==
+        if (::Core::Objects::ReadMinionClass(Address()) ==
             ::Core::Objects::MinionClass::Pet) {
             return true;
         }
 
-        const std::string name = ObjectDetail::ToLower(
-            snapshot.characterName[0] ? snapshot.characterName : snapshot.name);
-        return ObjectDetail::EqualsAny(name, {
+        const std::string name = ObjectDetail::ToLower(CharacterName());
+        const std::string nameFallback = name.empty() ? ObjectDetail::ToLower(Name()) : name;
+        return ObjectDetail::EqualsAny(nameFallback, {
             "annietibbers", "elisespiderling", "heimertyellow",
             "heimertblue", "ivernminion", "malzaharvoidling",
             "shacobox", "yorickghoulmelee", "yorickbigghoul",
@@ -569,15 +578,15 @@ public:
     explicit AttackableUnit(::Core::Objects::ObjectHandle handle)
         : GameObject(handle) {}
 
-    float Health() const { return Snapshot().health; }
-    float MaxHealth() const { return Snapshot().maxHealth; }
+    float Health() const { return Globals::Read<float>(Address() + Offset::AttackableUnit::HP); }
+    float MaxHealth() const { return Globals::Read<float>(Address() + Offset::AttackableUnit::MaxHP); }
     float HealthPercent() const {
         const float maxHealth = MaxHealth();
         return maxHealth > 0.0f ? (Health() * 100.0f / maxHealth) : 0.0f;
     }
-    float AllShield() const { return Snapshot().allShield; }
-    float PhysicalShield() const { return Snapshot().physicalShield; }
-    float MagicalShield() const { return Snapshot().magicalShield; }
+    float AllShield() const { return Globals::Read<float>(Address() + Offset::AttackableUnit::AllShield); }
+    float PhysicalShield() const { return Globals::Read<float>(Address() + Offset::AttackableUnit::PhysicalShield); }
+    float MagicalShield() const { return Globals::Read<float>(Address() + Offset::AttackableUnit::MagicalShield); }
 };
 
 class AIBaseClient : public AttackableUnit {
@@ -589,17 +598,17 @@ public:
     explicit AIBaseClient(::Core::Objects::ObjectHandle handle)
         : AttackableUnit(handle) {}
 
-    float Mana() const { return Snapshot().mana; }
-    float MaxMana() const { return Snapshot().maxMana; }
-    float MoveSpeed() const { return Snapshot().moveSpeed; }
-    float AttackRange() const { return Snapshot().attackRange; }
-    float TotalAttackDamage() const { return Snapshot().totalAttackDamage; }
-    float BaseAttackDamage() const { return Snapshot().baseAttackDamage; }
-    float TotalMagicalDamage() const { return Snapshot().abilityPower; }
-    float Armor() const { return Snapshot().armor; }
-    float SpellBlock() const { return Snapshot().spellBlock; }
-    float AttackSpeedMod() const { return Snapshot().attackSpeedMod; }
-    int Level() const { return Snapshot().level; }
+    float Mana() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::MP); }
+    float MaxMana() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::MaxMP); }
+    float MoveSpeed() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::MoveSpeed); }
+    float AttackRange() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::AttackRange); }
+    float TotalAttackDamage() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::BaseAttackDamage) + Globals::Read<float>(Address() + Offset::AIHeroClient::FlatPhysicalDmgMod); }
+    float BaseAttackDamage() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::BaseAttackDamage); }
+    float TotalMagicalDamage() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::BaseAbilityDamage); }
+    float Armor() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::Armor); }
+    float SpellBlock() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::SpellBlock); }
+    float AttackSpeedMod() const { return Globals::Read<float>(Address() + Offset::AIHeroClient::AttackSpeedMod); }
+    int Level() const { return Globals::Read<int>(Address() + Offset::AIHeroClient::LevelRef); }
 
     uintptr_t AiManagerAddress() const {
         return ::CoreAiManager::Address(Address());
@@ -861,55 +870,51 @@ public:
     }
 
     ::Core::Objects::MinionClass GetMinionClass() const {
-        return static_cast<::Core::Objects::MinionClass>(Snapshot().minionClass);
+        return ::Core::Objects::ReadMinionClass(Address());
     }
 
     MinionTypes GetMinionType() const {
-        const auto snapshot = Snapshot();
-        const std::string name = !std::string(snapshot.characterName).empty()
-            ? snapshot.characterName
-            : snapshot.name;
+        const std::string name = CharacterName();
+        const std::string nameFallback = name.empty() ? Name() : name;
+        const ::Core::Objects::MinionClass mc = GetMinionClass();
 
-        if (ObjectDetail::EqualsAny(name, {
+        if (ObjectDetail::EqualsAny(nameFallback, {
             "SRU_ChaosMinionMelee", "SRU_OrderMinionMelee",
             "HA_ChaosMinionMelee", "HA_OrderMinionMelee",
         })) {
             return MinionTypes::Normal | MinionTypes::Melee;
         }
 
-        if (ObjectDetail::EqualsAny(name, {
+        if (ObjectDetail::EqualsAny(nameFallback, {
             "SRU_ChaosMinionRanged", "SRU_OrderMinionRanged",
             "HA_ChaosMinionRanged", "HA_OrderMinionRanged",
         })) {
             return MinionTypes::Normal | MinionTypes::Ranged;
         }
 
-        if (ObjectDetail::EqualsAny(name, {
+        if (ObjectDetail::EqualsAny(nameFallback, {
             "SRU_ChaosMinionSiege", "SRU_OrderMinionSiege",
             "HA_ChaosMinionSiege", "HA_OrderMinionSiege",
         })) {
             return MinionTypes::Siege | MinionTypes::Ranged;
         }
 
-        if (ObjectDetail::EqualsAny(name, {
+        if (ObjectDetail::EqualsAny(nameFallback, {
             "SRU_ChaosMinionSuper", "SRU_OrderMinionSuper",
             "HA_ChaosMinionSuper", "HA_OrderMinionSuper",
         })) {
             return MinionTypes::Super | MinionTypes::Melee;
         }
 
-        // Wards (incl. all trinket variants observed in CDragon Map11 +
-        // legacy modes). Anything tagged as Ward should never be auto-
-        // attacked unless the user explicitly opts in.
-        if (ObjectDetail::EqualsAny(name, {
+        if (ObjectDetail::EqualsAny(nameFallback, {
             "SightWard", "VisionWard", "YellowTrinket", "BlueTrinket",
             "JammerDevice", "JammerDeviceItem",
-            "SionUlt_Ward", "SionPassiveCorpse", // Sion passive corpse acts ward-like
+            "SionUlt_Ward", "SionPassiveCorpse",
         })) {
             return MinionTypes::Ward;
         }
 
-        switch (static_cast<::Core::Objects::MinionClass>(snapshot.minionClass)) {
+        switch (mc) {
         case ::Core::Objects::MinionClass::MeleeLaneMinion:
             return MinionTypes::Normal | MinionTypes::Melee;
         case ::Core::Objects::MinionClass::RangedLaneMinion:
@@ -933,15 +938,13 @@ public:
     // boss itself is "Atakhan_*". KrugAncient is the Krug elder. RiftHrald
     // and Baron retain their classic names.
     JungleType GetJungleType() const {
-        const auto snapshot = Snapshot();
-        const std::string name = !std::string(snapshot.characterName).empty()
-            ? snapshot.characterName
-            : snapshot.name;
+        const std::string name = CharacterName();
+        const std::string nameFallback = name.empty() ? Name() : name;
 
         // Plants: blast cone, honeyfruit, scryer's bloom (visible-only +
         // Smolder's Twin Shadows passive variant). Map under the same enum
         // as jungle so target selectors / orbwalker can filter them out.
-        if (ObjectDetail::ContainsAny(name, {
+        if (ObjectDetail::ContainsAny(nameFallback, {
             "SRU_Plant_Satchel",   // Blast Cone (đèn nổ)
             "SRU_Plant_Health",    // Honeyfruit (trái cây hồi máu)
             "SRU_Plant_Vision",    // Scryer's Bloom (đèn soi sáng / hạt thông soi)
@@ -951,7 +954,7 @@ public:
         }
 
         // Small camp minions (mini wolves/krugs/raptors + TT mini camps).
-        if (ObjectDetail::ContainsAny(name, {
+        if (ObjectDetail::ContainsAny(nameFallback, {
             "SRU_RazorbeakMini", "SRU_MurkwolfMini", "SRU_KrugMini",
             "SRU_KrugMiniMini",   // post 13.18 mini krug split
             "SRU_GrompMini",      // future-proof if Riot adds split
@@ -962,7 +965,7 @@ public:
         }
 
         // Large camp monsters + Krug Ancient (the elder krug).
-        if (ObjectDetail::ContainsAny(name, {
+        if (ObjectDetail::ContainsAny(nameFallback, {
             "SRU_Razorbeak", "SRU_Red", "SRU_Krug", "SRU_KrugAncient",
             "SRU_Murkwolf", "SRU_Blue", "SRU_Gromp",
             "Sru_Crab", "SRU_Crab",
@@ -974,7 +977,7 @@ public:
         // Voidgrubs are an early-game epic objective that spawns 3 at a
         // time in the Baron pit; treat them as Epic so jungle clear logic
         // can prioritise them differently from large camps.
-        if (ObjectDetail::ContainsAny(name, {
+        if (ObjectDetail::ContainsAny(nameFallback, {
             "SRU_Voidgrub", "SRU_Voidgrubs",
         })) {
             return JungleType::Epic;
@@ -982,7 +985,7 @@ public:
 
         // Legendary epic monsters: dragons, Baron, Rift Herald, Atakhan,
         // Sentinel (Atakhan precursor), TT Vilemaw.
-        if (ObjectDetail::ContainsAny(name, {
+        if (ObjectDetail::ContainsAny(nameFallback, {
             "SRU_Dragon_Air", "SRU_Dragon_Earth", "SRU_Dragon_Fire",
             "SRU_Dragon_Water", "SRU_Dragon_Elder", "SRU_Dragon_Hextech",
             "SRU_Dragon_Chemtech",
@@ -1084,14 +1087,22 @@ public:
         handle_.type = ::Core::Objects::ObjectType::MissileClient;
     }
 
-    int CasterIndex() const { return static_cast<int>(Snapshot().missile.casterIndex); }
-    int TargetIndex() const { return static_cast<int>(Snapshot().missile.targetIndex); }
-    int CasterNetworkId() const { return ResolveNetworkIdFromIndex(Snapshot().missile.casterIndex); }
-    int TargetNetworkId() const { return ResolveNetworkIdFromIndex(Snapshot().missile.targetIndex); }
-    std::string SpellName() const { return Snapshot().missile.spellName; }
-    std::string MissileName() const { return Snapshot().missile.missileName; }
-    Vector3 StartPosition() const { return Snapshot().missile.startPosition; }
-    Vector3 EndPosition() const { return Snapshot().missile.endPosition; }
+    int CasterIndex() const { return static_cast<int>(::Core::Objects::ReadField<std::uint32_t>(Address(), Offset::MissileClient::CasterIndex)); }
+    int TargetIndex() const { return static_cast<int>(::Core::Objects::ReadField<std::uint32_t>(Address(), Offset::MissileClient::TargetIndex)); }
+    int CasterNetworkId() const { return ResolveNetworkIdFromIndex(::Core::Objects::ReadField<std::uint32_t>(Address(), Offset::MissileClient::CasterIndex)); }
+    int TargetNetworkId() const { return ResolveNetworkIdFromIndex(::Core::Objects::ReadField<std::uint32_t>(Address(), Offset::MissileClient::TargetIndex)); }
+    std::string SpellName() const {
+        char buf[128] = {};
+        Globals::ReadRuntimeStringField(Address() + Offset::MissileClient::SpellName, buf, static_cast<int>(sizeof(buf)));
+        return std::string(buf);
+    }
+    std::string MissileName() const {
+        char buf[128] = {};
+        Globals::ReadRuntimeStringField(Address() + Offset::MissileClient::MissileName, buf, static_cast<int>(sizeof(buf)));
+        return std::string(buf);
+    }
+    Vector3 StartPosition() const { return ::Core::Objects::ReadField<Vec3>(Address(), Offset::MissileClient::StartPos); }
+    Vector3 EndPosition() const { return ::Core::Objects::ReadField<Vec3>(Address(), Offset::MissileClient::EndPos); }
 
 private:
     static int ResolveNetworkIdFromIndex(std::uint32_t index) {
@@ -1172,7 +1183,7 @@ public:
     // this in sync with the inhibitor state, so we don't need to
     // re-derive it from BarracksDampenerClient health.
     bool HasShield() const {
-        return Snapshot().isInvulnerable;
+        return ::Core::Objects::ReadBoolByte(Address(), Offset::All::IsInvulnerable);
     }
 };
 
