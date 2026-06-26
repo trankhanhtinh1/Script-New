@@ -13,6 +13,7 @@
 #include "../../Extensions/Extensions.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../Utils/Minion.h"
+#include "../../Math/Prediction.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -49,28 +50,8 @@ enum class DamageStage : std::int32_t {
 };
 #endif
 
-struct PredictionInput {
-    AIBaseClient Unit;
-    float Delay = 0.0f;
-    float Radius = 0.0f;
-    float Speed = FLT_MAX;
-    Vector3 From = {};
-    float Range = FLT_MAX;
-    bool Collision = false;
-    SkillshotType Type = SkillshotType::SkillshotLine;
-    Vector3 RangeCheckFrom = {};
-    bool AoE = false;
-    CollisionableObjects CollisionObjects =
-        CollisionableObjects::Heroes | CollisionableObjects::Minions;
-};
-
-struct PredictionOutput {
-    Vector3 CastPosition = {};
-    Vector3 UnitPosition = {};
-    HitChance Hitchance = HitChance::None;
-    int AoeTargetsHitCount = 0;
-    std::vector<GameObject> CollisionObjects;
-};
+// PredictionInput and PredictionOutput are now defined in Math/Prediction.h
+// (ported from Movement.cs) and included above.
 
 class Spell {
 public:
@@ -276,7 +257,7 @@ public:
             return CastStates::Collision;
         }
 
-        if (RangeCheckSource().DistanceSqr2D(prediction.CastPosition) > RangeSqr()) {
+        if (RangeCheckSource().DistanceSqr2D(prediction.GetCastPosition()) > RangeSqr()) {
             return CastStates::OutOfRange;
         }
 
@@ -289,11 +270,11 @@ public:
         LastCastAttemptT = Variables::TickCount();
         if (IsChargedSpell) {
             if (IsCharging()) {
-                ShootChargedSpell(Slot, prediction.CastPosition);
+                ShootChargedSpell(Slot, prediction.GetCastPosition());
             } else {
                 StartCharging();
             }
-        } else if (!player.Spellbook().CastSpell(Slot, prediction.CastPosition)) {
+        } else if (!player.Spellbook().CastSpell(Slot, prediction.GetCastPosition())) {
             return CastStates::NotCasted;
         }
 
@@ -370,7 +351,7 @@ public:
         std::vector<Vector3> points;
         points.reserve(units.size());
         for (const auto& unit : units) {
-            points.push_back(GetPrediction(unit).UnitPosition);
+            points.push_back(GetPrediction(unit).GetUnitPosition());
         }
         return CountHits(points, castPosition);
     }
@@ -467,12 +448,12 @@ public:
         // TODO(SDK parity): replace current-position fallback with
         // Movement.GetPrediction once NightSharp prediction is ported.
         PredictionOutput output;
-        output.UnitPosition = unit.Position();
-        output.CastPosition = unit.Position();
+        output.SetUnitPosition(Vec3Ext::SetZ(unit.Position()));
+        output.SetCastPosition(Vec3Ext::SetZ(unit.Position()));
         output.AoeTargetsHitCount = aoe ? 1 : 0;
 
         const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();
-        output.Hitchance = RangeCheckSource().DistanceSqr2D(output.CastPosition) <= range * range
+        output.Hitchance = RangeCheckSource().DistanceSqr2D(output.GetCastPosition()) <= range * range
             ? HitChance::High
             : HitChance::OutOfRange;
         return output;
@@ -637,7 +618,7 @@ public:
                  HitChance minHitChance = HitChance::High) {
         const auto prediction = GetPrediction(unit);
         return ChanceValue(prediction.Hitchance) >= ChanceValue(minHitChance) &&
-               WillHit(prediction.UnitPosition, castPosition, extraWidth);
+               WillHit(prediction.GetUnitPosition(), castPosition, extraWidth);
     }
 
     bool WillHit(const Vector3& point, const Vector3& castPosition, int extraWidth = 0) const {

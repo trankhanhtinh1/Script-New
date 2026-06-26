@@ -5,16 +5,15 @@
 namespace SDK {
 
 enum class HitChance : std::int32_t {
-    Immobile = 8,
-    Dashing = 7,
-    VeryHigh = 6,
-    High = 5,
-    Medium = 4,
-    Low = 3,
-    Impossible = 2,
-    OutOfRange = 1,
-    Collision = 0,
-    None = -1,
+    None = -2,
+    Collision = -1,
+    OutOfRange = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    VeryHigh = 4,
+    Immobile = 5,
+    Dash = 6,
 };
 
 } // namespace SDK

@@ -22,10 +22,17 @@ struct SelectedSpellInfo {
 };
 
 struct DragonSRXInfo {
-    uintptr_t Address = 0;
+    int AllyDragonKills = 0;
+    int AllyElderDragonKills = 0;
+    int AllyRiftHeraldKills = 0;
+    int EnemyDragonKills = 0;
+    int EnemyElderDragonKills = 0;
+    int EnemyRiftHeraldKills = 0;
 
     bool IsValid() const {
-        return Globals::IsValidPtr(Address);
+        return AllyDragonKills > 0 || EnemyDragonKills > 0 ||
+               AllyElderDragonKills > 0 || EnemyElderDragonKills > 0 ||
+               AllyRiftHeraldKills > 0 || EnemyRiftHeraldKills > 0;
     }
 };
 
@@ -35,6 +42,10 @@ inline uintptr_t Address() {
 
 inline uintptr_t HudRoot() {
     return ::CoreHud::HudRoot();
+}
+
+inline uintptr_t ScoreboardViewControllerAddress() {
+    return ::CoreHud::ScoreboardViewController();
 }
 
 inline uintptr_t InputAddress() {
@@ -70,7 +81,9 @@ inline SelectedSpellInfo SelectedSpell() {
 }
 
 inline DragonSRXInfo DragonSRX() {
-    return { ::CoreHud::DragonTracker() };
+    const auto stats = ::CoreHud::DragonTracker();
+    return { stats.allyDragonKills, stats.allyElderDragonKills, stats.allyRiftHeraldKills,
+             stats.enemyDragonKills, stats.enemyElderDragonKills, stats.enemyRiftHeraldKills };
 }
 
 inline Vector3 MouseWorldPosition() {

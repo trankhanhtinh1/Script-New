@@ -73,11 +73,49 @@ namespace DrawingRuntime {
     // owner used by Hud logic constructors.
     constexpr auto HudRoot = 0x1E9D140;
     constexpr auto HudInstance = 0x1E9D148;
+    // `qword_1EAED80` owns the published ScoreboardViewController interface.
+    // IDA 13337: ScoreboardViewController::Setup (sub_E28270) writes its
+    // secondary interface pointer to `[qword_1EAED80 + 0x128]`; the
+    // destructor clears the same field. The fields behind that interface
+    // (TeamScoresDefinitions / DragonTracker) still require runtime
+    // verification and are deliberately not represented here.
+    constexpr auto ScoreboardViewController = 0x128;
     constexpr auto ViewPort = 0x1EAED80;
     constexpr auto ViewPort2 = 0x1F7AA18;
     constexpr auto Renderer = 0x1F7AA28;
     constexpr auto ViewProjOffset = 0x1F644A0;
+    // qword_1E9D180: stats manager. Owns a std::map<uint32_t, vector<StatBlock*>>
+    // at +0x30 keyed by team ID (100=ORDER, 200=CHAOS). Each StatBlock is 8128
+    // bytes allocated by sub_2FDB70 and initialised by sub_2EA000.
+    // IDA 13337: sub_307E30 reads *(statsManager+0x30) tree, finds node by
+    // teamId, double-dereferences vector begin to get StatBlock*.
+    constexpr auto StatsManager = 0x1E9D180;
 } // namespace DrawingRuntime
+
+namespace StatsRuntime {
+    // Tree container at StatsManager + 0x30 (std::map layout, MSVC).
+    constexpr auto TreeOffset = 0x30;
+    // Tree node layout (MSVC std::_Tree_node):
+    //   +0x00 _Left, +0x08 _Right, +0x10 _Parent,
+    //   +0x18 _Color(byte), +0x19 _Isnil(byte),
+    //   +0x20 key(uint32 teamId),
+    //   +0x28 value(vector<StatBlock*>::begin)
+    constexpr auto NodeKey = 0x20;
+    constexpr auto NodeIsNil = 0x19;
+    constexpr auto NodeValueBegin = 0x28;
+    constexpr auto SentinelParent = 0x10;
+    // Stat entry layout: +0x00 vtable, +0x08 std::string name,
+    //   +0x18 type(int), +0x1C flags, +0x20 value(int).
+    constexpr auto StatEntryValue = 0x20;
+    // Offsets of stat entries within StatBlock (from sub_2EA000).
+    constexpr auto DragonKillsEntry = 0x688;
+    constexpr auto ElderDragonKillsEntry = 0x6B0;
+    constexpr auto RiftHeraldKillsEntry = 0x6D8;
+    // Convenience: entry offset + StatEntryValue = direct value offset.
+    constexpr auto DragonKills = DragonKillsEntry + StatEntryValue;       // 0x6A8
+    constexpr auto ElderDragonKills = ElderDragonKillsEntry + StatEntryValue; // 0x6D0
+    constexpr auto RiftHeraldKills = RiftHeraldKillsEntry + StatEntryValue;   // 0x6F8
+} // namespace StatsRuntime
 
 // All offsets below are RELATIVE struct field offsets (not RVAs), so they
 // remain stable across patches as long as the Riot client doesn't rewrite
@@ -278,9 +316,23 @@ namespace BuffDataLayout {
     constexpr auto BuffScriptPtr = 0x10;
     constexpr auto BuffStartTime = 0x18;
     constexpr auto BuffEndTime = 0x1C;
+    // Stack array (StlVector of StlSharedPtr<BuffScriptInstance>).
+    // Each entry is 16 bytes: {BuffScriptInstance*, refcount*}.
+    // IDA 13337: sub_91BC60 reads buff+0x30 as begin, buff+0x38 as count.
+    constexpr auto BuffStackArrayBegin = 0x30;
+    constexpr auto BuffStackCount = 0x38;
     constexpr auto BuffStacks = 0x38;
     constexpr auto BuffStacksAlt = 0x3C;
 } // namespace BuffDataLayout
+
+// BuffScriptInstance is obtained by dereferencing the first 8 bytes of each
+// 16-byte entry in the stack array at BuffDataLayout::BuffStackArrayBegin.
+// IDA 13337: sub_91BC60 compares BuffScriptInstance+0x4 with the source
+// object's network ID, confirming +0x4 is the caster's network ID.
+namespace BuffScriptInstanceLayout {
+    constexpr auto CasterNetworkId = 0x4;
+    constexpr auto EntryStride = 0x10;  // 16 bytes per stack entry
+} // namespace BuffScriptInstanceLayout
 
 namespace BuffEventLayout {
     // OnBuffAdd/OnBuffRemove receive AIBaseClient::eventComponent

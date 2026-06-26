@@ -17,13 +17,14 @@ namespace SDK::Collision {
             to,
             radius,
             ignoredUnit,
-            CollisionObjects::Minions | CollisionObjects::YasuoWall | CollisionObjects::BraumShield).empty();
+            CollisionableObjects::Minions | CollisionableObjects::YasuoWall | CollisionableObjects::BraumShield).empty();
     }
 
-    inline std::vector<GameObject> GetCollision(const AIBaseClient& target, const PredictionInput& input) {
+    inline std::vector<AIBaseClient> GetCollision(const AIBaseClient& target, const PredictionInput& input) {
         auto effectiveInput = input;
         effectiveInput.Unit = target;
-        return Prediction::GetPrediction(target, effectiveInput).CollisionObjects;
+        auto predOut = Prediction::GetPrediction(target, effectiveInput);
+        return predOut.CollisionObjects;
     }
 
     inline std::vector<AIBaseClient> GetCollision(const std::vector<Vector3>& positions, const PredictionInput& input) {
@@ -48,7 +49,7 @@ namespace SDK::Collision {
                 continue;
             }
 
-            if (input.Collision && input.Type == SkillshotType::Line) {
+            if (input.Collision && input.Type == SkillshotType::SkillshotLine) {
                 const auto collisions = Prediction::Movement::CollectLineCollisions(
                     source,
                     position,

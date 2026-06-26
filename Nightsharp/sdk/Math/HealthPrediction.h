@@ -8,16 +8,8 @@ inline void Initialize() {
     Prediction::Health::Initialize();
 }
 
-inline void Update() {
-    Prediction::Health::Update();
-}
-
 inline void Reset() {
     Prediction::Health::Reset();
-}
-
-inline float EstimateIncomingAutoAttackDamage(const AIBaseClient& unit, int timeMs) {
-    return Prediction::Health::EstimateIncomingAutoAttackDamage(unit, timeMs);
 }
 
 inline float GetPrediction(const AIBaseClient& unit,

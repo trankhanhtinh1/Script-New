@@ -126,5 +126,6 @@ using ClickType = ::SDK::Hud::ClickType;
 using HudSnapshot = ::SDK::Hud::Snapshot;
 using HudSelectedSpellInfo = ::SDK::Hud::SelectedSpellInfo;
 using DragonSRXInfo = ::SDK::Hud::DragonSRXInfo;
+inline DragonSRXInfo DragonSRX() { return ::SDK::Hud::DragonSRX(); }
 
 #endif

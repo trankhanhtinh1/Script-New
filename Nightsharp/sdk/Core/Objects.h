@@ -8,10 +8,12 @@
 #include "../../Core/CoreObjectManager.h"
 #include "../../Core/CoreObjects.h"
 #include "../../Core/CoreRuneManager.h"
+#include "../../Core/CoreAIHeroClient.h"
 #include "../../Core/Vector.h"
 #include "../Enumerations/JungleType.h"
 #include "../Enumerations/MinionTypes.h"
 #include "../Enumerations/SpellSlot.h"
+#include "../Enumerations/DamageType.h"
 
 #include <algorithm>
 #include <cctype>
@@ -629,6 +631,123 @@ public:
     float AttackSpeedMod() const { return Snapshot().attackSpeedMod; }
     int Level() const { return Snapshot().level; }
 
+    // â”€â”€ Hero-specific stat properties (read from AIHeroClient offsets) â”€â”€
+    // These are safe to call on any AIBaseClient â€” non-hero objects will
+    // return 0 since the offsets are only populated for AIHeroClient.
+    float AD() const { return TotalAttackDamage(); }
+    float AP() const { return TotalMagicalDamage(); }
+    float BonusAttackDamage() const {
+        return TotalAttackDamage() - BaseAttackDamage();
+    }
+    float Crit() const {
+        return ::CoreAIHeroClient::Crit(Address());
+    }
+    float BonusArmor() const {
+        return ::CoreAIHeroClient::BonusArmor(Address());
+    }
+    float BonusSpellBlock() const {
+        return ::CoreAIHeroClient::BonusSpellBlock(Address());
+    }
+    float Lethality() const {
+        return ::CoreAIHeroClient::PhysicalLethality(Address());
+    }
+    float FlatArmorPenetrationMod() const {
+        return ::CoreAIHeroClient::FlatArmorPen(Address());
+    }
+    float PercentArmorPenetrationMod() const {
+        return ::CoreAIHeroClient::PercentArmorPen(Address());
+    }
+    float PercentBonusArmorPenetrationMod() const {
+        return ::CoreAIHeroClient::PercentBonusArmorPen(Address());
+    }
+    float FlatMagicPenetrationMod() const {
+        return ::CoreAIHeroClient::FlatMagicPen(Address());
+    }
+    float MagicLethality() const {
+        return ::CoreAIHeroClient::MagicLethality(Address());
+    }
+    float PercentMagicPenetrationMod() const {
+        return ::CoreAIHeroClient::PercentMagicPen(Address());
+    }
+    float PercentBonusMagicPenetrationMod() const {
+        return ::CoreAIHeroClient::PercentBonusMagicPen(Address());
+    }
+
+    // â”€â”€ Damage calculation (matching DLL's Damage.CalculatePhysicalDamage) â”€â”€
+    float CalculatePhysicalDamage(const AIBaseClient& target, float amount) const {
+        if (amount <= 0.0f) return 0.0f;
+        if (!IsValid() || !target.IsValid()) return 0.0f;
+
+        float percentArmorPen = PercentArmorPenetrationMod();
+        float flatArmorPen = FlatArmorPenetrationMod() + Lethality();
+        float percentBonusArmorPen = PercentBonusArmorPenetrationMod();
+
+        if (Type() == ::Core::Objects::ObjectType::AIMinionClient) {
+            flatArmorPen = 0.0f;
+            percentArmorPen = 1.0f;
+            percentBonusArmorPen = 1.0f;
+        } else if (Type() == ::Core::Objects::ObjectType::AIHeroClient) {
+            flatArmorPen = Lethality() * (0.6f + 0.4f * static_cast<float>(Level()) / 18.0f);
+            if (std::isnan(flatArmorPen)) flatArmorPen = 0.0f;
+        } else if (Type() == ::Core::Objects::ObjectType::AITurretClient) {
+            flatArmorPen = 0.0f;
+            percentArmorPen = 1.0f;
+            percentBonusArmorPen = 1.0f;
+        }
+
+        float armor = target.Armor();
+        float bonusArmor = target.BonusArmor();
+        float multiplier;
+        if (armor < 0.0f) {
+            multiplier = 2.0f - 100.0f / (100.0f - armor);
+        } else {
+            float effectiveArmor = armor * percentArmorPen
+                - bonusArmor * (1.0f - percentBonusArmorPen)
+                - flatArmorPen;
+            multiplier = (effectiveArmor < 0.0f) ? 1.0f : (100.0f / (100.0f + effectiveArmor));
+        }
+
+        float result = multiplier * amount;
+        result = SDK::DamageMod::DamageReductionMod(*this, target, result, DamageType::Physical);
+        return std::max(std::floor(result), 0.0f);
+    }
+
+    // â”€â”€ Damage calculation (matching DLL's Damage.CalculateMagicDamage) â”€â”€
+    float CalculateMagicDamage(const AIBaseClient& target, float amount) const {
+        if (amount <= 0.0f) return 0.0f;
+        if (!IsValid() || !target.IsValid()) return 0.0f;
+
+        float spellBlock = target.SpellBlock();
+        float bonusSpellBlock = target.BonusSpellBlock();
+        float flatMagicPen = FlatMagicPenetrationMod() + MagicLethality();
+
+        float effectiveSpellBlock = spellBlock * PercentMagicPenetrationMod()
+            - bonusSpellBlock * (1.0f - PercentBonusMagicPenetrationMod())
+            - flatMagicPen;
+
+        float multiplier;
+        if (spellBlock < 0.0f) {
+            multiplier = 2.0f - 100.0f / (100.0f - spellBlock);
+        } else {
+            multiplier = (effectiveSpellBlock < 0.0f) ? 1.0f : (100.0f / (100.0f + effectiveSpellBlock));
+        }
+
+        float bonus = 0.0f;
+        if (target.HasBuff("cursedtouch")) {
+            bonus = 0.1f * amount;
+        }
+
+        float result = multiplier * amount;
+        result = SDK::DamageMod::DamageReductionMod(*this, target, result, DamageType::Magical);
+        return std::max(std::floor(result) + bonus, 0.0f);
+    }
+
+    // â”€â”€ GetAutoAttackDamage (AIBaseClient overload, no passives) â”€â”€
+    float GetAutoAttackDamage(const AIBaseClient& target, bool includePassives) const {
+        (void)includePassives;
+        return CalculatePhysicalDamage(target, AD());
+    }
+
     uintptr_t AiManagerAddress() const {
         return ::CoreAiManager::Address(Address());
     }
@@ -741,6 +860,11 @@ public:
 
     bool HasBuff(const char* name) const {
         return CoreBuffs::HasBuff(Address(), name);
+    }
+
+    uintptr_t GetBuffCaster(const char* name) const {
+        auto buff = CoreBuffs::FindByName(Address(), name);
+        return buff.IsValid() ? buff.GetCaster() : 0;
     }
 
     bool HasItem(int id) const {
@@ -1038,6 +1162,11 @@ public:
         return GetJungleType() == JungleType::Plant;
     }
 
+    bool IsJungle() const {
+        const JungleType jt = GetJungleType();
+        return jt != JungleType::Unknown && jt != JungleType::Plant;
+    }
+
     bool IsJungleBuff() const {
         const std::string name = CharacterName();
         return name == "SRU_Blue" || name == "SRU_Red";
@@ -1238,3 +1367,5 @@ public:
 };
 
 } // namespace SDK
+
+#include "../../Wrappers/Damages/DamageReductionMod.h"

@@ -126,6 +126,22 @@ inline uintptr_t HudInstance() {
     return CoreRuntime::GetContext().hudInstance;
 }
 
+inline uintptr_t ScoreboardViewController() {
+    auto& ctx = CoreRuntime::g_ctx;
+    if (!Globals::IsValidPtr(ctx.viewPort)) {
+        (void)CoreRuntime::RefreshReadState();
+    }
+
+    const uintptr_t root = CoreRuntime::GetContext().viewPort;
+    if (!Globals::IsValidPtr(root)) {
+        return 0;
+    }
+
+    const uintptr_t controller = Globals::Read<uintptr_t>(
+        root + Offset::DrawingRuntime::ScoreboardViewController);
+    return Globals::IsValidPtr(controller) ? controller : 0;
+}
+
 inline uintptr_t Input() {
     const uintptr_t hud = HudInstance();
     return Globals::IsValidPtr(hud)
@@ -330,11 +346,96 @@ inline uintptr_t SelectedSpellData() {
     return 0;
 }
 
-inline uintptr_t DragonTracker() {
-    detail::LogOnce(
-        "dragon-native-missing",
-        "[CoreHud] ScoreboardViewController DragonSRX offsets are not verified; Hud.DragonSRX returns null.");
-    return 0;
+struct DragonKillStats {
+    int allyDragonKills = 0;
+    int allyElderDragonKills = 0;
+    int allyRiftHeraldKills = 0;
+    int enemyDragonKills = 0;
+    int enemyElderDragonKills = 0;
+    int enemyRiftHeraldKills = 0;
+};
+
+namespace detail {
+    inline uintptr_t FindStatBlock(uintptr_t treeBase, std::uint32_t teamId) {
+        const uintptr_t sentinel = Globals::Read<uintptr_t>(treeBase);
+        if (!Globals::IsValidPtr(sentinel)) return 0;
+
+        const uintptr_t root = Globals::Read<uintptr_t>(
+            sentinel + Offset::StatsRuntime::SentinelParent);
+        if (!Globals::IsValidPtr(root)) return 0;
+
+        uintptr_t node = root;
+        for (int i = 0; i < 64 && Globals::IsValidPtr(node); ++i) {
+            const auto isNil = Globals::Read<std::uint8_t>(
+                node + Offset::StatsRuntime::NodeIsNil);
+            if (isNil) break;
+
+            const auto key = Globals::Read<std::uint32_t>(
+                node + Offset::StatsRuntime::NodeKey);
+            if (key == teamId) {
+                const uintptr_t begin = Globals::Read<uintptr_t>(
+                    node + Offset::StatsRuntime::NodeValueBegin);
+                if (!Globals::IsValidPtr(begin)) return 0;
+                return Globals::Read<uintptr_t>(begin);
+            }
+            const uintptr_t next = Globals::Read<uintptr_t>(
+                node + (key < teamId ? 0x08 : 0x00));
+            node = next;
+        }
+        return 0;
+    }
+
+    inline void ReadDragonKills(uintptr_t statBlock, DragonKillStats& out, bool ally) {
+        if (!Globals::IsValidPtr(statBlock)) return;
+        const int dragon = Globals::Read<int>(statBlock + Offset::StatsRuntime::DragonKills);
+        const int elder = Globals::Read<int>(statBlock + Offset::StatsRuntime::ElderDragonKills);
+        const int herald = Globals::Read<int>(statBlock + Offset::StatsRuntime::RiftHeraldKills);
+        if (ally) {
+            out.allyDragonKills = dragon;
+            out.allyElderDragonKills = elder;
+            out.allyRiftHeraldKills = herald;
+        } else {
+            out.enemyDragonKills = dragon;
+            out.enemyElderDragonKills = elder;
+            out.enemyRiftHeraldKills = herald;
+        }
+    }
+} // namespace detail
+
+inline DragonKillStats DragonTracker() {
+    DragonKillStats result{};
+
+    const auto& ctx = CoreRuntime::GetContext();
+    const uintptr_t base = ctx.moduleBase ? ctx.moduleBase : Globals::base;
+    if (!base) return result;
+
+    const uintptr_t statsManager = Globals::Read<uintptr_t>(
+        base + Offset::DrawingRuntime::StatsManager);
+    if (!Globals::IsValidPtr(statsManager)) return result;
+
+    const uintptr_t treeBase = statsManager + Offset::StatsRuntime::TreeOffset;
+
+    const uintptr_t player = ctx.localPlayer;
+    if (!Globals::IsValidPtr(player)) return result;
+
+    const std::uint8_t teamSlot = Globals::Read<std::uint8_t>(
+        player + Offset::All::Team);
+    const uintptr_t teamTable = Globals::Read<uintptr_t>(
+        base + Offset::GameObjectsRuntime::TeamTable);
+    std::uint32_t allyTeam = teamSlot;
+    if (Globals::IsValidPtr(teamTable)) {
+        const auto val = Globals::Read<std::uint32_t>(
+            teamTable + 0x20 + static_cast<uintptr_t>(teamSlot) * 4);
+        if (val != 0) allyTeam = val;
+    }
+    const std::uint32_t enemyTeam = (allyTeam == 100) ? 200 : 100;
+
+    const uintptr_t allyBlock = detail::FindStatBlock(treeBase, allyTeam);
+    const uintptr_t enemyBlock = detail::FindStatBlock(treeBase, enemyTeam);
+
+    detail::ReadDragonKills(allyBlock, result, true);
+    detail::ReadDragonKills(enemyBlock, result, false);
+    return result;
 }
 
 inline bool PingBar(PingResourceType /*type*/) {

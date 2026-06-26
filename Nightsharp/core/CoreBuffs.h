@@ -26,6 +26,7 @@
 // ============================================================================
 
 #include "CoreRuntime.h"
+#include "CoreObjectManager.h"
 #include "Globals.h"
 #include "offset.h"
 
@@ -115,6 +116,38 @@ namespace CoreBuffs {
                 return false;
             }
             return Globals::ReadCString(charPtr, out, maxOut);
+        }
+
+        // Returns the caster's network ID by reading the first BuffScriptInstance
+        // from the buff's stack array. IDA 13337: sub_91BC60 confirms that
+        // BuffScriptInstance+0x4 stores the caster's network ID.
+        // Returns 0 if the buff has no stack entries or is invalid.
+        uint32_t GetCasterNetworkId() const {
+            if (!IsValid()) return 0;
+
+            const auto arrayBegin = Globals::Read<uintptr_t>(
+                address + Offset::BuffDataLayout::BuffStackArrayBegin);
+            if (!Globals::IsValidPtr(arrayBegin)) return 0;
+
+            const auto count = Globals::Read<int>(
+                address + Offset::BuffDataLayout::BuffStackCount);
+            if (count <= 0) return 0;
+
+            // First entry: {BuffScriptInstance*, refcount*}
+            const auto scriptInstance = Globals::Read<uintptr_t>(arrayBegin);
+            if (!Globals::IsValidPtr(scriptInstance)) return 0;
+
+            return Globals::Read<uint32_t>(
+                scriptInstance + Offset::BuffScriptInstanceLayout::CasterNetworkId);
+        }
+
+        // Returns the native address of the caster GameObject by looking up
+        // the caster's network ID in the ObjectManager.
+        // Returns 0 if not found or invalid.
+        uintptr_t GetCaster() const {
+            const auto netId = GetCasterNetworkId();
+            if (netId == 0) return 0;
+            return ::Core::ObjectManager::FindByNetworkId(netId);
         }
     };
 

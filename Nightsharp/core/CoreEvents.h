@@ -199,7 +199,12 @@ struct StopCastEventArgs {
     uintptr_t ProcessFlag = 0;
     int Slot = -1;
     uint32_t CasterNetworkId = 0;
-    bool ForceStop = false;
+    bool KeepAnimationPlaying = false;
+    bool HasBeenCast = false;
+    bool DestroyMissile = false;
+    int MissileNetworkId = 0;
+    int SpellCastId = 0;
+    bool ForceStop = false;  // deprecated: use KeepAnimationPlaying
 };
 
 using RawCallback = void(*)(const RawEventArgs&);
@@ -1393,7 +1398,12 @@ inline StopCastEventArgs DecodeStopCast(const RawEventArgs& raw) {
     args.Raw = raw;
     args.Spellbook = raw.Rcx;
     args.ProcessFlag = raw.R8;
-    args.ForceStop = (raw.Rdx & 0xFF) == 0;
+    args.KeepAnimationPlaying = (raw.Rdx & 0xFF) != 0;
+    args.HasBeenCast = (raw.R8 & 0xFF) != 0;
+    args.DestroyMissile = (raw.Stack0 & 0xFF) != 0;
+    args.MissileNetworkId = static_cast<int>(raw.Stack1);
+    args.SpellCastId = static_cast<int>(raw.Stack2);
+    args.ForceStop = !args.KeepAnimationPlaying;
 
     if (raw.Rcx) {
         // Try every offset where a 32-bit CasterNetId/SrcIndex is known to
