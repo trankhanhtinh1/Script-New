@@ -903,10 +903,39 @@ inline PredictionOutput GetStandardPrediction(PredictionInput& input) {
 // GetPrediction(PredictionInput, bool ft, bool checkCollision)
 // (DLL: PredictionSDK.GetPrediction)
 // ----------------------------------------------------------------------------
+inline bool IsPredictionTargetUsable(const AIBaseClient& unit) {
+    if (SDK::Extensions::IsValidTarget(unit, FLT_MAX, false)) {
+        return true;
+    }
+
+    // NightSharp object flags can currently report practice/custom targets as
+    // !IsVisible and IsInvulnerable even though they are targetable, rendered,
+    // have valid HP/position/path, and native CastSpell can hit them. Do not
+    // let those two unstable flags make Math prediction return an empty
+    // output before it reaches the actual movement/path calculation.
+    if (!unit.IsValid() || (unit.IsDead() && !unit.IsZombie()) ||
+        !unit.IsTargetable()) {
+        return false;
+    }
+
+    const Vector3 position = unit.Position();
+    if (!position.IsValid() || position.IsZero()) {
+        return false;
+    }
+
+    const float health = unit.Health();
+    const float maxHealth = unit.MaxHealth();
+    if (maxHealth > 0.0f && health <= 0.0f) {
+        return false;
+    }
+
+    return true;
+}
+
 inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool checkCollision) {
     PredictionOutput result;
 
-    if (!SDK::Extensions::IsValidTarget(input.Unit, FLT_MAX, false)) {
+    if (!IsPredictionTargetUsable(input.Unit)) {
         PredictionOutput empty;
         empty.Input = input;
         return empty;

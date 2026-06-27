@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../Core/CoreEvents.h"
+#include "../../FpsDropDebug.h"
 #include "../Data/Database.h"
 
 #include <cstdint>
@@ -45,8 +46,12 @@ namespace detail {
     struct EventList {
         using Handler = void(*)(const T&);
 
+        const char* Name = "";
         Handler Handlers[MaxHandlers] = {};
         int Count = 0;
+
+        EventList() = default;
+        explicit EventList(const char* name) : Name(name ? name : "") {}
 
         bool Add(Handler handler) {
             if (!handler) {
@@ -82,15 +87,29 @@ namespace detail {
         }
 
         void Fire(const T& args) const {
+            if (Count <= 0) {
+                return;
+            }
+            const auto perfStart = NightSharpPerf::Now();
             for (int i = 0; i < Count; ++i) {
                 Handler handler = Handlers[i];
                 if (!handler) {
                     continue;
                 }
+                const auto handlerPerfStart = NightSharpPerf::Now();
                 __try {
                     handler(args);
                 } __except (1) {}
+                NightSharpPerf::AddEventHandlerTiming(
+                    Name,
+                    i,
+                    reinterpret_cast<const void*>(handler),
+                    NightSharpPerf::MsSince(handlerPerfStart));
             }
+            NightSharpPerf::AddEventTiming(
+                Name,
+                NightSharpPerf::MsSince(perfStart),
+                Count);
         }
 
         void Clear() {
@@ -103,25 +122,25 @@ namespace detail {
 
     inline bool Initialized = false;
 
-    inline EventList<CoreHookArgs> CoreHookHandlers;
-    inline EventList<GameUpdateEventArgs> GameUpdateHandlers;
-    inline EventList<ObjectEventArgs> ObjectCreateHandlers;
-    inline EventList<ObjectEventArgs> ObjectDeleteHandlers;
-    inline EventList<ObjectEventArgs> MissileCreateHandlers;
-    inline EventList<ObjectEventArgs> MissileDeleteHandlers;
-    inline EventList<BuffEventArgs> BuffAddHandlers;
-    inline EventList<BuffEventArgs> BuffRemoveHandlers;
-    inline EventList<BuffEventArgs> BuffUpdateHandlers;
-    inline EventList<NewPathEventArgs> NewPathHandlers;
-    inline EventList<IntegerPropertyChangeEventArgs> IntegerPropertyChangeHandlers;
-    inline EventList<TeleportRawEventArgs> TeleportHandlers;
-    inline EventList<ProcessSpellEventArgs> DoCastHandlers;
-    inline EventList<ProcessSpellEventArgs> ProcessSpellHandlers;
-    inline EventList<CastSpellEventArgs> ProcessCastSpellHandlers;
-    inline EventList<ProcessSpellEventArgs> FinishCastHandlers;
-    inline EventList<ProcessSpellEventArgs> SpellImpactHandlers;
-    inline EventList<PlayAnimationEventArgs> PlayAnimationHandlers;
-    inline EventList<StopCastEventArgs> StopCastHandlers;
+    inline EventList<CoreHookArgs> CoreHookHandlers{ "CoreHook" };
+    inline EventList<GameUpdateEventArgs> GameUpdateHandlers{ "GameUpdate" };
+    inline EventList<ObjectEventArgs> ObjectCreateHandlers{ "ObjectCreate" };
+    inline EventList<ObjectEventArgs> ObjectDeleteHandlers{ "ObjectDelete" };
+    inline EventList<ObjectEventArgs> MissileCreateHandlers{ "MissileCreate" };
+    inline EventList<ObjectEventArgs> MissileDeleteHandlers{ "MissileDelete" };
+    inline EventList<BuffEventArgs> BuffAddHandlers{ "BuffAdd" };
+    inline EventList<BuffEventArgs> BuffRemoveHandlers{ "BuffRemove" };
+    inline EventList<BuffEventArgs> BuffUpdateHandlers{ "BuffUpdate" };
+    inline EventList<NewPathEventArgs> NewPathHandlers{ "NewPath" };
+    inline EventList<IntegerPropertyChangeEventArgs> IntegerPropertyChangeHandlers{ "IntegerPropertyChange" };
+    inline EventList<TeleportRawEventArgs> TeleportHandlers{ "Teleport" };
+    inline EventList<ProcessSpellEventArgs> DoCastHandlers{ "DoCast" };
+    inline EventList<ProcessSpellEventArgs> ProcessSpellHandlers{ "ProcessSpell" };
+    inline EventList<CastSpellEventArgs> ProcessCastSpellHandlers{ "ProcessCastSpell" };
+    inline EventList<ProcessSpellEventArgs> FinishCastHandlers{ "FinishCast" };
+    inline EventList<ProcessSpellEventArgs> SpellImpactHandlers{ "SpellImpact" };
+    inline EventList<PlayAnimationEventArgs> PlayAnimationHandlers{ "PlayAnimation" };
+    inline EventList<StopCastEventArgs> StopCastHandlers{ "StopCast" };
 
     inline void EventLoad();
     inline void EventDash(const NewPathEventArgs& args);

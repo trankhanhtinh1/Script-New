@@ -4,6 +4,7 @@
 #include "../Events/Load.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <type_traits>
 #include <vector>
 
@@ -54,6 +55,7 @@ namespace detail {
     inline bool Initialized = false;
     inline bool Loaded = false;
     inline float LastMinionRoleRefresh = -1.0f;
+    inline std::size_t NextMinionRoleRefreshIndex = 0;
 
     template <typename T>
     inline bool Contains(const std::vector<T>& list, const GameObject& object) {
@@ -129,6 +131,7 @@ namespace detail {
         EnemyNexusObject = HQClient();
         PlayerObject = AIHeroClient();
         LastMinionRoleRefresh = -1.0f;
+        NextMinionRoleRefreshIndex = 0;
         Loaded = false;
     }
 
@@ -210,21 +213,36 @@ namespace detail {
     // fields cannot permanently classify a clone as an ordinary minion.
     inline void RefreshMinionRoles() {
         const float now = CoreRuntime::GetContext().gameTime;
+        if (now <= 0.0f) {
+            return;
+        }
         if (now > 0.0f && LastMinionRoleRefresh >= 0.0f &&
             now - LastMinionRoleRefresh < 0.25f) {
             return;
         }
         LastMinionRoleRefresh = now;
 
-        ClonesList.clear();
-        PetsList.clear();
-        AllyClonesList.clear();
-        AllyPetsList.clear();
-        EnemyClonesList.clear();
-        EnemyPetsList.clear();
-        for (const auto& minion : MinionsList) {
+        constexpr std::size_t kMaxRoleRefreshPerTick = 8;
+        const std::size_t count = MinionsList.size();
+        if (count == 0) {
+            NextMinionRoleRefreshIndex = 0;
+            return;
+        }
+
+        if (NextMinionRoleRefreshIndex >= count) {
+            NextMinionRoleRefreshIndex = 0;
+        }
+
+        const std::size_t limit = std::min(kMaxRoleRefreshPerTick, count);
+        for (std::size_t i = 0; i < limit; ++i) {
+            const auto& minion = MinionsList[NextMinionRoleRefreshIndex];
             if (minion.IsValid()) {
                 AddMinionRole(minion);
+            }
+
+            ++NextMinionRoleRefreshIndex;
+            if (NextMinionRoleRefreshIndex >= count) {
+                NextMinionRoleRefreshIndex = 0;
             }
         }
     }
