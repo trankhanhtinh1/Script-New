@@ -11,6 +11,7 @@
 #include "../Core/CoreRuntime.h"
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
+#include "../FpsDropDebug.h"
 #include "../SDK/Lifecycle.h"
 
 #include <d3d11.h>
@@ -643,6 +644,7 @@ void Overlay::Run() {
     while (!g_bShutdown) {
         NightSharpDebug::SetPhase("overlay-frame");
         const DWORD frameStart = GetTickCount();
+        NightSharpPerf::BeginFrame();
 
         MSG msg = {};
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -680,6 +682,7 @@ void Overlay::Run() {
             InterlockedExchange(&g_bShutdown, 1);
             break;
         }
+        NightSharpPerf::ToggleHotkeys();
 
         UpdateClickThroughFromMenuBounds();
 
@@ -691,10 +694,25 @@ void Overlay::Run() {
         // Refresh game state once per frame before any plugin accesses it.
         // EnsureReady() in CoreObjectManager no longer calls RefreshReadState
         // on every manager lookup, so this single tick is the only refresh.
+        auto perfStart = NightSharpPerf::Now();
         CoreRuntime::TickRead();
+        NightSharpPerf::AddPhase(
+            "CoreRuntime::TickRead",
+            NightSharpPerf::MsSince(perfStart));
 
+        perfStart = NightSharpPerf::Now();
         Plugins::PluginManager::Get().OnUpdate();
+        NightSharpPerf::AddPhase(
+            "PluginManager::OnUpdate",
+            NightSharpPerf::MsSince(perfStart));
+
+        perfStart = NightSharpPerf::Now();
         Plugins::PluginManager::Get().OnRender();
+        NightSharpPerf::AddPhase(
+            "PluginManager::OnRender",
+            NightSharpPerf::MsSince(perfStart));
+
+        perfStart = NightSharpPerf::Now();
         __try {
             NightSharpMenu::Render();
         }
@@ -704,6 +722,11 @@ void Overlay::Run() {
             NightSharpDebug::Logf("[NightSharp] Menu render crashed; requesting shutdown");
             InterlockedExchange(&g_bShutdown, 1);
         }
+        NightSharpPerf::AddPhase(
+            "NightSharpMenu::Render",
+            NightSharpPerf::MsSince(perfStart));
+
+        NightSharpPerf::RenderOverlay();
 
         ImGui::EndFrame();
         ImGui::Render();
@@ -711,12 +734,17 @@ void Overlay::Run() {
         g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
         g_pd3dContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        perfStart = NightSharpPerf::Now();
         g_pSwapChain->Present(0, 0);
+        NightSharpPerf::AddPhase("Present", NightSharpPerf::MsSince(perfStart));
 
         const DWORD frameElapsed = GetTickCount() - frameStart;
         if (frameElapsed < kTargetOverlayFrameMs) {
+            perfStart = NightSharpPerf::Now();
             Sleep(kTargetOverlayFrameMs - frameElapsed);
+            NightSharpPerf::AddPhase("Sleep", NightSharpPerf::MsSince(perfStart));
         }
+        NightSharpPerf::EndFrame();
     }
 
     NightSharpDebug::Phase("overlay-shutdown-plugins");

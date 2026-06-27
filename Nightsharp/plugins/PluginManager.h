@@ -10,6 +10,7 @@
 #include "PluginRegistry.h"
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
+#include "../FpsDropDebug.h"
 
 #include <cstdio>
 #include <memory>
@@ -159,6 +160,7 @@ namespace Plugins {
         void OnUpdate() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
+                    const auto perfStart = NightSharpPerf::Now();
                     __try {
                         plugin->OnUpdate();
                     }
@@ -171,6 +173,11 @@ namespace Plugins {
                         plugin->m_enabled = false;
                         SyncRegistry(plugin.get());
                     }
+                    NightSharpPerf::AddPluginTiming(
+                        "update",
+                        plugin->GetInternalId(),
+                        plugin->GetName(),
+                        NightSharpPerf::MsSince(perfStart));
                 }
             }
         }
@@ -178,6 +185,7 @@ namespace Plugins {
         void OnRender() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
+                    const auto perfStart = NightSharpPerf::Now();
                     __try {
                         plugin->OnRender();
                     }
@@ -190,6 +198,11 @@ namespace Plugins {
                         plugin->m_enabled = false;
                         SyncRegistry(plugin.get());
                     }
+                    NightSharpPerf::AddPluginTiming(
+                        "render",
+                        plugin->GetInternalId(),
+                        plugin->GetName(),
+                        NightSharpPerf::MsSince(perfStart));
                 }
             }
         }
@@ -221,6 +234,7 @@ namespace Plugins {
         static void MenuThunk(void* userData) {
             auto* plugin = static_cast<IPlugin*>(userData);
             if (plugin && plugin->m_loaded && plugin->m_enabled) {
+                const auto perfStart = NightSharpPerf::Now();
                 char stage[160] = {};
                 _snprintf_s(stage,
                             sizeof(stage),
@@ -239,6 +253,11 @@ namespace Plugins {
                     plugin->m_enabled = false;
                     Get().SyncRegistry(plugin);
                 }
+                NightSharpPerf::AddPluginTiming(
+                    "menu",
+                    plugin->GetInternalId(),
+                    plugin->GetName(),
+                    NightSharpPerf::MsSince(perfStart));
             }
         }
 

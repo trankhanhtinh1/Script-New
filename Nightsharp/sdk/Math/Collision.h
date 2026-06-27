@@ -200,8 +200,36 @@ inline Vector3 ServerPositionOrPosition(const AIBaseClient& unit) {
 inline bool IsValidCollisionTarget(const GameObject& object,
                                    const PredictionInput& input,
                                    float range) {
-    return Extensions::IsValidTarget(object, range, true, input.ResolveRangeCheckFrom()) &&
-           !object.Compare(input.Unit);
+    if (object.Compare(input.Unit)) {
+        return false;
+    }
+
+    if (Extensions::IsValidTarget(object, range, true, input.ResolveRangeCheckFrom())) {
+        return true;
+    }
+
+    // Same defensive fallback as Movement::IsPredictionTargetUsable: the
+    // current NightSharp object layer can misreport Visible/Invulnerable for
+    // targetable, rendered practice/custom units. Collision still needs to
+    // consider those objects if their position/team/targetable state is sane.
+    if (!object.IsValid() || (object.IsDead() && !object.IsZombie()) ||
+        !object.IsTargetable()) {
+        return false;
+    }
+
+    const auto player = ObjectManager::Player();
+    if (player.IsValid() && player.Team() == object.Team()) {
+        return false;
+    }
+
+    const Vector3 position = object.Position();
+    if (!position.IsValid() || position.IsZero()) {
+        return false;
+    }
+
+    const Vector3 origin = input.ResolveRangeCheckFrom();
+    return range >= FLT_MAX || origin.IsZero() ||
+           position.DistanceSqr2D(origin) < range * range;
 }
 
 inline float DistanceSquaredToSegmentOnly(const Vec2& point,
@@ -268,9 +296,12 @@ inline int GetWindWallLevel(const EffectEmitter& emitter) {
 }
 
 inline bool IsWallCastActive() {
+    if (!YasuoInGame) {
+        return false;
+    }
+
     RefreshWindwalls();
-    return YasuoInGame &&
-           !Windwalls.empty() &&
+    return !Windwalls.empty() &&
            Variables::TickCount() - WallCastT <= 4000;
 }
 
@@ -420,6 +451,31 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
         const Vector3 minionServerPosition = ServerPositionOrPosition(minionUnit);
         const float distanceFromSource = minionServerPosition.Distance(from);
         const float closeRadius = minion.BoundingRadius() + inputUnitRadius;
+        const bool moving = minionUnit.IsMoving();
+
+        float travelTime = input.Delay;
+        if (std::abs(input.Speed - FLT_MAX) >= FLT_EPSILON && input.Speed > 0.0f) {
+            travelTime += distanceFromSource / input.Speed;
+        }
+
+        const float broadRadius =
+            input.Radius +
+            minion.BoundingRadius() +
+            75.0f +
+            (moving
+                ? std::max(0.0f, minionUnit.MoveSpeed()) * std::max(0.0f, travelTime)
+                : static_cast<float>(stationaryPadding));
+        const float broadRadiusSqr = broadRadius * broadRadius;
+        const bool canReachCastSegment =
+            DistanceSquaredToSegmentOnly(minionServerPosition.To2D(), from2D, position2D) <= broadRadiusSqr ||
+            minionServerPosition.DistanceSqr2D(from) <= broadRadiusSqr ||
+            minionServerPosition.DistanceSqr2D(position) <= broadRadiusSqr ||
+            (inputUnitServerPosition.IsValid() &&
+             !inputUnitServerPosition.IsZero() &&
+             minionServerPosition.DistanceSqr2D(inputUnitServerPosition) <= broadRadiusSqr);
+        if (!canReachCastSegment) {
+            continue;
+        }
 
         if (WillDead(input, minionUnit, distanceFromSource)) {
             continue;
@@ -436,7 +492,7 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
 
         Vector3 collisionPosition = minionServerPosition;
         int padding = stationaryPadding;
-        if (minionUnit.IsMoving()) {
+        if (moving) {
             PredictionInput minionInput;
             minionInput.Collision = false;
             minionInput.Speed = input.Speed;

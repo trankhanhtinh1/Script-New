@@ -45,6 +45,22 @@ protected:
             return;
         }
 
+        if (!m_q.IsReady()) {
+            if (pressed) {
+                RecordBlocked("EzrealQ", "q-not-ready");
+            }
+            return;
+        }
+
+        const int now = SDK::Game::TickCount();
+        const bool shouldRefreshPrediction =
+            pressed ||
+            !m_lastPredictionValid ||
+            (now - m_lastPredictionTick) >= kPredictionRefreshMs;
+        if (!shouldRefreshPrediction) {
+            return;
+        }
+
         const uintptr_t target = ResolveComboTarget(m_q.CurrentRange());
         if (!Globals::IsValidPtr(target)) {
             m_lastPredictionValid = false;
@@ -54,7 +70,7 @@ protected:
             return;
         }
 
-        const SDK::AIBaseClient targetUnit(target);
+        const SDK::AIHeroClient targetUnit(target);
         const SDK::PredictionInput input = BuildQPredictionInput(targetUnit);
         const SDK::PredictionOutput prediction = SDK::Prediction::GetPrediction(input);
         StoreLastPrediction(target, prediction);
@@ -63,16 +79,12 @@ protected:
             return;
         }
 
+        LogPredictionInputDiagnostics("press", target, targetUnit, input);
         LogPrediction("press", target, prediction);
 
         const Vec3 castPosition = prediction.GetCastPosition();
         if (!castPosition.IsValid() || castPosition.IsZero()) {
             RecordBlocked("EzrealQ", "prediction-failed");
-            return;
-        }
-
-        if (!m_q.IsReady()) {
-            RecordBlocked("EzrealQ", "q-not-ready");
             return;
         }
 
@@ -93,8 +105,8 @@ protected:
             return;
         }
 
-        const bool ok = CoreCastSpell::CastPositionSpell(
-            CoreCastSpell::SlotQ,
+        const bool ok = SDK::ObjectManager::Player().Spellbook().CastSpell(
+            SDK::SpellSlot::Q,
             castPosition);
         RecordAttempt("EzrealQ", ok, castPosition, target);
     }
@@ -300,7 +312,137 @@ private:
             m_q.Delay);
     }
 
+    void LogPredictionInputDiagnostics(const char* phase,
+                                       uintptr_t target,
+                                       const SDK::AIBaseClient& unit,
+                                       const SDK::PredictionInput& input) {
+        const std::uint32_t rawNetId = Globals::IsValidPtr(target)
+            ? Globals::Read<std::uint32_t>(target + Offset::All::NetworkId)
+            : 0;
+        const std::uint32_t rawIndex = Globals::IsValidPtr(target)
+            ? Globals::Read<std::uint32_t>(target + Offset::All::Index)
+            : 0;
+        const std::uint32_t rawTeam = Globals::IsValidPtr(target)
+            ? Globals::Read<std::uint32_t>(target + Offset::All::Team)
+            : 0;
+        const float rawHealth = Globals::IsValidPtr(target)
+            ? Globals::Read<float>(target + Offset::AttackableUnit::HP)
+            : 0.0f;
+        const Vec3 rawPosition = Globals::IsValidPtr(target)
+            ? Globals::Read<Vec3>(target + Offset::All::Position)
+            : Vec3();
+        const bool rawVisible = Globals::IsValidPtr(target) &&
+            Globals::Read<std::uint8_t>(target + Offset::All::Visible) != 0;
+        const bool rawTargetable = Globals::IsValidPtr(target) &&
+            Globals::Read<std::uint8_t>(
+                target + Offset::AttackableUnit::IsTargetable) != 0;
+        const bool rawInvulnerable = Globals::IsValidPtr(target) &&
+            Globals::Read<std::uint8_t>(
+                target + Offset::All::IsInvulnerable) != 0;
+
+        const auto handle = unit.Handle();
+        const uintptr_t wrappedAddress = unit.Address();
+        const bool valid = unit.IsValid();
+        const bool hero = unit.IsHero();
+        const bool dead = unit.IsDead();
+        const bool zombie = unit.IsZombie();
+        const bool visible = unit.IsVisible();
+        const bool targetable = unit.IsTargetable();
+        const bool invulnerable = unit.IsInvulnerable();
+        const bool enemy = unit.IsEnemy();
+        const auto team = unit.Team();
+        const float health = unit.Health();
+        const float moveSpeed = unit.MoveSpeed();
+        const float boundingRadius = unit.BoundingRadius();
+        const Vec3 position = unit.Position();
+        const Vec3 serverPosition = unit.ServerPosition();
+        const Vec3 from = input.ResolveFrom();
+        const Vec3 rangeFrom = input.ResolveRangeCheckFrom();
+        const bool validTarget =
+            SDK::Extensions::IsValidTarget(unit, FLT_MAX, false);
+        const float distanceFromRange =
+            position.Distance2D(rangeFrom);
+        const bool rangeGuard =
+            std::abs(input.Range - FLT_MAX) > 0.0001f &&
+            distanceFromRange > input.Range * 1.5f;
+        const char* guard = "ok";
+        if (!valid) {
+            guard = "wrapper-invalid";
+        } else if (dead && !zombie) {
+            guard = "dead";
+        } else if (!visible) {
+            guard = "not-visible";
+        } else if (!targetable) {
+            guard = "not-targetable";
+        } else if (invulnerable) {
+            guard = "invulnerable";
+        } else if (rangeGuard) {
+            guard = "range-guard";
+        }
+        const auto waypoints = unit.GetWaypoints();
+        const Vec3 firstWaypoint =
+            waypoints.empty() ? Vec3() : waypoints.front();
+        const Vec3 lastWaypoint =
+            waypoints.empty() ? Vec3() : waypoints.back();
+
+        Appendf(
+            "[%s] pred-input phase=%s tick=%d guard=%s raw=0x%llX rawNet=%u rawIndex=%u rawTeam=%u rawHp=%.1f rawVisible=%d rawTargetable=%d rawInvuln=%d rawPos=%.1f %.1f %.1f wrapAddr=0x%llX handleNet=%u handleIndex=%u type=%d valid=%d hero=%d dead=%d zombie=%d visible=%d targetable=%d invuln=%d enemy=%d team=%d hp=%.1f ms=%.1f br=%.1f pos=%.1f %.1f %.1f server=%.1f %.1f %.1f from=%.1f %.1f %.1f rangeFrom=%.1f %.1f %.1f distFromRange=%.1f validTarget=%d waypoints=%zu firstWp=%.1f %.1f %.1f lastWp=%.1f %.1f %.1f\r\n",
+            DebugPrefix(),
+            phase ? phase : "?",
+            SDK::Game::TickCount(),
+            guard,
+            static_cast<unsigned long long>(target),
+            rawNetId,
+            rawIndex,
+            rawTeam,
+            rawHealth,
+            rawVisible ? 1 : 0,
+            rawTargetable ? 1 : 0,
+            rawInvulnerable ? 1 : 0,
+            rawPosition.x,
+            rawPosition.y,
+            rawPosition.z,
+            static_cast<unsigned long long>(wrappedAddress),
+            handle.networkId,
+            handle.index,
+            static_cast<int>(unit.Type()),
+            valid ? 1 : 0,
+            hero ? 1 : 0,
+            dead ? 1 : 0,
+            zombie ? 1 : 0,
+            visible ? 1 : 0,
+            targetable ? 1 : 0,
+            invulnerable ? 1 : 0,
+            enemy ? 1 : 0,
+            static_cast<int>(team),
+            health,
+            moveSpeed,
+            boundingRadius,
+            position.x,
+            position.y,
+            position.z,
+            serverPosition.x,
+            serverPosition.y,
+            serverPosition.z,
+            from.x,
+            from.y,
+            from.z,
+            rangeFrom.x,
+            rangeFrom.y,
+            rangeFrom.z,
+            distanceFromRange,
+            validTarget ? 1 : 0,
+            waypoints.size(),
+            firstWaypoint.x,
+            firstWaypoint.y,
+            firstWaypoint.z,
+            lastWaypoint.x,
+            lastWaypoint.y,
+            lastWaypoint.z);
+    }
+
     MenuKeyBind* m_qKey = nullptr;
+    static constexpr int kPredictionRefreshMs = 150;
     bool m_qWasDown = false;
     SDK::Spell m_q{ SDK::SpellSlot::Q, 1200.0f };
     SDK::PredictionOutput m_lastPrediction = {};
