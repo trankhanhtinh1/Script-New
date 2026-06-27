@@ -11,6 +11,12 @@
 
 #include "Polygon.h"
 
+#ifndef _USE_MATH_DEFINES
+#define _USE_MATH_DEFINES
+#endif
+#include <cmath>
+#include <utility>
+
 namespace SDK {
 
     class SectorPoly : public Polygon {
@@ -52,6 +58,31 @@ namespace SDK {
                     Center.x + (outRadius * cDirection.x),
                     Center.y + (outRadius * cDirection.y));
             }
+        }
+
+        // ── RotateLineFromPoint ──────────────────────────────────────────
+        // DLL-only method: rotates a line segment (point1→point2) around
+        // a pivot point by `value` radians. Returns the rotated endpoints.
+        // Usage: when a sector needs to be rotated around an arbitrary
+        // pivot (e.g. for dynamic spell direction changes).
+        static std::pair<Vec2, Vec2> RotateLineFromPoint(
+            const Vec2& point1, const Vec2& point2,
+            const Vec2& pivot, float value, bool radian = true)
+        {
+            const float angle = radian ? value : value * 3.14159265358979323846f / 180.0f;
+            const float c = std::cos(angle);
+            const float s = std::sin(angle);
+
+            // Translate points relative to pivot, rotate, translate back
+            auto rotateAround = [&](const Vec2& p) -> Vec2 {
+                float dx = p.x - pivot.x;
+                float dy = p.y - pivot.y;
+                return Vec2(
+                    pivot.x + dx * c - dy * s,
+                    pivot.y + dx * s + dy * c);
+            };
+
+            return { rotateAround(point1), rotateAround(point2) };
         }
 
     private:

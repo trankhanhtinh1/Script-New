@@ -448,8 +448,10 @@ public:
         // TODO(SDK parity): replace current-position fallback with
         // Movement.GetPrediction once NightSharp prediction is ported.
         PredictionOutput output;
-        output.SetUnitPosition(Vec3Ext::SetZ(unit.Position()));
-        output.SetCastPosition(Vec3Ext::SetZ(unit.Position()));
+        auto pos = unit.Position();
+        pos.y = SDK::Game::CursorPosRaw().y;
+        output.SetUnitPosition(pos);
+        output.SetCastPosition(pos);
         output.AoeTargetsHitCount = aoe ? 1 : 0;
 
         const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();

@@ -23,6 +23,7 @@
 // ============================================================================
 
 #include "../../../Core/Vector.h"
+#include "../../Core/Objects.h"
 
 #include <cmath>
 #include <cstdint>
@@ -199,6 +200,12 @@ namespace SDK {
         // Whether the Vec3 (projected to 2D) is inside the polygon
         bool IsInside(const Vec3& point) const {
             return !IsOutside(point.To2D());
+        }
+
+        // Whether the GameObject's position is inside the polygon
+        // DLL: Geometry.Polygon.IsInside(GameObject)
+        bool IsInside(const GameObject& gameObject) const {
+            return !IsOutside(gameObject.Position().To2D());
         }
 
         // Whether the position is OUTSIDE the polygon (PointInPolygon != 1).

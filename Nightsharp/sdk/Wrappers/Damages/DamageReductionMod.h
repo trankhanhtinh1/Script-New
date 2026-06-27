@@ -1,15 +1,16 @@
 #pragma once
 
 #include "../../Core/Objects.h"
-#include "../../Core/CoreBuffs.h"
+#include "../../../Core/CoreBuffs.h"
 #include "../../Core/Game.h"
-#include "../Enumerations/DamageType.h"
-#include "../Enumerations/MinionTypes.h"
-#include "../Enumerations/SpellSlot.h"
+#include "../../Enumerations/DamageType.h"
+#include "../../Enumerations/MinionTypes.h"
+#include "../../Enumerations/SpellSlot.h"
 #include "../../Core/Hud.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 // ============================================================================
 // DamageReductionMod — ported from EnsoulSharp.SDK.Damage.DamageReductionMod
@@ -19,14 +20,36 @@
 
 namespace SDK::DamageMod {
 
-    // DLL: private static readonly double[] arrays
-    static constexpr double AlistarR[]  = { 0.55, 0.65, 0.75 };
-    static constexpr double AmumuE[]    = { 5.0, 7.0, 9.0, 11.0, 13.0 };
-    static constexpr double BraumE[]    = { 0.30, 0.325, 0.35, 0.375, 0.40 };
-    static constexpr double GalioW[]    = { 0.20, 0.25, 0.30, 0.35, 0.40 };
-    static constexpr double GragasW[]   = { 0.10, 0.12, 0.14, 0.16, 0.18 };
-    static constexpr double MasterYiW[] = { 0.60, 0.625, 0.65, 0.675, 0.70 };
-    static constexpr double WarwickE[]  = { 0.35, 0.40, 0.45, 0.50, 0.55 };
+    // CommunityDragon latest (16.13.7906961) SpellDataValue arrays keep
+    // index 0 as the unlearned rank for most spells; runtime SpellLevel is
+    // therefore used directly and clamped to the learned rank range.
+    static constexpr float AlistarRDamageReduction[]     = { 0.45f, 0.55f, 0.65f, 0.75f };
+    static constexpr float AmumuEFlatReduction[]         = { 0.0f, 5.0f, 7.0f, 9.0f, 11.0f, 13.0f };
+    static constexpr float BraumEDamageReduction[]       = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
+    static constexpr float GalioWBaseReduction[]         = { 0.20f, 0.25f, 0.30f, 0.35f, 0.40f, 0.45f };
+    static constexpr float GarenWReduction[]             = { 0.21f, 0.25f, 0.29f, 0.33f, 0.37f, 0.41f };
+    static constexpr float GragasWBaseReductionPercent[] = { 6.0f, 10.0f, 14.0f, 18.0f, 22.0f, 26.0f };
+    static constexpr float LeonaWFlatReduction[]         = { 4.0f, 8.0f, 12.0f, 16.0f, 20.0f, 24.0f };
+    static constexpr float MasterYiWReduction[]          = { 0.425f, 0.45f, 0.475f, 0.50f, 0.525f, 0.55f };
+    static constexpr float MasterYiWInitialExtra[]       = { 0.275f, 0.25f, 0.225f, 0.20f, 0.175f, 0.15f };
+    static constexpr float WarwickEReduction[]           = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
+    static constexpr float BelvethEReduction[]           = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
+
+    template <std::size_t N>
+    inline float SpellRankValue(const float (&values)[N], int spellLevel) {
+        static_assert(N > 1, "SpellRankValue requires an unlearned entry plus at least one learned rank");
+        const int index = std::clamp(spellLevel, 1, static_cast<int>(N) - 1);
+        return values[index];
+    }
+
+    inline float PercentToMultiplier(float reduction) {
+        return 1.0f - std::clamp(reduction, 0.0f, 0.99f);
+    }
+
+    inline void ApplyFlatReduction(float& amount, float reduction, float maxFraction = 0.5f) {
+        const float capped = std::min(reduction, amount * maxFraction);
+        amount = std::max(amount - capped, 0.0f);
+    }
 
     // DLL: private static int GetSpellLevel(AIBaseClient source, SpellSlot slot)
     inline int GetSpellLevel(const AIBaseClient& source, SpellSlot slot) {
@@ -60,9 +83,11 @@ namespace SDK::DamageMod {
         if (targetIsHero && sourceIsMinion &&
             source.Team() == GameObjectTeam::Neutral && IsDragon(source)) {
             const auto dragon = SDK::Hud::DragonSRX();
-            const int enemyDragonKills = dragon.EnemyDragonKills;
-            if (enemyDragonKills > 0) {
-                amount *= static_cast<float>(1.0 + 0.2 * enemyDragonKills);
+            const int dragonKills = target.IsAlly()
+                ? dragon.AllyDragonKills
+                : dragon.EnemyDragonKills;
+            if (dragonKills > 0) {
+                amount *= static_cast<float>(1.0 + 0.2 * dragonKills);
             }
         }
 
@@ -76,15 +101,17 @@ namespace SDK::DamageMod {
                 // Dragon damage reduction from dragon kills
                 if (IsDragon(target)) {
                     const auto dragon = SDK::Hud::DragonSRX();
-                    const int allyDragonKills = dragon.AllyDragonKills;
-                    if (allyDragonKills > 0) {
-                        amount *= static_cast<float>(1.0 - 0.07 * allyDragonKills);
+                    const int dragonKills = source.IsAlly()
+                        ? dragon.AllyDragonKills
+                        : dragon.EnemyDragonKills;
+                    if (dragonKills > 0) {
+                        amount *= static_cast<float>(1.0 - 0.07 * dragonKills);
                     }
                 }
                 // Shyvana passive: +20% damage to legendary jungle
                 if (source.CharacterName() == "Shyvana") {
                     const AIMinionClient minionTarget(target.Address());
-                    if (HasFlag(minionTarget.GetJungleType(), JungleType::Legendary)) {
+                    if (minionTarget.GetJungleType() == JungleType::Legendary) {
                         amount *= 1.2f;
                     }
                 }
@@ -100,15 +127,21 @@ namespace SDK::DamageMod {
             amount *= 1.1f;
         }
 
-        // Sona passive debuff on source
-        // DLL: buff.Caster.TotalMagicalDamage
-        if (source.HasBuff("SonaEDebuff")) {
-            const uintptr_t casterAddr = source.GetBuffCaster("SonaEDebuff");
+        // Sona W Power Chord - Diminuendo: target deals 25% + 4%/100 AP
+        // less physical/magic damage. CDragon object is SonaWPassiveDebuff;
+        // keep the legacy lowercase SDK name as a fallback for older dumps.
+        const char* sonaDebuffName = nullptr;
+        if (source.HasBuff("SonaWPassiveDebuff")) {
+            sonaDebuffName = "SonaWPassiveDebuff";
+        } else if (source.HasBuff("sonapassivedebuff")) {
+            sonaDebuffName = "sonapassivedebuff";
+        }
+        if (sonaDebuffName) {
+            const uintptr_t casterAddr = source.GetBuffCaster(sonaDebuffName);
             if (Globals::IsValidPtr(casterAddr)) {
                 const AIBaseClient caster(casterAddr);
-                const float bonusMag = caster.TotalMagicalDamage();
-                amount -= bonusMag * 0.15f;
-                if (amount < 0.0f) amount = 0.0f;
+                const float weaken = 0.25f + 0.0004f * caster.TotalMagicalDamage();
+                amount *= PercentToMultiplier(weaken);
             }
         }
 
@@ -139,58 +172,167 @@ namespace SDK::DamageMod {
             }
         }
 
-        // Champion-specific damage reduction passives
+        // Champion-specific damage reduction from CDragon latest.
         if (targetIsHero) {
-            const auto heroTarget = AIHeroClient(target.Address());
+            const AIHeroClient heroTarget(target.Address());
             const std::string targetName = heroTarget.CharacterName();
+            const int championLevel = std::clamp(heroTarget.Level(), 1, 18);
 
-            if (targetName == "Alistar" && heroTarget.HasBuff("AlisterTrample")) {
-                const int level = GetSpellLevel(target, SpellSlot::R);
-                if (level >= 1 && level <= 3) {
-                    amount *= static_cast<float>(AlistarR[level - 1]);
+            if (targetName == "Alistar" && heroTarget.HasBuff("FerociousHowl")) {
+                const float reduction = SpellRankValue(
+                    AlistarRDamageReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::R));
+                amount *= PercentToMultiplier(reduction);
+            }
+
+            if (targetName == "Amumu" && heroTarget.HasBuff("Tantrum") &&
+                damageType == DamageType::Physical) {
+                const float reduction = SpellRankValue(
+                    AmumuEFlatReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::E)) +
+                    0.03f * heroTarget.BonusArmor() +
+                    0.03f * heroTarget.BonusSpellBlock();
+                ApplyFlatReduction(amount, reduction);
+            }
+
+            if (targetName == "Braum" &&
+                (heroTarget.HasBuff("BraumEShieldBuff") ||
+                 heroTarget.HasBuff("braumeshieldbuff"))) {
+                const float reduction = SpellRankValue(
+                    BraumEDamageReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::E));
+                amount *= PercentToMultiplier(reduction);
+            }
+
+            if (targetName == "Galio" &&
+                (heroTarget.HasBuff("GalioWBuff") ||
+                 heroTarget.HasBuff("galiowbuff"))) {
+                const float magicReduction =
+                    SpellRankValue(GalioWBaseReduction, GetSpellLevel(heroTarget, SpellSlot::W)) +
+                    0.0004f * heroTarget.TotalMagicalDamage() +
+                    0.0008f * heroTarget.BonusSpellBlock() +
+                    0.0001f * heroTarget.MaxHealth();
+
+                if (damageType == DamageType::Physical) {
+                    amount *= PercentToMultiplier(magicReduction * 0.5f);
+                } else if (damageType == DamageType::Magical) {
+                    amount *= PercentToMultiplier(magicReduction);
                 }
             }
 
-            if (targetName == "Amumu" && heroTarget.HasBuff("AmumuESpell")) {
-                const int level = GetSpellLevel(target, SpellSlot::E);
-                if (level >= 1 && level <= 5) {
-                    amount -= static_cast<float>(AmumuE[level - 1]);
+            if (targetName == "Garen" && heroTarget.HasBuff("GarenW")) {
+                const float reduction = SpellRankValue(
+                    GarenWReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::W));
+                amount *= PercentToMultiplier(reduction);
+            }
+
+            if (targetName == "Gragas" &&
+                (heroTarget.HasBuff("GragasW") ||
+                 heroTarget.HasBuff("gragaswself"))) {
+                const float reduction =
+                    (SpellRankValue(GragasWBaseReductionPercent, GetSpellLevel(heroTarget, SpellSlot::W)) +
+                     0.04f * heroTarget.TotalMagicalDamage()) *
+                    0.01f;
+                amount *= PercentToMultiplier(reduction);
+            }
+
+            if (targetName == "Irelia" &&
+                (heroTarget.HasBuff("IreliaWDefense") ||
+                 heroTarget.HasBuff("ireliawdefense"))) {
+                const float physicalReduction =
+                    0.40f +
+                    (0.30f / 17.0f) * static_cast<float>(championLevel - 1) +
+                    0.0007f * heroTarget.TotalMagicalDamage();
+
+                if (damageType == DamageType::Physical) {
+                    amount *= PercentToMultiplier(physicalReduction);
+                } else if (damageType == DamageType::Magical) {
+                    amount *= PercentToMultiplier(physicalReduction * 0.5f);
                 }
             }
 
-            if (targetName == "Braum" && heroTarget.HasBuff("BraumEShield")) {
-                const int level = GetSpellLevel(target, SpellSlot::E);
-                if (level >= 1 && level <= 5) {
-                    amount *= static_cast<float>(BraumE[level - 1]);
-                }
+            if (targetName == "Kassadin" && damageType == DamageType::Magical) {
+                amount *= 0.90f;
             }
 
-            if (targetName == "Galio" && heroTarget.HasBuff("GalioW")) {
-                const int level = GetSpellLevel(target, SpellSlot::W);
-                if (level >= 1 && level <= 5) {
-                    amount *= static_cast<float>(GalioW[level - 1]);
-                }
+            if (targetName == "Leona" &&
+                (heroTarget.HasBuff("LeonaSolarBarrier") ||
+                 heroTarget.HasBuff("leonasolarbarrier"))) {
+                const float reduction = SpellRankValue(
+                    LeonaWFlatReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::W));
+                ApplyFlatReduction(amount, reduction);
             }
 
-            if (targetName == "Gragas" && heroTarget.HasBuff("GragasW")) {
-                const int level = GetSpellLevel(target, SpellSlot::W);
-                if (level >= 1 && level <= 5) {
-                    amount *= static_cast<float>(GragasW[level - 1]);
-                }
+            if (targetName == "Fizz") {
+                const bool neutralMonsterSource =
+                    sourceIsMinion && source.Team() == GameObjectTeam::Neutral;
+                const float reduction =
+                    (neutralMonsterSource ? 14.0f : 4.0f) +
+                    0.01f * heroTarget.TotalMagicalDamage();
+                ApplyFlatReduction(amount, reduction);
+            }
+
+            if (targetName == "Malzahar" &&
+                (heroTarget.HasBuff("MalzaharPassiveShield") ||
+                 heroTarget.HasBuff("MalzaharPassive"))) {
+                amount *= 0.10f;
             }
 
             if (targetName == "MasterYi" && heroTarget.HasBuff("Meditate")) {
-                const int level = GetSpellLevel(target, SpellSlot::W);
-                if (level >= 1 && level <= 5) {
-                    amount *= static_cast<float>(MasterYiW[level - 1]);
+                const int spellLevel = GetSpellLevel(heroTarget, SpellSlot::W);
+                float reduction = SpellRankValue(MasterYiWReduction, spellLevel);
+
+                const auto meditate = CoreBuffs::FindByName(heroTarget.Address(), "Meditate");
+                if (meditate.IsValid()) {
+                    const float elapsed = SDK::Game::Time() - meditate.GetStartTime();
+                    if (elapsed >= 0.0f && elapsed < 0.5f) {
+                        reduction += SpellRankValue(MasterYiWInitialExtra, spellLevel);
+                    }
                 }
+
+                if (source.Type() == ::Core::Objects::ObjectType::AITurretClient) {
+                    reduction *= 0.5f;
+                }
+                amount *= PercentToMultiplier(reduction);
             }
 
             if (targetName == "Warwick" && heroTarget.HasBuff("WarwickE")) {
-                const int level = GetSpellLevel(target, SpellSlot::E);
-                if (level >= 1 && level <= 5) {
-                    amount *= static_cast<float>(WarwickE[level - 1]);
+                const float reduction = SpellRankValue(
+                    WarwickEReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::E));
+                amount *= PercentToMultiplier(reduction);
+            }
+
+            if (targetName == "Belveth" && heroTarget.HasBuff("BelvethE")) {
+                const float reduction = SpellRankValue(
+                    BelvethEReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::E));
+                amount *= PercentToMultiplier(reduction);
+            }
+
+            if (targetName == "Briar" && heroTarget.HasBuff("BriarEDR")) {
+                amount *= PercentToMultiplier(0.35f);
+            }
+
+            const bool targetIsKSante = targetName == "KSante" || targetName == "K'Sante";
+            if (targetIsKSante) {
+                if (heroTarget.HasBuff("KSanteW_AllOut")) {
+                    amount *= PercentToMultiplier(0.75f);
+                } else if (heroTarget.HasBuff("KSanteW")) {
+                    amount *= PercentToMultiplier(0.30f);
                 }
+            }
+
+            if (targetName == "Nilah" && damageType == DamageType::Magical &&
+                (heroTarget.HasBuff("NilahWBuff") ||
+                 heroTarget.HasBuff("NilahWAllyBuff"))) {
+                amount *= PercentToMultiplier(0.25f);
+            }
+
+            if (targetName == "Zaahen" && heroTarget.HasBuff("ZaahenR")) {
+                amount *= PercentToMultiplier(0.50f);
             }
         }
 

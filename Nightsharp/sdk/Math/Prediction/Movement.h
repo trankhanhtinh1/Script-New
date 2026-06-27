@@ -21,6 +21,7 @@
 #include "../../Events/Dash.h"
 #include "../../Extensions/Unit.h"
 #include "../../Utils/MathUtils.h"
+#include "../../GameObjects/GameObjects.h"
 #include "../../GameObjects/ObjectManager.h"
 
 #include <algorithm>
@@ -40,6 +41,11 @@ namespace SDK {
 struct PredictionInput;
 struct PredictionOutput;
 } // namespace SDK
+
+// Forward declaration — defined in Cluster.h (included via Prediction.h)
+namespace SDK::Prediction::Cluster {
+    PredictionOutput GetAoEPrediction(const PredictionInput& input);
+}
 
 namespace SDK::Prediction {
 
@@ -68,7 +74,7 @@ inline float Polar(const Vec2& v) {
     if (std::abs(v.x) < 0.0001f) {
         return v.y > 0 ? 90.0f : (v.y < 0 ? 270.0f : 0.0f);
     }
-    float theta = std::atan2(v.y, v.x) * 180.0f / static_cast<float>(M_PI);
+    float theta = std::atan2(v.y, v.x) * 180.0f / 3.14159265358979323846f;
     if (theta < 0) theta += 360.0f;
     return theta;
 }
@@ -89,8 +95,8 @@ inline Vec2 Rotated(const Vec2& v, float angle) {
 }
 
 inline Vec2 Perpendicular(const Vec2& v, int offset = 0) {
-    float c = std::cos(static_cast<float>(offset) * static_cast<float>(M_PI) / 2.0f);
-    float s = std::sin(static_cast<float>(offset) * static_cast<float>(M_PI) / 2.0f);
+    float c = std::cos(static_cast<float>(offset) * 3.14159265358979323846f / 2.0f);
+    float s = std::sin(static_cast<float>(offset) * 3.14159265358979323846f / 2.0f);
     return Vec2(-v.x * s + v.y * c, v.x * c + v.y * s);
 }
 
@@ -188,10 +194,11 @@ inline MovementCollisionInfo VectorMovementCollision(
         Vec2 b = pathA[i + 1];
 
         float segmentDistance = a.Distance(b);
+        float timeToReachSegmentEnd = 0.0f;
         if (segmentDistance > 0) {
             segmentPositions[1] = segmentPositions[0] + segmentDistance;
 
-            float timeToReachSegmentEnd = segmentDistance / speedA;
+            timeToReachSegmentEnd = segmentDistance / speedA;
             float segmentTime = 0.0f;
 
             while (segmentTime < timeToReachSegmentEnd + 0.001f) {
@@ -495,7 +502,7 @@ inline Vec2 PositionAfter(const AIBaseClient& unit, float t, float speed = FLT_M
         if (d < distance) {
             distance -= d;
         } else {
-            return a + (distance * (b - a).Normalized());
+            return a + ((b - a).Normalized() * distance);
         }
     }
 
@@ -521,7 +528,7 @@ inline HitChance GetHitchance(const AIBaseClient& unit) {
 // GetPositionOnPath (Movement.cs lines 213-319)
 // ----------------------------------------------------------------------------
 inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Vec2> path, float speed = -1.0f, bool needToFixSpeed = false) {
-    if (needToFixSpeed && input.Unit.DistanceSquared(input.ResolveFrom()) < 250.0f * 250.0f) {
+    if (needToFixSpeed && input.Unit.Position().DistanceSqr2D(input.ResolveFrom()) < 250.0f * 250.0f) {
         speed *= 1.5f;
     }
     speed = (std::abs(speed - (-1.0f)) < 0.0001f) ? input.Unit.MoveSpeed() : speed;
@@ -604,7 +611,7 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Ve
             Vec2 b = path[i + 1];
             float tB = a.Distance(b) / speed;
             Vec2 direction = (b - a).Normalized();
-            a = a - (speed * tT * direction);
+            a = a - (direction * (speed * tT));
 
             auto sol = Vec2Ext::VectorMovementCollision(
                 a, b, speed, input.ResolveFrom().To2D(), input.Speed, tT);
@@ -615,7 +622,7 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Ve
                 if (pos.DistanceSquared(b) < 20.0f) {
                     break;
                 }
-                Vec2 p = pos - (input.RealRadius() * direction);
+                Vec2 p = pos - (direction * input.RealRadius());
 
                 PredictionOutput output;
                 output.Input = input;
@@ -650,7 +657,7 @@ inline PredictionOutput GetAdvancedPrediction(PredictionInput& input, float addi
 
     AIBaseClient unit = input.Unit;
     Vec2 position = PositionAfter(unit, 1.0f, unit.MoveSpeed() - 100.0f);
-    Vec2 prediction = position + (speed * (input.Delay / 1000.0f) * Vec2(1, 1));
+    Vec2 prediction = position + (Vec2(1, 1) * (speed * (input.Delay / 1000.0f)));
 
     // C# code: prediction = position + (speed * (input.Delay / 1000));
     // This is a scalar * Vector2 multiplication, meaning the vector is
@@ -811,7 +818,7 @@ inline double UnitIsImmobileUntil(const AIBaseClient& unit) {
 inline PredictionOutput GetStandardPrediction(PredictionInput& input) {
     float speed = input.Unit.MoveSpeed();
 
-    if (input.Unit.DistanceSquared(input.ResolveFrom()) < 200.0f * 200.0f) {
+    if (input.Unit.Position().DistanceSqr2D(input.ResolveFrom()) < 200.0f * 200.0f) {
         speed /= 1.5f;
     }
 
@@ -854,13 +861,16 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
         input.Delay += (static_cast<float>(SDK::Game::Ping()) / 2000.0f) + 0.06f;
 
         if (input.AoE) {
-            // AoEPrediction not yet ported; fallback to GetPositionOnPath
+            // Route to Cluster::GetAoEPrediction for AoE skillshots
+            // (Circle, Cone, Line). This matches C# pattern:
+            //   if (input.AoE) return Cluster.GetAoEPrediction(input);
+            return Prediction::Cluster::GetAoEPrediction(input);
         }
     }
 
     // Target too far away (DLL: RangeCheckFrom, not ResolveRangeCheckFrom)
     if (std::abs(input.Range - FLT_MAX) > 0.0001f
-        && input.Unit.DistanceSquared(input.ResolveRangeCheckFrom())
+        && input.Unit.Position().DistanceSqr2D(input.ResolveRangeCheckFrom())
         > std::pow(input.Range * 1.5f, 2)) {
         PredictionOutput output;
         output.Input = input;
@@ -896,12 +906,12 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
     // Range checks (DLL: no cast position clamping, just Hitchance changes)
     if (std::abs(input.Range - FLT_MAX) > 0.0001f) {
         if (result.Hitchance >= HitChance::High
-            && input.ResolveRangeCheckFrom().DistanceSquared(input.Unit.Position())
+            && input.ResolveRangeCheckFrom().DistanceSqr2D(input.Unit.Position())
             > std::pow(input.Range + (input.RealRadius() * 3.0f / 4.0f), 2)) {
             result.Hitchance = HitChance::Medium;
         }
 
-        if (input.ResolveRangeCheckFrom().DistanceSquared(result.GetUnitPosition())
+        if (input.ResolveRangeCheckFrom().DistanceSqr2D(result.GetUnitPosition())
             > std::pow(input.Range + (input.Type == SkillshotType::SkillshotCircle
                 ? input.RealRadius() : 0.0f), 2)) {
             result.Hitchance = HitChance::OutOfRange;
@@ -1008,6 +1018,100 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     if (SDK::HasFlag(flags, CollisionableObjects::Heroes)) {
         for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
             checkUnit(hero);
+        }
+    }
+
+    // ── Yasuo Wind Wall ──────────────────────────────────────────────
+    // C# source: checks particle emitters matching "Yasuo_.+_w_windwall_enemy_\d"
+    // Wall width = 250 + 50 * level (from particle name suffix)
+    if (SDK::HasFlag(flags, CollisionableObjects::YasuoWall)) {
+        bool hasYasuo = false;
+        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+            if (hero.IsValid() && !hero.IsDead()
+                && hero.CharacterName() == "Yasuo") {
+                hasYasuo = true;
+                break;
+            }
+        }
+        if (hasYasuo) {
+            for (const auto& emitter : SDK::GameObjects::ParticleEmitters()) {
+                if (!emitter.IsValid()) continue;
+                const std::string name = emitter.Name();
+                // Match "Yasuo_.+_w_windwall_enemy_\d" (case-insensitive)
+                if (name.find("Yasuo") != std::string::npos
+                    && name.find("_w_windwall") != std::string::npos
+                    && name.find("enemy") != std::string::npos)
+                {
+                    // Extract level from last 2 chars
+                    int level = 1;
+                    if (name.size() >= 2) {
+                        auto c = name.back();
+                        if (c >= '1' && c <= '9') level = c - '0';
+                    }
+                    float wallWidth = 250.0f + 50.0f * static_cast<float>(level);
+                    Vec2 wallPos = emitter.Position().To2D();
+                    Vec2 wallDir = emitter.Direction().To2D();
+                    if (wallDir.LengthSqr() < 0.001f) continue;
+                    Vec2 perp(-wallDir.y, wallDir.x);
+                    perp = perp.Normalized();
+                    Vec2 wallStart = wallPos + perp * (wallWidth * 0.5f);
+                    Vec2 wallEnd = wallPos - perp * (wallWidth * 0.5f);
+
+                    // Check if skillshot path intersects wall segment
+                    auto inter = Vec2Ext::Intersection(from2D, to2D, wallStart, wallEnd);
+                    if (inter.Valid) {
+                        result.push_back(SDK::GameObjects::Player());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Samira Blade Whirl (W) ───────────────────────────────────────
+    // Samira's W blocks projectiles in a radius around her for ~1s
+    // Detect via buff "SamiraW" or "SamiraWBuff"
+    if (SDK::HasFlag(flags, CollisionableObjects::SamiraWall)) {
+        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+            if (!hero.IsValid() || hero.IsDead()) continue;
+            if (hero.CharacterName() != "Samira") continue;
+            if (!hero.HasBuff("SamiraW") && !hero.HasBuff("SamiraWBuff"))
+                continue;
+
+            // Check if skillshot path passes through Samira's W radius
+            Vec2 samiraPos = hero.Position().To2D();
+            auto proj = Vec2Ext::ProjectOn(samiraPos, from2D, to2D);
+            float distToLine = proj.IsOnSegment
+                ? samiraPos.Distance(proj.SegmentPoint)
+                : std::min(samiraPos.Distance(from2D), samiraPos.Distance(to2D));
+            // Samira W radius ~ 260 (her W AoE)
+            if (distToLine <= 260.0f + radius) {
+                result.push_back(hero);
+            }
+        }
+    }
+
+    // ── Mel Rebuttal (W) ─────────────────────────────────────────────
+    // Mel's W creates a 175-radius barrier that destroys/reflects projectiles
+    // Duration ~0.75s. Detect via buff "MelW" or "MelWBuff" or "MelRebuttal"
+    if (SDK::HasFlag(flags, CollisionableObjects::MelWall)) {
+        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+            if (!hero.IsValid() || hero.IsDead()) continue;
+            if (hero.CharacterName() != "Mel") continue;
+            if (!hero.HasBuff("MelW") && !hero.HasBuff("MelWBuff")
+                && !hero.HasBuff("MelRebuttal"))
+                continue;
+
+            // Check if skillshot path passes through Mel's W barrier radius
+            Vec2 melPos = hero.Position().To2D();
+            auto proj = Vec2Ext::ProjectOn(melPos, from2D, to2D);
+            float distToLine = proj.IsOnSegment
+                ? melPos.Distance(proj.SegmentPoint)
+                : std::min(melPos.Distance(from2D), melPos.Distance(to2D));
+            // Mel W effect radius = 175
+            if (distToLine <= 175.0f + radius) {
+                result.push_back(hero);
+            }
         }
     }
 

@@ -1,138 +1,226 @@
 #pragma once
 
-#include "../../core/Vector.h"
+// ============================================================================
+// Geometry.h — Geometry static methods (DLL polygon operations)
+// Ported from EnsoulSharp.SDK DLL: Geometry class (polygon operations)
+//
+// Source Geometry.cs chỉ có rendering helpers (GetCenter, GetCenteredText
+// với SharpDX.Direct3D9 Sprite/Font) — không port vì NightSharp dùng
+// ImGui rendering. DLL thêm các polygon operations sau:
+//   - CenterOfPolygone, ClipPolygons, JoinPolygons, MovePolygone
+//   - RotatePolygon, ToPolygon, ToPolygons, Close
+//   - DegreeToRadian, RadianToDegree
+//
+// Path helpers (PathLength, CutPath, VectorMovementCollision) đã có
+// trong SDK::Utils::MathUtils và Vec2Ext — không duplicate.
+//
+// Dependencies:
+//   - Core/Vector.h (Vec2, Vec3)
+//   - Polygons/Polygon.h (SDK::Polygon, SDK::Clipper)
+// ============================================================================
 
-#include <cfloat>
-#include <utility>
+#include "../../Core/Vector.h"
+#include "Polygons/Polygon.h"
+
+#include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace SDK::Geometry {
 
-struct MovementCollisionResult {
-    float Time = FLT_MAX;
-    Vec2 Position = {};
-
-    bool IsValid() const {
-        return Time < FLT_MAX && Position.IsValid();
-    }
-};
-
-inline float PathLength(const std::vector<Vec2>& path) {
-    float total = 0.0f;
-    for (size_t i = 1; i < path.size(); ++i) {
-        total += path[i - 1].Distance(path[i]);
-    }
-    return total;
+// ============================================================================
+// Angle conversion helpers
+// ============================================================================
+inline float DegreeToRadian(float degree) {
+    return degree * (3.14159265358979323846f / 180.0f);
 }
 
-inline Vec3 PositionAlongPath(const std::vector<Vec3>& path, float distance) {
-    return ::Geometry::PositionOnPath(path, distance);
+inline float RadianToDegree(float radian) {
+    return radian * (180.0f / 3.14159265358979323846f);
 }
 
-inline Vec2 PositionAlongPath(const std::vector<Vec2>& path, float distance) {
-    if (path.empty()) {
-        return {};
-    }
-    if (path.size() == 1) {
-        return path.front();
-    }
-
-    float remaining = distance;
-    for (size_t i = 1; i < path.size(); ++i) {
-        const float segLen = path[i - 1].Distance(path[i]);
-        if (remaining <= segLen) {
-            return path[i - 1].Extend(path[i], remaining);
-        }
-        remaining -= segLen;
-    }
-
-    return path.back();
-}
-
-inline std::vector<Vec2> CutPath(const std::vector<Vec2>& path, float distance) {
-    if (path.size() <= 1 || distance <= 0.0f) {
-        return path;
-    }
-
-    std::vector<Vec2> result = {};
-    float remaining = distance;
-
-    for (size_t i = 0; i + 1 < path.size(); ++i) {
-        const float segLen = path[i].Distance(path[i + 1]);
-        if (remaining > segLen) {
-            remaining -= segLen;
-            continue;
-        }
-
-        result.push_back(path[i].Extend(path[i + 1], remaining));
-        for (size_t j = i + 1; j < path.size(); ++j) {
-            result.push_back(path[j]);
-        }
-        break;
-    }
-
-    if (result.empty()) {
-        result.push_back(path.back());
+// ============================================================================
+// ToPolygon — convert Clipper IntPoint path to SDK::Polygon
+// DLL: Geometry.ToPolygon(List<IntPoint> path)
+// ============================================================================
+inline Polygon ToPolygon(const std::vector<Clipper::IntPoint>& path) {
+    Polygon result;
+    for (const auto& pt : path) {
+        result.Add(Vec2(static_cast<float>(pt.X), static_cast<float>(pt.Y)));
     }
     return result;
 }
 
-inline MovementCollisionResult VectorMovementCollision(const Vec2& startPos1,
-                                                       const Vec2& endPos1,
-                                                       float speed1,
-                                                       const Vec2& startPos2,
-                                                       float speed2,
-                                                       float delay = 0.0f) {
-    MovementCollisionResult result = {};
-    if (speed1 <= 0.0f || speed2 <= 0.0f) {
-        return result;
+// ============================================================================
+// ToPolygons — convert list of Clipper IntPoint paths to list of SDK::Polygon
+// DLL: Geometry.ToPolygons(List<List<IntPoint>> paths)
+// ============================================================================
+inline std::vector<Polygon> ToPolygons(const std::vector<std::vector<Clipper::IntPoint>>& paths) {
+    std::vector<Polygon> result;
+    result.reserve(paths.size());
+    for (const auto& path : paths) {
+        result.push_back(ToPolygon(path));
+    }
+    return result;
+}
+
+// ============================================================================
+// CenterOfPolygone — returns centroid of polygon points
+// DLL: Geometry.CenterOfPolygone(Polygon poly)
+// ============================================================================
+inline Vec2 CenterOfPolygone(const Polygon& poly) {
+    if (poly.Points.empty()) {
+        return {};
     }
 
-    const Vec2 delta = endPos1 - startPos1;
-    const float dist = delta.Length();
-    if (dist < 0.0001f) {
-        return result;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    for (const auto& pt : poly.Points) {
+        sumX += pt.x;
+        sumY += pt.y;
     }
+    return Vec2(sumX / static_cast<float>(poly.Points.size()),
+                sumY / static_cast<float>(poly.Points.size()));
+}
 
-    const float maxTime = dist / speed1;
-    const Vec2 direction = delta / dist;
-    const Vec2 origin = startPos1 - (direction * speed1 * delay);
-    const Vec2 relative = origin - startPos2;
-    const Vec2 velocity = direction * speed1;
+// ============================================================================
+// Close — ensure polygon is closed (first point == last point)
+// DLL: Geometry.Close(Polygon poly)
+// ============================================================================
+inline Polygon Close(const Polygon& poly) {
+    Polygon result = poly;
+    if (result.Points.size() >= 2
+        && result.Points.front() != result.Points.back())
+    {
+        result.Add(result.Points.front());
+    }
+    return result;
+}
 
-    const float a = velocity.Dot(velocity) - (speed2 * speed2);
-    const float b = 2.0f * relative.Dot(velocity);
-    const float c = relative.Dot(relative);
+// ============================================================================
+// MovePolygone — translate polygon by offset vector
+// DLL: Geometry.MovePolygone(Polygon poly, Vector2 offset)
+// ============================================================================
+inline Polygon MovePolygone(const Polygon& poly, const Vec2& offset) {
+    Polygon result;
+    result.Points.reserve(poly.Points.size());
+    for (const auto& pt : poly.Points) {
+        result.Add(pt + offset);
+    }
+    return result;
+}
 
-    auto acceptSolution = [&](float t) {
-        if (t < delay || t > (delay + maxTime)) {
-            return false;
+// ============================================================================
+// RotatePolygon — rotate polygon around a center point by angle (radians)
+// DLL: Geometry.RotatePolygon(Polygon poly, Vector2 center, float angle)
+// ============================================================================
+inline Polygon RotatePolygon(const Polygon& poly, const Vec2& center, float angle) {
+    const float cos = std::cos(angle);
+    const float sin = std::sin(angle);
+
+    Polygon result;
+    result.Points.reserve(poly.Points.size());
+    for (const auto& pt : poly.Points) {
+        const float dx = pt.x - center.x;
+        const float dy = pt.y - center.y;
+        result.Add(Vec2(
+            center.x + dx * cos - dy * sin,
+            center.y + dx * sin + dy * cos
+        ));
+    }
+    return result;
+}
+
+// ============================================================================
+// RotatePolygon — rotate polygon around its centroid by angle (radians)
+// DLL: Geometry.RotatePolygon(Polygon poly, float angle)
+// ============================================================================
+inline Polygon RotatePolygon(const Polygon& poly, float angle) {
+    return RotatePolygon(poly, CenterOfPolygone(poly), angle);
+}
+
+// ============================================================================
+// ClipPolygons — clip subject polygon against clip polygon
+// DLL: Geometry.ClipPolygons(Polygon subject, Polygon clip)
+// Uses Sutherland-Hodgman algorithm for convex clip polygon
+// ============================================================================
+inline Polygon ClipPolygons(const Polygon& subject, const Polygon& clip) {
+    if (clip.Points.size() < 3) return subject;
+
+    std::vector<Vec2> output = subject.Points;
+
+    // Sutherland-Hodgman: clip against each edge of the clip polygon
+    for (size_t i = 0; i < clip.Points.size(); ++i) {
+        if (output.empty()) break;
+
+        const Vec2& clipA = clip.Points[i];
+        const Vec2& clipB = clip.Points[(i + 1) % clip.Points.size()];
+
+        std::vector<Vec2> input = std::move(output);
+        output.clear();
+
+        for (size_t j = 0; j < input.size(); ++j) {
+            const Vec2& current = input[j];
+            const Vec2& next = input[(j + 1) % input.size()];
+
+            // Cross product to determine which side of clip edge
+            auto isInside = [&](const Vec2& p) {
+                return (clipB.x - clipA.x) * (p.y - clipA.y)
+                     - (clipB.y - clipA.y) * (p.x - clipA.x) >= 0.0f;
+            };
+
+            // Line segment intersection
+            auto intersect = [&](const Vec2& a, const Vec2& b) {
+                float dx1 = clipB.x - clipA.x;
+                float dy1 = clipB.y - clipA.y;
+                float dx2 = b.x - a.x;
+                float dy2 = b.y - a.y;
+                float denom = dx1 * dy2 - dy1 * dx2;
+                if (std::abs(denom) < 1e-6f) return a;
+                float t = ((clipA.x - a.x) * dy1 - (clipA.y - a.y) * dx1) / denom;
+                return Vec2(a.x + t * dx2, a.y + t * dy2);
+            };
+
+            bool currentInside = isInside(current);
+            bool nextInside = isInside(next);
+
+            if (currentInside) {
+                output.push_back(current);
+                if (!nextInside) {
+                    output.push_back(intersect(current, next));
+                }
+            } else if (nextInside) {
+                output.push_back(intersect(current, next));
+            }
         }
-        result.Time = t;
-        result.Position = origin + (velocity * t);
-        return true;
-    };
-
-    if (std::fabs(a) < 0.0001f) {
-        if (std::fabs(b) < 0.0001f) {
-            return result;
-        }
-        acceptSolution(-c / b);
-        return result;
     }
 
-    const float disc = (b * b) - (4.0f * a * c);
-    if (disc < 0.0f) {
-        return result;
+    Polygon result;
+    for (const auto& pt : output) {
+        result.Add(pt);
     }
+    return result;
+}
 
-    const float sqrtDisc = std::sqrt(disc);
-    const float t1 = (-b - sqrtDisc) / (2.0f * a);
-    const float t2 = (-b + sqrtDisc) / (2.0f * a);
-    if (acceptSolution(t1)) {
-        return result;
+// ============================================================================
+// JoinPolygons — merge two polygons into one (concatenate points)
+// DLL: Geometry.JoinPolygons(Polygon poly1, Polygon poly2)
+// ============================================================================
+inline Polygon JoinPolygons(const Polygon& poly1, const Polygon& poly2) {
+    Polygon result = poly1;
+    result.Add(poly2);
+    return result;
+}
+
+// ============================================================================
+// JoinPolygons — merge list of polygons into one
+// DLL: Geometry.JoinPolygons(List<Polygon> polygons)
+// ============================================================================
+inline Polygon JoinPolygons(const std::vector<Polygon>& polygons) {
+    Polygon result;
+    for (const auto& poly : polygons) {
+        result.Add(poly);
     }
-    acceptSolution(t2);
     return result;
 }
 

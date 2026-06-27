@@ -33,6 +33,13 @@ class AIBaseClient;
 class GameObject;
 class InventorySlot;
 
+namespace DamageMod {
+    float DamageReductionMod(const AIBaseClient& source,
+                             const AIBaseClient& target,
+                             float amount,
+                             DamageType damageType);
+}
+
 namespace CoreSpellBook = ::CoreSpellBook;
 
 enum class GameObjectTeam : std::int32_t {
@@ -673,7 +680,7 @@ public:
         return ::CoreAIHeroClient::PercentBonusMagicPen(Address());
     }
 
-    // â”€â”€ Damage calculation (matching DLL's Damage.CalculatePhysicalDamage) â”€â”€
+    // ── Damage calculation (matching DLL's Damage.CalculatePhysicalDamage) ──
     float CalculatePhysicalDamage(const AIBaseClient& target, float amount) const {
         if (amount <= 0.0f) return 0.0f;
         if (!IsValid() || !target.IsValid()) return 0.0f;
@@ -1367,5 +1374,3 @@ public:
 };
 
 } // namespace SDK
-
-#include "../../Wrappers/Damages/DamageReductionMod.h"

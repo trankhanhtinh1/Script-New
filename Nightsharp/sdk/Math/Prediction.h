@@ -11,3 +11,6 @@
 // ============================================================================
 
 #include "Prediction/Movement.h"
+#include "Prediction/Cluster.h"
+#include "ConvexHull.h"
+#include "Geometry.h"

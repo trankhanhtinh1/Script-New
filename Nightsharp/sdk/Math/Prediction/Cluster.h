@@ -1,7 +1,24 @@
 #pragma once
 
+// ============================================================================
+// Cluster.h — AoE (Area of Effect) Prediction
+// Ported from EnsoulSharp.SDK/Core/Math/Prediction/Cluster.cs (453 lines)
+//
+// Provides GetAoEPrediction for Circle, Cone, and Line skillshots.
+// Uses MEC (Minimum Enclosing Circle) for Circle prediction, candidate
+// midpoint scanning for Cone, and candidate line scanning for Line.
+//
+// Dependencies:
+//   - Movement.h (GetPrediction, PredictionInput, PredictionOutput)
+//   - Vec2Ext helpers (Rotated, AngleBetween, ProjectOn)
+//   - GameObjects::EnemyHeroes()
+//   - Extensions::IsValidTarget()
+// ============================================================================
+
 #include "Movement.h"
 #include "../ConvexHull.h"
+#include "../../Extensions/Unit.h"
+#include "../../GameObjects/GameObjects.h"
 
 #include <algorithm>
 #include <cmath>
@@ -11,140 +28,105 @@ namespace SDK::Prediction::Cluster {
 
 namespace detail {
 
+// ============================================================================
+// PossibleTarget — matches C# Cluster.PossibleTarget internal class
+// ============================================================================
 struct PossibleTarget {
     Vec2 Position = {};
     AIHeroClient Unit = {};
 };
 
-inline Vec3 ResolveFrom(const PredictionInput& input) {
-    return Movement::ResolveFrom(input);
-}
-
-inline float DistanceSquaredToSegment(const Vec2& point, const Vec2& segmentStart, const Vec2& segmentEnd) {
-    return SDK::Geometry::ProjectOn(point, segmentStart, segmentEnd).segmentPoint.DistanceSqr(point);
-}
-
-inline PredictionOutput MakeOutput(const PredictionInput& input,
-                                   const PredictionOutput& base,
-                                   const std::vector<AIHeroClient>& hits,
-                                   const Vec3& castPosition) {
-    PredictionOutput output = base;
-    output.Input = input;
-    output.CastPosition = castPosition;
-    output.AoeTargetsHit = hits;
-    output.AoeHitCount = static_cast<int>(hits.size());
-    return output;
-}
-
+// ============================================================================
+// GetPossibleTargets — matches C# Cluster.GetPossibleTargets
+// Finds enemy heroes near the target that could be hit by AoE
+// ============================================================================
 inline std::vector<PossibleTarget> GetPossibleTargets(PredictionInput input) {
-    std::vector<PossibleTarget> result = {};
+    std::vector<PossibleTarget> result;
     const auto originalUnit = input.Unit;
-    const Vec3 source = Movement::ResolveRangeCheckFrom(input, ResolveFrom(input));
+    const Vector3 source = input.ResolveRangeCheckFrom();
 
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!enemy.IsValid() || enemy.IsDead()) {
+        if (!enemy.IsValid() || enemy.IsDead()) continue;
+        if (originalUnit.IsValid() && enemy.NetworkId() == originalUnit.NetworkId()) continue;
+
+        if (!Extensions::IsValidTarget(enemy, input.Range + 200.0f + input.RealRadius(), true, source))
             continue;
-        }
-        if (originalUnit.IsValid() && enemy.NetworkId() == originalUnit.NetworkId()) {
-            continue;
-        }
-        if (!Extensions::IsValidTarget(enemy, input.Range + 200.0f + input.RealRadius(), true, source)) {
-            continue;
-        }
 
         input.Unit = enemy;
-        const auto prediction = Movement::GetPrediction(input, false, true);
+        // C#: Movement.GetPrediction(input, false, false)
+        // C++ overload: (input, checkCollision, checkRange)
+        const auto prediction = Movement::GetPrediction(input, false, false);
         if (prediction.Hitchance >= HitChance::High) {
-            result.push_back(PossibleTarget{ prediction.UnitPosition.To2D(), enemy });
+            result.push_back({ prediction.GetUnitPosition().To2D(), enemy });
         }
     }
 
     return result;
 }
 
-inline std::vector<AIHeroClient> CollectCircleHits(const std::vector<PossibleTarget>& targets,
-                                                   const Vec2& center,
-                                                   float radius) {
-    std::vector<AIHeroClient> hits = {};
-    for (const auto& target : targets) {
-        if (target.Position.DistanceSqr(center) <= (radius * radius)) {
-            hits.push_back(target.Unit);
-        }
-    }
-    return hits;
+// ============================================================================
+// CircleCircleIntersection — needed by Line::GetCandidates
+// Returns intersection points of two circles
+// ============================================================================
+inline std::vector<Vec2> CircleCircleIntersection(const Vec2& center1, const Vec2& center2,
+                                                   float radius1, float radius2) {
+    std::vector<Vec2> result;
+    float d = center1.Distance(center2);
+    if (d > radius1 + radius2 + 0.0001f) return result;
+    if (d < std::abs(radius1 - radius2) - 0.0001f) return result;
+    if (d < 0.0001f) return result;
+
+    float a = (radius1 * radius1 - radius2 * radius2 + d * d) / (2.0f * d);
+    float h2 = radius1 * radius1 - a * a;
+    if (h2 < 0.0f) h2 = 0.0f;
+    float h = std::sqrt(h2);
+
+    Vec2 mid = center1 + (center2 - center1).Normalized() * a;
+    Vec2 perp = (center2 - center1).Normalized();
+    Vec2 perpRotated(-perp.y, perp.x);
+
+    result.push_back(Vec2(mid.x + h * perpRotated.x, mid.y + h * perpRotated.y));
+    result.push_back(Vec2(mid.x - h * perpRotated.x, mid.y - h * perpRotated.y));
+    return result;
 }
 
-inline std::vector<AIHeroClient> CollectLineHits(const std::vector<PossibleTarget>& targets,
-                                                 const Vec2& from,
-                                                 const Vec2& to,
-                                                 float radius) {
-    std::vector<AIHeroClient> hits = {};
-    for (const auto& target : targets) {
-        if (DistanceSquaredToSegment(target.Position, from, to) <= (radius * radius)) {
-            hits.push_back(target.Unit);
-        }
-    }
-    return hits;
+// ============================================================================
+// DistanceSquared from point to line segment
+// ============================================================================
+inline float DistanceSquaredToSegment(const Vec2& point, const Vec2& segStart, const Vec2& segEnd) {
+    auto proj = Vec2Ext::ProjectOn(point, segStart, segEnd);
+    return proj.SegmentPoint.DistanceSqr(point);
 }
 
-inline std::vector<AIHeroClient> CollectConeHits(const std::vector<PossibleTarget>& targets,
-                                                 const Vec2& directionPoint,
-                                                 double range,
-                                                 float angle) {
-    std::vector<AIHeroClient> hits = {};
-    const Vec2 edge1 = directionPoint.Rotated(-angle * 0.5f);
-    const Vec2 edge2 = edge1.Rotated(angle);
-
-    for (const auto& target : targets) {
-        const Vec2 point = target.Position;
-        if (point.LengthSqr() >= static_cast<float>(range * range)) {
-            continue;
-        }
-        if (edge1.Cross(point) > 0.0f && point.Cross(edge2) > 0.0f) {
-            hits.push_back(target.Unit);
-        }
-    }
-    return hits;
-}
-
-inline std::vector<Vec2> CircleCircleIntersection(const Vec2& center1,
-                                                  const Vec2& center2,
-                                                  float radius1,
-                                                  float radius2) {
-    const float distance = center1.Distance(center2);
-    if (distance > radius1 + radius2 || distance <= std::fabs(radius1 - radius2) || distance <= 1e-6f) {
-        return {};
-    }
-
-    const float a = ((radius1 * radius1) - (radius2 * radius2) + (distance * distance)) / (2.0f * distance);
-    const float h = std::sqrt((radius1 * radius1) - (a * a));
-    const Vec2 direction = (center2 - center1).Normalized();
-    const Vec2 pa = center1 + (direction * a);
-    return {
-        pa + (direction.Perpendicular() * h),
-        pa - (direction.Perpendicular() * h)
-    };
+// ============================================================================
+// MakeOutput — helper to build PredictionOutput with AoE hits
+// ============================================================================
+inline PredictionOutput MakeOutput(const PredictionInput& input,
+                                   const PredictionOutput& base,
+                                   const std::vector<AIHeroClient>& hits,
+                                   const Vector3& castPosition) {
+    PredictionOutput output = base;
+    output.Input = input;
+    output.SetCastPosition(castPosition);
+    output.AoeTargetsHit = hits;
+    output.AoeTargetsHitCount = static_cast<int>(hits.size());
+    return output;
 }
 
 } // namespace detail
 
+// ============================================================================
+// Circle prediction — matches C# Cluster.Circle.GetCirclePrediction
+// ============================================================================
 namespace Circle {
 
 inline PredictionOutput GetCirclePrediction(PredictionInput input) {
-    if (input.From.IsZero()) {
-        input.From = detail::ResolveFrom(input);
-    }
-    if (input.RangeCheckFrom.IsZero()) {
-        input.RangeCheckFrom = input.From;
-    }
-
-    const auto mainTargetPrediction = Movement::GetPrediction(input, true, true);
-    if (!mainTargetPrediction.IsValid()) {
-        return mainTargetPrediction;
-    }
+    // C#: Movement.GetPrediction(input, false, true)
+    // C++ overload: (input, checkCollision, checkRange)
+    const auto mainTargetPrediction = Movement::GetPrediction(input, false, true);
 
     std::vector<detail::PossibleTarget> possibleTargets = {
-        { mainTargetPrediction.UnitPosition.To2D(), AIHeroClient(input.Unit.Address()) }
+        { mainTargetPrediction.GetUnitPosition().To2D(), AIHeroClient(input.Unit.Handle()) }
     };
 
     if (mainTargetPrediction.Hitchance >= HitChance::Medium) {
@@ -153,30 +135,36 @@ inline PredictionOutput GetCirclePrediction(PredictionInput input) {
     }
 
     while (possibleTargets.size() > 1) {
-        std::vector<Vec2> points = {};
+        std::vector<Vec2> points;
         points.reserve(possibleTargets.size());
-        for (const auto& target : possibleTargets) {
-            points.push_back(target.Position);
+        for (const auto& t : possibleTargets)
+            points.push_back(t.Position);
+
+        auto mec = SDK::ConvexHull::GetMec(points);
+
+        if (mec.Radius <= input.RealRadius() - 10.0f
+            && mec.Center.DistanceSqr(input.ResolveRangeCheckFrom().To2D())
+               < input.Range * input.Range)
+        {
+            std::vector<AIHeroClient> hits;
+            for (const auto& t : possibleTargets)
+                hits.push_back(t.Unit);
+
+            return detail::MakeOutput(input, mainTargetPrediction, hits,
+                Vec3::From2D(mec.Center, mainTargetPrediction.GetCastPosition().y));
         }
 
-        const auto mec = ConvexHull::GetMec(points);
-        if (mec.Radius <= input.RealRadius() - 10.0f &&
-            mec.Center.DistanceSqr(input.RangeCheckFrom.IsZero() ? detail::ResolveFrom(input).To2D() : input.RangeCheckFrom.To2D()) <
-                (input.Range * input.Range)) {
-            const auto hits = detail::CollectCircleHits(possibleTargets, mec.Center, input.RealRadius());
-            return detail::MakeOutput(input, mainTargetPrediction, hits, Vec3::From2D(mec.Center, mainTargetPrediction.CastPosition.y));
-        }
-
+        // Remove farthest target from target[0]
         float maxDist = -1.0f;
         size_t maxIndex = 1;
         for (size_t i = 1; i < possibleTargets.size(); ++i) {
-            const float dist = possibleTargets[i].Position.DistanceSqr(possibleTargets[0].Position);
+            float dist = possibleTargets[i].Position.DistanceSqr(possibleTargets[0].Position);
             if (dist > maxDist) {
                 maxDist = dist;
                 maxIndex = i;
             }
         }
-        possibleTargets.erase(possibleTargets.begin() + static_cast<long long>(maxIndex));
+        possibleTargets.erase(possibleTargets.begin() + static_cast<ptrdiff_t>(maxIndex));
     }
 
     return mainTargetPrediction;
@@ -184,23 +172,34 @@ inline PredictionOutput GetCirclePrediction(PredictionInput input) {
 
 } // namespace Circle
 
+// ============================================================================
+// Cone prediction — matches C# Cluster.Cone.GetConePrediction
+// ============================================================================
 namespace Cone {
 
-inline PredictionOutput GetConePrediction(PredictionInput input) {
-    if (input.From.IsZero()) {
-        input.From = detail::ResolveFrom(input);
-    }
-    if (input.RangeCheckFrom.IsZero()) {
-        input.RangeCheckFrom = input.From;
-    }
+// GetHits — count hits within a cone
+inline int GetHits(const Vec2& end, double range, float angle, const std::vector<Vec2>& points) {
+    Vec2 edge1 = Vec2Ext::Rotated(end, -angle * 0.5f);
+    Vec2 edge2 = Vec2Ext::Rotated(edge1, angle);
 
-    const auto mainTargetPrediction = Movement::GetPrediction(input, true, true);
-    if (!mainTargetPrediction.IsValid()) {
-        return mainTargetPrediction;
+    int count = 0;
+    for (const auto& point : points) {
+        if (point.DistanceSqr(Vec2()) < range * range
+            && edge1.Cross(point) > 0.0f
+            && point.Cross(edge2) > 0.0f)
+        {
+            ++count;
+        }
     }
+    return count;
+}
+
+inline PredictionOutput GetConePrediction(PredictionInput input) {
+    // C#: Movement.GetPrediction(input, false, true)
+    const auto mainTargetPrediction = Movement::GetPrediction(input, false, true);
 
     std::vector<detail::PossibleTarget> possibleTargets = {
-        { mainTargetPrediction.UnitPosition.To2D(), AIHeroClient(input.Unit.Address()) }
+        { mainTargetPrediction.GetUnitPosition().To2D(), AIHeroClient(input.Unit.Handle()) }
     };
 
     if (mainTargetPrediction.Hitchance >= HitChance::Medium) {
@@ -208,39 +207,61 @@ inline PredictionOutput GetConePrediction(PredictionInput input) {
         possibleTargets.insert(possibleTargets.end(), extras.begin(), extras.end());
     }
 
-    if (possibleTargets.size() <= 1) {
+    if (possibleTargets.size() <= 1)
         return mainTargetPrediction;
-    }
 
-    std::vector<Vec2> candidates = {};
-    candidates.reserve(possibleTargets.size() * possibleTargets.size());
-    for (auto& target : possibleTargets) {
-        target.Position = target.Position - input.From.To2D();
-    }
+    // Shift positions relative to input.From
+    std::vector<Vec2> candidates;
+    Vec2 from2D = input.ResolveFrom().To2D();
+
+    for (auto& t : possibleTargets)
+        t.Position = t.Position - from2D;
 
     for (size_t i = 0; i < possibleTargets.size(); ++i) {
         for (size_t j = 0; j < possibleTargets.size(); ++j) {
-            if (i == j) {
-                continue;
+            if (i == j) continue;
+            Vec2 p = (possibleTargets[i].Position + possibleTargets[j].Position) * 0.5f;
+            // Check if candidate already exists
+            bool found = false;
+            for (const auto& c : candidates) {
+                if (c == p) { found = true; break; }
             }
-            const Vec2 candidate = (possibleTargets[i].Position + possibleTargets[j].Position) * 0.5f;
-            candidates.push_back(candidate);
+            if (!found)
+                candidates.push_back(p);
         }
     }
 
     int bestHits = -1;
     Vec2 bestCandidate = {};
+    std::vector<Vec2> positionsList;
+    for (const auto& t : possibleTargets)
+        positionsList.push_back(t.Position);
+
     for (const auto& candidate : candidates) {
-        const auto hits = detail::CollectConeHits(possibleTargets, candidate, input.Range, input.Radius);
-        if (static_cast<int>(hits.size()) > bestHits) {
-            bestHits = static_cast<int>(hits.size());
+        int hits = GetHits(candidate, input.Range, input.Radius, positionsList);
+        if (hits > bestHits) {
+            bestHits = hits;
             bestCandidate = candidate;
         }
     }
 
-    if (bestHits > 1 && input.From.To2D().DistanceSqr(bestCandidate) > (50.0f * 50.0f)) {
-        const auto hits = detail::CollectConeHits(possibleTargets, bestCandidate, input.Range, input.Radius);
-        return detail::MakeOutput(input, mainTargetPrediction, hits, Vec3::From2D(bestCandidate + input.From.To2D(), mainTargetPrediction.CastPosition.y));
+    if (bestHits > 1 && from2D.DistanceSqr(bestCandidate) > 50.0f * 50.0f) {
+        // Collect actual hit units
+        Vec2 edge1 = Vec2Ext::Rotated(bestCandidate, -input.Radius * 0.5f);
+        Vec2 edge2 = Vec2Ext::Rotated(edge1, input.Radius);
+        std::vector<AIHeroClient> hits;
+        for (const auto& t : possibleTargets) {
+            if (t.Position.DistanceSqr(Vec2()) < input.Range * input.Range
+                && edge1.Cross(t.Position) > 0.0f
+                && t.Position.Cross(edge2) > 0.0f)
+            {
+                hits.push_back(t.Unit);
+            }
+        }
+
+        Vec2 cast2D = bestCandidate + from2D;
+        return detail::MakeOutput(input, mainTargetPrediction, hits,
+            Vec3::From2D(cast2D, mainTargetPrediction.GetCastPosition().y));
     }
 
     return mainTargetPrediction;
@@ -248,49 +269,45 @@ inline PredictionOutput GetConePrediction(PredictionInput input) {
 
 } // namespace Cone
 
+// ============================================================================
+// Line prediction — matches C# Cluster.Line.GetLinePrediction
+// ============================================================================
 namespace Line {
 
-inline std::vector<Vec2> GetCandidates(const Vec2& from, const Vec2& to, float radius, float range) {
-    const Vec2 middlePoint = (from + to) * 0.5f;
-    const auto intersections = detail::CircleCircleIntersection(from, middlePoint, radius, from.Distance(middlePoint));
+// GetCandidates — returns candidate end positions for line prediction
+inline std::vector<Vec2> GetCandidates(const Vec2& from, const Vec2& to,
+                                       float radius, float range) {
+    Vec2 middlePoint = (from + to) * 0.5f;
+    auto intersections = detail::CircleCircleIntersection(from, middlePoint,
+        radius, from.Distance(middlePoint));
+
     if (intersections.size() > 1) {
         Vec2 c1 = intersections[0];
         Vec2 c2 = intersections[1];
-        c1 = from + ((to - c1).Normalized() * range);
-        c2 = from + ((to - c2).Normalized() * range);
+        c1 = from + (to - c1).Normalized() * range;
+        c2 = from + (to - c2).Normalized() * range;
         return { c1, c2 };
     }
     return {};
 }
 
-inline std::vector<Vec2> GetHits(const Vec2& start,
-                                 const Vec2& end,
-                                 double radius,
-                                 const std::vector<Vec2>& points) {
-    std::vector<Vec2> hits = {};
+// GetHits — returns points within radius of line segment [start, end]
+inline std::vector<Vec2> GetHits(const Vec2& start, const Vec2& end,
+                                 double radius, const std::vector<Vec2>& points) {
+    std::vector<Vec2> hits;
     for (const auto& point : points) {
-        if (detail::DistanceSquaredToSegment(point, start, end) <= static_cast<float>(radius * radius)) {
+        if (detail::DistanceSquaredToSegment(point, start, end) <= radius * radius)
             hits.push_back(point);
-        }
     }
     return hits;
 }
 
 inline PredictionOutput GetLinePrediction(PredictionInput input) {
-    if (input.From.IsZero()) {
-        input.From = detail::ResolveFrom(input);
-    }
-    if (input.RangeCheckFrom.IsZero()) {
-        input.RangeCheckFrom = input.From;
-    }
-
-    const auto mainTargetPrediction = Movement::GetPrediction(input, true, true);
-    if (!mainTargetPrediction.IsValid()) {
-        return mainTargetPrediction;
-    }
+    // C#: Movement.GetPrediction(input, false, true)
+    const auto mainTargetPrediction = Movement::GetPrediction(input, false, true);
 
     std::vector<detail::PossibleTarget> possibleTargets = {
-        { mainTargetPrediction.UnitPosition.To2D(), AIHeroClient(input.Unit.Address()) }
+        { mainTargetPrediction.GetUnitPosition().To2D(), AIHeroClient(input.Unit.Handle()) }
     };
 
     if (mainTargetPrediction.Hitchance >= HitChance::Medium) {
@@ -298,35 +315,34 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
         possibleTargets.insert(possibleTargets.end(), extras.begin(), extras.end());
     }
 
-    if (possibleTargets.size() <= 1) {
+    if (possibleTargets.size() <= 1)
         return mainTargetPrediction;
-    }
 
-    std::vector<Vec2> candidates = {};
+    Vec2 from2D = input.ResolveFrom().To2D();
+
+    // Gather candidates from all targets
+    std::vector<Vec2> candidates;
     for (const auto& target : possibleTargets) {
-        auto targetCandidates = GetCandidates(input.From.To2D(), target.Position, input.Radius, input.Range);
+        auto targetCandidates = GetCandidates(from2D, target.Position, input.Radius, input.Range);
         candidates.insert(candidates.end(), targetCandidates.begin(), targetCandidates.end());
     }
 
     int bestHits = -1;
     Vec2 bestCandidate = {};
-    std::vector<Vec2> bestHitPoints = {};
-    std::vector<Vec2> positions = {};
-    positions.reserve(possibleTargets.size());
-    for (const auto& target : possibleTargets) {
-        positions.push_back(target.Position);
-    }
+    std::vector<Vec2> bestHitPoints;
+    std::vector<Vec2> positionsList;
+    for (const auto& t : possibleTargets)
+        positionsList.push_back(t.Position);
 
     for (const auto& candidate : candidates) {
-        const auto mainHit = GetHits(input.From.To2D(),
-                                     candidate,
-                                     input.Radius + (input.Unit.BoundingRadius() / 3.0f) - 10.0f,
-                                     { possibleTargets[0].Position });
-        if (mainHit.size() != 1) {
-            continue;
-        }
+        // Check that main target is hit with slightly larger radius
+        auto mainHit = GetHits(from2D, candidate,
+            input.Radius + (input.Unit.BoundingRadius() / 3.0f) - 10.0f,
+            { possibleTargets[0].Position });
 
-        const auto hits = GetHits(input.From.To2D(), candidate, input.Radius, positions);
+        if (mainHit.size() != 1) continue;
+
+        auto hits = GetHits(from2D, candidate, input.Radius, positionsList);
         if (static_cast<int>(hits.size()) >= bestHits) {
             bestHits = static_cast<int>(hits.size());
             bestCandidate = candidate;
@@ -335,31 +351,40 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
     }
 
     if (bestHits > 1) {
+        // Center the cast position between the two farthest apart hit points
         float maxDistance = -1.0f;
-        Vec2 p1 = {};
-        Vec2 p2 = {};
+        Vec2 p1 = {}, p2 = {};
 
         for (size_t i = 0; i < bestHitPoints.size(); ++i) {
             for (size_t j = 0; j < bestHitPoints.size(); ++j) {
-                if (i >= positions.size() || j >= positions.size()) {
-                    continue;
-                }
-                const auto proj1 = SDK::Geometry::ProjectOn(positions[i], input.From.To2D(), bestCandidate);
-                const auto proj2 = SDK::Geometry::ProjectOn(positions[j], input.From.To2D(), bestCandidate);
-                const float dist = bestHitPoints[i].DistanceSqr(proj1.linePoint) +
-                                   bestHitPoints[j].DistanceSqr(proj2.linePoint);
-                if (dist >= maxDistance &&
-                    std::abs((proj1.linePoint - positions[i]).AngleBetween(proj2.linePoint - positions[j])) * 180.0f / (float)M_PI > 90.0f) {
+                auto proj1 = Vec2Ext::ProjectOn(positionsList[i], from2D, bestCandidate);
+                auto proj2 = Vec2Ext::ProjectOn(positionsList[j], from2D, bestCandidate);
+
+                float dist = bestHitPoints[i].DistanceSqr(proj1.LinePoint)
+                           + bestHitPoints[j].DistanceSqr(proj2.LinePoint);
+
+                if (dist >= maxDistance
+                    && Vec2Ext::AngleBetween(proj1.LinePoint - positionsList[i],
+                                             proj2.LinePoint - positionsList[j]) > 90.0f)
+                {
                     maxDistance = dist;
-                    p1 = positions[i];
-                    p2 = positions[j];
+                    p1 = positionsList[i];
+                    p2 = positionsList[j];
                 }
             }
         }
 
-        const Vec2 cast2D = (maxDistance >= 0.0f) ? ((p1 + p2) * 0.5f) : bestCandidate;
-        const auto hits = detail::CollectLineHits(possibleTargets, input.From.To2D(), cast2D, input.Radius);
-        return detail::MakeOutput(input, mainTargetPrediction, hits, Vec3::From2D(cast2D, mainTargetPrediction.CastPosition.y));
+        Vec2 cast2D = (maxDistance >= 0.0f) ? (p1 + p2) * 0.5f : bestCandidate;
+
+        // Collect actual hit units
+        std::vector<AIHeroClient> hits;
+        for (const auto& t : possibleTargets) {
+            if (detail::DistanceSquaredToSegment(t.Position, from2D, cast2D) <= input.Radius * input.Radius)
+                hits.push_back(t.Unit);
+        }
+
+        return detail::MakeOutput(input, mainTargetPrediction, hits,
+            Vec3::From2D(cast2D, mainTargetPrediction.GetCastPosition().y));
     }
 
     return mainTargetPrediction;
@@ -367,21 +392,10 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
 
 } // namespace Line
 
-inline std::vector<AIHeroClient> GetPossibleTargets(const PredictionInput& input, const AIBaseClient& originalTarget) {
-    auto copy = input;
-    copy.Unit = originalTarget;
-    std::vector<AIHeroClient> result = {};
-    for (const auto& target : detail::GetPossibleTargets(copy)) {
-        result.push_back(target.Unit);
-    }
-    return result;
-}
-
+// ============================================================================
+// GetAoEPrediction — main entry point, matches C# Cluster.GetAoEPrediction
+// ============================================================================
 inline PredictionOutput GetAoEPrediction(const PredictionInput& input) {
-    if (!input.Unit.IsValid()) {
-        return {};
-    }
-
     switch (input.Type) {
     case SkillshotType::SkillshotCircle:
         return Circle::GetCirclePrediction(input);
@@ -390,7 +404,7 @@ inline PredictionOutput GetAoEPrediction(const PredictionInput& input) {
     case SkillshotType::SkillshotLine:
         return Line::GetLinePrediction(input);
     default:
-        return Movement::GetPrediction(input);
+        return PredictionOutput();
     }
 }
 
@@ -402,6 +416,9 @@ inline PredictionOutput GetAoEPrediction(const PredictionInput& input, const AIB
 
 } // namespace SDK::Prediction::Cluster
 
+// ============================================================================
+// SDK::Cluster — convenience aliases at SDK level
+// ============================================================================
 namespace SDK::Cluster {
 
 inline PredictionOutput GetAoEPrediction(const PredictionInput& input) {
@@ -410,10 +427,6 @@ inline PredictionOutput GetAoEPrediction(const PredictionInput& input) {
 
 inline PredictionOutput GetAoEPrediction(const PredictionInput& input, const AIBaseClient& target) {
     return Prediction::Cluster::GetAoEPrediction(input, target);
-}
-
-inline std::vector<AIHeroClient> GetPossibleTargets(const PredictionInput& input, const AIBaseClient& originalTarget) {
-    return Prediction::Cluster::GetPossibleTargets(input, originalTarget);
 }
 
 namespace Circle {
@@ -435,14 +448,3 @@ namespace Line {
 }
 
 } // namespace SDK::Cluster
-
-namespace SDK::Prediction::Movement::detail_cluster_init {
-    inline PredictionOutput AoETrampoline(const PredictionInput& input) {
-        return Prediction::Cluster::GetAoEPrediction(input);
-    }
-
-    inline const bool g_registered = []() {
-        ::SDK::Prediction::Movement::g_aoePredictionCallback = &AoETrampoline;
-        return true;
-    }();
-} // namespace SDK::Prediction::Movement::detail_cluster_init

@@ -86,7 +86,9 @@ enum CollisionableObjects : uint32_t {
     Collision_Walls            = 1u << 4,  // Terrain walls (pathing)
     Collision_Turrets          = 1u << 5,
     Collision_AllyMinions      = 1u << 6,
-    Collision_AllyChampions    = 1u << 7
+    Collision_AllyChampions    = 1u << 7,
+    Collision_SamiraWall       = 1u << 8,
+    Collision_MelWall          = 1u << 9
 };
 
 // Legacy aliases — keep old enum-name literals that Database.h uses.
@@ -98,7 +100,9 @@ enum CollisionObjectType : uint32_t {
     BraumShield    = Collision_BraumShield,
     Walls          = Collision_Walls,
     AllyMinions    = Collision_AllyMinions,
-    AllyChampions  = Collision_AllyChampions
+    AllyChampions  = Collision_AllyChampions,
+    SamiraWall     = Collision_SamiraWall,
+    MelWall        = Collision_MelWall
 };
 
 // Legacy bit-flag enum (Nightsharp pre-port). Kept so existing
@@ -110,7 +114,9 @@ enum SpellCollisionFlags : uint32_t {
     CollisionYasuoWall  = Collision_YasuoWall,
     CollisionBraumShield= Collision_BraumShield,
     CollisionWalls      = Collision_Walls,
-    CollisionTurrets    = Collision_Turrets
+    CollisionTurrets    = Collision_Turrets,
+    CollisionSamiraWall = Collision_SamiraWall,
+    CollisionMelWall    = Collision_MelWall
 };
 
 // ── `CastType` — EnsoulSharp port (bitmask) ─────────────────────────────────
@@ -325,6 +331,22 @@ struct SpellData {
         if (collisionObjectsMask & CollisionYasuoWall) return true;
         for (auto obj : collisionObjects) {
             if (obj == YasuoWall) return true;
+        }
+        return false;
+    }
+
+    bool CanBeSamiraWalled() const {
+        if (collisionObjectsMask & CollisionSamiraWall) return true;
+        for (auto obj : collisionObjects) {
+            if (obj == SamiraWall) return true;
+        }
+        return false;
+    }
+
+    bool CanBeMelWalled() const {
+        if (collisionObjectsMask & CollisionMelWall) return true;
+        for (auto obj : collisionObjects) {
+            if (obj == MelWall) return true;
         }
         return false;
     }

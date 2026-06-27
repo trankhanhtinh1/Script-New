@@ -11,6 +11,8 @@ enum class CollisionableObjects : std::int32_t {
     YasuoWall = 1 << 2,
     BraumShield = 1 << 3,
     Walls = 1 << 4,
+    SamiraWall = 1 << 5,
+    MelWall = 1 << 6,
 };
 
 constexpr CollisionableObjects operator|(CollisionableObjects lhs, CollisionableObjects rhs) {

@@ -33,6 +33,7 @@
 #include "Core/Map.h"
 #include "Core/NavMesh.h"
 #include "Core/Objects.h"
+#include "Wrappers/Damages/DamageReductionMod.h"
 #include "Core/Variables.h"
 #include "Core/View.h"
 #include "Events/Events.h"

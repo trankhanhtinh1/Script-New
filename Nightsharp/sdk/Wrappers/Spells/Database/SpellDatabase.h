@@ -191,6 +191,8 @@ private:
         AddIf(values, raw.collisionObjectsMask, Data::Collision_YasuoWall, SDK::CollisionableObjects::YasuoWall);
         AddIf(values, raw.collisionObjectsMask, Data::Collision_BraumShield, SDK::CollisionableObjects::BraumShield);
         AddIf(values, raw.collisionObjectsMask, Data::Collision_Walls, SDK::CollisionableObjects::Walls);
+        AddIf(values, raw.collisionObjectsMask, Data::Collision_SamiraWall, SDK::CollisionableObjects::SamiraWall);
+        AddIf(values, raw.collisionObjectsMask, Data::Collision_MelWall, SDK::CollisionableObjects::MelWall);
 
         for (const auto object : raw.collisionObjects) {
             switch (object) {
@@ -208,6 +210,12 @@ private:
                 break;
             case Data::Walls:
                 AddUnique(values, SDK::CollisionableObjects::Walls);
+                break;
+            case Data::SamiraWall:
+                AddUnique(values, SDK::CollisionableObjects::SamiraWall);
+                break;
+            case Data::MelWall:
+                AddUnique(values, SDK::CollisionableObjects::MelWall);
                 break;
             default:
                 break;
