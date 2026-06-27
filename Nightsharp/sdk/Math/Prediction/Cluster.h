@@ -396,16 +396,16 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
 // GetAoEPrediction — main entry point, matches C# Cluster.GetAoEPrediction
 // ============================================================================
 inline PredictionOutput GetAoEPrediction(const PredictionInput& input) {
-    switch (input.Type) {
-    case SkillshotType::SkillshotCircle:
+    if (IsCircleSpellType(input.Type)) {
         return Circle::GetCirclePrediction(input);
-    case SkillshotType::SkillshotCone:
-        return Cone::GetConePrediction(input);
-    case SkillshotType::SkillshotLine:
-        return Line::GetLinePrediction(input);
-    default:
-        return PredictionOutput();
     }
+    if (IsConeSpellType(input.Type)) {
+        return Cone::GetConePrediction(input);
+    }
+    if (IsLineSpellType(input.Type)) {
+        return Line::GetLinePrediction(input);
+    }
+    return PredictionOutput();
 }
 
 inline PredictionOutput GetAoEPrediction(const PredictionInput& input, const AIBaseClient& target) {
@@ -448,3 +448,31 @@ namespace Line {
 }
 
 } // namespace SDK::Cluster
+
+// ============================================================================
+// SDK::AoEPrediction — DLL-style public facade.
+// Keeps Prediction::Cluster as the implementation namespace.
+// ============================================================================
+namespace SDK::AoEPrediction {
+
+inline PredictionOutput GetPrediction(const PredictionInput& input) {
+    return Prediction::Cluster::GetAoEPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const PredictionInput& input, const AIBaseClient& target) {
+    return Prediction::Cluster::GetAoEPrediction(input, target);
+}
+
+inline PredictionOutput GetCirclePrediction(PredictionInput input) {
+    return Prediction::Cluster::Circle::GetCirclePrediction(input);
+}
+
+inline PredictionOutput GetConePrediction(PredictionInput input) {
+    return Prediction::Cluster::Cone::GetConePrediction(input);
+}
+
+inline PredictionOutput GetLinePrediction(PredictionInput input) {
+    return Prediction::Cluster::Line::GetLinePrediction(input);
+}
+
+} // namespace SDK::AoEPrediction

@@ -61,10 +61,35 @@ namespace SDK {
         }
 
         // ── RotateLineFromPoint ──────────────────────────────────────────
-        // DLL-only method: rotates a line segment (point1→point2) around
-        // a pivot point by `value` radians. Returns the rotated endpoints.
-        // Usage: when a sector needs to be rotated around an arbitrary
-        // pivot (e.g. for dynamic spell direction changes).
+        // DLL-compatible instance method:
+        // EnsoulSharp.SDK.Geometry.Sector.RotateLineFromPoint(
+        //     Vector2 point1, Vector2 point2, float value, bool radian = true)
+        // rotates point2 around point1 and returns the rotated endpoint.
+        Vec2 RotateLineFromPoint(
+            const Vec2& point1, const Vec2& point2,
+            float value, bool radian = true) const
+        {
+            const float angle = radian ? value : value * 3.14159265358979323846f / 180.0f;
+            const float c = std::cos(angle);
+            const float s = std::sin(angle);
+            const Vec2 vector = point2 - point1;
+
+            return Vec2(
+                point1.x + vector.x * c - vector.y * s,
+                point1.y + vector.x * s + vector.y * c);
+        }
+
+        Vec3 RotateLineFromPoint(
+            const Vec3& point1, const Vec3& point2,
+            float value, bool radian = true) const
+        {
+            return Vec3::From2D(
+                RotateLineFromPoint(point1.To2D(), point2.To2D(), value, radian),
+                point2.y);
+        }
+
+        // Legacy NightSharp helper: rotates both endpoints around an arbitrary
+        // pivot and returns the rotated segment. Kept for existing callers.
         static std::pair<Vec2, Vec2> RotateLineFromPoint(
             const Vec2& point1, const Vec2& point2,
             const Vec2& pivot, float value, bool radian = true)

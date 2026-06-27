@@ -112,7 +112,7 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     // Resolve sender from args.Sender
     AIBaseClient sender;
     if (args.Sender.IsValid()) {
-        sender = AIBaseClient(args.Sender.Address());
+        sender = AIBaseClient(args.Sender.Ptr);
     }
 
     if (!sender.IsValid() || !sender.IsAlly()) return;
@@ -164,7 +164,7 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
 inline void OnStopCast(const Events::StopCastEventArgs& args) {
     if (!args.Sender.IsValid()) return;
 
-    AIBaseClient owner(args.Sender.Address());
+    AIBaseClient owner(args.Sender.Ptr);
     if (!owner.IsValid() || !owner.IsAlly()) return;
 
     // DLL: args.KeepAnimationPlaying && args.DestroyMissile
@@ -195,7 +195,7 @@ inline void OnDelete(const Events::ObjectEventArgs& args) {
 inline void OnProcessSpellCast(const Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) return;
 
-    AIBaseClient sender(args.Sender.Address());
+    AIBaseClient sender(args.Sender.Ptr);
     if (!sender.IsValid() || !sender.IsAlly() || !sender.IsMelee()) return;
 
     auto it = ActiveAttacks.find(sender.NetworkId());

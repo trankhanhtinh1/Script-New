@@ -16,7 +16,7 @@
 #include "../../Core/Objects.h"
 #include "../../Core/Game.h"
 #include "../../Enumerations/HitChance.h"
-#include "../../Enumerations/SkillshotType.h"
+#include "../../Enumerations/SpellType.h"
 #include "../../Enumerations/CollisionableObjects.h"
 #include "../../Events/Dash.h"
 #include "../../Extensions/Unit.h"
@@ -38,6 +38,7 @@
 // They are forward-declared here and defined after the helper namespaces.
 // ============================================================================
 namespace SDK {
+class Spell;
 struct PredictionInput;
 struct PredictionOutput;
 } // namespace SDK
@@ -45,6 +46,10 @@ struct PredictionOutput;
 // Forward declaration — defined in Cluster.h (included via Prediction.h)
 namespace SDK::Prediction::Cluster {
     PredictionOutput GetAoEPrediction(const PredictionInput& input);
+}
+
+namespace SDK::Collision {
+    std::vector<AIBaseClient> GetCollision(const std::vector<Vector3>& positions, PredictionInput input);
 }
 
 namespace SDK::Prediction {
@@ -372,36 +377,80 @@ private:
 // ============================================================================
 namespace SDK {
 struct PredictionInput {
-    AIBaseClient Unit;
+    AIBaseClient Unit = GameObjects::Player();
     float Delay = 0.0f;
     float Radius = 1.0f;
     float Speed = FLT_MAX;
     Vector3 From = {};
     float Range = FLT_MAX;
     bool Collision = false;
-    SkillshotType Type = SkillshotType::SkillshotNone;
+    SpellType Type = SpellType::None;
+    const class Spell* Spell = nullptr;
     Vector3 RangeCheckFrom = {};
     bool AoE = false;
-    CollisionableObjects CollisionObjects =
-        CollisionableObjects::Minions | CollisionableObjects::YasuoWall;
+    CollisionObjectsBridge CollisionObjects;
     bool AddHitBox = true;
     float MaxCollisionCount = 0.0f;
     bool ChoiceCloserPosition = false;
 
+    void SetType(SpellType type) {
+        Type = type;
+    }
+
+    void SetType(SkillshotType type) {
+        Type = ToSpellType(type);
+    }
+
+    void SetCollisionObjects(CollisionableObjects flags) {
+        CollisionObjects = flags;
+    }
+
+    void SetCollisionObjects(const std::vector<CollisionableObjects>& objects) {
+        CollisionObjects = objects;
+    }
+
+    CollisionableObjects CollisionObjectFlags() const {
+        return CollisionObjects.ToFlags();
+    }
+
+    const std::vector<CollisionableObjects>& CollisionObjectArray() const {
+        return CollisionObjects.ToArray();
+    }
+
     Vector3 ResolveFrom() const {
         return From.IsValid() && !From.IsZero()
             ? From
-            : (GameObjects::Player().IsValid() ? GameObjects::Player().Position() : Vector3());
+            : PlayerServerPosition();
     }
 
     Vector3 ResolveRangeCheckFrom() const {
-        return RangeCheckFrom.IsValid() && !RangeCheckFrom.IsZero()
-            ? RangeCheckFrom
-            : ResolveFrom();
+        if (RangeCheckFrom.IsValid() && !RangeCheckFrom.IsZero()) {
+            return RangeCheckFrom;
+        }
+        const auto from = ResolveFrom();
+        return from.To2D().IsValid() && !from.To2D().IsZero()
+            ? from
+            : PlayerServerPosition();
     }
 
     float RealRadius() const {
         return AddHitBox ? Radius + Unit.BoundingRadius() : Radius;
+    }
+
+private:
+    static Vector3 ServerPositionOrPosition(const AIBaseClient& unit) {
+        if (!unit.IsValid()) {
+            return Vector3();
+        }
+        const auto serverPosition = unit.ServerPosition();
+        return serverPosition.IsValid() && !serverPosition.IsZero()
+            ? serverPosition
+            : unit.Position();
+    }
+
+    static Vector3 PlayerServerPosition() {
+        const auto player = GameObjects::Player();
+        return ServerPositionOrPosition(player);
     }
 };
 
@@ -471,6 +520,19 @@ public:
 } // namespace SDK
 
 namespace SDK::Prediction {
+
+// ============================================================================
+// IPrediction — C++ contract equivalent to EnsoulSharp.SDK.IPrediction.
+// ============================================================================
+class IPrediction {
+public:
+    virtual ~IPrediction() = default;
+
+    virtual PredictionOutput GetPrediction(PredictionInput input) = 0;
+    virtual PredictionOutput GetPrediction(PredictionInput input,
+                                           bool ft,
+                                           bool checkCollision) = 0;
+};
 
 // ============================================================================
 // Movement class (ported from Movement.cs lines 32-499)
@@ -599,7 +661,7 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Ve
         && std::abs(input.Speed - FLT_MAX) > 0.0001f) {
         float distance = (input.Delay * speed) - input.RealRadius();
         // DLL: for Line/Cone, if unit is close to From (<200), don't subtract RealRadius
-        if ((input.Type == SkillshotType::SkillshotLine || input.Type == SkillshotType::SkillshotCone)
+        if ((IsLineSpellType(input.Type) || IsConeSpellType(input.Type))
             && input.ResolveFrom().To2D().DistanceSquared(serverPos.To2D()) < 200.0f * 200.0f) {
             distance = input.Delay * speed;
         }
@@ -852,9 +914,16 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
 
     // DLL: Yuumi attached to ally check
     if (input.Unit.IsHero() && input.Unit.CharacterName() == "Yuumi") {
-        // Check if any ally hero has YuumiWAlly buff and is within 50 units
-        // NightSharp: simplified — skip if not implemented
-        // TODO: Port full Yuumi check when buff checking is available
+        for (const auto& hero : SDK::GameObjects::Heroes()) {
+            if (SDK::Extensions::IsValidTarget(hero, FLT_MAX, false)
+                && hero.Team() == input.Unit.Team()
+                && hero.HasBuff("YuumiWAlly")
+                && hero.Distance(input.Unit) <= 50.0f) {
+                PredictionOutput output;
+                output.Input = input;
+                return output;
+            }
+        }
     }
 
     if (ft) {
@@ -912,21 +981,36 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
         }
 
         if (input.ResolveRangeCheckFrom().DistanceSqr2D(result.GetUnitPosition())
-            > std::pow(input.Range + (input.Type == SkillshotType::SkillshotCircle
+            > std::pow(input.Range + (IsCircleSpellType(input.Type)
                 ? input.RealRadius() : 0.0f), 2)) {
             result.Hitchance = HitChance::OutOfRange;
         }
     }
 
-    // Collision check deferred to caller (circular dependency with Collision.h)
-    // DLL: if (checkCollision && input.Collision && result.Hitchance > None) {
-    //   var collision = Collisions.GetCollision(positions, input);
+    // DLL collision block:
+    //   var collision = Collisions.GetCollision(new List<Vector3>{ CastPosition }, input);
     //   if (collision.Count > input.MaxCollisionCount) {
+    //     collision.RemoveAll(x => x == null || !x.IsValid || x.Compare(input.Unit));
     //     result.CollisionObjects = collision;
     //     result.OriginHitchance = result.Hitchance;
     //     result.Hitchance = HitChance.Collision;
+    //     return result;
     //   }
-    // }
+    if (checkCollision && input.Collision && result.Hitchance > HitChance::None) {
+        std::vector<Vector3> positions = { result.GetCastPosition() };
+        auto collision = SDK::Collision::GetCollision(positions, input);
+        if (static_cast<float>(collision.size()) > input.MaxCollisionCount) {
+            collision.erase(
+                std::remove_if(collision.begin(), collision.end(), [&](const AIBaseClient& object) {
+                    return !object.IsValid() || object.Compare(input.Unit);
+                }),
+                collision.end());
+            result.CollisionObjects = collision;
+            result.SetOriginHitchance(result.Hitchance);
+            result.Hitchance = HitChance::Collision;
+            return result;
+        }
+    }
 
     return result;
 }
@@ -1121,12 +1205,187 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
 } // namespace Movement
 
 // ============================================================================
-// Prediction facade - GetPrediction delegates to Movement::GetPrediction
-// Used by Collision.h
+// Prediction facade — registry equivalent to EnsoulSharp.SDK.Prediction.
 // ============================================================================
+namespace detail {
+
+class SDKPrediction final : public IPrediction {
+public:
+    PredictionOutput GetPrediction(PredictionInput input) override {
+        return Movement::GetPrediction(input);
+    }
+
+    PredictionOutput GetPrediction(PredictionInput input,
+                                   bool ft,
+                                   bool checkCollision) override {
+        return Movement::GetPrediction(input, ft, checkCollision);
+    }
+};
+
+inline constexpr const char* SDKPredictionName = "SDK Prediction";
+inline bool FacadeInitialized = false;
+inline SDKPrediction DefaultPrediction;
+inline std::unordered_map<std::string, IPrediction*> Implementations;
+inline IPrediction* Implementation = nullptr;
+inline std::string SelectedPredictionName;
+
+} // namespace detail
+
+inline void Initialize() {
+    if (detail::FacadeInitialized) {
+        return;
+    }
+
+    detail::FacadeInitialized = true;
+    detail::Implementations.emplace(detail::SDKPredictionName, &detail::DefaultPrediction);
+    detail::Implementation = &detail::DefaultPrediction;
+    detail::SelectedPredictionName = detail::SDKPredictionName;
+}
+
+inline bool AddPrediction(const std::string& name, IPrediction* prediction) {
+    Initialize();
+    if (name.empty() || prediction == nullptr ||
+        detail::Implementations.find(name) != detail::Implementations.end()) {
+        return false;
+    }
+
+    detail::Implementations.emplace(name, prediction);
+    return true;
+}
+
+inline bool AddPrediction(const std::string& name, IPrediction& prediction) {
+    return AddPrediction(name, &prediction);
+}
+
+inline bool SetPrediction(const std::string& name) {
+    Initialize();
+    const auto it = detail::Implementations.find(name);
+    if (it == detail::Implementations.end() || it->second == nullptr) {
+        return false;
+    }
+
+    detail::Implementation = it->second;
+    detail::SelectedPredictionName = name;
+    return true;
+}
+
+inline IPrediction* GetPrediction(const std::string& name) {
+    Initialize();
+    const auto it = detail::Implementations.find(name);
+    return it != detail::Implementations.end() ? it->second : nullptr;
+}
+
+inline IPrediction* GetPrediction(const char* name) {
+    return name ? GetPrediction(std::string(name)) : nullptr;
+}
+
+inline IPrediction* GetSDKPrediction() {
+    Initialize();
+    return &detail::DefaultPrediction;
+}
+
+inline IPrediction* CurrentPrediction() {
+    Initialize();
+    return detail::Implementation;
+}
+
+inline const std::string& CurrentPredictionName() {
+    Initialize();
+    return detail::SelectedPredictionName;
+}
+
+inline PredictionOutput GetPrediction(PredictionInput input,
+                                      bool ft,
+                                      bool checkCollision) {
+    Initialize();
+    return detail::Implementation
+        ? detail::Implementation->GetPrediction(input, ft, checkCollision)
+        : Movement::GetPrediction(input, ft, checkCollision);
+}
+
+inline PredictionOutput GetPrediction(PredictionInput input) {
+    Initialize();
+    return detail::Implementation
+        ? detail::Implementation->GetPrediction(input)
+        : Movement::GetPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const AIBaseClient& unit, float delay) {
+    PredictionInput input;
+    input.Unit = unit;
+    input.Delay = delay;
+    return GetPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const AIBaseClient& unit,
+                                      float delay,
+                                      float radius) {
+    PredictionInput input;
+    input.Unit = unit;
+    input.Delay = delay;
+    input.Radius = radius;
+    return GetPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const AIBaseClient& unit,
+                                      float delay,
+                                      float radius,
+                                      float speed) {
+    PredictionInput input;
+    input.Unit = unit;
+    input.Delay = delay;
+    input.Radius = radius;
+    input.Speed = speed;
+    return GetPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const AIBaseClient& unit,
+                                      float delay,
+                                      float radius,
+                                      float speed,
+                                      bool addHitBox) {
+    PredictionInput input;
+    input.Unit = unit;
+    input.Delay = delay;
+    input.Radius = radius;
+    input.Speed = speed;
+    input.AddHitBox = addHitBox;
+    return GetPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const AIBaseClient& unit,
+                                      float delay,
+                                      float radius,
+                                      float speed,
+                                      CollisionObjectsBridge collisionable) {
+    PredictionInput input;
+    input.Unit = unit;
+    input.Delay = delay;
+    input.Radius = radius;
+    input.Speed = speed;
+    input.CollisionObjects = collisionable.ToArray();
+    return GetPrediction(input);
+}
+
+inline PredictionOutput GetPrediction(const AIBaseClient& unit,
+                                      float delay,
+                                      float radius,
+                                      float speed,
+                                      bool addHitBox,
+                                      CollisionObjectsBridge collisionable) {
+    PredictionInput input;
+    input.Unit = unit;
+    input.Delay = delay;
+    input.Radius = radius;
+    input.Speed = speed;
+    input.AddHitBox = addHitBox;
+    input.CollisionObjects = collisionable.ToArray();
+    return GetPrediction(input);
+}
+
 inline PredictionOutput GetPrediction(const AIBaseClient& target, PredictionInput input) {
     input.Unit = target;
-    return Movement::GetPrediction(input);
+    return GetPrediction(input);
 }
 
 } // namespace SDK::Prediction

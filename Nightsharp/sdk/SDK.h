@@ -45,6 +45,7 @@
 #include "Wrappers/Spells/LastCastedSpellEntry.h"
 #include "Wrappers/Spells/LastCast.h"
 #include "Wrappers/Spells/Spell.h"
+#include "Math/Collision.h"
 #include "Wrappers/Spells/SpellTypes/BaseSpell.h"
 #include "Wrappers/Spells/SpellTypes/Skillshot.h"
 #include "Wrappers/Spells/SpellTypes/SkillshotCircle.h"

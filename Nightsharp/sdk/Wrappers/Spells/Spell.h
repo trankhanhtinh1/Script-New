@@ -443,18 +443,34 @@ public:
     PredictionOutput GetPrediction(const AIBaseClient& unit,
                                    bool aoe = false,
                                    float overrideRange = -1.0f,
-                                   CollisionableObjects /*collisionable*/ =
+                                   CollisionableObjects collisionable =
                                        CollisionableObjects::Heroes | CollisionableObjects::Minions) const {
         // TODO(SDK parity): replace current-position fallback with
         // Movement.GetPrediction once NightSharp prediction is ported.
+        const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();
+
+        PredictionInput input;
+        input.Unit = unit;
+        input.Delay = Delay;
+        input.Radius = Width;
+        input.Speed = Speed;
+        input.From = From;
+        input.Range = range;
+        input.Collision = Collision;
+        input.SetType(Type);
+        input.Spell = this;
+        input.RangeCheckFrom = RangeCheckFrom;
+        input.AoE = aoe;
+        input.CollisionObjects = collisionable;
+
         PredictionOutput output;
+        output.Input = input;
         auto pos = unit.Position();
         pos.y = SDK::Game::CursorPosRaw().y;
         output.SetUnitPosition(pos);
         output.SetCastPosition(pos);
         output.AoeTargetsHitCount = aoe ? 1 : 0;
 
-        const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();
         output.Hitchance = RangeCheckSource().DistanceSqr2D(output.GetCastPosition()) <= range * range
             ? HitChance::High
             : HitChance::OutOfRange;
@@ -560,6 +576,23 @@ public:
         return *this;
     }
 
+    Spell& SetSkillshot(float delay,
+                        float skillWidth,
+                        float speed,
+                        bool collision,
+                        SpellType type,
+                        Vector3 fromVector3 = {},
+                        Vector3 rangeCheckFromVector3 = {}) {
+        return SetSkillshot(
+            delay,
+            skillWidth,
+            speed,
+            collision,
+            ToSkillshotType(type),
+            fromVector3,
+            rangeCheckFromVector3);
+    }
+
     Spell& SetSkillshot(bool collision,
                         SkillshotType type,
                         Vector3 fromVector3 = {},
@@ -570,6 +603,17 @@ public:
         RangeCheckFrom = rangeCheckFromVector3;
         IsSkillshot = true;
         return *this;
+    }
+
+    Spell& SetSkillshot(bool collision,
+                        SpellType type,
+                        Vector3 fromVector3 = {},
+                        Vector3 rangeCheckFromVector3 = {}) {
+        return SetSkillshot(
+            collision,
+            ToSkillshotType(type),
+            fromVector3,
+            rangeCheckFromVector3);
     }
 
     Spell& SetTargetted(float delay,
