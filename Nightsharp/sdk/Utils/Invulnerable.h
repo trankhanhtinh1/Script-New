@@ -48,7 +48,7 @@ public:
         }
 
         constexpr int kBuffTypeInvulnerability = 18; // EnsoulSharp.BuffType.Invulnerability.
-        if (CoreBuffs::HasBuffType(hero.Address(), kBuffTypeInvulnerability) || hero.IsInvulnerable()) {
+        if (CoreBuffs::HasBuffType(hero.Address(), kBuffTypeInvulnerability) /* || hero.IsInvulnerable() */) {
             return true;
         }
 

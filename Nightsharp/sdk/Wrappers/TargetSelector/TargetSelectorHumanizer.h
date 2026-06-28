@@ -43,20 +43,6 @@ public:
             return heroes;
         }
 
-        auto snapshot = heroes;
-        for (const auto& hero : snapshot) {
-            auto it = std::find_if(entries_.begin(), entries_.end(),
-                [&hero](const HeroVisibleEntry& e) { return hero.Compare(e.Hero); });
-
-            if (it == entries_.end() ||
-                std::abs(Variables::TickCount() - it->LastVisibleChangeTick) < fowDelay_) {
-                heroes.erase(
-                    std::remove_if(heroes.begin(), heroes.end(),
-                        [&hero](const AIHeroClient& h) { return h.Compare(hero); }),
-                    heroes.end());
-            }
-        }
-
         return heroes;
     }
 

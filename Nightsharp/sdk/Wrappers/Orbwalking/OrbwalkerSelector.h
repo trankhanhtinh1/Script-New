@@ -215,7 +215,7 @@ private:
     bool IsValidUnit(const AttackableUnit& unit, float range = 0.0f) const {
         const float effectiveRange = range > 0.0f
             ? range
-            : Utils::AutoAttack::GetRealAutoAttackRange(unit);
+            : Utils::AutoAttack::GetRealAutoAttackRange(GameObjects::Player(), unit);
         return Extensions::IsValidTarget(unit, effectiveRange);
     }
 

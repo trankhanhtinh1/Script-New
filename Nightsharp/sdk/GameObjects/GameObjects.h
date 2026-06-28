@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <type_traits>
 #include <vector>
+#include <cstring>
 
 namespace SDK::GameObjects {
 
@@ -28,6 +29,49 @@ namespace detail {
     inline std::vector<AIMinionClient> EnemyMinionsList;
     inline std::vector<AIMinionClient> EnemyClonesList;
     inline std::vector<AIMinionClient> EnemyPetsList;
+    inline std::vector<AIMinionClient> EnemyLaneMinionsList;
+    inline std::vector<AIMinionClient> EnemySpecialMinionsList;
+    inline std::vector<AIMinionClient> EnemyIgnoredMinionsList;
+    inline std::vector<AIMinionClient> AllyLaneMinionsList;
+    inline std::vector<AIMinionClient> AllySpecialMinionsList;
+    inline std::vector<AIMinionClient> AllyIgnoredMinionsList;
+
+    static constexpr const char* kClones[] = {
+        "leblanc", "monkeyking", "neeko", "shaco"
+    };
+    static constexpr const char* kIgnoreMinions[] = {
+        "jarvanivstandard"
+    };
+    static constexpr const char* kSpecialMinions[] = {
+        "annietibbers", "elisespiderling", "heimertyellow",
+        "heimertblue", "ivernminion", "malzaharvoidling",
+        "shacobox", "teemomushroom", "yorickghoulmelee",
+        "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
+    };
+
+    inline bool IsIgnoredMinion(const char* name) {
+        if (!name || !name[0]) return false;
+        for (const auto* ign : kIgnoreMinions) {
+            if (_stricmp(name, ign) == 0) return true;
+        }
+        return false;
+    }
+
+    inline bool IsSpecialMinion(const char* name) {
+        if (!name || !name[0]) return false;
+        for (const auto* spec : kSpecialMinions) {
+            if (_stricmp(name, spec) == 0) return true;
+        }
+        return false;
+    }
+
+    inline bool IsCloneStr(const char* name) {
+        if (!name || !name[0]) return false;
+        for (const auto* clone : kClones) {
+            if (_stricmp(name, clone) == 0) return true;
+        }
+        return false;
+    }
     inline std::vector<ShopClient> EnemyShopsList;
     inline std::vector<Obj_SpawnPoint> EnemySpawnPointsList;
     inline std::vector<AITurretClient> EnemyTurretsList;
@@ -107,6 +151,12 @@ namespace detail {
         EnemyMinionsList.clear();
         EnemyClonesList.clear();
         EnemyPetsList.clear();
+        EnemyLaneMinionsList.clear();
+        EnemySpecialMinionsList.clear();
+        EnemyIgnoredMinionsList.clear();
+        AllyLaneMinionsList.clear();
+        AllySpecialMinionsList.clear();
+        AllyIgnoredMinionsList.clear();
         EnemyShopsList.clear();
         EnemySpawnPointsList.clear();
         EnemyTurretsList.clear();
@@ -358,6 +408,12 @@ namespace detail {
         RemoveMatching(EnemyMinionsList, object);
         RemoveMatching(EnemyClonesList, object);
         RemoveMatching(EnemyPetsList, object);
+        RemoveMatching(EnemyLaneMinionsList, object);
+        RemoveMatching(EnemySpecialMinionsList, object);
+        RemoveMatching(EnemyIgnoredMinionsList, object);
+        RemoveMatching(AllyLaneMinionsList, object);
+        RemoveMatching(AllySpecialMinionsList, object);
+        RemoveMatching(AllyIgnoredMinionsList, object);
         RemoveMatching(WardsList, object);
         RemoveMatching(AllyWardsList, object);
         RemoveMatching(EnemyWardsList, object);
@@ -472,6 +528,9 @@ inline const std::vector<BarracksDampenerClient>& EnemyInhibitors() { EnsureInit
 inline const std::vector<AIMinionClient>& EnemyMinions() { EnsureInitialized(); return detail::EnemyMinionsList; }
 inline const std::vector<AIMinionClient>& EnemyClones() { EnsureInitialized(); return detail::EnemyClonesList; }
 inline const std::vector<AIMinionClient>& EnemyPets() { EnsureInitialized(); return detail::EnemyPetsList; }
+inline const std::vector<AIMinionClient>& EnemyLaneMinions() { EnsureInitialized(); return detail::EnemyLaneMinionsList; }
+inline const std::vector<AIMinionClient>& EnemySpecialMinions() { EnsureInitialized(); return detail::EnemySpecialMinionsList; }
+inline const std::vector<AIMinionClient>& EnemyIgnoredMinions() { EnsureInitialized(); return detail::EnemyIgnoredMinionsList; }
 inline HQClient EnemyNexus() { EnsureInitialized(); return detail::EnemyNexusObject; }
 inline const std::vector<ShopClient>& EnemyShops() { EnsureInitialized(); return detail::EnemyShopsList; }
 inline const std::vector<Obj_SpawnPoint>& EnemySpawnPoints() { EnsureInitialized(); return detail::EnemySpawnPointsList; }

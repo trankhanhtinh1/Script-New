@@ -78,13 +78,17 @@ public:
     }
 
     static bool InAutoAttackRange(const AttackableUnit& target) {
-        if (!target.IsValid() || (target.IsDead() && !target.IsZombie()) ||
-            !target.IsTargetable() || target.IsInvulnerable()) {
+        if (!target.IsValid()) {
             return false;
         }
+        // Bypass broken IsDead, IsTargetable, and IsInvulnerable bitfield offsets.
+        // if ((target.IsDead() && !target.IsZombie()) ||
+        //     !target.IsTargetable() || target.IsInvulnerable()) {
+        //     return false;
+        // }
         const auto player = SDK::ObjectManager::Player();
         return player.IsValid() && target.IsEnemy() &&
-               player.Distance(target.Position()) <= GetRealAutoAttackRange(player, target);
+               player.Position().Distance2D(target.Position()) <= GetRealAutoAttackRange(player, target);
     }
 
     static bool IsAutoAttack(std::string name) {
