@@ -755,27 +755,100 @@ inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
         static_cast<int>(sizeof(out.missile.missileName)));
 }
 
+namespace detail {
+    // Separate function to avoid C2712 (MSVC cannot mix __try with C++ objects
+    // requiring unwinding — the NS_PROFILE SectionProbe in ReadSnapshot conflicts).
+    inline void ReadSnapshotBulk(ObjectSnapshot& snapshot, uintptr_t object, ObjectType type) {
+        __try {
+            snapshot.handle.index = *reinterpret_cast<const std::uint32_t*>(object + Offset::All::Index);
+            snapshot.handle.networkId = *reinterpret_cast<const std::uint32_t*>(object + Offset::All::NetId);
+
+            const std::uint8_t teamSlot = *reinterpret_cast<const std::uint8_t*>(object + Offset::All::Team);
+            snapshot.teamSlot = teamSlot;
+
+            if (Globals::base) {
+                const uintptr_t teamTable = *reinterpret_cast<const uintptr_t*>(Globals::base + Offset::GameObjectsRuntime::TeamTable);
+                if (Globals::IsValidPtr(teamTable)) {
+                    snapshot.team = *reinterpret_cast<const std::uint32_t*>(
+                        teamTable + 0x20 + static_cast<uintptr_t>(teamSlot) * sizeof(std::uint32_t));
+                } else {
+                    snapshot.team = teamSlot;
+                }
+            } else {
+                snapshot.team = teamSlot;
+            }
+            if (snapshot.team == 0) snapshot.team = teamSlot;
+
+            snapshot.isDead = IsDead(object);
+
+            snapshot.isVisible = (*reinterpret_cast<const std::uint8_t*>(object + Offset::All::Visible)) != 0;
+            snapshot.isInvulnerable = (*reinterpret_cast<const std::uint8_t*>(object + Offset::All::IsInvulnerable)) != 0;
+            snapshot.position = *reinterpret_cast<const Vec3*>(object + Offset::All::Position);
+            snapshot.direction = Vec3{};
+
+            const float rawRadius = *reinterpret_cast<const float*>(object + Offset::All::Radius);
+            if (rawRadius == rawRadius && rawRadius >= 0.0f && rawRadius <= 10000.0f) {
+                snapshot.boundingRadius = rawRadius;
+            } else {
+                float r = 0.0f;
+                if (TryCallObjectFloatFunction(object, Offset::ControlRuntime::GetBoundingRadius, r))
+                    snapshot.boundingRadius = r;
+            }
+
+            if (IsAttackable(type)) {
+                snapshot.health = *reinterpret_cast<const float*>(object + Offset::AttackableUnit::HP);
+                snapshot.maxHealth = *reinterpret_cast<const float*>(object + Offset::AttackableUnit::MaxHP);
+                snapshot.allShield = *reinterpret_cast<const float*>(object + Offset::AttackableUnit::AllShield);
+                snapshot.physicalShield = *reinterpret_cast<const float*>(object + Offset::AttackableUnit::PhysicalShield);
+                snapshot.magicalShield = *reinterpret_cast<const float*>(object + Offset::AttackableUnit::MagicalShield);
+                snapshot.isTargetable = (*reinterpret_cast<const std::uint8_t*>(object + Offset::AttackableUnit::IsTargetable)) != 0;
+            }
+
+            if (IsAIBase(type)) {
+                snapshot.mana = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::MP);
+                snapshot.maxMana = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::MaxMP);
+                snapshot.moveSpeed = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::MoveSpeed);
+                snapshot.attackRange = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::AttackRange);
+                snapshot.baseAttackDamage = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::BaseAttackDamage);
+                snapshot.totalAttackDamage = snapshot.baseAttackDamage + *reinterpret_cast<const float*>(object + Offset::AIHeroClient::FlatPhysicalDmgMod);
+                snapshot.abilityPower = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::BaseAbilityDamage);
+                snapshot.armor = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::Armor);
+                snapshot.spellBlock = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::SpellBlock);
+                snapshot.attackSpeedMod = *reinterpret_cast<const float*>(object + Offset::AIHeroClient::AttackSpeedMod);
+                snapshot.level = *reinterpret_cast<const int*>(object + Offset::AIHeroClient::LevelRef);
+            }
+
+            if (type == ObjectType::AIMinionClient || type == ObjectType::NeutralMinionCampClient) {
+                snapshot.minionClass = static_cast<int>(*reinterpret_cast<const std::uint8_t*>(
+                    object + Offset::MinionClassRuntime::TypeOffset));
+                snapshot.jungleType = static_cast<int>(*reinterpret_cast<const std::uint8_t*>(
+                    object + Offset::JungleTypeRuntime::TypeOffset));
+            }
+
+            if (IsMissile(type)) {
+                ReadMissile(snapshot, object);
+            }
+        }
+        __except (1) {
+        }
+    }
+}
+
 inline ObjectSnapshot ReadSnapshot(uintptr_t object, ObjectType type = ObjectType::Unknown) {
     NS_PROFILE("core.ReadSnapshot");
     ObjectSnapshot snapshot{};
-    snapshot.handle = MakeHandle(object, type);
-    if (!snapshot.handle.HasAddress()) {
-        return snapshot;
+    if (!Globals::IsValidPtr(object)) return snapshot;
+
+    snapshot.handle.address = object;
+    snapshot.handle.type = type;
+
+    detail::ReadSnapshotBulk(snapshot, object, type);
+
+    if (Globals::IsValidPtr(object)) {
+        ReadName(object, snapshot.name, static_cast<int>(sizeof(snapshot.name)));
+        ReadCharacterName(object, snapshot.characterName, static_cast<int>(sizeof(snapshot.characterName)));
     }
 
-    ReadBase(snapshot, object);
-    if (IsAttackable(type)) {
-        ReadAttackable(snapshot, object);
-    }
-    if (IsAIBase(type)) {
-        ReadAIBase(snapshot, object);
-    }
-    if (type == ObjectType::AIMinionClient || type == ObjectType::NeutralMinionCampClient) {
-        ReadMinion(snapshot, object);
-    }
-    if (IsMissile(type)) {
-        ReadMissile(snapshot, object);
-    }
     return snapshot;
 }
 

@@ -133,10 +133,17 @@ namespace Globals {
     }
 
     inline bool ReadStdString(uintptr_t nameAddr, char* out, int maxOut) {
-        if (!out || maxOut <= 1 || !IsReadablePtr(nameAddr, 0x20)) {
+        if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
             }
+            return false;
+        }
+
+        // IsValidPtr is a fast range check (~2ns). The __try/__except below
+        // catches any access violation — VirtualQuery is redundant and costly.
+        if (!IsValidPtr(nameAddr)) {
+            out[0] = 0;
             return false;
         }
 
@@ -150,17 +157,8 @@ namespace Globals {
 
             uintptr_t src = 0;
             if (capacity > 15) {
-                const uintptr_t ptr = *reinterpret_cast<const uintptr_t*>(nameAddr);
-                if (!IsReadablePtr(ptr, len)) {
-                    out[0] = 0;
-                    return false;
-                }
-                src = ptr;
+                src = *reinterpret_cast<const uintptr_t*>(nameAddr);
             } else {
-                if (!IsReadablePtr(nameAddr, len)) {
-                    out[0] = 0;
-                    return false;
-                }
                 src = nameAddr;
             }
 
@@ -177,10 +175,15 @@ namespace Globals {
     }
 
     inline bool ReadRiotString(uintptr_t nameAddr, char* out, int maxOut) {
-        if (!out || maxOut <= 1 || !IsReadablePtr(nameAddr, 0x18)) {
+        if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
             }
+            return false;
+        }
+
+        if (!IsValidPtr(nameAddr)) {
+            out[0] = 0;
             return false;
         }
 
@@ -194,17 +197,8 @@ namespace Globals {
 
             uintptr_t src = 0;
             if (maxLen >= 16) {
-                const uintptr_t ptr = *reinterpret_cast<const uintptr_t*>(nameAddr);
-                if (!IsReadablePtr(ptr, static_cast<size_t>(len))) {
-                    out[0] = 0;
-                    return false;
-                }
-                src = ptr;
+                src = *reinterpret_cast<const uintptr_t*>(nameAddr);
             } else {
-                if (!IsReadablePtr(nameAddr, static_cast<size_t>(len))) {
-                    out[0] = 0;
-                    return false;
-                }
                 src = nameAddr;
             }
 
@@ -233,10 +227,15 @@ namespace Globals {
     }
 
     inline bool ReadCString(uintptr_t strAddr, char* out, int maxOut) {
-        if (!out || maxOut <= 1 || !IsReadablePtr(strAddr, static_cast<size_t>(maxOut))) {
+        if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
             }
+            return false;
+        }
+
+        if (!IsValidPtr(strAddr)) {
+            out[0] = 0;
             return false;
         }
 
@@ -278,7 +277,7 @@ namespace Globals {
         }
 
         const uintptr_t ptr = Read<uintptr_t>(fieldAddr);
-        if (IsReadablePtr(ptr, 1) && ReadCString(ptr, out, maxOut)) {
+        if (ReadCString(ptr, out, maxOut)) {
             return true;
         }
 
@@ -286,8 +285,7 @@ namespace Globals {
     }
 
     inline int ReadPtrArray(uintptr_t listAddr, int count, uintptr_t* out, int maxOut) {
-        if (!out || count <= 0 || count > maxOut ||
-            !IsReadablePtr(listAddr, static_cast<size_t>(count) * sizeof(uintptr_t))) {
+        if (!out || count <= 0 || count > maxOut || !IsValidPtr(listAddr)) {
             return 0;
         }
 
