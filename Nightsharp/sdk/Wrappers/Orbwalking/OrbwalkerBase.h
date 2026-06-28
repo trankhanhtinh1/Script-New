@@ -410,15 +410,18 @@ public:
 
         auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
+        if (!target.IsValid()) {
+            target = LastTarget.IsValid() ? LastTarget : GetTarget();
+        }
         const AIBaseClient sender(args.Sender.Ptr);
 
+        std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+        os << "[Tick: " << Variables::TickCount() << "] EVENT: OnProcessSpell (Windup Started)\n";
+
+        LastAutoAttackTick = Variables::TickCount() - (Game::Ping() / 2);
+        MissileLaunched = false;
+
         if (target.IsValid()) {
-            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-            os << "[Tick: " << Variables::TickCount() << "] EVENT: OnProcessSpell (Windup Started)\n";
-
-            LastAutoAttackTick = Variables::TickCount() - (Game::Ping() / 2);
-            MissileLaunched = false;
-
             if (!target.Compare(LastTarget)) {
                 OrbwalkingActionArgs switchArgs = {};
                 switchArgs.Target = target;
