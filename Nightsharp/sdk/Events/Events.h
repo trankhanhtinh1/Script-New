@@ -4,6 +4,7 @@
 #include "../../FpsDropDebug.h"
 #include "../Data/Database.h"
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 
@@ -121,6 +122,11 @@ namespace detail {
     };
 
     inline bool Initialized = false;
+    inline std::atomic_bool DeliveryEnabled{ false };
+
+    inline bool CanDeliverRawEvents() {
+        return DeliveryEnabled.load(std::memory_order_acquire);
+    }
 
     inline EventList<CoreHookArgs> CoreHookHandlers{ "CoreHook" };
     inline EventList<GameUpdateEventArgs> GameUpdateHandlers{ "GameUpdate" };
@@ -156,6 +162,9 @@ namespace detail {
     inline void ResetDerivedEvents();
 
     inline void OnRawCoreHook(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         CoreHookHandlers.Fire(raw);
     }
 
@@ -251,8 +260,14 @@ namespace detail {
 
         for (int index = 0; index < PendingObjectCreateCount; ++index) {
             auto& pending = PendingObjectCreates[index];
-            if (pending.Rdx == raw.Rdx ||
-                (pending.R8 != 0 && pending.R8 == raw.R8)) {
+            const uint32_t pendingNetworkId =
+                static_cast<uint32_t>(pending.Rdx & 0xFFFFFFFFu);
+            const uint32_t rawNetworkId =
+                static_cast<uint32_t>(raw.Rdx & 0xFFFFFFFFu);
+            if (pending.Rcx == raw.Rcx ||
+                (pendingNetworkId != 0 &&
+                 pendingNetworkId != 0xFFFFFFFFu &&
+                 pendingNetworkId == rawNetworkId)) {
                 pending = raw;
                 return;
             }
@@ -269,10 +284,12 @@ namespace detail {
     inline void RemovePendingObjectCreate(uintptr_t object, uint32_t networkId) {
         for (int index = 0; index < PendingObjectCreateCount;) {
             const auto& pending = PendingObjectCreates[index];
-            const bool sameObject = pending.Rdx == object;
+            const bool sameObject = pending.Rcx == object;
+            const uint32_t pendingNetworkId =
+                static_cast<uint32_t>(pending.Rdx & 0xFFFFFFFFu);
             const bool sameNetworkId = networkId != 0 &&
                 networkId != 0xFFFFFFFFu &&
-                static_cast<uint32_t>(pending.R8) == networkId;
+                pendingNetworkId == networkId;
             if (!sameObject && !sameNetworkId) {
                 ++index;
                 continue;
@@ -300,10 +317,16 @@ namespace detail {
     }
 
     inline void OnRawObjectCreate(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         QueueObjectCreate(raw);
     }
 
     inline void OnRawObjectDelete(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
         if (!args.Sender.IsValid()) {
             return;
@@ -314,6 +337,9 @@ namespace detail {
     }
 
     inline void OnRawGameUpdate(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         (void)CoreRuntime::RefreshReadState();
         FlushObjectCreates();
 
@@ -327,48 +353,75 @@ namespace detail {
     }
 
     inline void OnRawMissileCreate(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
         CanonicalizeMissileNames(args);
         MissileCreateHandlers.Fire(args);
     }
 
     inline void OnRawMissileDelete(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
         CanonicalizeMissileNames(args);
         MissileDeleteHandlers.Fire(args);
     }
 
     inline void OnRawBuffAdd(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         BuffAddHandlers.Fire(::Core::Events::DecodeBuffEvent(raw));
     }
 
     inline void OnRawBuffRemove(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         BuffRemoveHandlers.Fire(::Core::Events::DecodeBuffEvent(raw));
     }
 
     inline void OnRawBuffUpdate(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         BuffUpdateHandlers.Fire(::Core::Events::DecodeBuffEvent(raw));
     }
 
     inline void OnRawNewPath(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         const NewPathEventArgs args = ::Core::Events::DecodeNewPath(raw);
         NewPathHandlers.Fire(args);
         EventDash(args);
     }
 
     inline void OnRawIntegerPropertyChange(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         const IntegerPropertyChangeEventArgs args = ::Core::Events::DecodeIntegerPropertyChange(raw);
         IntegerPropertyChangeHandlers.Fire(args);
         EventStealth(args);
     }
 
     inline void OnRawTeleport(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         const TeleportRawEventArgs args = ::Core::Events::DecodeTeleport(raw);
         TeleportHandlers.Fire(args);
         EventTeleport(args);
     }
 
     inline void OnRawDoCast(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         // OnDoCast (sub_97C290) is a vtable spell-instance method — RCX is a
         // SpellDataInstance, NOT a SpellBookClient. Use DecodeDoCast which
         // resolves the hero through ObjectManager::FindByIndex(*(RCX+0xA8))
@@ -384,31 +437,57 @@ namespace detail {
 
 
     inline void OnRawProcessSpell(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         ProcessSpellHandlers.Fire(::Core::Events::DecodeProcessSpell(raw));
     }
 
     inline void OnRawProcessCastSpell(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         ProcessCastSpellHandlers.Fire(::Core::Events::DecodeProcessCastSpell(raw));
     }
 
     inline void OnRawFinishCast(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         FinishCastHandlers.Fire(::Core::Events::DecodeProcessSpell(raw));
     }
 
     inline void OnRawSpellImpact(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         SpellImpactHandlers.Fire(::Core::Events::DecodeProcessSpell(raw));
     }
 
     inline void OnRawPlayAnimation(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         PlayAnimationHandlers.Fire(::Core::Events::DecodePlayAnimation(raw));
     }
 
     inline void OnRawStopCast(const CoreHookArgs& raw) {
+        if (!CanDeliverRawEvents()) {
+            return;
+        }
         const StopCastEventArgs args = ::Core::Events::DecodeStopCast(raw);
         StopCastHandlers.Fire(args);
         EventInterruptableSpell(args);
     }
 } // namespace detail
+
+inline void SetDeliveryEnabled(bool enabled) {
+    detail::DeliveryEnabled.store(enabled, std::memory_order_release);
+}
+
+inline bool IsDeliveryEnabled() {
+    return detail::CanDeliverRawEvents();
+}
 
 inline void Initialize() {
     if (detail::Initialized) {
@@ -452,10 +531,14 @@ inline void Initialize() {
 }
 
 inline void Reset() {
+    SetDeliveryEnabled(false);
     detail::CoreHookHandlers.Clear();
     detail::GameUpdateHandlers.Clear();
     detail::ObjectCreateHandlers.Clear();
     detail::ObjectDeleteHandlers.Clear();
+    for (int i = 0; i < detail::PendingObjectCreateCount; ++i) {
+        detail::PendingObjectCreates[i] = {};
+    }
     detail::PendingObjectCreateCount = 0;
     detail::MissileCreateHandlers.Clear();
     detail::MissileDeleteHandlers.Clear();

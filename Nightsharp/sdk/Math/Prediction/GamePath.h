@@ -1,10 +1,8 @@
 #pragma once
 
-#include "Types.h"
 #include "../../Core/Game.h"
-#include "../../../core/CoreRuntime.h"
-#include "../../../core/Globals.h"
 #include "../../Events/Events.h"
+#include "../../GameObjects/GameObjects.h"
 
 #include <algorithm>
 #include <cfloat>

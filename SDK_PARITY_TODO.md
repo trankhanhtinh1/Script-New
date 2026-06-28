@@ -1,6 +1,6 @@
 # NightSharp SDK Parity TODO
 
-Date: 2026-06-24
+Date: 2026-06-28
 
 Goal:
 - Build `NightSharp/SDK/` to match `EnsoulSharp.SDK/Core/` 1-1 in public API shape, file grouping, event naming, wrapper naming, and data behavior where possible.
@@ -27,18 +27,54 @@ Status legend:
 
 - [x] Enumerations mostly exist under `NightSharp/SDK/Enumerations/*`.
 - [x] Spell database files exist under `NightSharp/SDK/Wrappers/Spells/Database/*`.
-- [~] Spell wrappers exist under `NightSharp/SDK/Wrappers/Spells/*`, but several TODOs wait on Prediction, Collision, TargetSelector, Damage, HealthPrediction, and Core cast packet decoding.
+- [~] Spell wrappers exist under `NightSharp/SDK/Wrappers/Spells/*`; `Spell::GetPrediction`, `Spell::GetCollision`, `Spell::GetDamage`, and `Spell::GetHealthPrediction` are wired to the newer SDK backends. TargetSelector-backed `Spell::GetTarget` is still pending.
 - [~] SpellTypes exist under `NightSharp/SDK/Wrappers/Spells/SpellTypes/*`; hit prediction, collision clipping, source-object rewrites, and draw debug are still partial.
 - [~] Tracker exists under `NightSharp/SDK/Wrappers/Spells/Tracker/*`; champion-specific `_ZiggsR` is still missing.
 - [~] Events exist, but several event filters/semantics need parity validation.
-- [~] Damage wrappers exist, but need API parity review against `EnsoulSharp.SDK/Core/Wrappers/Damages/*`.
-- [ ] TargetSelector wrapper tree is missing.
-- [ ] Orbwalking wrapper tree is missing.
-- [ ] Prediction tree is missing.
-- [ ] Items and Map wrappers are missing at the EnsoulSharp.SDK path.
+- [x] Damage wrappers are wired: `SDK::Damage::CalculateDamage`, `CalculateMixedDamage`, `GetSpellDamage`, spell-stage damage type routing, CDragon item/rune metadata, rune modifiers, passive damage, and `BonusHealth` scaling are in place.
+- [~] TargetSelector wrapper tree exists under `NightSharp/SDK/Wrappers/TargetSelector/*`, but SDK exposure, missing weight modes, and runtime parity review remain.
+- [~] Orbwalking wrapper tree exists under `NightSharp/SDK/Wrappers/Orbwalking/*`, but it is not complete and must stay marked partial.
+- [x] Math/Prediction tree exists, is exposed through `SDK.h`, and runtime validation for the current line collision / AoE / HealthPrediction path was reported OK.
+- [~] Items data exists from CDragon and Core inventory access exists; `Wrappers/Items.h` is still missing at the EnsoulSharp.SDK path. `Wrappers/Map.h` is missing; `SDK/Core/Map.h` backend exists.
 - [x] No SharpDX port is needed on C++; use NightSharp `Vec2` / `Vec3` helpers instead.
 - [~] UI/menu base exists. `UI/IMenu/Customizer` and `UI/IMenu/Skins` are intentionally excluded.
 - [~] Utils exist, but need member-by-member parity review.
+
+Recheck notes 2026-06-27:
+- [x] `NightSharp/SDK/Math/*` file coverage is now mostly present.
+- [x] `PredictionInput.Type` canonical type is now `SpellType`, with `SkillshotType` adapter compatibility.
+- [x] `PredictionInput` has DLL-shape fields/fallbacks: `Spell`, `Unit = GameObjects::Player()`, `From`, `RangeCheckFrom`, `CollisionObjectsBridge`, `MaxCollisionCount`.
+- [x] `Movement::GetPrediction` has DLL-style Yuumi/collision block: calls `Collisions.GetCollision`, compares `collision.Count > MaxCollisionCount`, sets `OriginHitchance`, sets `Hitchance = Collision`, and assigns `CollisionObjects`.
+- [x] `Collision.h` was reworked toward DLL `EnsoulSharp.SDK.Collisions`, including Heroes/Minions/Jungle/Building/Walls/YasuoWall/SamiraW and NightSharp extension MelW.
+- [x] `SDK::Prediction`, `SDK::HealthPrediction`, and `SDK::AoEPrediction` facades exist.
+- [x] `Geometry.h` has DLL polygon ops, `SDK::Geometry::Sector`, DLL-compatible `Sector.RotateLineFromPoint`, and math-only `GetCenter/GetCenteredText` helpers.
+- [x] `EzrealSemiPlugin` now compile-tests prediction/collision with Q setup `SpellSlot.Q, 1200`, `SetSkillshot(0.25, 60, 2000, true, SpellType.Line)`, draws prediction cast point, and blocks cast on collision.
+- [x] Recheck build pass: `NightSharp.sln Release|x64` with MSBuild from `E:\Visual Studio`.
+- [x] `SDK.h` exposes Math explicitly: `Math/Prediction.h`, `Math/HealthPrediction.h`, `Math/Geometry.h`, `Math/ConvexHull.h`, and `Math/Collision.h`.
+- [x] `Spell.h` is wired into Math/Damage backends: `Prediction::GetPrediction`, `Collision::GetCollision`, `HealthPrediction::GetPrediction`, and `Damage::GetSpellDamage`.
+
+Source tree recheck 2026-06-28:
+- [x] Math runtime test reported OK: line collision minion/hero, Yasuo Wind Wall, Samira W, Mel W, AoE circle/cone/line, and HealthPrediction timing.
+- [x] `Math/Prediction/GamePath.h` is a public header and no longer duplicates `Movement.h`.
+- [~] `Wrappers/TargetSelector/*` files are mostly present; missing source-level parity files are the weight modes listed below.
+- [~] `Wrappers/Orbwalking/*` files are present, but Orbwalking is still not complete.
+- [ ] Remaining missing paths after excluding SharpDX, `UI/IMenu/Customizer`, and `UI/IMenu/Skins`: `Bootstrap.h`, `Constants.h`, top-level `GameObjects.h`, `Variables.h`, `UI/Utils.h`, `Wrappers/Items.h`, `Wrappers/Map.h`, `_ZiggsR.h`, and seven TargetSelector weight files.
+
+Damage recheck 2026-06-28:
+- [x] CDragon latest champion `Locke` exists as id `805`, alias `Locke`.
+- [x] Added Locke spell damage data to both damage databases: Q missile, Q nail consume, E arrival, E dash, and R.
+- [x] Added Locke passive `Silver Stake` to `DamagePassives.h` as magic on-hit damage scaling from min to max by target missing health.
+- [x] Damage data table count is now 173 entries and remains alphabetically sorted for binary search.
+- [x] CDragon item/rune database generation is in place:
+  - `tools/generate_cdragon_item_rune_data.py`
+  - `NightSharp/SDK/Data/ItemData.h`: 706 items with id/name/raw text/categories/build paths/stats/active flag/cooldown/duration/range metadata.
+  - `NightSharp/SDK/Data/RuneData.h`: 103 perks and 5 perk styles with tree/slot metadata/cooldown/duration text-derived fields.
+  - `InventorySlot` and `RuneManagerClient` can resolve Core runtime ids into generated metadata.
+- [x] Damage wrapper parity is complete for current static data and public wrapper calls:
+  - `SDK::Damage` public surface now has `CalculateDamage`, `CalculateMixedDamage`, `GetSpellDamage`, `GetPassiveDamage`, and `GetAutoAttackDamage`.
+  - `DamageLibrary` exposes stage damage type so spell damage no longer applies all modifiers as Physical.
+  - `DamageMastery` applies current rune modifiers: Coup de Grace, Cut Down, Last Stand, Press the Attack, and First Strike via runtime buff/debuff aliases.
+  - `BonusHealth` scaling no longer falls back to full `MaxHealth`; it uses item/rune static data exposed through inventory and rune manager.
 
 ## Priority Order
 
@@ -71,10 +107,12 @@ Status legend:
 - [x] Decode spell slot in `CoreEvents::DecodeProcessCastSpell` / `CastSpellEventArgs` so `LastCast::OnCastSpell` can fill `LastCastPacketSentEntry.Slot`. Implemented from IDA 13339; needs runtime verification.
 - [CORE] Extend `ProcessSpellEventArgs` with cast info target/source/slot if needed by LastCast and Detector.
 - [x] Add `SpellDataResource` parameter accessors required by `Spell.h`: `CastRange`, `LineWidth`, `MissileSpeed`, `CastType`, script name, and icon name are exposed through `CoreSpellDataInst` / `SpellDataInstClient`. `Spell(slot, true)` now fills `Range`, `Width`, and `Speed` from native data with `SpellDatabase` fallback. `CastRadius` direct field is not pinned in IDA 13339 yet, so the accessor returns 0 and `Spell.h` uses database radius when line width is unavailable.
-- [ ] Restore `Spell::GetPrediction`, `Spell::GetCollision`, and position overloads after Prediction/Collision are ported.
-- [ ] Restore `Spell::GetTarget` after TargetSelector is ported.
-- [ ] Restore `Spell::GetDamage` / `CanKill` after Damage wrapper and `AIBaseClient`/`AIHeroClient` accessors are parity-checked.
-- [ ] Restore HealthPrediction use after `Math/Prediction/Health.h` is ported.
+- [x] Wire `Spell::GetPrediction` to `SDK::Prediction::GetPrediction`.
+- [x] Wire `Spell::GetCollision` and position overloads to `SDK::Collision/SDK::Collisions`.
+- [ ] Restore `Spell::GetTarget` after TargetSelector is exposed through `SDK.h` and runtime validated.
+- [x] Wire `Spell::GetDamage` / `CanKill` to `SDK::Damage::GetSpellDamage`.
+- [x] Wire `Spell::GetHealthPrediction` to `SDK::HealthPrediction`.
+- [x] Add `Spell::SetSkillshot(..., SpellType)` overloads for DLL-style `SpellType.Line/Circle/Cone/Arc` setup.
 - [ ] Implement per-spell charged spell event registry if a C++ callback/event model is needed to match EnsoulSharp SDK.
 - [ ] Set cast position height through `NavMesh.GetHeightForPosition` where EnsoulSharp does it.
 
@@ -89,15 +127,27 @@ Existing code TODOs to close:
 
 ### P2 - Math And Prediction
 
-- [ ] Port `Math/Geometry.h`.
-- [ ] Port `Math/ConvexHull.h`.
-- [ ] Port `Math/Prediction/Cluster.h`.
-- [ ] Port `Math/Prediction/GamePath.h`.
-- [ ] Port `Math/Prediction/Health.h`.
-- [ ] Port `Math/Prediction/Movement.h`.
-- [~] Review current `Math/Collision.h` against `EnsoulSharp.SDK/Core/Math/Collision.cs`.
-- [~] Review current `Math/Polygons/*` against EnsoulSharp polygon files and fill API gaps.
-- [ ] Add tests/plugins for:
+- [x] Port/update `Math/Geometry.h`.
+  - Has DLL polygon ops, `SDK::Geometry::Sector`, DLL-compatible `Sector.RotateLineFromPoint`, and math-only `GetCenter/GetCenteredText`.
+  - Does not port SharpDX `Sprite/Font` text-measuring overloads.
+- [x] Port/review `Math/ConvexHull.h`.
+  - File/API exists and current behavior is accepted; only rework if deterministic source-level parity becomes necessary.
+- [x] Port/update `Math/Prediction/Cluster.h`.
+  - `SDK::AoEPrediction` facade exists.
+- [x] Port/update `Math/Prediction/GamePath.h`.
+  - `GamePath::PathTracker` now lives in the separate header and is included by `Math/Prediction.h`.
+- [x] Port/update `Math/Prediction/Health.h`.
+  - `SDK::HealthPrediction` facade/registry exists.
+- [x] Port/update `Math/Prediction/Movement.h`.
+  - Main source/DLL API exists, Yuumi and collision block are ported, and current runtime validation was reported OK.
+- [x] Review/rework current `Math/Collision.h` against DLL `EnsoulSharp.SDK.Collisions`.
+  - Has `SDK::Collisions`, `GetCollision`, `IsCollision`, `WillDead`, Heroes/Minions/Jungle/Building/Walls/Yasuo/Samira plus NightSharp MelW extension.
+  - Caveat: Yasuo Wind Wall orientation still uses NightSharp `Direction()` fallback because matrix orientation is not exposed.
+- [x] Review current `Math/Polygons/*` and fill known API gaps.
+  - `SectorPoly` now has DLL-compatible `RotateLineFromPoint`.
+- [x] Add compile-test plugin for prediction/collision.
+  - `EzrealSemiPlugin` calls `SDK::Prediction::GetPrediction(input)`, blocks cast on collision, and draws cast/collision points.
+- [x] Runtime-test plugins/checklist for:
   - movement prediction point,
   - collision object detection,
   - polygon containment/intersection,
@@ -105,39 +155,41 @@ Existing code TODOs to close:
 
 ### P3 - TargetSelector
 
-Port the whole tree under `NightSharp/SDK/Wrappers/TargetSelector/`:
+The main tree exists under `NightSharp/SDK/Wrappers/TargetSelector/`, but parity is still partial:
 
-- [ ] `HeroVisibleEntry.h`
-- [ ] `ITargetSelectorMode.h`
-- [ ] `TargetSelector.h`
-- [ ] `TargetSelectorDrawing.h`
-- [ ] `TargetSelectorHumanizer.h`
-- [ ] `TargetSelectorMode.h`
-- [ ] `TargetSelectorSelected.h`
-- [ ] `Modes/Closest.h`
-- [ ] `Modes/IWeightItem.h`
-- [ ] `Modes/LeastHealth.h`
-- [ ] `Modes/LessAttacksToKill.h`
-- [ ] `Modes/LessCastsToKill.h`
-- [ ] `Modes/MostAbilityPower.h`
-- [ ] `Modes/MostAttackDamage.h`
-- [ ] `Modes/NearMouse.h`
-- [ ] `Modes/Priority.h`
-- [ ] `Modes/PriorityCategory.h`
-- [ ] `Modes/Weight.h`
-- [ ] `Modes/WeightItemWrapper.h`
-- [ ] `Modes/Weights/AbilityPower.h`
-- [ ] `Modes/Weights/Aggro.h`
-- [ ] `Modes/Weights/AttackDamage.h`
-- [ ] `Modes/Weights/CrowdControl.h`
+- [x] `HeroVisibleEntry.h`
+- [x] `ITargetSelectorMode.h`
+- [x] `TargetSelector.h`
+- [x] `TargetSelectorDrawing.h`
+- [x] `TargetSelectorHumanizer.h`
+- [x] `TargetSelectorMode.h`
+- [x] `TargetSelectorSelected.h`
+- [x] `Modes/Closest.h`
+- [x] `Modes/IWeightItem.h`
+- [x] `Modes/LeastHealth.h`
+- [x] `Modes/LessAttacksToKill.h`
+- [x] `Modes/LessCastsToKill.h`
+- [x] `Modes/MostAbilityPower.h`
+- [x] `Modes/MostAttackDamage.h`
+- [x] `Modes/NearMouse.h`
+- [x] `Modes/Priority.h`
+- [x] `Modes/PriorityCategory.h`
+- [x] `Modes/Weight.h`
+- [x] `Modes/WeightItemWrapper.h`
+- [x] `Modes/Weights/AbilityPower.h`
+- [x] `Modes/Weights/Aggro.h`
+- [x] `Modes/Weights/AttackDamage.h`
+- [x] `Modes/Weights/CrowdControl.h`
 - [ ] `Modes/Weights/FocusMe.h`
 - [ ] `Modes/Weights/Gold.h`
-- [ ] `Modes/Weights/Killable.h`
+- [x] `Modes/Weights/Killable.h`
 - [ ] `Modes/Weights/LowHealth.h`
 - [ ] `Modes/Weights/LowResists.h`
 - [ ] `Modes/Weights/ShortDistanceCursor.h`
 - [ ] `Modes/Weights/ShortDistancePlayer.h`
 - [ ] `Modes/Weights/TeamFocus.h`
+- [ ] Expose TargetSelector headers through `NightSharp/SDK/SDK.h` after include-order is confirmed.
+- [ ] Runtime-test selection order, selected target focus, humanizer delay, damage-based modes, and no-collision target selection.
 
 Dependencies:
 - `GameObjects::EnemyHeroes` / hero cache correctness.
@@ -147,11 +199,13 @@ Dependencies:
 
 ### P4 - Orbwalking
 
-Port the whole tree under `NightSharp/SDK/Wrappers/Orbwalking/`:
+Files exist under `NightSharp/SDK/Wrappers/Orbwalking/`, but Orbwalking is not complete:
 
-- [ ] `Orbwalker.h`
-- [ ] `OrbwalkerBase.h`
-- [ ] `OrbwalkerSelector.h`
+- [~] `Orbwalker.h`
+- [~] `OrbwalkerBase.h`
+- [~] `OrbwalkerSelector.h`
+- [x] `OrbwalkingActionArgs.h` exists as a NightSharp helper.
+- [ ] Expose Orbwalking headers through `NightSharp/SDK/SDK.h` only after runtime safety review.
 
 Dependencies:
 - `Utils/AutoAttack.h` parity review.
@@ -159,6 +213,7 @@ Dependencies:
 - `Events/Turret.h`, `Events/Dash.h`, `Events/Gapcloser.h` semantics.
 - Spell/basic attack cast timing.
 - Input/click control safety.
+- Runtime confirmation that attack orders, movement orders, windup cancel, missile launch state, and mode switching do not cause unsafe input spam.
 
 Recommended implementation order:
 - [ ] Read-only attack timer and target selection.
@@ -167,10 +222,18 @@ Recommended implementation order:
 
 ### P5 - Items And Map Wrappers
 
+- [x] Generate static CDragon item/rune database:
+  - `SDK/Data/ItemData.h`
+  - `SDK/Data/RuneData.h`
+  - source script: `tools/generate_cdragon_item_rune_data.py`
+- [x] Wire generated item/rune data to Core runtime ids:
+  - `InventorySlot::DatabaseEntry()` / `CDragonData()`
+  - `RuneManagerClient::RuneDataEntries()`, `PrimaryTreeData()`, `SecondaryTreeData()`
+  - `GameData::GetItemInfoById` falls back to generated CDragon `ItemInfo` stats.
 - [ ] Port `Wrappers/Items.h`.
 - [ ] Port `Wrappers/Map.h`.
 - [~] Use existing `NightSharp/SDK/Core/Map.h` as backend for `Wrappers/Map.h`.
-- [CORE] Verify item inventory/accessor offsets if `Items.h` needs active item state, charges, cooldowns, or cast.
+- [CORE] Verify item charges/cooldown/cast offsets only if `Wrappers/Items.h` needs live active item state beyond static CDragon metadata and inventory item id.
 - [DATA] Map metadata should come from `EnsoulSharp.SDK/Resources/Data/Map.json` if compatible.
 
 ### P6 - Core-Like Top-Level SDK Files
@@ -179,8 +242,10 @@ These are path/name parity tasks. NightSharp already has equivalent concepts in 
 
 - [ ] `Bootstrap.h`
 - [ ] `Constants.h`
-- [ ] `GameObjects.h`
-- [ ] `Variables.h`
+- [~] `GameObjects.h`
+  - Backend exists at `NightSharp/SDK/GameObjects/GameObjects.h`; top-level facade path still missing.
+- [~] `Variables.h`
+  - Backend exists at `NightSharp/SDK/Core/Variables.h`; top-level facade path still missing.
 
 Existing NightSharp equivalents:
 - `NightSharp/SDK/Core/Game.h`
@@ -226,18 +291,20 @@ Core dependencies:
 ### P9 - Damage Wrappers
 
 Existing files:
-- [~] `Wrappers/Damages/Damage.h`
-- [~] `Wrappers/Damages/DamageData.h` (NightSharp-only helper)
-- [~] `Wrappers/Damages/DamageJson.h`
-- [~] `Wrappers/Damages/DamageLibrary.h`
-- [~] `Wrappers/Damages/DamageMastery.h`
-- [~] `Wrappers/Damages/DamagePassives.h`
+- [x] `Wrappers/Damages/Damage.h`
+- [x] `Wrappers/Damages/DamageData.h` (NightSharp-only helper)
+- [x] `Wrappers/Damages/DamageJson.h`
+- [x] `Wrappers/Damages/DamageLibrary.h`
+- [x] `Wrappers/Damages/DamageMastery.h`
+- [x] `Wrappers/Damages/DamagePassives.h`
 
 TODO:
-- [ ] Compare public methods and overloads against EnsoulSharp.SDK.
-- [ ] Verify `DamageStage`, `DamageType`, raw stats, armor/mr, crit/on-hit fields.
-- [ ] Restore calls from `Spell::GetDamage` once wrapper accessors are complete.
-- [DATA] Load/generate data from `EnsoulSharp.SDK/Resources/Data/Database.json` or current NightSharp data source.
+- [x] Provide current backend entry point `SDK::Damage::GetSpellDamage`.
+- [x] Add Locke from CDragon latest to static damage data and passive on-hit logic.
+- [x] Compare public methods and overloads against EnsoulSharp.SDK.
+- [x] Verify `DamageStage`, `DamageType`, raw stats, armor/mr, crit/on-hit fields.
+- [x] Restore calls from `Spell::GetDamage` to `SDK::Damage::GetSpellDamage`.
+- [x] Load/generate data from current NightSharp/CDragon data source.
 
 ### P10 - Utils
 
@@ -328,47 +395,52 @@ This list is generated by mapping `EnsoulSharp.SDK/Core/**/*.cs` to `NightSharp/
 
 - [ ] `Bootstrap.h`
 - [ ] `Constants.h`
-- [ ] `GameObjects.h`
-- [ ] `Math/ConvexHull.h`
-- [ ] `Math/Geometry.h`
-- [ ] `Math/Prediction/Cluster.h`
-- [ ] `Math/Prediction/GamePath.h`
-- [ ] `Math/Prediction/Health.h`
-- [ ] `Math/Prediction/Movement.h`
+- [~] `GameObjects.h`
+  - Equivalent exists at `GameObjects/GameObjects.h`; top-level facade path is still missing.
+- [x] `Math/ConvexHull.h`
+  - File exists and current behavior is accepted; deterministic source-level rework is optional.
+- [x] `Math/Geometry.h`
+- [x] `Math/Prediction/Cluster.h`
+- [x] `Math/Prediction/GamePath.h`
+  - `GamePath::PathTracker` now lives in the separate header and is included by `Math/Prediction.h`.
+- [x] `Math/Prediction/Health.h`
+- [x] `Math/Prediction/Movement.h`
+  - File exists, main backend works, and current runtime validation was reported OK.
 - [ ] `UI/Utils.h`
-- [ ] `Variables.h`
+- [~] `Variables.h`
+  - Equivalent exists at `Core/Variables.h`; top-level facade path is still missing.
 - [ ] `Wrappers/Items.h`
 - [ ] `Wrappers/Map.h`
-- [ ] `Wrappers/Orbwalking/Orbwalker.h`
-- [ ] `Wrappers/Orbwalking/OrbwalkerBase.h`
-- [ ] `Wrappers/Orbwalking/OrbwalkerSelector.h`
+- [~] `Wrappers/Orbwalking/Orbwalker.h`
+- [~] `Wrappers/Orbwalking/OrbwalkerBase.h`
+- [~] `Wrappers/Orbwalking/OrbwalkerSelector.h`
 - [ ] `Wrappers/Spells/Tracker/Skillshots/_ZiggsR.h`
-- [ ] `Wrappers/TargetSelector/HeroVisibleEntry.h`
-- [ ] `Wrappers/TargetSelector/ITargetSelectorMode.h`
-- [ ] `Wrappers/TargetSelector/TargetSelector.h`
-- [ ] `Wrappers/TargetSelector/TargetSelectorDrawing.h`
-- [ ] `Wrappers/TargetSelector/TargetSelectorHumanizer.h`
-- [ ] `Wrappers/TargetSelector/TargetSelectorMode.h`
-- [ ] `Wrappers/TargetSelector/TargetSelectorSelected.h`
-- [ ] `Wrappers/TargetSelector/Modes/Closest.h`
-- [ ] `Wrappers/TargetSelector/Modes/IWeightItem.h`
-- [ ] `Wrappers/TargetSelector/Modes/LeastHealth.h`
-- [ ] `Wrappers/TargetSelector/Modes/LessAttacksToKill.h`
-- [ ] `Wrappers/TargetSelector/Modes/LessCastsToKill.h`
-- [ ] `Wrappers/TargetSelector/Modes/MostAbilityPower.h`
-- [ ] `Wrappers/TargetSelector/Modes/MostAttackDamage.h`
-- [ ] `Wrappers/TargetSelector/Modes/NearMouse.h`
-- [ ] `Wrappers/TargetSelector/Modes/Priority.h`
-- [ ] `Wrappers/TargetSelector/Modes/PriorityCategory.h`
-- [ ] `Wrappers/TargetSelector/Modes/Weight.h`
-- [ ] `Wrappers/TargetSelector/Modes/WeightItemWrapper.h`
-- [ ] `Wrappers/TargetSelector/Modes/Weights/AbilityPower.h`
-- [ ] `Wrappers/TargetSelector/Modes/Weights/Aggro.h`
-- [ ] `Wrappers/TargetSelector/Modes/Weights/AttackDamage.h`
-- [ ] `Wrappers/TargetSelector/Modes/Weights/CrowdControl.h`
+- [x] `Wrappers/TargetSelector/HeroVisibleEntry.h`
+- [x] `Wrappers/TargetSelector/ITargetSelectorMode.h`
+- [x] `Wrappers/TargetSelector/TargetSelector.h`
+- [x] `Wrappers/TargetSelector/TargetSelectorDrawing.h`
+- [x] `Wrappers/TargetSelector/TargetSelectorHumanizer.h`
+- [x] `Wrappers/TargetSelector/TargetSelectorMode.h`
+- [x] `Wrappers/TargetSelector/TargetSelectorSelected.h`
+- [x] `Wrappers/TargetSelector/Modes/Closest.h`
+- [x] `Wrappers/TargetSelector/Modes/IWeightItem.h`
+- [x] `Wrappers/TargetSelector/Modes/LeastHealth.h`
+- [x] `Wrappers/TargetSelector/Modes/LessAttacksToKill.h`
+- [x] `Wrappers/TargetSelector/Modes/LessCastsToKill.h`
+- [x] `Wrappers/TargetSelector/Modes/MostAbilityPower.h`
+- [x] `Wrappers/TargetSelector/Modes/MostAttackDamage.h`
+- [x] `Wrappers/TargetSelector/Modes/NearMouse.h`
+- [x] `Wrappers/TargetSelector/Modes/Priority.h`
+- [x] `Wrappers/TargetSelector/Modes/PriorityCategory.h`
+- [x] `Wrappers/TargetSelector/Modes/Weight.h`
+- [x] `Wrappers/TargetSelector/Modes/WeightItemWrapper.h`
+- [x] `Wrappers/TargetSelector/Modes/Weights/AbilityPower.h`
+- [x] `Wrappers/TargetSelector/Modes/Weights/Aggro.h`
+- [x] `Wrappers/TargetSelector/Modes/Weights/AttackDamage.h`
+- [x] `Wrappers/TargetSelector/Modes/Weights/CrowdControl.h`
 - [ ] `Wrappers/TargetSelector/Modes/Weights/FocusMe.h`
 - [ ] `Wrappers/TargetSelector/Modes/Weights/Gold.h`
-- [ ] `Wrappers/TargetSelector/Modes/Weights/Killable.h`
+- [x] `Wrappers/TargetSelector/Modes/Weights/Killable.h`
 - [ ] `Wrappers/TargetSelector/Modes/Weights/LowHealth.h`
 - [ ] `Wrappers/TargetSelector/Modes/Weights/LowResists.h`
 - [ ] `Wrappers/TargetSelector/Modes/Weights/ShortDistanceCursor.h`
@@ -411,38 +483,46 @@ Do these in order. Each item unlocks TODOs above it depends on.
    - `Spell(SpellSlot::Q, loadFromGame=true)` now fills `Range`, `Width`, and `Speed` from native data and falls back to `SpellDatabase` if native data is missing.
    - IDA 13339 confirms the `SPELLPARAM_CASTRADIUS` enum value, but not a stable direct float field. `CastRadius()` intentionally returns 0 until that getter path is pinned; `Spell.h` uses database radius fallback.
 
-3. [SDK] Port Math foundation before higher wrappers.
-   - `Math/Geometry.h`
-   - `Math/ConvexHull.h`
-   - `Math/Prediction/GamePath.h`
-   - `Math/Prediction/Movement.h`
-   - `Math/Prediction/Health.h`
-   - Review `Math/Collision.h`
-   - This unlocks `Spell::GetPrediction`, `Spell::GetCollision`, skillshot hit prediction, and health prediction TODOs.
+3. [x] Wire `Spell.h` into the newly ported Math backends.
+   - `Spell::GetPrediction` calls `SDK::Prediction::GetPrediction(input)`.
+   - `Spell::GetCollision` calls `SDK::Collision::GetCollision`.
+   - `Spell::GetHealthPrediction` calls `SDK::HealthPrediction`.
+   - `Spell::GetDamage` calls `SDK::Damage::GetSpellDamage`.
+   - Keep EzrealSemiPlugin as the first runtime probe for line prediction/collision.
 
-4. [SDK] Port `TargetSelector`.
-   - Start with base selector and simple modes: `Closest`, `LeastHealth`, `NearMouse`.
-   - Add weight modes after Damage and stats are ready.
+4. [x] Cleanup Math/public surface.
+   - Explicit `SDK.h` includes added for `Math/Prediction.h`, `Math/HealthPrediction.h`, `Math/Geometry.h`, `Math/ConvexHull.h`, and `Math/Collision.h`.
+   - `GamePath::PathTracker` was moved out of `Prediction/Movement.h`; `Prediction/GamePath.h` is now the public source and is included by `Math/Prediction.h`.
+   - Runtime-test line collision minion/hero, Yasuo Wind Wall, Samira W, Mel W, AoE circle/cone/line, and HealthPrediction timing was reported OK.
+   - Only rework `ConvexHull` algorithm if deterministic source-level parity becomes necessary.
+
+5. [SDK] Finish `TargetSelector`.
+   - Existing tree is present, but still needs `SDK.h` exposure, missing weight modes, and runtime selection validation.
+   - Add missing weights: `FocusMe`, `Gold`, `LowHealth`, `LowResists`, `ShortDistanceCursor`, `ShortDistancePlayer`, `TeamFocus`.
    - This unlocks `Spell::GetTarget` and common champion script usage.
 
-5. [SDK] Finish Damage wrapper parity.
-   - Verify `DamageLibrary`, `DamagePassives`, `DamageMastery`, champion data, and required unit stat accessors.
-   - This unlocks `Spell::GetDamage`, `Spell::CanKill`, and TargetSelector killable/casts-to-kill modes.
+6. [x] Finish Damage wrapper parity.
+   - Locke data/passive, CDragon item/rune static databases, `SDK::Damage` public overloads, spell-stage damage type routing, rune modifiers, and `BonusHealth` scaling are wired.
+   - Build is clean and `Spell::GetDamage` / `Spell::CanKill` route through the updated damage wrapper.
+   - TargetSelector killable/casts-to-kill can now be wired.
+   - Active item cast/cooldown wrappers remain part of item wrapper parity, not Damage wrapper parity.
 
-6. [SDK] Finish Spell tracker special cases.
+7. [SDK] Finish Spell tracker special cases.
    - Port `Wrappers/Spells/Tracker/Skillshots/_ZiggsR.h`.
    - Add a read-only tracker debug plugin showing active skillshots and detection source.
    - This validates `GameObject.OnCreate` + `MissileClient.OnCreate` matching EnsoulSharp.SDK.
 
-7. [SDK] Port `Orbwalking` only after TargetSelector, AutoAttack, Cursor, and attack timing are stable.
-   - Start read-only.
-   - Add movement/click issuing behind a safety toggle.
+8. [SDK] Finish `Orbwalking` only after TargetSelector, AutoAttack, Cursor, and attack timing are stable.
+   - Files exist, but Orbwalking is still not complete.
+   - Keep read-only/runtime validation first.
+   - Gate movement/click issuing behind a safety toggle.
 
-8. [SDK/DATA] Port `Wrappers/Items.h`, `Wrappers/Map.h`, and data generation/copy.
+9. [SDK/DATA] Port `Wrappers/Items.h`, `Wrappers/Map.h`, and data generation/copy.
+   - Item/rune data generation from CDragon is complete; keep the generator as source of truth when Riot data updates.
    - Use current `Core/Map.h` backend for map facade.
    - Reverse item cooldown/charges/cast only if needed by public API.
 
-9. [SDK] Review Events and Utils member-by-member.
+10. [SDK] Review Events and Utils member-by-member.
    - Close `Turret`, `Stealth`, `Teleport`, `DelayAction`, `Minion`, `Jungle`, `Cursor`, and `Render` parity gaps.
 
 After each item:

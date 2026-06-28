@@ -18,7 +18,7 @@ public:
     const char* GetInternalId() const override { return "utility.attack_range_draw_test"; }
     const char* GetAuthor() const override { return "NightSharp"; }
     PluginCategory GetCategory() const override { return PluginCategory::Utility; }
-    bool AutoLoadByDefault() const override { return true; }
+    bool AutoLoadByDefault() const override { return false; }
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {

@@ -222,8 +222,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
 
     // Heartsteel (3084) — Colossal Consumption charge attack
     if (source.HasItem(3084) && source.HasBuff("intothefray")) {
-        // Note: BonusHealth not available, using MaxHealth as approximation
-        out.Physical += 100.0f + 0.10f * source.MaxHealth();
+        out.Physical += 100.0f + 0.10f * source.BonusHealth();
     }
 
     // Hullbreaker (3181) — Enhanced 5th attack: 140% base AD physical
@@ -773,6 +772,18 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Magical += 0.05f * missingHp;
             }
             break;
+        case "Locke"_h: {
+            // P "Silver Stake": magic on-hit damage, increased by target
+            // missing health. CDragon latest: MinOnHitDamage 5-40 + 10% AP,
+            // MaxOnHitDamage 10-80 + 20% AP.
+            const float minDamage = Lerp18(5.0f, 40.0f, source) + 0.10f * source.AP();
+            const float maxDamage = Lerp18(10.0f, 80.0f, source) + 0.20f * source.AP();
+            const float missingRatio = target.MaxHealth() > 0.0f
+                ? std::clamp((target.MaxHealth() - target.Health()) / target.MaxHealth(), 0.0f, 1.0f)
+                : 0.0f;
+            out.Magical += minDamage + (maxDamage - minDamage) * missingRatio;
+            break;
+        }
     }
 
     return out;

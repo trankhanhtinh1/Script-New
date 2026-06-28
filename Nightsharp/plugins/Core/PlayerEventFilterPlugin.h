@@ -21,7 +21,7 @@ public:
     const char* GetInternalId() const override { return "core.player_event_filter"; }
     const char* GetAuthor() const override { return "NightSharp"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
-    bool AutoLoadByDefault() const override { return true; }
+    bool AutoLoadByDefault() const override { return false; }
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {
@@ -194,7 +194,7 @@ private:
         m_menu = new Menu(GetInternalId(), "Player Event Filter", true);
         auto* settings = m_menu->AddSubMenu(new Menu("settings", "Settings"));
         m_enabledMenu = settings->Add(new MenuBool("enabled", "Enabled", true));
-        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write player event log", true));
+        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write player event log", false));
         settings->Add(new MenuButton(
             "resetCounters",
             "Reset counters",
@@ -228,7 +228,7 @@ private:
     }
 
     bool WriteLog() const {
-        return !m_writeLogMenu || m_writeLogMenu->Value;
+        return m_writeLogMenu && m_writeLogMenu->Value;
     }
 
     static void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -778,10 +778,16 @@ private:
             "OnMissileDelete", args, s_instance->m_missileDelReceived, s_instance->m_missileDelLocal);
     }
     static void OnRawDamage(const ::Core::Events::RawEventArgs& raw) {
+        if (!SDK::Events::IsDeliveryEnabled()) {
+            return;
+        }
         if (s_instance) s_instance->HandleRawProbe(
             "OnDamage", raw, s_instance->m_damageReceived, s_instance->m_damageLocal);
     }
     static void OnRawFinishCast(const ::Core::Events::RawEventArgs& raw) {
+        if (!SDK::Events::IsDeliveryEnabled()) {
+            return;
+        }
         if (s_instance) s_instance->HandleRawProbe(
             "OnFinishCast", raw, s_instance->m_finishCastReceived, s_instance->m_finishCastLocal);
     }
