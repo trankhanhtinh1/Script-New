@@ -16,6 +16,13 @@
 #include <cstdint>
 #include <random>
 #include <vector>
+#include <fstream>
+#include <string>
+
+inline void LogOrb(const std::string& msg) {
+    std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+    os << "[Tick: " << SDK::Variables::TickCount() << "] " << msg << "\n";
+}
 
 namespace SDK {
 
@@ -145,8 +152,12 @@ public:
             {
                 NS_PROFILE("orb.CoreControl.IssueAttack");
                 if (CoreControl::IssueAttack(gTarget.Address(), gTarget.Position())) {
+                    LogOrb("ACTION: IssueAttack (SUCCESS) -> Target: " + gTarget.CharacterName());
                     LastAutoAttackCommandTick = Variables::TickCount();
+                    LastAutoAttackTick = Variables::TickCount(); // Fallback to prevent spam loop
                     LastTarget = gTarget;
+                } else {
+                    LogOrb("ACTION: IssueAttack (FAILED)");
                 }
             }
 
@@ -302,6 +313,7 @@ public:
         InvokeAction(eventArgs);
 
         if (eventArgs.Process) {
+            LogOrb("ACTION: Move (SUCCESS) -> Position: " + std::to_string(eventArgs.Position.x) + ", " + std::to_string(eventArgs.Position.z));
             NS_PROFILE("orb.CoreControl.IssueMove");
             CoreControl::IssueMove(eventArgs.Position);
             LastMovementOrderTick = Variables::TickCount();

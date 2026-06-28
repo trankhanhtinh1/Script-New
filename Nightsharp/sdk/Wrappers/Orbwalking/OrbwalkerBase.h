@@ -66,12 +66,18 @@ public:
         if (value) {
             Events::hook.OnProcessSpell += &OnProcessSpellHandler;
             Events::hook.OnDoCast += &OnDoCastHandler;
+            Events::hook.OnPlayAnimation += &OnPlayAnimationHandler;
+            Events::hook.OnProcessCastSpell += &OnProcessCastSpellHandler;
+            Events::hook.OnMissileCreate += &OnMissileCreateHandler;
             Events::hook.OnBuffAdd += &OnBuffAddHandler;
             Events::hook.OnStopCast += &OnStopCastHandler;
             Events::hook.OnUpdate += &OnGameUpdateHandler;
         } else {
             Events::hook.OnProcessSpell -= &OnProcessSpellHandler;
             Events::hook.OnDoCast -= &OnDoCastHandler;
+            Events::hook.OnPlayAnimation -= &OnPlayAnimationHandler;
+            Events::hook.OnProcessCastSpell -= &OnProcessCastSpellHandler;
+            Events::hook.OnMissileCreate -= &OnMissileCreateHandler;
             Events::hook.OnBuffAdd -= &OnBuffAddHandler;
             Events::hook.OnStopCast -= &OnStopCastHandler;
             Events::hook.OnUpdate -= &OnGameUpdateHandler;
@@ -114,24 +120,29 @@ public:
     bool CanAttack() { return CanAttack(0.0f); }
 
     virtual bool CanAttack(float extraWindup) {
-        return Variables::TickCount() + (Game::Ping() / 2) + 25
-               >= LastAutoAttackTick
-                  + static_cast<int>(FrameCache().attackDelay * 1000.0f)
-                  + static_cast<int>(extraWindup);
+        int cd = static_cast<int>(FrameCache().attackDelay * 1000.0f);
+        int required = LastAutoAttackTick + cd + static_cast<int>(extraWindup);
+        bool res = Variables::TickCount() + (Game::Ping() / 2) + 25 >= required;
+
+        if (res && Variables::TickCount() >= LastAutoAttackTick + 100 && Variables::TickCount() < LastAutoAttackTick + 500) {
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << Variables::TickCount() << "] CanAttack() -> TRUE | attackDelay: " << FrameCache().attackDelay << "s (" << cd << "ms) | LastAttackTick: " << LastAutoAttackTick << " | extraWindup: " << extraWindup << "\n";
+        }
+        return res;
     }
 
     bool CanMove() { return CanMove(0.0f, false); }
 
     virtual bool CanMove(float extraWindup, bool disableMissileCheck) {
-        if (MissileLaunched && !disableMissileCheck) {
-            return true;
+        auto player = GameObjects::Player();
+        if (!player.IsValid()) {
+            return false;
         }
-        const auto player = GameObjects::Player();
-        return !Utils::AutoAttack::CanCancelAutoAttack(player)
-               || (Variables::TickCount() + (Game::Ping() / 2)
-                   >= LastAutoAttackTick
-                      + static_cast<int>(FrameCache().attackWindup * 1000.0f)
-                      + static_cast<int>(extraWindup));
+
+        int windupMs = static_cast<int>(FrameCache().attackWindup * 1000.0f);
+        int requiredTick = LastAutoAttackTick + windupMs + static_cast<int>(extraWindup) + (Game::Ping() / 2) + 25; 
+
+        return !Utils::AutoAttack::CanCancelAutoAttack(player) || (Variables::TickCount() >= requiredTick);
     }
 
     bool CanOrbwalk(const AttackableUnit& target, float range = 0.0f) {
@@ -170,10 +181,17 @@ public:
                 inRange = target.IsValid() && Utils::AutoAttack::InAutoAttackRange(target);
             }
             if (inRange) {
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "[Tick: " << Variables::TickCount() << "] CHECK: CanAttack() -> TRUE, InRange -> TRUE. Calling Attack().\n";
                 Attack(target);
+            } else {
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "[Tick: " << Variables::TickCount() << "] CHECK: CanAttack() -> TRUE, but No Target In Range.\n";
             }
         }
         if (CanMove() && MovementState) {
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << Variables::TickCount() << "] CHECK: CanMove() -> TRUE. Calling Move().\n";
             Move(forcedPosition.IsValid() && !forcedPosition.IsZero()
                      ? forcedPosition
                      : FrameCache().cursorPos);
@@ -274,16 +292,55 @@ public:
     static void OnProcessSpellHandler(const Events::ProcessSpellEventArgs& args) {
         auto* self = Ptr();
         if (!self || !self->enabled_) return;
+
+        std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+        os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnProcessSpell | SenderNetId: " << args.Sender.NetworkId << " | PlayerNetId: " << GameObjects::Player().NetworkId() << " | Name: '" << args.SpellName << "' | TargetId: " << args.TargetNetworkId << " | Slot: " << args.Slot << " | IsAuto: " << (args.IsAutoAttack ? "TRUE" : "FALSE") << "\n";
+
         if (!args.Sender.IsValid()
             || args.Sender.NetworkId != GameObjects::Player().NetworkId()) {
             return;
         }
+
         self->OnProcessSpellDelayed(args);
+    }
+
+    static void OnPlayAnimationHandler(const Events::PlayAnimationEventArgs& args) {
+        auto* self = Ptr();
+        if (!self || !self->enabled_) return;
+
+        if (args.Sender.NetworkId == GameObjects::Player().NetworkId()) {
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << Variables::TickCount() << "] EVENT: OnPlayAnimation | Name: '" << args.Animation << "'\n";
+        }
+    }
+
+    static void OnProcessCastSpellHandler(const Events::CastSpellEventArgs& args) {
+        auto* self = Ptr();
+        if (!self || !self->enabled_) return;
+
+        if (args.Sender.NetworkId == GameObjects::Player().NetworkId()) {
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnProcessCastSpell | SenderNetId: " << args.Sender.NetworkId << " | Slot: " << args.Slot << "\n";
+        }
+    }
+
+    static void OnMissileCreateHandler(const Events::ObjectEventArgs& args) {
+        auto* self = Ptr();
+        if (!self || !self->enabled_) return;
+
+        if (args.Source.NetworkId == GameObjects::Player().NetworkId()) {
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << Variables::TickCount() << "] EVENT: OnMissileCreate | SpellName: '" << args.SpellName << "' | MissileName: '" << args.MissileName << "'\n";
+        }
     }
 
     static void OnDoCastHandler(const Events::ProcessSpellEventArgs& args) {
         auto* self = Ptr();
         if (!self || !self->enabled_) return;
+
+        std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+        os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnDoCast | SenderNetId: " << args.Sender.NetworkId << " | PlayerNetId: " << GameObjects::Player().NetworkId() << " | Name: '" << args.SpellName << "' | Slot: " << args.Slot << " | IsAuto: " << (args.IsAutoAttack ? "TRUE" : "FALSE") << "\n";
+
         if (!args.Sender.IsValid()
             || args.Sender.NetworkId != GameObjects::Player().NetworkId()) {
             return;
@@ -300,28 +357,21 @@ public:
             return;
         }
 
+        std::ofstream os2("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+        os2 << "[Tick: " << Variables::TickCount() << "] EVENT: OnDoCast (Windup Finished)\n";
+
+        self->MissileLaunched = true;
+        self->LastMovementOrderTick = 0;
+        ++self->TotalAutoAttacks;
+
         auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
-        if (target.IsValid()) {
-            self->LastAutoAttackTick = Variables::TickCount() - (Game::Ping() / 2);
-            self->MissileLaunched = false;
-            self->LastMovementOrderTick = 0;
-            ++self->TotalAutoAttacks;
 
-            if (!target.Compare(self->LastTarget)) {
-                OrbwalkingActionArgs switchArgs = {};
-                switchArgs.Target = target;
-                switchArgs.Type = OrbwalkingType::TargetSwitch;
-                self->InvokeAction(switchArgs);
-                self->LastTarget = target;
-            }
-
-            OrbwalkingActionArgs attackArgs = {};
-            attackArgs.Target = target;
-            attackArgs.Sender = sender;
-            attackArgs.Type = OrbwalkingType::OnAttack;
-            self->InvokeAction(attackArgs);
-        }
+        OrbwalkingActionArgs eventArgs = {};
+        eventArgs.Target = target;
+        eventArgs.Sender = sender;
+        eventArgs.Type = OrbwalkingType::AfterAttack;
+        self->InvokeAction(eventArgs);
     }
 
     static void OnBuffAddHandler(const Events::BuffEventArgs& args) {
@@ -358,17 +408,31 @@ public:
             return;
         }
 
-        MissileLaunched = true;
-
         auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
         const AIBaseClient sender(args.Sender.Ptr);
 
-        OrbwalkingActionArgs eventArgs = {};
-        eventArgs.Target = target;
-        eventArgs.Sender = sender;
-        eventArgs.Type = OrbwalkingType::AfterAttack;
-        InvokeAction(eventArgs);
+        if (target.IsValid()) {
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << Variables::TickCount() << "] EVENT: OnProcessSpell (Windup Started)\n";
+
+            LastAutoAttackTick = Variables::TickCount() - (Game::Ping() / 2);
+            MissileLaunched = false;
+
+            if (!target.Compare(LastTarget)) {
+                OrbwalkingActionArgs switchArgs = {};
+                switchArgs.Target = target;
+                switchArgs.Type = OrbwalkingType::TargetSwitch;
+                InvokeAction(switchArgs);
+                LastTarget = target;
+            }
+
+            OrbwalkingActionArgs attackArgs = {};
+            attackArgs.Target = target;
+            attackArgs.Sender = sender;
+            attackArgs.Type = OrbwalkingType::OnAttack;
+            InvokeAction(attackArgs);
+        }
     }
 };
 

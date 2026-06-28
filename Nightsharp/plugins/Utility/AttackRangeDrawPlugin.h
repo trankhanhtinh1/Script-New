@@ -64,20 +64,30 @@ private:
                                 float radius,
                                 std::uint32_t color,
                                 float thickness) {
-        Vec2 screenCenter{};
-        if (!SDK::Drawing::WorldToScreen(center, screenCenter)) {
-            return;
-        }
-
-        float screenRadius = radius;
-        Vec2 screenEdge{};
-        const Vec3 edge{ center.x + radius, center.y, center.z };
-        if (SDK::Drawing::WorldToScreen(edge, screenEdge)) {
-            screenRadius = std::max(1.0f, screenCenter.Distance(screenEdge));
-        }
-
-        if (std::isfinite(screenRadius) && screenRadius > 0.0f && screenRadius < 10000.0f) {
-            SDK::Drawing::DrawCircle(screenCenter, screenRadius, thickness, color, 96);
+        const int segments = 60;
+        const float step = (2.0f * 3.14159265358979323846f) / segments;
+        
+        Vec2 lastScreen{};
+        bool hasLast = false;
+        
+        for (int i = 0; i <= segments; ++i) {
+            float angle = i * step;
+            Vec3 point = {
+                center.x + radius * std::cos(angle),
+                center.y,
+                center.z + radius * std::sin(angle)
+            };
+            
+            Vec2 screenPoint{};
+            if (SDK::Drawing::WorldToScreen(point, screenPoint)) {
+                if (hasLast) {
+                    SDK::Drawing::DrawLine(lastScreen, screenPoint, thickness, color);
+                }
+                lastScreen = screenPoint;
+                hasLast = true;
+            } else {
+                hasLast = false;
+            }
         }
     }
 

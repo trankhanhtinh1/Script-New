@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <fstream>
 #include <vector>
 
 namespace SDK {
@@ -146,7 +147,11 @@ public:
         bool ignoreShields = true,
         const Vector3& from = Vector3())
     {
+        std::ofstream tsLog("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+        tsLog << "  [TS] Eval: " << hero.CharacterName() << "\n";
+
         if (!Extensions::IsValidTarget(hero)) {
+            tsLog << "    -> Failed Extensions::IsValidTarget\n";
             return false;
         }
 
@@ -154,15 +159,26 @@ public:
             const Vector3 origin = from.IsZero()
                 ? (GameObjects::Player().IsValid() ? GameObjects::Player().Position() : Vector3())
                 : from;
-            const float effectiveRange = range <= 0.0f ? Utils::AutoAttack::GetRealAutoAttackRange(hero) : range;
+            const float effectiveRange = range <= 0.0f ? Utils::AutoAttack::GetRealAutoAttackRange(GameObjects::Player(), hero) : range;
+            const float distSqr = origin.DistanceSqr2D(hero.Position());
+
+            tsLog << "    -> DistSqr: " << distSqr << " EffRangeSqr: " << (effectiveRange * effectiveRange) << "\n";
 
             if (origin.IsValid() && !origin.IsZero() &&
-                origin.DistanceSqr2D(hero.Position()) >= effectiveRange * effectiveRange) {
+                distSqr >= effectiveRange * effectiveRange) {
+                tsLog << "    -> Failed Distance Check\n";
                 return false;
             }
         }
 
-        return !Utils::Invulnerable::Check(hero, damageType, ignoreShields);
+        bool invuln = Utils::Invulnerable::Check(hero, damageType, ignoreShields);
+        if (invuln) {
+            tsLog << "    -> Failed Invulnerable Check\n";
+            return false;
+        }
+
+        tsLog << "    -> SUCCESS\n";
+        return true;
     }
 
 private:
