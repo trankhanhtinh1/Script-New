@@ -8,6 +8,7 @@
 #include "Vector.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
+#include "../SectionProfiler.h"
 
 #include <Windows.h>
 #include <cmath>
@@ -248,6 +249,7 @@ inline float GetAttackDelay() {
 }
 
 inline float GetAttackDelay(uintptr_t object) {
+    NS_PROFILE("cc.GetAttackDelay(obj)");
     const auto& ctx = CoreRuntime::GetContext();
     if (!Globals::IsValidPtr(object) || object == ctx.localPlayer) {
         return GetAttackDelay();
@@ -268,6 +270,7 @@ inline float GetAttackWindup() {
 }
 
 inline float GetAttackWindup(uintptr_t object) {
+    NS_PROFILE("cc.GetAttackWindup(obj)");
     const auto& ctx = CoreRuntime::GetContext();
     if (!Globals::IsValidPtr(object) || object == ctx.localPlayer) {
         return GetAttackWindup();
@@ -507,24 +510,29 @@ inline bool AttackMoveTo(const Vec3& position, bool triggerEvent = true) {
 }
 
 inline bool IssueMove(const Vec3& position, bool triggerEvent = true) {
+    NS_PROFILE("cc.IssueMove");
     return MoveToPos(position, triggerEvent);
 }
 
 inline bool IssueAttackMove(const Vec3& position, bool triggerEvent = true) {
+    NS_PROFILE("cc.IssueAttackMove");
     return AttackMoveTo(position, triggerEvent);
 }
 
 inline bool IssueAttack(uintptr_t target,
                         const Vec3& fallbackPosition,
                         bool triggerEvent = true) {
+    NS_PROFILE("cc.IssueAttack");
     return AttackObject(target, fallbackPosition, triggerEvent);
 }
 
 inline bool HoldPosition(bool triggerEvent = true) {
+    NS_PROFILE("cc.HoldPosition");
     return IssueOrder(Hold, LocalPlayerPosition(), 0, triggerEvent);
 }
 
 inline bool StopMoving(bool triggerEvent = true) {
+    NS_PROFILE("cc.StopMoving");
     return IssueOrder(Stop, LocalPlayerPosition(), 0, triggerEvent);
 }
 

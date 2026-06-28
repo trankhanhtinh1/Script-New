@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <vector>
+#include "../SectionProfiler.h"
 
 namespace CoreAiManager {
 
@@ -76,7 +77,22 @@ inline bool IsUsablePosition(const Vec3& value) {
     return value.IsValid() && !value.IsZero();
 }
 
+namespace detail {
+    inline uintptr_t ResolveManagerSeh(uintptr_t object, uintptr_t function) {
+        using GetAiManagerFn = uintptr_t(__fastcall*)(uintptr_t);
+        __try {
+            const uintptr_t manager =
+                reinterpret_cast<GetAiManagerFn>(function)(object);
+            return Globals::IsValidPtr(manager) ? manager : 0;
+        }
+        __except (1) {
+            return 0;
+        }
+    }
+}
+
 inline uintptr_t ResolveManager(uintptr_t object) {
+    NS_PROFILE("ai.ResolveManager");
     if (!Globals::IsValidPtr(object)) {
         return 0;
     }
@@ -93,15 +109,7 @@ inline uintptr_t ResolveManager(uintptr_t object) {
         return 0;
     }
 
-    using GetAiManagerFn = uintptr_t(__fastcall*)(uintptr_t);
-    __try {
-        const uintptr_t manager =
-            reinterpret_cast<GetAiManagerFn>(function)(object);
-        return Globals::IsValidPtr(manager) ? manager : 0;
-    }
-    __except (1) {
-        return 0;
-    }
+    return detail::ResolveManagerSeh(object, function);
 }
 
 inline ManagerRef Get(uintptr_t object) {
@@ -150,6 +158,7 @@ inline Vec3 GetPathStart(uintptr_t object) {
 }
 
 inline Vec3 GetServerPosition(uintptr_t object) {
+    NS_PROFILE("ai.GetServerPosition");
     Vec3 position = Get(object).Read<Vec3>(Offset::AiManager::ServerPos);
     if (IsUsablePosition(position)) {
         return position;
@@ -167,6 +176,7 @@ inline Vec3 GetMoveVector(uintptr_t object) {
 }
 
 inline int CopyWaypoints(uintptr_t object, Vec3* out, int maxOut) {
+    NS_PROFILE("ai.CopyWaypoints");
     if (!out || maxOut <= 0) {
         return 0;
     }
@@ -330,6 +340,7 @@ inline float GetDashDuration(uintptr_t object) {
 }
 
 inline int CopyPath(uintptr_t object, Vec3* out, int maxOut) {
+    NS_PROFILE("ai.CopyPath");
     if (!out || maxOut <= 0 || !Globals::IsValidPtr(object)) {
         return 0;
     }

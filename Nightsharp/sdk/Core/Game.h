@@ -120,6 +120,10 @@ using WndProcHandler = void(*)(WndEventArgs&);
 using SendChatHandler = void(*)(GameSendChatEventArgs&);
 using DisplayChatHandler = void(*)(GameDisplayChatEventArgs&);
 
+// Forward declarations (defined below) — needed for circular include safety
+inline bool AddOnWndProc(WndProcHandler handler);
+inline bool RemoveOnWndProc(WndProcHandler handler);
+
 namespace detail {
     inline HandlerList<UpdateHandler> UpdateHandlers;
     inline HandlerList<WndProcHandler> WndProcHandlers;
@@ -128,6 +132,30 @@ namespace detail {
     inline bool UpdateBridgeInstalled = false;
     inline InputDebugState InputDebug = {};
 
+    // Chat-open state tracked from WndProc messages (replaces per-frame GetAsyncKeyState polling)
+    inline bool ChatOpenByKeyboard = false;
+    inline DWORD ChatLastToggleTick = 0;
+    inline bool ChatWndProcInstalled = false;
+
+    inline void ChatWndProcHandler(WndEventArgs& args) {
+        if (args.Msg == WM_KEYDOWN) {
+            const DWORD now = GetTickCount();
+            if (args.WParam == VK_RETURN && now - ChatLastToggleTick > 300) {
+                ChatOpenByKeyboard = !ChatOpenByKeyboard;
+                ::CoreGame::g_chatOpenByKeyboard = ChatOpenByKeyboard;
+                ChatLastToggleTick = now;
+            }
+            if (args.WParam == VK_ESCAPE) {
+                ChatOpenByKeyboard = false;
+                ::CoreGame::g_chatOpenByKeyboard = false;
+            }
+        }
+        if (args.Msg == WM_RBUTTONDOWN && ChatOpenByKeyboard) {
+            ChatOpenByKeyboard = false;
+            ::CoreGame::g_chatOpenByKeyboard = false;
+        }
+    }
+ 
     inline bool IsFiniteFloat(float value) {
         return std::isfinite(value);
     }
@@ -590,26 +618,14 @@ namespace detail {
     }
 
     inline bool IsChatOpenByKeyboard() {
-        static bool chatOpen = false;
-        static DWORD lastToggleTick = 0;
-
+        if (!detail::ChatWndProcInstalled) {
+            AddOnWndProc(&detail::ChatWndProcHandler);
+            detail::ChatWndProcInstalled = true;
+        }
         if (!IsGameFocused()) {
             return false;
         }
-
-        const DWORD now = GetTickCount();
-        if ((GetAsyncKeyState(VK_RETURN) & 0x8000) != 0) {
-            if (now - lastToggleTick > 300) {
-                chatOpen = !chatOpen;
-                lastToggleTick = now;
-            }
-        }
-
-        if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0 ||
-            (chatOpen && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0)) {
-            chatOpen = false;
-        }
-        return chatOpen;
+        return detail::ChatOpenByKeyboard;
     }
 
     inline bool IsShopOpen() {
@@ -694,6 +710,10 @@ inline Vec3 CursorPosRaw() {
 }
 
 inline Vec3 CursorPos() {
+    return CursorPosRaw();
+}
+
+inline Vec3 CursorPosition() {
     return CursorPosRaw();
 }
 

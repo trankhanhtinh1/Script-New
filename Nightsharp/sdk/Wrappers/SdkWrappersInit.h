@@ -6,7 +6,8 @@
 
 namespace SDK::SdkWrappers {
 
-inline Menu* g_rootMenu = nullptr;
+inline Menu* g_tsRootMenu = nullptr;
+inline Menu* g_orbRootMenu = nullptr;
 inline TargetSelector* g_targetSelector = nullptr;
 inline Orbwalker* g_orbwalker = nullptr;
 inline bool g_initialized = false;
@@ -19,12 +20,13 @@ inline void Initialize() {
     if (g_initialized) return;
     g_initialized = true;
 
-    g_rootMenu = new Menu("sdksystem", RootMenuName(), true);
+    g_tsRootMenu = new Menu("targetselector", "Target Selector", true);
+    g_targetSelector = new TargetSelector(g_tsRootMenu);
+    g_tsRootMenu->Attach();
 
-    g_targetSelector = new TargetSelector(g_rootMenu);
-    g_orbwalker = new Orbwalker(g_rootMenu);
-
-    g_rootMenu->Attach();
+    g_orbRootMenu = new Menu("orbwalker", "Orbwalker", true);
+    g_orbwalker = new Orbwalker(g_orbRootMenu);
+    g_orbRootMenu->Attach();
 }
 
 inline void Shutdown() {
@@ -34,10 +36,16 @@ inline void Shutdown() {
         g_orbwalker->SetEnabled(false);
     }
 
-    if (g_rootMenu) {
-        MenuManager::Instance().Remove(g_rootMenu);
-        delete g_rootMenu;
-        g_rootMenu = nullptr;
+    if (g_orbRootMenu) {
+        MenuManager::Instance().Remove(g_orbRootMenu);
+        delete g_orbRootMenu;
+        g_orbRootMenu = nullptr;
+    }
+
+    if (g_tsRootMenu) {
+        MenuManager::Instance().Remove(g_tsRootMenu);
+        delete g_tsRootMenu;
+        g_tsRootMenu = nullptr;
     }
 
     delete g_orbwalker;

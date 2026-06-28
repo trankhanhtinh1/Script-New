@@ -420,11 +420,13 @@ inline void ProcessHeroes(std::vector<AIBaseClient>& result,
         AIBaseClient heroUnit(hero.Handle());
         PredictionInput heroInput = input;
         heroInput.Unit = heroUnit;
-        const Vector3 predictedPosition =
-            Prediction::Movement::GetPrediction(heroInput, false, false).GetUnitPosition();
-        const float radius = input.Radius + hero.BoundingRadius() + 50.0f;
+        const auto prediction = Prediction::Movement::GetPrediction(heroInput, false, false);
+        const float radius = input.Radius + 50.0f + hero.BoundingRadius();
 
-        if (IsPointNearProjection(position2D, from2D, predictedPosition.To2D(), radius)) {
+        if (DistanceSquaredToSegmentOnly(
+                prediction.GetUnitPosition().To2D(),
+                from2D,
+                position2D) <= radius * radius) {
             AddIfUnique(result, hero);
         }
     }
@@ -439,8 +441,6 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
     const Vector3 from = input.ResolveFrom();
     const Vec2 from2D = from.To2D();
     const Vec2 position2D = position.To2D();
-    const Vector3 inputUnitServerPosition = ServerPositionOrPosition(input.Unit);
-    const float inputUnitRadius = UnitBoundingRadius(input.Unit);
 
     for (const auto& minion : minions) {
         if (!IsValidCollisionTarget(minion, input, range)) {
@@ -448,69 +448,13 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
         }
 
         AIBaseClient minionUnit(minion.Handle());
-        const Vector3 minionServerPosition = ServerPositionOrPosition(minionUnit);
-        const float distanceFromSource = minionServerPosition.Distance(from);
-        const float closeRadius = minion.BoundingRadius() + inputUnitRadius;
-        const bool moving = minionUnit.IsMoving();
+        PredictionInput minionInput = input;
+        minionInput.Unit = minionUnit;
+        const auto minionPrediction = Prediction::Movement::GetPrediction(minionInput, false, false);
+        const float radius = input.Radius + static_cast<float>(stationaryPadding) + minion.BoundingRadius();
 
-        float travelTime = input.Delay;
-        if (std::abs(input.Speed - FLT_MAX) >= FLT_EPSILON && input.Speed > 0.0f) {
-            travelTime += distanceFromSource / input.Speed;
-        }
-
-        const float broadRadius =
-            input.Radius +
-            minion.BoundingRadius() +
-            75.0f +
-            (moving
-                ? std::max(0.0f, minionUnit.MoveSpeed()) * std::max(0.0f, travelTime)
-                : static_cast<float>(stationaryPadding));
-        const float broadRadiusSqr = broadRadius * broadRadius;
-        const bool canReachCastSegment =
-            DistanceSquaredToSegmentOnly(minionServerPosition.To2D(), from2D, position2D) <= broadRadiusSqr ||
-            minionServerPosition.DistanceSqr2D(from) <= broadRadiusSqr ||
-            minionServerPosition.DistanceSqr2D(position) <= broadRadiusSqr ||
-            (inputUnitServerPosition.IsValid() &&
-             !inputUnitServerPosition.IsZero() &&
-             minionServerPosition.DistanceSqr2D(inputUnitServerPosition) <= broadRadiusSqr);
-        if (!canReachCastSegment) {
-            continue;
-        }
-
-        if (WillDead(input, minionUnit, distanceFromSource)) {
-            continue;
-        }
-
-        if (distanceFromSource < closeRadius ||
-            minionServerPosition.Distance(position) < closeRadius ||
-            (inputUnitServerPosition.IsValid() &&
-             !inputUnitServerPosition.IsZero() &&
-             minionServerPosition.Distance(inputUnitServerPosition) < closeRadius)) {
-            AddIfUnique(result, minion);
-            continue;
-        }
-
-        Vector3 collisionPosition = minionServerPosition;
-        int padding = stationaryPadding;
-        if (moving) {
-            PredictionInput minionInput;
-            minionInput.Collision = false;
-            minionInput.Speed = input.Speed;
-            minionInput.Delay = input.Delay;
-            minionInput.Range = input.Range;
-            minionInput.From = from;
-            minionInput.RangeCheckFrom = input.ResolveRangeCheckFrom();
-            minionInput.Radius = input.Radius;
-            minionInput.Unit = minionUnit;
-            minionInput.Type = input.Type;
-            collisionPosition = Prediction::Movement::GetPrediction(minionInput).GetCastPosition();
-            padding = 50 + static_cast<int>(input.Radius);
-        }
-
-        const float radius =
-            input.Radius + static_cast<float>(padding) + minion.BoundingRadius();
         if (DistanceSquaredToSegmentOnly(
-                collisionPosition.To2D(),
+                minionPrediction.GetUnitPosition().To2D(),
                 from2D,
                 position2D) <= radius * radius) {
             AddIfUnique(result, minion);

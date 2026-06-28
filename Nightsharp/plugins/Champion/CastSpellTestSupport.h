@@ -138,9 +138,7 @@ protected:
     }
 
     static bool KeyDown(const MenuKeyBind* keyBind) {
-        return keyBind &&
-               keyBind->Key > 0 &&
-               (GetAsyncKeyState(keyBind->Key) & 0x8000) != 0;
+        return keyBind && keyBind->Active;
     }
 
     // Resolve the best enemy hero target near the cursor.
@@ -222,6 +220,7 @@ protected:
             ? maxRangeFromPlayer * maxRangeFromPlayer
             : (std::numeric_limits<float>::max)();
 
+        /*
         Appendf(
             "[%s] target-scan tick=%d heroes=%d player=0x%llX team=%u pos=%.1f %.1f %.1f cursorValid=%d cursor=%.1f %.1f %.1f hudTargetState=%u hudTargetIndex=0x%X maxPlayerRange=%.1f\r\n",
             DebugPrefix(),
@@ -239,16 +238,19 @@ protected:
             hudTargetState,
             hudTargetIndex,
             maxRangeFromPlayer);
+        */
 
         for (int i = 0; i < count; ++i) {
             const uintptr_t hero = heroes[i];
             if (!Globals::IsValidPtr(hero) || hero == player) {
+                /*
                 Appendf(
                     "[%s] target-candidate index=%d ptr=0x%llX skip=%s\r\n",
                     DebugPrefix(),
                     i,
                     static_cast<unsigned long long>(hero),
                     hero == player ? "local-player" : "invalid-pointer");
+                */
                 continue;
             }
 
@@ -266,6 +268,7 @@ protected:
             const Vec3 heroPos =
                 Globals::Read<Vec3>(hero + Offset::All::Position);
             if (!heroPos.IsValid() || heroPos.IsZero()) {
+                /*
                 Appendf(
                     "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=%u hp=%.1f pos=%.1f %.1f %.1f skip=invalid-position\r\n",
                     DebugPrefix(),
@@ -278,6 +281,7 @@ protected:
                     heroPos.x,
                     heroPos.y,
                     heroPos.z);
+                */
                 continue;
             }
 
@@ -285,6 +289,7 @@ protected:
             const float dzP = heroPos.z - playerPos.z;
             const float distFromPlayerSq = dxP * dxP + dzP * dzP;
             if (enforcePlayerRange && distFromPlayerSq > maxFromPlayerSq) {
+                /*
                 Appendf(
                     "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=%u hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f skip=out-of-test-range\r\n",
                     DebugPrefix(),
@@ -298,6 +303,7 @@ protected:
                     heroPos.y,
                     heroPos.z,
                     std::sqrt(distFromPlayerSq));
+                */
                 continue;
             }
 
@@ -324,6 +330,7 @@ protected:
                 bestOther = hero;
             }
 
+            /*
             Appendf(
                 "[%s] target-candidate index=%d ptr=0x%llX objIndex=0x%X net=%u team=%u enemy=%d hudMatch=%d deadRaw=%u hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f distCursor=%.1f\r\n",
                 DebugPrefix(),
@@ -341,6 +348,7 @@ protected:
                 heroPos.z,
                 std::sqrt(distFromPlayerSq),
                 cursorValid ? std::sqrt(score) : -1.0f);
+            */
         }
 
         // In a two-hero practice session, falling back to the only non-local
@@ -348,6 +356,7 @@ protected:
         // CanCastCheck still rejects an ally or otherwise illegal target.
         const uintptr_t selected =
             bestEnemy ? bestEnemy : (count <= 2 ? bestOther : 0);
+        /*
         Appendf(
             "[%s] target-selected ptr=0x%llX source=%s\r\n",
             DebugPrefix(),
@@ -355,6 +364,7 @@ protected:
             bestEnemy
                 ? (bestEnemyScore < 0.0f ? "hud-target-index" : "enemy-team")
                 : (selected ? "two-hero-fallback" : "none"));
+        */
         return selected;
     }
 
@@ -423,6 +433,7 @@ protected:
             }
         }
 
+        /*
         if (best) {
             Appendf(
                 "[%s] combo-target tick=%d ptr=0x%llX net=%u hp=%.1f distance=%.1f range=%.1f mouse=%.1f %.1f %.1f\r\n",
@@ -438,6 +449,7 @@ protected:
                 SDK::Game::CursorPos().y,
                 SDK::Game::CursorPos().z);
         }
+        */
         return best;
     }
 

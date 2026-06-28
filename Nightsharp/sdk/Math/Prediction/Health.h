@@ -290,7 +290,9 @@ inline float GetPredictionSimulated(const AIBaseClient& unit, int time) {
                     hitCount++;
                 }
 
-                tick += static_cast<int>(pd.AnimationTime);
+                int step = static_cast<int>(pd.AnimationTime);
+                if (step < 30) step = 30;
+                tick += step;
             } while (tick < endTime);
         }
 

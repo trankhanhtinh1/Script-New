@@ -13,6 +13,9 @@
 #include "../Core/CoreEvents.h"
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
+#include "../FpsDropDebug.h"
+#include "../SDK/Core/Game.h"
+#include "../SDK/UI/UI.h"
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -202,6 +205,15 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             InterlockedExchange(&g_shutdown, 1);
             return TRUE;
         }
+    }
+
+    // Dispatch to SDK WndProc subscribers (cursor, target selector, chat, plugins, etc.)
+    SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
+
+    // Dispatch key events to MenuKeyBind state machines (updates Active field)
+    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP) {
+        const bool down = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
+        SDK::UI::MenuManager::Instance().DispatchKey(static_cast<int>(wParam), down);
     }
 
     // Forward to original game WndProc
@@ -429,7 +441,10 @@ bool Install() {
     NightSharpDebug::Logf("[D3D11Hook] Waiting for game > 3s...");
 
     for (int i = 0; i < 240; ++i) {
-        if (g_shutdown) return true;
+        if (g_shutdown) {
+            Uninstall();
+            return true;
+        }
 
         CoreRuntime::RefreshReadState();
 
@@ -438,6 +453,10 @@ bool Install() {
                                   CoreRuntime::GetContext().gameTime);
             NightSharpDebug::Phase("d3d11hook-plugins");
             BootstrapPluginsSafe();
+            while (!g_shutdown) {
+                Sleep(250);
+            }
+            Uninstall();
             return true;
         }
         Sleep(500);
@@ -447,11 +466,16 @@ bool Install() {
     NightSharpDebug::Phase("d3d11hook-plugins-timeout");
     BootstrapPluginsSafe();
 
+    while (!g_shutdown) {
+        Sleep(250);
+    }
+    Uninstall();
     return true;
 }
 
 void Uninstall() {
     if (!g_active) return;
+    g_active = false;
 
     NightSharpDebug::Phase("d3d11hook-uninstall");
     NightSharpDebug::Logf("[D3D11Hook] Uninstalling...");
@@ -474,13 +498,20 @@ void Uninstall() {
     SafeRelease(g_pd3dContext);
     SafeRelease(g_pd3dDevice);
     g_pSwapChain = nullptr;
-    g_active = false;
 
     NightSharpDebug::Logf("[D3D11Hook] Uninstall complete");
 }
 
 bool IsActive() {
     return g_active;
+}
+
+void RequestShutdown() {
+    InterlockedExchange(&g_shutdown, 1);
+}
+
+bool IsShutdownRequested() {
+    return g_shutdown != 0;
 }
 
 } // namespace D3D11Hook

@@ -8,6 +8,7 @@
 #include "../../UI/UI.h"
 #include "../../Wrappers/Damages/Damage.h"
 #include "../../Utils/AutoAttack.h"
+#include "../../../FpsDropDebug.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -112,6 +113,7 @@ private:
     }
 
     std::vector<AIMinionClient> GetMinions(OrbwalkingMode mode) const {
+        NS_PROFILE("orb.GetMinions.total");
         const bool includeMinions = mode != OrbwalkingMode::Combo;
         const bool attackWards = MenuBool("attackWards");
         const bool attackClones = MenuBool("attackClones");
@@ -124,21 +126,25 @@ private:
         std::vector<AIMinionClient> cloneList;
         std::vector<AIMinionClient> wardList;
 
-        for (const auto& minion : GameObjects::EnemyMinions()) {
-            if (!IsValidUnit(minion)) continue;
+        {
+            NS_PROFILE("orb.GameObjects.EnemyMinions");
+            for (const auto& minion : GameObjects::EnemyMinions()) {
+                if (!IsValidUnit(minion)) continue;
 
-            const std::string baseName = minion.CharacterName();
+                const std::string baseName = minion.CharacterName();
 
-            if (includeMinions && minion.IsMinion()) {
-                minionList.push_back(minion);
-            } else if (attackSpecialMinions && IsSpecialMinion(baseName.c_str())) {
-                specialList.push_back(minion);
-            } else if (attackClones && IsClone(baseName.c_str())) {
-                cloneList.push_back(minion);
+                if (includeMinions && minion.IsMinion()) {
+                    minionList.push_back(minion);
+                } else if (attackSpecialMinions && IsSpecialMinion(baseName.c_str())) {
+                    specialList.push_back(minion);
+                } else if (attackClones && IsClone(baseName.c_str())) {
+                    cloneList.push_back(minion);
+                }
             }
         }
 
         if (includeMinions) {
+            NS_PROFILE("orb.GameObjects.Jungle");
             minionList = OrderEnemyMinions(minionList);
             std::vector<AIMinionClient> jungleList;
             for (const auto& j : GameObjects::Jungle()) {
@@ -154,6 +160,7 @@ private:
         }
 
         if (attackWards) {
+            NS_PROFILE("orb.GameObjects.EnemyWards");
             for (const auto& w : GameObjects::EnemyWards()) {
                 if (IsValidUnit(w)) {
                     wardList.push_back(w);
@@ -230,27 +237,39 @@ public:
     }
 
     AttackableUnit GetTarget(OrbwalkingMode mode) {
+        NS_PROFILE("orb.Selector.GetTarget.total");
         const auto player = GameObjects::Player();
         if (!player.IsValid()) return {};
 
         if ((mode == OrbwalkingMode::Hybrid || mode == OrbwalkingMode::LaneClear)
             && !MenuBool("prioritizeFarm")) {
-            auto target = TargetSelector::Instance()->GetTarget(-1.0f, DamageType::Physical);
+            AIHeroClient target;
+            {
+                NS_PROFILE("orb.TargetSelector.GetTarget");
+                target = TargetSelector::Instance()->GetTarget(-1.0f, DamageType::Physical);
+            }
             if (target.IsValid() && Utils::AutoAttack::InAutoAttackRange(target)) {
                 return target;
             }
         }
 
-        auto minions = (mode != OrbwalkingMode::None)
-            ? GetMinions(mode)
-            : std::vector<AIMinionClient>();
+        std::vector<AIMinionClient> minions;
+        {
+            NS_PROFILE("orb.GetMinions");
+            minions = (mode != OrbwalkingMode::None)
+                ? GetMinions(mode)
+                : std::vector<AIMinionClient>();
+        }
 
         if (mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Hybrid
             || mode == OrbwalkingMode::LastHit) {
-            std::sort(minions.begin(), minions.end(),
-                [](const AIMinionClient& a, const AIMinionClient& b) {
-                    return a.Health() < b.Health();
-                });
+            {
+                NS_PROFILE("orb.GetTarget.sortMinions");
+                std::sort(minions.begin(), minions.end(),
+                    [](const AIMinionClient& a, const AIMinionClient& b) {
+                        return a.Health() < b.Health();
+                    });
+            }
 
             for (const auto& minion : minions) {
                 if (minion.MaxHealth() <= 10.0f) {
@@ -258,9 +277,13 @@ public:
                         return minion;
                     }
                 } else {
-                    int timeToHit = static_cast<int>(Utils::AutoAttack::GetTimeToHit(minion));
-                    float predHealth = HealthPrediction::GetPrediction(
-                        minion, timeToHit, FarmDelay(), HealthPredictionType::Simulated);
+                    float predHealth;
+                    {
+                        NS_PROFILE("orb.HealthPrediction.GetPrediction");
+                        int timeToHit = static_cast<int>(Utils::AutoAttack::GetTimeToHit(minion));
+                        predHealth = HealthPrediction::GetPrediction(
+                            minion, timeToHit, FarmDelay(), HealthPredictionType::Simulated);
+                    }
 
                     if (predHealth <= 0.0f) {
                         OrbwalkingActionArgs args = {};
@@ -271,8 +294,12 @@ public:
                         orbwalker_->InvokeAction(args);
                     }
 
-                    float aaDamage = Damage::GetAutoAttackDamage(
-                        AIHeroClient(player.Address()), minion, true);
+                    float aaDamage;
+                    {
+                        NS_PROFILE("orb.Damage.GetAutoAttackDamage");
+                        aaDamage = Damage::GetAutoAttackDamage(
+                            AIHeroClient(player.Address()), minion, true);
+                    }
                     if (predHealth > 0.0f && predHealth < aaDamage) {
                         return minion;
                     }
@@ -357,6 +384,7 @@ public:
                             + static_cast<int>(1000.0f * travelTime);
 
                         float turretAttackDelay = CoreControl::GetAttackDelay(aggroTurret.Address());
+                        if (turretAttackDelay < 0.1f) turretAttackDelay = 0.833f;
 
                         for (float i = static_cast<float>(turretLandTick) + 50.0f;
                              i < static_cast<float>(turretLandTick) + (3.0f * turretAttackDelay * 1000.0f) + 50.0f;
@@ -524,17 +552,31 @@ public:
     }
 
     bool ShouldWait() const {
+        NS_PROFILE("orb.ShouldWait.total");
         const auto player = GameObjects::Player();
         if (!player.IsValid()) return false;
 
-        for (const auto& m : GetEnemyMinions()) {
-            float predHealth = HealthPrediction::GetPrediction(
-                m,
-                static_cast<int>(CoreControl::GetAttackDelay(player.Address()) * 1000.0f * kLaneClearWaitTime),
-                FarmDelay(),
-                HealthPredictionType::Simulated);
-            float aaDamage = Damage::GetAutoAttackDamage(
-                AIHeroClient(player.Address()), m, true);
+        std::vector<AIMinionClient> minions;
+        {
+            NS_PROFILE("orb.GetEnemyMinions");
+            minions = GetEnemyMinions();
+        }
+        for (const auto& m : minions) {
+            float predHealth;
+            {
+                NS_PROFILE("orb.HealthPrediction.GetPrediction");
+                predHealth = HealthPrediction::GetPrediction(
+                    m,
+                    static_cast<int>(CoreControl::GetAttackDelay(player.Address()) * 1000.0f * kLaneClearWaitTime),
+                    FarmDelay(),
+                    HealthPredictionType::Simulated);
+            }
+            float aaDamage;
+            {
+                NS_PROFILE("orb.Damage.GetAutoAttackDamage");
+                aaDamage = Damage::GetAutoAttackDamage(
+                    AIHeroClient(player.Address()), m, true);
+            }
             if (predHealth < aaDamage) {
                 return true;
             }

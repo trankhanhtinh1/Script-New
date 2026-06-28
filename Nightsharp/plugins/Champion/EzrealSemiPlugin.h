@@ -79,8 +79,8 @@ protected:
             return;
         }
 
-        LogPredictionInputDiagnostics("press", target, targetUnit, input);
-        LogPrediction("press", target, prediction);
+        // LogPredictionInputDiagnostics("press", target, targetUnit, input);
+        // LogPrediction("press", target, prediction);
 
         const Vec3 castPosition = prediction.GetCastPosition();
         if (!castPosition.IsValid() || castPosition.IsZero()) {

@@ -51,16 +51,16 @@ namespace NightSharpMenu {
     // Margin from the screen edges when auto-positioning PermaShow.
     constexpr float PERMASHOW_EDGE_MARGIN = 18.0f;
 
-    inline ImU32 COL_BG = IM_COL32(8, 10, 18, 214);
-    inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 128);
-    inline ImU32 COL_HEADER = IM_COL32(16, 18, 28, 236);
-    inline ImU32 COL_ITEM = IM_COL32(18, 20, 30, 118);
-    inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 215);
-    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 232);
+    inline ImU32 COL_BG = IM_COL32(18, 20, 26, 255);
+    inline ImU32 COL_CONTENT_BG = IM_COL32(14, 16, 22, 255);
+    inline ImU32 COL_HEADER = IM_COL32(24, 26, 36, 255);
+    inline ImU32 COL_ITEM = IM_COL32(28, 30, 42, 255);
+    inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 255);
+    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 255);
     inline ImU32 COL_ACCENT = IM_COL32(120, 235, 120, 255);
     inline ImU32 COL_TEXT = IM_COL32(255, 255, 255, 255);
     inline ImU32 COL_TEXT_DIM = IM_COL32(185, 185, 205, 255);
-    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 180);
+    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 255);
 
     struct SidebarEntry {
         const char* label;
@@ -545,7 +545,7 @@ namespace NightSharpMenu {
         permaShowBoundsRight = x + width;
         permaShowBoundsBottom = y + totalHeight;
 
-        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(20, 20, 30, 210), 4.0f);
+        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(18, 20, 26, 255), 4.0f);
         dl->AddRect(ImVec2(x, y), ImVec2(x + width, y + totalHeight), COL_BORDER, 4.0f);
         dl->AddText(ImVec2(x + padding, y + padding - 1.0f), COL_ACCENT, "PermaShow");
 
@@ -661,140 +661,63 @@ namespace NightSharpMenu {
         secondarySelected = true;
         activePluginIdx = activePluginMap;
 
-        bool showSecondary = primarySelected && activePrimaryIdx >= 0;
-        bool showContent = showSecondary && secondarySelected;
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.06f, 0.08f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.35f, 0.40f, 0.58f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
 
-        float totalW = PRIMARY_W;
-        if (showSecondary) {
-            totalW += PANEL_GAP + SECONDARY_W;
-        }
-        if (showContent) {
-            totalW += PANEL_GAP + CONTENT_W;
-        }
+        ImGui::SetNextWindowSize(ImVec2(800.0f, 540.0f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("NightSharp Menu", &showMenu, ImGuiWindowFlags_NoCollapse)) {
+            ImVec2 winPos = ImGui::GetWindowPos();
+            ImVec2 winSize = ImGui::GetWindowSize();
+            menuPosX = winPos.x;
+            menuPosY = winPos.y;
+            menuBoundsRight = winPos.x + winSize.x;
+            menuBoundsBottom = winPos.y + winSize.y;
 
-        ImVec2 mouse = ImGui::GetIO().MousePos;
-        float titleMaxX = menuPosX + totalW;
-        float titleMaxY = menuPosY + HEADER_H;
-        bool inTitle = mouse.x >= menuPosX && mouse.x <= titleMaxX &&
-            mouse.y >= menuPosY && mouse.y <= titleMaxY;
-
-        if (ImGui::IsMouseClicked(0) && inTitle && !permaShowDragging && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive()) {
-            isDragging = true;
-            dragOffX = mouse.x - menuPosX;
-            dragOffY = mouse.y - menuPosY;
-        }
-        if (!ImGui::IsMouseDown(0)) {
-            isDragging = false;
-        }
-        if (isDragging) {
-            menuPosX = mouse.x - dragOffX;
-            menuPosY = mouse.y - dragOffY;
-        }
-
-        ImDrawList* dl = ImGui::GetForegroundDrawList();
-        if (!dl) {
-            return;
-        }
-
-        ImVec2 primaryPos = ImVec2(menuPosX, menuPosY);
-        ImVec2 secondaryPos = ImVec2(menuPosX + PRIMARY_W + PANEL_GAP, menuPosY);
-        ImVec2 contentPos = ImVec2(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2.0f, menuPosY);
-
-        float primaryH = HEADER_H + ITEM_H * static_cast<float>(MaxI(1, primaryCount)) + 4.0f;
-        float secondaryH = showSecondary ? HEADER_H + ITEM_H * static_cast<float>(MaxI(1, secCount)) + 4.0f : 0.0f;
-        float sidebarH = MaxF(primaryH, secondaryH > 0.0f ? secondaryH : primaryH);
-        float contentH = MaxF(sidebarH, MAX_CONTENT_H);
-
-        dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH), COL_BG, 4.0f);
-        dl->AddRectFilled(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-        dl->AddRect(primaryPos, ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH), COL_BORDER, 4.0f);
-        dl->AddText(ImVec2(primaryPos.x + 10, primaryPos.y + 8), COL_ACCENT, "NightSharp");
-        dl->AddLine(ImVec2(primaryPos.x, primaryPos.y + HEADER_H), ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H), COL_BORDER);
-
-        float primaryY = primaryPos.y + HEADER_H + 2.0f;
-        for (int i = 0; i < primaryCount; ++i) {
-            if (DrawSidebarItem(dl, ImVec2(primaryPos.x, primaryY), PRIMARY_W, primaryLabels[i], activePrimaryIdx == i, true)) {
-                if (activePrimaryIdx != i) {
-                    activeSecondaryIdx = 0;
+            // Left Sidebar (Primary categories / plugins)
+            ImGui::BeginChild("PrimarySidebar", ImVec2(160.0f, 0.0f), true);
+            for (int i = 0; i < primaryCount; ++i) {
+                if (ImGui::Selectable(primaryLabels[i], activePrimaryIdx == i)) {
+                    if (activePrimaryIdx != i) {
+                        activeSecondaryIdx = 0;
+                    }
+                    activePrimaryIdx = i;
+                    activePluginIdx = primaryPluginMap[i];
                 }
-                activePrimaryIdx = i;
-                activePluginIdx = primaryPluginMap[i];
-                primarySelected = true;
-                secondarySelected = true;
             }
-            primaryY += ITEM_H;
-        }
+            ImGui::EndChild();
 
-        showSecondary = primarySelected && activePrimaryIdx >= 0;
-        if (!showSecondary) {
-            menuBoundsRight = menuPosX + PRIMARY_W;
-            menuBoundsBottom = menuPosY + sidebarH;
-            return;
-        }
+            ImGui::SameLine();
 
-        const int selectedPluginIdx = primaryPluginMap[activePrimaryIdx];
-        const char* secondaryHeader = activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount
-            ? primaryLabels[activePrimaryIdx]
-            : "Core";
-
-        dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH), COL_BG, 4.0f);
-        dl->AddRectFilled(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_HEADER, 4.0f);
-        dl->AddRect(secondaryPos, ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH), COL_BORDER, 4.0f);
-        dl->AddText(ImVec2(secondaryPos.x + 10, secondaryPos.y + 8), COL_ACCENT, secondaryHeader);
-        dl->AddLine(ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H), ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H), COL_BORDER);
-
-        float secondaryY = secondaryPos.y + HEADER_H + 2.0f;
-        for (int i = 0; i < secCount; ++i) {
-            const char* label = selectedPluginIdx < 0
-                ? CORE_SECONDARY[i].label
-                : GetPluginSecondaryLabel(selectedPluginIdx, i);
-            if (DrawSidebarItem(dl, ImVec2(secondaryPos.x, secondaryY), SECONDARY_W, label, activeSecondaryIdx == i, true)) {
-                activeSecondaryIdx = i;
-                secondarySelected = true;
+            // Middle Sidebar (Secondary sub-categories)
+            ImGui::BeginChild("SecondarySidebar", ImVec2(160.0f, 0.0f), true);
+            for (int i = 0; i < secCount; ++i) {
+                const char* label = activePluginIdx < 0
+                    ? CORE_SECONDARY[i].label
+                    : GetPluginSecondaryLabel(activePluginIdx, i);
+                if (ImGui::Selectable(label, activeSecondaryIdx == i)) {
+                    activeSecondaryIdx = i;
+                }
             }
-            secondaryY += ITEM_H;
-        }
+            ImGui::EndChild();
 
-        if (secondarySelected && activeSecondaryIdx >= 0) {
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 4));
+            ImGui::SameLine();
 
-            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_CONTENT_BG, 4.0f);
-            dl->AddRectFilled(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_HEADER, 4.0f);
-            dl->AddRect(contentPos, ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH), COL_BORDER, 4.0f);
-
-            const char* sectionLabel = selectedPluginIdx < 0
-                ? (activeSecondaryIdx < CORE_SECONDARY_COUNT ? CORE_SECONDARY[activeSecondaryIdx].label : "?")
-                : GetPluginSecondaryLabel(selectedPluginIdx, activeSecondaryIdx);
-            dl->AddText(ImVec2(contentPos.x + 10, contentPos.y + 8), COL_ACCENT, sectionLabel);
-            dl->AddLine(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H), COL_BORDER);
-
-            ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
-            ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
-            ImGui::Begin("##ns_content", nullptr,
-                ImGuiWindowFlags_NoTitleBar |
-                ImGuiWindowFlags_NoResize |
-                ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoCollapse |
-                ImGuiWindowFlags_NoBackground);
-
-            if (selectedPluginIdx < 0) {
+            // Content Panel
+            ImGui::BeginChild("ContentPanel", ImVec2(0.0f, 0.0f), true);
+            if (activePluginIdx < 0) {
                 DrawCoreContentPanel(activeSecondaryIdx);
             } else {
-                DrawPluginContentPanel(selectedPluginIdx);
+                DrawPluginContentPanel(activePluginIdx);
             }
-
-            ImGui::End();
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor(3);
+            ImGui::EndChild();
         }
+        ImGui::End();
 
-        menuBoundsRight = menuPosX + totalW;
-        menuBoundsBottom = menuPosY + contentH;
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(3);
     }
 
 } // namespace NightSharpMenu

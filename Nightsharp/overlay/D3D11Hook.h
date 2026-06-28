@@ -17,6 +17,12 @@ namespace D3D11Hook {
     // True while hooks are active.
     bool IsActive();
 
+    // Signal hooks to shut down and unhook.
+    void RequestShutdown();
+
+    // True if shutdown has been requested.
+    bool IsShutdownRequested();
+
     // D3D11 objects obtained from the game's swapchain
     extern ID3D11Device*           g_pd3dDevice;
     extern ID3D11DeviceContext*    g_pd3dContext;

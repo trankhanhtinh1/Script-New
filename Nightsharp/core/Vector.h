@@ -36,6 +36,15 @@ struct Vec2 {
 
     float Dot(const Vec2& v) const { return x * v.x + y * v.y; }
     float Cross(const Vec2& v) const { return x * v.y - y * v.x; }
+    float AngleBetween(const Vec2& v) const {
+        const Vec2 n1 = Normalized();
+        const Vec2 n2 = v.Normalized();
+        if (n1.IsZero() || n2.IsZero()) return 0.0f;
+        float dot = n1.Dot(n2);
+        if (dot > 1.0f) dot = 1.0f;
+        if (dot < -1.0f) dot = -1.0f;
+        return std::acos(dot) * 180.0f / 3.14159265358979323846f;
+    }
     bool IsZero() const { return x == 0.0f && y == 0.0f; }
     bool IsValid() const { return std::isfinite(x) && std::isfinite(y); }
 };
@@ -60,6 +69,8 @@ struct Vec3 {
     float LengthSqr() const { return x * x + y * y + z * z; }
     float LengthSqr2D() const { return x * x + z * z; }
     float Distance(const Vec3& v) const { return (*this - v).Length(); }
+    float DistanceSqr(const Vec3& v) const { return (*this - v).LengthSqr(); }
+    float DistanceSquared(const Vec3& v) const { return DistanceSqr(v); }
     float Distance2D(const Vec3& v) const { return Vec2(x, z).Distance(Vec2(v.x, v.z)); }
     float DistanceSqr2D(const Vec3& v) const { return Vec2(x, z).DistanceSqr(Vec2(v.x, v.z)); }
 
@@ -85,6 +96,15 @@ struct Vec3 {
     Vec2 To2D() const { return { x, z }; }
     static Vec3 From2D(const Vec2& v, float height = 0.0f) { return { v.x, height, v.y }; }
     float Dot(const Vec3& v) const { return x * v.x + y * v.y + z * v.z; }
+    float AngleBetween(const Vec3& v) const {
+        const Vec2 n1 = To2D().Normalized();
+        const Vec2 n2 = v.To2D().Normalized();
+        if (n1.IsZero() || n2.IsZero()) return 0.0f;
+        float dot = n1.Dot(n2);
+        if (dot > 1.0f) dot = 1.0f;
+        if (dot < -1.0f) dot = -1.0f;
+        return std::acos(dot) * 180.0f / 3.14159265358979323846f;
+    }
     bool IsZero() const { return x == 0.0f && y == 0.0f && z == 0.0f; }
     bool IsValid() const { return std::isfinite(x) && std::isfinite(y) && std::isfinite(z); }
 };

@@ -6,6 +6,7 @@
 #include "../../Core/Objects.h"
 #include "../../Core/Variables.h"
 #include "../../Enumerations/CastStates.h"
+#include "../../Enumerations/CastStates.h"
 #include "../../Enumerations/CollisionableObjects.h"
 #include "../../Enumerations/DamageType.h"
 #include "../../Enumerations/HitChance.h"
@@ -14,6 +15,7 @@
 #include "../../GameObjects/GameObjects.h"
 #include "../../Utils/Minion.h"
 #include "../../Math/Prediction.h"
+#include "../../Math/HealthPrediction.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -403,9 +405,12 @@ public:
     }
 
     float GetHealthPrediction(const AIBaseClient& unit) const {
-        // TODO(SDK parity): restore HealthPrediction after Prediction/Health.h
-        // is ported into NightSharp/SDK/Math/Prediction.
-        return unit.IsValid() ? unit.Health() : 0.0f;
+        if (!unit.IsValid()) {
+            return 0.0f;
+        }
+        const int time = static_cast<int>(Delay * 1000.0f) - 100 + Game::Ping() / 2
+            + static_cast<int>(1000.0f * SourcePosition().Distance2D(unit.Position()) / Speed);
+        return HealthPrediction::GetPrediction(unit, time);
     }
 
     float GetHitCount(HitChance hitChance = HitChance::High) {
@@ -445,8 +450,6 @@ public:
                                    float overrideRange = -1.0f,
                                    CollisionableObjects collisionable =
                                        CollisionableObjects::Heroes | CollisionableObjects::Minions) const {
-        // TODO(SDK parity): replace current-position fallback with
-        // Movement.GetPrediction once NightSharp prediction is ported.
         const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();
 
         PredictionInput input;
@@ -458,54 +461,17 @@ public:
         input.Range = range;
         input.Collision = Collision;
         input.SetType(Type);
-        input.Spell = this;
+        input.Spell = const_cast<Spell*>(this);
         input.RangeCheckFrom = RangeCheckFrom;
         input.AoE = aoe;
         input.CollisionObjects = collisionable;
 
-        PredictionOutput output;
-        output.Input = input;
-        auto pos = unit.Position();
-        pos.y = SDK::Game::CursorPosRaw().y;
-        output.SetUnitPosition(pos);
-        output.SetCastPosition(pos);
-        output.AoeTargetsHitCount = aoe ? 1 : 0;
-
-        output.Hitchance = RangeCheckSource().DistanceSqr2D(output.GetCastPosition()) <= range * range
-            ? HitChance::High
-            : HitChance::OutOfRange;
-        return output;
+        return Prediction::GetPrediction(input);
     }
 
     AIHeroClient GetTarget(float extraRange = 0.0f,
                            bool accountForCollision = false,
-                           const std::vector<AIHeroClient>& champsToIgnore = {}) const {
-        // TODO(SDK parity): replace nearest-target fallback with
-        // Variables.TargetSelector.GetTarget/GetTargetNoCollision.
-        (void)accountForCollision;
-
-        AIHeroClient best;
-        float bestDistance = FLT_MAX;
-        const float range = CurrentRange() + extraRange;
-        const Vector3 source = SourcePosition();
-        for (const auto& hero : GameObjects::EnemyHeroes()) {
-            if (std::find_if(champsToIgnore.begin(), champsToIgnore.end(), [&](const AIHeroClient& ignored) {
-                    return ignored.Compare(hero);
-                }) != champsToIgnore.end()) {
-                continue;
-            }
-            if (!Extensions::IsValidTarget(hero, range, true, source)) {
-                continue;
-            }
-
-            const float distance = source.DistanceSqr2D(hero.Position());
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = hero;
-            }
-        }
-        return best;
-    }
+                           const std::vector<AIHeroClient>& champsToIgnore = {}) const;
 
     std::vector<AIBaseClient> GetUnitsByHitChance(HitChance minimumHitChance = HitChance::High) {
         std::vector<AIBaseClient> result;
@@ -520,6 +486,7 @@ public:
     bool IsInRange(const GameObject& obj, float otherRange = -1.0f) const {
         return IsInRange(obj.Position().To2D(), otherRange);
     }
+
 
     bool IsInRange(const Vector3& point, float otherRange = -1.0f) const {
         return IsInRange(point.To2D(), otherRange);

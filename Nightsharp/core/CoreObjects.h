@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include "../SectionProfiler.h"
 
 #ifndef NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS
 #define NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS 0
@@ -706,7 +707,11 @@ inline void ReadAttackable(ObjectSnapshot& out, uintptr_t object) {
 }
 
 inline void ReadAIBase(ObjectSnapshot& out, uintptr_t object) {
-    const auto hero = CoreAIHeroClient::Read(object);
+    // CoreAIHeroClient::Read() re-reads the 15 attackable fields via
+    // CoreAttackableUnit::Read(). ReadAttackable() already populated those in
+    // `out`, so use ReadFromAttackable() which skips that duplicate read.
+    const auto hero = CoreAIHeroClient::ReadFromAttackable(
+        CoreAIHeroClient::Snapshot{}, object);
     out.mana = hero.mana;
     out.maxMana = hero.maxMana;
     out.moveSpeed = hero.moveSpeed;
@@ -751,6 +756,7 @@ inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
 }
 
 inline ObjectSnapshot ReadSnapshot(uintptr_t object, ObjectType type = ObjectType::Unknown) {
+    NS_PROFILE("core.ReadSnapshot");
     ObjectSnapshot snapshot{};
     snapshot.handle = MakeHandle(object, type);
     if (!snapshot.handle.HasAddress()) {

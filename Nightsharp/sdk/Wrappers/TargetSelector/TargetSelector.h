@@ -179,4 +179,18 @@ private:
     TargetSelectorDrawing* drawing_ = nullptr;
 };
 
+inline AIHeroClient Spell::GetTarget(float extraRange,
+                                     bool accountForCollision,
+                                     const std::vector<AIHeroClient>& champsToIgnore) const {
+    auto* ts = TargetSelector::Instance();
+    if (!ts) {
+        return AIHeroClient();
+    }
+    const std::vector<AIHeroClient>* ignorePtr = champsToIgnore.empty() ? nullptr : &champsToIgnore;
+    if (accountForCollision) {
+        return ts->GetTargetNoCollision(const_cast<Spell*>(this), true, ignorePtr);
+    }
+    return ts->GetTarget(CurrentRange() + extraRange, DamageType, true, From, ignorePtr);
+}
+
 } // namespace SDK

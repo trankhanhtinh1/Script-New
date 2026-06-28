@@ -384,6 +384,70 @@ namespace ObjectDetail {
     }
 } // namespace ObjectDetail
 
+namespace ObjectCache {
+    constexpr int kSnapshotBuckets = 512;
+    struct SnapshotEntry {
+        uintptr_t address = 0;
+        uint32_t gen = 0;
+        ::Core::Objects::ObjectSnapshot snapshot;
+        bool hasWaypoints = false;
+        std::vector<Vector3> waypoints;
+        bool hasImmobileTime = false;
+        double immobileTime = 0.0;
+        bool hasServerPosition = false;
+        Vector3 serverPosition = {};
+    };
+    inline SnapshotEntry entries[kSnapshotBuckets] = {};
+    inline int Bucket(uintptr_t a) { return static_cast<int>((a >> 4) & (kSnapshotBuckets - 1)); }
+    inline SnapshotEntry* GetEntry(uintptr_t a, ::Core::Objects::ObjectType t = ::Core::Objects::ObjectType::GameObject) {
+        int b = Bucket(a);
+        SnapshotEntry& e = entries[b];
+        uint32_t g = CoreRuntime::g_ctx.phaseGeneration;
+        if (e.address == a && e.gen == g) return &e;
+        e.address = a; e.gen = g;
+        e.snapshot = ::Core::ObjectManager::ReadObject(a, t);
+        e.hasWaypoints = false;
+        e.hasImmobileTime = false;
+        e.hasServerPosition = false;
+        return &e;
+    }
+    inline const ::Core::Objects::ObjectSnapshot& GetSnapshot(uintptr_t a, ::Core::Objects::ObjectType t) {
+        return GetEntry(a, t)->snapshot;
+    }
+    // Lazily-populated waypoint cache. GetWaypoints()/CopyPath() each re-resolve
+    // the AiManager (a native game function call) and re-read the nav array on
+    // every call. The prediction pipeline (GetPrediction) calls GetWaypoints()
+    // repeatedly per prediction, so without this cache each prediction did
+    // ~5-10 native AiManager resolutions + nav-array reads. Cached for one
+    // phase (same generation as the snapshot).
+    inline std::vector<Vector3>& GetWaypoints(uintptr_t a, int maxPoints) {
+        SnapshotEntry* e = GetEntry(a);
+        if (!e->hasWaypoints) {
+            e->waypoints.clear();
+            maxPoints = std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints);
+            Vec3 points[::CoreAiManager::kMaxWaypoints] = {};
+            const int count = ::CoreAiManager::CopyPath(a, points, maxPoints);
+            e->waypoints.reserve(static_cast<std::size_t>(std::max(0, count)));
+            for (int i = 0; i < count; ++i) {
+                e->waypoints.push_back(points[i]);
+            }
+            e->hasWaypoints = true;
+        }
+        return e->waypoints;
+    }
+    // ServerPosition also resolves the AiManager every call. Cache the single
+    // Vec3 read for the phase so the ~10 ServerPosition() calls per prediction
+    // resolve the AiManager only once per frame.
+    inline Vector3 GetServerPosition(uintptr_t a) {
+        SnapshotEntry* e = GetEntry(a);
+        if (!e->hasServerPosition) {
+            e->serverPosition = ::CoreAiManager::GetServerPosition(a);
+            e->hasServerPosition = true;
+        }
+        return e->serverPosition;
+    }
+}
+
 class GameObject {
 public:
     GameObject() = default;
@@ -434,24 +498,45 @@ public:
         return handle_;
     }
 
-    ::Core::Objects::ObjectSnapshot Snapshot() const {
-        return ::Core::ObjectManager::ReadObject(Address(), Type());
+    const ::Core::Objects::ObjectSnapshot& Snapshot() const {
+        return ObjectCache::GetSnapshot(Address(), Type());
     }
 
     GameObjectTeam Team() const {
         return ObjectDetail::MapTeam(Snapshot().team);
     }
 
+    // Player team is constant for the entire game. Cache it on first use so
+    // these predicates don't re-resolve the player object on every call.
+    // Before this cache, IsEnemy()/IsAlly() called ::Core::ObjectManager::Player()
+    // which builds a full 92-read snapshot on every invocation — and
+    // InAutoAttackRange() calls IsEnemy() dozens of times per orbwalker tick,
+    // which was the dominant cause of the FPS drop when holding the orbwalker key.
+    static std::uint32_t CachedPlayerTeam() {
+        static std::uint32_t cached = 0;
+        static bool resolved = false;
+        if (!resolved) {
+            const uintptr_t player = CoreRuntime::g_ctx.localPlayer;
+            if (Globals::IsValidPtr(player)) {
+                cached = ::Core::Objects::ReadTeamValue(player);
+            }
+            resolved = (cached != 0);
+        }
+        return cached;
+    }
+
     bool IsEnemy() const {
-        const auto player = ::Core::ObjectManager::Player();
-        const auto self = Snapshot();
-        return player.IsValid() && self.IsValid() && player.team != 0 && self.team != 0 && player.team != self.team;
+        const auto& self = Snapshot();
+        if (!self.IsValid() || self.team == 0) return false;
+        const std::uint32_t playerTeam = CachedPlayerTeam();
+        return playerTeam != 0 && playerTeam != self.team;
     }
 
     bool IsAlly() const {
-        const auto player = ::Core::ObjectManager::Player();
-        const auto self = Snapshot();
-        return player.IsValid() && self.IsValid() && player.team != 0 && player.team == self.team;
+        const auto& self = Snapshot();
+        if (!self.IsValid() || self.team == 0) return false;
+        const std::uint32_t playerTeam = CachedPlayerTeam();
+        return playerTeam != 0 && playerTeam == self.team;
     }
 
     bool IsMe() const {
@@ -513,6 +598,10 @@ public:
         return Position().Distance(other.Position());
     }
 
+    float DistanceSquared(const GameObject& other) const {
+        return Position().DistanceSquared(other.Position());
+    }
+
     float Distance(const Vector3& position) const {
         return Position().Distance(position);
     }
@@ -571,7 +660,7 @@ public:
             return false;
         }
 
-        const auto snapshot = Snapshot();
+        const auto& snapshot = Snapshot();
         if (static_cast<::Core::Objects::MinionClass>(snapshot.minionClass) ==
             ::Core::Objects::MinionClass::Pet) {
             return true;
@@ -628,6 +717,11 @@ public:
 
     float Mana() const { return Snapshot().mana; }
     float MaxMana() const { return Snapshot().maxMana; }
+    float ManaPercent() const {
+        const float maxMana = MaxMana();
+        return maxMana > 0.0f ? (Mana() * 100.0f / maxMana) : 0.0f;
+    }
+    float GetSpellDamage(const AIBaseClient& target, SpellSlot slot) const;
     float MoveSpeed() const { return Snapshot().moveSpeed; }
     float AttackRange() const { return Snapshot().attackRange; }
     float TotalAttackDamage() const { return Snapshot().totalAttackDamage; }
@@ -638,8 +732,8 @@ public:
     float AttackSpeedMod() const { return Snapshot().attackSpeedMod; }
     int Level() const { return Snapshot().level; }
 
-    // â”€â”€ Hero-specific stat properties (read from AIHeroClient offsets) â”€â”€
-    // These are safe to call on any AIBaseClient â€” non-hero objects will
+    // ── Hero-specific stat properties (read from AIHeroClient offsets) ──
+    // These are safe to call on any AIBaseClient ─ non-hero objects will
     // return 0 since the offsets are only populated for AIHeroClient.
     float AD() const { return TotalAttackDamage(); }
     float AP() const { return TotalMagicalDamage(); }
@@ -719,7 +813,7 @@ public:
         return std::max(std::floor(result), 0.0f);
     }
 
-    // â”€â”€ Damage calculation (matching DLL's Damage.CalculateMagicDamage) â”€â”€
+    // ── Damage calculation (matching DLL's Damage.CalculateMagicDamage) ──
     float CalculateMagicDamage(const AIBaseClient& target, float amount) const {
         if (amount <= 0.0f) return 0.0f;
         if (!IsValid() || !target.IsValid()) return 0.0f;
@@ -749,7 +843,7 @@ public:
         return std::max(std::floor(result) + bonus, 0.0f);
     }
 
-    // â”€â”€ GetAutoAttackDamage (AIBaseClient overload, no passives) â”€â”€
+    // ── GetAutoAttackDamage (AIBaseClient overload, no passives) ──
     float GetAutoAttackDamage(const AIBaseClient& target, bool includePassives) const {
         (void)includePassives;
         return CalculatePhysicalDamage(target, AD());
@@ -768,7 +862,7 @@ public:
     }
 
     Vector3 ServerPosition() const {
-        return ::CoreAiManager::GetServerPosition(Address());
+        return ObjectCache::GetServerPosition(Address());
     }
 
     Vector3 PreviousPosition() const {
@@ -833,20 +927,13 @@ public:
     }
 
     std::vector<Vector3> GetWaypoints(int maxPoints = 32) const {
-        std::vector<Vector3> path;
         if (!IsValid() || maxPoints <= 0) {
-            return path;
+            return {};
         }
-
-        maxPoints = std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints);
-        Vec3 points[::CoreAiManager::kMaxWaypoints] = {};
-        const int count = ::CoreAiManager::CopyPath(
-            Address(), points, maxPoints);
-        path.reserve(static_cast<std::size_t>(std::max(0, count)));
-        for (int i = 0; i < count; ++i) {
-            path.push_back(points[i]);
-        }
-        return path;
+        // Served from the per-phase ObjectCache so repeated calls during one
+        // prediction (GamePath / Movement call GetWaypoints 5-10x) resolve the
+        // AiManager + read the nav array only once per frame.
+        return ObjectCache::GetWaypoints(Address(), maxPoints);
     }
 
     std::vector<Vector3> GetPath(int maxPoints = 32) const {
@@ -867,6 +954,10 @@ public:
 
     bool HasBuff(const char* name) const {
         return CoreBuffs::HasBuff(Address(), name);
+    }
+
+    int GetBuffCount(const char* name) const {
+        return CoreBuffs::GetBuffStacks(Address(), name);
     }
 
     uintptr_t GetBuffCaster(const char* name) const {
@@ -1024,7 +1115,7 @@ public:
     }
 
     MinionTypes GetMinionType() const {
-        const auto snapshot = Snapshot();
+        const auto& snapshot = Snapshot();
         const std::string name = !std::string(snapshot.characterName).empty()
             ? snapshot.characterName
             : snapshot.name;
@@ -1092,7 +1183,7 @@ public:
     // boss itself is "Atakhan_*". KrugAncient is the Krug elder. RiftHrald
     // and Baron retain their classic names.
     JungleType GetJungleType() const {
-        const auto snapshot = Snapshot();
+        const auto& snapshot = Snapshot();
         const std::string name = !std::string(snapshot.characterName).empty()
             ? snapshot.characterName
             : snapshot.name;

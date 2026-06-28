@@ -197,4 +197,8 @@ private:
     }
 };
 
+inline float AIBaseClient::GetSpellDamage(const AIBaseClient& target, SpellSlot slot) const {
+    return DamageLibrary::GetSpellDamage(*this, target, slot);
+}
+
 } // namespace SDK

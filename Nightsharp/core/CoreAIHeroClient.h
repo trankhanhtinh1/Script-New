@@ -298,6 +298,11 @@ inline float TotalAttackDamage(uintptr_t object) {
     return BaseAttackDamage(object) + FlatPhysicalDamageMod(object);
 }
 
+// Forward declaration — defined below. Read() delegates to ReadFromAttackable()
+// so it can reuse an already-read CoreAttackableUnit snapshot and avoid
+// re-reading the 15 attackable fields a second time.
+Snapshot ReadFromAttackable(Snapshot snapshot, uintptr_t object);
+
 inline Snapshot Read(uintptr_t object) {
     Snapshot snapshot{};
     snapshot.address = object;
@@ -306,6 +311,20 @@ inline Snapshot Read(uintptr_t object) {
     }
 
     snapshot.attackable = CoreAttackableUnit::Read(object);
+    return ReadFromAttackable(snapshot, object);
+}
+
+// Reads only the AI-hero-specific fields, reusing an already-populated
+// CoreAttackableUnit snapshot instead of re-reading the 15 attackable fields.
+// Called by Core::Objects::ReadSnapshot after ReadAttackable() has already run
+// CoreAttackableUnit::Read — without this overload the attackable read would
+// run twice per AIHero/AIMinion/AITurret snapshot (15 wasted reads each).
+inline Snapshot ReadFromAttackable(Snapshot snapshot, uintptr_t object) {
+    snapshot.address = object;
+    if (!Globals::IsValidPtr(object)) {
+        return snapshot;
+    }
+
     snapshot.mana = Mana(object);
     snapshot.maxMana = MaxMana(object);
     snapshot.par = Par(object);

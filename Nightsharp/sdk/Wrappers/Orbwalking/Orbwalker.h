@@ -124,6 +124,7 @@ public:
     }
 
     void Attack(AttackableUnit target) override {
+        NS_PROFILE("orb.Attack.total");
         if (BlockOrdersUntilTick - Variables::TickCount() > 0) return;
 
         auto gTarget = target.IsValid() ? target : GetTarget();
@@ -141,9 +142,12 @@ public:
                 MissileLaunched = false;
             }
 
-            if (CoreControl::IssueAttack(gTarget.Address(), gTarget.Position())) {
-                LastAutoAttackCommandTick = Variables::TickCount();
-                LastTarget = gTarget;
+            {
+                NS_PROFILE("orb.CoreControl.IssueAttack");
+                if (CoreControl::IssueAttack(gTarget.Address(), gTarget.Position())) {
+                    LastAutoAttackCommandTick = Variables::TickCount();
+                    LastTarget = gTarget;
+                }
             }
 
             BlockOrdersUntilTick = Variables::TickCount() + 70 + (std::min)(60, Game::Ping());
@@ -193,6 +197,7 @@ public:
     }
 
     void Move(Vector3 position) override {
+        NS_PROFILE("orb.Move.total");
         if (BlockOrdersUntilTick - Variables::TickCount() > 0) return;
         if (!position.IsValid()) return;
 
@@ -202,7 +207,11 @@ public:
         if (Variables::TickCount() - LastMovementOrderTick < moveDelay) return;
 
         if (advanced && advanced->Get<MenuBool>("miscAttackSpeed")->Value) {
-            float attackDelay = CoreControl::GetAttackDelay(GameObjects::Player().Address());
+            float attackDelay;
+            {
+                NS_PROFILE("orb.CoreControl.GetAttackDelay");
+                attackDelay = CoreControl::GetAttackDelay(GameObjects::Player().Address());
+            }
             if (attackDelay < 1.0f / 2.6f && TotalAutoAttacks % 3 != 0
                 && !CanMove(500.0f, true) && !MovementState) {
                 return;
@@ -219,6 +228,7 @@ public:
                 stopArgs.Type = OrbwalkingType::StopMovement;
                 InvokeAction(stopArgs);
                 if (stopArgs.Process) {
+                    NS_PROFILE("orb.CoreControl.StopMoving");
                     CoreControl::StopMoving();
                     LastMovementOrderTick = Variables::TickCount() - 70;
                 }
@@ -229,10 +239,15 @@ public:
         float playerDist = position.Distance(GameObjects::Player().Position());
         float bounding = GameObjects::Player().BoundingRadius();
 
+        auto fastRandFloat = [](unsigned int seed) -> float {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            return static_cast<float>(seed % 10000u) / 10000.0f;
+        };
+
         if (playerDist < bounding + 100.0f) {
-            std::mt19937 rng(static_cast<unsigned>(Variables::TickCount()));
-            std::uniform_real_distribution<float> dist(0.6f, 1.0f);
-            float randFactor = dist(rng) + 0.2f;
+            float randFactor = 0.8f + fastRandFloat(static_cast<unsigned>(Variables::TickCount()) ^ 0xA5A5u) * 0.4f;
             position = GameObjects::Player().Position().Extend(
                 position, bounding + randFactor * 400.0f);
             playerDist = position.Distance(GameObjects::Player().Position());
@@ -240,44 +255,44 @@ public:
 
         int maxDist = advanced ? advanced->Get<MenuSlider>("movementMaximumDistance")->Value : 1500;
         if (playerDist > static_cast<float>(maxDist)) {
-            std::mt19937 rng2(static_cast<unsigned>(Variables::TickCount() + 1));
-            std::uniform_int_distribution<int> dist2(0, 51);
+            unsigned int r = static_cast<unsigned>(Variables::TickCount() + 1) ^ 0x5A5Au;
+            r ^= r << 13; r ^= r >> 17; r ^= r << 5;
+            int randInt = static_cast<int>(r % 52u);
             position = GameObjects::Player().Position().Extend(
                 position,
-                static_cast<float>(maxDist + 25 - dist2(rng2)));
+                static_cast<float>(maxDist + 25 - randInt));
             playerDist = position.Distance(GameObjects::Player().Position());
         }
 
         if (advanced && advanced->Get<MenuBool>("movementRandomize")->Value
             && playerDist > 350.0f) {
-            std::mt19937 rng3(static_cast<unsigned>(Variables::TickCount() + 2));
-            std::uniform_real_distribution<float> angleDist(0.0f, 2.0f * 3.14159265358979323846f);
-            double rAngle = static_cast<double>(angleDist(rng3));
+            float rAngle = fastRandFloat(static_cast<unsigned>(Variables::TickCount() + 2) ^ 0xF0F0u) * (2.0f * 3.14159265358979323846f);
             float radius = bounding / 2.0f;
-            float x = position.x + radius * static_cast<float>(std::cos(rAngle));
-            float z = position.z + radius * static_cast<float>(std::sin(rAngle));
+            float x = position.x + radius * std::cos(rAngle);
+            float z = position.z + radius * std::sin(rAngle);
             position = Vector3(x, position.y, z);
         }
 
-        // Path-angle redundancy check (simplified: compare path end vs target)
+        // 1:1 EnsoulSharp path angle movement throttling
+        std::vector<Vector3> waypoints;
         {
-            auto waypoints = GameObjects::Player().GetWaypoints();
-            if (waypoints.size() > 1) {
-                float pathLen = 0.0f;
-                for (std::size_t i = 1; i < waypoints.size(); ++i) {
-                    pathLen += waypoints[i].Distance(waypoints[i - 1]);
-                }
-                if (pathLen > 100.0f) {
-                    const Vector3& lastWp = waypoints.back();
-                    if (lastWp.Distance(position) < 100.0f) {
-                        return;
-                    }
-                }
-            }
+            NS_PROFILE("orb.Player.GetWaypoints");
+            waypoints = GameObjects::Player().GetWaypoints();
         }
-
-        if (Variables::TickCount() - LastMovementOrderTick < 70 + (std::min)(60, Game::Ping())) {
-            return;
+        if (waypoints.size() > 1) {
+            Vector3 v1 = waypoints[1] - waypoints[0];
+            Vector3 v2 = position - GameObjects::Player().Position();
+            float angle = v1.AngleBetween(v2);
+            if (angle < 60.0f && Variables::TickCount() - LastMovementOrderTick < 70 + (std::min)(60, Game::Ping())) {
+                return;
+            }
+            if (angle >= 60.0f && Variables::TickCount() - LastMovementOrderTick < 60) {
+                return;
+            }
+        } else {
+            if (Variables::TickCount() - LastMovementOrderTick < 70 + (std::min)(60, Game::Ping())) {
+                return;
+            }
         }
 
         OrbwalkingActionArgs eventArgs = {};
@@ -287,6 +302,7 @@ public:
         InvokeAction(eventArgs);
 
         if (eventArgs.Process) {
+            NS_PROFILE("orb.CoreControl.IssueMove");
             CoreControl::IssueMove(eventArgs.Position);
             LastMovementOrderTick = Variables::TickCount();
         }

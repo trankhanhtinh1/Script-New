@@ -8,6 +8,8 @@
 #include "Modes/LessCastsToKill.h"
 #include "Modes/MostAbilityPower.h"
 #include "Modes/MostAttackDamage.h"
+#include "Modes/Priority.h"
+#include "Modes/Weight.h"
 #include "../../UI/UI.h"
 
 #include <algorithm>
@@ -113,13 +115,19 @@ public:
 
 private:
     void RegisterBuiltins() {
-        entries_.push_back(new Modes::Closest());
-        entries_.push_back(new Modes::LeastHealth());
-        entries_.push_back(new Modes::NearMouse());
-        entries_.push_back(new Modes::LessAttacksToKill());
-        entries_.push_back(new Modes::LessCastsToKill());
-        entries_.push_back(new Modes::MostAbilityPower());
-        entries_.push_back(new Modes::MostAttackDamage());
+        auto addBuiltin = [this](ITargetSelectorMode* mode) {
+            mode->AddToMenu(menu_);
+            entries_.push_back(mode);
+        };
+        addBuiltin(new Modes::Closest());
+        addBuiltin(new Modes::LeastHealth());
+        addBuiltin(new Modes::NearMouse());
+        addBuiltin(new Modes::LessAttacksToKill());
+        addBuiltin(new Modes::LessCastsToKill());
+        addBuiltin(new Modes::MostAbilityPower());
+        addBuiltin(new Modes::MostAttackDamage());
+        addBuiltin(new Modes::Priority());
+        addBuiltin(new Modes::Weight());
     }
 
     void UpdateMenu() {

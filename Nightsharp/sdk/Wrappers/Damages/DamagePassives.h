@@ -2,6 +2,7 @@
 
 #include "../../Enumerations/DamageType.h"
 #include "../../Core/Objects.h"
+#include "DamageLibrary.h"
 
 #include <algorithm>
 #include <cmath>

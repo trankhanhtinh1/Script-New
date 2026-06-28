@@ -12,6 +12,9 @@
 #include <cmath>
 #include <cstdint>
 
+// For SDK::Game::AddOnWndProc (lazy-register the F7 WndProc handler)
+#include "../Core/Game.h"
+
 namespace SDK::Drawing {
 
 namespace detail {
@@ -80,14 +83,19 @@ namespace detail {
     }
 
     inline bool DrawingEnabled = true;
-    inline bool F7WasDown = false;
+    inline bool F7WndProcInstalled = false;
 
-    inline void UpdateHotkey() {
-        const bool down = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
-        if (down && !F7WasDown) {
+    inline void F7WndProcHandler(SDK::Game::WndEventArgs& args) {
+        if (args.Msg == WM_KEYDOWN && args.WParam == VK_F7) {
             DrawingEnabled = !DrawingEnabled;
         }
-        F7WasDown = down;
+    }
+
+    inline void UpdateHotkey() {
+        if (!F7WndProcInstalled) {
+            SDK::Game::AddOnWndProc(&F7WndProcHandler);
+            F7WndProcInstalled = true;
+        }
     }
 
     inline HWND FindProcessWindow() {

@@ -14,7 +14,7 @@
 
 #include "CrashReporter.h"
 #include "DebugLog.h"
-#include "overlay/Overlay.h"
+#include "overlay/D3D11Hook.h"
 
 // PackmanHook disabled — CRC bypass not yet stable
 // #include "Core/PackmanHook.h"
@@ -127,13 +127,13 @@ static DWORD WINAPI OverlayWorker(LPVOID) {
     NightSharpDebug::Logf("[NightSharp] OverlayWorker entered");
 
     __try {
-        NightSharpDebug::Phase("overlay-run");
-        Overlay::Run();
-        NightSharpDebug::Logf("[NightSharp] Overlay::Run() exited");
+        NightSharpDebug::Phase("d3d11hook-install");
+        D3D11Hook::Install();
+        NightSharpDebug::Logf("[NightSharp] D3D11Hook exited");
     } __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                    "OverlayWorker/Overlay::Run",
+                    "OverlayWorker/D3D11Hook::Install",
                     GetExceptionInformation())) {
-        NightSharpDebug::Logf("[NightSharp] Overlay::Run() crashed");
+        NightSharpDebug::Logf("[NightSharp] D3D11Hook crashed");
     }
 
     InterlockedExchange(&g_workerStarted, 0);
@@ -185,7 +185,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     case DLL_PROCESS_DETACH:
         NightSharpDebug::Phase("dll-detach");
         NightSharpDebug::Logf("[NightSharp] DllMain detach");
-        Overlay::RequestShutdown();
+        D3D11Hook::RequestShutdown();
+        D3D11Hook::Uninstall();
         NightSharpDebug::CrashReporter::Uninstall();
         break;
     default:

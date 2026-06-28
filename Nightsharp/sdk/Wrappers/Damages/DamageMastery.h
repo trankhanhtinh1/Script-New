@@ -10,7 +10,7 @@ inline float GetOutgoingDamageModifier(const AIHeroClient&, const AIBaseClient&,
 }
 
 inline float GetIncomingDamageModifier(const AIBaseClient& target, DamageType) {
-    return target.Ref().IsInvulnerable() ? 0.0f : 1.0f;
+    return target.IsInvulnerable() ? 0.0f : 1.0f;
 }
 
 inline float ApplyOutgoing(const AIHeroClient& source,

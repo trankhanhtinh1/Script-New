@@ -975,30 +975,20 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
         return output;
     }
 
-    // DLL: only check dashing/immobile for AIHeroClient
     bool hasResult = false;
-    if (input.Unit.IsHero()) {
-        if (SDK::Extensions::IsDashing(input.Unit)) {
-            result = GetDashingPrediction(input);
+    if (SDK::Extensions::IsDashing(input.Unit)) {
+        result = GetDashingPrediction(input);
+        hasResult = true;
+    } else {
+        double remainingImmobileT = UnitIsImmobileUntil(input.Unit);
+        if (remainingImmobileT >= 0.0) {
+            result = GetImmobilePrediction(input, remainingImmobileT);
             hasResult = true;
-        } else {
-            double remainingImmobileT = UnitIsImmobileUntil(input.Unit);
-            if (remainingImmobileT >= 0.0) {
-                result = GetImmobilePrediction(input, remainingImmobileT);
-                hasResult = true;
-            }
         }
     }
 
-    // DLL: fallback to GetPositionOnPath if not dashing/immobile
     if (!hasResult) {
-        auto waypoints3D = input.Unit.GetWaypoints();
-        std::vector<Vec2> path;
-        path.reserve(waypoints3D.size());
-        for (const auto& wp : waypoints3D) {
-            path.push_back(wp.To2D());
-        }
-        result = GetPositionOnPath(input, path, input.Unit.MoveSpeed(), true);
+        result = GetStandardPrediction(input);
     }
 
     // Range checks (DLL: no cast position clamping, just Hitchance changes)

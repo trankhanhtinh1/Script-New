@@ -361,27 +361,14 @@ inline bool IsOpenChat() {
     return IsChatOpen();
 }
 
-inline bool IsChatOpenByKeyboard() {
-    static bool chatOpen = false;
-    static DWORD lastToggleTick = 0;
+// Chat-open keyboard state — updated by SDK::Game WndProc handler (no polling)
+inline bool g_chatOpenByKeyboard = false;
 
+inline bool IsChatOpenByKeyboard() {
     if (!IsGameFocused()) {
         return false;
     }
-
-    const DWORD now = GetTickCount();
-    if ((GetAsyncKeyState(VK_RETURN) & 0x8000) != 0) {
-        if (now - lastToggleTick > 300) {
-            chatOpen = !chatOpen;
-            lastToggleTick = now;
-        }
-    }
-
-    if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0 ||
-        (chatOpen && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0)) {
-        chatOpen = false;
-    }
-    return chatOpen;
+    return g_chatOpenByKeyboard;
 }
 
 inline bool IsShopOpen() {

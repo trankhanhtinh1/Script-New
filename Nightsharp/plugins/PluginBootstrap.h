@@ -17,6 +17,7 @@
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
 #include "Champion/XerathSemiPlugin.h"
+#include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../DebugLog.h"
 
 
@@ -36,6 +37,13 @@ namespace PluginBootstrap {
         }
         g_registered = true;
         g_shutdown = false;
+
+        // Initialize default SDK Wrappers (TargetSelector & Orbwalker)
+        NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
+        ::SDK::SdkWrappers::Initialize();
+        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 
         // ─── Core plugins ────────────────────────────────────────────────
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
@@ -74,6 +82,7 @@ namespace PluginBootstrap {
         }
         g_shutdown = true;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown begin");
+        ::SDK::SdkWrappers::Shutdown();
         PluginManager::Get().Shutdown();
         PluginRegistry::Reset();
         g_registered = false;

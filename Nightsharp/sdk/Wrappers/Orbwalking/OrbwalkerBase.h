@@ -9,6 +9,7 @@
 #include "../../Core/Game.h"
 #include "../../Core/Variables.h"
 #include "../../../core/CoreControl.h"
+#include "../../../FpsDropDebug.h"
 
 #include <algorithm>
 #include <cmath>
@@ -114,7 +115,7 @@ public:
 
     virtual bool CanAttack(float extraWindup) {
         return Variables::TickCount() + (Game::Ping() / 2) + 25
-               >= lastAutoAttackTick
+               >= LastAutoAttackTick
                   + static_cast<int>(FrameCache().attackDelay * 1000.0f)
                   + static_cast<int>(extraWindup);
     }
@@ -150,9 +151,25 @@ public:
 
     void Orbwalk(const AttackableUnit& forcedTarget = AttackableUnit(),
                  const Vector3& forcedPosition = Vector3()) {
+        NS_PROFILE("orb.Orbwalk.total");
+        {
+            NS_PROFILE("orb.CanAttack");
+            bool canAttack = CanAttack();
+            // (probe ends here so the timing excludes GetTarget/Attack)
+            (void)canAttack;
+        }
         if (CanAttack() && AttackState) {
-            auto target = forcedTarget.IsValid() ? forcedTarget : GetTarget();
-            if (target.IsValid() && Utils::AutoAttack::InAutoAttackRange(target)) {
+            AttackableUnit target;
+            {
+                NS_PROFILE("orb.GetTarget");
+                target = forcedTarget.IsValid() ? forcedTarget : GetTarget();
+            }
+            bool inRange;
+            {
+                NS_PROFILE("orb.InAutoAttackRange");
+                inRange = target.IsValid() && Utils::AutoAttack::InAutoAttackRange(target);
+            }
+            if (inRange) {
                 Attack(target);
             }
         }
@@ -197,16 +214,60 @@ private:
 
 public:
     static void OnGameUpdateHandler(const Events::GameUpdateEventArgs&) {
-        RefreshCache();
+        static int lastUpdateTick = 0;
+        int now = Variables::TickCount();
+        if (now >= lastUpdateTick && now - lastUpdateTick < 30) return;
+        lastUpdateTick = now;
+
         auto* self = Ptr();
-        if (!self || !self->enabled_) return;
-        const auto player = GameObjects::Player();
-        if (!player.IsValid() || player.IsDead()
-            || Extensions::IsCastingInterruptableSpell(player, true)) {
+        if (!self || !self->enabled_) {
             return;
+        }
+
+        // Activate section profiling for the entire tick while an orbwalker
+        // key is held (ActiveMode != None). Idle frames (no key held) pay zero
+        // overhead because every NS_PROFILE probe is a no-op when
+        // SectionsActive == false. The toggle is restored on exit so manual
+        // F12 activation still works outside the orbwalker tick.
+        const bool wasActive = NightSharpPerf::SectionsActive;
+        const bool keyHeld = (self->ActiveMode != OrbwalkingMode::None);
+        if (keyHeld) {
+            if (!wasActive) NightSharpPerf::ResetSections();
+            NightSharpPerf::SectionsActive = true;
+        }
+
+        NS_PROFILE("orb.OnGameUpdateHandler.total");
+        {
+            NS_PROFILE("orb.RefreshCache");
+            RefreshCache();
+        }
+        {
+            NS_PROFILE("orb.Player");
+            const auto player = GameObjects::Player();
+            if (!player.IsValid() || player.IsDead()) {
+                if (keyHeld) {
+                    NightSharpPerf::DumpSections();
+                    NightSharpPerf::SectionsActive = wasActive;
+                }
+                return;
+            }
+            {
+                NS_PROFILE("orb.IsCastingInterruptableSpell");
+                if (Extensions::IsCastingInterruptableSpell(player, true)) {
+                    if (keyHeld) {
+                        NightSharpPerf::DumpSections();
+                        NightSharpPerf::SectionsActive = wasActive;
+                    }
+                    return;
+                }
+            }
         }
         if (self->ActiveMode != self->InActiveMode) {
             self->Orbwalk();
+        }
+        if (keyHeld) {
+            NightSharpPerf::DumpSections();
+            NightSharpPerf::SectionsActive = wasActive;
         }
     }
 
