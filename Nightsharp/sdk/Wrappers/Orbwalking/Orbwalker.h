@@ -152,9 +152,12 @@ public:
             {
                 NS_PROFILE("orb.CoreControl.IssueAttack");
                 if (CoreControl::IssueAttack(gTarget.Address(), gTarget.Position())) {
-                    LogOrb("ACTION: IssueAttack (SUCCESS) -> Target: " + gTarget.CharacterName());
+                    LogOrb("ACTION: IssueAttack (SUCCESS) -> Target: " + gTarget.CharacterName()
+                        + " | Tick: " + std::to_string(Variables::TickCount()));
                     LastAutoAttackCommandTick = Variables::TickCount();
-                    LastAutoAttackTick = Variables::TickCount(); // Fallback to prevent spam loop
+                    // Set LastAutoAttackTick immediately (local time).
+                    // CanAttack/CanMove use this directly — no server confirmation needed.
+                    LastAutoAttackTick = Variables::TickCount();
                     LastTarget = gTarget;
                 } else {
                     LogOrb("ACTION: IssueAttack (FAILED)");

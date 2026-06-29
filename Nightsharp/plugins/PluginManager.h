@@ -161,6 +161,7 @@ namespace Plugins {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
                     const auto perfStart = NightSharpPerf::Now();
+                    const auto sectionStart = NightSharpPerf::SectionNow();
                     __try {
                         plugin->OnUpdate();
                     }
@@ -178,6 +179,9 @@ namespace Plugins {
                         plugin->GetInternalId(),
                         plugin->GetName(),
                         NightSharpPerf::MsSince(perfStart));
+                    NightSharpPerf::RecordSection(
+                        plugin->GetInternalId(),
+                        NightSharpPerf::SectionMsSince(sectionStart));
                 }
             }
         }
@@ -186,6 +190,7 @@ namespace Plugins {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
                     const auto perfStart = NightSharpPerf::Now();
+                    const auto sectionStart = NightSharpPerf::SectionNow();
                     __try {
                         plugin->OnRender();
                     }
@@ -203,6 +208,8 @@ namespace Plugins {
                         plugin->GetInternalId(),
                         plugin->GetName(),
                         NightSharpPerf::MsSince(perfStart));
+                    // Optional: could add another section prefix for render
+                    // NightSharpPerf::RecordSection(...) 
                 }
             }
         }

@@ -120,30 +120,32 @@ public:
     bool CanAttack() { return CanAttack(0.0f); }
 
     virtual bool CanAttack(float extraWindup) {
-        int cd = static_cast<int>(FrameCache().attackDelay * 1000.0f);
-        int required = LastAutoAttackTick + cd + static_cast<int>(extraWindup);
-        bool res = Variables::TickCount() + (Game::Ping() / 2) + 25 >= required;
-
-        if (res && Variables::TickCount() >= LastAutoAttackTick + 100 && Variables::TickCount() < LastAutoAttackTick + 500) {
-            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-            os << "[Tick: " << Variables::TickCount() << "] CanAttack() -> TRUE | attackDelay: " << FrameCache().attackDelay << "s (" << cd << "ms) | LastAttackTick: " << LastAutoAttackTick << " | extraWindup: " << extraWindup << "\n";
-        }
-        return res;
+        // Simple local-time approach: IssueAttack sets LastAutoAttackTick immediately.
+        // No server-confirmation (PendingAttack) needed — mirrors external orbwalker.
+        const int cd = static_cast<int>(FrameCache().attackDelay * 1000.0f);
+        return static_cast<float>(Variables::TickCount() + (Game::Ping() / 2) + 25) >=
+               static_cast<float>(LastAutoAttackTick) + static_cast<float>(cd) + extraWindup;
     }
 
     bool CanMove() { return CanMove(0.0f, false); }
 
-    virtual bool CanMove(float extraWindup, bool disableMissileCheck) {
+    virtual bool CanMove(float extraWindup, bool /*disableMissileCheck*/) {
         auto player = GameObjects::Player();
-        if (!player.IsValid()) {
-            return false;
-        }
+        if (!player.IsValid()) return false;
 
-        int windupMs = static_cast<int>(FrameCache().attackWindup * 1000.0f);
-        int requiredTick = LastAutoAttackTick + windupMs + static_cast<int>(extraWindup) + (Game::Ping() / 2) + 25; 
+        // Kalista can always move (her passive requires it)
+        if (!Utils::AutoAttack::CanCancelAutoAttack(player)) return true;
 
-        return !Utils::AutoAttack::CanCancelAutoAttack(player) || (Variables::TickCount() >= requiredTick);
+        if (LastAutoAttackTick <= 0) return true;
+
+        // Pure engine-windup timing: fire move once the client animation's
+        // windup phase is complete. No ping adjustment — the client animation
+        // starts the moment IssueAttack is called, so this is fully local.
+        const float windupMs = FrameCache().attackWindup * 1000.0f;
+        return static_cast<float>(Variables::TickCount()) >=
+               static_cast<float>(LastAutoAttackTick) + windupMs + extraWindup;
     }
+
 
     bool CanOrbwalk(const AttackableUnit& target, float range = 0.0f) {
         return CanOrbwalk(target, range, 0.0f);
@@ -163,13 +165,30 @@ public:
     void Orbwalk(const AttackableUnit& forcedTarget = AttackableUnit(),
                  const Vector3& forcedPosition = Vector3()) {
         NS_PROFILE("orb.Orbwalk.total");
+
+        // --- Debug: log Orbwalk entry once per 250ms ---
+        {
+            static int s_lastOrbwalkLog = 0;
+            const int now = Variables::TickCount();
+            if (now - s_lastOrbwalkLog >= 250) {
+                s_lastOrbwalkLog = now;
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "[Tick: " << now
+                   << "] ORBWALK ENTRY | mode=" << static_cast<int>(ActiveMode)
+                   << " | AttackState=" << (AttackState ? "1" : "0")
+                   << " | LastAutoAttackTick=" << LastAutoAttackTick
+                   << " | attackDelayMs=" << static_cast<int>(FrameCache().attackDelay * 1000.0f)
+                   << " | windupMs=" << static_cast<int>(FrameCache().attackWindup * 1000.0f)
+                   << " | sinceLastAttack=" << (now - LastAutoAttackTick) << "ms\n";
+            }
+        }
+
+        bool attackReady;
         {
             NS_PROFILE("orb.CanAttack");
-            bool canAttack = CanAttack();
-            // (probe ends here so the timing excludes GetTarget/Attack)
-            (void)canAttack;
+            attackReady = CanAttack();
         }
-        if (CanAttack() && AttackState) {
+        if (attackReady && AttackState) {
             AttackableUnit target;
             {
                 NS_PROFILE("orb.GetTarget");
@@ -180,26 +199,39 @@ public:
                 NS_PROFILE("orb.InAutoAttackRange");
                 inRange = target.IsValid() && Utils::AutoAttack::InAutoAttackRange(target);
             }
+
+            // Log every CanAttack=TRUE frame (rare, so no throttle needed)
+            {
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "[Tick: " << Variables::TickCount()
+                   << "] ORBWALK CanAttack=TRUE | targetValid=" << (target.IsValid() ? "YES" : "NO")
+                   << " | targetName='" << (target.IsValid() ? target.CharacterName() : "") << "'"
+                   << " | inRange=" << (inRange ? "YES" : "NO") << "\n";
+            }
+
             if (inRange) {
-                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-                os << "[Tick: " << Variables::TickCount() << "] CHECK: CanAttack() -> TRUE, InRange -> TRUE. Calling Attack().\n";
                 Attack(target);
-            } else {
-                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-                os << "[Tick: " << Variables::TickCount() << "] CHECK: CanAttack() -> TRUE, but No Target In Range.\n";
             }
         }
         if (CanMove() && MovementState) {
+            const int now = Variables::TickCount();
             std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-            os << "[Tick: " << Variables::TickCount() << "] CHECK: CanMove() -> TRUE. Calling Move().\n";
+            os << "[Tick: " << now
+               << "] MOVE | elapsed=" << (now - LastAutoAttackTick) << "ms"
+               << " | windupMs=" << static_cast<int>(FrameCache().attackWindup * 1000.0f) << "ms\n";
             Move(forcedPosition.IsValid() && !forcedPosition.IsZero()
                      ? forcedPosition
                      : FrameCache().cursorPos);
         }
+
     }
 
     void ResetSwingTimer() {
-        LastAutoAttackTick = 0;
+        LastAutoAttackTick  = 0;
+        LastCastDelay       = 0.0f;
+        PendingAttack       = false;
+        PendingAttackTick   = 0;
+        MissileLaunched     = false;
     }
 
     void SetAttackState(bool state) { AttackState = state; }
@@ -208,15 +240,24 @@ public:
 public:
     // Public read access (matching C# { get; protected set; })
     int LastAutoAttackCommandTick = 0;
-    int LastAutoAttackTick = 0;
-    int LastMovementOrderTick = 0;
-    int TotalAutoAttacks = 0;
-    AttackableUnit LastTarget = {};
+    int LastAutoAttackTick        = 0;  // Set from OnProcessSpell (server-side AA start)
+    int LastMovementOrderTick     = 0;
+    int TotalAutoAttacks          = 0;
+    AttackableUnit LastTarget     = {};
+
+    // Pending attack state: set by Attack() on IssueAttack success, cleared by OnProcessSpell.
+    // AttackClockTick() picks max(LastAutoAttackTick, PendingAttackTick) to prevent spam.
+    bool  PendingAttack    = false;
+    int   PendingAttackTick = 0;
+
+    // Actual cast delay captured from OnProcessSpell CastDelay field.
+    // More accurate than engine windup; used by CanMove() for the animation window.
+    float LastCastDelay = 0.0f;
 
 protected:
     OrbwalkingMode InActiveMode = OrbwalkingMode::None;
-    bool AttackState = true;
-    bool MovementState = true;
+    bool AttackState    = true;
+    bool MovementState  = true;
     bool MissileLaunched = false;
 
 public:
@@ -241,19 +282,7 @@ public:
         if (!self || !self->enabled_) {
             return;
         }
-
-        // Activate section profiling for the entire tick while an orbwalker
-        // key is held (ActiveMode != None). Idle frames (no key held) pay zero
-        // overhead because every NS_PROFILE probe is a no-op when
-        // SectionsActive == false. The toggle is restored on exit so manual
-        // F12 activation still works outside the orbwalker tick.
-        const bool wasActive = NightSharpPerf::SectionsActive;
-        const bool keyHeld = (self->ActiveMode != OrbwalkingMode::None);
-        if (keyHeld) {
-            if (!wasActive) NightSharpPerf::ResetSections();
-            NightSharpPerf::SectionsActive = true;
-        }
-
+        // Start of orbwalker loop
         NS_PROFILE("orb.OnGameUpdateHandler.total");
         {
             NS_PROFILE("orb.RefreshCache");
@@ -263,29 +292,17 @@ public:
             NS_PROFILE("orb.Player");
             const auto player = GameObjects::Player();
             if (!player.IsValid() || player.IsDead()) {
-                if (keyHeld) {
-                    NightSharpPerf::DumpSections();
-                    NightSharpPerf::SectionsActive = wasActive;
-                }
                 return;
             }
             {
                 NS_PROFILE("orb.IsCastingInterruptableSpell");
                 if (Extensions::IsCastingInterruptableSpell(player, true)) {
-                    if (keyHeld) {
-                        NightSharpPerf::DumpSections();
-                        NightSharpPerf::SectionsActive = wasActive;
-                    }
                     return;
                 }
             }
         }
         if (self->ActiveMode != self->InActiveMode) {
             self->Orbwalk();
-        }
-        if (keyHeld) {
-            NightSharpPerf::DumpSections();
-            NightSharpPerf::SectionsActive = wasActive;
         }
     }
 
@@ -339,7 +356,10 @@ public:
         if (!self || !self->enabled_) return;
 
         std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-        os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnDoCast | SenderNetId: " << args.Sender.NetworkId << " | PlayerNetId: " << GameObjects::Player().NetworkId() << " | Name: '" << args.SpellName << "' | Slot: " << args.Slot << " | IsAuto: " << (args.IsAutoAttack ? "TRUE" : "FALSE") << "\n";
+        os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnDoCast | SenderNetId: " << args.Sender.NetworkId
+           << " | PlayerNetId: " << GameObjects::Player().NetworkId()
+           << " | Name: '" << args.SpellName << "' | Slot: " << args.Slot
+           << " | IsAuto: " << (args.IsAutoAttack ? "TRUE" : "FALSE") << "\n";
 
         if (!args.Sender.IsValid()
             || args.Sender.NetworkId != GameObjects::Player().NetworkId()) {
@@ -354,15 +374,25 @@ public:
         }
 
         if (!args.IsAutoAttack && !Utils::AutoAttack::IsAutoAttack(args.SpellName)) {
+            // Not our auto-attack, not a reset — ignore completely.
             return;
         }
 
-        std::ofstream os2("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-        os2 << "[Tick: " << Variables::TickCount() << "] EVENT: OnDoCast (Windup Finished)\n";
-
+        // OnDoCast = missile has left the bow (windup finished, projectile spawned).
+        // Set MissileLaunched to enable the 60% fast-path in CanMove().
+        // Clamp LastAutoAttackTick from PendingAttackTick if it was set later
+        // (local issue time may be later than server-event time due to ping).
         self->MissileLaunched = true;
+        if (self->PendingAttack && self->LastAutoAttackTick < self->PendingAttackTick) {
+            self->LastAutoAttackTick = self->PendingAttackTick;
+        }
+        self->PendingAttack     = false;
+        self->PendingAttackTick = 0;
         self->LastMovementOrderTick = 0;
         ++self->TotalAutoAttacks;
+
+        os << "[Tick: " << Variables::TickCount() << "] EVENT: OnDoCast (Missile Launched)"
+           << " | LastAutoAttackTick: " << self->LastAutoAttackTick << "\n";
 
         auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
@@ -393,9 +423,17 @@ public:
             || args.Sender.NetworkId != GameObjects::Player().NetworkId()) {
             return;
         }
-        if (args.DestroyMissile && args.KeepAnimationPlaying) {
-            self->ResetSwingTimer();
+        if (args.ForceStop && !args.HasBeenCast && args.Spellbook) {
+            const auto activeSlot = Globals::Read<uint8_t>(
+                args.Spellbook + Offset::SpellBookLayout::ActiveSlot);
+            if (activeSlot == 64) {
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "[Tick: " << Variables::TickCount()
+                   << "] OnStopCast: AA ForceStop (slot=64) -> ResetSwingTimer()\n";
+                self->ResetSwingTimer();
+            }
         }
+
     }
 
     void OnProcessSpellDelayed(const Events::ProcessSpellEventArgs& args) {
@@ -405,8 +443,21 @@ public:
         }
 
         if (!args.IsAutoAttack && !Utils::AutoAttack::IsAutoAttack(args.SpellName)) {
+            // Strictly ignore non-auto spells — no 150ms fallback.
             return;
         }
+
+        // OnProcessSpell = windup has started (game registered the attack server-side).
+        // Record the server-adjusted tick and save the per-attack cast delay.
+        int serverTick = Variables::TickCount() - (Game::Ping() / 2);
+        // Clamp: if PendingAttackTick is later (we issued faster than server ack), prefer it.
+        if (PendingAttack && PendingAttackTick > serverTick) {
+            serverTick = PendingAttackTick;
+        }
+        LastAutoAttackTick = serverTick;
+        PendingAttack      = false;
+        PendingAttackTick  = 0;
+        MissileLaunched    = false;
 
         auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
@@ -416,10 +467,9 @@ public:
         const AIBaseClient sender(args.Sender.Ptr);
 
         std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-        os << "[Tick: " << Variables::TickCount() << "] EVENT: OnProcessSpell (Windup Started)\n";
-
-        LastAutoAttackTick = Variables::TickCount() - (Game::Ping() / 2);
-        MissileLaunched = false;
+        os << "[Tick: " << Variables::TickCount() << "] EVENT: OnProcessSpell"
+           << " | serverTick: " << serverTick
+           << " | Name: '" << args.SpellName << "'\n";
 
         if (target.IsValid()) {
             if (!target.Compare(LastTarget)) {

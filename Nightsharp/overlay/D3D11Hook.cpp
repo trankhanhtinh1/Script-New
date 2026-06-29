@@ -49,6 +49,9 @@ static WNDPROC          g_originalWndProc  = nullptr;
 static std::once_flag   g_initDevice;
 static bool             g_active           = false;
 static volatile LONG    g_shutdown         = 0;
+// Set to 1 once PluginBootstrap::EnsureRegistered() has returned (success or crash).
+// Render() gates all SDK/plugin calls on this flag to prevent the bootstrap race.
+static volatile LONG    g_bootstrapDone    = 0;
 
 // -----------------------------------------------------------------------
 // Pattern scanning helpers
@@ -282,22 +285,7 @@ static void InitImGui(IDXGISwapChain* swapChain) {
 // -----------------------------------------------------------------------
 // Rendering
 // -----------------------------------------------------------------------
-static void Render() {
-    if (g_shutdown)
-        return;
-
-    ImGui_ImplDX11_NewFrame();
-    ImGui_ImplWin32_NewFrame();
-    ImGui::NewFrame();
-
-    // Read game state once per frame
-    CoreRuntime::TickRead();
-
-    // Plugin update + render
-    Plugins::PluginManager::Get().OnUpdate();
-    Plugins::PluginManager::Get().OnRender();
-
-    // Menu + PermaShow render
+static void RenderMenuSafe() {
     __try {
         NightSharpMenu::Render();
     }
@@ -306,12 +294,53 @@ static void Render() {
                   GetExceptionInformation())) {
         NightSharpDebug::Logf("[D3D11Hook] Menu render crashed");
     }
+}
+
+static void Render() {
+    if (g_shutdown)
+        return;
+
+    NightSharpPerf::BeginFrame();
+
+    ImGui_ImplDX11_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+
+    // Guard: do not touch game memory or plugins until PluginBootstrap has fully
+    // completed on the install thread. Without this, TickRead/OnUpdate can dereference
+    // SDK singletons that haven't been initialized yet, causing ACCESS_VIOLATION.
+    if (g_bootstrapDone) {
+        // Read game state once per frame
+        {
+            NightSharpPerf::ScopedTimer timer("CoreRuntime::TickRead");
+            CoreRuntime::TickRead();
+        }
+
+        // Plugin update + render
+        {
+            NightSharpPerf::ScopedTimer timer("PluginManager::OnUpdate");
+            Plugins::PluginManager::Get().OnUpdate();
+        }
+        {
+            NightSharpPerf::ScopedTimer timer("PluginManager::OnRender");
+            Plugins::PluginManager::Get().OnRender();
+        }
+
+        // Menu + PermaShow render
+        {
+            NightSharpPerf::ScopedTimer timer("NightSharpMenu::Render");
+            RenderMenuSafe();
+        }
+    }
 
     ImGui::EndFrame();
     ImGui::Render();
 
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+    NightSharpPerf::DumpSections();
+    NightSharpPerf::EndFrame();
 }
 
 // -----------------------------------------------------------------------
@@ -323,6 +352,7 @@ struct DxgiPresent {
             InitImGui(pSwapChain);
         });
         Render();
+        NightSharpPerf::ScopedTimer timer("Present");
         return m_original(pSwapChain, syncInterval, flags);
     }
     static decltype(&Hooked) m_original;
@@ -355,6 +385,10 @@ static void BootstrapPluginsSafe() {
                   GetExceptionInformation())) {
         NightSharpDebug::Logf("[D3D11Hook] Plugin bootstrap crashed");
     }
+    // Signal Render() that it is now safe to call TickRead/OnUpdate/OnRender.
+    // This runs whether bootstrap succeeded or crashed, so the render thread
+    // is never permanently blocked (it will just skip SDK calls if plugins failed).
+    InterlockedExchange(&g_bootstrapDone, 1);
 }
 
 static void ShutdownPluginsSafe() {
@@ -402,14 +436,34 @@ bool Install() {
     NightSharpDebug::Phase("d3d11hook-install");
     NightSharpDebug::Logf("[D3D11Hook] Installing D3D11 swapchain hooks...");
 
-    HWND gameHwnd = FindGameWindow();
+    // Retry FindGameWindow: the game window may not be visible/owned by the render
+    // thread yet when the DLL is injected. Retry up to 10 times with 100ms gaps.
+    HWND gameHwnd = nullptr;
+    for (int retry = 0; retry < 10 && !gameHwnd; ++retry) {
+        gameHwnd = FindGameWindow();
+        if (!gameHwnd) {
+            NightSharpDebug::Logf("[D3D11Hook] Game window not found, retry %d/10...", retry + 1);
+            Sleep(100);
+        }
+    }
     if (!gameHwnd) {
-        NightSharpDebug::Logf("[D3D11Hook] Could not find game window");
+        NightSharpDebug::Logf("[D3D11Hook] Could not find game window after retries");
         return false;
     }
 
-    if (!HookWndProc(gameHwnd)) {
-        NightSharpDebug::Logf("[D3D11Hook] Failed to hook WndProc");
+    // Retry HookWndProc: SetWindowLongPtrW returns 0 (fails) when the window's
+    // message pump isn't fully owned by its thread yet. This is a timing issue
+    // at injection time and resolves within a few hundred milliseconds.
+    bool wndHooked = false;
+    for (int retry = 0; retry < 10 && !wndHooked; ++retry) {
+        wndHooked = HookWndProc(gameHwnd);
+        if (!wndHooked) {
+            NightSharpDebug::Logf("[D3D11Hook] WndProc hook failed, retry %d/10...", retry + 1);
+            Sleep(100);
+        }
+    }
+    if (!wndHooked) {
+        NightSharpDebug::Logf("[D3D11Hook] Failed to hook WndProc after retries");
         return false;
     }
 
