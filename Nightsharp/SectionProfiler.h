@@ -42,7 +42,7 @@ inline int SectionCount = 0;
 inline DWORD LastSectionDumpTick = 0;
 inline DWORD SectionDumpIntervalMs = 1000;   // how often to write summary to log
 inline double SectionDumpMinMs = 0.005;      // skip regions below this avg ms
-inline bool SectionsActive = false;          // master switch (toggled on orbwalker hold)
+inline bool SectionsActive = true;          // master switch (always on for system-wide profile)
 inline bool SectionLogEnabled = true;        // mirrors FpsDropDebug::LogEnabled
 
 inline LARGE_INTEGER SectionFrequency = {};

@@ -128,7 +128,14 @@ private:
 
         {
             NS_PROFILE("orb.GameObjects.EnemyMinions");
-            for (const auto& minion : GameObjects::EnemyMinions()) {
+            const auto player = GameObjects::Player();
+            const float attackRange = Utils::AutoAttack::GetRealAutoAttackRange(player, AttackableUnit()) + 100.0f;
+            const Vector3 playerPos = player.Position();
+            for (const auto& minion : GetCachedEnemyMinions()) {
+                // Cheap position-only distance check first — skip full state reads for far units.
+                const Vector3 pos = minion.Position();
+                if (playerPos.Distance2D(pos) > attackRange) continue;
+
                 if (!IsValidUnit(minion)) continue;
 
                 const std::string baseName = minion.CharacterName();
@@ -147,7 +154,13 @@ private:
             NS_PROFILE("orb.GameObjects.Jungle");
             minionList = OrderEnemyMinions(minionList);
             std::vector<AIMinionClient> jungleList;
+            const auto playerJ = GameObjects::Player();
+            const float jungleRange = Utils::AutoAttack::GetRealAutoAttackRange(playerJ, AttackableUnit()) + 100.0f;
+            const Vector3 playerJPos = playerJ.Position();
             for (const auto& j : GameObjects::Jungle()) {
+                // Cheap position-only distance check before full validation.
+                if (playerJPos.Distance2D(j.Position()) > jungleRange) continue;
+
                 if (IsValidUnit(j)) {
                     const std::string jName = j.CharacterName();
                     if (_stricmp(jName.c_str(), "gangplankbarrel") != 0) {
@@ -226,9 +239,26 @@ public:
 
     AttackableUnit ForceTarget = {};
 
+    mutable std::vector<AIMinionClient> cachedEnemyMinions_;
+    mutable int lastEnemyMinionsTick_ = 0;
+
+    const std::vector<AIMinionClient>& GetCachedEnemyMinions() const {
+        if (Variables::TickCount() - lastEnemyMinionsTick_ > 30) {
+            NS_PROFILE("orb.UpdateEnemyMinionsCache");
+            cachedEnemyMinions_.clear();
+            for (const auto& m : GameObjects::EnemyMinions()) {
+                if (m.IsValid() && !m.IsDead() && m.IsVisible() && m.IsTargetable()) {
+                    cachedEnemyMinions_.push_back(m);
+                }
+            }
+            lastEnemyMinionsTick_ = Variables::TickCount();
+        }
+        return cachedEnemyMinions_;
+    }
+
     std::vector<AIMinionClient> GetEnemyMinions(float range = 0.0f) const {
         std::vector<AIMinionClient> result;
-        for (const auto& m : GameObjects::EnemyMinions()) {
+        for (const auto& m : GetCachedEnemyMinions()) {
             if (IsValidUnit(m, range) && !IsIgnoredMinion(m.CharacterName().c_str())) {
                 result.push_back(m);
             }
@@ -271,41 +301,70 @@ public:
                     });
             }
 
+            // Cache AA damage once per loop — it's the same for all minions.
+            float aaDamage;
+            {
+                NS_PROFILE("orb.Damage.GetAutoAttackDamage");
+                aaDamage = Damage::GetAutoAttackDamage(
+                    AIHeroClient(player.Address()),
+                    minions.empty() ? AIMinionClient() : minions[0],
+                    true);
+            }
+
+            AIMinionClient bestFarmMinion; // LaneClear fallback: first in-range minion
             for (const auto& minion : minions) {
                 if (minion.MaxHealth() <= 10.0f) {
-                    if (minion.Health() <= 1.0f) {
-                        return minion;
-                    }
-                } else {
-                    float predHealth;
-                    {
-                        NS_PROFILE("orb.HealthPrediction.GetPrediction");
-                        int timeToHit = static_cast<int>(Utils::AutoAttack::GetTimeToHit(minion));
-                        predHealth = HealthPrediction::GetPrediction(
-                            minion, timeToHit, FarmDelay(), HealthPredictionType::Simulated);
-                    }
+                    if (minion.Health() <= 1.0f) return minion;
+                    continue;
+                }
 
-                    if (predHealth <= 0.0f) {
-                        OrbwalkingActionArgs args = {};
-                        args.Position = minion.Position();
-                        args.Target = minion;
-                        args.Process = true;
-                        args.Type = OrbwalkingType::NonKillableMinion;
-                        orbwalker_->InvokeAction(args);
+                // Pre-filter: skip HealthPrediction for minions clearly too healthy to kill.
+                // 3x aaDamage threshold: if hp > 3*dmg, no incoming hits in travel time
+                // can bring it into our one-shot range — skip the expensive simulation.
+                if (minion.Health() > aaDamage * 3.0f) {
+                    if ((mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Hybrid)
+                        && !bestFarmMinion.IsValid()) {
+                        bestFarmMinion = minion;
                     }
+                    continue;
+                }
 
-                    float aaDamage;
-                    {
-                        NS_PROFILE("orb.Damage.GetAutoAttackDamage");
-                        aaDamage = Damage::GetAutoAttackDamage(
-                            AIHeroClient(player.Address()), minion, true);
-                    }
-                    if (predHealth > 0.0f && predHealth < aaDamage) {
-                        return minion;
-                    }
+                float predHealth;
+                {
+                    NS_PROFILE("orb.HealthPrediction.GetPrediction");
+                    int timeToHit = static_cast<int>(Utils::AutoAttack::GetTimeToHit(minion));
+                    predHealth = HealthPrediction::GetPrediction(
+                        minion, timeToHit, FarmDelay(), HealthPredictionType::Simulated);
+                }
+
+                if (predHealth <= 0.0f) {
+                    OrbwalkingActionArgs args = {};
+                    args.Position = minion.Position();
+                    args.Target = minion;
+                    args.Process = true;
+                    args.Type = OrbwalkingType::NonKillableMinion;
+                    orbwalker_->InvokeAction(args);
+                }
+
+                if (predHealth > 0.0f && predHealth < aaDamage) {
+                    return minion; // killable — return immediately
+                }
+
+                // LaneClear/Hybrid: remember first valid minion as farm fallback
+                if ((mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Hybrid)
+                    && !bestFarmMinion.IsValid()) {
+                    bestFarmMinion = minion;
                 }
             }
+
+            // LaneClear/Hybrid: no killable found — farm lowest-HP in-range minion.
+            // LastHit is strict: only returns killable.
+            if ((mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Hybrid)
+                && bestFarmMinion.IsValid()) {
+                return bestFarmMinion;
+            }
         }
+
 
         if (ForceTarget.IsValid()
             && Extensions::IsValidTarget(ForceTarget)
