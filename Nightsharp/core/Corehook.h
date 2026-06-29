@@ -43,7 +43,7 @@
 #endif
 
 #ifndef NIGHTSHARP_ENABLE_ONDELETE_HOOK
-// Enabled: hooks DestroyObject (0x54CC30). RCX = manager, RDX = object.
+// Enabled: hooks sub_28EFE0 (GameEventId.OnDelete dispatcher). RCX = GameObject*.
 // Event fires BEFORE original runs — object is still valid at hook entry.
 #define NIGHTSHARP_ENABLE_ONDELETE_HOOK 1
 #endif
@@ -796,7 +796,7 @@ inline const char* InstallNote(HookId id) {
 #endif
 #if !NIGHTSHARP_ENABLE_ONDELETE_HOOK
     if (id == OnDelete) {
-        return "disabled by default; DestroyObject hook was prone to vfunc crashes";
+        return "disabled by default; OnDelete event handler hook was prone to vfunc crashes";
     }
 #endif
     if (id >= 0 && id < HookCount && HookInstallRva(id) == 0) {
@@ -824,7 +824,7 @@ inline const char* InstallNote(HookId id) {
         return "AssignNetworkId; RCX object, RDX networkId. Call original first";
     }
     if (id == OnDelete) {
-        return "DestroyObject; RCX manager, RDX object. Fires before original";
+        return "sub_28EFE0; RCX = GameObject*. Fires GameEventId.OnDelete (event ID = 0)";
     }
     if (id == OnMissileCreate) {
         return "MissileClient init path; inserts into MissileManager";

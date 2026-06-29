@@ -8,6 +8,7 @@
 #include "../../Enumerations/DamageType.h"
 #include "../../Enumerations/SpellSlot.h"
 #include "../../Core/Objects.h"
+#include "../../GameObjects/InventorySlot.h"
 
 #include <algorithm>
 #include <cstring>
@@ -68,38 +69,9 @@ public:
             return 0.0f;
         }
 
-        // Find champion in constexpr table (binary search, sorted by name)
-        const auto* champ = DamageData::FindChampion(source.CharacterName().c_str());
-        if (!champ) {
+        const DamageData::StageEntry* entry = FindStageEntry(source, slot, stage);
+        if (!entry) {
             return 0.0f;
-        }
-
-        // Map SpellSlot enum to table index (0=Q, 1=W, 2=E, 3=R)
-        const uint8_t slotIdx = MapSlot(slot);
-        if (slotIdx > 3) {
-            return 0.0f;
-        }
-
-        // Find the matching slot
-        const DamageData::SlotEntry* slotEntry = nullptr;
-        for (int i = 0; i < champ->SlotCount; ++i) {
-            if (champ->Slots[i].Slot == slotIdx) {
-                slotEntry = &champ->Slots[i];
-                break;
-            }
-        }
-        if (!slotEntry || slotEntry->StageCount == 0) {
-            return 0.0f;
-        }
-
-        // Find the matching stage
-        const uint8_t stageIdx = static_cast<uint8_t>(stage);
-        const DamageData::StageEntry* entry = &slotEntry->Stages[0]; // default fallback
-        for (int i = 0; i < slotEntry->StageCount; ++i) {
-            if (slotEntry->Stages[i].Stage == stageIdx) {
-                entry = &slotEntry->Stages[i];
-                break;
-            }
         }
 
         const int spellLevel = std::max(1, source.GetSpell(slot).Level());
@@ -152,6 +124,13 @@ public:
                trueDamage;
     }
 
+    static DamageType GetSpellDamageType(const AIBaseClient& source,
+                                         SpellSlot slot,
+                                         DamageStage stage = DamageStage::Default) {
+        const DamageData::StageEntry* entry = FindStageEntry(source, slot, stage);
+        return entry ? MapDamageType(entry->Type) : DamageType::Physical;
+    }
+
     static float GetAutoAttackDamage(const AIBaseClient& source,
                                      const AIBaseClient& target) {
         if (!source.IsValid() || !target.IsValid()) {
@@ -177,6 +156,54 @@ private:
         }
     }
 
+    static DamageType MapDamageType(uint8_t type) {
+        switch (type) {
+        case 0: return DamageType::Physical;
+        case 1: return DamageType::Magical;
+        case 2: return DamageType::Mixed;
+        case 3: default: return DamageType::True;
+        }
+    }
+
+    static const DamageData::StageEntry* FindStageEntry(const AIBaseClient& source,
+                                                        SpellSlot slot,
+                                                        DamageStage stage) {
+        if (!source.IsValid()) {
+            return nullptr;
+        }
+
+        const auto* champ = DamageData::FindChampion(source.CharacterName().c_str());
+        if (!champ) {
+            return nullptr;
+        }
+
+        const uint8_t slotIdx = MapSlot(slot);
+        if (slotIdx > 3) {
+            return nullptr;
+        }
+
+        const DamageData::SlotEntry* slotEntry = nullptr;
+        for (int i = 0; i < champ->SlotCount; ++i) {
+            if (champ->Slots[i].Slot == slotIdx) {
+                slotEntry = &champ->Slots[i];
+                break;
+            }
+        }
+        if (!slotEntry || slotEntry->StageCount == 0) {
+            return nullptr;
+        }
+
+        const uint8_t stageIdx = static_cast<uint8_t>(stage);
+        const DamageData::StageEntry* entry = &slotEntry->Stages[0];
+        for (int i = 0; i < slotEntry->StageCount; ++i) {
+            if (slotEntry->Stages[i].Stage == stageIdx) {
+                entry = &slotEntry->Stages[i];
+                break;
+            }
+        }
+        return entry;
+    }
+
     static float ResolveScaling(const DamageData::BonusEntry& bonus,
                                 const AIBaseClient& source,
                                 const AIBaseClient& target) {
@@ -185,7 +212,7 @@ private:
         case 1:  return scaler.AD();                     // AttackPoints       (total AD)
         case 2:  return scaler.BonusAttackDamage();       // BonusAttackPoints  (kept long: no short alias)
         case 3:  return scaler.AP();                      // AbilityPoints      (= ability power)
-        case 4:  return scaler.MaxHealth();               // BonusHealth (approx)
+        case 4:  return scaler.BonusHealth();              // BonusHealth
         case 5:  return scaler.Health();                  // CurrentHealth
         case 6:  return scaler.MaxHealth();               // MaxHealth
         case 7:  return std::max(0.0f, scaler.MaxHealth() - scaler.Health()); // MissingHealth

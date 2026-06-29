@@ -14,6 +14,7 @@
 #include "../Enumerations/MinionTypes.h"
 #include "../Enumerations/SpellSlot.h"
 #include "../Enumerations/DamageType.h"
+#include "../Data/RuneData.h"
 
 #include <algorithm>
 #include <cctype>
@@ -740,6 +741,7 @@ public:
     float BonusAttackDamage() const {
         return TotalAttackDamage() - BaseAttackDamage();
     }
+    float BonusHealth() const;
     float Crit() const {
         return ::CoreAIHeroClient::Crit(Address());
     }
@@ -1073,6 +1075,46 @@ public:
         return result;
     }
 
+    const Data::RuneDatabase::RuneStyleDataEntry* PrimaryTreeData() const {
+        const auto tree = PrimaryTree();
+        return Data::RuneDatabase::FindStyleById(tree.id);
+    }
+
+    const Data::RuneDatabase::RuneStyleDataEntry* SecondaryTreeData() const {
+        const auto tree = SecondaryTree();
+        return Data::RuneDatabase::FindStyleById(tree.id);
+    }
+
+    const Data::RuneDatabase::RuneDataEntry* GetRuneData(int runeId) const {
+        return Data::RuneDatabase::FindById(runeId);
+    }
+
+    bool HasRune(int runeId) const {
+        if (runeId <= 0) {
+            return false;
+        }
+
+        const auto nativeEntries = Entries();
+        for (const auto& entry : nativeEntries) {
+            if (entry.data.id == runeId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::vector<const Data::RuneDatabase::RuneDataEntry*> RuneDataEntries() const {
+        const auto nativeEntries = Entries();
+        std::vector<const Data::RuneDatabase::RuneDataEntry*> result;
+        result.reserve(nativeEntries.size());
+        for (const auto& entry : nativeEntries) {
+            if (const auto* data = Data::RuneDatabase::FindById(entry.data.id)) {
+                result.push_back(data);
+            }
+        }
+        return result;
+    }
+
 private:
     uintptr_t address_ = 0;
 };
@@ -1097,6 +1139,10 @@ public:
 
     RuneManagerClient RuneManager() const {
         return RuneManagerClient(::CoreRuneManager::Resolve(Address()));
+    }
+
+    bool HasRune(int runeId) const {
+        return RuneManager().HasRune(runeId);
     }
 };
 
