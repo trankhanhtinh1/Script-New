@@ -46,12 +46,13 @@ bool g_antiCaptureEnabled = false;
 volatile LONG g_bRunning = 0;
 volatile LONG g_bShutdown = 0;
 volatile LONG g_bMenuVisible = 1;
+volatile LONG g_bMenuReady = 0;
 
 const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
 constexpr DWORD kTargetOverlayFrameMs = 16; // ~60 Hz — halves per-frame CPU vs 125 Hz
 constexpr DWORD kGameReadyPollMs = 500;
 constexpr int kGameReadyMaxPolls = 240;
-constexpr float kMenuStartGameTimeSeconds = 3.0f;
+constexpr float kMenuStartDelayAfterGameTimeSeconds = 3.0f;
 
 template <typename T>
 void SafeRelease(T*& ptr) {
@@ -92,8 +93,10 @@ float ReadGameTimeSafe() {
 
 bool WaitForGameReady() {
     NightSharpDebug::Phase("overlay-wait-game-ready");
-    Log("[NightSharp] Waiting for game time > 3.0 before showing menu/loading plugins\n");
+    Log("[NightSharp] Waiting for first sane game time read, then delaying menu/plugins 3.0s\n");
 
+    bool sawGameTime = false;
+    float firstGameTime = 0.0f;
     for (int i = 0; i < kGameReadyMaxPolls; ++i) {
         if (IsShutdownRequested()) {
             return false;
@@ -108,24 +111,56 @@ bool WaitForGameReady() {
         }
 
         const float gameTime = ReadGameTimeSafe();
-        if (gameTime > kMenuStartGameTimeSeconds) {
-            char buffer[160] = {};
-            wsprintfA(
-                buffer,
-                "[NightSharp] Game ready, GameTime=%d.%02d. Loading menu/plugins/hooks\n",
-                static_cast<int>(gameTime),
-                static_cast<int>(gameTime * 100.0f) % 100);
-            Log(buffer);
-            NightSharpDebug::Phase("overlay-game-ready");
-            return true;
+        if (gameTime > 0.0f) {
+            if (!sawGameTime) {
+                sawGameTime = true;
+                firstGameTime = gameTime;
+                char buffer[160] = {};
+                wsprintfA(
+                    buffer,
+                    "[NightSharp] First GameTime=%d.%02d; delaying menu/plugins 3.0s\n",
+                    static_cast<int>(gameTime),
+                    static_cast<int>(gameTime * 100.0f) % 100);
+                Log(buffer);
+            }
+
+            float elapsed = gameTime - firstGameTime;
+            if (elapsed < 0.0f) {
+                firstGameTime = gameTime;
+                elapsed = 0.0f;
+            }
+
+            if (elapsed >= kMenuStartDelayAfterGameTimeSeconds) {
+                char buffer[192] = {};
+                wsprintfA(
+                    buffer,
+                    "[NightSharp] Game ready, GameTime=%d.%02d elapsed=%d.%02d. Loading menu/plugins/hooks\n",
+                    static_cast<int>(gameTime),
+                    static_cast<int>(gameTime * 100.0f) % 100,
+                    static_cast<int>(elapsed),
+                    static_cast<int>(elapsed * 100.0f) % 100);
+                Log(buffer);
+                NightSharpDebug::Phase("overlay-game-ready");
+                return true;
+            }
         }
 
         if (i > 0 && (i % 20) == 0) {
-            char buffer[128] = {};
-            wsprintfA(
-                buffer,
-                "[NightSharp] Still waiting for GameTime > 3.0 (%d sec)\n",
-                static_cast<int>((i * kGameReadyPollMs) / 1000));
+            char buffer[160] = {};
+            if (sawGameTime) {
+                wsprintfA(
+                    buffer,
+                    "[NightSharp] Still delaying menu/plugins, GameTime=%d.%02d first=%d.%02d\n",
+                    static_cast<int>(gameTime),
+                    static_cast<int>(gameTime * 100.0f) % 100,
+                    static_cast<int>(firstGameTime),
+                    static_cast<int>(firstGameTime * 100.0f) % 100);
+            } else {
+                wsprintfA(
+                    buffer,
+                    "[NightSharp] Still waiting for first sane GameTime read (%d sec)\n",
+                    static_cast<int>((i * kGameReadyPollMs) / 1000));
+            }
             Log(buffer);
         }
         Sleep(kGameReadyPollMs);
@@ -457,6 +492,10 @@ void UpdateClickThroughFromMenuBounds() {
 }
 
 void ToggleMenuVisible() {
+    if (InterlockedCompareExchange(&g_bMenuReady, 0, 0) == 0) {
+        return;
+    }
+
     LONG visible = !g_bMenuVisible;
     InterlockedExchange(&g_bMenuVisible, visible);
     NightSharpMenu::showMenu = (visible != 0);
@@ -516,6 +555,7 @@ void Overlay::Run() {
     NightSharpDebug::Phase("overlay-run-start");
     InterlockedExchange(&g_bRunning, 1);
     InterlockedExchange(&g_bShutdown, 0);
+    InterlockedExchange(&g_bMenuReady, 0);
     InterlockedExchange(&g_bMenuVisible, 0);
     NightSharpMenu::showMenu = false;
     SDK::Lifecycle::ResetShutdownState();
@@ -618,15 +658,21 @@ void Overlay::Run() {
 
     if (WaitForGameReady()) {
         InterlockedExchange(&g_bMenuVisible, 1);
-        NightSharpMenu::showMenu = true;
         SDK::Lifecycle::ResetShutdownState();
         NightSharpDebug::Phase("plugin-bootstrap");
+        SDK::Events::SetDeliveryEnabled(false);
         __try {
             Plugins::PluginBootstrap::EnsureRegistered();
+            SDK::Events::SetDeliveryEnabled(true);
+            NightSharpMenu::showMenu = true;
+            InterlockedExchange(&g_bMenuReady, 1);
         }
         __except (NightSharpDebug::CrashReporter::LogAndDumpException(
                       "Overlay::PluginBootstrap::EnsureRegistered",
                       GetExceptionInformation())) {
+            SDK::Events::SetDeliveryEnabled(false);
+            __try { Plugins::PluginBootstrap::Shutdown(); } __except (1) {}
+            __try { SDK::Events::Reset(); } __except (1) {}
             NightSharpDebug::Logf("[NightSharp] Plugin bootstrap crashed; requesting shutdown");
             InterlockedExchange(&g_bShutdown, 1);
         }
@@ -675,7 +721,8 @@ void Overlay::Run() {
         MoveOverlayToTarget();
         SetAntiCapture(Config::StreamProtection::bypassObs);
 
-        if (GetAsyncKeyState(VK_F1) & 1) {
+        if ((GetAsyncKeyState(VK_F1) & 1) &&
+            InterlockedCompareExchange(&g_bMenuReady, 0, 0) != 0) {
             ToggleMenuVisible();
         }
         if (GetAsyncKeyState(VK_END) & 1) {
@@ -713,14 +760,16 @@ void Overlay::Run() {
             NightSharpPerf::MsSince(perfStart));
 
         perfStart = NightSharpPerf::Now();
-        __try {
-            NightSharpMenu::Render();
-        }
-        __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                      "Overlay::NightSharpMenu::Render",
-                      GetExceptionInformation())) {
-            NightSharpDebug::Logf("[NightSharp] Menu render crashed; requesting shutdown");
-            InterlockedExchange(&g_bShutdown, 1);
+        if (InterlockedCompareExchange(&g_bMenuReady, 0, 0) != 0) {
+            __try {
+                NightSharpMenu::Render();
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "Overlay::NightSharpMenu::Render",
+                          GetExceptionInformation())) {
+                NightSharpDebug::Logf("[NightSharp] Menu render crashed; requesting shutdown");
+                InterlockedExchange(&g_bShutdown, 1);
+            }
         }
         NightSharpPerf::AddPhase(
             "NightSharpMenu::Render",
@@ -748,6 +797,7 @@ void Overlay::Run() {
     }
 
     NightSharpDebug::Phase("overlay-shutdown-plugins");
+    SDK::Events::SetDeliveryEnabled(false);
     __try {
         Plugins::PluginBootstrap::Shutdown();
     }

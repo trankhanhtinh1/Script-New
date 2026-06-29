@@ -28,6 +28,32 @@ namespace PluginBootstrap {
     inline bool g_shutdown = false;
 
     inline void ApplyDebugAutoLoadOverrides() {
+        static constexpr const char* kDebugPluginIds[] = {
+            "core.player_event_filter",
+            "core.spell_tracking_debug",
+            "utility.attack_range_draw_test",
+            "utility.movement_state_draw",
+            "utility.navgrid_wall_brush_draw",
+            "champion.ezreal_cast_test",
+            "champion.ezreal_q_missile_lifecycle",
+            "champion.jax_cast_test",
+            "champion.xerath_cast_test",
+        };
+
+        for (const char* id : kDebugPluginIds) {
+            const int idx = PluginRegistry::FindByInternalId(id);
+            if (idx < 0) {
+                continue;
+            }
+
+            auto& entry = PluginRegistry::Plugins[idx];
+            if (entry.AlwaysLoad) {
+                NightSharpDebug::Logf("[PluginBootstrap] Suppressing debug/test auto-load id=%s",
+                                      id);
+            }
+            entry.AlwaysLoad = false;
+            entry.Loaded = false;
+        }
     }
 
     inline void EnsureRegistered() {

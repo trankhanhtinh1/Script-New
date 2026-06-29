@@ -26,7 +26,9 @@
 // JSONs and icon directories next to the running League executable.
 // ============================================================================
 
+#include "ItemData.h"
 #include "ItemInfo.h"
+#include "RuneData.h"
 #include "SpellInfo.h"
 #include "UnitInfo.h"
 
@@ -54,6 +56,7 @@ namespace detail {
     inline std::map<std::string, UnitInfo*>&  UnitsMap()  { static std::map<std::string, UnitInfo*>  m; return m; }
     inline std::map<std::string, SpellInfo*>& SpellsMap() { static std::map<std::string, SpellInfo*> m; return m; }
     inline std::map<int, ItemInfo*>&          ItemsMap()  { static std::map<int, ItemInfo*>          m; return m; }
+    inline std::map<int, ItemInfo>& GeneratedItemsMap() { static std::map<int, ItemInfo> m; return m; }
 
     inline bool& Initialized() { static bool b = false; return b; }
 
@@ -124,6 +127,20 @@ namespace detail {
                 path.c_str());
             return false;
         }
+    }
+
+    inline ItemInfo* GetGeneratedItemInfoById(int id) {
+        const auto* entry = ItemDatabase::FindById(id);
+        if (!entry) {
+            return nullptr;
+        }
+
+        auto& generated = GeneratedItemsMap();
+        auto it = generated.find(id);
+        if (it == generated.end()) {
+            it = generated.emplace(id, entry->Stats).first;
+        }
+        return &it->second;
     }
 
     // ────── Loaders ─────────────────────────────────────────────────────
@@ -421,8 +438,24 @@ inline ItemInfo* GetItemInfoById(int id) {
     const auto it = items.find(id);
     if (it != items.end()) return it->second;
 
+    if (ItemInfo* generated = detail::GetGeneratedItemInfoById(id)) {
+        return generated;
+    }
+
     if (!detail::UnknownItemSlot()) detail::UnknownItemSlot() = new ItemInfo();
     return detail::UnknownItemSlot();
+}
+
+inline const ItemDatabase::ItemDataEntry* GetItemDataById(int id) {
+    return ItemDatabase::FindById(id);
+}
+
+inline const RuneDatabase::RuneDataEntry* GetRuneDataById(int id) {
+    return RuneDatabase::FindById(id);
+}
+
+inline const RuneDatabase::RuneStyleDataEntry* GetRuneStyleById(int id) {
+    return RuneDatabase::FindStyleById(id);
 }
 
 // Icon resolved by spell name. The lookup chain is:

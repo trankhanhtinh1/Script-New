@@ -4,9 +4,9 @@
 // Movement.h - Movement prediction ported 1:1 from EnsoulSharp.SDK
 // ----------------------------------------------------------------------------
 // Source: EnsoulSharp.SDK/Core/Math/Prediction/Movement.cs
-// Also includes GamePath.cs (PathTracker / StoredPath) and the
-// PredictionInput / PredictionOutput classes defined at the bottom of
-// Movement.cs in the original C# source.
+// GamePath.cs lives in Prediction/GamePath.h. PredictionInput /
+// PredictionOutput are still defined at the bottom of this header to match
+// their original placement in Movement.cs.
 //
 // Helper math (Polar, Rotated, AngleBetween, Perpendicular, ProjectOn,
 // Intersection, VectorMovementCollision, CutPath, PathLength, SetZ) is
@@ -23,6 +23,7 @@
 #include "../../Utils/MathUtils.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../GameObjects/ObjectManager.h"
+#include "GamePath.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -257,118 +258,6 @@ inline Vec3 Rotated(const Vec3& v, float angle) {
 
 } // namespace Vec3Ext
 
-// ============================================================================
-// GamePath::StoredPath and GamePath::PathTracker (ported from GamePath.cs)
-// ============================================================================
-namespace GamePath {
-
-struct StoredPath {
-    std::vector<Vec2> Path;
-    int Tick = 0;
-
-    Vec2 StartPoint() const {
-        return Path.empty() ? Vec2() : Path.front();
-    }
-
-    Vec2 EndPoint() const {
-        return Path.empty() ? Vec2() : Path.back();
-    }
-
-    int WaypointCount() const {
-        return static_cast<int>(Path.size());
-    }
-
-    double Time() const {
-        return (SDK::Variables::TickCount() - Tick) / 1000.0;
-    }
-};
-
-class PathTracker {
-public:
-    static constexpr double MaxTime = 1.5;
-
-    static void Initialize() {
-        if (initialized_) return;
-        initialized_ = true;
-        SDK::Events::AddOnNewPath(&OnNewPath);
-    }
-
-    static StoredPath GetCurrentPath(const AIBaseClient& unit) {
-        Initialize();
-        auto it = StoredPaths_.find(static_cast<std::uint32_t>(unit.NetworkId()));
-        if (it != StoredPaths_.end() && !it->second.empty()) {
-            return it->second.back();
-        }
-        return {};
-    }
-
-    static std::vector<StoredPath> GetStoredPaths(const AIBaseClient& unit, double maxT) {
-        Initialize();
-        std::vector<StoredPath> result;
-        auto it = StoredPaths_.find(static_cast<std::uint32_t>(unit.NetworkId()));
-        if (it == StoredPaths_.end()) return result;
-        for (const auto& p : it->second) {
-            if (p.Time() < maxT) {
-                result.push_back(p);
-            }
-        }
-        return result;
-    }
-
-    static double GetMeanSpeed(const AIBaseClient& unit, double maxT) {
-        Initialize();
-        auto paths = GetStoredPaths(unit, MaxTime);
-        double distance = 0.0;
-        if (!paths.empty()) {
-            distance += (maxT - paths[0].Time()) * unit.MoveSpeed();
-            for (std::size_t i = 0; i + 1 < paths.size(); ++i) {
-                const auto& currentPath = paths[i];
-                const auto& nextPath = paths[i + 1];
-                if (currentPath.WaypointCount() > 0) {
-                    distance += std::min(
-                        (currentPath.Time() - nextPath.Time()) * unit.MoveSpeed(),
-                        static_cast<double>(SDK::Utils::MathUtils::PathLength(currentPath.Path)));
-                }
-            }
-            const auto& lastPath = paths.back();
-            if (lastPath.WaypointCount() > 0) {
-                distance += std::min(
-                    lastPath.Time() * unit.MoveSpeed(),
-                    static_cast<double>(SDK::Utils::MathUtils::PathLength(lastPath.Path)));
-            }
-        } else {
-            return unit.MoveSpeed();
-        }
-        return distance / maxT;
-    }
-
-private:
-    static inline bool initialized_ = false;
-    static inline std::unordered_map<std::uint32_t, std::vector<StoredPath>> StoredPaths_;
-
-    static void OnNewPath(const SDK::Events::NewPathEventArgs& args) {
-        // Only track heroes (matching C# behavior)
-        // The C# code checks `sender is AIHeroClient`
-        // In NightSharp, we check if the object is a hero via the handle type
-        if (args.Sender.Ptr == 0) return;
-
-        auto& list = StoredPaths_[args.Sender.NetworkId];
-
-        StoredPath newPath;
-        newPath.Tick = SDK::Variables::TickCount();
-        for (int i = 0; i < args.PathCount; ++i) {
-            newPath.Path.push_back(args.Path[i].To2D());
-        }
-        list.push_back(std::move(newPath));
-
-        if (list.size() > 50) {
-            list.erase(list.begin(), list.begin() + 40);
-        }
-    }
-};
-
-} // namespace GamePath
-
 } // namespace SDK::Prediction
 
 // ============================================================================
@@ -578,7 +467,7 @@ inline Vec2 PositionAfter(const AIBaseClient& unit, float t, float speed = FLT_M
 // ----------------------------------------------------------------------------
 inline HitChance GetHitchance(const AIBaseClient& unit) {
     if (unit.IsHero()) {
-        if (GamePath::PathTracker::GetCurrentPath(unit).Time() < 0.1) {
+        if (SDK::GamePath::PathTracker::GetCurrentPath(unit).Time() < 0.1) {
             return HitChance::VeryHigh;
         }
         return HitChance::High;
@@ -589,10 +478,7 @@ inline HitChance GetHitchance(const AIBaseClient& unit) {
 // ----------------------------------------------------------------------------
 // GetPositionOnPath (Movement.cs lines 213-319)
 // ----------------------------------------------------------------------------
-inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Vec2> path, float speed = -1.0f, bool needToFixSpeed = false) {
-    if (needToFixSpeed && input.Unit.Position().DistanceSqr2D(input.ResolveFrom()) < 250.0f * 250.0f) {
-        speed *= 1.5f;
-    }
+inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Vec2> path, float speed = -1.0f) {
     speed = (std::abs(speed - (-1.0f)) < 0.0001f) ? input.Unit.MoveSpeed() : speed;
 
     Vector3 serverPos = input.Unit.Position();
@@ -684,7 +570,25 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Ve
                 if (pos.DistanceSquared(b) < 20.0f) {
                     break;
                 }
-                Vec2 p = pos - (direction * input.RealRadius());
+                Vec2 p = pos + (direction * input.RealRadius());
+
+                // Line spell angle check (C# lines 286-297):
+                // When the angle between (From->p) and (a->b) is between 30 and 150,
+                // adjust cast position to the tangent point on the unit's hitbox circle.
+                if (IsLineSpellType(input.Type)) {
+                    float alpha = Vec2Ext::AngleBetween(
+                        (input.ResolveFrom().To2D() - p), (a - b));
+                    if (alpha > 30.0f && alpha < 180.0f - 30.0f) {
+                        float distFromToP = p.Distance(input.ResolveFrom().To2D());
+                        if (distFromToP > input.RealRadius()) {
+                            float beta = std::asin(input.RealRadius() / distFromToP);
+                            Vec2 dirFromToP = (p - input.ResolveFrom().To2D()).Normalized();
+                            Vec2 cp1 = input.ResolveFrom().To2D() + Vec2Ext::Rotated(dirFromToP, beta) * distFromToP;
+                            Vec2 cp2 = input.ResolveFrom().To2D() + Vec2Ext::Rotated(dirFromToP, -beta) * distFromToP;
+                            pos = cp1.DistanceSquared(pos) < cp2.DistanceSquared(pos) ? cp1 : cp2;
+                        }
+                    }
+                }
 
                 PredictionOutput output;
                 output.Input = input;
@@ -719,89 +623,72 @@ inline PredictionOutput GetAdvancedPrediction(PredictionInput& input, float addi
 
     AIBaseClient unit = input.Unit;
     Vec2 position = PositionAfter(unit, 1.0f, unit.MoveSpeed() - 100.0f);
-    Vec2 prediction = position + (Vec2(1, 1) * (speed * (input.Delay / 1000.0f)));
 
-    // C# code: prediction = position + (speed * (input.Delay / 1000));
-    // This is a scalar * Vector2 multiplication, meaning the vector is
-    // extended by the scalar in its own direction. But in C# the `+` operator
-    // on Vector2 + float is not valid. Looking more carefully at the C# code:
-    //   var prediction = position + (speed * (input.Delay / 1000));
-    // This is actually: position + (speed * (input.Delay / 1000)) * direction
-    // But the C# code doesn't have a direction. Actually, re-reading:
-    // In C#, `speed * (input.Delay / 1000)` is a float, and `position + float`
-    // is not valid for Vector2. This must be a Vector2 operation.
-    // Looking at the decompiled DLL would clarify, but the most likely
-    // interpretation is that this is position + direction * (speed * delay/1000)
-    // where direction is the unit's movement direction. However, the original
-    // code as written doesn't compile in C# as-is. Let me re-interpret:
-    // Actually in C#, `float * float` = float, and `Vector2 + float` doesn't
-    // compile. This is likely a bug in the source or the decompiler. The
-    // decompiled DLL shows the actual behavior. Let me use the most sensible
-    // interpretation: the prediction is the position offset by delay*speed
-    // in the direction of movement.
-    // For now, matching the source as closely as possible:
-    prediction = position + position.Normalized() * (speed * (input.Delay / 1000.0f));
+    // C# source: prediction = position + (speed * (input.Delay / 1000))
+    // The scalar is added in the direction of the unit's movement.
+    // Derive direction from the unit's current waypoints.
+    Vec2 moveDir(0, 0);
+    auto waypoints3D = unit.GetWaypoints();
+    if (waypoints3D.size() >= 2) {
+        Vec2 a = waypoints3D[0].To2D();
+        Vec2 b = waypoints3D[1].To2D();
+        Vec2 diff = b - a;
+        if (diff.LengthSqr() > 0.001f) {
+            moveDir = diff.Normalized();
+        }
+    }
+
+    Vec2 prediction = position + moveDir * (speed * (input.Delay / 1000.0f));
 
     PredictionOutput output;
-    output.SetUnitPosition(Vec3Ext::SetZ(Vec3(position.x, position.y, 0)));
-    output.SetCastPosition(Vec3Ext::SetZ(Vec3(prediction.x, prediction.y, 0)));
+    output.Input = input;
+    output.SetUnitPosition(Vec3Ext::SetZ(Vec3::From2D(position)));
+    output.SetCastPosition(Vec3Ext::SetZ(Vec3::From2D(prediction)));
     output.Hitchance = HitChance::High;
     return output;
 }
 
 // ----------------------------------------------------------------------------
-// GetDashingPrediction (DLL: PredictionSDK.GetDashingPrediction)
-// Handles both gapcloser and normal dash paths.
+// GetDashingPrediction (Movement.cs lines 130-174)
 // ----------------------------------------------------------------------------
 inline PredictionOutput GetDashingPrediction(PredictionInput& input) {
     PredictionOutput result;
     result.Input = input;
 
-    // DLL checks GetGapcloserInfo first; if null or "NullDash", falls through to dash.
-    // NightSharp AntiGapcloser not yet ported, so we skip gapcloser branch.
-    // TODO: Port AntiGapcloser.GetGapcloserInfo for full parity.
-
     auto dashData = SDK::Extensions::GetDashInfo(input.Unit);
     input.Delay += 0.1f;
 
-    Vec2 startPos = dashData.StartPos.IsValid()
-        ? dashData.StartPos.To2D()
-        : input.Unit.Position().To2D();
+    Vec2 startPos = input.Unit.Position().To2D();
     Vec2 endPos = dashData.PathCount > 0
         ? dashData.Path[dashData.PathCount - 1].To2D()
         : (dashData.EndPos.IsValid() ? dashData.EndPos.To2D() : startPos);
 
-    // Mid-air prediction
-    std::vector<Vec2> dashPath = { startPos, endPos };
-    auto dashPred = GetPositionOnPath(input, dashPath, dashData.Speed);
-
-    // DLL: Distance(unitPosition, ServerPosition, endPos, onlyIfOnSegment) < 200
-    if (dashPred.Hitchance >= HitChance::High) {
-        Vec2 serverPos2D = input.Unit.Position().To2D();
-        auto proj = Vec2Ext::ProjectOn(dashPred.GetUnitPosition().To2D(), serverPos2D, endPos);
-        if (proj.IsOnSegment && proj.SegmentPoint.Distance(dashPred.GetUnitPosition().To2D()) < 200.0f) {
+    if (!dashData.IsBlink) {
+        // Mid-air prediction
+        std::vector<Vec2> dashPath = { startPos, endPos };
+        auto dashPred = GetPositionOnPath(input, dashPath, dashData.Speed);
+        if (dashPred.Hitchance >= HitChance::High) {
             dashPred.SetCastPosition(dashPred.GetUnitPosition());
             dashPred.Hitchance = HitChance::Dash;
             return dashPred;
         }
-    }
 
-    // End-of-dash prediction
-    // DLL: input.Delay / 2f + input.From.Distance(endPos) / input.Speed - 0.25f
-    if (startPos.Distance(endPos) > 200.0f) {
-        float timeToPoint = (input.Delay / 2.0f)
-            + (input.ResolveFrom().To2D().Distance(endPos) / input.Speed)
-            - 0.25f;
-        float timeForUnit = (input.Unit.Position().To2D().Distance(endPos) / dashData.Speed)
-            + (input.RealRadius() / input.Unit.MoveSpeed());
+        // End-of-dash prediction (C# line 152-165)
+        float pathLength = SDK::Utils::MathUtils::PathLength(dashPath);
+        if (pathLength > 200.0f) {
+            float timeToPoint = input.Delay
+                + (input.ResolveFrom().To2D().Distance(endPos) / input.Speed);
+            float timeForUnit = (input.Unit.Position().To2D().Distance(endPos) / dashData.Speed)
+                + (input.RealRadius() / input.Unit.MoveSpeed());
 
-        if (timeToPoint <= timeForUnit) {
-            PredictionOutput output;
-            output.Input = input;
-            output.SetCastPosition(Vec3::From2D(endPos));
-            output.SetUnitPosition(Vec3::From2D(endPos));
-            output.Hitchance = HitChance::Dash;
-            return output;
+            if (timeToPoint <= timeForUnit) {
+                PredictionOutput output;
+                output.Input = input;
+                output.SetCastPosition(Vec3::From2D(endPos));
+                output.SetUnitPosition(Vec3::From2D(endPos));
+                output.Hitchance = HitChance::Dash;
+                return output;
+            }
         }
     }
 
@@ -811,8 +698,7 @@ inline PredictionOutput GetDashingPrediction(PredictionInput& input) {
 }
 
 // ----------------------------------------------------------------------------
-// GetImmobilePrediction (DLL: PredictionSDK.GetImmobilePrediction)
-// DLL has 3 tiers: Immobile, VeryHigh (within 0.2s), Medium (fallback)
+// GetImmobilePrediction (Movement.cs lines 184-202)
 // ----------------------------------------------------------------------------
 inline PredictionOutput GetImmobilePrediction(PredictionInput& input, double remainingImmobileT) {
     Vector3 serverPos = input.Unit.Position();
@@ -826,20 +712,11 @@ inline PredictionOutput GetImmobilePrediction(PredictionInput& input, double rem
         return output;
     }
 
-    // DLL: second check with 0.2s tolerance -> VeryHigh
-    if ((double)(timeToReach - 0.2f) <= remainingImmobileT + (double)(input.RealRadius() / input.Unit.MoveSpeed())) {
-        PredictionOutput output;
-        output.SetCastPosition(serverPos);
-        output.SetUnitPosition(serverPos);
-        output.Hitchance = HitChance::VeryHigh;
-        return output;
-    }
-
     PredictionOutput output;
     output.Input = input;
     output.SetCastPosition(serverPos);
     output.SetUnitPosition(serverPos);
-    output.Hitchance = HitChance::Medium;
+    output.Hitchance = HitChance::High;
     return output;
 }
 
@@ -988,10 +865,10 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
     }
 
     if (!hasResult) {
-        result = GetStandardPrediction(input);
+        result = GetAdvancedPrediction(input);
     }
 
-    // Range checks (DLL: no cast position clamping, just Hitchance changes)
+    // Range checks + cast position clamping (C# lines 381-408)
     if (std::abs(input.Range - FLT_MAX) > 0.0001f) {
         if (result.Hitchance >= HitChance::High
             && input.ResolveRangeCheckFrom().DistanceSqr2D(input.Unit.Position())
@@ -1004,26 +881,42 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
                 ? input.RealRadius() : 0.0f), 2)) {
             result.Hitchance = HitChance::OutOfRange;
         }
+
+        // Clamp cast position to within range (C# lines 396-408)
+        if (input.ResolveRangeCheckFrom().DistanceSqr2D(result.GetCastPosition())
+            > std::pow(input.Range, 2)) {
+            if (result.Hitchance != HitChance::OutOfRange) {
+                Vec2 from2D = input.ResolveRangeCheckFrom().To2D();
+                Vec2 unitPos2D = result.GetUnitPosition().To2D();
+                Vec2 dir = (unitPos2D - from2D).Normalized();
+                if (dir.LengthSqr() > 0.001f) {
+                    Vec3 clamped = Vec3Ext::SetZ(Vec3::From2D(
+                        from2D + dir * input.Range));
+                    result.SetCastPosition(clamped);
+                }
+            } else {
+                result.Hitchance = HitChance::OutOfRange;
+            }
+        }
     }
 
-    // DLL collision block:
-    //   var collision = Collisions.GetCollision(new List<Vector3>{ CastPosition }, input);
-    //   if (collision.Count > input.MaxCollisionCount) {
-    //     collision.RemoveAll(x => x == null || !x.IsValid || x.Compare(input.Unit));
-    //     result.CollisionObjects = collision;
-    //     result.OriginHitchance = result.Hitchance;
-    //     result.Hitchance = HitChance.Collision;
-    //     return result;
-    //   }
+    // Collision check (C# lines 411-419):
+    //   positions = { UnitPosition, CastPosition, Unit.Position }
+    //   collision.RemoveAll(x => x.NetworkId == input.Unit.NetworkId)
+    //   result.Hitchance = collision.Count > 0 ? Collision : result.Hitchance
     if (checkCollision && input.Collision && result.Hitchance > HitChance::None) {
-        std::vector<Vector3> positions = { result.GetCastPosition() };
+        std::vector<Vector3> positions = {
+            result.GetUnitPosition(),
+            result.GetCastPosition(),
+            input.Unit.Position()
+        };
         auto collision = SDK::Collision::GetCollision(positions, input);
-        if (static_cast<float>(collision.size()) > input.MaxCollisionCount) {
-            collision.erase(
-                std::remove_if(collision.begin(), collision.end(), [&](const AIBaseClient& object) {
-                    return !object.IsValid() || object.Compare(input.Unit);
-                }),
-                collision.end());
+        collision.erase(
+            std::remove_if(collision.begin(), collision.end(), [&](const AIBaseClient& object) {
+                return !object.IsValid() || object.NetworkId() == input.Unit.NetworkId();
+            }),
+            collision.end());
+        if (!collision.empty()) {
             result.CollisionObjects = collision;
             result.SetOriginHitchance(result.Hitchance);
             result.Hitchance = HitChance::Collision;

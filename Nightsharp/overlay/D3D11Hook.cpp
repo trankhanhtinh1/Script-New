@@ -15,6 +15,7 @@
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 #include "../SDK/Core/Game.h"
+#include "../SDK/Events/Events.h"
 #include "../SDK/UI/UI.h"
 
 #include <d3d11.h>
@@ -168,6 +169,156 @@ static IDXGISwapChain* FindSwapChain() {
     return swapChain;
 }
 
+static bool ResolveSwapChainLayoutCached(bool noisy) {
+    if (g_swapChainLayoutResolved) {
+        return true;
+    }
+
+    constexpr const char* funcSig =
+        "E8 ? ? ? ? 8B 57 34 45 33 C9";
+    uint8_t* funcAddr = FindPattern(nullptr, funcSig);
+    if (!funcAddr) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton pattern not found");
+        }
+        return false;
+    }
+
+    const uintptr_t singletonFunc = ResolveRelativeCall(funcAddr);
+    if (!singletonFunc) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton resolve failed");
+        }
+        return false;
+    }
+
+    constexpr const char* fieldSig =
+        "48 8D BB ? ? ? ? C6 83 ? ? ? ? ? 0F 84";
+    uint8_t* fieldAddr = FindPattern(nullptr, fieldSig);
+    if (!fieldAddr) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] SwapChain field pattern not found");
+        }
+        return false;
+    }
+
+    g_materialRegistrySingletonFn = singletonFunc;
+    g_swapChainOffset = *reinterpret_cast<int32_t*>(fieldAddr + 3);
+    g_swapChainLayoutResolved = true;
+    NightSharpDebug::Logf("[D3D11Hook] Swapchain layout resolved singleton=0x%p offset=0x%X",
+                          reinterpret_cast<void*>(g_materialRegistrySingletonFn),
+                          g_swapChainOffset);
+    return true;
+}
+
+static IDXGISwapChain* FindSwapChainCached(bool noisy = true) {
+    if (!ResolveSwapChainLayoutCached(noisy)) {
+        return nullptr;
+    }
+
+    uintptr_t materialRegistry = 0;
+    __try {
+        materialRegistry =
+            reinterpret_cast<uintptr_t(__fastcall*)()>(g_materialRegistrySingletonFn)();
+    }
+    __except (1) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton call faulted");
+        }
+        return nullptr;
+    }
+
+    if (!materialRegistry) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton returned null");
+        }
+        return nullptr;
+    }
+
+    IDXGISwapChain* swapChain = nullptr;
+    __try {
+        swapChain =
+            *reinterpret_cast<IDXGISwapChain**>(materialRegistry + g_swapChainOffset);
+    }
+    __except (1) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] SwapChain field read faulted registry=0x%p offset=0x%X",
+                                  reinterpret_cast<void*>(materialRegistry),
+                                  g_swapChainOffset);
+        }
+        return nullptr;
+    }
+
+    if (!swapChain) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] SwapChain pointer is null registry=0x%p offset=0x%X",
+                                  reinterpret_cast<void*>(materialRegistry),
+                                  g_swapChainOffset);
+        }
+        return nullptr;
+    }
+
+    DXGI_SWAP_CHAIN_DESC desc = {};
+    HRESULT hr = E_FAIL;
+    __try {
+        hr = swapChain->GetDesc(&desc);
+    }
+    __except (1) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] SwapChain GetDesc faulted ptr=%p",
+                                  static_cast<void*>(swapChain));
+        }
+        return nullptr;
+    }
+
+    if (FAILED(hr)) {
+        if (noisy) {
+            NightSharpDebug::Logf("[D3D11Hook] SwapChain GetDesc failed hr=0x%08lX ptr=%p",
+                                  static_cast<unsigned long>(hr),
+                                  static_cast<void*>(swapChain));
+        }
+        return nullptr;
+    }
+
+    NightSharpDebug::Logf("[D3D11Hook] Found swapchain at registry+0x%X = %p",
+                          g_swapChainOffset,
+                          static_cast<void*>(swapChain));
+    return swapChain;
+}
+
+static IDXGISwapChain* WaitForSwapChain() {
+    NightSharpDebug::Phase("d3d11hook-wait-swapchain");
+    NightSharpDebug::Logf("[D3D11Hook] Waiting for game swapchain...");
+
+    for (int i = 0; i < kSwapChainMaxPolls; ++i) {
+        if (g_shutdown) {
+            return nullptr;
+        }
+        if (g_gameHwnd && !IsWindow(g_gameHwnd)) {
+            InterlockedExchange(&g_shutdown, 1);
+            return nullptr;
+        }
+
+        IDXGISwapChain* swapChain = FindSwapChainCached(i == 0);
+        if (swapChain) {
+            if (i > 0) {
+                NightSharpDebug::Logf("[D3D11Hook] Swapchain became ready after %d sec",
+                                      static_cast<int>((i * kSwapChainPollMs) / 1000));
+            }
+            return swapChain;
+        }
+
+        if (i > 0 && (i % 20) == 0) {
+            NightSharpDebug::Logf("[D3D11Hook] Still waiting for swapchain (%d sec)",
+                                  static_cast<int>((i * kSwapChainPollMs) / 1000));
+        }
+        Sleep(kSwapChainPollMs);
+    }
+
+    NightSharpDebug::Logf("[D3D11Hook] Swapchain wait timed out");
+    return nullptr;
+}
+
 // -----------------------------------------------------------------------
 // Render target
 // -----------------------------------------------------------------------
@@ -195,12 +346,17 @@ static void CleanupRenderTargetInternal() {
 // -----------------------------------------------------------------------
 static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     // Let ImGui process input first
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+    if (ImGui::GetCurrentContext() &&
+        ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
         return TRUE;
+    }
 
     // Handle keyboard shortcuts
     if (msg == WM_KEYDOWN) {
         if (wParam == VK_F1) {
+            if (InterlockedCompareExchange(&g_menuReady, 0, 0) == 0) {
+                return TRUE;
+            }
             NightSharpMenu::showMenu = !NightSharpMenu::showMenu;
             return TRUE;
         }
@@ -376,9 +532,13 @@ decltype(DxgiResizeBuffers::m_original) DxgiResizeBuffers::m_original;
 // -----------------------------------------------------------------------
 // SEH-safe helpers (no C++ objects with destructors in these)
 // -----------------------------------------------------------------------
-static void BootstrapPluginsSafe() {
+static bool BootstrapPluginsSafe() {
+    bool ok = false;
+    SDK::Events::SetDeliveryEnabled(false);
+
     __try {
         Plugins::PluginBootstrap::EnsureRegistered();
+        ok = true;
     }
     __except (NightSharpDebug::CrashReporter::LogAndDumpException(
                   "D3D11Hook::PluginBootstrap",
@@ -392,6 +552,7 @@ static void BootstrapPluginsSafe() {
 }
 
 static void ShutdownPluginsSafe() {
+    SDK::Events::SetDeliveryEnabled(false);
     __try {
         Plugins::PluginBootstrap::Shutdown();
     }
@@ -435,6 +596,8 @@ bool Install() {
 
     NightSharpDebug::Phase("d3d11hook-install");
     NightSharpDebug::Logf("[D3D11Hook] Installing D3D11 swapchain hooks...");
+    InterlockedExchange(&g_menuReady, 0);
+    NightSharpMenu::showMenu = false;
 
     // Retry FindGameWindow: the game window may not be visible/owned by the render
     // thread yet when the DLL is injected. Retry up to 10 times with 100ms gaps.
@@ -467,11 +630,11 @@ bool Install() {
         return false;
     }
 
-    IDXGISwapChain* swapChain = FindSwapChain();
+    IDXGISwapChain* swapChain = WaitForSwapChain();
     if (!swapChain) {
-        NightSharpDebug::Logf("[D3D11Hook] Failed to find swapchain, unhooking WndProc");
+        NightSharpDebug::Logf("[D3D11Hook] Failed to find swapchain after wait, unhooking WndProc");
         UnhookWndProc();
-        return false;
+        return g_shutdown != 0;
     }
 
     g_vmtHook = new (std::nothrow) VmtHook(swapChain);
@@ -490,35 +653,82 @@ bool Install() {
     NightSharpDebug::Phase("d3d11hook-installed");
     NightSharpDebug::Logf("[D3D11Hook] D3D11 swapchain hooks installed (Present=8, ResizeBuffers=13)");
 
-    // Wait for game ready then bootstrap plugins
+    // Wait until we can read a sane game time, then delay three in-game
+    // seconds before showing the menu/loading plugins. This matches the old
+    // startup behavior even when the DLL is injected after gameTime is already
+    // greater than 3.0.
     NightSharpDebug::Phase("d3d11hook-wait-game");
-    NightSharpDebug::Logf("[D3D11Hook] Waiting for game > 3s...");
+    NightSharpDebug::Logf("[D3D11Hook] Waiting for game time read + %.1fs...",
+                          kMenuStartDelayAfterGameTimeSeconds);
 
-    for (int i = 0; i < 240; ++i) {
+    bool sawGameTime = false;
+    float firstGameTime = 0.0f;
+    for (int i = 0; i < kGameReadyMaxPolls; ++i) {
         if (g_shutdown) {
             Uninstall();
             return true;
         }
 
-        CoreRuntime::RefreshReadState();
-
-        if (CoreRuntime::GetContext().gameTime > 3.0f) {
-            NightSharpDebug::Logf("[D3D11Hook] Game ready at %.1fs, bootstrapping plugins",
-                                  CoreRuntime::GetContext().gameTime);
-            NightSharpDebug::Phase("d3d11hook-plugins");
-            BootstrapPluginsSafe();
-            while (!g_shutdown) {
-                Sleep(250);
+        float gameTime = 0.0f;
+        if (ReadGameTimeForStartup(gameTime)) {
+            if (!sawGameTime) {
+                sawGameTime = true;
+                firstGameTime = gameTime;
+                NightSharpDebug::Logf("[D3D11Hook] First sane game time read %.2fs; delaying menu/plugins %.1fs",
+                                      gameTime,
+                                      kMenuStartDelayAfterGameTimeSeconds);
             }
-            Uninstall();
-            return true;
+
+            float elapsed = gameTime - firstGameTime;
+            if (elapsed < 0.0f) {
+                firstGameTime = gameTime;
+                elapsed = 0.0f;
+            }
+
+            if (elapsed >= kMenuStartDelayAfterGameTimeSeconds) {
+                NightSharpDebug::Logf("[D3D11Hook] Game ready at %.2fs (elapsed %.2fs), bootstrapping plugins",
+                                      gameTime,
+                                      elapsed);
+                NightSharpDebug::Phase("d3d11hook-plugins");
+                if (!BootstrapPluginsSafe()) {
+                    NightSharpDebug::Logf("[D3D11Hook] Plugin bootstrap failed; shutting down hook");
+                    InterlockedExchange(&g_shutdown, 1);
+                    Uninstall();
+                    return false;
+                }
+                NightSharpMenu::showMenu = true;
+                InterlockedExchange(&g_menuReady, 1);
+                while (!g_shutdown) {
+                    Sleep(250);
+                }
+                Uninstall();
+                return true;
+            }
         }
-        Sleep(500);
+
+        if (i > 0 && (i % 20) == 0) {
+            if (sawGameTime) {
+                NightSharpDebug::Logf("[D3D11Hook] Still delaying menu/plugins: gameTime=%.2fs first=%.2fs",
+                                      gameTime,
+                                      firstGameTime);
+            } else {
+                NightSharpDebug::Logf("[D3D11Hook] Still waiting for first sane game time read (%d sec)",
+                                      static_cast<int>((i * kGameReadyPollMs) / 1000));
+            }
+        }
+        Sleep(kGameReadyPollMs);
     }
 
-    NightSharpDebug::Logf("[D3D11Hook] Game ready wait timed out, bootstrapping anyway");
+    NightSharpDebug::Logf("[D3D11Hook] Game time wait timed out, bootstrapping anyway");
     NightSharpDebug::Phase("d3d11hook-plugins-timeout");
-    BootstrapPluginsSafe();
+    if (!BootstrapPluginsSafe()) {
+        NightSharpDebug::Logf("[D3D11Hook] Plugin bootstrap failed after timeout; shutting down hook");
+        InterlockedExchange(&g_shutdown, 1);
+        Uninstall();
+        return false;
+    }
+    NightSharpMenu::showMenu = true;
+    InterlockedExchange(&g_menuReady, 1);
 
     while (!g_shutdown) {
         Sleep(250);
@@ -530,6 +740,8 @@ bool Install() {
 void Uninstall() {
     if (!g_active) return;
     g_active = false;
+    InterlockedExchange(&g_menuReady, 0);
+    NightSharpMenu::showMenu = false;
 
     NightSharpDebug::Phase("d3d11hook-uninstall");
     NightSharpDebug::Logf("[D3D11Hook] Uninstalling...");

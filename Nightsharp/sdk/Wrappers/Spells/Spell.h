@@ -14,8 +14,10 @@
 #include "../../Extensions/Extensions.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../Utils/Minion.h"
+#include "../../Math/Collision.h"
 #include "../../Math/Prediction.h"
 #include "../../Math/HealthPrediction.h"
+#include "../Damages/Damage.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -27,30 +29,6 @@
 #include <vector>
 
 namespace SDK {
-
-#ifndef NIGHTSHARP_SDK_DAMAGE_STAGE_DEFINED
-#define NIGHTSHARP_SDK_DAMAGE_STAGE_DEFINED
-enum class DamageStage : std::int32_t {
-    Default,
-    WayBack,
-    Detonation,
-    DamagePerTick,
-    DamagePerTime,
-    DamagePerHalfSecond,
-    DamagePerQuarterSecond,
-    DamagePerSecond,
-    SingleTotal,
-    SecondForm,
-    ThirdForm,
-    SecondCast,
-    ThirdCast,
-    Buff,
-    Empowered,
-    EmpoweredDamagePerSecond,
-    EmpoweredDamagePerHalfSecond,
-    EmpoweredDamagePerQuarterSecond
-};
-#endif
 
 // PredictionInput and PredictionOutput are now defined in Math/Prediction.h
 // (ported from Movement.cs) and included above.
@@ -390,27 +368,45 @@ public:
             CurrentRange());
     }
 
-    std::vector<AIBaseClient> GetCollision(const Vector2& /*fromVector2*/,
-                                           const std::vector<Vector2>& /*to*/,
-                                           float /*delayOverride*/ = -1.0f) const {
-        // TODO(SDK parity): port SDK::Collision/Movement prediction; current
-        // Collision.h references missing Prediction.h.
-        return {};
+    std::vector<AIBaseClient> GetCollision(const Vector2& fromVector2,
+                                           const std::vector<Vector2>& to,
+                                           float delayOverride = -1.0f) const {
+        std::vector<Vector3> positions;
+        positions.reserve(to.size());
+        for (const auto& position : to) {
+            positions.push_back(Vector3::From2D(position));
+        }
+
+        PredictionInput input;
+        input.From = Vector3::From2D(fromVector2);
+        input.SetType(Type);
+        input.Radius = Width;
+        input.Delay = delayOverride > 0.0f ? delayOverride : Delay;
+        input.Speed = Speed;
+
+        return Collision::GetCollision(positions, input);
     }
 
-    float GetDamage(const AIBaseClient& /*target*/, DamageStage /*stage*/ = DamageStage::Default) const {
-        // TODO(SDK parity): wire to SDK::Damage::GetSpellDamage after the
-        // damage wrapper is made self-contained for AIBaseClient accessors.
-        return 0.0f;
+    float GetDamage(const AIBaseClient& target, DamageStage stage = DamageStage::Default) const {
+        const auto player = GameObjects::Player();
+        if (!player.IsValid() || !target.IsValid()) {
+            return 0.0f;
+        }
+        return Damage::GetSpellDamage(player, target, Slot, stage);
     }
 
     float GetHealthPrediction(const AIBaseClient& unit) const {
         if (!unit.IsValid()) {
             return 0.0f;
         }
-        const int time = static_cast<int>(Delay * 1000.0f) - 100 + Game::Ping() / 2
-            + static_cast<int>(1000.0f * SourcePosition().Distance2D(unit.Position()) / Speed);
-        return HealthPrediction::GetPrediction(unit, time);
+        float time = (Delay * 1000.0f) - 100.0f + static_cast<float>(Game::Ping()) / 2.0f;
+        if (std::abs(Speed - FLT_MAX) > FLT_EPSILON && Speed > 1.0f) {
+            time += 1000.0f * SourcePosition().Distance2D(unit.Position()) / Speed;
+        }
+        if (!std::isfinite(time)) {
+            time = 0.0f;
+        }
+        return HealthPrediction::GetPrediction(unit, static_cast<int>(time));
     }
 
     float GetHitCount(HitChance hitChance = HitChance::High) {

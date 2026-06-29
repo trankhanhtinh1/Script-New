@@ -48,7 +48,7 @@ public:
     }
 
     bool AutoLoadByDefault() const override {
-        return true;
+        return false;
     }
 
     bool CanLoad() const override {
@@ -731,7 +731,7 @@ private:
                 "Draw OnProcessSpell pending line",
                 true));
         m_writeLogMenu =
-            settings->Add(new MenuBool("writeLog", "Write lifecycle log", true));
+            settings->Add(new MenuBool("writeLog", "Write lifecycle log", false));
         m_colorMenu =
             settings->Add(new MenuColor(
                 "activeColor",
@@ -778,7 +778,7 @@ private:
     }
 
     bool WriteLog() const {
-        return !m_writeLogMenu || m_writeLogMenu->Value;
+        return m_writeLogMenu && m_writeLogMenu->Value;
     }
 
     ImU32 ActiveColor() const {

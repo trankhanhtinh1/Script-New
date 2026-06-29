@@ -25,7 +25,7 @@ public:
     }
 
     bool AutoLoadByDefault() const override {
-        return true;
+        return false;
     }
 
     void OnLoad() override {
@@ -138,7 +138,7 @@ protected:
     }
 
     bool WriteLog() const {
-        return !m_writeLogMenu || m_writeLogMenu->Value;
+        return m_writeLogMenu && m_writeLogMenu->Value;
     }
 
     bool IsChatTyping() const {
@@ -646,7 +646,7 @@ private:
         m_menu = new Menu(GetInternalId(), GetName(), true);
         auto* settings = m_menu->AddSubMenu(new Menu("settings", "Settings"));
         m_enabledMenu = settings->Add(new MenuBool("enabled", "Enabled", true));
-        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write debug log", true));
+        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write debug log", false));
         BuildChampionMenu(settings);
         settings->Add(new MenuButton(
             "resetCounters",

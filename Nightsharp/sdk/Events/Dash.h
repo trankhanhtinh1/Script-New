@@ -18,6 +18,7 @@ struct DashArgs {
     int EndTick = 0;
     int Duration = 0;
     bool IsDash = false;
+    bool IsBlink = false;
     ::Core::Events::NewPathEventArgs Raw = {};
 };
 
@@ -122,6 +123,7 @@ namespace detail {
 
         if (!args.IsDash) {
             dash->IsDash = false;
+            dash->IsBlink = false;
             dash->Duration = 0;
             dash->EndTick = 0;
             dash->EndTime = 0.0f;
@@ -156,6 +158,7 @@ namespace detail {
             dash->EndTick = 0;
             dash->EndTime = 0.0f;
         }
+        dash->IsBlink = dash->Speed > 5000.0f || dash->Duration <= 10;
 
         Dash::detail::DashHandlers.Fire(*dash);
     }

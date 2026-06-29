@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <type_traits>
 #include <vector>
 #include <cstring>
@@ -106,8 +107,41 @@ namespace detail {
 
     template <typename T>
     inline bool Contains(const std::vector<T>& list, const GameObject& object) {
+        const uintptr_t address = object.Address();
+        const int networkId = object.NetworkId();
         return std::find_if(list.begin(), list.end(), [&](const T& entry) {
+            if (address != 0 && entry.Address() == address) {
+                const int entryNetworkId = entry.NetworkId();
+                return networkId == 0 ||
+                       networkId == -1 ||
+                       entryNetworkId == 0 ||
+                       entryNetworkId == -1 ||
+                       entryNetworkId == networkId;
+            }
             return entry.Compare(object);
+        }) != list.end();
+    }
+
+    template <typename T>
+    inline bool ContainsAddress(
+        const std::vector<T>& list,
+        uintptr_t address,
+        uint32_t networkId = 0) {
+        if (!address) {
+            return false;
+        }
+        return std::find_if(list.begin(), list.end(), [&](const T& entry) {
+            if (entry.Address() != address) {
+                return false;
+            }
+            if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+                return true;
+            }
+            const uint32_t entryNetworkId =
+                static_cast<uint32_t>(entry.NetworkId());
+            return entryNetworkId == 0 ||
+                   entryNetworkId == 0xFFFFFFFFu ||
+                   entryNetworkId == networkId;
         }) != list.end();
     }
 
@@ -121,8 +155,18 @@ namespace detail {
 
     template <typename T>
     inline void RemoveMatching(std::vector<T>& list, const GameObject& object) {
+        const uintptr_t address = object.Address();
+        const int networkId = object.NetworkId();
         list.erase(
             std::remove_if(list.begin(), list.end(), [&](const T& entry) {
+                if (address != 0 && entry.Address() == address) {
+                    const int entryNetworkId = entry.NetworkId();
+                    return networkId == 0 ||
+                           networkId == -1 ||
+                           entryNetworkId == 0 ||
+                           entryNetworkId == -1 ||
+                           entryNetworkId == networkId;
+                }
                 return entry.Compare(object);
             }),
             list.end());
@@ -228,7 +272,6 @@ namespace detail {
                 }
             } else {
                 AddUnique(MinionsList, minion);
-                AddMinionRole(minion);
                 if (minion.IsEnemy()) {
                     AddUnique(EnemyMinionsList, minion);
                     AddUnique(EnemyList, AIBaseClient(minion.Handle()));
@@ -354,6 +397,11 @@ namespace detail {
         ::Core::Objects::ObjectType knownType =
             ::Core::Objects::ObjectType::Unknown) {
         if (!Globals::IsValidPtr(address)) {
+            return;
+        }
+
+        const uint32_t networkId = ::Core::Objects::ReadNetworkId(address);
+        if (ContainsAddress(GameObjectsList, address, networkId)) {
             return;
         }
 
@@ -489,9 +537,12 @@ namespace detail {
         // unit and all enemy lists end up empty for the entire session.
         SDK::GameObject::WarmPlayerTeamCache();
 
-        int objectsIterated = 0;
-        for (const auto& object : SDK::ObjectManager::Get<GameObject>()) {
-            objectsIterated++;
+        const auto objects = SDK::ObjectManager::Get<GameObject>();
+        GameObjectsList.reserve(objects.size());
+        AttackableUnitsList.reserve(objects.size() / 2);
+        MinionsList.reserve(objects.size() / 2);
+
+        for (const auto& object : objects) {
             const uintptr_t addr = object.Address();
             if (!addr) continue;
 
@@ -506,7 +557,7 @@ namespace detail {
 
             AddObject(addr, inferredType);
         }
-        
+
         Loaded = true;
     }
 

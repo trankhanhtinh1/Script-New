@@ -6,11 +6,13 @@
 // Includes Movement.h which contains:
 //   - PredictionInput / PredictionOutput structs
 //   - Movement namespace with all prediction methods
-//   - GamePath::PathTracker for path tracking
 //   - Vec2Ext / Vec3Ext helper functions
+// Also exposes:
+//   - GamePath::PathTracker for path tracking
 // ============================================================================
 
 #include "Prediction/Movement.h"
 #include "Prediction/Cluster.h"
+#include "Prediction/GamePath.h"
 #include "ConvexHull.h"
 #include "Geometry.h"

@@ -1052,12 +1052,8 @@ inline ObjectEventArgs DecodeObjectLifecycleEvent(const RawEventArgs& raw) {
             }
         }
     } else if (raw.Id == Hooks::OnDelete) {
-        // DestroyObject (0x54CC30): RCX = ObjectManager*, RDX = GameObject*
-        (void)CoreRuntime::RefreshReadState();
-        if (raw.Rcx != CoreRuntime::GetContext().objectManager) {
-            return args;
-        }
-        object = static_cast<uintptr_t>(raw.Rdx);
+        // sub_28EFE0: RCX = GameObject* (this pointer), fires GameEventId.OnDelete
+        object = static_cast<uintptr_t>(raw.Rcx);
         if (detail::IsValidAddress(object)) {
             args.Sender = detail::ReadObject(object);
         }
