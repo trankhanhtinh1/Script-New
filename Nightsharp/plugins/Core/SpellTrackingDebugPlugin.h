@@ -449,12 +449,11 @@ private:
         int count = 0;
 
         const auto player = SDK::ObjectManager::Player();
-        const auto playerSnapshot = player.Snapshot();
-        const std::uint32_t playerTeam = playerSnapshot.team;
-        const std::uint32_t playerNetworkId = playerSnapshot.handle.networkId;
+        const std::uint32_t playerTeam   = player.IsValid() ? static_cast<uint32_t>(player.Team()) : 0;
+        const std::uint32_t playerNetId  = player.IsValid() ? static_cast<uint32_t>(player.NetworkId()) : 0;
 
-        if (playerSnapshot.IsValid() && count < kMaxUnits) {
-            FillUnit(player, playerSnapshot, gameTime, true, false, false, next[count++]);
+        if (player.IsValid() && count < kMaxUnits) {
+            FillUnit(player, gameTime, true, false, false, next[count++]);
         }
 
         for (const auto& hero : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
@@ -462,22 +461,16 @@ private:
                 continue;
             }
 
-            const auto snapshot = hero.Snapshot();
-            if (!snapshot.IsValid() ||
-                snapshot.handle.networkId == playerNetworkId) {
+            if (static_cast<uint32_t>(hero.NetworkId()) == playerNetId) {
                 continue;
             }
 
-            const bool enemy =
-                playerTeam != 0 &&
-                snapshot.team != 0 &&
-                snapshot.team != playerTeam;
-            const bool ally =
-                playerTeam != 0 &&
-                snapshot.team != 0 &&
-                snapshot.team == playerTeam;
-            FillUnit(hero, snapshot, gameTime, false, enemy, ally, next[count++]);
+            const uint32_t heroTeam = static_cast<uint32_t>(hero.Team());
+            const bool enemy = playerTeam != 0 && heroTeam != 0 && heroTeam != playerTeam;
+            const bool ally  = playerTeam != 0 && heroTeam != 0 && heroTeam == playerTeam;
+            FillUnit(hero, gameTime, false, enemy, ally, next[count++]);
         }
+
 
         AcquireSRWLockExclusive(&m_cacheLock);
         for (int i = 0; i < kMaxUnits; ++i) {
@@ -488,25 +481,24 @@ private:
     }
 
     static void FillUnit(const SDK::AIHeroClient& hero,
-                         const ::Core::Objects::ObjectSnapshot& snapshot,
                          float gameTime,
                          bool player,
                          bool enemy,
                          bool ally,
                          UnitSnapshot& out) {
         out = {};
-        out.active = true;
-        out.player = player;
-        out.enemy = enemy;
-        out.ally = ally;
-        out.address = snapshot.handle.address;
-        out.networkId = snapshot.handle.networkId;
-        out.level = snapshot.level;
-        out.position = snapshot.position;
+        out.active    = true;
+        out.player    = player;
+        out.enemy     = enemy;
+        out.ally      = ally;
+        out.address   = hero.Address();
+        out.networkId = static_cast<std::uint32_t>(hero.NetworkId());
+        out.level     = hero.Level();
+        out.position  = hero.Position();
         out.sampleTime = gameTime;
-        const char* name = snapshot.characterName[0]
-            ? snapshot.characterName
-            : snapshot.name;
+        const std::string& charName = hero.CharacterName();
+        const std::string& unitName = hero.Name();
+        const char* name = !charName.empty() ? charName.c_str() : unitName.c_str();
         strncpy_s(out.name, name ? name : "", _TRUNCATE);
 
         for (int i = 0; i < kSlotCount; ++i) {

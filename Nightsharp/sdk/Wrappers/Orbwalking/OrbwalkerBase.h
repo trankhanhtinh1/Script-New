@@ -166,21 +166,18 @@ public:
                  const Vector3& forcedPosition = Vector3()) {
         NS_PROFILE("orb.Orbwalk.total");
 
-        // --- Debug: log Orbwalk entry once per 250ms ---
+        const int now = Variables::TickCount();
+        // --- Debug: log Orbwalk entry ---
         {
-            static int s_lastOrbwalkLog = 0;
-            const int now = Variables::TickCount();
-            if (now - s_lastOrbwalkLog >= 250) {
-                s_lastOrbwalkLog = now;
-                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-                os << "[Tick: " << now
-                   << "] ORBWALK ENTRY | mode=" << static_cast<int>(ActiveMode)
-                   << " | AttackState=" << (AttackState ? "1" : "0")
-                   << " | LastAutoAttackTick=" << LastAutoAttackTick
-                   << " | attackDelayMs=" << static_cast<int>(FrameCache().attackDelay * 1000.0f)
-                   << " | windupMs=" << static_cast<int>(FrameCache().attackWindup * 1000.0f)
-                   << " | sinceLastAttack=" << (now - LastAutoAttackTick) << "ms\n";
-            }
+            std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+            os << "[Tick: " << now
+               << "] ORBWALK ENTRY | mode=" << static_cast<int>(ActiveMode)
+               << " | AttackState=" << (AttackState ? "1" : "0")
+               << " | MovementState=" << (MovementState ? "1" : "0")
+               << " | LastAutoAttackTick=" << LastAutoAttackTick
+               << " | attackDelayMs=" << static_cast<int>(FrameCache().attackDelay * 1000.0f)
+               << " | windupMs=" << static_cast<int>(FrameCache().attackWindup * 1000.0f)
+               << " | sinceLastAttack=" << (now - LastAutoAttackTick) << "ms\n";
         }
 
         bool attackReady;
@@ -282,6 +279,7 @@ public:
         if (!self || !self->enabled_) {
             return;
         }
+
         // Start of orbwalker loop
         NS_PROFILE("orb.OnGameUpdateHandler.total");
         {
@@ -292,16 +290,28 @@ public:
             NS_PROFILE("orb.Player");
             const auto player = GameObjects::Player();
             if (!player.IsValid() || player.IsDead()) {
+                static int s_lastErr1 = 0;
+                if (now - s_lastErr1 >= 250) {
+                    s_lastErr1 = now;
+                    std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                    os << "[Tick: " << now << "] OnGameUpdateHandler RETURNING EARLY: player.IsValid()=" << (player.IsValid() ? "1" : "0") << " player.IsDead()=" << (player.IsDead() ? "1" : "0") << "\n";
+                }
                 return;
             }
             {
                 NS_PROFILE("orb.IsCastingInterruptableSpell");
                 if (Extensions::IsCastingInterruptableSpell(player, true)) {
+                    static int s_lastErr2 = 0;
+                    if (now - s_lastErr2 >= 250) {
+                        s_lastErr2 = now;
+                        std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                        os << "[Tick: " << now << "] OnGameUpdateHandler RETURNING EARLY: IsCastingInterruptableSpell\n";
+                    }
                     return;
                 }
             }
         }
-        if (self->ActiveMode != self->InActiveMode) {
+        if (self->ActiveMode != OrbwalkingMode::None) {
             self->Orbwalk();
         }
     }
@@ -310,9 +320,9 @@ public:
         auto* self = Ptr();
         if (!self || !self->enabled_) return;
 
-        std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+       /* std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
         os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnProcessSpell | SenderNetId: " << args.Sender.NetworkId << " | PlayerNetId: " << GameObjects::Player().NetworkId() << " | Name: '" << args.SpellName << "' | TargetId: " << args.TargetNetworkId << " | Slot: " << args.Slot << " | IsAuto: " << (args.IsAutoAttack ? "TRUE" : "FALSE") << "\n";
-
+*/
         if (!args.Sender.IsValid()
             || args.Sender.NetworkId != GameObjects::Player().NetworkId()) {
             return;
@@ -335,10 +345,10 @@ public:
         auto* self = Ptr();
         if (!self || !self->enabled_) return;
 
-        if (args.Sender.NetworkId == GameObjects::Player().NetworkId()) {
+       /* if (args.Sender.NetworkId == GameObjects::Player().NetworkId()) {
             std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
             os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnProcessCastSpell | SenderNetId: " << args.Sender.NetworkId << " | Slot: " << args.Slot << "\n";
-        }
+        }*/
     }
 
     static void OnMissileCreateHandler(const Events::ObjectEventArgs& args) {
@@ -355,12 +365,12 @@ public:
         auto* self = Ptr();
         if (!self || !self->enabled_) return;
 
-        std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+       /* std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
         os << "[Tick: " << Variables::TickCount() << "] EVENT TRIGGERED: OnDoCast | SenderNetId: " << args.Sender.NetworkId
            << " | PlayerNetId: " << GameObjects::Player().NetworkId()
            << " | Name: '" << args.SpellName << "' | Slot: " << args.Slot
            << " | IsAuto: " << (args.IsAutoAttack ? "TRUE" : "FALSE") << "\n";
-
+*/
         if (!args.Sender.IsValid()
             || args.Sender.NetworkId != GameObjects::Player().NetworkId()) {
             return;
@@ -390,9 +400,6 @@ public:
         self->PendingAttackTick = 0;
         self->LastMovementOrderTick = 0;
         ++self->TotalAutoAttacks;
-
-        os << "[Tick: " << Variables::TickCount() << "] EVENT: OnDoCast (Missile Launched)"
-           << " | LastAutoAttackTick: " << self->LastAutoAttackTick << "\n";
 
         auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));

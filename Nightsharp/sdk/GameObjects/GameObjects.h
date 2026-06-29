@@ -8,6 +8,9 @@
 #include <type_traits>
 #include <vector>
 #include <cstring>
+#include <string> 
+#include <fstream>  // basic_ostream
+
 
 namespace SDK::GameObjects {
 
@@ -233,6 +236,8 @@ namespace detail {
                     AddUnique(AllyMinionsList, minion);
                     AddUnique(AllyList, AIBaseClient(minion.Handle()));
                 }
+                
+            
             }
             return;
         }
@@ -451,6 +456,12 @@ namespace detail {
             return;
         }
 
+        // Populate the static string cache BEFORE AddObject() so that
+        // IsEnemy()/IsAlly() inside AddHero/AddMinion/AddTurret can use
+        // the team value from the cache on the very first categorization.
+        const uint32_t idx = (*reinterpret_cast<const uint32_t*>(args.Sender.Ptr + Offset::All::Index)) & 0xFFFF;
+        SDK::StaticStringCache::Populate(args.Sender.Ptr, idx, args.Sender.Type);
+
         AddObject(args.Sender.Ptr, args.Sender.Type);
     }
 
@@ -458,6 +469,10 @@ namespace detail {
         if (!Loaded || !args.Sender.IsValid()) {
             return;
         }
+
+        // Clear the static string cache before the object's memory is unmapped.
+        const uint32_t idx = (*reinterpret_cast<const uint32_t*>(args.Sender.Ptr + Offset::All::Index)) & 0xFFFF;
+        SDK::StaticStringCache::Clear(idx);
 
         RemoveObject(GameObject(::Core::ObjectManager::MakeHandle(
             args.Sender.Ptr,
@@ -468,11 +483,33 @@ namespace detail {
         Clear();
         PlayerObject = SDK::ObjectManager::Player();
 
+        // Force-warm the player team static cache before we categorize any
+        // object. CachedPlayerTeam() is lazy and relies on g_ctx.localPlayer.
+        // If it hasn't resolved yet, IsEnemy()/IsAlly() return false for every
+        // unit and all enemy lists end up empty for the entire session.
+        SDK::GameObject::WarmPlayerTeamCache();
+
+        int objectsIterated = 0;
         for (const auto& object : SDK::ObjectManager::Get<GameObject>()) {
-            AddObject(object.Address());
+            objectsIterated++;
+            const uintptr_t addr = object.Address();
+            if (!addr) continue;
+
+            // Populate static string cache BEFORE AddObject() so that
+            // IsEnemy()/IsAlly() inside AddHero/AddMinion/AddTurret can
+            // use the cache hit for team comparison.
+            const uint32_t rawIdx = *reinterpret_cast<const uint32_t*>(addr + Offset::All::Index);
+            const uint32_t idx = rawIdx & 0xFFFF;
+
+            const auto inferredType = SDK::ObjectManager::detail::InferExtendedType(addr);
+            SDK::StaticStringCache::Populate(addr, idx, inferredType);
+
+            AddObject(addr, inferredType);
         }
+        
         Loaded = true;
     }
+
 
     inline void OnLoad() {
         Rebuild();

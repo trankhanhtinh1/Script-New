@@ -105,15 +105,32 @@ protected:
         if (!championName || !championName[0] ||
             !CoreRuntime::EnsureInitialized() ||
             !CoreRuntime::RefreshReadState()) {
+            NightSharpDebug::Logf("[CanLoadChampion] early-out: championName=%s init=%d",
+                championName ? championName : "<null>",
+                CoreRuntime::EnsureInitialized() ? 1 : 0);
             return false;
         }
 
+        // Primary: use the session-level cache populated by WarmPlayerTeamCache().
+        const std::string& cached = SDK::GameObject::GetCachedChampionName();
+        if (!cached.empty()) {
+            const bool match = _stricmp(cached.c_str(), championName) == 0;
+            NightSharpDebug::Logf("[CanLoadChampion] cached='%s' want='%s' match=%d",
+                cached.c_str(), championName, match ? 1 : 0);
+            return match;
+        }
+
+        // Fallback: read from StaticStringCache via Player().CharacterName().
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) {
+            NightSharpDebug::Logf("[CanLoadChampion] player invalid, want='%s'", championName);
             return false;
         }
-
-        return _stricmp(player.CharacterName().c_str(), championName) == 0;
+        const std::string& charName = player.CharacterName();
+        const bool match = _stricmp(charName.c_str(), championName) == 0;
+        NightSharpDebug::Logf("[CanLoadChampion] fallback charName='%s' want='%s' match=%d",
+            charName.c_str(), championName, match ? 1 : 0);
+        return match;
     }
 
     bool Enabled() const {

@@ -131,21 +131,73 @@ private:
             const auto player = GameObjects::Player();
             const float attackRange = Utils::AutoAttack::GetRealAutoAttackRange(player, AttackableUnit()) + 100.0f;
             const Vector3 playerPos = player.Position();
-            for (const auto& minion : GetCachedEnemyMinions()) {
-                // Cheap position-only distance check first — skip full state reads for far units.
-                const Vector3 pos = minion.Position();
-                if (playerPos.Distance2D(pos) > attackRange) continue;
+            auto cachedEnemies = GetCachedEnemyMinions();
 
-                if (!IsValidUnit(minion)) continue;
+            /*
+            static int s_playerDbg = 0;
+            if (Variables::TickCount() - s_playerDbg > 2000) {
+                s_playerDbg = Variables::TickCount();
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "[GameObjects::Player] Pos=(" << playerPos.x << "," << playerPos.z
+                   << ") IsValid=" << player.IsValid() << " Address=" << player.Address() << "\n";
+                if (!cachedEnemies.empty()) {
+                    const auto& m0 = cachedEnemies[0];
+                    float d = playerPos.Distance2D(m0.Position());
+                    os << "[GameObjects::Player] Dist to cached[0]=" << d
+                       << " attackRange=" << attackRange
+                       << " (fail if " << d << " > " << attackRange << ")\n";
+                }
+            }
+
+            static int s_gdb = 0;
+            if (Variables::TickCount() - s_gdb > 1000) {
+                s_gdb = Variables::TickCount();
+                std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                os << "--- GetMinions DEBUG DUMP (Player Pos: " << playerPos.x << "," << playerPos.z << ") ---\n";
+                int nearbyCount = 0;
+                for (const auto& m : GameObjects::Minions()) {
+                    float dist = playerPos.Distance2D(m.Position());
+                    if (dist < 1500.0f) {
+                        os << "Nearby Minion: Name='" << m.CharacterName() 
+                           << "' IsEnemy=" << m.IsEnemy() 
+                           << " Team=" << static_cast<int>(m.Team())
+                           << " IsDead=" << m.IsDead() 
+                           << " HP=" << m.Health()
+                           << " IsMinion=" << m.IsMinion()
+                           << " Dist=" << dist << "\n";
+                        nearbyCount++;
+                    }
+                }
+                os << "Found " << nearbyCount << " total minions within 1500 units.\n";
+                os << "--------------------------------------------------\n";
+            }
+            */
+
+            for (const auto& minion : cachedEnemies) {
+                const Vector3 pos = minion.Position();
+                float dist = playerPos.Distance2D(pos);
+                
+                if (dist > attackRange) {
+                    continue;
+                }
+
+                // Since we bypassed IsVisible and IsTargetable in GetCachedEnemyMinions,
+                // we should bypass it here too for now until offsets are fixed.
+                // Replace full IsValidUnit with a simpler check
+                if (!minion.IsValid() || minion.IsDead()) {
+                    continue;
+                }
 
                 const std::string baseName = minion.CharacterName();
 
-                if (includeMinions && minion.IsMinion()) {
-                    minionList.push_back(minion);
-                } else if (attackSpecialMinions && IsSpecialMinion(baseName.c_str())) {
+                if (attackSpecialMinions && IsSpecialMinion(baseName.c_str())) {
                     specialList.push_back(minion);
                 } else if (attackClones && IsClone(baseName.c_str())) {
                     cloneList.push_back(minion);
+                } else if (includeMinions) {
+                    // Removed minion.IsMinion() check because IsMinion depends on CharacterName
+                    // which is currently broken/empty due to memory offset/read issues.
+                    minionList.push_back(minion);
                 }
             }
         }
@@ -246,8 +298,31 @@ public:
         if (Variables::TickCount() - lastEnemyMinionsTick_ > 30) {
             NS_PROFILE("orb.UpdateEnemyMinionsCache");
             cachedEnemyMinions_.clear();
+            
+            /*
+            static int s_cdbg = 0;
+            bool printLog = (Variables::TickCount() - s_cdbg > 1000); // Log once per second
+            if (printLog) s_cdbg = Variables::TickCount();
+            int count = 0;
+            */
+            
             for (const auto& m : GameObjects::EnemyMinions()) {
-                if (m.IsValid() && !m.IsDead() && m.IsVisible() && m.IsTargetable()) {
+                bool isValid = m.IsValid();
+                bool isDead = m.IsDead();
+                
+                /*
+                if (printLog && count < 3) {
+                    std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
+                    os << "[CacheEval] Minion " << count << " Name='" << m.CharacterName() 
+                       << "' | IsValid=" << isValid 
+                       << " | IsDead=" << isDead 
+                       << " | HP=" << m.Health() << "/" << m.MaxHealth()
+                       << " | Pos=(" << m.Position().x << "," << m.Position().z << ")\n";
+                }
+                count++;
+                */
+                
+                if (isValid && !isDead) {
                     cachedEnemyMinions_.push_back(m);
                 }
             }
@@ -269,6 +344,7 @@ public:
     AttackableUnit GetTarget(OrbwalkingMode mode) {
         NS_PROFILE("orb.Selector.GetTarget.total");
         const auto player = GameObjects::Player();
+        
         if (!player.IsValid()) return {};
 
         if ((mode == OrbwalkingMode::Hybrid || mode == OrbwalkingMode::LaneClear)
@@ -289,6 +365,20 @@ public:
             minions = (mode != OrbwalkingMode::None)
                 ? GetMinions(mode)
                 : std::vector<AIMinionClient>();
+        }
+
+        {
+            static int s_ldbg = 0;
+            if (Variables::TickCount() - s_ldbg > 500) {
+                s_ldbg = Variables::TickCount();
+                   if (!minions.empty()) {
+                    auto& m = minions.front();
+                   
+                } else if (!GameObjects::EnemyMinions().empty()) {
+                    auto& m = GameObjects::EnemyMinions().front();
+                   
+                }
+            }
         }
 
         if (mode == OrbwalkingMode::LaneClear || mode == OrbwalkingMode::Hybrid
@@ -395,6 +485,7 @@ public:
 
         if (mode != OrbwalkingMode::LastHit) {
             auto target = TargetSelector::Instance()->GetTarget(-1.0f, DamageType::Physical);
+            
             if (target.IsValid() && Utils::AutoAttack::InAutoAttackRange(target)) {
                 return target;
             }
@@ -412,7 +503,7 @@ public:
             || mode == OrbwalkingMode::LastHit) {
             std::vector<AIMinionClient> turretMinions;
             for (const auto& m : minions) {
-                if (m.IsMinion() && m.IsUnderAllyTurret()) {
+                if (m.IsUnderAllyTurret()) {
                     turretMinions.push_back(m);
                 }
             }
