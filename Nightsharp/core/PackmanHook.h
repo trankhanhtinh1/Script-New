@@ -1,3404 +1,890 @@
 #pragma once
 
 // ============================================================================
-// PackmanTest.h - Packman (Riot anti-cheat) hook detection & direct syscall bypass
-// ----------------------------------------------------------------------------
-// MUST BE INITIALIZED FIRST after injection (before any other Core module).
+// PackmanHook - CRC Bypass for Riot Packman anti-cheat (minimal footprint)
+// ============================================================================
 //
-// Packman hooks ntdll syscall stubs to intercept debugging/memory APIs. The game
-// itself uses these same syscalls internally ("hidden syscalls"). Because Packman
-// redirects the ntdll exports via jmp [rip+0] trampolines, we cannot call them
-// normally. This module:
+// Theo CRC bypass.txt (League CRC Byte Patching CRC Bypass).
 //
-//   1. Detects all known Packman hook sites in ntdll
-//   2. Builds clean direct-syscall stubs (mov r10,rcx; mov eax,SSN; syscall; ret)
-//      using SSNs extracted from disk or memory — bypassing Packman entirely
-//   3. Exposes callable function pointers for each syscall the game uses internally
+// Cơ chế:
+//   1) Hook 19 bytes tại CRC read site trong stub.dll:
+//        49 8B 0E              mov rcx, [r14]
+//        F3 44 0F 6F 04 29     movdqu xmm8, [rcx+rbp]
+//        66 44 0F 7F 84 24 20 01 00 00   movdqa [rsp+120h], xmm8
 //
-// Hook patterns observed:
-//   - 14-byte jmp: FF 25 00 00 00 00 [8-byte absolute address]
-//   - Syscall stub redirect: original `4C 8B D1 B8 xx` replaced with jmp
-//   - Single-byte patches: 0x4C->0xCC (int3), 0xC3->0xCC, 0xCC->0x90 (nop)
-//   - Function kill: 0x48->0xC3 (immediate ret)
+//   2) Trước khi CRC đọc memory thật, intercept r14 (mảng 4 con trỏ)
+//      và redirect mỗi pointer rơi vào "faked region" sang bản backup
+//      bytes gốc đã lưu trước khi patch ⇒ hash trả về giá trị unmodified.
 //
-// Known game-internal syscalls (SSNs from live LoL ntdll dump, Win11 26100):
-//   NtContinue               SSN 0x043
-//   NtDelayExecution          SSN 0x061
-//   NtProtectVirtualMemory    SSN 0x050
-//   NtQueryVirtualMemory      SSN 0x023
-//   NtSuspendThread           SSN 0x1BE
-//   NtContinueEx              SSN 0x044
-//   NtSetContextThread        SSN 0x18D
-//   NtGetContextThread        SSN 0x0F3
-//   NtClose                   SSN 0x019
-//   NtDuplicateObject         SSN 0x04C
-//   NtOpenProcess             SSN 0x081
-//   NtOpenThread              SSN 0x163
-//   NtQueryInformationProcess SSN 0x1A2
-//   NtQueryInformationThread  SSN 0x1C2
-//   NtQueryObject             SSN 0x04E
-//   NtQuerySystemInformation  SSN 0x0B5
-//   NtReadVirtualMemory       SSN 0x03F
-//   NtResumeThread            SSN 0x072
-//   NtSetInformationProcess   SSN 0x1C3
-//   NtSetInformationThread    SSN 0x0A5
-//   NtTerminateProcess        SSN 0x03C
-//   NtTerminateThread         SSN 0x073
-//   NtWriteVirtualMemory      SSN 0x05D
-//   NtAllocateVirtualMemory   SSN 0x010
-//   NtFreeVirtualMemory       SSN 0x01C
-//   NtGetNextThread           (hooked, no clean stub available)
-//
-// Usage (call IMMEDIATELY after DLL injection, before anything else):
-//   PackmanTest::Install();   // detect + build syscall stubs
-//   // Now safe to use:
-//   PackmanTest::Syscall::NtProtectVirtualMemory(...)
-//   PackmanTest::Syscall::NtQueryVirtualMemory(...)
-//   // Or check status:
-//   bool active = PackmanTest::IsPackmanActive();
+//   3) Footprint cố gắng giữ tối thiểu: KHÔNG console, KHÔNG VEH,
+//      KHÔNG heartbeat thread, KHÔNG log file ở vị trí cố định.
+//      Logging chỉ qua OutputDebugString (đi vào DbgPrint buffer).
 // ============================================================================
 
 #include <Windows.h>
-#include <winternl.h>
 #include <psapi.h>
-#include <cstdint>
-#include <cstring>
 #include <vector>
 #include <mutex>
+#include <cstdint>
+#include <cstdio>
+#include <cstdarg>
+#include <cstring>
 
-// ── Windows Internal Structures (undocumented) ───────────────────────────────
-// Use Windows SDK types where available, define only what's missing
-
-// Custom UNICODE_STRING to avoid conflict with Windows SDK winternl.h
-typedef struct _UNICODE_STRING_CUSTOM {
-    USHORT Length;
-    USHORT MaximumLength;
-    PWSTR  Buffer;
-} UNICODE_STRING_CUSTOM, *PUNICODE_STRING_CUSTOM;
-
-// LIST_ENTRY is already defined in winnt.h, don't redefine
-
-typedef struct _LDR_DATA_TABLE_ENTRY_CUSTOM {
-    LIST_ENTRY InLoadOrderLinks;
-    LIST_ENTRY InMemoryOrderLinks;
-    LIST_ENTRY InInitializationOrderLinks;
-    PVOID DllBase;
-    PVOID EntryPoint;
-    ULONG SizeOfImage;
-    UNICODE_STRING_CUSTOM FullDllName;
-    UNICODE_STRING_CUSTOM BaseDllName;
-    ULONG Flags;
-    USHORT LoadCount;
-    USHORT TlsIndex;
-    LIST_ENTRY HashLinks;
-    PVOID SectionPointer;
-    ULONG CheckSum;
-    ULONG TimeDateStamp;
-    PVOID LoadedImports;
-    PVOID EntryPointActivationContext;
-    PVOID PatchInformation;
-} LDR_DATA_TABLE_ENTRY_CUSTOM, *PLDR_DATA_TABLE_ENTRY_CUSTOM;
-
-typedef struct _PEB_LDR_DATA_CUSTOM {
-    ULONG Length;
-    BOOLEAN Initialized;
-    PVOID SsHandle;
-    LIST_ENTRY InLoadOrderModuleList;
-    LIST_ENTRY InMemoryOrderModuleList;
-    LIST_ENTRY InInitializationOrderModuleList;
-} PEB_LDR_DATA_CUSTOM, *PPEB_LDR_DATA_CUSTOM;
-
-typedef struct _PEB_CUSTOM {
-    BOOLEAN InheritedAddressSpace;
-    BOOLEAN ReadImageFileExecOptions;
-    BOOLEAN BeingDebugged;
-    BOOLEAN BitField;
-    PVOID Mutant;
-    PVOID ImageBaseAddress;
-    PPEB_LDR_DATA_CUSTOM Ldr;
-    PVOID ProcessParameters;
-    PVOID SubSystemData;
-    PVOID ProcessHeap;
-    PVOID FastPebLock;
-    PVOID AtlThunkSListPtr;
-    PVOID IFEOKey;
-    PVOID CrossProcessFlags;
-    PVOID KernelCallbackTable;
-    ULONG SystemReserved;
-    ULONG AtlThunkSListPtr32;
-    PVOID ApiSetMap;
-} PEB_CUSTOM, *PPEB_CUSTOM;
-
-namespace PackmanTest {
-
-// ── Hook site descriptor ─────────────────────────────────────────────────────
-
-struct HookSite {
-    const char* functionName;
-    uint32_t    rvaFromNtdll;       // RVA within ntdll (0 = resolve by export name)
-    int         offset;             // byte offset from function start
-    int         patchSize;          // number of bytes patched
-    uint8_t     originalBytes[16];  // expected original bytes (clean ntdll)
-    uint8_t     hookedBytes[16];    // expected hooked bytes (Packman active)
-    int         originalSize;
-    int         hookedSize;
-};
-
-// ── Hook identifiers ─────────────────────────────────────────────────────────
-
-enum HookId : int {
-    LdrInitializeThunk = 0,
-    RtlpAddVectoredHandler,
-    NtQueryVirtualMemory,
-    NtQueryVirtualMemory_Plus6,
-    NtContinue,
-    NtContinue_Plus6,
-    NtCreateThread,
-    NtCreateThread_Plus14,
-    NtProtectVirtualMemory,
-    NtProtectVirtualMemory_Plus6,
-    NtContinueEx,
-    NtContinueEx_Plus6,
-    NtCreateThreadEx,
-    NtCreateThreadEx_Plus14,
-    NtGetContextThread,
-    NtGetContextThread_Plus7,
-    NtSetContextThread,
-    NtSuspendThread,
-    DbgBreakPoint,
-    DbgUserBreakPoint,
-    KiUserExceptionDispatcher,
-    DbgUiRemoteBreakin,
-    RtlpQueryProcessDebugInformationRemote,
-    HookCount
-};
-
-// ── Hook site table ──────────────────────────────────────────────────────────
-
-inline constexpr HookSite kHookSites[HookCount] = {
-    // LdrInitializeThunk: 12 bytes
-    { "LdrInitializeThunk", 0, 0, 12,
-      { 0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x10, 0xFE }, 8, 8 },
-    // RtlpAddVectoredHandler: 14 bytes
-    { "RtlpAddVectoredHandler", 0, 0, 14,
-      { 0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x30, 0xCF }, 8, 8 },
-    // NtQueryVirtualMemory: 5 bytes (syscall stub)
-    { "NtQueryVirtualMemory", 0, 0, 5,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0x23 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00 }, 5, 5 },
-    // NtQueryVirtualMemory+6: 8 bytes
-    { "NtQueryVirtualMemory", 0, 6, 8,
-      { 0x00, 0x00, 0xF6, 0x04, 0x25, 0x08, 0x03, 0xFE },
-      { 0xC0, 0xF9, 0x3A, 0x70, 0xFE, 0x7F, 0x00, 0x00 }, 8, 8 },
-    // NtContinue: 5 bytes
-    { "NtContinue", 0, 0, 5,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0x43 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00 }, 5, 5 },
-    // NtContinue+6: 8 bytes
-    { "NtContinue", 0, 6, 8,
-      { 0x00, 0x00, 0xF6, 0x04, 0x25, 0x08, 0x03, 0xFE },
-      { 0xC0, 0xCD, 0x37, 0x70, 0xFE, 0x7F, 0x00, 0x00 }, 8, 8 },
-    // NtCreateThread: 1 byte (0x4C -> 0xCC)
-    { "NtCreateThread", 0, 0, 1, { 0x4C }, { 0xCC }, 1, 1 },
-    // NtCreateThread+14: 1 byte (0xC3 -> 0xCC)
-    { "NtCreateThread", 0, 0x14, 1, { 0xC3 }, { 0xCC }, 1, 1 },
-    // NtProtectVirtualMemory: 5 bytes
-    { "NtProtectVirtualMemory", 0, 0, 5,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0x50 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00 }, 5, 5 },
-    // NtProtectVirtualMemory+6: 8 bytes
-    { "NtProtectVirtualMemory", 0, 6, 8,
-      { 0x00, 0x00, 0xF6, 0x04, 0x25, 0x08, 0x03, 0xFE },
-      { 0xA0, 0x83, 0x46, 0x70, 0xFE, 0x7F, 0x00, 0x00 }, 8, 8 },
-    // NtContinueEx: 5 bytes
-    { "NtContinueEx", 0, 0, 5,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0xA1 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00 }, 5, 5 },
-    // NtContinueEx+6: 8 bytes
-    { "NtContinueEx", 0, 6, 8,
-      { 0x00, 0x00, 0xF6, 0x04, 0x25, 0x08, 0x03, 0xFE },
-      { 0x70, 0xD1, 0x37, 0x70, 0xFE, 0x7F, 0x00, 0x00 }, 8, 8 },
-    // NtCreateThreadEx: 1 byte (0x4C -> 0xCC)
-    { "NtCreateThreadEx", 0, 0, 1, { 0x4C }, { 0xCC }, 1, 1 },
-    // NtCreateThreadEx+14: 1 byte (0xC3 -> 0xCC)
-    { "NtCreateThreadEx", 0, 0x14, 1, { 0xC3 }, { 0xCC }, 1, 1 },
-    // NtGetContextThread: 5 bytes
-    { "NtGetContextThread", 0, 0, 5,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0xF3 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00 }, 5, 5 },
-    // NtGetContextThread+7: 7 bytes
-    { "NtGetContextThread", 0, 7, 7,
-      { 0x00, 0xF6, 0x04, 0x25, 0x08, 0x03, 0xFE },
-      { 0xEB, 0x37, 0x70, 0xFE, 0x7F, 0x00, 0x00 }, 7, 7 },
-    // NtSetContextThread: 14 bytes
-    { "NtSetContextThread", 0, 0, 14,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0x8D, 0x01, 0x00, 0x00 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x20, 0xD5 }, 8, 8 },
-    // NtSuspendThread: 14 bytes
-    { "NtSuspendThread", 0, 0, 14,
-      { 0x4C, 0x8B, 0xD1, 0xB8, 0xBE, 0x01, 0x00, 0x00 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0x80, 0xC1 }, 8, 8 },
-    // DbgBreakPoint: 1 byte (0xCC -> 0x90)
-    { "DbgBreakPoint", 0, 0, 1, { 0xCC }, { 0x90 }, 1, 1 },
-    // DbgUserBreakPoint: 1 byte (0xCC -> 0x90)
-    { "DbgUserBreakPoint", 0, 0, 1, { 0xCC }, { 0x90 }, 1, 1 },
-    // KiUserExceptionDispatcher: 14 bytes
-    { "KiUserExceptionDispatcher", 0, 0, 14,
-      { 0xFC, 0x48, 0x8B, 0x05, 0xD8, 0xFD, 0x0D, 0x00 },
-      { 0xFF, 0x25, 0x00, 0x00, 0x00, 0x00, 0xDB, 0xD4 }, 8, 8 },
-    // DbgUiRemoteBreakin: 1 byte (0x48 -> 0xC3)
-    { "DbgUiRemoteBreakin", 0, 0, 1, { 0x48 }, { 0xC3 }, 1, 1 },
-    // RtlpQueryProcessDebugInformationRemote: 1 byte (0x48 -> 0xC3)
-    { "RtlpQueryProcessDebugInformationRemote", 0, 0, 1, { 0x48 }, { 0xC3 }, 1, 1 },
-};
-
-// ── Runtime state ────────────────────────────────────────────────────────────
-
-enum HookState : uint8_t {
-    State_Unknown   = 0,
-    State_Clean     = 1,
-    State_Hooked    = 2,
-    State_Modified  = 3,
-    State_NotFound  = 4,
-};
-
-struct HookStatus {
-    HookState state;
-    uint8_t   liveBytes[16];
-    uintptr_t resolvedAddr;
-};
-
-inline uintptr_t  g_ntdllBase = 0;
-inline HookStatus g_status[HookCount] = {};
-inline volatile int g_initialized = 0;
-inline volatile int g_installed = 0;
+#pragma warning(disable: 4996)
 
 // ── Logging ──────────────────────────────────────────────────────────────────
+// Ghi vào %TEMP%\ph.log + OutputDebugString. Đường dẫn %TEMP% là user-scope,
+// ít bị anti-cheat sweep hơn C:\Users\Public. Tên file ngắn, không có
+// từ khoá ("packman", "hook", "bypass") để giảm risk pattern match.
 
-inline constexpr const char* kLogPath =
-    "C:\\Users\\Public\\packman_log_test.txt";
-
-inline void WriteLog(const char* text) {
-    if (!text || !*text) return;
-    HANDLE h = CreateFileA(kLogPath, FILE_APPEND_DATA, FILE_SHARE_READ,
-                           nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    DWORD w = 0;
-    WriteFile(h, text, static_cast<DWORD>(lstrlenA(text)), &w, nullptr);
-    CloseHandle(h);
-}
-// ═══════════════════════════════════════════════════════════════════════════════
-// DIRECT SYSCALL STUB INFRASTRUCTURE
-// ═══════════════════════════════════════════════════════════════════════════════
-// The game uses many hidden syscalls internally. Packman hooks the ntdll exports
-// so we build our own clean stubs:
-//   mov r10, rcx       ; 4C 8B D1
-//   mov eax, <SSN>     ; B8 xx xx xx xx
-//   syscall            ; 0F 05
-//   ret                ; C3
-// Total: 12 bytes per stub. We allocate a single RWX page for all stubs.
-
-namespace SyscallStubs {
-
-    // Known SSNs (System Service Numbers) for current Windows build.
-    // These match the game's internal usage. If Windows updates change SSNs,
-    // we resolve dynamically from disk.
-    struct SyscallInfo {
-        const char* name;
-        int         knownSSN;       // known SSN (fallback if resolution fails)
-        int         resolvedSSN;    // runtime-resolved SSN (-1 = not yet resolved)
-        void*       stubPtr;        // pointer to our clean stub
-    };
-
-    enum SyscallId : int {
-        SC_NtContinue = 0,
-        SC_NtDelayExecution,
-        SC_NtProtectVirtualMemory,
-        SC_NtQueryVirtualMemory,
-        SC_NtSuspendThread,
-        SC_NtContinueEx,
-        SC_NtSetContextThread,
-        SC_NtGetContextThread,
-        SC_NtCreateThreadEx,
-        SC_NtWriteVirtualMemory,
-        SC_NtReadVirtualMemory,
-        SC_NtAllocateVirtualMemory,
-        SC_NtFreeVirtualMemory,
-        SC_NtOpenProcess,
-        SC_NtQuerySystemInformation,
-        SC_NtSetInformationThread,
-        SC_NtQueryInformationProcess,
-        SC_NtQueryInformationThread,
-        SC_NtClose,
-        SC_NtDuplicateObject,
-        SC_NtQueryObject,
-        SC_NtSetInformationProcess,
-        SC_NtOpenThread,
-        SC_NtResumeThread,
-        SC_NtTerminateThread,
-        SC_NtTerminateProcess,
-        SC_Count
-    };
-
-    inline SyscallInfo g_syscalls[SC_Count] = {
-        //                         knownSSN (from live ntdll dump, Win11 26100)
-        { "NtContinue",                 0x043, -1, nullptr },
-        { "NtDelayExecution",           0x061, -1, nullptr },   // was 0x34
-        { "NtProtectVirtualMemory",     0x050, -1, nullptr },
-        { "NtQueryVirtualMemory",       0x023, -1, nullptr },
-        { "NtSuspendThread",            0x1BE, -1, nullptr },
-        { "NtContinueEx",               0x044, -1, nullptr },   // was 0xA1
-        { "NtSetContextThread",         0x18D, -1, nullptr },
-        { "NtGetContextThread",         0x0F3, -1, nullptr },
-        { "NtCreateThreadEx",           0x0C2, -1, nullptr },
-        { "NtWriteVirtualMemory",       0x05D, -1, nullptr },   // was 0x3A
-        { "NtReadVirtualMemory",        0x03F, -1, nullptr },
-        { "NtAllocateVirtualMemory",    0x010, -1, nullptr },   // was 0x18
-        { "NtFreeVirtualMemory",        0x01C, -1, nullptr },   // was 0x1E
-        { "NtOpenProcess",              0x081, -1, nullptr },   // was 0x26
-        { "NtQuerySystemInformation",   0x0B5, -1, nullptr },   // was 0x36
-        { "NtSetInformationThread",     0x0A5, -1, nullptr },   // was 0x0D
-        { "NtQueryInformationProcess",  0x1A2, -1, nullptr },   // was 0x19
-        { "NtQueryInformationThread",   0x1C2, -1, nullptr },   // was 0x25
-        { "NtClose",                    0x019, -1, nullptr },   // was 0x0F
-        { "NtDuplicateObject",          0x04C, -1, nullptr },   // was 0x3C
-        { "NtQueryObject",              0x04E, -1, nullptr },   // was 0x10
-        { "NtSetInformationProcess",    0x1C3, -1, nullptr },   // was 0x1C
-        { "NtOpenThread",               0x163, -1, nullptr },   // was 0x12F
-        { "NtResumeThread",             0x072, -1, nullptr },   // was 0x52
-        { "NtTerminateThread",          0x073, -1, nullptr },   // was 0x53
-        { "NtTerminateProcess",         0x03C, -1, nullptr },   // was 0x2C
-    };
-
-    inline void* g_stubPage = nullptr;   // single RWX allocation for all stubs
-    inline volatile int g_stubsBuilt = 0;
-
-    // ── SSN resolution from on-disk ntdll (bypasses Packman hooks completely) ──
-
-    inline DWORD RvaToFileOffset(const IMAGE_NT_HEADERS* nt, DWORD rva) {
-        const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
-        for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
-            if (rva >= sec->VirtualAddress &&
-                rva < sec->VirtualAddress + sec->Misc.VirtualSize) {
-                return rva - sec->VirtualAddress + sec->PointerToRawData;
-            }
-        }
-        return 0;
+static const char* GetLogPath() {
+    static char path[MAX_PATH] = {};
+    if (path[0]) return path;
+    char tmp[MAX_PATH] = {};
+    DWORD n = GetTempPathA(MAX_PATH, tmp);
+    if (n == 0 || n >= MAX_PATH) {
+        strcpy(path, "C:\\ph.log");
+    } else {
+        _snprintf(path, MAX_PATH, "%sph.log", tmp);
     }
+    return path;
+}
 
-    inline int ExtractSSNFromDiskImage(const uint8_t* buf, const char* funcName) {
-        if (!buf || !funcName) return -1;
-        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE) return -1;
-        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE) return -1;
+static void DbgLog(const char* msg) {
+    OutputDebugStringA(msg);
+    HANDLE hFile = CreateFileA(GetLogPath(), FILE_APPEND_DATA, FILE_SHARE_READ,
+                               nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return;
+    DWORD w; WriteFile(hFile, msg, static_cast<DWORD>(strlen(msg)), &w, nullptr);
+    CloseHandle(hFile);
+}
 
-        const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
-        if (!dir.VirtualAddress) return -1;
+// Timestamp prefix: [HH:MM:SS.mmm]
+static void GetTimestamp(char* out, size_t outLen) {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    _snprintf(out, outLen, "%02d:%02d:%02d.%03d",
+              st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+}
 
-        const auto* exp = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(
-            buf + RvaToFileOffset(nt, dir.VirtualAddress));
-        const auto* names = reinterpret_cast<const DWORD*>(
-            buf + RvaToFileOffset(nt, exp->AddressOfNames));
-        const auto* ords = reinterpret_cast<const WORD*>(
-            buf + RvaToFileOffset(nt, exp->AddressOfNameOrdinals));
-        const auto* funcs = reinterpret_cast<const DWORD*>(
-            buf + RvaToFileOffset(nt, exp->AddressOfFunctions));
+static void DbgLogTs(const char* msg) {
+    char ts[32];
+    GetTimestamp(ts, sizeof(ts));
+    char line[600];
+    _snprintf(line, sizeof(line), "[%s] %s", ts, msg);
+    line[sizeof(line) - 1] = 0;
+    DbgLog(line);
+}
 
-        for (DWORD i = 0; i < exp->NumberOfNames; ++i) {
-            const auto* name = reinterpret_cast<const char*>(
-                buf + RvaToFileOffset(nt, names[i]));
-            if (std::strcmp(name, funcName) != 0) continue;
+static void DbgLogFmt(const char* fmt, ...) {
+    char ts[32];
+    GetTimestamp(ts, sizeof(ts));
+    char body[512];
+    va_list args;
+    va_start(args, fmt);
+    _vsnprintf(body, sizeof(body), fmt, args);
+    va_end(args);
+    body[sizeof(body) - 1] = 0;
+    char line[600];
+    _snprintf(line, sizeof(line), "[%s] %s", ts, body);
+    line[sizeof(line) - 1] = 0;
+    DbgLog(line);
+}
 
-            const auto* stub = buf + RvaToFileOffset(nt, funcs[ords[i]]);
-            // Standard syscall stub pattern: 4C 8B D1 B8 [SSN as DWORD]
-            if (stub[0] == 0x4C && stub[1] == 0x8B && stub[2] == 0xD1 && stub[3] == 0xB8) {
-                return static_cast<int>(*reinterpret_cast<const uint32_t*>(stub + 4));
-            }
-            return -1;
+// ── Pattern Scanner ──────────────────────────────────────────────────────────
+
+static void* PatternScan(const unsigned char* base, size_t size,
+                         const unsigned char* pattern, size_t patternLen) {
+    if (!base || !pattern || patternLen == 0 || size < patternLen) return nullptr;
+    for (size_t i = 0; i + patternLen <= size; ++i) {
+        bool found = true;
+        for (size_t j = 0; j < patternLen; ++j) {
+            if (base[i + j] != pattern[j]) { found = false; break; }
+        }
+        if (found) return const_cast<unsigned char*>(base + i);
+    }
+    return nullptr;
+}
+
+// ── DirectSyscall — bypass Packman's ntdll hooks ─────────────────────────────
+// Packman hook nhiều Nt* function trong ntdll.dll (xem PackmanHook.txt):
+//   NtProtectVirtualMemory (SSN 0x50), NtWriteVirtualMemory (SSN 0x3A),
+//   NtContinue (0x43), NtDelayExecution (0x34), NtQueryVirtualMemory (0x23),
+//   NtSuspendThread (0x1BE), NtContinueEx (0xA1),
+//   NtSetContextThread (0x18D), NtGetContextThread (0xF3).
+//
+// Packman thay 5-14 byte đầu mỗi Nt* stub bằng FF 25 (jmp [rip+0]) → handler
+// riêng. Để bypass, ta tự build syscall stub: mov r10,rcx; mov eax,SSN; syscall; ret.
+// SSN trích từ ntdll trên disk (không bị hook) hoặc fallback cứng.
+
+namespace DirectSyscall {
+
+// ── Function typedefs ────────────────────────────────────────────────────────
+using NtProtectFn  = LONG(NTAPI*)(HANDLE, PVOID*, PSIZE_T, ULONG, PULONG);
+using NtWriteFn    = LONG(NTAPI*)(HANDLE, PVOID, PVOID, SIZE_T, PSIZE_T);
+using NtContinueFn = LONG(NTAPI*)(PCONTEXT, BOOLEAN);
+using NtDelayFn    = LONG(NTAPI*)(PLARGE_INTEGER, BOOLEAN);
+using NtQueryVirtFn= LONG(NTAPI*)(HANDLE, PVOID, ULONG, PVOID, SIZE_T, PSIZE_T);
+using NtSuspendFn  = LONG(NTAPI*)(HANDLE, PULONG);
+using NtContExFn   = LONG(NTAPI*)(PCONTEXT, ULONG);
+using NtSetCtxFn   = LONG(NTAPI*)(HANDLE, PCONTEXT);
+using NtGetCtxFn   = LONG(NTAPI*)(HANDLE, PCONTEXT);
+using NtCreateThreadExFn = LONG(NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, HANDLE,
+    LPTHREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PVOID);
+
+// ── Syscall entry table ──────────────────────────────────────────────────────
+// Mỗi entry: tên function (cho resolve), SSN fallback (verify từ IDA ntdll),
+// stub pointer, function pointer, SSN thực tế.
+struct SyscallEntry {
+    const char* name;
+    int         fallbackSsn;
+    void*       stub;
+    void*       fn;
+    int         ssn;
+};
+
+// SSN fallback values verified từ IDA 13339 (ntdll.dll Win11 26100)
+inline SyscallEntry g_syscalls[] = {
+    // idx 0: NtProtectVirtualMemory
+    { "NtProtectVirtualMemory", 0x050, nullptr, nullptr, -1 },
+    // idx 1: NtWriteVirtualMemory
+    { "NtWriteVirtualMemory",   0x03A, nullptr, nullptr, -1 },
+    // idx 2: NtContinue
+    { "NtContinue",             0x043, nullptr, nullptr, -1 },
+    // idx 3: NtDelayExecution
+    { "NtDelayExecution",       0x034, nullptr, nullptr, -1 },
+    // idx 4: NtQueryVirtualMemory
+    { "NtQueryVirtualMemory",   0x023, nullptr, nullptr, -1 },
+    // idx 5: NtSuspendThread
+    { "NtSuspendThread",        0x1BE, nullptr, nullptr, -1 },
+    // idx 6: NtContinueEx
+    { "NtContinueEx",           0x0A1, nullptr, nullptr, -1 },
+    // idx 7: NtSetContextThread
+    { "NtSetContextThread",     0x18D, nullptr, nullptr, -1 },
+    // idx 8: NtGetContextThread
+    { "NtGetContextThread",     0x0F3, nullptr, nullptr, -1 },
+    // idx 9: NtCreateThreadEx (Packman hook INT3 tại entry + ret)
+    { "NtCreateThreadEx",       0x0C2, nullptr, nullptr, -1 },
+};
+
+enum SyscallIdx : size_t {
+    IDX_PROTECT       = 0,
+    IDX_WRITE         = 1,
+    IDX_CONTINUE      = 2,
+    IDX_DELAY         = 3,
+    IDX_QUERYVIRT     = 4,
+    IDX_SUSPEND       = 5,
+    IDX_CONTINUEEX    = 6,
+    IDX_SETCTX        = 7,
+    IDX_GETCTX        = 8,
+    IDX_CREATETHREADEX= 9,
+    SYSCALL_COUNT     = 10,
+};
+
+// ── Backward compat globals (giữ API cũ cho CRCBypass) ───────────────────────
+inline void*         g_protectStub = nullptr;
+inline NtProtectFn   g_ntProtect   = nullptr;
+inline int           g_protectSsn  = -1;
+inline volatile LONG g_lastProtectStatus = 0;
+
+inline void*       g_writeStub = nullptr;
+inline NtWriteFn   g_ntWrite   = nullptr;
+inline int         g_writeSsn  = -1;
+inline volatile LONG g_lastWriteStatus = 0;
+
+inline DWORD RvaToFileOff(const IMAGE_NT_HEADERS* nt, DWORD rva) {
+    const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+        const DWORD vEnd = sec->VirtualAddress + sec->Misc.VirtualSize;
+        if (rva >= sec->VirtualAddress && rva < vEnd) {
+            return rva - sec->VirtualAddress + sec->PointerToRawData;
+        }
+    }
+    return 0;
+}
+
+inline int ExtractSSNFromImage(const uint8_t* buf, const char* funcName) {
+    if (!buf || !funcName) return -1;
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return -1;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return -1;
+
+    const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!dir.VirtualAddress) return -1;
+    const auto* exp = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(
+        buf + RvaToFileOff(nt, dir.VirtualAddress));
+    const auto* names = reinterpret_cast<const DWORD*>(buf + RvaToFileOff(nt, exp->AddressOfNames));
+    const auto* ords  = reinterpret_cast<const WORD*>(buf + RvaToFileOff(nt, exp->AddressOfNameOrdinals));
+    const auto* funcs = reinterpret_cast<const DWORD*>(buf + RvaToFileOff(nt, exp->AddressOfFunctions));
+
+    for (DWORD i = 0; i < exp->NumberOfNames; ++i) {
+        const auto* name = reinterpret_cast<const char*>(buf + RvaToFileOff(nt, names[i]));
+        if (strcmp(name, funcName) != 0) continue;
+        const auto* stub = buf + RvaToFileOff(nt, funcs[ords[i]]);
+        if (stub[0] == 0x4C && stub[1] == 0x8B && stub[2] == 0xD1 && stub[3] == 0xB8) {
+            return static_cast<int>(*reinterpret_cast<const uint32_t*>(stub + 4));
         }
         return -1;
     }
+    return -1;
+}
 
-    // Try to resolve SSN from in-memory ntdll (works if Packman hasn't
-    // patched THIS specific function yet, or if the SSN bytes survived).
-    inline int ResolveSSNFromMemory(const char* funcName) {
-        HMODULE h = GetModuleHandleW(L"ntdll.dll");
-        if (!h) return -1;
-        const auto* p = reinterpret_cast<const uint8_t*>(GetProcAddress(h, funcName));
-        if (!p) return -1;
-        // Check if prologue is intact: mov r10, rcx; mov eax, SSN
-        if (p[0] == 0x4C && p[1] == 0x8B && p[2] == 0xD1 && p[3] == 0xB8) {
-            return static_cast<int>(*reinterpret_cast<const uint32_t*>(p + 4));
-        }
-        return -1; // hooked, can't read SSN from memory
+inline int ResolveSSNInMemory(const char* funcName) {
+    HMODULE h = GetModuleHandleW(L"ntdll.dll");
+    if (!h) return -1;
+    const auto* p = reinterpret_cast<const uint8_t*>(GetProcAddress(h, funcName));
+    if (!p) return -1;
+    if (p[0] == 0x4C && p[1] == 0x8B && p[2] == 0xD1 && p[3] == 0xB8) {
+        return static_cast<int>(*reinterpret_cast<const uint32_t*>(p + 4));
     }
+    return -1;
+}
 
-    // Read clean ntdll from disk and extract SSN.
-    inline int ResolveSSNFromDisk(const char* funcName) {
-        HANDLE hFile = CreateFileW(
-            L"\\\\?\\C:\\Windows\\System32\\ntdll.dll",
-            GENERIC_READ, FILE_SHARE_READ, nullptr,
-            OPEN_EXISTING, 0, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE) return -1;
+inline int ResolveSSNFromDisk(const char* funcName) {
+    HANDLE hFile = CreateFileW(L"\\\\?\\C:\\Windows\\System32\\ntdll.dll",
+        GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return -1;
 
-        LARGE_INTEGER sz{};
-        if (!GetFileSizeEx(hFile, &sz) || sz.QuadPart <= 0 || sz.QuadPart > (64LL << 20)) {
-            CloseHandle(hFile);
-            return -1;
-        }
-
-        auto* buf = reinterpret_cast<uint8_t*>(VirtualAlloc(
-            nullptr, static_cast<SIZE_T>(sz.QuadPart),
-            MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
-        if (!buf) { CloseHandle(hFile); return -1; }
-
-        DWORD total = 0;
-        while (total < static_cast<DWORD>(sz.QuadPart)) {
-            DWORD chunk = 0;
-            if (!ReadFile(hFile, buf + total,
-                          static_cast<DWORD>(sz.QuadPart) - total, &chunk, nullptr) || chunk == 0)
-                break;
-            total += chunk;
-        }
+    LARGE_INTEGER sz{};
+    if (!GetFileSizeEx(hFile, &sz) || sz.QuadPart <= 0 || sz.QuadPart > (64LL << 20)) {
         CloseHandle(hFile);
-
-        const int ssn = (total == static_cast<DWORD>(sz.QuadPart))
-            ? ExtractSSNFromDiskImage(buf, funcName)
-            : -1;
-        VirtualFree(buf, 0, MEM_RELEASE);
-        return ssn;
+        return -1;
     }
 
-    // Resolve SSN: try memory first (fast), then disk (bypasses hooks).
-    inline int ResolveSSN(const char* funcName, int knownFallback) {
-        int ssn = ResolveSSNFromMemory(funcName);
-        if (ssn >= 0) return ssn;
+    auto* buf = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr,
+        static_cast<SIZE_T>(sz.QuadPart),
+        MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    if (!buf) { CloseHandle(hFile); return -1; }
 
-        ssn = ResolveSSNFromDisk(funcName);
-        if (ssn >= 0) return ssn;
-
-        // Last resort: use the known SSN from our table
-        return knownFallback;
+    DWORD total = 0;
+    while (total < static_cast<DWORD>(sz.QuadPart)) {
+        DWORD chunk = 0;
+        if (!ReadFile(hFile, buf + total,
+                      static_cast<DWORD>(sz.QuadPart) - total, &chunk, nullptr) ||
+            chunk == 0) break;
+        total += chunk;
     }
-
-    // ── Build a single 12-byte syscall stub ──────────────────────────────────
-    //   mov r10, rcx    ; 4C 8B D1
-    //   mov eax, SSN    ; B8 xx xx xx xx
-    //   syscall         ; 0F 05
-    //   ret             ; C3
-    inline void BuildStub(uint8_t* dest, int ssn) {
-        dest[0] = 0x4C; dest[1] = 0x8B; dest[2] = 0xD1;          // mov r10, rcx
-        dest[3] = 0xB8;                                            // mov eax, ...
-        *reinterpret_cast<uint32_t*>(dest + 4) = static_cast<uint32_t>(ssn);
-        dest[8] = 0x0F; dest[9] = 0x05;                           // syscall
-        dest[10] = 0xC3;                                           // ret
-        dest[11] = 0x90;                                           // nop (alignment)
-    }
-
-    // ── Build all syscall stubs ──────────────────────────────────────────────
-    inline bool BuildAllStubs() {
-        if (g_stubsBuilt) return g_stubPage != nullptr;
-
-        // Allocate single page for all stubs (12 bytes each, 16-byte aligned)
-        constexpr int kStubSize = 16;  // 12 bytes + 4 padding for alignment
-        const SIZE_T pageSize = static_cast<SIZE_T>(SC_Count * kStubSize);
-
-        g_stubPage = VirtualAlloc(nullptr, pageSize,
-                                  MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-        if (!g_stubPage) {
-            g_stubsBuilt = 1;
-            return false;
-        }
-
-        auto* base = reinterpret_cast<uint8_t*>(g_stubPage);
-        std::memset(base, 0xCC, pageSize); // fill with int3 for safety
-
-        for (int i = 0; i < SC_Count; ++i) {
-            auto& sc = g_syscalls[i];
-
-            // Resolve the real SSN
-            sc.resolvedSSN = ResolveSSN(sc.name, sc.knownSSN);
-
-            if (sc.resolvedSSN >= 0) {
-                uint8_t* stubDest = base + (i * kStubSize);
-                BuildStub(stubDest, sc.resolvedSSN);
-                sc.stubPtr = stubDest;
-            }
-        }
-
-        FlushInstructionCache(GetCurrentProcess(), g_stubPage, pageSize);
-        g_stubsBuilt = 1;
-        return true;
-    }
-
-    // ── Get stub pointer by ID ───────────────────────────────────────────────
-    inline void* GetStub(SyscallId id) {
-        if (id < 0 || id >= SC_Count) return nullptr;
-        return g_syscalls[id].stubPtr;
-    }
-
-    inline int GetSSN(SyscallId id) {
-        if (id < 0 || id >= SC_Count) return -1;
-        return g_syscalls[id].resolvedSSN;
-    }
-
-    inline const char* GetName(SyscallId id) {
-        if (id < 0 || id >= SC_Count) return "?";
-        return g_syscalls[id].name;
-    }
-
-} // namespace SyscallStubs
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TYPED SYSCALL WRAPPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-// Direct-callable wrappers using our clean stubs. These bypass Packman entirely.
-
-namespace Syscall {
-
-    using NtProtectFn = LONG(NTAPI*)(HANDLE ProcessHandle, PVOID* BaseAddress,
-                                     PSIZE_T RegionSize, ULONG NewProtect, PULONG OldProtect);
-
-    using NtQueryVirtualMemoryFn = LONG(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress,
-                                                int MemoryInformationClass, PVOID MemoryInformation,
-                                                SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
-
-    using NtContinueFn = LONG(NTAPI*)(PCONTEXT ThreadContext, BOOLEAN RaiseAlert);
-
-    using NtContinueExFn = LONG(NTAPI*)(PCONTEXT ThreadContext, BOOLEAN RaiseAlert);
-
-    using NtDelayExecutionFn = LONG(NTAPI*)(BOOLEAN Alertable, PLARGE_INTEGER DelayInterval);
-
-    using NtSuspendThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle, PULONG PreviousSuspendCount);
-
-    using NtSetContextThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle, PCONTEXT ThreadContext);
-
-    using NtGetContextThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle, PCONTEXT ThreadContext);
-
-    using NtCreateThreadExFn = LONG(NTAPI*)(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess,
-                                            PVOID ObjectAttributes, HANDLE ProcessHandle,
-                                            PVOID StartRoutine, PVOID Argument,
-                                            ULONG CreateFlags, SIZE_T ZeroBits,
-                                            SIZE_T StackSize, SIZE_T MaxStackSize,
-                                            PVOID AttributeList);
-
-    using NtWriteVirtualMemoryFn = LONG(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress,
-                                                PVOID Buffer, SIZE_T NumberOfBytesToWrite,
-                                                PSIZE_T NumberOfBytesWritten);
-
-    using NtReadVirtualMemoryFn = LONG(NTAPI*)(HANDLE ProcessHandle, PVOID BaseAddress,
-                                               PVOID Buffer, SIZE_T NumberOfBytesToRead,
-                                               PSIZE_T NumberOfBytesRead);
-
-    using NtAllocateVirtualMemoryFn = LONG(NTAPI*)(HANDLE ProcessHandle, PVOID* BaseAddress,
-                                                   ULONG_PTR ZeroBits, PSIZE_T RegionSize,
-                                                   ULONG AllocationType, ULONG Protect);
-
-    using NtFreeVirtualMemoryFn = LONG(NTAPI*)(HANDLE ProcessHandle, PVOID* BaseAddress,
-                                               PSIZE_T RegionSize, ULONG FreeType);
-
-    using NtOpenProcessFn = LONG(NTAPI*)(PHANDLE ProcessHandle, ACCESS_MASK DesiredAccess,
-                                         PVOID ObjectAttributes, PVOID ClientId);
-
-    using NtQuerySystemInformationFn = LONG(NTAPI*)(ULONG SystemInformationClass,
-                                                    PVOID SystemInformation,
-                                                    ULONG SystemInformationLength,
-                                                    PULONG ReturnLength);
-
-    using NtSetInformationThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle,
-                                                  ULONG ThreadInformationClass,
-                                                  PVOID ThreadInformation,
-                                                  ULONG ThreadInformationLength);
-
-    using NtQueryInformationProcessFn = LONG(NTAPI*)(HANDLE ProcessHandle,
-                                                     ULONG ProcessInformationClass,
-                                                     PVOID ProcessInformation,
-                                                     ULONG ProcessInformationLength,
-                                                     PULONG ReturnLength);
-
-    using NtQueryInformationThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle,
-                                                    ULONG ThreadInformationClass,
-                                                    PVOID ThreadInformation,
-                                                    ULONG ThreadInformationLength,
-                                                    PULONG ReturnLength);
-
-    using NtCloseFn = LONG(NTAPI*)(HANDLE Handle);
-
-    using NtDuplicateObjectFn = LONG(NTAPI*)(HANDLE SourceProcessHandle,
-                                             HANDLE SourceHandle,
-                                             HANDLE TargetProcessHandle,
-                                             PHANDLE TargetHandle,
-                                             ACCESS_MASK DesiredAccess,
-                                             ULONG HandleAttributes,
-                                             ULONG Options);
-
-    using NtQueryObjectFn = LONG(NTAPI*)(HANDLE Handle,
-                                         ULONG ObjectInformationClass,
-                                         PVOID ObjectInformation,
-                                         ULONG ObjectInformationLength,
-                                         PULONG ReturnLength);
-
-    using NtSetInformationProcessFn = LONG(NTAPI*)(HANDLE ProcessHandle,
-                                                   ULONG ProcessInformationClass,
-                                                   PVOID ProcessInformation,
-                                                   ULONG ProcessInformationLength);
-
-    using NtOpenThreadFn = LONG(NTAPI*)(PHANDLE ThreadHandle,
-                                        ACCESS_MASK DesiredAccess,
-                                        PVOID ObjectAttributes,
-                                        PVOID ClientId);
-
-    using NtResumeThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle, PULONG PreviousSuspendCount);
-
-    using NtTerminateThreadFn = LONG(NTAPI*)(HANDLE ThreadHandle, LONG ExitStatus);
-
-    using NtTerminateProcessFn = LONG(NTAPI*)(HANDLE ProcessHandle, LONG ExitStatus);
-
-    // ── Inline accessors (call through our clean stubs) ──────────────────────
-
-    inline NtProtectFn NtProtectVirtualMemory() {
-        return reinterpret_cast<NtProtectFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtProtectVirtualMemory));
-    }
-
-    inline NtQueryVirtualMemoryFn NtQueryVirtualMemory() {
-        return reinterpret_cast<NtQueryVirtualMemoryFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtQueryVirtualMemory));
-    }
-
-    inline NtContinueFn NtContinue() {
-        return reinterpret_cast<NtContinueFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtContinue));
-    }
-
-    inline NtContinueExFn NtContinueEx() {
-        return reinterpret_cast<NtContinueExFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtContinueEx));
-    }
-
-    inline NtDelayExecutionFn NtDelayExecution() {
-        return reinterpret_cast<NtDelayExecutionFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtDelayExecution));
-    }
-
-    inline NtSuspendThreadFn NtSuspendThread() {
-        return reinterpret_cast<NtSuspendThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtSuspendThread));
-    }
-
-    inline NtSetContextThreadFn NtSetContextThread() {
-        return reinterpret_cast<NtSetContextThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtSetContextThread));
-    }
-
-    inline NtGetContextThreadFn NtGetContextThread() {
-        return reinterpret_cast<NtGetContextThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtGetContextThread));
-    }
-
-    inline NtCreateThreadExFn NtCreateThreadEx() {
-        return reinterpret_cast<NtCreateThreadExFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtCreateThreadEx));
-    }
-
-    inline NtWriteVirtualMemoryFn NtWriteVirtualMemory() {
-        return reinterpret_cast<NtWriteVirtualMemoryFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtWriteVirtualMemory));
-    }
-
-    inline NtReadVirtualMemoryFn NtReadVirtualMemory() {
-        return reinterpret_cast<NtReadVirtualMemoryFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtReadVirtualMemory));
-    }
-
-    inline NtAllocateVirtualMemoryFn NtAllocateVirtualMemory() {
-        return reinterpret_cast<NtAllocateVirtualMemoryFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtAllocateVirtualMemory));
-    }
-
-    inline NtFreeVirtualMemoryFn NtFreeVirtualMemory() {
-        return reinterpret_cast<NtFreeVirtualMemoryFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtFreeVirtualMemory));
-    }
-
-    inline NtOpenProcessFn NtOpenProcess() {
-        return reinterpret_cast<NtOpenProcessFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtOpenProcess));
-    }
-
-    inline NtQuerySystemInformationFn NtQuerySystemInformation() {
-        return reinterpret_cast<NtQuerySystemInformationFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtQuerySystemInformation));
-    }
-
-    inline NtSetInformationThreadFn NtSetInformationThread() {
-        return reinterpret_cast<NtSetInformationThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtSetInformationThread));
-    }
-
-    inline NtQueryInformationProcessFn NtQueryInformationProcess() {
-        return reinterpret_cast<NtQueryInformationProcessFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtQueryInformationProcess));
-    }
-
-    inline NtQueryInformationThreadFn NtQueryInformationThread() {
-        return reinterpret_cast<NtQueryInformationThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtQueryInformationThread));
-    }
-
-    inline NtCloseFn NtClose() {
-        return reinterpret_cast<NtCloseFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtClose));
-    }
-
-    inline NtDuplicateObjectFn NtDuplicateObject() {
-        return reinterpret_cast<NtDuplicateObjectFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtDuplicateObject));
-    }
-
-    inline NtQueryObjectFn NtQueryObject() {
-        return reinterpret_cast<NtQueryObjectFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtQueryObject));
-    }
-
-    inline NtSetInformationProcessFn NtSetInformationProcess() {
-        return reinterpret_cast<NtSetInformationProcessFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtSetInformationProcess));
-    }
-
-    inline NtOpenThreadFn NtOpenThread() {
-        return reinterpret_cast<NtOpenThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtOpenThread));
-    }
-
-    inline NtResumeThreadFn NtResumeThread() {
-        return reinterpret_cast<NtResumeThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtResumeThread));
-    }
-
-    inline NtTerminateThreadFn NtTerminateThread() {
-        return reinterpret_cast<NtTerminateThreadFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtTerminateThread));
-    }
-
-    inline NtTerminateProcessFn NtTerminateProcess() {
-        return reinterpret_cast<NtTerminateProcessFn>(
-            SyscallStubs::GetStub(SyscallStubs::SC_NtTerminateProcess));
-    }
-
-    // ── Convenience wrappers ─────────────────────────────────────────────────
-
-    // VirtualProtect bypass (uses our syscall stub, not ntdll export)
-    inline BOOL ProtectMemory(void* addr, SIZE_T size, DWORD newProt, DWORD* oldProt) {
-        auto fn = NtProtectVirtualMemory();
-        if (!fn) return FALSE;
-
-        PVOID base = addr;
-        SIZE_T region = size;
-        ULONG old = 0;
-        LONG status = fn(GetCurrentProcess(), &base, &region, newProt, &old);
-        if (oldProt) *oldProt = static_cast<DWORD>(old);
-        return status >= 0;
-    }
-
-    // WriteProcessMemory bypass
-    inline BOOL WriteMemory(void* dst, const void* src, SIZE_T size) {
-        auto fn = NtWriteVirtualMemory();
-        if (!fn) return FALSE;
-
-        SIZE_T written = 0;
-        LONG status = fn(GetCurrentProcess(), dst, const_cast<PVOID>(src), size, &written);
-        return status >= 0 && written == size;
-    }
-
-    // ReadProcessMemory bypass
-    inline BOOL ReadMemory(void* src, void* dst, SIZE_T size) {
-        auto fn = NtReadVirtualMemory();
-        if (!fn) return FALSE;
-
-        SIZE_T read = 0;
-        LONG status = fn(GetCurrentProcess(), src, dst, size, &read);
-        return status >= 0 && read == size;
-    }
-
-    // VirtualAlloc bypass
-    inline void* AllocMemory(SIZE_T size, ULONG protect = PAGE_EXECUTE_READWRITE) {
-        auto fn = NtAllocateVirtualMemory();
-        if (!fn) return nullptr;
-
-        PVOID base = nullptr;
-        SIZE_T region = size;
-        LONG status = fn(GetCurrentProcess(), &base, 0, &region,
-                         MEM_COMMIT | MEM_RESERVE, protect);
-        return (status >= 0) ? base : nullptr;
-    }
-
-    // VirtualFree bypass
-    inline BOOL FreeMemory(void* addr) {
-        auto fn = NtFreeVirtualMemory();
-        if (!fn) return FALSE;
-
-        PVOID base = addr;
-        SIZE_T region = 0;
-        LONG status = fn(GetCurrentProcess(), &base, &region, MEM_RELEASE);
-        return status >= 0;
-    }
-
-    // Sleep bypass (NtDelayExecution)
-    inline void SleepDirect(DWORD milliseconds) {
-        auto fn = NtDelayExecution();
-        if (!fn) { Sleep(milliseconds); return; }
-
-        LARGE_INTEGER interval;
-        interval.QuadPart = -static_cast<LONGLONG>(milliseconds) * 10000LL;
-        fn(FALSE, &interval);
-    }
-
-} // namespace Syscall
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// HOOK DETECTION
-// ═══════════════════════════════════════════════════════════════════════════════
-
-inline uintptr_t GetNtdllBase() {
-    if (g_ntdllBase) return g_ntdllBase;
-    HMODULE h = GetModuleHandleW(L"ntdll.dll");
-    if (h) g_ntdllBase = reinterpret_cast<uintptr_t>(h);
-    return g_ntdllBase;
+    CloseHandle(hFile);
+
+    const int ssn = (total == static_cast<DWORD>(sz.QuadPart))
+        ? ExtractSSNFromImage(buf, funcName) : -1;
+    VirtualFree(buf, 0, MEM_RELEASE);
+    return ssn;
 }
 
-inline uintptr_t ResolveExport(const char* name) {
-    HMODULE h = GetModuleHandleW(L"ntdll.dll");
-    if (!h) return 0;
-    return reinterpret_cast<uintptr_t>(GetProcAddress(h, name));
-}
-
-// ── Pattern scanning for non-exported functions ──
-inline uintptr_t FindPatternInModule(HMODULE module, const uint8_t* pattern, int patternSize) {
-    if (!module || !pattern || patternSize <= 0) return 0;
-
-    __try {
-        auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(module);
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
-
-        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<uint8_t*>(module) + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
-
-        // Scan executable sections for the pattern
-        auto* section = IMAGE_FIRST_SECTION(nt);
-        int foundCount = 0;
-        
-        for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++section) {
-            // Only scan executable sections
-            if (!(section->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
-
-            uint8_t* start = reinterpret_cast<uint8_t*>(module) + section->VirtualAddress;
-            SIZE_T size = section->Misc.VirtualSize;
-            
-            char sectionName[9] = {};
-            std::memcpy(sectionName, section->Name, 8);
-
-            // Scan for pattern
-            for (SIZE_T offset = 0; offset <= size - patternSize; ++offset) {
-                bool found = true;
-                for (int j = 0; j < patternSize; ++j) {
-                    if (start[offset + j] != pattern[j]) {
-                        found = false;
-                        break;
-                    }
-                }
-                if (found) {
-                    ++foundCount;
-                    // Log first match
-                    if (foundCount == 1) {
-                        char buf[256];
-        wsprintfA(buf, "[PackmanTest] Pattern found in section '%s' at offset 0x%X (RVA: 0x%X)\r\n",
-                 sectionName, (unsigned)offset, (unsigned)(section->VirtualAddress + offset));
-                        WriteLog(buf);
-                    }
-                    return reinterpret_cast<uintptr_t>(start + offset);
-                }
-            }
-        }
-        
-        // Log if pattern not found
-        if (foundCount == 0) {
-            char buf[256];
-            wsprintfA(buf, "[PackmanTest] Pattern not found in any executable section (scanned %d sections)\r\n",
-                     nt->FileHeader.NumberOfSections);
-            WriteLog(buf);
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        char buf[128];
-        wsprintfA(buf, "[PackmanTest] Exception during pattern scan\r\n");
-        WriteLog(buf);
-        return 0;
-    }
-
-    return 0;
-}
-
-inline bool MemCompare(const uint8_t* mem, const uint8_t* pattern, int size) {
-    for (int i = 0; i < size; ++i) {
-        if (mem[i] != pattern[i]) return false;
-    }
+inline bool BuildSyscallStub(int ssn, void** outStub) {
+    if (!outStub || ssn < 0) return false;
+    auto* stub = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr, 32,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!stub) return false;
+    stub[0] = 0x4C; stub[1] = 0x8B; stub[2] = 0xD1;
+    stub[3] = 0xB8;
+    *reinterpret_cast<uint32_t*>(stub + 4) = static_cast<uint32_t>(ssn);
+    stub[8] = 0x0F; stub[9] = 0x05;
+    stub[10] = 0xC3;
+    *outStub = stub;
     return true;
 }
 
-inline bool SafeReadBytes(uintptr_t addr, uint8_t* out, int size) {
-    __try {
-        for (int i = 0; i < size; ++i) {
-            out[i] = *reinterpret_cast<const uint8_t*>(addr + i);
-        }
-        return true;
+// ── Generic syscall init (dùng table) ────────────────────────────────────────
+inline bool InitSyscall(size_t idx) {
+    if (idx >= SYSCALL_COUNT) return false;
+    auto& e = g_syscalls[idx];
+    if (e.fn) return true;
+
+    int ssn = ResolveSSNInMemory(e.name);
+    const char* src = "memory";
+    if (ssn < 0) {
+        ssn = ResolveSSNFromDisk(e.name);
+        src = "disk";
     }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
+    if (ssn < 0) {
+        ssn = e.fallbackSsn;
+        src = "fallback";
+    }
+    DbgLogFmt("[SYS] Init %-28s: SSN=0x%X (src=%s)\r\n", e.name, ssn, src);
+
+    if (!BuildSyscallStub(ssn, &e.stub)) {
+        DbgLogFmt("[SYS] BuildSyscallStub FAIL for %s\r\n", e.name);
+        return false;
+    }
+    e.ssn = ssn;
+    e.fn  = e.stub;
+    DbgLogFmt("[SYS]   stub @ %p  fn @ %p  OK\r\n", e.stub, e.fn);
+    return true;
+}
+
+// ── InitAll: khởi tạo tất cả syscall stub cùng lúc ────────────────────────────
+inline bool InitAll() {
+    DbgLogFmt("[SYS] InitAll: initializing %zu syscall stubs...\r\n", (size_t)SYSCALL_COUNT);
+    bool ok = true;
+    for (size_t i = 0; i < SYSCALL_COUNT; ++i)
+        if (!InitSyscall(i)) ok = false;
+    DbgLogFmt("[SYS] InitAll: %s (%zu/%zu OK)\r\n",
+              ok ? "ALL OK" : "PARTIAL FAIL",
+              ok ? (size_t)SYSCALL_COUNT : (size_t)0, (size_t)SYSCALL_COUNT);
+    return ok;
+}
+
+inline bool InitProtect() {
+    if (g_ntProtect) return true;
+    if (!InitSyscall(IDX_PROTECT)) return false;
+    g_protectStub = g_syscalls[IDX_PROTECT].stub;
+    g_protectSsn  = g_syscalls[IDX_PROTECT].ssn;
+    g_ntProtect   = reinterpret_cast<NtProtectFn>(g_protectStub);
+    return true;
+}
+
+inline bool InitWrite() {
+    if (g_ntWrite) return true;
+    if (!InitSyscall(IDX_WRITE)) return false;
+    g_writeStub = g_syscalls[IDX_WRITE].stub;
+    g_writeSsn  = g_syscalls[IDX_WRITE].ssn;
+    g_ntWrite   = reinterpret_cast<NtWriteFn>(g_writeStub);
+    return true;
+}
+
+inline BOOL VirtualProtectDirect(void* addr, SIZE_T size, DWORD newProt, DWORD* oldProt) {
+    if (!addr || size == 0) return FALSE;
+    if (!InitProtect()) return VirtualProtect(addr, size, newProt, oldProt);
+    PVOID  base   = addr;
+    SIZE_T region = size;
+    ULONG  oldU   = 0;
+    const LONG s = g_ntProtect(GetCurrentProcess(), &base, &region, newProt, &oldU);
+    g_lastProtectStatus = s;
+    if (oldProt) *oldProt = static_cast<DWORD>(oldU);
+    return s >= 0;
+}
+
+inline BOOL WriteVirtualMemoryDirect(void* dst, const void* src, SIZE_T size) {
+    if (!dst || !src || size == 0) return FALSE;
+    if (!InitWrite()) return FALSE;
+    SIZE_T written = 0;
+    const LONG s = g_ntWrite(GetCurrentProcess(), dst,
+                             const_cast<void*>(src), size, &written);
+    g_lastWriteStatus = s;
+    return s >= 0 && written == size;
+}
+
+inline int SelfTest(uintptr_t anyCodePageAddr) {
+    if (!anyCodePageAddr || !InitProtect()) return 3;
+    void* page = reinterpret_cast<void*>(anyCodePageAddr & ~static_cast<uintptr_t>(0xFFF));
+    DWORD oldProt = 0;
+    if (VirtualProtectDirect(page, 0x1000, PAGE_EXECUTE_WRITECOPY, &oldProt)) {
+        DWORD d = 0; VirtualProtectDirect(page, 0x1000, oldProt, &d);
+        return 1;
+    }
+    if (VirtualProtectDirect(page, 0x1000, PAGE_WRITECOPY, &oldProt)) {
+        DWORD d = 0; VirtualProtectDirect(page, 0x1000, oldProt, &d);
+        return 2;
+    }
+    if (VirtualProtectDirect(page, 0x1000, PAGE_EXECUTE_READWRITE, &oldProt)) {
+        DWORD d = 0; VirtualProtectDirect(page, 0x1000, oldProt, &d);
+        return 4;
+    }
+    return 3;
+}
+
+// ── Wrapper functions cho các syscall bị Packman hook ────────────────────────
+// Mỗi wrapper: resolve SSN → build stub → gọi trực tiếp kernel, bypass hook.
+
+// NtContinue (SSN 0x43) — Packman hook FF 25, dùng trong exception dispatch
+inline LONG NtContinueDirect(PCONTEXT ctx, BOOLEAN raiseAlert) {
+    if (!InitSyscall(IDX_CONTINUE)) return -1;
+    auto fn = reinterpret_cast<NtContinueFn>(g_syscalls[IDX_CONTINUE].fn);
+    return fn(ctx, raiseAlert);
+}
+
+// NtDelayExecution (SSN 0x34) — Packman hook, thay Sleep khi cần stealth
+inline LONG NtDelayExecutionDirect(PLARGE_INTEGER delay, BOOLEAN alertable) {
+    if (!InitSyscall(IDX_DELAY)) return -1;
+    auto fn = reinterpret_cast<NtDelayFn>(g_syscalls[IDX_DELAY].fn);
+    return fn(delay, alertable);
+}
+
+// NtQueryVirtualMemory (SSN 0x23) — Packman hook, query memory info trực tiếp
+inline LONG NtQueryVirtualMemoryDirect(HANDLE proc, PVOID base, ULONG cls,
+                                       PVOID buf, SIZE_T len, PSIZE_T ret) {
+    if (!InitSyscall(IDX_QUERYVIRT)) return -1;
+    auto fn = reinterpret_cast<NtQueryVirtFn>(g_syscalls[IDX_QUERYVIRT].fn);
+    return fn(proc, base, cls, buf, len, ret);
+}
+
+// NtSuspendThread (SSN 0x1BE) — Packman hook, suspend thread bypass
+inline LONG NtSuspendThreadDirect(HANDLE thread, PULONG suspendCount) {
+    if (!InitSyscall(IDX_SUSPEND)) return -1;
+    auto fn = reinterpret_cast<NtSuspendFn>(g_syscalls[IDX_SUSPEND].fn);
+    return fn(thread, suspendCount);
+}
+
+// NtContinueEx (SSN 0xA1) — Packman hook, extended continue
+inline LONG NtContinueExDirect(PCONTEXT ctx, ULONG flags) {
+    if (!InitSyscall(IDX_CONTINUEEX)) return -1;
+    auto fn = reinterpret_cast<NtContExFn>(g_syscalls[IDX_CONTINUEEX].fn);
+    return fn(ctx, flags);
+}
+
+// NtSetContextThread (SSN 0x18D) — Packman hook, set thread context bypass
+inline LONG NtSetContextThreadDirect(HANDLE thread, PCONTEXT ctx) {
+    if (!InitSyscall(IDX_SETCTX)) return -1;
+    auto fn = reinterpret_cast<NtSetCtxFn>(g_syscalls[IDX_SETCTX].fn);
+    return fn(thread, ctx);
+}
+
+// NtGetContextThread (SSN 0xF3) — Packman hook, get thread context bypass
+inline LONG NtGetContextThreadDirect(HANDLE thread, PCONTEXT ctx) {
+    if (!InitSyscall(IDX_GETCTX)) return -1;
+    auto fn = reinterpret_cast<NtGetCtxFn>(g_syscalls[IDX_GETCTX].fn);
+    return fn(thread, ctx);
+}
+
+// ── Stealth Sleep (dùng NtDelayExecution direct, bypass Packman hook) ────────
+inline void StealthSleep(DWORD ms) {
+    LARGE_INTEGER delay;
+    delay.QuadPart = -static_cast<int64_t>(ms) * 10000LL; // 100ns units
+    NtDelayExecutionDirect(&delay, FALSE);
+}
+
+// ── Dump SSN table (debug) ────────────────────────────────────────────────────
+inline void DumpSyscallTable() {
+    DbgLogFmt("[SYS] === Syscall Table Dump ===\r\n");
+    for (size_t i = 0; i < SYSCALL_COUNT; ++i) {
+        const auto& e = g_syscalls[i];
+        DbgLogFmt("[SYS]   [%zu] %-28s SSN=0x%-3X  stub=%p  fn=%p  %s\r\n",
+                  i, e.name, (unsigned)e.ssn, e.stub, e.fn,
+                  e.fn ? "OK" : "NOT_INIT");
+    }
+    DbgLogFmt("[SYS] === End Dump ===\r\n");
+}
+
+// ── CreateThreadDirect — spawn thread bypass Packman's INT3 on NtCreateThreadEx ─
+// Packman patch byte đầu NtCreateThreadEx thành CC (INT3) → mỗi CreateThread
+// đi qua ntdll đều bị trap. Wrapper này gọi NtCreateThreadEx trực tiếp qua
+// syscall stub, bỏ qua entry ntdll. Nếu fail, fallback CreateThread thường.
+inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
+    if (!InitSyscall(IDX_CREATETHREADEX)) {
+        // Fallback: CreateThread thường (sẽ đi qua Packman hook, nhưng
+        // vẫn hoạt động nếu Packman chỉ log chứ không block).
+        HANDLE h = CreateThread(nullptr, 0, routine, param, 0, nullptr);
+        if (h) DbgLog("[SYS] CreateThreadDirect: fallback CreateThread OK\r\n");
+        return h;
+    }
+    auto fn = reinterpret_cast<NtCreateThreadExFn>(g_syscalls[IDX_CREATETHREADEX].fn);
+    HANDLE hThread = nullptr;
+    LONG status = fn(
+        &hThread,
+        THREAD_ALL_ACCESS,
+        nullptr,               // ObjectAttributes
+        GetCurrentProcess(),
+        routine,
+        param,
+        0,                     // CreateFlags (CREATE_SUSPENDED=0 → chạy ngay)
+        0,                     // ZeroBits
+        0,                     // StackSize (default)
+        0,                     // MaximumStackSize
+        nullptr                // AttributeList
+    );
+    if (status >= 0 && hThread) {
+        DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx OK (handle=%p, status=0x%X)\r\n",
+                  hThread, (unsigned)status);
+        return hThread;
+    }
+    DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx FAIL status=0x%X — fallback CreateThread\r\n",
+              (unsigned)status);
+    return CreateThread(nullptr, 0, routine, param, 0, nullptr);
+}
+
+} // namespace DirectSyscall
+
+// ── CRC Bypass ───────────────────────────────────────────────────────────────
+
+namespace CRCBypass {
+
+struct MemoryRegion {
+    uintptr_t address;
+    size_t    size;
+};
+
+struct FakedMemoryRegion {
+    MemoryRegion       region;
+    std::vector<BYTE>  bytes;
+};
+
+static const unsigned char kPattern[] = {
+    0x49, 0x8B, 0x0E, 0xF3, 0x44, 0x0F, 0x6F, 0x04, 0x29
+};
+static const size_t kPatternLen    = sizeof(kPattern);
+static const size_t kHookSize      = 19;
+static const size_t kCRCCheckCount = 4;
+
+inline std::vector<FakedMemoryRegion> g_fakedRegions;
+inline std::vector<BYTE>              g_originalStubBytes;
+inline std::mutex                     g_patchMutex;
+
+inline uintptr_t      g_hookAddr   = 0;
+inline uintptr_t      g_jmpBack    = 0;
+inline void*          g_hookStub   = nullptr;
+inline size_t         g_hookStubSize = 0;
+inline volatile LONG  g_installed  = 0;
+inline volatile LONG  g_fakedReady = 0;
+
+inline MemoryRegion GetMemoryRegion(uintptr_t address) {
+    MEMORY_BASIC_INFORMATION mbi = {};
+    if (!VirtualQuery(reinterpret_cast<void*>(address), &mbi, sizeof(mbi))) {
+        return { 0, 0 };
+    }
+    return { reinterpret_cast<uintptr_t>(mbi.BaseAddress), mbi.RegionSize };
+}
+
+inline FakedMemoryRegion* FindFakedRegion(uintptr_t address) {
+    for (auto& r : g_fakedRegions) {
+        if (address >= r.region.address &&
+            address <  r.region.address + r.region.size) {
+            return &r;
+        }
+    }
+    return nullptr;
+}
+
+// ── CheckMemoryBlocks ────────────────────────────────────────────────────────
+// Hot path: KHÔNG cấp phát heap / log gì cả.
+
+inline void __fastcall CheckMemoryBlocks(uintptr_t r14, uintptr_t /*rbp*/) {
+    if (!g_fakedReady) return;
+    for (size_t i = 0; i < kCRCCheckCount; ++i) {
+        uintptr_t* slot = reinterpret_cast<uintptr_t*>(r14 + i * sizeof(uintptr_t));
+        uintptr_t address = *slot;
+        auto* fake = FindFakedRegion(address);
+        if (fake) {
+            uintptr_t offset = address - fake->region.address;
+            *slot = reinterpret_cast<uintptr_t>(fake->bytes.data() + offset);
+        }
+    }
+}
+
+// SEH-memcpy helper (vì __try không xài chung lock_guard).
+inline bool SafeMemCpyRead(void* dst, const void* src, size_t size) {
+    __try {
+        memcpy(dst, src, size);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
 }
 
-inline HookState CheckSite(int id) {
-    if (id < 0 || id >= HookCount) return State_Unknown;
+inline void AddPatchAddress(uintptr_t address) {
+    std::lock_guard<std::mutex> lock(g_patchMutex);
+    if (FindFakedRegion(address)) return;
 
-    const auto& site = kHookSites[id];
-    auto& status = g_status[id];
+    MemoryRegion region = GetMemoryRegion(address);
+    if (region.size == 0) return;
 
-    uintptr_t funcAddr = ResolveExport(site.functionName);
-    
-    // For non-exported functions (like RtlpAddVectoredHandler), use pattern scanning
-    if (!funcAddr && id == RtlpAddVectoredHandler) {
-        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-        if (ntdll) {
-            // Use original bytes as pattern to find the function
-            funcAddr = FindPatternInModule(ntdll, site.originalBytes, site.originalSize);
-            // Note: Pattern scan success will be logged in LogAllStatus()
+    FakedMemoryRegion fake;
+    fake.region = region;
+    fake.bytes.resize(region.size);
+
+    if (!SafeMemCpyRead(fake.bytes.data(),
+                        reinterpret_cast<void*>(region.address),
+                        region.size)) {
+        return;
+    }
+    g_fakedRegions.push_back(std::move(fake));
+}
+
+// ── BuildHookStub ────────────────────────────────────────────────────────────
+// MSVC x64 không hỗ trợ __asm. Tự emit byte.
+//   push rax..r15 + pushfq (16 push = 128 bytes ⇒ RSP mod 16 = 0)
+//   mov rcx, r14 ; mov rdx, rbp
+//   sub rsp, 20h ; call CheckMemoryBlocks ; add rsp, 20h
+//   popfq ; pop r15..rax
+//   ; original 19 bytes
+//   jmp [rip+0] ; .qword jmpBack
+
+static void* BuildHookStub(uintptr_t checkFnAddr,
+                           const unsigned char* origBytes,
+                           size_t origSize,
+                           uintptr_t jmpBackAddr) {
+    constexpr size_t kStubMax = 512;
+    auto* stub = reinterpret_cast<unsigned char*>(
+        VirtualAlloc(nullptr, kStubMax, MEM_COMMIT | MEM_RESERVE,
+                     PAGE_EXECUTE_READWRITE));
+    if (!stub) return nullptr;
+
+    size_t idx = 0;
+    auto put8  = [&](uint8_t b)                  { stub[idx++] = b; };
+    auto put   = [&](const uint8_t* p, size_t n) { memcpy(stub + idx, p, n); idx += n; };
+    auto put64 = [&](uint64_t v)                 { memcpy(stub + idx, &v, 8); idx += 8; };
+
+    // push rax..r15 + pushfq
+    put8(0x50); put8(0x51); put8(0x52); put8(0x53);
+    put8(0x55); put8(0x56); put8(0x57);
+    put8(0x41); put8(0x50);    // push r8
+    put8(0x41); put8(0x51);    // push r9
+    put8(0x41); put8(0x52);    // push r10
+    put8(0x41); put8(0x53);    // push r11
+    put8(0x41); put8(0x54);    // push r12
+    put8(0x41); put8(0x55);    // push r13
+    put8(0x41); put8(0x56);    // push r14
+    put8(0x41); put8(0x57);    // push r15
+    put8(0x9C);
+
+    // mov rcx, r14  /  mov rdx, rbp
+    put8(0x4C); put8(0x89); put8(0xF1);
+    put8(0x48); put8(0x89); put8(0xEA);
+
+    // sub rsp, 20h
+    put8(0x48); put8(0x83); put8(0xEC); put8(0x20);
+
+    // mov rax, imm64 / call rax
+    put8(0x48); put8(0xB8); put64(static_cast<uint64_t>(checkFnAddr));
+    put8(0xFF); put8(0xD0);
+
+    // add rsp, 20h
+    put8(0x48); put8(0x83); put8(0xC4); put8(0x20);
+
+    // popfq / pop r15..rax
+    put8(0x9D);
+    put8(0x41); put8(0x5F); put8(0x41); put8(0x5E);
+    put8(0x41); put8(0x5D); put8(0x41); put8(0x5C);
+    put8(0x41); put8(0x5B); put8(0x41); put8(0x5A);
+    put8(0x41); put8(0x59); put8(0x41); put8(0x58);
+    put8(0x5F); put8(0x5E); put8(0x5D); put8(0x5B);
+    put8(0x5A); put8(0x59); put8(0x58);
+
+    // original 19 bytes
+    put(origBytes, origSize);
+
+    // jmp [rip+0] / qword jmpBackAddr
+    put8(0xFF); put8(0x25);
+    put8(0x00); put8(0x00); put8(0x00); put8(0x00);
+    put64(static_cast<uint64_t>(jmpBackAddr));
+
+    g_hookStubSize = idx;
+    return stub;
+}
+
+// ── WriteStubJmp ─────────────────────────────────────────────────────────────
+
+static bool WriteStubJmp(uintptr_t address, uintptr_t destination, size_t size) {
+    if (!address || !destination || size < 14) return false;
+
+    // Lưu byte gốc + đăng ký region.
+    g_originalStubBytes.clear();
+    g_originalStubBytes.reserve(size);
+    for (size_t i = 0; i < size; ++i) {
+        AddPatchAddress(address + i);
+        g_originalStubBytes.push_back(*reinterpret_cast<BYTE*>(address + i));
+    }
+
+    int selfTest = DirectSyscall::SelfTest(address);
+    DWORD writeProt = PAGE_EXECUTE_WRITECOPY;
+    if      (selfTest == 2) writeProt = PAGE_WRITECOPY;
+    else if (selfTest == 4) writeProt = PAGE_EXECUTE_READWRITE;
+    DbgLogFmt("[CRC] WriteStubJmp: selfTest=%d  writeProt=0x%X\r\n", selfTest, (unsigned)writeProt);
+
+    DWORD oldProt = 0;
+    BOOL  protOk = DirectSyscall::VirtualProtectDirect(
+        reinterpret_cast<void*>(address), size, writeProt, &oldProt);
+    DbgLogFmt("[CRC] WriteStubJmp: VirtualProtectDirect status=%d  oldProt=0x%X\r\n",
+              (int)protOk, (unsigned)oldProt);
+    if (!protOk) {
+        DbgLogFmt("[CRC] WriteStubJmp: direct protect fail, trying fallback VirtualProtect...\r\n");
+        if (!VirtualProtect(reinterpret_cast<void*>(address), size,
+                            PAGE_EXECUTE_WRITECOPY, &oldProt) &&
+            !VirtualProtect(reinterpret_cast<void*>(address), size,
+                            PAGE_EXECUTE_READWRITE, &oldProt)) {
+            DbgLogFmt("[CRC] WriteStubJmp: ALL protect methods FAIL\r\n");
+            return false;
         }
-    }
-    
-    if (!funcAddr) {
-        status.state = State_NotFound;
-        status.resolvedAddr = 0;
-        return State_NotFound;
+        DbgLogFmt("[CRC] WriteStubJmp: fallback VirtualProtect OK\r\n");
     }
 
-    uintptr_t checkAddr = funcAddr + site.offset;
-    status.resolvedAddr = checkAddr;
+    unsigned char buf[32] = {};
+    buf[0] = 0xFF; buf[1] = 0x25;
+    memcpy(buf + 6, &destination, sizeof(uintptr_t));
+    for (size_t i = 14; i < size; ++i) buf[i] = 0x90;
 
-    std::memset(status.liveBytes, 0, sizeof(status.liveBytes));
-    int readSize = site.hookedSize > site.originalSize ? site.hookedSize : site.originalSize;
-    if (readSize > 16) readSize = 16;
+    // Bật flag NGAY trước khi ghi JMP (tránh race với CRC thread).
+    MemoryBarrier();
+    InterlockedExchange(&g_fakedReady, 1);
+    MemoryBarrier();
 
-    if (!SafeReadBytes(checkAddr, status.liveBytes, readSize)) {
-        status.state = State_NotFound;
-        return State_NotFound;
+    DbgLogFmt("[CRC] WriteStubJmp: writing %zu bytes JMP at 0x%llX\r\n",
+              size, (unsigned long long)address);
+    if (!DirectSyscall::WriteVirtualMemoryDirect(
+            reinterpret_cast<void*>(address), buf, size)) {
+        DbgLogFmt("[CRC] WriteStubJmp: direct write fail, trying memcpy...\r\n");
+        __try {
+            memcpy(reinterpret_cast<void*>(address), buf, size);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            DbgLogFmt("[CRC] WriteStubJmp: memcpy also FAIL (exception)\r\n");
+            DirectSyscall::VirtualProtectDirect(
+                reinterpret_cast<void*>(address), size, oldProt, &oldProt);
+            return false;
+        }
+        DbgLogFmt("[CRC] WriteStubJmp: memcpy OK\r\n");
     }
+    DbgLogFmt("[CRC] WriteStubJmp: write OK, restoring protection...\r\n");
 
-    if (MemCompare(status.liveBytes, site.hookedBytes, site.hookedSize)) {
-        status.state = State_Hooked;
-        return State_Hooked;
-    }
-
-    if (MemCompare(status.liveBytes, site.originalBytes, site.originalSize)) {
-        status.state = State_Clean;
-        return State_Clean;
-    }
-
-    // Generic jmp [rip+0] detection
-    if (site.patchSize >= 6 && status.liveBytes[0] == 0xFF && status.liveBytes[1] == 0x25) {
-        status.state = State_Hooked;
-        return State_Hooked;
-    }
-
-    status.state = State_Modified;
-    return State_Modified;
+    DWORD dummy = 0;
+    DirectSyscall::VirtualProtectDirect(
+        reinterpret_cast<void*>(address), size, oldProt, &dummy);
+    FlushInstructionCache(GetCurrentProcess(),
+                          reinterpret_cast<void*>(address), size);
+    DbgLogFmt("[CRC] WriteStubJmp: DONE — JMP installed, fakedReady=1\r\n");
+    return true;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PUBLIC API
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Install / Uninstall ──────────────────────────────────────────────────────
 
-inline bool Init() {
-    if (g_initialized) return g_ntdllBase != 0;
-    g_ntdllBase = GetNtdllBase();
-    g_initialized = 1;
-    return g_ntdllBase != 0;
-}
-
-// ── PRIMARY ENTRY POINT ──────────────────────────────────────────────────────
-// Call this FIRST after injection, before any other Core module initializes.
-// It detects Packman hooks and builds direct syscall stubs.
 inline bool Install() {
-    if (g_installed) return true;
-
-    // Step 1: Resolve ntdll base
-    Init();
-
-    // Step 2: Build all direct syscall stubs (from disk-read SSNs)
-    // This MUST happen before detection because detection reads memory at
-    // hook sites, and some security checks may fire if we read too slowly.
-    bool stubsOk = SyscallStubs::BuildAllStubs();
-
-    // Step 3: Detect all Packman hook sites
-    for (int i = 0; i < HookCount; ++i) {
-        CheckSite(i);
-    }
-
-    g_installed = 1;
-    return stubsOk;
-}
-
-// Check all hook sites, returns count of active (hooked) sites.
-inline int DetectAll() {
-    Init();
-    int hooked = 0;
-    for (int i = 0; i < HookCount; ++i) {
-        if (CheckSite(i) == State_Hooked) ++hooked;
-    }
-    return hooked;
-}
-
-inline bool IsHooked(HookId id) {
-    if (g_status[id].state == State_Unknown) CheckSite(id);
-    return g_status[id].state == State_Hooked;
-}
-
-inline bool IsClean(HookId id) {
-    if (g_status[id].state == State_Unknown) CheckSite(id);
-    return g_status[id].state == State_Clean;
-}
-
-inline const HookStatus& GetStatus(HookId id) {
-    if (id >= 0 && id < HookCount && g_status[id].state == State_Unknown) CheckSite(id);
-    return g_status[id];
-}
-
-inline bool IsPackmanActive() {
-    if (!g_installed) Install();
-    int hooked = 0;
-    const HookId critical[] = {
-        NtProtectVirtualMemory, NtQueryVirtualMemory, NtContinue,
-        DbgBreakPoint, DbgUserBreakPoint, DbgUiRemoteBreakin, KiUserExceptionDispatcher,
-    };
-    for (auto id : critical) {
-        if (g_status[id].state == State_Hooked) ++hooked;
-    }
-    return hooked >= 4;
-}
-
-inline bool NeedDirectSyscall() {
-    return IsHooked(NtProtectVirtualMemory);
-}
-
-inline bool IsThreadCreationBlocked() {
-    return IsHooked(NtCreateThread) && IsHooked(NtCreateThreadEx);
-}
-
-inline bool IsDebugAttachBlocked() {
-    return IsHooked(DbgUiRemoteBreakin);
-}
-
-inline uintptr_t GetTrampolineTarget(HookId id) {
-    if (id < 0 || id >= HookCount) return 0;
-    const auto& st = GetStatus(id);
-    if (st.state != State_Hooked) return 0;
-    if (st.liveBytes[0] == 0xFF && st.liveBytes[1] == 0x25 &&
-        st.liveBytes[2] == 0x00 && st.liveBytes[3] == 0x00 &&
-        st.liveBytes[4] == 0x00 && st.liveBytes[5] == 0x00) {
-        uintptr_t target = 0;
-        if (SafeReadBytes(st.resolvedAddr + 6, reinterpret_cast<uint8_t*>(&target), 8))
-            return target;
-    }
-    return 0;
-}
-
-inline int Rescan() {
-    for (int i = 0; i < HookCount; ++i) g_status[i].state = State_Unknown;
-    return DetectAll();
-}
-
-// ── Status helpers ───────────────────────────────────────────────────────────
-
-inline const char* StateLabel(HookState s) {
-    switch (s) {
-        case State_Clean:    return "clean";
-        case State_Hooked:   return "HOOKED";
-        case State_Modified: return "modified";
-        case State_NotFound: return "not-found";
-        default:             return "unknown";
-    }
-}
-
-inline const char* GetHookName(HookId id) {
-    return (id >= 0 && id < HookCount) ? kHookSites[id].functionName : "?";
-}
-
-
-inline void LogAllStatus() {
-    char buf[512] = {};
-
-    wsprintfA(buf, "[PackmanTest] === Install Report ===\r\n");
-    WriteLog(buf);
-    wsprintfA(buf, "[PackmanTest] ntdll base = 0x%p\r\n",
-              reinterpret_cast<void*>(g_ntdllBase));
-    WriteLog(buf);
-
-    // Log hook detection results
-    wsprintfA(buf, "\r\n[PackmanTest] --- Hook Sites ---\r\n");
-    WriteLog(buf);
-    for (int i = 0; i < HookCount; ++i) {
-        const auto& site = kHookSites[i];
-        const auto& st = g_status[i];
-        wsprintfA(buf,
-            "  [%2d] %-40s +0x%02X  %-8s  addr=0x%p  [%02X %02X %02X %02X %02X]\r\n",
-            i, site.functionName, site.offset, StateLabel(st.state),
-            reinterpret_cast<void*>(st.resolvedAddr),
-            st.liveBytes[0], st.liveBytes[1], st.liveBytes[2],
-            st.liveBytes[3], st.liveBytes[4]);
-        WriteLog(buf);
-    }
-
-    // Log syscall stub status
-    wsprintfA(buf, "\r\n[PackmanTest] --- Syscall Stubs ---\r\n");
-    WriteLog(buf);
-    for (int i = 0; i < SyscallStubs::SC_Count; ++i) {
-        const auto& sc = SyscallStubs::g_syscalls[i];
-        wsprintfA(buf,
-            "  [%2d] %-28s SSN=0x%03X (known=0x%03X)  stub=%p  %s\r\n",
-            i, sc.name,
-            sc.resolvedSSN >= 0 ? sc.resolvedSSN : 0,
-            sc.knownSSN,
-            sc.stubPtr,
-            sc.stubPtr ? "OK" : "FAILED");
-        WriteLog(buf);
-    }
-
-    // Summary
-    int hookedCount = 0;
-    for (int i = 0; i < HookCount; ++i) {
-        if (g_status[i].state == State_Hooked) ++hookedCount;
-    }
-    int stubCount = 0;
-    for (int i = 0; i < SyscallStubs::SC_Count; ++i) {
-        if (SyscallStubs::g_syscalls[i].stubPtr) ++stubCount;
-    }
-
-    wsprintfA(buf,
-        "\r\n[PackmanTest] Summary: hooks=%d/%d active, stubs=%d/%d built, Packman=%s\r\n\r\n",
-        hookedCount, HookCount, stubCount, SyscallStubs::SC_Count,
-        IsPackmanActive() ? "ACTIVE" : "inactive");
-    WriteLog(buf);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RUNTIME PROTECTION & INTEGRITY CHECKS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ── Stub integrity verification ─────────────────────────────────────────────
-// Verify our syscall stubs haven't been tampered with by anti-cheat
-inline bool VerifyStubIntegrity(SyscallStubs::SyscallId id) {
-    if (id < 0 || id >= SyscallStubs::SC_Count) return false;
-    
-    const auto& sc = SyscallStubs::g_syscalls[id];
-    if (!sc.stubPtr || sc.resolvedSSN < 0) return false;
-
-    const auto* stub = reinterpret_cast<const uint8_t*>(sc.stubPtr);
-    
-    // Expected pattern: 4C 8B D1 B8 [SSN] 0F 05 C3
-    if (stub[0] != 0x4C || stub[1] != 0x8B || stub[2] != 0xD1) return false;
-    if (stub[3] != 0xB8) return false;
-    
-    const uint32_t ssn = *reinterpret_cast<const uint32_t*>(stub + 4);
-    if (static_cast<int>(ssn) != sc.resolvedSSN) return false;
-    
-    if (stub[8] != 0x0F || stub[9] != 0x05) return false;
-    if (stub[10] != 0xC3) return false;
-    
-    return true;
-}
-
-inline int VerifyAllStubs() {
-    int tamperedCount = 0;
-    for (int i = 0; i < SyscallStubs::SC_Count; ++i) {
-        if (!VerifyStubIntegrity(static_cast<SyscallStubs::SyscallId>(i))) {
-            ++tamperedCount;
-        }
-    }
-    return tamperedCount;
-}
-
-// ── Hardware breakpoint detection ────────────────────────────────────────────
-inline bool DetectHardwareBreakpoints() {
-    CONTEXT ctx = {};
-    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
-    
-    if (!GetThreadContext(GetCurrentThread(), &ctx)) return false;
-    
-    // Check if any debug registers are set
-    return (ctx.Dr0 != 0 || ctx.Dr1 != 0 || ctx.Dr2 != 0 || ctx.Dr3 != 0 || ctx.Dr7 != 0);
-}
-
-// ── Inline hook detection (jmp rel32, jmp rel8) ──────────────────────────────
-inline bool DetectInlineHook(uintptr_t addr) {
-    uint8_t bytes[5] = {};
-    if (!SafeReadBytes(addr, bytes, 5)) return false;
-    
-    // Check for jmp rel32 (E9 xx xx xx xx)
-    if (bytes[0] == 0xE9) return true;
-    
-    // Check for jmp rel8 (EB xx)
-    if (bytes[0] == 0xEB) return true;
-    
-    // Check for jmp [rip+disp32] (FF 25 xx xx xx xx)
-    if (bytes[0] == 0xFF && bytes[1] == 0x25) return true;
-    
-    // Check for push ret combo (68 xx xx xx xx C3)
-    if (bytes[0] == 0x68 && bytes[4] == 0xC3) return true;
-    
-    return false;
-}
-
-// ── Advanced hook detection for critical functions ───────────────────────────
-inline int DetectAdditionalHooks() {
-    int detectedCount = 0;
-    
-    // Check additional common hook targets
-    const char* additionalTargets[] = {
-        "NtOpenProcess",
-        "NtQuerySystemInformation",
-        "NtSetInformationThread",
-        "NtQueryInformationProcess",
-        "NtClose",
-        "NtDuplicateObject",
-        "RtlDispatchException",
-        "KiUserApcDispatcher",
-        nullptr
-    };
-    
-    for (int i = 0; additionalTargets[i]; ++i) {
-        uintptr_t addr = ResolveExport(additionalTargets[i]);
-        if (addr && DetectInlineHook(addr)) {
-            ++detectedCount;
-        }
-    }
-    
-    return detectedCount;
-}
-
-// ── Page protection for stub page ────────────────────────────────────────────
-inline bool ProtectStubPage() {
-    if (!SyscallStubs::g_stubPage) return false;
-    
-    constexpr int kStubSize = 16;
-    const SIZE_T pageSize = static_cast<SIZE_T>(SyscallStubs::SC_Count * kStubSize);
-    
-    DWORD oldProtect = 0;
-    return VirtualProtect(SyscallStubs::g_stubPage, pageSize, 
-                         PAGE_EXECUTE_READ, &oldProtect) != 0;
-}
-
-// ── Comprehensive security check ─────────────────────────────────────────────
-struct SecurityStatus {
-    int hookedSites;
-    int tamperedStubs;
-    int additionalHooks;
-    bool hardwareBreakpoints;
-    bool stubsProtected;
-};
-
-inline SecurityStatus PerformSecurityCheck() {
-    SecurityStatus status = {};
-    
-    // Check hook sites
-    for (int i = 0; i < HookCount; ++i) {
-        if (g_status[i].state == State_Hooked) {
-            ++status.hookedSites;
-        }
-    }
-    
-    // Check stub integrity
-    status.tamperedStubs = VerifyAllStubs();
-    
-    // Check additional hooks
-    status.additionalHooks = DetectAdditionalHooks();
-    
-    // Check hardware breakpoints
-    status.hardwareBreakpoints = DetectHardwareBreakpoints();
-    
-    // Verify stub page protection
-    MEMORY_BASIC_INFORMATION mbi = {};
-    if (SyscallStubs::g_stubPage && 
-        VirtualQuery(SyscallStubs::g_stubPage, &mbi, sizeof(mbi))) {
-        status.stubsProtected = (mbi.Protect == PAGE_EXECUTE_READ);
-    }
-    
-    return status;
-}
-
-// ── Enhanced logging with security status ────────────────────────────────────
-inline void LogSecurityStatus(const SecurityStatus& status) {
-    char buf[256] = {};
-    
-    wsprintfA(buf, "\r\n[PackmanTest] --- Security Status ---\r\n");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Hooked Sites: %d/%d\r\n", status.hookedSites, HookCount);
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Tampered Stubs: %d/%d\r\n", status.tamperedStubs, SyscallStubs::SC_Count);
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Additional Hooks Detected: %d\r\n", status.additionalHooks);
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Hardware Breakpoints: %s\r\n", 
-             status.hardwareBreakpoints ? "DETECTED" : "None");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Stub Page Protected: %s\r\n", 
-             status.stubsProtected ? "Yes" : "No");
-    WriteLog(buf);
-    
-    // Overall threat level
-    const int threatLevel = status.hookedSites + status.tamperedStubs + 
-                          status.additionalHooks + (status.hardwareBreakpoints ? 5 : 0);
-    
-    const char* threat = threatLevel == 0 ? "SAFE" :
-                        threatLevel < 5 ? "LOW" :
-                        threatLevel < 10 ? "MODERATE" :
-                        threatLevel < 20 ? "HIGH" : "CRITICAL";
-    
-    wsprintfA(buf, "  Overall Threat Level: %s (%d)\r\n\r\n", threat, threatLevel);
-    WriteLog(buf);
-}
-
-// ── Full security audit ──────────────────────────────────────────────────────
-inline SecurityStatus PerformFullAudit() {
-    SecurityStatus status = PerformSecurityCheck();
-    LogSecurityStatus(status);
-    return status;
-}
-
-// ── Periodic re-verification ─────────────────────────────────────────────────
-inline bool ReVerifyProtection() {
-    // Re-scan all hook sites
-    Rescan();
-    
-    // Re-check stub integrity
-    int tampered = VerifyAllStubs();
-    
-    // If stubs are compromised, rebuild them
-    if (tampered > 0) {
-        SyscallStubs::g_stubsBuilt = 0;
-        return SyscallStubs::BuildAllStubs();
-    }
-    
-    return tampered == 0;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADVANCED BYPASS TECHNIQUES (Based on stub_dump.dll Reverse Engineering)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ── PEB (Process Environment Block) hiding ───────────────────────────────────
-inline bool HidePEBDebuggerFlags() {
-    // Clear BeingDebugged flag
-    __try {
-        PPEB_CUSTOM peb = reinterpret_cast<PPEB_CUSTOM>(__readgsqword(0x60));
-        if (peb) {
-            peb->BeingDebugged = 0;
-            
-            // Clear NtGlobalFlag (offset 0xBC in PEB)
-            *reinterpret_cast<PDWORD>(reinterpret_cast<PBYTE>(peb) + 0xBC) = 0;
-            
-            // Clear heap flags to hide debugger
-            const int heapFlagsOffset = 0x70;  // ProcessHeap->Flags
-            const int heapForceFlagsOffset = 0x74;  // ProcessHeap->ForceFlags
-            
-            PVOID heap = peb->ProcessHeap;
-            if (heap) {
-                *reinterpret_cast<PDWORD>(reinterpret_cast<PBYTE>(heap) + heapFlagsOffset) = HEAP_GROWABLE;
-                *reinterpret_cast<PDWORD>(reinterpret_cast<PBYTE>(heap) + heapForceFlagsOffset) = 0;
-            }
-            return true;
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-    return false;
-}
-
-// ── ETW (Event Tracing for Windows) bypass ──────────────────────────────────
-inline bool DisableETW() {
-    // Patch EtwEventWrite to return immediately
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    if (!ntdll) return false;
-    
-    auto* etwEventWrite = reinterpret_cast<uint8_t*>(
-        GetProcAddress(ntdll, "EtwEventWrite"));
-    if (!etwEventWrite) return false;
-    
-    // Patch: xor eax, eax; ret (33 C0 C3)
-    uint8_t patch[] = { 0x33, 0xC0, 0xC3 };
-    
-    // Use direct syscall to bypass Packman's NtProtectVirtualMemory hook
-    DWORD oldProtect = 0;
-    if (!Syscall::ProtectMemory(etwEventWrite, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-        // Fallback to VirtualProtect (rarely works but try)
-        if (!VirtualProtect(etwEventWrite, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect))
-            return false;
-    }
-    
-    std::memcpy(etwEventWrite, patch, sizeof(patch));
-    
-    Syscall::ProtectMemory(etwEventWrite, sizeof(patch), oldProtect, &oldProtect);
-    FlushInstructionCache(GetCurrentProcess(), etwEventWrite, sizeof(patch));
-    
-    return true;
-}
-
-// ── Return address spoofing ──────────────────────────────────────────────────
-// Spoof return addresses to hide our callstack from anti-cheat scans
-inline uintptr_t GetLegitReturnAddress() {
-    // Get a legitimate return address from kernel32 or ntdll
-    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel32) return 0;
-    
-    // Return address to middle of a common function
-    auto* baseThreadInitThunk = GetProcAddress(kernel32, "BaseThreadInitThunk");
-    return reinterpret_cast<uintptr_t>(baseThreadInitThunk) + 0x20;
-}
-
-// ── Memory page hiding (from memory scans) ──────────────────────────────────
-inline bool HideMemoryPage(void* page, SIZE_T size) {
-    // Make page look like a legitimate allocation by hiding PAGE_EXECUTE flags
-    MEMORY_BASIC_INFORMATION mbi = {};
-    if (!VirtualQuery(page, &mbi, sizeof(mbi))) return false;
-    
-    // Change to PAGE_READWRITE temporarily during scans, restore when needed
-    DWORD oldProtect = 0;
-    return VirtualProtect(page, size, PAGE_READWRITE, &oldProtect) != 0;
-}
-
-inline bool RestoreExecutablePage(void* page, SIZE_T size) {
-    DWORD oldProtect = 0;
-    return VirtualProtect(page, size, PAGE_EXECUTE_READ, &oldProtect) != 0;
-}
-
-// ── Timing attack resistance ─────────────────────────────────────────────────
-inline void RandomDelay() {
-    // Add random delays to prevent timing-based detection
-    LARGE_INTEGER seed;
-    QueryPerformanceCounter(&seed);
-    const DWORD delay = (seed.LowPart % 50) + 10;  // 10-60ms random
-    Sleep(delay);
-}
-
-// ── QueryPerformanceCounter bypass (IDA: Heavy usage in 42KB anti-debug) ─────
-// Position-independent: resolves at runtime, no hardcoded addresses
-inline bool NeutralizeTimingChecks() {
-    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel32) return false;
-    
-    auto* qpc = reinterpret_cast<uint8_t*>(
-        GetProcAddress(kernel32, "QueryPerformanceCounter"));
-    if (!qpc) return false;
-    
-    // Patch to return consistent values (prevents timing-based detection)
-    uint8_t patch[] = {
-        0x48, 0xB8, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // mov rax, 0x1000
-        0x48, 0x89, 0x01,                                              // mov [rcx], rax
-        0xB8, 0x01, 0x00, 0x00, 0x00,                                  // mov eax, 1
-        0xC3                                                            // ret
-    };
-    
-    DWORD oldProtect = 0;
-    if (!VirtualProtect(qpc, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect))
-        return false;
-    
-    std::memcpy(qpc, patch, sizeof(patch));
-    VirtualProtect(qpc, sizeof(patch), oldProtect, &oldProtect);
-    FlushInstructionCache(GetCurrentProcess(), qpc, sizeof(patch));
-    
-    return true;
-}
-
-// ── Anti-VM detection bypass ─────────────────────────────────────────────────
-inline bool SpoofCPUID() {
-    // Clear hypervisor present bit in CPUID leaf 0x1
-    // This is a detection point that Packman might use (39 CPUID sites observed
-    // inside stub.dll). On standard Windows, user-mode CPUID does not trap to
-    // ring 3 (UMIP off), so a VEH cannot intercept it from here. We install the
-    // VEH anyway as a defensive scaffold; on systems where CPUID does trap we
-    // will clear the HV bit and rewrite the result. See InstallCpuidSpoofVEH().
-    return true;
-}
-
-// ── Thread hiding from anti-cheat enumeration ────────────────────────────────
-inline bool HideThread(HANDLE threadHandle) {
-    // Set thread information to hide from enumeration
-    const ULONG ThreadHideFromDebugger = 0x11;
-    
-    auto fn = Syscall::NtSetInformationThread();
-    if (!fn) return false;
-    
-    // ThreadHideFromDebugger takes NULL buffer (fixed from wrong implementation)
-    LONG status = fn(threadHandle, ThreadHideFromDebugger, nullptr, 0);
-    return status >= 0;
-}
-
-// ── DLL injection detection bypass ───────────────────────────────────────────
-inline bool UnlinkModuleFromPEB(HMODULE module) {
-    // Unlink our module from PEB module list to hide from enumeration
-    __try {
-        PPEB_CUSTOM peb = reinterpret_cast<PPEB_CUSTOM>(__readgsqword(0x60));
-        if (!peb) return false;
-        
-        PPEB_LDR_DATA_CUSTOM ldr = peb->Ldr;
-        if (!ldr) return false;
-        
-        // Walk InLoadOrderModuleList
-        PLDR_DATA_TABLE_ENTRY_CUSTOM entry = reinterpret_cast<PLDR_DATA_TABLE_ENTRY_CUSTOM>(
-            ldr->InLoadOrderModuleList.Flink);
-        
-        while (entry && entry->DllBase != module) {
-            entry = reinterpret_cast<PLDR_DATA_TABLE_ENTRY_CUSTOM>(entry->InLoadOrderLinks.Flink);
-        }
-        
-        if (entry && entry->DllBase == module) {
-            // Unlink from all three lists
-            entry->InLoadOrderLinks.Flink->Blink = entry->InLoadOrderLinks.Blink;
-            entry->InLoadOrderLinks.Blink->Flink = entry->InLoadOrderLinks.Flink;
-            
-            entry->InMemoryOrderLinks.Flink->Blink = entry->InMemoryOrderLinks.Blink;
-            entry->InMemoryOrderLinks.Blink->Flink = entry->InMemoryOrderLinks.Flink;
-            
-            entry->InInitializationOrderLinks.Flink->Blink = entry->InInitializationOrderLinks.Blink;
-            entry->InInitializationOrderLinks.Blink->Flink = entry->InInitializationOrderLinks.Flink;
-            
-            return true;
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-    return false;
-}
-
-// ── Code integrity bypass (CRC/hash checks) ──────────────────────────────────
-inline bool ProtectCodeRegion(void* start, SIZE_T size) {
-    // Make code region read-only to pass integrity checks
-    // but use PAGE_EXECUTE_WRITECOPY for on-demand modifications
-    DWORD oldProtect = 0;
-    return VirtualProtect(start, size, PAGE_EXECUTE_WRITECOPY, &oldProtect) != 0;
-}
-
-// ── Handle table hiding ──────────────────────────────────────────────────────
-inline bool SpoofHandleCount() {
-    // Manipulate PEB to report fewer handles (anti-cheat detection point)
-    __try {
-        PPEB peb = reinterpret_cast<PPEB>(__readgsqword(0x60));
-        if (!peb) return false;
-        
-        // Zero out some handle table entries to appear cleaner
-        // This is a simplified version
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-// ── Exception handler bypass ─────────────────────────────────────────────────
-// Filtered VEH: only intercept exceptions from anti-cheat modules (ntdll/stub.dll),
-// let game exceptions pass through to normal SEH handlers.
-static LONG CALLBACK SafeExceptionHandler(PEXCEPTION_POINTERS ep) {
-    if (!ep || !ep->ExceptionRecord || !ep->ContextRecord)
-        return EXCEPTION_CONTINUE_SEARCH;
-
-    // Get the address that caused the exception
-    uintptr_t faultAddr = reinterpret_cast<uintptr_t>(ep->ExceptionRecord->ExceptionAddress);
-
-    // Only handle exceptions originating from ntdll.dll or stub.dll (anti-cheat)
-    // Let game code exceptions pass through to normal SEH
-    static uintptr_t ntdllBase = 0;
-    static SIZE_T ntdllSize = 0;
-    static uintptr_t stubBase = 0;
-    static SIZE_T stubSize = 0;
-    static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-        if (ntdll) {
-            ntdllBase = reinterpret_cast<uintptr_t>(ntdll);
-            MODULEINFO mi = {};
-            if (GetModuleInformation(GetCurrentProcess(), ntdll, &mi, sizeof(mi)))
-                ntdllSize = mi.SizeOfImage;
-        }
-        HMODULE stub = GetModuleHandleA("stub.dll");
-        if (stub) {
-            stubBase = reinterpret_cast<uintptr_t>(stub);
-            MODULEINFO mi = {};
-            if (GetModuleInformation(GetCurrentProcess(), stub, &mi, sizeof(mi)))
-                stubSize = mi.SizeOfImage;
-        }
-    }
-
-    auto isInModule = [](uintptr_t addr, uintptr_t base, SIZE_T size) {
-        return base && addr >= base && addr < base + size;
-    };
-
-    bool fromAntiCheat = isInModule(faultAddr, ntdllBase, ntdllSize) ||
-                         isInModule(faultAddr, stubBase, stubSize);
-
-    if (!fromAntiCheat)
-        return EXCEPTION_CONTINUE_SEARCH;
-
-    // Handle anti-debug exceptions from anti-cheat code only
-    if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_BREAKPOINT) {
-        // Skip int3 instructions placed by anti-cheat
-        #ifdef _M_X64
-        ep->ContextRecord->Rip += 1;
-        #else
-        ep->ContextRecord->Eip += 1;
-        #endif
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP) {
-        // Clear trap flag set by anti-cheat
-        ep->ContextRecord->EFlags &= ~0x100;
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    // Other exceptions from anti-cheat: let them pass
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-inline bool InstallSafeExceptionHandler() {
-    // Install custom VEH to intercept anti-cheat exception-based checks
-    return AddVectoredExceptionHandler(1, SafeExceptionHandler) != nullptr;
-}
-
-// ── AMSI (Antimalware Scan Interface) bypass ────────────────────────────────
-inline bool DisableAMSI() {
-    HMODULE amsi = GetModuleHandleW(L"amsi.dll");
-    if (!amsi) return true;  // Not loaded, nothing to bypass
-    
-    auto* amsiScanBuffer = reinterpret_cast<uint8_t*>(
-        GetProcAddress(amsi, "AmsiScanBuffer"));
-    if (!amsiScanBuffer) return false;
-    
-    // Patch to return AMSI_RESULT_CLEAN (0x0)
-    uint8_t patch[] = { 0xB8, 0x00, 0x00, 0x00, 0x00, 0xC3 };  // mov eax, 0; ret
-    
-    // Use direct syscall to bypass Packman's NtProtectVirtualMemory hook
-    DWORD oldProtect = 0;
-    if (!Syscall::ProtectMemory(amsiScanBuffer, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-        if (!VirtualProtect(amsiScanBuffer, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect))
-            return false;
-    }
-    
-    std::memcpy(amsiScanBuffer, patch, sizeof(patch));
-    
-    Syscall::ProtectMemory(amsiScanBuffer, sizeof(patch), oldProtect, &oldProtect);
-    FlushInstructionCache(GetCurrentProcess(), amsiScanBuffer, sizeof(patch));
-    
-    return true;
-}
-
-// ── System call number obfuscation ───────────────────────────────────────────
-inline int ObfuscateSSN(int ssn) {
-    // XOR with random key to hide SSN in memory
-    static int key = 0;
-    if (key == 0) {
-        LARGE_INTEGER seed;
-        QueryPerformanceCounter(&seed);
-        key = seed.LowPart & 0xFFFF;
-    }
-    return ssn ^ key;
-}
-
-inline int DeobfuscateSSN(int obfuscatedSSN) {
-    static int key = 0;
-    if (key == 0) {
-        LARGE_INTEGER seed;
-        QueryPerformanceCounter(&seed);
-        key = seed.LowPart & 0xFFFF;
-    }
-    return obfuscatedSSN ^ key;
-}
-
-// ── Comprehensive bypass installation ────────────────────────────────────────
-struct BypassStatus {
-    bool pebHidden;
-    bool etwDisabled;
-    bool amsiDisabled;
-    bool stubsProtected;
-    bool threadHidden;
-    bool exceptionHandlerInstalled;
-    int bypassCount;
-};
-
-inline BypassStatus InstallAdvancedBypasses(HMODULE ourModule = nullptr) {
-    BypassStatus status = {};
-    
-    // 1. Hide PEB debugger flags
-    if (HidePEBDebuggerFlags()) {
-        status.pebHidden = true;
-        ++status.bypassCount;
-    }
-    
-    // 2. Disable ETW telemetry
-    if (DisableETW()) {
-        status.etwDisabled = true;
-        ++status.bypassCount;
-    }
-    
-    // 3. Disable AMSI
-    if (DisableAMSI()) {
-        status.amsiDisabled = true;
-        ++status.bypassCount;
-    }
-    
-    // 4. Protect stub page
-    if (ProtectStubPage()) {
-        status.stubsProtected = true;
-        ++status.bypassCount;
-    }
-    
-    // 5. Hide current thread
-    if (HideThread(GetCurrentThread())) {
-        status.threadHidden = true;
-        ++status.bypassCount;
-    }
-    
-    // 6. DISABLED - VEH exception handler causes game crash after seconds
-    // The filtered version still interferes with game's internal exception flow
-    // if (InstallSafeExceptionHandler()) {
-    //     status.exceptionHandlerInstalled = true;
-    //     ++status.bypassCount;
-    // }
-    
-    // 7. Unlink module from PEB if provided
-    if (ourModule && UnlinkModuleFromPEB(ourModule)) {
-        ++status.bypassCount;
-    }
-    
-    return status;
-}
-
-// ── Enhanced logging for bypass status ───────────────────────────────────────
-inline void LogBypassStatus(const BypassStatus& status) {
-    char buf[256] = {};
-    
-    wsprintfA(buf, "\r\n[PackmanTest] --- Advanced Bypass Status ---\r\n");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  PEB Debugger Flags: %s\r\n", 
-             status.pebHidden ? "Hidden" : "Failed");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  ETW Telemetry: %s\r\n", 
-             status.etwDisabled ? "Disabled" : "Active");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  AMSI: %s\r\n", 
-             status.amsiDisabled ? "Bypassed" : "Active");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Stub Page Protection: %s\r\n", 
-             status.stubsProtected ? "Protected" : "Vulnerable");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Thread Hiding: %s\r\n", 
-             status.threadHidden ? "Hidden" : "Visible");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Exception Handler: %s\r\n", 
-             status.exceptionHandlerInstalled ? "Installed" : "Not Installed");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Total Bypasses Active: %d/6\r\n\r\n", status.bypassCount);
-    WriteLog(buf);
-}
-
-// ── Full installation with all bypasses ──────────────────────────────────────
-inline bool InstallWithBypasses(HMODULE ourModule = nullptr) {
-    // Step 1: Standard installation
-    bool baseInstall = Install();
-    
-    // Step 2: Install advanced bypasses
-    BypassStatus bypassStatus = InstallAdvancedBypasses(ourModule);
-    
-    // Step 3: Log everything
-    LogAllStatus();
-    LogBypassStatus(bypassStatus);
-    
-    return baseInstall && (bypassStatus.bypassCount >= 4);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ADDITIONAL BYPASSES FROM IDA PRO ANALYSIS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ── IsDebuggerPresent/CheckRemoteDebuggerPresent bypass ──────────────────────
-inline bool PatchDebuggerDetection() {
-    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel32) return false;
-    
-    bool success = true;
-    
-    // Patch IsDebuggerPresent to always return FALSE
-    auto* isDebuggerPresent = reinterpret_cast<uint8_t*>(
-        GetProcAddress(kernel32, "IsDebuggerPresent"));
-    if (isDebuggerPresent) {
-        // xor eax, eax; ret (33 C0 C3)
-        uint8_t patch[] = { 0x33, 0xC0, 0xC3 };
-        DWORD oldProtect = 0;
-        if (VirtualProtect(isDebuggerPresent, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-            std::memcpy(isDebuggerPresent, patch, sizeof(patch));
-            VirtualProtect(isDebuggerPresent, sizeof(patch), oldProtect, &oldProtect);
-            FlushInstructionCache(GetCurrentProcess(), isDebuggerPresent, sizeof(patch));
-        } else {
-            success = false;
-        }
-    }
-    
-    // Patch CheckRemoteDebuggerPresent to always set *pbDebuggerPresent = FALSE
-    auto* checkRemoteDebugger = reinterpret_cast<uint8_t*>(
-        GetProcAddress(kernel32, "CheckRemoteDebuggerPresent"));
-    if (checkRemoteDebugger) {
-        // mov dword ptr [rdx], 0; mov eax, 1; ret
-        // C7 02 00 00 00 00 B8 01 00 00 00 C3
-        uint8_t patch[] = { 0xC7, 0x02, 0x00, 0x00, 0x00, 0x00, 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3 };
-        DWORD oldProtect = 0;
-        if (VirtualProtect(checkRemoteDebugger, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
-            std::memcpy(checkRemoteDebugger, patch, sizeof(patch));
-            VirtualProtect(checkRemoteDebugger, sizeof(patch), oldProtect, &oldProtect);
-            FlushInstructionCache(GetCurrentProcess(), checkRemoteDebugger, sizeof(patch));
-        } else {
-            success = false;
-        }
-    }
-    
-    return success;
-}
-
-// ── NtQueryInformationProcess bypass (ProcessDebugPort, ProcessDebugFlags) ───
-inline bool BypassProcessDebugChecks() {
-    auto fn = Syscall::NtQueryInformationProcess();
-    if (!fn) return false;
-    
-    // Hook our own NtQueryInformationProcess to filter debug-related queries
-    // This is a simplified version - in production, use inline hooking
-    return true;
-}
-
-// ── NtSetInformationThread (ThreadHideFromDebugger) bypass ──────────────────
-inline bool PreventThreadHiding() {
-    // Anti-cheat might try to hide ITS threads from us
-    // We already have HideThread() for our own threads
-    return true;
-}
-
-// ── NtQuerySystemInformation bypass (SystemKernelDebuggerInformation) ────────
-inline bool BypassKernelDebuggerCheck() {
-    auto fn = Syscall::NtQuerySystemInformation();
-    if (!fn) return false;
-    
-    // SystemKernelDebuggerInformation = 0x23
-    // Would need inline hook to filter this
-    return true;
-}
-
-// ── NtQueryObject bypass (ObjectTypesInformation, ObjectHandleFlagInformation)
-inline bool BypassObjectQueries() {
-    auto fn = Syscall::NtQueryObject();
-    if (!fn) return false;
-    
-    // Anti-cheat uses this to detect debugger handles
-    return true;
-}
-
-// ── SetUnhandledExceptionFilter bypass ───────────────────────────────────────
-inline bool DisableExceptionFilterHijacking() {
-    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (!kernel32) return false;
-    
-    auto* setUnhandledExceptionFilter = reinterpret_cast<uint8_t*>(
-        GetProcAddress(kernel32, "SetUnhandledExceptionFilter"));
-    if (!setUnhandledExceptionFilter) return false;
-    
-    // Patch to return immediately without setting filter
-    // xor eax, eax; ret (33 C0 C3)
-    uint8_t patch[] = { 0x33, 0xC0, 0xC3 };
-    
-    DWORD oldProtect = 0;
-    if (!VirtualProtect(setUnhandledExceptionFilter, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect))
-        return false;
-    
-    std::memcpy(setUnhandledExceptionFilter, patch, sizeof(patch));
-    
-    VirtualProtect(setUnhandledExceptionFilter, sizeof(patch), oldProtect, &oldProtect);
-    FlushInstructionCache(GetCurrentProcess(), setUnhandledExceptionFilter, sizeof(patch));
-    
-    return true;
-}
-
-// ── NtClose handle validation bypass ─────────────────────────────────────────
-inline bool BypassCloseHandleException() {
-    // Anti-cheat uses NtClose on invalid handles to trigger exceptions
-    // Our VEH handler already handles this
-    return InstallSafeExceptionHandler();
-}
-
-// ── TLS (Thread Local Storage) callback hiding ──────────────────────────────
-inline bool HideTLSCallbacks() {
-    __try {
-        PPEB_CUSTOM peb = reinterpret_cast<PPEB_CUSTOM>(__readgsqword(0x60));
-        if (!peb || !peb->ImageBaseAddress) return false;
-        
-        IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(peb->ImageBaseAddress);
-        if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return false;
-        
-        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<uint8_t*>(peb->ImageBaseAddress) + dosHeader->e_lfanew);
-        if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return false;
-        
-        // Clear TLS directory to hide our callbacks
-        IMAGE_DATA_DIRECTORY& dataDir = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
-        if (dataDir.VirtualAddress) {
-            DWORD oldProtect = 0;
-            if (VirtualProtect(&dataDir, sizeof(dataDir), PAGE_READWRITE, &oldProtect)) {
-                dataDir.VirtualAddress = 0;
-                dataDir.Size = 0;
-                VirtualProtect(&dataDir, sizeof(dataDir), oldProtect, &oldProtect);
-                return true;
-            }
-        }
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-    return false;
-}
-
-// ── Parent process check bypass (Explorer.exe validation) ────────────────────
-inline bool SpoofParentProcess() {
-    // Anti-cheat checks if parent process is Explorer.exe
-    // This requires PEB manipulation or process creation hooks
-    __try {
-        PPEB_CUSTOM peb = reinterpret_cast<PPEB_CUSTOM>(__readgsqword(0x60));
-        if (!peb) return false;
-        
-        // Would need to modify PEB->ProcessParameters->ParentProcess
-        // This is complex and may crash if not done carefully
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-// ── Memory page scanning evasion ─────────────────────────────────────────────
-inline bool EvadeMemoryScan() {
-    if (!SyscallStubs::g_stubPage) return false;
-    
-    // Strategy 1: Make our stub page look like legitimate code
-    MEMORY_BASIC_INFORMATION mbi = {};
-    if (!VirtualQuery(SyscallStubs::g_stubPage, &mbi, sizeof(mbi))) return false;
-    
-    // Strategy 2: Add fake PE headers to make it look like a module
-    // Strategy 3: Use guard pages around our stubs
-    
-    return HideMemoryPage(SyscallStubs::g_stubPage, mbi.RegionSize);
-}
-
-// ── DeviceIoControl blocking (kernel communication) ──────────────────────────
-inline bool BlockKernelCommunication() {
-    // Packman uses DeviceIoControl to communicate with kernel driver
-    // We can't easily block this without breaking legitimate game functionality
-    // Best approach: monitor for suspicious IOCTL codes
-    return true;
-}
-
-// ── Timing-based detection bypass ────────────────────────────────────────────
-inline bool StabilizeTimings() {
-    // Anti-cheat measures execution time to detect hooks/debugging
-    // NOTE: Actual affinity/priority changes cause game crashes
-    // This function now just reports success without modifications
-    return true;
-}
-
-// ── Code integrity check bypass (CRC/hash validation) ────────────────────────
-inline bool BypassIntegrityChecks() {
-    // Packman performs CRC checks on critical game code
-    if (!SyscallStubs::g_stubPage) return false;
-    
-    // Protect stub page with PAGE_EXECUTE_READ
-    bool stubProtected = ProtectCodeRegion(
-        SyscallStubs::g_stubPage, 
-        SyscallStubs::SC_Count * 16);
-    
-    // Protect our DLL's .text section to pass CRC checks
-    HMODULE ourModule = GetModuleHandleA(nullptr);
-    if (ourModule) {
-        __try {
-            auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(ourModule);
-            if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
-                auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-                    reinterpret_cast<uint8_t*>(ourModule) + dos->e_lfanew);
-                if (nt->Signature == IMAGE_NT_SIGNATURE) {
-                    auto* section = IMAGE_FIRST_SECTION(nt);
-                    for (int i = 0; i < nt->FileHeader.NumberOfSections; i++) {
-                        if (std::strcmp(reinterpret_cast<char*>(section[i].Name), ".text") == 0) {
-                            auto* textStart = reinterpret_cast<uint8_t*>(ourModule) + 
-                                            section[i].VirtualAddress;
-                            SIZE_T textSize = section[i].Misc.VirtualSize;
-                            
-                            // Make read-only to pass CRC checks
-                            DWORD old = 0;
-                            VirtualProtect(textStart, textSize, PAGE_EXECUTE_READ, &old);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER) {
-            // Ignore errors in PE parsing
-        }
-    }
-    
-    return stubProtected;
-}
-
-// ── Thread stack walking bypass ──────────────────────────────────────────────
-inline bool ObfuscateCallStack() {
-    // Anti-cheat walks thread stacks looking for suspicious return addresses
-    // Use return address spoofing via GetLegitReturnAddress()
-    
-    // Also: Install frame pointer obfuscation
-    return true;
-}
-
-// ── Window/Process enumeration hiding ───────────────────────────────────────
-inline bool HideFromEnumeration() {
-    // Hide our process/windows from EnumWindows, EnumProcesses, etc.
-    // This requires hooking user32/kernel32 enumeration functions
-    return true;
-}
-
-// ── Registry key hiding (debugger detection) ─────────────────────────────────
-inline bool HideDebuggerRegistry() {
-    // Clear registry keys that indicate debugger presence
-    // HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug
-    // HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-    
-    // This is dangerous and may break system functionality
-    return true;
-}
-
-// ── Interrupt descriptor table (IDT) check bypass ────────────────────────────
-inline bool BypassIDTChecks() {
-    // Anti-cheat checks IDT for int3 hooks
-    // Requires kernel-mode driver to properly bypass
-    return true;
-}
-
-// ── System module integrity bypass ───────────────────────────────────────────
-inline bool ValidateSystemModules() {
-    // Packman validates ntdll.dll/kernel32.dll haven't been modified
-    // Our syscall stubs bypass this since we don't modify ntdll exports
-    return true;
-}
-
-// ── Comprehensive bypass installation ────────────────────────────────────────
-struct ComprehensiveBypassStatus {
-    bool debuggerDetectionPatched;
-    bool exceptionFilterDisabled;
-    bool tlsHidden;
-    bool memoryEvaded;
-    bool timingsStabilized;
-    bool integrityBypassed;
-    int additionalBypassCount;
-};
-
-inline ComprehensiveBypassStatus InstallComprehensiveBypasses() {
-    ComprehensiveBypassStatus status = {};
-    
-    // 1. Patch debugger detection functions
-    if (PatchDebuggerDetection()) {
-        status.debuggerDetectionPatched = true;
-        ++status.additionalBypassCount;
-    }
-    
-    // 2. Disable exception filter hijacking
-    if (DisableExceptionFilterHijacking()) {
-        status.exceptionFilterDisabled = true;
-        ++status.additionalBypassCount;
-    }
-    
-    // 3. Hide TLS callbacks
-    if (HideTLSCallbacks()) {
-        status.tlsHidden = true;
-        ++status.additionalBypassCount;
-    }
-    
-    // 4. Evade memory scanning
-    if (EvadeMemoryScan()) {
-        status.memoryEvaded = true;
-        ++status.additionalBypassCount;
-    }
-    
-    // 5. Stabilize timings
-    if (StabilizeTimings()) {
-        status.timingsStabilized = true;
-        ++status.additionalBypassCount;
-    }
-    
-    // 6. Bypass integrity checks
-    if (BypassIntegrityChecks()) {
-        status.integrityBypassed = true;
-        ++status.additionalBypassCount;
-    }
-    
-    // Additional bypasses
-    BypassProcessDebugChecks();
-    BypassKernelDebuggerCheck();
-    BypassObjectQueries();
-    BypassCloseHandleException();
-    ObfuscateCallStack();
-    
-    return status;
-}
-
-// ── Enhanced logging for comprehensive bypasses ──────────────────────────────
-inline void LogComprehensiveBypassStatus(const ComprehensiveBypassStatus& status) {
-    char buf[256] = {};
-    
-    wsprintfA(buf, "\r\n[PackmanTest] --- Comprehensive Bypass Status ---\r\n");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Debugger Detection: %s\r\n", 
-             status.debuggerDetectionPatched ? "Patched" : "Failed");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Exception Filter: %s\r\n", 
-             status.exceptionFilterDisabled ? "Disabled" : "Active");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  TLS Callbacks: %s\r\n", 
-             status.tlsHidden ? "Hidden" : "Visible");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Memory Scanning: %s\r\n", 
-             status.memoryEvaded ? "Evaded" : "Vulnerable");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Timing Checks: %s\r\n", 
-             status.timingsStabilized ? "Stabilized" : "Detectable");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Integrity Checks: %s\r\n", 
-             status.integrityBypassed ? "Bypassed" : "Active");
-    WriteLog(buf);
-    
-    wsprintfA(buf, "  Additional Bypasses: %d/11\r\n\r\n", status.additionalBypassCount);
-    WriteLog(buf);
-}
-
-// ── ULTIMATE installation with ALL bypasses ──────────────────────────────────
-inline bool InstallUltimateProtection(HMODULE ourModule = nullptr) {
-    // Step 1: Base installation (syscall stubs)
-    bool baseInstall = Install();
-    
-    // Step 2: Advanced bypasses (PEB, ETW, AMSI, etc.)
-    BypassStatus advancedStatus = InstallAdvancedBypasses(ourModule);
-    
-    // Step 3: Comprehensive bypasses (debugger detection, integrity, etc.)
-    ComprehensiveBypassStatus comprehensiveStatus = InstallComprehensiveBypasses();
-    
-    // Step 4: Log everything
-    LogAllStatus();
-    LogBypassStatus(advancedStatus);
-    LogComprehensiveBypassStatus(comprehensiveStatus);
-    
-    const int totalBypasses = advancedStatus.bypassCount + comprehensiveStatus.additionalBypassCount;
-    
-    char buf[128] = {};
-    wsprintfA(buf, "[PackmanTest] ULTIMATE PROTECTION: %d/18 bypasses active\r\n\r\n", totalBypasses);
-    WriteLog(buf);
-    
-    return baseInstall && (totalBypasses >= 12);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// KERNEL DRIVER COMMUNICATION BLOCKING (IDA Pro Analysis - Priority 1)
-// ═══════════════════════════════════════════════════════════════════════════════
-// Based on IDA analysis: Packman uses DeviceIoControl 10x to query kernel driver
-// Main functions: 0x7ff965342939, 0x7ff9653443f9, 0x7ff9653530d5
-// This is the CRITICAL missing component - blocks kernel-mode detection
-
-namespace KernelComm {
-
-    using DeviceIoControlFn = BOOL(WINAPI*)(HANDLE hDevice, DWORD dwIoControlCode,
-                                            LPVOID lpInBuffer, DWORD nInBufferSize,
-                                            LPVOID lpOutBuffer, DWORD nOutBufferSize,
-                                            LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped);
-
-    inline DeviceIoControlFn g_originalDeviceIoControl = nullptr;
-    inline HANDLE g_packmanDriverHandle = nullptr;
-    inline volatile int g_commBlocked = 0;
-    inline DWORD g_blockedIOCTLCount = 0;
-
-    // Common IOCTL codes used by anti-cheat drivers (heuristic detection)
-    inline bool IsSuspiciousIOCTL(DWORD code) {
-        // Anti-cheat drivers typically use custom IOCTL codes in these ranges
-        const DWORD deviceType = (code >> 16) & 0xFFFF;
-        const DWORD function = (code >> 2) & 0xFFF;
-        
-        // File system device type (0x9) with high function codes = suspicious
-        if (deviceType == 0x9 && function > 0x100) return true;
-        
-        // Unknown device types with custom methods
-        if (deviceType >= 0x8000) return true;
-        
-        // Specific suspicious patterns
-        if ((code & 0xFFFF0000) == 0x80000000) return true;
-        if ((code & 0xFFFF0000) == 0x90000000) return true;
-        
-        return false;
-    }
-
-    inline bool IsPackmanDriver(HANDLE hDevice) {
-        if (hDevice == g_packmanDriverHandle) return true;
-        if (hDevice == INVALID_HANDLE_VALUE || !hDevice) return false;
-        
-        // Try to query object name to identify driver
-        char buffer[512] = {};
-        auto fn = Syscall::NtQueryObject();
-        if (!fn) return false;
-        
-        ULONG returnLength = 0;
-        LONG status = fn(hDevice, 1, buffer, sizeof(buffer), &returnLength);  // ObjectNameInformation = 1
-        
-        if (status >= 0 && returnLength > 0) {
-            // Check for packman/vanguard related device names
-            const char* name = buffer;
-            if (strstr(name, "vgk") || strstr(name, "vgc") ||
-                strstr(name, "packman") || strstr(name, "riot")) {
-                g_packmanDriverHandle = hDevice;  // Cache it
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
-    // Hooked DeviceIoControl - intercepts all kernel communication
-    BOOL WINAPI HookedDeviceIoControl(
-        HANDLE hDevice,
-        DWORD dwIoControlCode,
-        LPVOID lpInBuffer,
-        DWORD nInBufferSize,
-        LPVOID lpOutBuffer,
-        DWORD nOutBufferSize,
-        LPDWORD lpBytesReturned,
-        LPOVERLAPPED lpOverlapped)
-    {
-        // Check if this targets Packman's driver
-        if (IsPackmanDriver(hDevice) || IsSuspiciousIOCTL(dwIoControlCode)) {
-            ++g_blockedIOCTLCount;
-            
-            // Block by returning failure with safe error code
-            if (lpBytesReturned) *lpBytesReturned = 0;
-            SetLastError(ERROR_NOT_SUPPORTED);
-            
-            // Log for debugging
-            char buf[128] = {};
-            wsprintfA(buf, "[PackmanTest] Blocked IOCTL 0x%08X to handle 0x%p\r\n", 
-                     dwIoControlCode, hDevice);
-            WriteLog(buf);
-            
-            return FALSE;
-        }
-        
-        // Pass through legitimate calls
-        return g_originalDeviceIoControl(hDevice, dwIoControlCode,
-                                        lpInBuffer, nInBufferSize,
-                                        lpOutBuffer, nOutBufferSize,
-                                        lpBytesReturned, lpOverlapped);
-    }
-
-    // Simple inline hook implementation (trampoline method)
-    inline bool InstallInlineHook(void* target, void* hook, void** original) {
-        if (!target || !hook || !original) return false;
-        
-        // Allocate trampoline for original code + jmp back
-        auto* trampoline = reinterpret_cast<uint8_t*>(
-            VirtualAlloc(nullptr, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-        if (!trampoline) return false;
-        
-        // Save original bytes (first 14 for safety)
-        DWORD oldProtect = 0;
-        if (!VirtualProtect(target, 14, PAGE_EXECUTE_READWRITE, &oldProtect))
-            return false;
-        
-        std::memcpy(trampoline, target, 14);
-        
-        // Build jmp back to original+14
-        trampoline[14] = 0xFF;  // jmp [rip+0]
-        trampoline[15] = 0x25;
-        *reinterpret_cast<DWORD*>(trampoline + 16) = 0;
-        *reinterpret_cast<uintptr_t*>(trampoline + 20) = 
-            reinterpret_cast<uintptr_t>(target) + 14;
-        
-        // Write jmp to hook at target
-        auto* targetBytes = reinterpret_cast<uint8_t*>(target);
-        targetBytes[0] = 0xFF;  // jmp [rip+0]
-        targetBytes[1] = 0x25;
-        *reinterpret_cast<DWORD*>(targetBytes + 2) = 0;
-        *reinterpret_cast<uintptr_t*>(targetBytes + 6) = reinterpret_cast<uintptr_t>(hook);
-        
-        VirtualProtect(target, 14, oldProtect, &oldProtect);
-        FlushInstructionCache(GetCurrentProcess(), target, 14);
-        
-        *original = trampoline;
+    if (InterlockedCompareExchange(&g_installed, 1, 0) != 0) {
+        DbgLog("[CRC] Install: đã cài rồi, bỏ qua\r\n");
         return true;
     }
 
-    inline bool InstallKernelCommBlock() {
-        if (g_commBlocked) return true;
-        
-        HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-        if (!kernel32) return false;
-        
-        auto* deviceIoControl = GetProcAddress(kernel32, "DeviceIoControl");
-        if (!deviceIoControl) return false;
-        
-        // Install inline hook
-        void* original = nullptr;
-        if (!InstallInlineHook(deviceIoControl, 
-                              reinterpret_cast<void*>(HookedDeviceIoControl),
-                              &original)) {
-            return false;
-        }
-        
-        g_originalDeviceIoControl = reinterpret_cast<DeviceIoControlFn>(original);
-        g_commBlocked = 1;
-        
-        char buf[128] = {};
-        wsprintfA(buf, "[PackmanTest] Kernel communication blocking installed\r\n");
-        WriteLog(buf);
-        
-        return true;
-    }
-
-    inline DWORD GetBlockedCount() {
-        return g_blockedIOCTLCount;
-    }
-
-} // namespace KernelComm
-
-// ── Memory scan evasion ──────────────────────────────────────────────────────
-// Packman scans process memory via NtQueryVirtualMemory to find injected DLLs.
-// We hide our pages by:
-// 1. Removing execute permission from our DLL .text during scans (restore after)
-// 2. Spoofing memory region type to MEM_IMAGE instead of MEM_PRIVATE
-// 3. Zeroing PE headers of our DLL to break signature scans
-inline bool EvadeMemoryScanAdvanced(HMODULE ourModule) {
-    if (!ourModule) return false;
-
-    // Zero our DLL PE headers to break signature-based memory scans
-    __try {
-        auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(ourModule);
-        
-        // Check if PE headers already erased (by manual map injector)
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
-            // Already zeroed - nothing to do, evasion already active
-            char buf[128];
-            wsprintfA(buf, "[PackmanTest] Memory scan evasion: PE headers already erased\r\n");
-            WriteLog(buf);
-            return true;
-        }
-
-        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<uint8_t*>(ourModule) + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
-
-        // Zero DOS header (64 bytes) + NT headers (signature + headers)
-        DWORD oldProtect = 0;
-        SIZE_T headerSize = dos->e_lfanew + sizeof(IMAGE_NT_HEADERS);
-
-        if (!Syscall::ProtectMemory(dos, headerSize, PAGE_READWRITE, &oldProtect)) {
-            if (!VirtualProtect(dos, headerSize, PAGE_READWRITE, &oldProtect))
-                return false;
-        }
-
-        // Save original headers for potential restore
-        static uint8_t savedHeaders[0x400] = {};
-        static bool saved = false;
-        if (!saved) {
-            std::memcpy(savedHeaders, dos, std::min(headerSize, sizeof(savedHeaders)));
-            saved = true;
-        }
-
-        // Zero out headers
-        std::memset(dos, 0, headerSize);
-
-        Syscall::ProtectMemory(dos, headerSize, oldProtect, &oldProtect);
-        VirtualProtect(dos, headerSize, oldProtect, &oldProtect);
-
-        char buf[128];
-        wsprintfA(buf, "[PackmanTest] Memory scan evasion: PE headers zeroed (0x%p, 0x%llX bytes)\r\n",
-                 reinterpret_cast<void*>(ourModule), (unsigned long long)headerSize);
-        WriteLog(buf);
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
+    HMODULE hStub = GetModuleHandleA("stub.dll");
+    if (!hStub) {
+        DbgLog("[CRC] Install: stub.dll chưa load\r\n");
+        InterlockedExchange(&g_installed, 0);
         return false;
     }
-}
 
-// ── Window enumeration protection ────────────────────────────────────────────
-// Packman uses EnumWindows/FindWindow to detect overlay windows.
-// We hook user32!EnumWindows to skip our overlay window.
-static HWND g_ourOverlayWnd = nullptr;
+    MODULEINFO mi = {};
+    if (!GetModuleInformation(GetCurrentProcess(), hStub, &mi, sizeof(mi))) {
+        DbgLog("[CRC] Install: GetModuleInformation(stub.dll) FAIL\r\n");
+        InterlockedExchange(&g_installed, 0);
+        return false;
+    }
+    DbgLogFmt("[CRC] stub.dll base=0x%p size=0x%X\r\n",
+              hStub, (unsigned)mi.SizeOfImage);
 
-typedef BOOL(WINAPI* EnumWindowsProc)(WNDENUMPROC, LPARAM);
-static EnumWindowsProc g_origEnumWindows = nullptr;
-static EnumWindowsProc g_origEnumChildWindows = nullptr;
+    DbgLogFmt("[CRC] Install: scanning stub.dll for CRC pattern (size=0x%X)...\r\n",
+              (unsigned)mi.SizeOfImage);
 
-// Hooked EnumWindows - skips our overlay window
-static BOOL WINAPI HookedEnumWindows(WNDENUMPROC lpEnumFunc, LPARAM lParam) {
-    // Just call original but our overlay will be filtered by the callback
-    // The overlay window has WS_EX_NOACTIVATE | WS_EX_TRANSPARENT so it's
-    // less likely to be enumerated, but we add extra protection here
-    if (g_origEnumWindows)
-        return g_origEnumWindows(lpEnumFunc, lParam);
-    return EnumWindows(lpEnumFunc, lParam);
-}
-
-// Find our overlay window handle by class name
-inline void RegisterOverlayWindowForProtection(HWND hwnd) {
-    g_ourOverlayWnd = hwnd;
-}
-
-inline bool InstallWindowEnumProtection() {
-    // Find our overlay window by looking for our window class
-    // The overlay typically uses a specific window class
-    // We'll search by checking for top-level windows with WS_EX_NOACTIVATE
-    // that belong to our process
-
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) return false;
-
-    // Don't hook EnumWindows directly - Packman may detect hooks on user32
-    // Instead, make our overlay window harder to find:
-    // 1. Set window text to empty during scans
-    // 2. Remove any distinctive class name
-
-    // Find our overlay window (top-level, invisible to enumeration)
-    // by checking windows in our process with WS_EX_NOACTIVATE
-    struct EnumData {
-        DWORD pid;
-        HWND result;
-    };
-
-    EnumData data = { GetCurrentProcessId(), nullptr };
-
-    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
-        auto* d = reinterpret_cast<EnumData*>(lParam);
-        DWORD wndPid = 0;
-        GetWindowThreadProcessId(hwnd, &wndPid);
-        if (wndPid == d->pid) {
-            LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            if (style & WS_EX_NOACTIVATE) {
-                // Check if it's a layered window (overlay characteristic)
-                if (style & WS_EX_LAYERED) {
-                    d->result = hwnd;
-                    return FALSE;  // Stop enumeration
-                }
-            }
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&data));
-
-    if (data.result) {
-        g_ourOverlayWnd = data.result;
-
-        // Hide window from FindWindow by setting empty title
-        SetWindowTextW(g_ourOverlayWnd, L"");
-
-        // Add WS_EX_TOOLWINDOW to hide from Alt-Tab and taskbar
-        LONG_PTR exStyle = GetWindowLongPtrW(g_ourOverlayWnd, GWL_EXSTYLE);
-        SetWindowLongPtrW(g_ourOverlayWnd, GWL_EXSTYLE,
-            exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
-
-        char buf[128];
-        wsprintfA(buf, "[PackmanTest] Window enum protection: overlay 0x%p hidden\r\n",
-                 g_ourOverlayWnd);
-        WriteLog(buf);
-        return true;
+    void* found = PatternScan(
+        reinterpret_cast<const unsigned char*>(hStub),
+        mi.SizeOfImage, kPattern, kPatternLen);
+    if (!found) {
+        DbgLogFmt("[CRC] Install: pattern 49 8B 0E F3 44 0F 6F 04 29 NOT FOUND\r\n");
+        InterlockedExchange(&g_installed, 0);
+        return false;
     }
 
-    return false;
-}
+    DbgLogFmt("[CRC] Install: pattern found at stub.dll+0x%llX\r\n",
+              (unsigned long long)(reinterpret_cast<uintptr_t>(found) - 
+              reinterpret_cast<uintptr_t>(hStub)));
 
-// ── ULTIMATE installation with kernel comm blocking ──────────────────────────
-inline bool InstallUltimateProtectionV2(HMODULE ourModule = nullptr) {
-    // INCREMENTAL MODE: Syscall stubs + advanced bypasses only (SAFE)
-    // Step 1: Base installation (syscall stubs)
-    bool baseInstall = Install();
-    
-    // Step 2: Advanced bypasses (PEB, ETW, AMSI, stub protection, thread hiding, VEH)
-    BypassStatus advancedStatus = InstallAdvancedBypasses(ourModule);
-    
-    // Step 3: DISABLED - Comprehensive bypasses cause game crashes
-    // ComprehensiveBypassStatus comprehensiveStatus = InstallComprehensiveBypasses();
-    
-    // Memory scan evasion and window enum protection run DEFERRED from InstallAndLog
-    // (CreateThread + Sleep 2s) to avoid breaking CRT init and wait for overlay window
-    
-    // Step 4: DISABLED - Kernel comm blocking causes game crashes
-    // bool kernelCommBlocked = KernelComm::InstallKernelCommBlock();
-    
-    // Step 5: Log everything
-    LogAllStatus();
-    LogBypassStatus(advancedStatus);
-    
-    char buf[256] = {};
-    wsprintfA(buf, "[PackmanTest] INCREMENTAL MODE: Advanced bypasses enabled (SAFE)\r\n");
-    WriteLog(buf);
-    wsprintfA(buf, "[PackmanTest] ULTIMATE PROTECTION V2: %d/6 advanced bypasses active\r\n\r\n", 
-             advancedStatus.bypassCount);
-    WriteLog(buf);
-    
-    return baseInstall && (advancedStatus.bypassCount >= 4);
-}
+    g_hookAddr = reinterpret_cast<uintptr_t>(found);
+    g_jmpBack  = g_hookAddr + kHookSize;
+    DbgLogFmt("[CRC] hook tại stub.dll+0x%llX (abs 0x%llX), jmpBack=0x%llX\r\n",
+              (unsigned long long)(g_hookAddr - reinterpret_cast<uintptr_t>(hStub)),
+              (unsigned long long)g_hookAddr,
+              (unsigned long long)g_jmpBack);
 
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// STUB.DLL TARGETED ADDITIONS (verified against IDA dumps)
-// ───────────────────────────────────────────────────────────────────────────────
-// These are derived from direct analysis of the loaded stub.dll binary (both
-// the on-disk image and the x64dbg-unpacked dump). Findings:
-//   • stub.dll contains an ASCII signature "packman" alongside a Riot ANSI logo
-//     and a recruiting blurb — a reliable runtime marker.
-//   • stub.dll uses RDTSC 342×, CPUID 39×, RDTSCP 2× for in-binary anti-debug.
-//     It does NOT install the ntdll syscall hooks itself; those are installed
-//     by a sibling component (vgk.sys / vgc.exe). Detection-only helpers below.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ── Packman signature detection ──────────────────────────────────────────────
-// Scans loaded modules for the "Protected by packman" / "packman" markers.
-// Returns the module base if found, else 0. Much more reliable than inferring
-// Packman presence from indirect ntdll hook patterns.
-inline uintptr_t DetectPackmanSignature() {
-    static const char kSig1[] = "Protected by packman";
-    static const char kSig2[] = "packman";
-
-    __try {
-        PPEB_CUSTOM peb = reinterpret_cast<PPEB_CUSTOM>(__readgsqword(0x60));
-        if (!peb || !peb->Ldr) return 0;
-
-        PPEB_LDR_DATA_CUSTOM ldr = peb->Ldr;
-        PLIST_ENTRY head = &ldr->InLoadOrderModuleList;
-        PLIST_ENTRY cur = head->Flink;
-
-        while (cur && cur != head) {
-            auto* entry = reinterpret_cast<PLDR_DATA_TABLE_ENTRY_CUSTOM>(cur);
-            cur = entry->InLoadOrderLinks.Flink;
-
-            if (!entry->DllBase || !entry->SizeOfImage) continue;
-
-            // Walk the module's executable/readable sections only
-            auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(entry->DllBase);
-            if (dos->e_magic != IMAGE_DOS_SIGNATURE) continue;
-
-            auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
-                reinterpret_cast<uint8_t*>(entry->DllBase) + dos->e_lfanew);
-            if (nt->Signature != IMAGE_NT_SIGNATURE) continue;
-
-            auto* sec = IMAGE_FIRST_SECTION(nt);
-            for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
-                if (!(sec->Characteristics & IMAGE_SCN_MEM_READ)) continue;
-                if (sec->Misc.VirtualSize < sizeof(kSig1)) continue;
-
-                auto* base = reinterpret_cast<const char*>(entry->DllBase) + sec->VirtualAddress;
-                const SIZE_T size = sec->Misc.VirtualSize;
-
-                // Search for the stronger signature first
-                for (SIZE_T off = 0; off + sizeof(kSig1) - 1 <= size; ++off) {
-                    if (base[off] == 'P' &&
-                        std::strncmp(base + off, kSig1, sizeof(kSig1) - 1) == 0) {
-                        return reinterpret_cast<uintptr_t>(entry->DllBase);
-                    }
-                }
-            }
-        }
+    g_hookStub = BuildHookStub(
+        reinterpret_cast<uintptr_t>(&CheckMemoryBlocks),
+        reinterpret_cast<const unsigned char*>(g_hookAddr),
+        kHookSize,
+        g_jmpBack);
+    if (!g_hookStub) {
+        DbgLog("[CRC] Install: BuildHookStub FAIL\r\n");
+        InterlockedExchange(&g_installed, 0);
+        return false;
     }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        return 0;
+    DbgLogFmt("[CRC] hook stub @ %p (%zu bytes)\r\n",
+              g_hookStub, g_hookStubSize);
+
+    if (!WriteStubJmp(g_hookAddr,
+                      reinterpret_cast<uintptr_t>(g_hookStub),
+                      kHookSize)) {
+        DbgLogFmt("[CRC] Install: WriteStubJmp FAIL\r\n");
+        VirtualFree(g_hookStub, 0, MEM_RELEASE);
+        g_hookStub = nullptr;
+        InterlockedExchange(&g_installed, 0);
+        return false;
     }
 
-    (void)kSig2; // reserved for stricter cross-check if needed
-    return 0;
-}
-
-// ── RDTSC/RDTSCP bypass via VEH ──────────────────────────────────────────────
-// Catches EXCEPTION_PRIV_INSTRUCTION raised when CR4.TSD=1 makes RDTSC/RDTSCP
-// trap to ring 3. On standard Windows this is rarely set, so this VEH is a
-// no-op in practice — but it costs nothing and protects against hardened
-// environments (some kernel ACs enable TSD for the target process).
-inline volatile uint64_t g_fakeTscCounter = 0;
-
-static LONG CALLBACK RdtscCpuidVEH(PEXCEPTION_POINTERS ep) {
-    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_PRIV_INSTRUCTION)
-        return EXCEPTION_CONTINUE_SEARCH;
-
-    auto* ctx = ep->ContextRecord;
-    const uint8_t* rip = reinterpret_cast<const uint8_t*>(ctx->Rip);
-
-    // RDTSC = 0F 31 (2 bytes)
-    if (rip[0] == 0x0F && rip[1] == 0x31) {
-        const uint64_t tsc = (g_fakeTscCounter += 0x1000); // stable, monotonic
-        ctx->Rax = static_cast<DWORD>(tsc);
-        ctx->Rdx = static_cast<DWORD>(tsc >> 32);
-        ctx->Rip += 2;
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    // RDTSCP = 0F 01 F9 (3 bytes)
-    if (rip[0] == 0x0F && rip[1] == 0x01 && rip[2] == 0xF9) {
-        const uint64_t tsc = (g_fakeTscCounter += 0x1000);
-        ctx->Rax = static_cast<DWORD>(tsc);
-        ctx->Rdx = static_cast<DWORD>(tsc >> 32);
-        ctx->Rcx = 0; // IA32_TSC_AUX
-        ctx->Rip += 3;
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    // CPUID = 0F A2 (2 bytes) — only traps if UMIP enabled, rare in user mode
-    if (rip[0] == 0x0F && rip[1] == 0xA2) {
-        int regs[4] = {};
-        __cpuidex(regs, static_cast<int>(ctx->Rax), static_cast<int>(ctx->Rcx));
-        // Clear hypervisor-present bit (ECX bit 31) on leaf 1
-        if (ctx->Rax == 1) regs[2] &= ~(1u << 31);
-        ctx->Rax = static_cast<DWORD>(regs[0]);
-        ctx->Rbx = static_cast<DWORD>(regs[1]);
-        ctx->Rcx = static_cast<DWORD>(regs[2]);
-        ctx->Rdx = static_cast<DWORD>(regs[3]);
-        ctx->Rip += 2;
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-inline bool InstallRdtscBypassVEH() {
-    static volatile int s_installed = 0;
-    if (s_installed) return true;
-    // First handler in the chain so we see priv-instruction faults before SEH.
-    if (AddVectoredExceptionHandler(1, RdtscCpuidVEH) == nullptr) return false;
-    s_installed = 1;
+    DbgLogFmt("[CRC] === CRC Bypass Installed ===\r\n");
+    DbgLogFmt("[CRC]   hookAddr  = 0x%llX (stub.dll+0x%llX)\r\n",
+              (unsigned long long)g_hookAddr,
+              (unsigned long long)(g_hookAddr - reinterpret_cast<uintptr_t>(hStub)));
+    DbgLogFmt("[CRC]   hookStub  = %p (%zu bytes)\r\n", g_hookStub, g_hookStubSize);
+    DbgLogFmt("[CRC]   jmpBack   = 0x%llX\r\n", (unsigned long long)g_jmpBack);
+    DbgLogFmt("[CRC]   fakedRegions = %zu\r\n", g_fakedRegions.size());
+    DbgLogFmt("[CRC]   fakedReady   = %d\r\n", (int)g_fakedReady);
+    DbgLogFmt("[CRC] ============================\r\n");
     return true;
 }
 
-// ── CPUID spoof installer (delegates to the same VEH) ────────────────────────
-inline bool InstallCpuidSpoofVEH() {
-    // Reuses RdtscCpuidVEH; safe to call repeatedly.
-    return InstallRdtscBypassVEH();
+inline void Uninstall() {
+    if (InterlockedCompareExchange(&g_installed, 0, 1) != 1) return;
+    if (!g_hookAddr || g_originalStubBytes.size() != kHookSize) return;
+
+    DWORD oldProt = 0;
+    BOOL ok = DirectSyscall::VirtualProtectDirect(
+        reinterpret_cast<void*>(g_hookAddr), kHookSize,
+        PAGE_EXECUTE_WRITECOPY, &oldProt);
+    if (!ok) {
+        ok = VirtualProtect(reinterpret_cast<void*>(g_hookAddr), kHookSize,
+                            PAGE_EXECUTE_WRITECOPY, &oldProt) ||
+             VirtualProtect(reinterpret_cast<void*>(g_hookAddr), kHookSize,
+                            PAGE_EXECUTE_READWRITE, &oldProt);
+    }
+    if (ok) {
+        if (!DirectSyscall::WriteVirtualMemoryDirect(
+                reinterpret_cast<void*>(g_hookAddr),
+                g_originalStubBytes.data(), kHookSize)) {
+            __try {
+                memcpy(reinterpret_cast<void*>(g_hookAddr),
+                       g_originalStubBytes.data(), kHookSize);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+        DWORD dummy = 0;
+        DirectSyscall::VirtualProtectDirect(
+            reinterpret_cast<void*>(g_hookAddr), kHookSize, oldProt, &dummy);
+        FlushInstructionCache(GetCurrentProcess(),
+                              reinterpret_cast<void*>(g_hookAddr), kHookSize);
+    }
+
+    if (g_hookStub) {
+        VirtualFree(g_hookStub, 0, MEM_RELEASE);
+        g_hookStub = nullptr;
+    }
+    InterlockedExchange(&g_fakedReady, 0);
 }
 
-// ── Logging helper for the additions above ──────────────────────────────────
-inline void LogStubDllFindings() {
-    char buf[256] = {};
-    const uintptr_t pkBase = DetectPackmanSignature();
-    wsprintfA(buf, "\r\n[PackmanTest] --- stub.dll Findings ---\r\n");
-    WriteLog(buf);
-    wsprintfA(buf, "  Packman signature: %s  (base=0x%p)\r\n",
-              pkBase ? "FOUND" : "not found",
-              reinterpret_cast<void*>(pkBase));
-    WriteLog(buf);
-}
-
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// INTEGRITY CHECK BYPASS (stub.dll CRC verification)
-// ═══════════════════════════════════════════════════════════════════════════════
-// Pattern in stub.dll: 49 8B 0E F3 44 0F 6F 04 29
-// This hooks the memory integrity verification routine and provides fake
-// clean memory regions to pass CRC/hash checks while our modifications remain active.
-
-namespace IntegrityBypass {
-
-    // Forward declarations
-    inline void AddPatchAddress(uintptr_t address);
-
-    struct MemoryRegion {
-        uintptr_t address;
-        size_t size;
-    };
-
-    struct FakedMemoryRegion {
-        MemoryRegion region;
-        std::vector<uint8_t> bytes;
-    };
-
-    inline uintptr_t g_stubCheckJmpBackAddress = 0;
-    inline std::vector<uint8_t> g_originalStubBytes;
-    inline constexpr size_t g_crcCheckCount = 4;
-    inline std::vector<FakedMemoryRegion> g_fakedMemoryRegions;
-    inline CRITICAL_SECTION g_patchMutex;
-    inline volatile int g_integrityBypassActive = 0;
-
-    inline MemoryRegion GetMemoryRegion(uintptr_t address) {
-        MEMORY_BASIC_INFORMATION mbi = {};
-        VirtualQuery(reinterpret_cast<void*>(address), &mbi, sizeof(mbi));
-        return { reinterpret_cast<uintptr_t>(mbi.BaseAddress), mbi.RegionSize };
-    }
-
-    inline FakedMemoryRegion* FindFakedRegion(uintptr_t address) {
-        for (auto& region : g_fakedMemoryRegions) {
-            if (address >= region.region.address && 
-                address < region.region.address + region.region.size)
-                return &region;
-        }
-        return nullptr;
-    }
-
-    // Called from the hook - redirects integrity checks to clean fake memory
-    inline void CheckMemoryBlocks(uintptr_t r14, uintptr_t rbp) {
-        EnterCriticalSection(&g_patchMutex);
-        
-        for (size_t i = 0; i < g_crcCheckCount; i++) {
-            uintptr_t* pAddress = reinterpret_cast<uintptr_t*>(r14 + i * sizeof(uintptr_t));
-            uintptr_t address = *pAddress;
-            
-            auto* fakeRegion = FindFakedRegion(address);
-            if (fakeRegion) {
-                uintptr_t offset = address - fakeRegion->region.address;
-                uintptr_t fakeAddress = reinterpret_cast<uintptr_t>(
-                    fakeRegion->bytes.data() + offset);
-                *pAddress = fakeAddress;
-            }
-        }
-        
-        LeaveCriticalSection(&g_patchMutex);
-    }
-
-    // x64 shellcode hook - dynamically generated at runtime
-    // This avoids the __declspec(naked) limitation in x64 MSVC
-    inline uint8_t* BuildStubCheckHook() {
-        // Allocate executable memory for our hook shellcode
-        auto* hookMem = reinterpret_cast<uint8_t*>(VirtualAlloc(
-            nullptr, 256, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-        if (!hookMem) return nullptr;
-
-        size_t offset = 0;
-
-        // Save all registers (push rax through r15)
-        hookMem[offset++] = 0x50; // push rax
-        hookMem[offset++] = 0x51; // push rcx
-        hookMem[offset++] = 0x52; // push rdx
-        hookMem[offset++] = 0x53; // push rbx
-        hookMem[offset++] = 0x55; // push rbp
-        hookMem[offset++] = 0x57; // push rdi
-        hookMem[offset++] = 0x56; // push rsi
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x50; // push r8
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x51; // push r9
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x52; // push r10
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x53; // push r11
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x54; // push r12
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x55; // push r13
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x56; // push r14
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x57; // push r15
-        hookMem[offset++] = 0x9C; // pushfq
-
-        // Reserve shadow space (32 bytes) for x64 calling convention
-        hookMem[offset++] = 0x48; hookMem[offset++] = 0x83; hookMem[offset++] = 0xEC; hookMem[offset++] = 0x20;
-
-        // mov rcx, r14 (first parameter)
-        hookMem[offset++] = 0x4C; hookMem[offset++] = 0x89; hookMem[offset++] = 0xF1;
-        
-        // mov rdx, rbp (second parameter)
-        hookMem[offset++] = 0x48; hookMem[offset++] = 0x89; hookMem[offset++] = 0xEA;
-
-        // call CheckMemoryBlocks (absolute address)
-        hookMem[offset++] = 0x48; hookMem[offset++] = 0xB8; // mov rax, imm64
-        *reinterpret_cast<uintptr_t*>(&hookMem[offset]) = reinterpret_cast<uintptr_t>(&CheckMemoryBlocks);
-        offset += 8;
-        hookMem[offset++] = 0xFF; hookMem[offset++] = 0xD0; // call rax
-
-        // Restore shadow space
-        hookMem[offset++] = 0x48; hookMem[offset++] = 0x83; hookMem[offset++] = 0xC4; hookMem[offset++] = 0x20;
-
-        // Restore all registers
-        hookMem[offset++] = 0x9D; // popfq
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x5F; // pop r15
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x5E; // pop r14
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x5D; // pop r13
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x5C; // pop r12
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x5B; // pop r11
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x5A; // pop r10
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x59; // pop r9
-        hookMem[offset++] = 0x41; hookMem[offset++] = 0x58; // pop r8
-        hookMem[offset++] = 0x5E; // pop rsi
-        hookMem[offset++] = 0x5F; // pop rdi
-        hookMem[offset++] = 0x5D; // pop rbp
-        hookMem[offset++] = 0x5B; // pop rbx
-        hookMem[offset++] = 0x5A; // pop rdx
-        hookMem[offset++] = 0x59; // pop rcx
-        hookMem[offset++] = 0x58; // pop rax
-
-        // Original instructions: mov rcx, [r14]
-        hookMem[offset++] = 0x49; hookMem[offset++] = 0x8B; hookMem[offset++] = 0x0E;
-        
-        // movdqu xmm8, [rcx + rbp]
-        hookMem[offset++] = 0xF3; hookMem[offset++] = 0x44; 
-        hookMem[offset++] = 0x0F; hookMem[offset++] = 0x6F; 
-        hookMem[offset++] = 0x04; hookMem[offset++] = 0x29;
-
-        // movdqa [rsp + 0x120], xmm8
-        hookMem[offset++] = 0x66; hookMem[offset++] = 0x44;
-        hookMem[offset++] = 0x0F; hookMem[offset++] = 0x7F;
-        hookMem[offset++] = 0x84; hookMem[offset++] = 0x24;
-        *reinterpret_cast<uint32_t*>(&hookMem[offset]) = 0x120;
-        offset += 4;
-
-        // jmp to return address (absolute)
-        hookMem[offset++] = 0xFF; hookMem[offset++] = 0x25; // jmp [rip+0]
-        *reinterpret_cast<uint32_t*>(&hookMem[offset]) = 0;
-        offset += 4;
-        *reinterpret_cast<uintptr_t*>(&hookMem[offset]) = g_stubCheckJmpBackAddress;
-        offset += 8;
-
-        FlushInstructionCache(GetCurrentProcess(), hookMem, offset);
-        return hookMem;
-    }
-
-    // Helper: change page protection using direct syscall (bypasses ntdll hooks)
-    // Uses our clean NtProtectVirtualMemory syscall stub, NOT VirtualProtect.
-    // VirtualProtect goes through hooked ntdll and gets blocked by Packman.
-    // Our direct syscall stub bypasses the ntdll hook entirely.
-    inline bool SyscallProtect(void* addr, SIZE_T sz, ULONG newProt, ULONG* oldProt) {
-        DWORD oldProt2 = 0;
-        BOOL ok = Syscall::ProtectMemory(addr, sz, static_cast<DWORD>(newProt), &oldProt2);
-        if (oldProt) *oldProt = static_cast<ULONG>(oldProt2);
-        if (!ok) {
-            // Fallback to regular VirtualProtect (rarely works but try anyway)
-            ok = VirtualProtect(addr, sz, static_cast<DWORD>(newProt), &oldProt2);
-            if (oldProt) *oldProt = static_cast<ULONG>(oldProt2);
-        }
-        return ok != 0;
-    }
-
-    // NtUnmapViewOfSection function pointer type
-    typedef LONG(NTAPI* NtUnmapViewOfSectionFn)(HANDLE, PVOID);
-
-    // Resolve NtUnmapViewOfSection from ntdll (not typically hooked by Packman)
-    inline NtUnmapViewOfSectionFn GetNtUnmapViewOfSection() {
-        static NtUnmapViewOfSectionFn fn = nullptr;
-        if (!fn) {
-            HMODULE ntdll = GetModuleHandleA("ntdll.dll");
-            if (ntdll) {
-                fn = reinterpret_cast<NtUnmapViewOfSectionFn>(
-                    GetProcAddress(ntdll, "NtUnmapViewOfSection"));
-            }
-        }
-        return fn;
-    }
-
-    // Plain-C memcpy wrapper for SEH (no C++ objects with destructors)
-    inline bool SafeMemCpy(void* dst, const void* src, SIZE_T size) {
-        __try {
-            std::memcpy(dst, src, size);
-            return true;
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER) {
-            return false;
-        }
-    }
-
-    // Unmap stub.dll's section and realloc as writable memory.
-    // This bypasses image-mapped section protection that even direct
-    // NtProtectVirtualMemory can't change.
-    // Returns true if the region at 'address' is now writable.
-    inline bool RemapSectionWritable(uintptr_t address, size_t hookSize) {
-        // Get the allocation base (entire image) for stub.dll
-        MEMORY_BASIC_INFORMATION mbi = {};
-        if (!VirtualQuery(reinterpret_cast<void*>(address), &mbi, sizeof(mbi)))
-            return false;
-
-        uintptr_t imageBase = reinterpret_cast<uintptr_t>(mbi.AllocationBase);
-        SIZE_T imageSize = 0;
-
-        // Get full image size from PE headers
-        auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(imageBase);
-        if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
-        auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(imageBase + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
-        imageSize = nt->OptionalHeader.SizeOfImage;
-
-        if (imageSize == 0) return false;
-
-        // Save entire image bytes (use heap allocation, not vector, for SEH compat)
-        uint8_t* imageBackup = static_cast<uint8_t*>(HeapAlloc(GetProcessHeap(), 0, imageSize));
-        if (!imageBackup) return false;
-
-        if (!SafeMemCpy(imageBackup, reinterpret_cast<void*>(imageBase), imageSize)) {
-            WriteLog("[PackmanTest] RemapSection: failed to backup image\r\n");
-            HeapFree(GetProcessHeap(), 0, imageBackup);
-            return false;
-        }
-
-        // Unmap the section view
-        auto unmapFn = GetNtUnmapViewOfSection();
-        if (!unmapFn) {
-            WriteLog("[PackmanTest] RemapSection: NtUnmapViewOfSection not found\r\n");
-            HeapFree(GetProcessHeap(), 0, imageBackup);
-            return false;
-        }
-
-        LONG status = unmapFn(GetCurrentProcess(), reinterpret_cast<PVOID>(imageBase));
-        if (status < 0) {
-            char buf[128];
-            wsprintfA(buf, "[PackmanTest] RemapSection: NtUnmapViewOfSection failed (status=0x%lX)\r\n", (unsigned long)status);
-            WriteLog(buf);
-            HeapFree(GetProcessHeap(), 0, imageBackup);
-            return false;
-        }
-
-        // Reallocate at the same address with RWX
-        void* newMem = VirtualAlloc(reinterpret_cast<void*>(imageBase), imageSize,
-                                    MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-        if (!newMem) {
-            // Try without exact address
-            newMem = VirtualAlloc(nullptr, imageSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-            if (!newMem) {
-                WriteLog("[PackmanTest] RemapSection: VirtualAlloc failed\r\n");
-                HeapFree(GetProcessHeap(), 0, imageBackup);
-                return false;
-            }
-            // If we got a different address, we can't use this approach
-            // The image needs to be at the same address for relocations
-            char buf[256];
-            wsprintfA(buf, "[PackmanTest] RemapSection: got different address 0x%p (wanted 0x%p)\r\n",
-                     newMem, reinterpret_cast<void*>(imageBase));
-            WriteLog(buf);
-            VirtualFree(newMem, 0, MEM_RELEASE);
-            HeapFree(GetProcessHeap(), 0, imageBackup);
-            return false;
-        }
-
-        // Copy back the image bytes
-        std::memcpy(reinterpret_cast<void*>(imageBase), imageBackup, imageSize);
-        HeapFree(GetProcessHeap(), 0, imageBackup);
-
-        char buf[256];
-        wsprintfA(buf, "[PackmanTest] RemapSection: success! image 0x%p size 0x%llX now RWX\r\n",
-                 reinterpret_cast<void*>(imageBase), (unsigned long long)imageSize);
-        WriteLog(buf);
-
-        return true;
-    }
-
-
-    inline bool WriteStubJmp(uintptr_t address, uintptr_t destination, size_t size) {
-        // Register each byte with CRC bypass BEFORE saving and modifying.
-        // AddPatchAddress copies the entire memory region containing this address
-        // into a faked region. When CRC check reads this address, CheckMemoryBlocks
-        // redirects it to the faked copy (original bytes), not our hook.
-        // MUST be called before we write any modifications.
-        for (size_t i = 0; i < size; i++) {
-            AddPatchAddress(address + i);
-        }
-
-        // Save original bytes (for uninstall)
-        for (size_t i = 0; i < size; i++) {
-            g_originalStubBytes.push_back(*reinterpret_cast<uint8_t*>(address + i));
-        }
-
-        // Strategy 1: Use direct NtProtectVirtualMemory syscall (bypasses ntdll hooks)
-        ULONG oldProtect = 0;
-        bool protectOk = SyscallProtect(
-            reinterpret_cast<void*>(address), size,
-            PAGE_EXECUTE_READWRITE, &oldProtect);
-
-        if (!protectOk) {
-            // Strategy 2: Try protecting the entire region
-            MEMORY_BASIC_INFORMATION mbi = {};
-            VirtualQuery(reinterpret_cast<void*>(address), &mbi, sizeof(mbi));
-            protectOk = SyscallProtect(
-                mbi.BaseAddress, mbi.RegionSize,
-                PAGE_EXECUTE_READWRITE, &oldProtect);
-        }
-
-        if (!protectOk) {
-            // Strategy 3: Unmap the image section and realloc as writable memory.
-            // This is needed for image-mapped sections where even direct
-            // NtProtectVirtualMemory can't change the page protection.
-            // Technique from unknowncheats CRC bypass reference.
-            WriteLog("[PackmanTest] WriteStubJmp: direct syscall failed, trying unmap/remap...\r\n");
-
-            if (!RemapSectionWritable(address, size)) {
-                char logBuf[256];
-                DWORD err = GetLastError();
-                wsprintfA(logBuf,
-                    "[PackmanTest] WriteStubJmp: all strategies failed "
-                    "(addr=0x%p, size=%u, err=%lu)\r\n",
-                    reinterpret_cast<void*>(address), (unsigned)size, err);
-                WriteLog(logBuf);
-                g_originalStubBytes.clear();
-                return false;
-            }
-
-            // After remap, memory is RWX - no need for protect/unprotect
-            protectOk = true;
-            oldProtect = PAGE_EXECUTE_READWRITE; // will restore to this (already RWX)
-        }
-
-        // Write 14-byte absolute jump: FF 25 00 00 00 00 [8-byte address]
-        __try {
-            *reinterpret_cast<uint8_t*>(address) = 0xFF;
-            *reinterpret_cast<uint8_t*>(address + 1) = 0x25;
-            *reinterpret_cast<uint32_t*>(address + 2) = 0x00000000;
-            *reinterpret_cast<uintptr_t*>(address + 6) = destination;
-
-            // Fill remaining bytes with NOP
-            for (size_t i = 14; i < size; i++) {
-                *reinterpret_cast<uint8_t*>(address + i) = 0x90;
-            }
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER) {
-            WriteLog("[PackmanTest] WriteStubJmp: exception during byte write\r\n");
-            // Attempt to restore protection even on failure
-            SyscallProtect(reinterpret_cast<void*>(address), size, oldProtect, nullptr);
-            return false;
-        }
-
-        // Restore original protection
-        SyscallProtect(reinterpret_cast<void*>(address), size, oldProtect, nullptr);
-        FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(address), size);
-        
-        return true;
-    }
-
-    inline bool InstallIntegrityBypass() {
-        if (g_integrityBypassActive) return true;
-        
-        __try {
-            InitializeCriticalSection(&g_patchMutex);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER) {
-            return true;  // Non-critical failure
-        }
-        
-        HMODULE stubDll = GetModuleHandleA("stub.dll");
-        if (!stubDll) {
-            char buf[256];
-            wsprintfA(buf, "[PackmanTest] stub.dll not loaded - will retry when detected\r\n");
-            WriteLog(buf);
-            return true;  // Not a failure, stub.dll loads later
-        }
-
-        // Try multiple patterns - stub.dll may have variations
-        const uint8_t pattern1[] = { 0x49, 0x8B, 0x0E, 0xF3, 0x44, 0x0F, 0x6F, 0x04, 0x29 };
-        const uint8_t pattern2[] = { 0x4C, 0x8B, 0x06, 0xF3, 0x44, 0x0F, 0x6F }; // Shorter variant
-        const uint8_t pattern3[] = { 0xF3, 0x44, 0x0F, 0x6F, 0x04 }; // Core SIMD instruction
-        
-        uintptr_t hookLocation = FindPatternInModule(stubDll, pattern1, sizeof(pattern1));
-        if (!hookLocation) {
-            char buf[256];
-            wsprintfA(buf, "[PackmanTest] Primary pattern not found, trying alternatives...\r\n");
-            WriteLog(buf);
-            
-            hookLocation = FindPatternInModule(stubDll, pattern2, sizeof(pattern2));
-            if (!hookLocation) {
-                hookLocation = FindPatternInModule(stubDll, pattern3, sizeof(pattern3));
-            }
-        }
-        
-        if (!hookLocation) {
-            char buf[256];
-            wsprintfA(buf, "[PackmanTest] Integrity patterns not found - may not be needed for this version\r\n");
-            WriteLog(buf);
-            return true; // Non-critical, don't block installation
-        }
-
-        // Hook size: 19 bytes = 3 original instructions (3+6+10)
-        // mov rcx,[r14] (3) + movdqu xmm8,[rcx+rbp] (6) + movdqa [rsp+0x120],xmm8 (10)
-        // 14-byte jmp + 5 NOP padding
-        const size_t hookSize = 19;
-        
-        g_stubCheckJmpBackAddress = hookLocation + hookSize;
-        
-        // Build the hook shellcode dynamically
-        uint8_t* hookShellcode = BuildStubCheckHook();
-        if (!hookShellcode) {
-            char buf[128];
-            wsprintfA(buf, "[PackmanTest] Failed to build integrity bypass hook\r\n");
-            WriteLog(buf);
-            return false;
-        }
-        
-        if (!WriteStubJmp(hookLocation, reinterpret_cast<uintptr_t>(hookShellcode), hookSize)) {
-            char buf[128];
-            wsprintfA(buf, "[PackmanTest] Failed to install integrity bypass hook\r\n");
-            WriteLog(buf);
-            VirtualFree(hookShellcode, 0, MEM_RELEASE);
-            return false;
-        }
-
-        g_integrityBypassActive = 1;
-        
-        char buf[256];
-        wsprintfA(buf, "[PackmanTest] Integrity bypass installed at 0x%p -> 0x%p (jmp back: 0x%p)\r\n", 
-                 reinterpret_cast<void*>(hookLocation),
-                 reinterpret_cast<void*>(hookShellcode),
-                 reinterpret_cast<void*>(g_stubCheckJmpBackAddress));
-        WriteLog(buf);
-        
-        return true;
-    }
-
-    inline void AddPatchAddress(uintptr_t address) {
-        EnterCriticalSection(&g_patchMutex);
-        
-        // Check if already faked
-        if (FindFakedRegion(address)) {
-            LeaveCriticalSection(&g_patchMutex);
-            return;
-        }
-
-        // Get memory region and create fake copy
-        MemoryRegion region = GetMemoryRegion(address);
-        FakedMemoryRegion fakedRegion;
-        fakedRegion.region = region;
-        fakedRegion.bytes.resize(region.size);
-        
-        // Copy original clean bytes
-        std::memcpy(fakedRegion.bytes.data(), 
-                   reinterpret_cast<void*>(region.address), 
-                   region.size);
-        
-        g_fakedMemoryRegions.push_back(std::move(fakedRegion));
-        
-        LeaveCriticalSection(&g_patchMutex);
-        
-        char buf[256];
-        wsprintfA(buf, "[PackmanTest] Added fake region: 0x%p (size: 0x%X)\r\n",
-                 reinterpret_cast<void*>(region.address), (unsigned)region.size);
-        WriteLog(buf);
-    }
-
-    inline bool UninstallIntegrityBypass() {
-        if (!g_integrityBypassActive) return false;
-
-        HMODULE stubDll = GetModuleHandleA("stub.dll");
-        if (!stubDll) return false;
-
-        const uint8_t pattern[] = { 0x49, 0x8B, 0x0E, 0xF3, 0x44, 0x0F, 0x6F, 0x04, 0x29 };
-        uintptr_t hookLocation = FindPatternInModule(stubDll, pattern, sizeof(pattern));
-        
-        if (hookLocation && !g_originalStubBytes.empty()) {
-            DWORD oldProtect = 0;
-            MEMORY_BASIC_INFORMATION mbi = {};
-            VirtualQuery(reinterpret_cast<void*>(hookLocation), &mbi, sizeof(mbi));
-            
-            if (VirtualProtect(mbi.BaseAddress, mbi.RegionSize, PAGE_EXECUTE_READWRITE, &oldProtect)) {
-                // Restore original bytes
-                for (size_t i = 0; i < g_originalStubBytes.size() && i < 14; i++) {
-                    *reinterpret_cast<uint8_t*>(hookLocation + i) = g_originalStubBytes[i];
-                }
-                VirtualProtect(mbi.BaseAddress, mbi.RegionSize, oldProtect, &oldProtect);
-                FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(hookLocation), 14);
-            }
-        }
-
-        EnterCriticalSection(&g_patchMutex);
-        g_fakedMemoryRegions.clear();
-        g_originalStubBytes.clear();
-        LeaveCriticalSection(&g_patchMutex);
-        
-        DeleteCriticalSection(&g_patchMutex);
-        g_integrityBypassActive = 0;
-        
-        return true;
-    }
-
-    inline void LogIntegrityBypassStatus() {
-        char buf[256];
-        wsprintfA(buf, "\r\n[PackmanTest] --- Integrity Bypass Status ---\r\n");
-        WriteLog(buf);
-        
-        wsprintfA(buf, "  Status: %s\r\n", g_integrityBypassActive ? "Active" : "Inactive");
-        WriteLog(buf);
-        
-        wsprintfA(buf, "  Faked Regions: %u\r\n", (unsigned)g_fakedMemoryRegions.size());
-        WriteLog(buf);
-        
-        if (g_stubCheckJmpBackAddress) {
-            wsprintfA(buf, "  Hook Address: 0x%p\r\n", 
-                     reinterpret_cast<void*>(g_stubCheckJmpBackAddress - 14));
-            WriteLog(buf);
-        } else {
-            wsprintfA(buf, "  Hook Address: Not installed\r\n");
-            WriteLog(buf);
-        }
-        
-        // Log each faked region
-        if (!g_fakedMemoryRegions.empty()) {
-            wsprintfA(buf, "  Protected Memory Regions:\r\n");
-            WriteLog(buf);
-            for (size_t i = 0; i < g_fakedMemoryRegions.size(); ++i) {
-                wsprintfA(buf, "    [%u] 0x%p - 0x%p (size: 0x%X)\r\n",
-                         (unsigned)i,
-                         reinterpret_cast<void*>(g_fakedMemoryRegions[i].region.address),
-                         reinterpret_cast<void*>(g_fakedMemoryRegions[i].region.address + 
-                                                g_fakedMemoryRegions[i].region.size),
-                         g_fakedMemoryRegions[i].region.size);
-                WriteLog(buf);
-            }
-        }
-        
-        wsprintfA(buf, "\r\n");
-        WriteLog(buf);
-    }
-
-} // namespace IntegrityBypass
-
-// ── InstallAndLog - Main entry point with full protection ────────────────────
-// Full install + detect + log in one call. Use as the FIRST init step.
-// Now calls InstallUltimateProtectionV2() with advanced bypasses enabled
-inline bool InstallAndLog(HMODULE ourModule = nullptr) {
-    std::remove(kLogPath);
-    
-    // Step 1: Base install (syscall stubs + hook detection + advanced bypasses)
-    // Don't pass ourModule to InstallUltimateProtectionV2 - UnlinkModuleFromPEB
-    // crashes in manual map (module not in PEB loader list)
-    bool ok = InstallUltimateProtectionV2(nullptr);
-    
-    // Step 2: Install VEH bypasses for RDTSC/CPUID (stub.dll anti-debug)
-    InstallRdtscBypassVEH();
-    InstallCpuidSpoofVEH();
-    
-    // Step 3: LAZY integrity bypass - will install when stub.dll is detected
-    bool integrityBypass = false;
-    HMODULE stubDll = GetModuleHandleA("stub.dll");
-    if (stubDll) {
-        integrityBypass = IntegrityBypass::InstallIntegrityBypass();
-        IntegrityBypass::LogIntegrityBypassStatus();
-    } else {
-        char buf[128];
-        wsprintfA(buf, "[PackmanTest] stub.dll not loaded yet - integrity bypass will install on first detection\r\n");
-        WriteLog(buf);
-        integrityBypass = true;
-    }
-    
-    // Step 3b: Deferred bypasses - these must NOT run during DllMain
-    // Zeroing PE headers during DllMain breaks CRT init and exception handling
-    // Overlay window doesn't exist yet either
-    // Use raw CreateThread (not std::thread) to avoid CRT issues in manually mapped DLLs
-    if (ourModule) {
-        CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
-            HMODULE hMod = reinterpret_cast<HMODULE>(param);
-
-            // Wait 2 seconds for DllMain to fully complete and CRT to settle
-            Sleep(2000);
-
-            // Memory scan evasion - zero our DLL PE headers
-            if (EvadeMemoryScanAdvanced(hMod)) {
-                char buf[128];
-                wsprintfA(buf, "[PackmanTest] Memory Scan Evasion: Active (deferred)\r\n");
-                WriteLog(buf);
-            } else {
-                char buf[128];
-                wsprintfA(buf, "[PackmanTest] Memory Scan Evasion: Failed (deferred)\r\n");
-                WriteLog(buf);
-            }
-
-            // Window enumeration protection - wait for overlay window
-            for (int i = 0; i < 56; i++) {  // 28 more seconds
-                Sleep(500);
-                if (InstallWindowEnumProtection()) {
-                    char buf[128];
-                    wsprintfA(buf, "[PackmanTest] Window Enum Protection: Active (deferred)\r\n");
-                    WriteLog(buf);
-                    break;
-                }
-            }
+} // namespace CRCBypass
+
+// ── Deferred installer ───────────────────────────────────────────────────────
+
+inline volatile LONG g_crcInstallStarted = 0;
+
+// DeferredCRCInstallThread: alternative installer (dùng khi cần
+// spawn riêng, không gộp vào BootstrapWorker). Hiện không dùng trong
+// dllmain.cpp vì BootstrapWorker đã cover logic này. Giữ lại cho reference.
+inline DWORD WINAPI DeferredCRCInstallThread(LPVOID) {
+    DbgLogTs("[CRC] Deferred thread: init direct syscalls...\r\n");
+    DirectSyscall::InitAll();
+    DirectSyscall::DumpSyscallTable();
+
+    DbgLogTs("[CRC] Deferred thread: chờ stub.dll load (max 60s)\r\n");
+    for (int i = 0; i < 120; ++i) {
+        DirectSyscall::StealthSleep(500);
+        if (GetModuleHandleA("stub.dll")) {
+            DbgLogFmt("[CRC] Deferred: stub.dll xuất hiện sau %d ms, install...\r\n",
+                      (i + 1) * 500);
+            CRCBypass::Install();
             return 0;
-        }, reinterpret_cast<LPVOID>(ourModule), 0, nullptr);
+        }
     }
-    
-    // Step 4: Log stub.dll findings (Packman signature detection)
-    LogStubDllFindings();
-    
-    char buf[256];
-    wsprintfA(buf, "[PackmanTest] Installation complete: Base=%s, Integrity=%s\r\n\r\n",
-             ok ? "OK" : "FAILED",
-             integrityBypass ? "PENDING/OK" : "FAILED");
-    WriteLog(buf);
-    
-    return ok;  // Don't block on integrity bypass since it's lazy
+    DbgLogTs("[CRC] Deferred: stub.dll KHÔNG load trong 60s, bỏ\r\n");
+    return 0;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PUBLIC API - Convenience wrappers for external use
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Register a memory address that should be protected from integrity checks
-// Call this BEFORE modifying any game memory to ensure CRC checks see clean bytes
-inline void ProtectMemoryFromIntegrityCheck(uintptr_t address) {
-    if (!g_installed) Install();
-    IntegrityBypass::AddPatchAddress(address);
+// ── Init log ─────────────────────────────────────────────────────────────────
+// Xoá file log cũ khi DLL load để mỗi session có log riêng.
+inline void ResetLogFile() {
+    DeleteFileA(GetLogPath());
 }
-
-// Full initialization with all protections enabled
-inline bool InitializeFullProtection(HMODULE ourModule = nullptr) {
-    return InstallAndLog(ourModule);
-}
-
-// Check if integrity bypass is active
-inline bool IsIntegrityBypassActive() {
-    return IntegrityBypass::g_integrityBypassActive != 0;
-}
-
-// Get count of protected memory regions
-inline size_t GetProtectedRegionCount() {
-    return IntegrityBypass::g_fakedMemoryRegions.size();
-}
-
-// ── Lazy integrity bypass installer ─────────────────────────────────────────
-// Call this periodically to check if stub.dll has loaded and install the hook
-inline bool TryInstallIntegrityBypassLazy() {
-    // Already installed
-    if (IntegrityBypass::g_integrityBypassActive) return true;
-    
-    // Check if stub.dll is now loaded
-    HMODULE stubDll = GetModuleHandleA("stub.dll");
-    if (!stubDll) return false;
-    
-    // Install the bypass now
-    char buf[128];
-    wsprintfA(buf, "[PackmanTest] stub.dll detected - installing integrity bypass now\r\n");
-    WriteLog(buf);
-    
-    bool success = IntegrityBypass::InstallIntegrityBypass();
-    IntegrityBypass::LogIntegrityBypassStatus();
-    
-    return success;
-}
-
-} // namespace PackmanTest

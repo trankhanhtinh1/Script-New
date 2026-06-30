@@ -21,6 +21,7 @@
 #include <intrin.h>
 
 #include "offset.h"
+#include "Core/PackmanHook.h"
 
 #ifndef NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL
 #define NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL 0
@@ -438,8 +439,10 @@ struct RawAsmDetour {
                 return false;
             }
 
+            // Alloc as RW first, write code, then protect to RX
+            // so VAD scan sees PAGE_EXECUTE_READ (not RWX)
             trampolineAddr = reinterpret_cast<uintptr_t>(VirtualAlloc(
-                nullptr, 256, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+                nullptr, 256, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
             if (!trampolineAddr) {
                 lastStatus = kInst_VAllocFail;
                 return false;
@@ -492,6 +495,15 @@ struct RawAsmDetour {
             p[off++] = 0xFF; p[off++] = 0x25;
             *reinterpret_cast<int32_t*>(p + off) = 0; off += 4;
             *reinterpret_cast<uintptr_t*>(p + off) = target + stolenSize; off += 8;
+            // Reprotect trampoline: RW → RX (no W) to avoid RWX VAD flag
+            DWORD trampOld = 0;
+            if (!stealth::VirtualProtectDirect(reinterpret_cast<void*>(trampolineAddr), 256,
+                                               PAGE_EXECUTE_READ, &trampOld)) {
+                DbgLogFmt("[TRAMP] VirtualProtect RW→RX failed tramp=%p gle=%lu\r\n",
+                          (void*)trampolineAddr, GetLastError());
+            } else {
+                DbgLogFmt("[TRAMP] RW→RX ok tramp=%p\r\n", (void*)trampolineAddr);
+            }
             FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(trampolineAddr), off);
 
             DWORD oldProt = 0;
@@ -1089,14 +1101,26 @@ inline bool InstallHook(HookId id) {
     }
 
     const uintptr_t installRva = HookInstallRva(id);
-    const bool ok = d.Install(base + installRva, reinterpret_cast<uintptr_t>(&Logger));
+    const uintptr_t targetAddr = base + installRva;
+
+    // CRC Bypass: backup memory region trước khi patch
+    // Khi CRC scan đọc vùng này, CheckMemoryBlocks sẽ redirect sang bản backup
+    DbgLogFmt("[CRC] %s CRC Bypass: registering target 0x%llX (stolen=%d bytes)\r\n",
+              kHookSpecs[id].name, (unsigned long long)targetAddr, CoreEventHook::detail::kJmpPatchSize);
+    for (int i = 0; i < CoreEventHook::detail::kJmpPatchSize; ++i) {
+        CRCBypass::AddPatchAddress(targetAddr + i);
+    }
+    DbgLogFmt("[CRC] %s CRC Bypass: fakedRegions=%zu fakedReady=%d\r\n",
+              kHookSpecs[id].name, CRCBypass::g_fakedRegions.size(), (int)CRCBypass::g_fakedReady);
+
+    const bool ok = d.Install(targetAddr, reinterpret_cast<uintptr_t>(&Logger));
     g_status[id] = d.lastStatus;
     Logf(
         "Inline+EPT single %-24s rva=0x%llX installRva=0x%llX target=%p status=%s stolen=%d tramp=%p%s%s",
         kHookSpecs[id].name,
         (unsigned long long)kHookSpecs[id].rva,
         (unsigned long long)installRva,
-        (void*)(base + installRva),
+        (void*)targetAddr,
         StatusLabel(d.lastStatus),
         d.stolenSize,
         (void*)d.trampolineAddr,

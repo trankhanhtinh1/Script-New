@@ -16,9 +16,8 @@
 #include "DebugLog.h"
 #include "overlay/D3D11Hook.h"
 
-// PackmanHook disabled — CRC bypass not yet stable
-// #include "Core/PackmanHook.h"
-// using namespace PackmanTest;
+#include "Core/PackmanHook.h"
+#pragma comment(lib, "psapi.lib")
 
 #pragma comment(lib, "user32.lib")
 
@@ -173,20 +172,42 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     (void)reserved;
 
     switch (reason) {
-    case DLL_PROCESS_ATTACH:
+    case DLL_PROCESS_ATTACH: {
         DisableThreadLibraryCalls(hModule);
         NightSharpDebug::CrashReporter::Install(hModule);
         NightSharpDebug::Phase("dll-attach");
         NightSharpDebug::Logf("[NightSharp] DllMain attach module=%p", hModule);
-        // PackmanHook disabled — CRC bypass not yet stable
-        // PackmanTest::InstallAndLog(hModule);
+
+        // PEB.BeingDebugged = 0 — Packman checks IsDebuggerPresent
+        {
+            auto* peb = reinterpret_cast<uint8_t*>(__readgsqword(0x60));
+            if (peb) {
+                uint8_t& beingDebugged = peb[2];
+                const uint8_t old = beingDebugged;
+                beingDebugged = 0;
+                DbgLogFmt("[PEB] BeingDebugged cleared: old=%u new=0 peb=%p\r\n",
+                          (unsigned)old, (void*)peb);
+            } else {
+                DbgLogFmt("[PEB] Failed to read PEB from GS:0x60\r\n");
+            }
+        }
+
+        // PackmanHook: reset log + init syscalls + deferred CRC bypass install
+        ResetLogFile();
+        DirectSyscall::InitAll();
+        DirectSyscall::DumpSyscallTable();
+        HANDLE hCrc = CreateThread(nullptr, 0, DeferredCRCInstallThread, nullptr, 0, nullptr);
+        if (hCrc) CloseHandle(hCrc);
+
         StartOverlayWorker();
         break;
+    }
     case DLL_PROCESS_DETACH:
         NightSharpDebug::Phase("dll-detach");
         NightSharpDebug::Logf("[NightSharp] DllMain detach");
         D3D11Hook::RequestShutdown();
         D3D11Hook::Uninstall();
+        CRCBypass::Uninstall();
         NightSharpDebug::CrashReporter::Uninstall();
         break;
     default:
