@@ -331,14 +331,11 @@ private:
         const Vec3 rawPosition = Globals::IsValidPtr(target)
             ? Globals::Read<Vec3>(target + Offset::All::Position)
             : Vec3();
-        const bool rawVisible = Globals::IsValidPtr(target) &&
-            Globals::Read<std::uint8_t>(target + Offset::All::Visible) != 0;
+        const bool rawVisible = unit.IsVisible();
         const bool rawTargetable = Globals::IsValidPtr(target) &&
             Globals::Read<std::uint8_t>(
                 target + Offset::AttackableUnit::IsTargetable) != 0;
-        const bool rawInvulnerable = Globals::IsValidPtr(target) &&
-            Globals::Read<std::uint8_t>(
-                target + Offset::All::IsInvulnerable) != 0;
+        const bool rawInvulnerable = unit.IsInvulnerable();
 
         const auto handle = unit.Handle();
         const uintptr_t wrappedAddress = unit.Address();

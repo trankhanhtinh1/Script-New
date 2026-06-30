@@ -867,10 +867,8 @@ namespace SpellBookLayout {
         constexpr auto NetworkId           = NetId;
         constexpr auto Dead                = 0x250;
         constexpr auto Position            = 0x25C;
-        constexpr auto Visibility          = 0x2E0;
-        constexpr auto Visible             = 0x308;
-        constexpr auto IsVisible           = 0x308;
-        constexpr auto IsInvulnerable      = 0x5A0;
+        constexpr auto Visible             = 0x308;   // GameObject visible flag.
+        constexpr auto IsInvulnerable      = 0x5A0;   // Legacy/debug only; IsInvulnerable is native/buff logic, not this byte.
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
         // pointer on 26.6 (sub_9F18FE constructor / sub_9F18A0 destructor pair
         // free `[obj+0xF48]` when `[obj+0xF54] >= 0`). The real recall

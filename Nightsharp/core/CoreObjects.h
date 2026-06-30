@@ -402,6 +402,18 @@ inline bool ReadBoolByte(uintptr_t object, uintptr_t offset) {
     return ReadField<std::uint8_t>(object, offset) != 0;
 }
 
+inline bool ReadVisibleFlag(uintptr_t object) {
+    if (!object) {
+        return false;
+    }
+
+    __try {
+        return *reinterpret_cast<const std::uint8_t*>(object + Offset::All::Visible) != 0;
+    } __except (1) {
+        return false;
+    }
+}
+
 inline bool IsSaneFloat(float value, float minValue, float maxValue) {
     return value == value && value >= minValue && value <= maxValue;
 }
@@ -687,8 +699,8 @@ inline void ReadBase(ObjectSnapshot& out, uintptr_t object) {
     out.teamSlot = ReadTeam(object);
     out.team = ReadTeamValue(object);
     out.isDead = IsDead(object);
-    out.isVisible = ReadBoolByte(object, Offset::All::Visible);
-    out.isInvulnerable = ReadBoolByte(object, Offset::All::IsInvulnerable);
+    out.isVisible = ReadVisibleFlag(object);
+    out.isInvulnerable = false;
     out.position = ReadPosition(object);
     out.direction = ReadDirection(object);
     out.boundingRadius = ReadBoundingRadius(object);
@@ -781,8 +793,8 @@ namespace detail {
 
             snapshot.isDead = IsDead(object);
 
-            snapshot.isVisible = (*reinterpret_cast<const std::uint8_t*>(object + Offset::All::Visible)) != 0;
-            snapshot.isInvulnerable = (*reinterpret_cast<const std::uint8_t*>(object + Offset::All::IsInvulnerable)) != 0;
+            snapshot.isVisible = ReadVisibleFlag(object);
+            snapshot.isInvulnerable = false;
             snapshot.position = *reinterpret_cast<const Vec3*>(object + Offset::All::Position);
             snapshot.direction = Vec3{};
 

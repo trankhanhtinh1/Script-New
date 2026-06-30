@@ -384,6 +384,67 @@ namespace ObjectDetail {
         });
         return text;
     }
+
+    inline bool ReadVisibleFlag(uintptr_t object) {
+        if (!object) {
+            return false;
+        }
+
+        __try {
+            return *reinterpret_cast<const std::uint8_t*>(object + Offset::All::Visible) != 0;
+        } __except (1) {
+            return false;
+        }
+    }
+
+    inline bool ReadEngineInvulnerable(uintptr_t object) {
+        if (!Globals::IsValidPtr(object)) {
+            return false;
+        }
+
+        constexpr int kBuffTypeInvulnerability = 18;
+        constexpr int kBuffTypeUnKillable = 38;
+        static constexpr const char* kKnownInvulnerableBuffs[] = {
+            "KayleR",
+            "TaricR",
+            "UndyingRage",
+            "ChronoRevive",
+            "ZhonyasRingShield",
+            "zhonyasringshield",
+            "bardrstasis",
+            "BardRStasis",
+            "LissandraRSelf",
+            "VladimirSanguinePool",
+            "FizzEIcon"
+        };
+
+        uintptr_t buffs[256] = {};
+        const int count = CoreBuffs::Enumerate(object, buffs, 256);
+        const float gameTime = CoreBuffs::ResolveGameTime();
+        char nameBuffer[96] = {};
+        for (int i = 0; i < count; ++i) {
+            const CoreBuffs::BuffRef buff{ buffs[i] };
+            if (!buff.IsActive(gameTime)) {
+                continue;
+            }
+
+            const int type = buff.GetType();
+            if (type == kBuffTypeInvulnerability || type == kBuffTypeUnKillable) {
+                return true;
+            }
+
+            if (!buff.ReadName(nameBuffer, static_cast<int>(sizeof(nameBuffer)))) {
+                continue;
+            }
+
+            for (const char* name : kKnownInvulnerableBuffs) {
+                if (CoreBuffs::NameMatchesQuery(nameBuffer, name)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 } // namespace ObjectDetail
 
 // ---------------------------------------------------------------------------
@@ -659,7 +720,8 @@ public:
     bool IsVisible() const {
         const uintptr_t a = Address();
         if (!a) return false;
-        return *reinterpret_cast<const uint8_t*>(a + Offset::All::Visible) != 0;
+        if (IsMe()) return true;
+        return ObjectDetail::ReadVisibleFlag(a);
     }
 
     bool IsTargetable() const {
@@ -671,7 +733,7 @@ public:
     bool IsInvulnerable() const {
         const uintptr_t a = Address();
         if (!a) return false;
-        return *reinterpret_cast<const uint8_t*>(a + Offset::All::IsInvulnerable) != 0;
+        return ObjectDetail::ReadEngineInvulnerable(a);
     }
 
     float BoundingRadius() const {
