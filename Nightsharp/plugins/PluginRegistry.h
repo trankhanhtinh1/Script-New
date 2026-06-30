@@ -31,6 +31,8 @@ namespace PluginRegistry {
         bool       (*RuntimeUnload)(void*) = nullptr;
         void       (*RuntimeMenu)(void*) = nullptr;
         bool       (*CanLoadFn)(void*) = nullptr;
+        bool         CanLoadCached = true;
+        bool         CanLoadChecked = false;
     };
 
     // ── Fixed-size registry ──
@@ -72,6 +74,7 @@ namespace PluginRegistry {
 
         for (int i = 0; i < PluginCount; i++) {
             if (!Plugins[i].InternalId) continue;
+            if (Plugins[i].Kind == PluginKind::SDK) continue;
             char line[128] = {};
             wsprintfA(line, "%s=%d\r\n", Plugins[i].InternalId, Plugins[i].AlwaysLoad ? 1 : 0);
             WriteFile(hFile, line, (DWORD)lstrlenA(line), &written, nullptr);
@@ -135,6 +138,7 @@ namespace PluginRegistry {
 
             for (int i = 0; i < PluginCount; i++) {
                 if (!Plugins[i].InternalId) continue;
+                if (Plugins[i].Kind == PluginKind::SDK) continue;
                 const char* a = Plugins[i].InternalId;
                 const char* b = key;
                 bool match = true;
@@ -197,6 +201,8 @@ namespace PluginRegistry {
         Plugins[idx].RuntimeUnload = unloadFn;
         Plugins[idx].RuntimeMenu = menuFn;
         Plugins[idx].CanLoadFn = canLoadFn;
+        Plugins[idx].CanLoadCached = true;
+        Plugins[idx].CanLoadChecked = false;
     }
 
     inline bool HasRuntime(int idx) {
@@ -287,8 +293,19 @@ namespace PluginRegistry {
     inline bool CanPluginLoad(int idx) {
         if (idx < 0 || idx >= PluginCount) return false;
         auto& p = Plugins[idx];
-        if (!p.CanLoadFn) return true;
-        return p.CanLoadFn(p.RuntimeUserData);
+        if (!p.CanLoadFn) {
+            p.CanLoadCached = true;
+            p.CanLoadChecked = true;
+            return true;
+        }
+
+        if (p.CanLoadChecked) {
+            return p.CanLoadCached;
+        }
+
+        p.CanLoadCached = p.CanLoadFn(p.RuntimeUserData);
+        p.CanLoadChecked = true;
+        return p.CanLoadCached;
     }
 
     inline void DrawPluginMenu(int idx) {

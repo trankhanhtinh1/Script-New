@@ -13,6 +13,10 @@ namespace detail {
     inline LoadHandler LoadHandlers[MaxLoadHandlers] = {};
     inline bool LoadInvoked[MaxLoadHandlers] = {};
     inline int LoadHandlerCount = 0;
+
+    inline bool HasLoadHandlers() {
+        return LoadHandlerCount > 0;
+    }
 } // namespace detail
 
 inline bool AddOnLoad(LoadHandler handler) {
@@ -21,6 +25,9 @@ inline bool AddOnLoad(LoadHandler handler) {
     }
 
     Initialize();
+    if (!detail::EnsureGameUpdateRawSubscribed()) {
+        return false;
+    }
 
     for (int i = 0; i < detail::LoadHandlerCount; ++i) {
         if (detail::LoadHandlers[i] == handler) {
@@ -55,6 +62,9 @@ inline bool RemoveOnLoad(LoadHandler handler) {
         --detail::LoadHandlerCount;
         detail::LoadHandlers[detail::LoadHandlerCount] = nullptr;
         detail::LoadInvoked[detail::LoadHandlerCount] = false;
+        if (detail::LoadHandlerCount == 0) {
+            detail::ReleaseGameUpdateRawIfUnused();
+        }
         return true;
     }
 

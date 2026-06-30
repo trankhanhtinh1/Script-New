@@ -64,12 +64,32 @@ namespace detail {
 } // namespace detail
 
 inline bool AddOnDash(DashHandler handler) {
+    if (!handler) {
+        return false;
+    }
+
     SDK::Events::Initialize();
-    return detail::DashHandlers.Add(handler);
+    if (!SDK::Events::detail::EnsureNewPathRawSubscribed()) {
+        return false;
+    }
+
+    const bool hadHandlers = detail::DashHandlers.HasHandlers();
+    const bool added = detail::DashHandlers.Add(handler);
+    if (added && !hadHandlers) {
+        ++SDK::Events::detail::DashConsumerRefs;
+    }
+    return added;
 }
 
 inline bool RemoveOnDash(DashHandler handler) {
-    return detail::DashHandlers.Remove(handler);
+    const bool removed = detail::DashHandlers.Remove(handler);
+    if (removed && !detail::DashHandlers.HasHandlers()) {
+        if (SDK::Events::detail::DashConsumerRefs > 0) {
+            --SDK::Events::detail::DashConsumerRefs;
+        }
+        SDK::Events::detail::ReleaseNewPathRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool OnDash(DashHandler handler) {

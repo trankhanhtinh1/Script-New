@@ -795,6 +795,10 @@ inline bool IsPredictionTargetUsable(const AIBaseClient& unit) {
         return false;
     }
 
+    if (unit.IsHero() && !unit.IsVisible()) {
+        return false;
+    }
+
     const Vector3 position = unit.Position();
     if (!position.IsValid() || position.IsZero()) {
         return false;
@@ -980,8 +984,15 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     std::vector<AIBaseClient> result;
     Vec2 from2D = from.To2D();
     Vec2 to2D = to.To2D();
-    Vec2 dir = (to2D - from2D).Normalized();
-    float lineLength = from2D.Distance(to2D);
+    const auto player = SDK::ObjectManager::Player();
+    const auto playerTeam = player.IsValid()
+        ? player.Team()
+        : GameObjectTeam::Unknown;
+
+    auto isEnemy = [&](const AIBaseClient& unit) {
+        return playerTeam == GameObjectTeam::Unknown ||
+               unit.Team() != playerTeam;
+    };
 
     auto checkUnit = [&](const AIBaseClient& unit) {
         if (!unit.IsValid() || unit.IsDead() || !unit.IsVisible()) return;
@@ -1003,16 +1014,16 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     };
 
     if (SDK::HasFlag(flags, CollisionableObjects::Minions)) {
-        for (const auto& minion : SDK::GameObjects::EnemyMinions()) {
-            checkUnit(minion);
-        }
-        for (const auto& minion : SDK::GameObjects::AllyMinions()) {
+        for (const auto& minion : SDK::ObjectManager::Get<AIMinionClient>()) {
             checkUnit(minion);
         }
     }
 
     if (SDK::HasFlag(flags, CollisionableObjects::Heroes)) {
-        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
+            if (!isEnemy(hero)) {
+                continue;
+            }
             checkUnit(hero);
         }
     }
@@ -1022,15 +1033,16 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     // Wall width = 250 + 50 * level (from particle name suffix)
     if (SDK::HasFlag(flags, CollisionableObjects::YasuoWall)) {
         bool hasYasuo = false;
-        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
             if (hero.IsValid() && !hero.IsDead()
+                && isEnemy(hero)
                 && hero.CharacterName() == "Yasuo") {
                 hasYasuo = true;
                 break;
             }
         }
         if (hasYasuo) {
-            for (const auto& emitter : SDK::GameObjects::ParticleEmitters()) {
+            for (const auto& emitter : SDK::ObjectManager::Get<EffectEmitter>()) {
                 if (!emitter.IsValid()) continue;
                 const std::string name = emitter.Name();
                 // Match "Yasuo_.+_w_windwall_enemy_\d" (case-insensitive)
@@ -1068,8 +1080,9 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     // Samira's W blocks projectiles in a radius around her for ~1s
     // Detect via buff "SamiraW" or "SamiraWBuff"
     if (SDK::HasFlag(flags, CollisionableObjects::SamiraWall)) {
-        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
             if (!hero.IsValid() || hero.IsDead()) continue;
+            if (!isEnemy(hero)) continue;
             if (hero.CharacterName() != "Samira") continue;
             if (!hero.HasBuff("SamiraW") && !hero.HasBuff("SamiraWBuff"))
                 continue;
@@ -1091,8 +1104,9 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     // Mel's W creates a 175-radius barrier that destroys/reflects projectiles
     // Duration ~0.75s. Detect via buff "MelW" or "MelWBuff" or "MelRebuttal"
     if (SDK::HasFlag(flags, CollisionableObjects::MelWall)) {
-        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
             if (!hero.IsValid() || hero.IsDead()) continue;
+            if (!isEnemy(hero)) continue;
             if (hero.CharacterName() != "Mel") continue;
             if (!hero.HasBuff("MelW") && !hero.HasBuff("MelWBuff")
                 && !hero.HasBuff("MelRebuttal"))

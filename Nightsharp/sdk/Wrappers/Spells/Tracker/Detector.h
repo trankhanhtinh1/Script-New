@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace SDK {
@@ -38,6 +39,17 @@ public:
         Events::AddOnCreateObject(&GameObject_OnCreate);
     }
 
+    static void Shutdown() {
+        if (!Initialized()) {
+            return;
+        }
+
+        Events::RemoveOnCreateObject(&GameObject_OnCreate);
+        Events::RemoveOnMissileCreate(&MissileClient_OnCreate);
+        Events::RemoveOnProcessSpell(&Obj_AI_Base_OnProcessSpellCast);
+        Initialized() = false;
+    }
+
     static bool AddOnDetectSkillshot(OnDetectSkillshotH handler) {
         Initialize();
         auto& handlers = Handlers();
@@ -55,7 +67,11 @@ public:
         auto& handlers = Handlers();
         const auto oldSize = handlers.size();
         handlers.erase(std::remove(handlers.begin(), handlers.end(), handler), handlers.end());
-        return oldSize != handlers.size();
+        const bool removed = oldSize != handlers.size();
+        if (removed && handlers.empty()) {
+            Shutdown();
+        }
+        return removed;
     }
 
 private:
@@ -119,8 +135,15 @@ private:
             return;
         }
 
+        const auto type = ObjectManager::detail::InferExtendedType(args.Sender.Ptr);
+        GameObject sender(args.Sender.Ptr, type);
+        if (!sender.IsValid()) {
+            return;
+        }
+
+        const std::string sourceObjectName = sender.Name();
         const auto* spellDatabaseEntry =
-            SpellDatabase::GetBySourceObjectName(args.Sender.Name);
+            SpellDatabase::GetBySourceObjectName(sourceObjectName.c_str());
         if (!spellDatabaseEntry) {
             return;
         }
@@ -129,8 +152,8 @@ private:
             *spellDatabaseEntry,
             MakeSourceObjectCaster(*spellDatabaseEntry),
             SkillshotDetectionType::CreateObject,
-            args.Sender.Position.To2D(),
-            args.Sender.Position.To2D(),
+            sender.Position().To2D(),
+            sender.Position().To2D(),
             Variables::TickCount() - Game::Ping() / 2);
     }
 

@@ -25,6 +25,7 @@ namespace NightSharpMenu {
     inline bool primarySelected = true;
     inline bool secondarySelected = true;
     inline int activePluginIdx = -1;
+    inline int pluginManagerFilter = 0;
 
     inline float menuPosX = 20.0f;
     inline float menuPosY = 40.0f;
@@ -237,45 +238,77 @@ namespace NightSharpMenu {
         if (ImGui::GetIO().Framerate > 0.0f) {
             ImGui::Text("Frame: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
         }
-        ImGui::Separator();
-        ImGui::Text("Hook status (installed / hits)");
-        auto drawHookStatus = [](::Core::Events::HookId id) {
-            const bool installed = ::Core::Events::IsInstalled(id);
-            const long long hits = ::Core::Events::HitCount(id);
-            const char* name = ::Core::Events::Name(id);
-            if (installed) {
-                ImGui::TextColored(ImVec4(0.3f, 0.86f, 0.34f, 1.0f), "[ON]  %s", name);
-            } else {
-                ImGui::TextColored(ImVec4(0.62f, 0.64f, 0.70f, 1.0f), "[OFF] %s", name);
-            }
-            ImGui::SameLine(0, 8);
-            ImGui::Text("hits: %lld", hits);
-        };
-        drawHookStatus(::Core::Events::Hooks::OnCreate);
-        drawHookStatus(::Core::Events::Hooks::OnDelete);
-        drawHookStatus(::Core::Events::Hooks::OnMissileCreate);
-        drawHookStatus(::Core::Events::Hooks::OnMissileDelete);
     }
 
-    inline void DrawPluginsSection() {
-        DrawSectionTitle("Plugin Manager");
+    inline PluginRegistry::PluginCategory FilterCategoryFromIndex(int filterIdx) {
+        switch (filterIdx) {
+        case 1:  return PluginRegistry::PluginCategory::Champion;
+        case 2:  return PluginRegistry::PluginCategory::Utility;
+        case 3:  return PluginRegistry::PluginCategory::Core;
+        case 4:  return PluginRegistry::PluginCategory::Misc;
+        default: return PluginRegistry::PluginCategory::Core;
+        }
+    }
 
-        ImGui::Text("Registered: %d", PluginRegistry::PluginCount);
+    inline bool PluginManagerRowVisible(int idx, PluginRegistry::PluginKind kind) {
+        if (idx < 0 || idx >= PluginRegistry::PluginCount) return false;
+
+        auto& p = PluginRegistry::Plugins[idx];
+        if (p.Kind != kind || !p.Name || !p.InternalId) return false;
+
+        if (p.Category == PluginRegistry::PluginCategory::Champion &&
+            !PluginRegistry::CanPluginLoad(idx)) {
+            return false;
+        }
+
+        if (pluginManagerFilter <= 0) {
+            return true;
+        }
+
+        return p.Category == FilterCategoryFromIndex(pluginManagerFilter);
+    }
+
+    inline int CountPluginManagerRows(PluginRegistry::PluginKind kind) {
+        int count = 0;
+        for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
+            if (PluginManagerRowVisible(i, kind)) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    inline void DrawPluginManagerFilters() {
+        const char* labels[] = { "All", "Champion", "Utility", "Core", "Misc" };
+        for (int i = 0; i < 5; ++i) {
+            ImGui::PushID(i);
+            if (DrawStateButton(labels[i], labels[i], pluginManagerFilter == i, true, i == 1 ? 88.0f : 64.0f)) {
+                pluginManagerFilter = i;
+            }
+            ImGui::PopID();
+            if (i < 4) {
+                ImGui::SameLine(0, 6);
+            }
+        }
         ImGui::Spacing();
+    }
 
-        if (PluginRegistry::PluginCount <= 0) {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No plugins registered.");
+    inline void DrawPluginManagerRows(PluginRegistry::PluginKind kind, const char* emptyText, int idBase = 0) {
+        if (CountPluginManagerRows(kind) == 0) {
+            if (emptyText && emptyText[0]) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "%s", emptyText);
+            }
             return;
         }
 
         for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
             auto& p = PluginRegistry::Plugins[i];
-            if (!p.Name || !p.InternalId) {
+            if (!PluginManagerRowVisible(i, kind)) {
                 continue;
             }
 
             const bool canLoad = PluginRegistry::CanPluginLoad(i);
-            ImGui::PushID(i);
+            ImGui::PushID(i + idBase);
 
             ImVec4 statusColor = !canLoad
                 ? ImVec4(0.75f, 0.55f, 0.18f, 1.0f)
@@ -325,6 +358,21 @@ namespace NightSharpMenu {
             ImGui::Separator();
             ImGui::PopID();
         }
+    }
+
+    inline void DrawPluginsSection() {
+        DrawSectionTitle("Plugin Manager");
+        DrawPluginManagerFilters();
+        DrawPluginManagerRows(PluginRegistry::PluginKind::Plugin, "No source plugins for this filter.");
+
+        const int extCount = CountPluginManagerRows(PluginRegistry::PluginKind::External);
+        if (extCount <= 0) {
+            return;
+        }
+
+        ImGui::Spacing();
+        DrawSectionTitle("External Plugins");
+        DrawPluginManagerRows(PluginRegistry::PluginKind::External, "No external plugins for this filter.", 1000);
     }
 
     inline int LoadedPluginCount() {

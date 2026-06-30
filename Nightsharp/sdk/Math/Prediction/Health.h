@@ -177,12 +177,10 @@ inline void OnStopCast(const Events::StopCastEventArgs& args) {
 }
 
 // ── OnDelete: mark attack as processed when missile is destroyed ─────────────
-inline void OnDelete(const Events::ObjectEventArgs& args) {
-    // DLL: only process MissileClient deletions
-    if (args.Sender.Type != ::Core::Objects::ObjectType::MissileClient) return;
-
-    // DLL: missileClient.SpellCaster.NetworkId -> mark attack as processed
-    // NightSharp: ObjectEventArgs has SourceNetworkId for missile caster
+inline void OnMissileDelete(const Events::ObjectEventArgs& args) {
+    // DLL reads GameObject.OnDelete and then filters MissileClient. NightSharp
+    // has a narrower missile-delete event, so HealthPrediction does not need
+    // the hot general object-delete hook.
     if (args.SourceNetworkId == 0) return;
 
     auto it = detail::ActiveAttacks.find(static_cast<int>(args.SourceNetworkId));
@@ -228,12 +226,19 @@ inline void Initialize() {
 
     Events::AddOnDoCast(&detail::OnDoCast);
     Events::AddOnStopCast(&detail::OnStopCast);
-    Events::AddOnDeleteObject(&detail::OnDelete);
+    Events::AddOnMissileDelete(&detail::OnMissileDelete);
     Events::AddOnProcessSpell(&detail::OnProcessSpellCast);
     Events::AddOnGameUpdate(&detail::OnUpdate);
 }
 
 inline void Reset() {
+    if (detail::Initialized) {
+        Events::RemoveOnGameUpdate(&detail::OnUpdate);
+        Events::RemoveOnProcessSpell(&detail::OnProcessSpellCast);
+        Events::RemoveOnMissileDelete(&detail::OnMissileDelete);
+        Events::RemoveOnStopCast(&detail::OnStopCast);
+        Events::RemoveOnDoCast(&detail::OnDoCast);
+    }
     detail::ActiveAttacks.clear();
     detail::Initialized = false;
 }

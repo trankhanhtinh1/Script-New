@@ -14,10 +14,9 @@
 #include "../Core/NavMesh.h"
 #include "../Core/Objects.h"
 #include "../Core/Variables.h"
-#include "../Enumerations/SpellSlot.h"
-#include "../Events/Events.h"
 #include "../Extensions/Unit.h"
 #include "../GameObjects/GameObjects.h"
+#include "../GameObjects/ObjectManager.h"
 #include "HealthPrediction.h"
 #include "Prediction.h"
 
@@ -55,8 +54,15 @@ inline std::string ToLower(std::string value) {
 }
 
 inline bool IsChampionInGame(const char* championName) {
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
-        if (hero.IsValid() && hero.CharacterName() == championName) {
+    const auto player = ObjectManager::Player();
+    const GameObjectTeam playerTeam = player.IsValid()
+        ? player.Team()
+        : GameObjectTeam::Unknown;
+    for (const auto& hero : ObjectManager::Get<AIHeroClient>()) {
+        if (hero.IsValid() &&
+            (playerTeam == GameObjectTeam::Unknown ||
+             hero.Team() != playerTeam) &&
+            hero.CharacterName() == championName) {
             return true;
         }
     }
@@ -91,6 +97,7 @@ inline void AddWindwall(const EffectEmitter& emitter) {
     });
     if (exists == Windwalls.end()) {
         Windwalls.push_back(emitter);
+        WallCastT = Variables::TickCount();
     }
 }
 
@@ -101,7 +108,7 @@ inline void RefreshWindwalls() {
         }),
         Windwalls.end());
 
-    for (const auto& emitter : GameObjects::ParticleEmitters()) {
+    for (const auto& emitter : ObjectManager::Get<EffectEmitter>()) {
         if (IsWindWallEmitter(emitter)) {
             AddWindwall(emitter);
         }
@@ -115,52 +122,6 @@ inline void RefreshWindwalls() {
     }
 }
 
-inline void OnCreateObject(const Events::ObjectEventArgs& args) {
-    if (!YasuoInGame || !args.Sender.IsValid()) {
-        return;
-    }
-
-    GameObject object(::Core::ObjectManager::MakeHandle(args.Sender.Ptr, args.Sender.Type));
-    if (!IsWindWallEmitter(object)) {
-        return;
-    }
-
-    AddWindwall(EffectEmitter(object.Handle()));
-    WallCastT = Variables::TickCount();
-}
-
-inline void OnDeleteObject(const Events::ObjectEventArgs& args) {
-    if (!YasuoInGame || !args.Sender.IsValid()) {
-        return;
-    }
-
-    Windwalls.erase(
-        std::remove_if(Windwalls.begin(), Windwalls.end(), [&](const EffectEmitter& emitter) {
-            if (!emitter.IsValid()) {
-                return true;
-            }
-            const bool sameNetworkId =
-                args.Sender.NetworkId != 0 &&
-                args.Sender.NetworkId != 0xFFFFFFFFu &&
-                emitter.NetworkId() == static_cast<int>(args.Sender.NetworkId);
-            return sameNetworkId || emitter.Address() == args.Sender.Ptr;
-        }),
-        Windwalls.end());
-}
-
-inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    if (!args.Sender.IsValid() ||
-        args.Sender.Type != ::Core::Objects::ObjectType::AIHeroClient ||
-        args.Slot != static_cast<int>(SpellSlot::W)) {
-        return;
-    }
-
-    AIHeroClient sender(::Core::ObjectManager::MakeHandle(args.Sender.Ptr, args.Sender.Type));
-    if (sender.IsValid() && sender.IsEnemy() && sender.CharacterName() == "Yasuo") {
-        WallCastT = Variables::TickCount();
-    }
-}
-
 inline void Initialize() {
     if (Initialized) {
         return;
@@ -169,9 +130,6 @@ inline void Initialize() {
     Initialized = true;
     RefreshChampionFlags();
     RefreshWindwalls();
-    Events::AddOnCreateObject(&OnCreateObject);
-    Events::AddOnDeleteObject(&OnDeleteObject);
-    Events::AddOnDoCast(&OnDoCast);
 }
 
 inline bool ContainsCollisionObject(const PredictionInput& input, CollisionableObjects object) {
@@ -214,6 +172,10 @@ inline bool IsValidCollisionTarget(const GameObject& object,
     // consider those objects if their position/team/targetable state is sane.
     if (!object.IsValid() || (object.IsDead() && !object.IsZombie()) ||
         !object.IsTargetable()) {
+        return false;
+    }
+
+    if (object.IsHero() && !object.IsVisible()) {
         return false;
     }
 
@@ -267,7 +229,34 @@ inline void AddIfUnique(std::vector<AIBaseClient>& result, const GameObject& obj
 }
 
 inline void AddPlayerSentinel(std::vector<AIBaseClient>& result) {
-    AddIfUnique(result, GameObjects::Player());
+    AddIfUnique(result, ObjectManager::Player());
+}
+
+inline bool ShouldStopCollisionScan(const std::vector<AIBaseClient>& result,
+                                    const PredictionInput& input) {
+    int blockingCount = 0;
+    const int targetNetworkId = input.Unit.IsValid()
+        ? input.Unit.NetworkId()
+        : 0;
+    for (const auto& object : result) {
+        if (!object.IsValid()) {
+            continue;
+        }
+        if (targetNetworkId != 0 && object.NetworkId() == targetNetworkId) {
+            continue;
+        }
+        ++blockingCount;
+    }
+
+    if (blockingCount <= 0) {
+        return false;
+    }
+
+    if (input.MaxCollisionCount <= 0.0f) {
+        return true;
+    }
+
+    return static_cast<float>(blockingCount) > input.MaxCollisionCount;
 }
 
 inline bool HasAnyBuff(const AIBaseClient& unit, std::initializer_list<const char*> names) {
@@ -296,6 +285,7 @@ inline int GetWindWallLevel(const EffectEmitter& emitter) {
 }
 
 inline bool IsWallCastActive() {
+    RefreshChampionFlags();
     if (!YasuoInGame) {
         return false;
     }
@@ -356,7 +346,15 @@ inline bool HasCircularShieldCollision(const char* championName,
     const Vec2 start2D = start.To2D();
     const Vec2 end2D = end.To2D();
 
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
+    const auto player = ObjectManager::Player();
+    const GameObjectTeam playerTeam = player.IsValid()
+        ? player.Team()
+        : GameObjectTeam::Unknown;
+    for (const auto& hero : ObjectManager::Get<AIHeroClient>()) {
+        if (playerTeam != GameObjectTeam::Unknown &&
+            hero.Team() == playerTeam) {
+            continue;
+        }
         if (!Extensions::IsValidTarget(hero) || hero.CharacterName() != championName) {
             continue;
         }
@@ -383,6 +381,7 @@ inline bool HasCircularShieldCollision(const char* championName,
 }
 
 inline bool HasSamiraCollision(const Vector3& start, const Vector3& end, float extraRadius) {
+    RefreshChampionFlags();
     return SamiraInGame &&
            HasCircularShieldCollision(
                "Samira",
@@ -394,6 +393,7 @@ inline bool HasSamiraCollision(const Vector3& start, const Vector3& end, float e
 }
 
 inline bool HasMelCollision(const Vector3& start, const Vector3& end, float extraRadius) {
+    RefreshChampionFlags();
     return MelInGame &&
            HasCircularShieldCollision(
                "Mel",
@@ -412,7 +412,7 @@ inline void ProcessHeroes(std::vector<AIBaseClient>& result,
     const Vec2 position2D = position.To2D();
     const Vec2 from2D = from.To2D();
 
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
+    for (const auto& hero : ObjectManager::Get<AIHeroClient>()) {
         if (!IsValidCollisionTarget(hero, input, range)) {
             continue;
         }
@@ -451,7 +451,8 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
         PredictionInput minionInput = input;
         minionInput.Unit = minionUnit;
         const auto minionPrediction = Prediction::Movement::GetPrediction(minionInput, false, false);
-        const float radius = input.Radius + static_cast<float>(stationaryPadding) + minion.BoundingRadius();
+        const int padding = minion.IsJungle() ? 20 : stationaryPadding;
+        const float radius = input.Radius + static_cast<float>(padding) + minion.BoundingRadius();
 
         if (DistanceSquaredToSegmentOnly(
                 minionPrediction.GetUnitPosition().To2D(),
@@ -462,6 +463,10 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
     }
 }
 
+inline std::vector<AIMinionClient> SnapshotCollisionMinions() {
+    return SDK::ObjectManager::Get<AIMinionClient>();
+}
+
 inline void ProcessBuildings(std::vector<AIBaseClient>& result,
                              const Vector3& position,
                              const PredictionInput& input) {
@@ -470,7 +475,7 @@ inline void ProcessBuildings(std::vector<AIBaseClient>& result,
     const Vec2 position2D = position.To2D();
     const Vec2 from2D = from.To2D();
 
-    for (const auto& turret : GameObjects::EnemyTurrets()) {
+    for (const auto& turret : ObjectManager::Get<AITurretClient>()) {
         if (!IsValidCollisionTarget(turret, input, range)) {
             continue;
         }
@@ -547,6 +552,11 @@ inline std::vector<AIBaseClient> GetCollision(const std::vector<Vector3>& positi
     Initialize();
 
     std::vector<AIBaseClient> result;
+    std::vector<AIMinionClient> minions;
+    if (detail::ContainsCollisionObject(input, CollisionableObjects::Minions)) {
+        minions = detail::SnapshotCollisionMinions();
+    }
+
     for (const auto& position : positions) {
         if (!position.IsValid() || position.IsZero()) {
             continue;
@@ -554,22 +564,36 @@ inline std::vector<AIBaseClient> GetCollision(const std::vector<Vector3>& positi
 
         if (detail::ContainsCollisionObject(input, CollisionableObjects::Heroes)) {
             detail::ProcessHeroes(result, position, input);
+            if (detail::ShouldStopCollisionScan(result, input)) {
+                return result;
+            }
         }
 
         if (detail::ContainsCollisionObject(input, CollisionableObjects::Minions)) {
-            detail::ProcessMinionList(result, GameObjects::EnemyMinions(), position, input, 15);
-            detail::ProcessMinionList(result, GameObjects::Jungle(), position, input, 20);
+            detail::ProcessMinionList(result, minions, position, input, 15);
+            if (detail::ShouldStopCollisionScan(result, input)) {
+                return result;
+            }
         }
 
         if (detail::ContainsCollisionObject(input, CollisionableObjects::Building)) {
             detail::ProcessBuildings(result, position, input);
+            if (detail::ShouldStopCollisionScan(result, input)) {
+                return result;
+            }
         }
 
         if (detail::ContainsCollisionObject(input, CollisionableObjects::Walls)) {
             detail::ProcessWalls(result, position, input);
+            if (detail::ShouldStopCollisionScan(result, input)) {
+                return result;
+            }
         }
 
         detail::ProcessProjectileWalls(result, position, input);
+        if (detail::ShouldStopCollisionScan(result, input)) {
+            return result;
+        }
     }
 
     return result;
@@ -626,7 +650,7 @@ inline bool HasYasuoWindWallCollision(const Vector3& start,
 }
 
 inline bool IsCollision(const Vector3& position, float radius = 50.0f) {
-    const auto player = GameObjects::Player();
+    const auto player = ObjectManager::Player();
     if (!player.IsValid()) {
         return false;
     }

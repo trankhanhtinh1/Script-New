@@ -119,9 +119,90 @@ namespace detail {
             }
             Count = 0;
         }
+
+        bool HasHandlers() const {
+            return Count > 0;
+        }
+    };
+
+    template <typename T, int MaxEvents>
+    struct PendingEventQueue {
+        SRWLOCK Lock = SRWLOCK_INIT;
+        T Items[MaxEvents] = {};
+        int Head = 0;
+        int Count = 0;
+
+        void Push(const T& item) {
+            AcquireSRWLockExclusive(&Lock);
+            if (Count >= MaxEvents) {
+                Items[Head] = item;
+                Head = (Head + 1) % MaxEvents;
+                ReleaseSRWLockExclusive(&Lock);
+                return;
+            }
+
+            const int tail = (Head + Count) % MaxEvents;
+            Items[tail] = item;
+            ++Count;
+            ReleaseSRWLockExclusive(&Lock);
+        }
+
+        bool Pop(T& out) {
+            AcquireSRWLockExclusive(&Lock);
+            if (Count <= 0) {
+                ReleaseSRWLockExclusive(&Lock);
+                return false;
+            }
+
+            out = Items[Head];
+            Items[Head] = {};
+            Head = (Head + 1) % MaxEvents;
+            --Count;
+            if (Count == 0) {
+                Head = 0;
+            }
+            ReleaseSRWLockExclusive(&Lock);
+            return true;
+        }
+
+        void Clear() {
+            AcquireSRWLockExclusive(&Lock);
+            for (int i = 0; i < Count; ++i) {
+                Items[(Head + i) % MaxEvents] = {};
+            }
+            Head = 0;
+            Count = 0;
+            ReleaseSRWLockExclusive(&Lock);
+        }
     };
 
     inline bool Initialized = false;
+    inline bool CoreHookRawSubscribed = false;
+    inline bool GameUpdateRawSubscribed = false;
+    inline bool ObjectCreateRawSubscribed = false;
+    inline bool ObjectDeleteRawSubscribed = false;
+    inline bool MissileCreateRawSubscribed = false;
+    inline bool MissileDeleteRawSubscribed = false;
+    inline bool BuffAddRawSubscribed = false;
+    inline bool BuffRemoveRawSubscribed = false;
+    inline bool BuffUpdateRawSubscribed = false;
+    inline bool NewPathRawSubscribed = false;
+    inline bool IntegerPropertyChangeRawSubscribed = false;
+    inline bool TeleportRawSubscribed = false;
+    inline bool DoCastRawSubscribed = false;
+    inline bool ProcessSpellRawSubscribed = false;
+    inline bool ProcessCastSpellRawSubscribed = false;
+    inline bool FinishCastRawSubscribed = false;
+    inline bool SpellImpactRawSubscribed = false;
+    inline bool PlayAnimationWrapperRawSubscribed = false;
+    inline bool PlayAnimationRawSubscribed = false;
+    inline bool StopCastRawSubscribed = false;
+    inline int DashConsumerRefs = 0;
+    inline int StealthConsumerRefs = 0;
+    inline int TeleportConsumerRefs = 0;
+    inline int GapcloserConsumerRefs = 0;
+    inline int InterruptableConsumerRefs = 0;
+    inline int TurretConsumerRefs = 0;
     inline std::atomic_bool DeliveryEnabled{ false };
 
     inline bool CanDeliverRawEvents() {
@@ -148,6 +229,26 @@ namespace detail {
     inline EventList<PlayAnimationEventArgs> PlayAnimationHandlers{ "PlayAnimation" };
     inline EventList<StopCastEventArgs> StopCastHandlers{ "StopCast" };
 
+    inline PendingEventQueue<CoreHookArgs, 1024> PendingCoreHooks;
+    inline PendingEventQueue<ObjectEventArgs, 512> PendingMissileCreates;
+    inline PendingEventQueue<ObjectEventArgs, 512> PendingMissileDeletes;
+    inline PendingEventQueue<BuffEventArgs, 512> PendingBuffAdds;
+    inline PendingEventQueue<BuffEventArgs, 512> PendingBuffRemoves;
+    inline PendingEventQueue<BuffEventArgs, 512> PendingBuffUpdates;
+    inline PendingEventQueue<NewPathEventArgs, 256> PendingNewPaths;
+    inline PendingEventQueue<IntegerPropertyChangeEventArgs, 256> PendingIntegerPropertyChanges;
+    inline PendingEventQueue<TeleportRawEventArgs, 128> PendingTeleports;
+    inline PendingEventQueue<ProcessSpellEventArgs, 256> PendingDoCasts;
+    inline PendingEventQueue<ProcessSpellEventArgs, 256> PendingProcessSpells;
+    inline PendingEventQueue<CastSpellEventArgs, 128> PendingProcessCastSpells;
+    inline PendingEventQueue<ProcessSpellEventArgs, 256> PendingFinishCasts;
+    inline PendingEventQueue<ProcessSpellEventArgs, 256> PendingSpellImpacts;
+    inline PendingEventQueue<PlayAnimationEventArgs, 256> PendingPlayAnimations;
+    inline PendingEventQueue<StopCastEventArgs, 128> PendingStopCasts;
+
+    inline constexpr int kMaxObjectLifecycleEventsPerFrame = 32;
+    inline constexpr int kMaxQueuedEventsPerFrame = 64;
+
     inline void EventLoad();
     inline void EventDash(const NewPathEventArgs& args);
     inline void EventStealth(const IntegerPropertyChangeEventArgs& args);
@@ -160,12 +261,59 @@ namespace detail {
     inline void EventTurret(const ProcessSpellEventArgs& args);
     inline void EventTurretConstruct();
     inline void ResetDerivedEvents();
+    inline bool HasLoadHandlers();
+    inline bool HasDashConsumers() { return DashConsumerRefs > 0; }
+    inline bool HasStealthConsumers() { return StealthConsumerRefs > 0; }
+    inline bool HasTeleportConsumers() { return TeleportConsumerRefs > 0; }
+    inline bool HasGapcloserConsumers() { return GapcloserConsumerRefs > 0; }
+    inline bool HasInterruptableConsumers() { return InterruptableConsumerRefs > 0; }
+    inline bool HasTurretConsumers() { return TurretConsumerRefs > 0; }
+    inline bool HasNewPathConsumers() {
+        return NewPathHandlers.HasHandlers() || HasDashConsumers();
+    }
+    inline bool HasIntegerPropertyChangeConsumers() {
+        return IntegerPropertyChangeHandlers.HasHandlers() || HasStealthConsumers();
+    }
+    inline bool HasTeleportRawConsumers() {
+        return TeleportHandlers.HasHandlers() || HasTeleportConsumers();
+    }
+    inline bool HasDoCastConsumers() {
+        return DoCastHandlers.HasHandlers() ||
+               HasGapcloserConsumers() ||
+               HasInterruptableConsumers() ||
+               HasTurretConsumers();
+    }
+    inline bool HasStopCastConsumers() {
+        return StopCastHandlers.HasHandlers() || HasInterruptableConsumers();
+    }
 
     inline void OnRawCoreHook(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !CoreHookHandlers.HasHandlers()) {
             return;
         }
-        CoreHookHandlers.Fire(raw);
+        PendingCoreHooks.Push(raw);
+    }
+
+    inline void EnsureCoreHookRawSubscribed() {
+        if (CoreHookRawSubscribed) {
+            return;
+        }
+
+        CoreHookRawSubscribed = true;
+        for (int i = 0; i < ::CoreHookTest::HookCount; ++i) {
+            ::Core::Events::Add(static_cast<CoreHookId>(i), &OnRawCoreHook);
+        }
+    }
+
+    inline void ReleaseCoreHookRawSubscribed() {
+        if (!CoreHookRawSubscribed) {
+            return;
+        }
+
+        CoreHookRawSubscribed = false;
+        for (int i = 0; i < ::CoreHookTest::HookCount; ++i) {
+            ::Core::Events::Remove(static_cast<CoreHookId>(i), &OnRawCoreHook);
+        }
     }
 
     inline void CopyText(char* out, int outCount, const char* value) {
@@ -249,8 +397,38 @@ namespace detail {
     }
 
     inline constexpr int MaxPendingObjectCreates = 512;
-    inline CoreHookArgs PendingObjectCreates[MaxPendingObjectCreates] = {};
+    inline constexpr int MaxPendingObjectDeletes = 512;
+    inline SRWLOCK PendingObjectLock = SRWLOCK_INIT;
+    inline ObjectEventArgs PendingObjectCreates[MaxPendingObjectCreates] = {};
+    inline ObjectEventArgs PendingObjectDeletes[MaxPendingObjectDeletes] = {};
     inline int PendingObjectCreateCount = 0;
+    inline int PendingObjectDeleteCount = 0;
+
+    inline bool SameObjectIdentity(
+        const ObjectEventArgs& pending,
+        uintptr_t object,
+        uint32_t networkId) {
+        if (object != 0 && pending.Sender.Ptr == object) {
+            return true;
+        }
+        return networkId != 0 &&
+               networkId != 0xFFFFFFFFu &&
+               pending.Sender.NetworkId != 0 &&
+               pending.Sender.NetworkId != 0xFFFFFFFFu &&
+               pending.Sender.NetworkId == networkId;
+    }
+
+    inline void RemovePendingObjectCreateLocked(uintptr_t object, uint32_t networkId) {
+        for (int index = 0; index < PendingObjectCreateCount;) {
+            if (!SameObjectIdentity(PendingObjectCreates[index], object, networkId)) {
+                ++index;
+                continue;
+            }
+
+            PendingObjectCreates[index] = PendingObjectCreates[--PendingObjectCreateCount];
+            PendingObjectCreates[PendingObjectCreateCount] = {};
+        }
+    }
 
     inline void QueueObjectCreate(const CoreHookArgs& raw) {
         const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
@@ -258,82 +436,211 @@ namespace detail {
             return;
         }
 
+        AcquireSRWLockExclusive(&PendingObjectLock);
         for (int index = 0; index < PendingObjectCreateCount; ++index) {
-            auto& pending = PendingObjectCreates[index];
-            const uint32_t pendingNetworkId =
-                static_cast<uint32_t>(pending.Rdx & 0xFFFFFFFFu);
-            const uint32_t rawNetworkId =
-                static_cast<uint32_t>(raw.Rdx & 0xFFFFFFFFu);
-            if (pending.Rcx == raw.Rcx ||
-                (pendingNetworkId != 0 &&
-                 pendingNetworkId != 0xFFFFFFFFu &&
-                 pendingNetworkId == rawNetworkId)) {
-                pending = raw;
+            if (SameObjectIdentity(
+                    PendingObjectCreates[index],
+                    args.Sender.Ptr,
+                    args.Sender.NetworkId)) {
+                PendingObjectCreates[index] = args;
+                ReleaseSRWLockExclusive(&PendingObjectLock);
                 return;
             }
         }
 
         if (PendingObjectCreateCount < MaxPendingObjectCreates) {
-            PendingObjectCreates[PendingObjectCreateCount++] = raw;
+            PendingObjectCreates[PendingObjectCreateCount++] = args;
+        }
+        ReleaseSRWLockExclusive(&PendingObjectLock);
+    }
+
+    inline void QueueObjectDelete(const CoreHookArgs& raw) {
+        const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
+        if (!args.Sender.IsValid()) {
             return;
         }
 
-        ObjectCreateHandlers.Fire(args);
+        AcquireSRWLockExclusive(&PendingObjectLock);
+        RemovePendingObjectCreateLocked(args.Sender.Ptr, args.Sender.NetworkId);
+
+        for (int index = 0; index < PendingObjectDeleteCount; ++index) {
+            if (SameObjectIdentity(
+                    PendingObjectDeletes[index],
+                    args.Sender.Ptr,
+                    args.Sender.NetworkId)) {
+                PendingObjectDeletes[index] = args;
+                ReleaseSRWLockExclusive(&PendingObjectLock);
+                return;
+            }
+        }
+
+        if (PendingObjectDeleteCount < MaxPendingObjectDeletes) {
+            PendingObjectDeletes[PendingObjectDeleteCount++] = args;
+        }
+        ReleaseSRWLockExclusive(&PendingObjectLock);
     }
 
-    inline void RemovePendingObjectCreate(uintptr_t object, uint32_t networkId) {
-        for (int index = 0; index < PendingObjectCreateCount;) {
-            const auto& pending = PendingObjectCreates[index];
-            const bool sameObject = pending.Rcx == object;
-            const uint32_t pendingNetworkId =
-                static_cast<uint32_t>(pending.Rdx & 0xFFFFFFFFu);
-            const bool sameNetworkId = networkId != 0 &&
-                networkId != 0xFFFFFFFFu &&
-                pendingNetworkId == networkId;
-            if (!sameObject && !sameNetworkId) {
-                ++index;
-                continue;
-            }
+    inline bool PopPendingObjectCreate(ObjectEventArgs& out) {
+        AcquireSRWLockExclusive(&PendingObjectLock);
+        if (PendingObjectCreateCount <= 0) {
+            ReleaseSRWLockExclusive(&PendingObjectLock);
+            return false;
+        }
+        out = PendingObjectCreates[--PendingObjectCreateCount];
+        PendingObjectCreates[PendingObjectCreateCount] = {};
+        ReleaseSRWLockExclusive(&PendingObjectLock);
+        return true;
+    }
 
-            for (int moveIndex = index; moveIndex + 1 < PendingObjectCreateCount; ++moveIndex) {
-                PendingObjectCreates[moveIndex] = PendingObjectCreates[moveIndex + 1];
+    inline bool PopPendingObjectDelete(ObjectEventArgs& out) {
+        AcquireSRWLockExclusive(&PendingObjectLock);
+        if (PendingObjectDeleteCount <= 0) {
+            ReleaseSRWLockExclusive(&PendingObjectLock);
+            return false;
+        }
+        out = PendingObjectDeletes[--PendingObjectDeleteCount];
+        PendingObjectDeletes[PendingObjectDeleteCount] = {};
+        ReleaseSRWLockExclusive(&PendingObjectLock);
+        return true;
+    }
+
+    inline void FlushObjectLifecycleEvents() {
+        ObjectEventArgs args = {};
+        for (int i = 0; i < kMaxObjectLifecycleEventsPerFrame &&
+                        PopPendingObjectCreate(args); ++i) {
+            if (args.Sender.IsValid()) {
+                ObjectCreateHandlers.Fire(args);
             }
-            PendingObjectCreates[--PendingObjectCreateCount] = {};
+        }
+        for (int i = 0; i < kMaxObjectLifecycleEventsPerFrame &&
+                        PopPendingObjectDelete(args); ++i) {
+            if (args.Sender.IsValid()) {
+                ObjectDeleteHandlers.Fire(args);
+            }
         }
     }
 
-    inline void FlushObjectCreates() {
-        const int count = PendingObjectCreateCount;
-        PendingObjectCreateCount = 0;
+    inline void FlushQueuedEvents() {
+        CoreHookArgs coreArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingCoreHooks.Pop(coreArgs); ++i) {
+            CoreHookHandlers.Fire(coreArgs);
+        }
 
-        for (int index = 0; index < count; ++index) {
-            const CoreHookArgs raw = PendingObjectCreates[index];
-            PendingObjectCreates[index] = {};
-            const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
-            if (args.Sender.IsValid()) {
-                ObjectCreateHandlers.Fire(args);
+        FlushObjectLifecycleEvents();
+
+        ObjectEventArgs objectArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingMissileCreates.Pop(objectArgs); ++i) {
+            MissileCreateHandlers.Fire(objectArgs);
+        }
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingMissileDeletes.Pop(objectArgs); ++i) {
+            MissileDeleteHandlers.Fire(objectArgs);
+        }
+
+        BuffEventArgs buffArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingBuffAdds.Pop(buffArgs); ++i) {
+            BuffAddHandlers.Fire(buffArgs);
+        }
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingBuffRemoves.Pop(buffArgs); ++i) {
+            BuffRemoveHandlers.Fire(buffArgs);
+        }
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingBuffUpdates.Pop(buffArgs); ++i) {
+            BuffUpdateHandlers.Fire(buffArgs);
+        }
+
+        NewPathEventArgs pathArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingNewPaths.Pop(pathArgs); ++i) {
+            NewPathHandlers.Fire(pathArgs);
+            if (HasDashConsumers()) {
+                EventDash(pathArgs);
+            }
+        }
+
+        IntegerPropertyChangeEventArgs integerArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingIntegerPropertyChanges.Pop(integerArgs); ++i) {
+            IntegerPropertyChangeHandlers.Fire(integerArgs);
+            if (HasStealthConsumers()) {
+                EventStealth(integerArgs);
+            }
+        }
+
+        TeleportRawEventArgs teleportArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingTeleports.Pop(teleportArgs); ++i) {
+            TeleportHandlers.Fire(teleportArgs);
+            if (HasTeleportConsumers()) {
+                EventTeleport(teleportArgs);
+            }
+        }
+
+        ProcessSpellEventArgs spellArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingDoCasts.Pop(spellArgs); ++i) {
+            DoCastHandlers.Fire(spellArgs);
+            if (HasGapcloserConsumers()) {
+                EventGapcloser(spellArgs);
+            }
+            if (HasInterruptableConsumers()) {
+                EventInterruptableSpell(spellArgs);
+            }
+            if (HasTurretConsumers()) {
+                EventTurret(spellArgs);
+            }
+        }
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingProcessSpells.Pop(spellArgs); ++i) {
+            ProcessSpellHandlers.Fire(spellArgs);
+        }
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingFinishCasts.Pop(spellArgs); ++i) {
+            FinishCastHandlers.Fire(spellArgs);
+        }
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingSpellImpacts.Pop(spellArgs); ++i) {
+            SpellImpactHandlers.Fire(spellArgs);
+        }
+
+        CastSpellEventArgs castArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingProcessCastSpells.Pop(castArgs); ++i) {
+            ProcessCastSpellHandlers.Fire(castArgs);
+        }
+
+        PlayAnimationEventArgs animationArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingPlayAnimations.Pop(animationArgs); ++i) {
+            PlayAnimationHandlers.Fire(animationArgs);
+        }
+
+        StopCastEventArgs stopArgs = {};
+        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
+                        PendingStopCasts.Pop(stopArgs); ++i) {
+            StopCastHandlers.Fire(stopArgs);
+            if (HasInterruptableConsumers()) {
+                EventInterruptableSpell(stopArgs);
             }
         }
     }
 
     inline void OnRawObjectCreate(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !ObjectCreateHandlers.HasHandlers()) {
             return;
         }
         QueueObjectCreate(raw);
     }
 
     inline void OnRawObjectDelete(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !ObjectDeleteHandlers.HasHandlers()) {
             return;
         }
-        const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
-        if (!args.Sender.IsValid()) {
-            return;
-        }
-
-        RemovePendingObjectCreate(args.Sender.Ptr, args.Sender.NetworkId);
-        ObjectDeleteHandlers.Fire(args);
+        QueueObjectDelete(raw);
     }
 
     inline void OnRawGameUpdate(const CoreHookArgs& raw) {
@@ -341,85 +648,86 @@ namespace detail {
             return;
         }
         (void)CoreRuntime::RefreshReadState();
-        FlushObjectCreates();
+        FlushQueuedEvents();
 
         GameUpdateEventArgs args{};
         args.Raw = raw;
         GameUpdateHandlers.Fire(args);
 
         EventLoad();
-        EventGapcloser();
-        EventInterruptableSpell();
+        if (HasGapcloserConsumers()) {
+            EventGapcloser();
+        }
+        if (HasInterruptableConsumers()) {
+            EventInterruptableSpell();
+        }
     }
 
     inline void OnRawMissileCreate(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !MissileCreateHandlers.HasHandlers()) {
             return;
         }
         ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
         CanonicalizeMissileNames(args);
-        MissileCreateHandlers.Fire(args);
+        PendingMissileCreates.Push(args);
     }
 
     inline void OnRawMissileDelete(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !MissileDeleteHandlers.HasHandlers()) {
             return;
         }
         ObjectEventArgs args = ::Core::Events::DecodeMissileEvent(raw);
         CanonicalizeMissileNames(args);
-        MissileDeleteHandlers.Fire(args);
+        PendingMissileDeletes.Push(args);
     }
 
     inline void OnRawBuffAdd(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !BuffAddHandlers.HasHandlers()) {
             return;
         }
-        BuffAddHandlers.Fire(::Core::Events::DecodeBuffEvent(raw));
+        PendingBuffAdds.Push(::Core::Events::DecodeBuffEvent(raw));
     }
 
     inline void OnRawBuffRemove(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !BuffRemoveHandlers.HasHandlers()) {
             return;
         }
-        BuffRemoveHandlers.Fire(::Core::Events::DecodeBuffEvent(raw));
+        PendingBuffRemoves.Push(::Core::Events::DecodeBuffEvent(raw));
     }
 
     inline void OnRawBuffUpdate(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !BuffUpdateHandlers.HasHandlers()) {
             return;
         }
-        BuffUpdateHandlers.Fire(::Core::Events::DecodeBuffEvent(raw));
+        PendingBuffUpdates.Push(::Core::Events::DecodeBuffEvent(raw));
     }
 
     inline void OnRawNewPath(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !HasNewPathConsumers()) {
             return;
         }
         const NewPathEventArgs args = ::Core::Events::DecodeNewPath(raw);
-        NewPathHandlers.Fire(args);
-        EventDash(args);
+        PendingNewPaths.Push(args);
     }
 
     inline void OnRawIntegerPropertyChange(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !HasIntegerPropertyChangeConsumers()) {
             return;
         }
         const IntegerPropertyChangeEventArgs args = ::Core::Events::DecodeIntegerPropertyChange(raw);
-        IntegerPropertyChangeHandlers.Fire(args);
-        EventStealth(args);
+        PendingIntegerPropertyChanges.Push(args);
     }
 
     inline void OnRawTeleport(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !HasTeleportRawConsumers()) {
             return;
         }
         const TeleportRawEventArgs args = ::Core::Events::DecodeTeleport(raw);
-        TeleportHandlers.Fire(args);
-        EventTeleport(args);
+        PendingTeleports.Push(args);
     }
 
     inline void OnRawDoCast(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !HasDoCastConsumers()) {
             return;
         }
         // OnDoCast (sub_97C290) is a vtable spell-instance method — RCX is a
@@ -429,55 +737,330 @@ namespace detail {
         // DecodeProcessSpell, which interpreted RCX as a spellbook and
         // produced bogus senders / failed IsLocalPlayer checks.
         const ProcessSpellEventArgs args = ::Core::Events::DecodeDoCast(raw);
-        DoCastHandlers.Fire(args);
-        EventGapcloser(args);
-        EventInterruptableSpell(args);
-        EventTurret(args);
+        PendingDoCasts.Push(args);
     }
 
 
     inline void OnRawProcessSpell(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !ProcessSpellHandlers.HasHandlers()) {
             return;
         }
-        ProcessSpellHandlers.Fire(::Core::Events::DecodeProcessSpell(raw));
+        PendingProcessSpells.Push(::Core::Events::DecodeProcessSpell(raw));
     }
 
     inline void OnRawProcessCastSpell(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !ProcessCastSpellHandlers.HasHandlers()) {
             return;
         }
-        ProcessCastSpellHandlers.Fire(::Core::Events::DecodeProcessCastSpell(raw));
+        PendingProcessCastSpells.Push(::Core::Events::DecodeProcessCastSpell(raw));
     }
 
     inline void OnRawFinishCast(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !FinishCastHandlers.HasHandlers()) {
             return;
         }
-        FinishCastHandlers.Fire(::Core::Events::DecodeProcessSpell(raw));
+        PendingFinishCasts.Push(::Core::Events::DecodeProcessSpell(raw));
     }
 
     inline void OnRawSpellImpact(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !SpellImpactHandlers.HasHandlers()) {
             return;
         }
-        SpellImpactHandlers.Fire(::Core::Events::DecodeProcessSpell(raw));
+        PendingSpellImpacts.Push(::Core::Events::DecodeProcessSpell(raw));
     }
 
     inline void OnRawPlayAnimation(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !PlayAnimationHandlers.HasHandlers()) {
             return;
         }
-        PlayAnimationHandlers.Fire(::Core::Events::DecodePlayAnimation(raw));
+        PendingPlayAnimations.Push(::Core::Events::DecodePlayAnimation(raw));
     }
 
     inline void OnRawStopCast(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
+        if (!CanDeliverRawEvents() || !HasStopCastConsumers()) {
             return;
         }
         const StopCastEventArgs args = ::Core::Events::DecodeStopCast(raw);
-        StopCastHandlers.Fire(args);
-        EventInterruptableSpell(args);
+        PendingStopCasts.Push(args);
+    }
+
+    inline bool EnsureRawSubscribed(
+        CoreHookId id,
+        CoreHookHandler handler,
+        bool& subscribed) {
+        if (subscribed) {
+            return true;
+        }
+        if (!::Core::Events::Add(id, handler)) {
+            return false;
+        }
+        subscribed = true;
+        return true;
+    }
+
+    inline bool HasQueuedRawSubscriptions() {
+        return CoreHookRawSubscribed ||
+               ObjectCreateRawSubscribed ||
+               ObjectDeleteRawSubscribed ||
+               MissileCreateRawSubscribed ||
+               MissileDeleteRawSubscribed ||
+               BuffAddRawSubscribed ||
+               BuffRemoveRawSubscribed ||
+               BuffUpdateRawSubscribed ||
+               NewPathRawSubscribed ||
+               IntegerPropertyChangeRawSubscribed ||
+               TeleportRawSubscribed ||
+               DoCastRawSubscribed ||
+               ProcessSpellRawSubscribed ||
+               ProcessCastSpellRawSubscribed ||
+               FinishCastRawSubscribed ||
+               SpellImpactRawSubscribed ||
+               PlayAnimationWrapperRawSubscribed ||
+               PlayAnimationRawSubscribed ||
+               StopCastRawSubscribed;
+    }
+
+    inline void ReleaseGameUpdateRawIfUnused() {
+        if (!GameUpdateRawSubscribed ||
+            GameUpdateHandlers.HasHandlers() ||
+            HasLoadHandlers() ||
+            HasQueuedRawSubscriptions()) {
+            return;
+        }
+
+        (void)::Core::Events::Remove(Hooks::OnGameUpdate, &OnRawGameUpdate);
+        GameUpdateRawSubscribed = false;
+    }
+
+    inline bool ReleaseRawSubscribed(
+        CoreHookId id,
+        CoreHookHandler handler,
+        bool& subscribed) {
+        if (!subscribed) {
+            return true;
+        }
+
+        const bool removed = ::Core::Events::Remove(id, handler);
+        subscribed = false;
+        ReleaseGameUpdateRawIfUnused();
+        return removed;
+    }
+
+    inline void ReleaseObjectCreateRawIfUnused() {
+        if (!ObjectCreateHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::OnCreate,
+                &OnRawObjectCreate,
+                ObjectCreateRawSubscribed);
+        }
+    }
+
+    inline void ReleaseObjectDeleteRawIfUnused() {
+        if (!ObjectDeleteHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::OnDelete,
+                &OnRawObjectDelete,
+                ObjectDeleteRawSubscribed);
+        }
+    }
+
+    inline void ReleaseMissileCreateRawIfUnused() {
+        if (!MissileCreateHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::OnMissileCreate,
+                &OnRawMissileCreate,
+                MissileCreateRawSubscribed);
+        }
+    }
+
+    inline void ReleaseMissileDeleteRawIfUnused() {
+        if (!MissileDeleteHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::OnMissileDelete,
+                &OnRawMissileDelete,
+                MissileDeleteRawSubscribed);
+        }
+    }
+
+    inline void ReleaseBuffAddRawIfUnused() {
+        if (!BuffAddHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnBuffAdd, &OnRawBuffAdd, BuffAddRawSubscribed);
+        }
+    }
+
+    inline void ReleaseBuffRemoveRawIfUnused() {
+        if (!BuffRemoveHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnBuffRemove, &OnRawBuffRemove, BuffRemoveRawSubscribed);
+        }
+    }
+
+    inline void ReleaseBuffUpdateRawIfUnused() {
+        if (!BuffUpdateHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnBuffUpdate, &OnRawBuffUpdate, BuffUpdateRawSubscribed);
+        }
+    }
+
+    inline void ReleaseNewPathRawIfUnused() {
+        if (!HasNewPathConsumers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnNewPath, &OnRawNewPath, NewPathRawSubscribed);
+        }
+    }
+
+    inline void ReleaseIntegerPropertyChangeRawIfUnused() {
+        if (!HasIntegerPropertyChangeConsumers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::OnIntegerPropertyChange,
+                &OnRawIntegerPropertyChange,
+                IntegerPropertyChangeRawSubscribed);
+        }
+    }
+
+    inline void ReleaseTeleportRawIfUnused() {
+        if (!HasTeleportRawConsumers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnTeleport, &OnRawTeleport, TeleportRawSubscribed);
+        }
+    }
+
+    inline void ReleaseDoCastRawIfUnused() {
+        if (!HasDoCastConsumers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnDoCast, &OnRawDoCast, DoCastRawSubscribed);
+        }
+    }
+
+    inline void ReleaseProcessSpellRawIfUnused() {
+        if (!ProcessSpellHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::OnProcessSpell,
+                &OnRawProcessSpell,
+                ProcessSpellRawSubscribed);
+        }
+    }
+
+    inline void ReleaseProcessCastSpellRawIfUnused() {
+        if (!ProcessCastSpellHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(
+                Hooks::ProcessCastSpell,
+                &OnRawProcessCastSpell,
+                ProcessCastSpellRawSubscribed);
+        }
+    }
+
+    inline void ReleaseFinishCastRawIfUnused() {
+        if (!FinishCastHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnFinishCast, &OnRawFinishCast, FinishCastRawSubscribed);
+        }
+    }
+
+    inline void ReleaseSpellImpactRawIfUnused() {
+        if (!SpellImpactHandlers.HasHandlers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnSpellImpact, &OnRawSpellImpact, SpellImpactRawSubscribed);
+        }
+    }
+
+    inline void ReleasePlayAnimationRawIfUnused() {
+        if (PlayAnimationHandlers.HasHandlers()) {
+            return;
+        }
+
+        (void)ReleaseRawSubscribed(
+            Hooks::OnPlayAnimationWrapper,
+            &OnRawPlayAnimation,
+            PlayAnimationWrapperRawSubscribed);
+        (void)ReleaseRawSubscribed(
+            Hooks::OnPlayAnimation,
+            &OnRawPlayAnimation,
+            PlayAnimationRawSubscribed);
+    }
+
+    inline void ReleaseStopCastRawIfUnused() {
+        if (!HasStopCastConsumers()) {
+            (void)ReleaseRawSubscribed(Hooks::OnStopCast, &OnRawStopCast, StopCastRawSubscribed);
+        }
+    }
+
+    inline bool EnsureGameUpdateRawSubscribed() {
+        return EnsureRawSubscribed(Hooks::OnGameUpdate, &OnRawGameUpdate, GameUpdateRawSubscribed);
+    }
+    inline bool EnsureObjectCreateRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnCreate, &OnRawObjectCreate, ObjectCreateRawSubscribed);
+    }
+    inline bool EnsureObjectDeleteRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnDelete, &OnRawObjectDelete, ObjectDeleteRawSubscribed);
+    }
+    inline bool EnsureMissileCreateRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnMissileCreate, &OnRawMissileCreate, MissileCreateRawSubscribed);
+    }
+    inline bool EnsureMissileDeleteRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnMissileDelete, &OnRawMissileDelete, MissileDeleteRawSubscribed);
+    }
+    inline bool EnsureBuffAddRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnBuffAdd, &OnRawBuffAdd, BuffAddRawSubscribed);
+    }
+    inline bool EnsureBuffRemoveRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnBuffRemove, &OnRawBuffRemove, BuffRemoveRawSubscribed);
+    }
+    inline bool EnsureBuffUpdateRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnBuffUpdate, &OnRawBuffUpdate, BuffUpdateRawSubscribed);
+    }
+    inline bool EnsureNewPathRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnNewPath, &OnRawNewPath, NewPathRawSubscribed);
+    }
+    inline bool EnsureIntegerPropertyChangeRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(
+            Hooks::OnIntegerPropertyChange,
+            &OnRawIntegerPropertyChange,
+            IntegerPropertyChangeRawSubscribed);
+    }
+    inline bool EnsureTeleportRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnTeleport, &OnRawTeleport, TeleportRawSubscribed);
+    }
+    inline bool EnsureDoCastRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnDoCast, &OnRawDoCast, DoCastRawSubscribed);
+    }
+    inline bool EnsureProcessSpellRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnProcessSpell, &OnRawProcessSpell, ProcessSpellRawSubscribed);
+    }
+    inline bool EnsureProcessCastSpellRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::ProcessCastSpell, &OnRawProcessCastSpell, ProcessCastSpellRawSubscribed);
+    }
+    inline bool EnsureFinishCastRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnFinishCast, &OnRawFinishCast, FinishCastRawSubscribed);
+    }
+    inline bool EnsureSpellImpactRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnSpellImpact, &OnRawSpellImpact, SpellImpactRawSubscribed);
+    }
+    inline bool EnsurePlayAnimationRawSubscribed() {
+        if (!EnsureGameUpdateRawSubscribed()) {
+            return false;
+        }
+        const bool wrapper = EnsureRawSubscribed(
+            Hooks::OnPlayAnimationWrapper,
+            &OnRawPlayAnimation,
+            PlayAnimationWrapperRawSubscribed);
+        const bool packet = EnsureRawSubscribed(
+            Hooks::OnPlayAnimation,
+            &OnRawPlayAnimation,
+            PlayAnimationRawSubscribed);
+        return wrapper || packet;
+    }
+    inline bool EnsureStopCastRawSubscribed() {
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(Hooks::OnStopCast, &OnRawStopCast, StopCastRawSubscribed);
     }
 } // namespace detail
 
@@ -497,36 +1080,6 @@ inline void Initialize() {
 
     detail::Initialized = true;
     ::Core::Events::Initialize();
-    for (int i = 0; i < ::CoreHookTest::HookCount; ++i) {
-        ::Core::Events::Add(static_cast<CoreHookId>(i), &detail::OnRawCoreHook);
-    }
-    ::Core::Events::AddOnGameUpdate(&detail::OnRawGameUpdate);
-    ::Core::Events::AddOnCreateObject(&detail::OnRawObjectCreate);
-    ::Core::Events::AddOnDeleteObject(&detail::OnRawObjectDelete);
-    ::Core::Events::AddOnMissileCreate(&detail::OnRawMissileCreate);
-    ::Core::Events::AddOnMissileDelete(&detail::OnRawMissileDelete);
-    ::Core::Events::AddOnBuffAdd(&detail::OnRawBuffAdd);
-    ::Core::Events::AddOnBuffRemove(&detail::OnRawBuffRemove);
-    ::Core::Events::AddOnBuffUpdate(&detail::OnRawBuffUpdate);
-    ::Core::Events::AddOnNewPath(&detail::OnRawNewPath);
-    ::Core::Events::AddOnIntegerPropertyChange(&detail::OnRawIntegerPropertyChange);
-    ::Core::Events::AddOnTeleport(&detail::OnRawTeleport);
-    ::Core::Events::AddOnDoCast(&detail::OnRawDoCast);
-    ::Core::Events::AddOnProcessSpell(&detail::OnRawProcessSpell);
-    ::Core::Events::AddOnProcessCastSpell(&detail::OnRawProcessCastSpell);
-    ::Core::Events::AddOnFinishCast(&detail::OnRawFinishCast);
-    ::Core::Events::AddOnSpellImpact(&detail::OnRawSpellImpact);
-    // Subscribe BOTH animation hook IDs:
-    //   - OnPlayAnimationWrapper (sub_E15D10): central dispatch wrapper used by
-    //     local-player animation paths. RCX = wrapper, *(RCX+0x08) = AIBaseClient.
-    //   - OnPlayAnimation (sub_29BF90): packet callback for net packet ids 0x11D
-    //     and 0x1F1 (server-driven animations on any unit, incl. enemies).
-    //     RCX = AIBaseClient directly, string-view at RDX+0x18 (data) / +0x20 (size).
-    // DecodePlayAnimation in CoreEvents.h branches on raw.Id to handle both
-    // layouts. Subscribing only the wrapper missed every packet-driven animation.
-    ::Core::Events::AddOnPlayAnimationWrapper(&detail::OnRawPlayAnimation);
-    ::Core::Events::AddOnPlayAnimation(&detail::OnRawPlayAnimation);
-    ::Core::Events::AddOnStopCast(&detail::OnRawStopCast);
     detail::EventTurretConstruct();
 }
 
@@ -536,10 +1089,32 @@ inline void Reset() {
     detail::GameUpdateHandlers.Clear();
     detail::ObjectCreateHandlers.Clear();
     detail::ObjectDeleteHandlers.Clear();
+    AcquireSRWLockExclusive(&detail::PendingObjectLock);
     for (int i = 0; i < detail::PendingObjectCreateCount; ++i) {
         detail::PendingObjectCreates[i] = {};
     }
     detail::PendingObjectCreateCount = 0;
+    for (int i = 0; i < detail::PendingObjectDeleteCount; ++i) {
+        detail::PendingObjectDeletes[i] = {};
+    }
+    detail::PendingObjectDeleteCount = 0;
+    ReleaseSRWLockExclusive(&detail::PendingObjectLock);
+    detail::PendingCoreHooks.Clear();
+    detail::PendingMissileCreates.Clear();
+    detail::PendingMissileDeletes.Clear();
+    detail::PendingBuffAdds.Clear();
+    detail::PendingBuffRemoves.Clear();
+    detail::PendingBuffUpdates.Clear();
+    detail::PendingNewPaths.Clear();
+    detail::PendingIntegerPropertyChanges.Clear();
+    detail::PendingTeleports.Clear();
+    detail::PendingDoCasts.Clear();
+    detail::PendingProcessSpells.Clear();
+    detail::PendingProcessCastSpells.Clear();
+    detail::PendingFinishCasts.Clear();
+    detail::PendingSpellImpacts.Clear();
+    detail::PendingPlayAnimations.Clear();
+    detail::PendingStopCasts.Clear();
     detail::MissileCreateHandlers.Clear();
     detail::MissileDeleteHandlers.Clear();
     detail::BuffAddHandlers.Clear();
@@ -557,15 +1132,50 @@ inline void Reset() {
     detail::StopCastHandlers.Clear();
     detail::ResetDerivedEvents();
     detail::Initialized = false;
+    detail::CoreHookRawSubscribed = false;
+    detail::GameUpdateRawSubscribed = false;
+    detail::ObjectCreateRawSubscribed = false;
+    detail::ObjectDeleteRawSubscribed = false;
+    detail::MissileCreateRawSubscribed = false;
+    detail::MissileDeleteRawSubscribed = false;
+    detail::BuffAddRawSubscribed = false;
+    detail::BuffRemoveRawSubscribed = false;
+    detail::BuffUpdateRawSubscribed = false;
+    detail::NewPathRawSubscribed = false;
+    detail::IntegerPropertyChangeRawSubscribed = false;
+    detail::TeleportRawSubscribed = false;
+    detail::DoCastRawSubscribed = false;
+    detail::ProcessSpellRawSubscribed = false;
+    detail::ProcessCastSpellRawSubscribed = false;
+    detail::FinishCastRawSubscribed = false;
+    detail::SpellImpactRawSubscribed = false;
+    detail::PlayAnimationWrapperRawSubscribed = false;
+    detail::PlayAnimationRawSubscribed = false;
+    detail::StopCastRawSubscribed = false;
+    detail::DashConsumerRefs = 0;
+    detail::StealthConsumerRefs = 0;
+    detail::TeleportConsumerRefs = 0;
+    detail::GapcloserConsumerRefs = 0;
+    detail::InterruptableConsumerRefs = 0;
+    detail::TurretConsumerRefs = 0;
 }
 
 inline bool AddOnCoreHook(CoreHookHandler handler) {
     Initialize();
-    return detail::CoreHookHandlers.Add(handler);
+    const bool added = detail::CoreHookHandlers.Add(handler);
+    if (added) {
+        detail::EnsureCoreHookRawSubscribed();
+    }
+    return added;
 }
 
 inline bool RemoveOnCoreHook(CoreHookHandler handler) {
-    return detail::CoreHookHandlers.Remove(handler);
+    const bool removed = detail::CoreHookHandlers.Remove(handler);
+    if (removed && !detail::CoreHookHandlers.HasHandlers()) {
+        detail::ReleaseCoreHookRawSubscribed();
+        detail::ReleaseGameUpdateRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool AddOnCoreHook(CoreHookId id, CoreHookHandler handler) {
@@ -601,76 +1211,256 @@ inline bool IsLocalPlayer(const Core::Events::ObjectInfo& sender) {
            sender.NetworkId == playerNetworkId;
 }
 
-inline bool AddOnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) { Initialize(); return detail::GameUpdateHandlers.Add(handler); }
-inline bool RemoveOnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) { return detail::GameUpdateHandlers.Remove(handler); }
+inline bool AddOnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) {
+    Initialize();
+    return detail::EnsureGameUpdateRawSubscribed() &&
+           detail::GameUpdateHandlers.Add(handler);
+}
+inline bool RemoveOnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) {
+    const bool removed = detail::GameUpdateHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseGameUpdateRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnGameUpdate(void(*handler)(const GameUpdateEventArgs&)) { return AddOnGameUpdate(handler); }
 
-inline bool AddOnCreateObject(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::ObjectCreateHandlers.Add(handler); }
-inline bool RemoveOnCreateObject(void(*handler)(const ObjectEventArgs&)) { return detail::ObjectCreateHandlers.Remove(handler); }
+inline bool AddOnCreateObject(void(*handler)(const ObjectEventArgs&)) {
+    Initialize();
+    return detail::EnsureObjectCreateRawSubscribed() &&
+           detail::ObjectCreateHandlers.Add(handler);
+}
+inline bool RemoveOnCreateObject(void(*handler)(const ObjectEventArgs&)) {
+    const bool removed = detail::ObjectCreateHandlers.Remove(handler);
+    if (removed && !detail::ObjectCreateHandlers.HasHandlers()) {
+        detail::ReleaseObjectCreateRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnCreateObject(void(*handler)(const ObjectEventArgs&)) { return AddOnCreateObject(handler); }
 
-inline bool AddOnDeleteObject(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::ObjectDeleteHandlers.Add(handler); }
-inline bool RemoveOnDeleteObject(void(*handler)(const ObjectEventArgs&)) { return detail::ObjectDeleteHandlers.Remove(handler); }
+inline bool AddOnDeleteObject(void(*handler)(const ObjectEventArgs&)) {
+    Initialize();
+    return detail::EnsureObjectDeleteRawSubscribed() &&
+           detail::ObjectDeleteHandlers.Add(handler);
+}
+inline bool RemoveOnDeleteObject(void(*handler)(const ObjectEventArgs&)) {
+    const bool removed = detail::ObjectDeleteHandlers.Remove(handler);
+    if (removed && !detail::ObjectDeleteHandlers.HasHandlers()) {
+        detail::ReleaseObjectDeleteRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnDeleteObject(void(*handler)(const ObjectEventArgs&)) { return AddOnDeleteObject(handler); }
 
-inline bool AddOnMissileCreate(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::MissileCreateHandlers.Add(handler); }
-inline bool RemoveOnMissileCreate(void(*handler)(const ObjectEventArgs&)) { return detail::MissileCreateHandlers.Remove(handler); }
+inline bool AddOnMissileCreate(void(*handler)(const ObjectEventArgs&)) {
+    Initialize();
+    return detail::EnsureMissileCreateRawSubscribed() &&
+           detail::MissileCreateHandlers.Add(handler);
+}
+inline bool RemoveOnMissileCreate(void(*handler)(const ObjectEventArgs&)) {
+    const bool removed = detail::MissileCreateHandlers.Remove(handler);
+    if (removed && !detail::MissileCreateHandlers.HasHandlers()) {
+        detail::ReleaseMissileCreateRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnMissileCreate(void(*handler)(const ObjectEventArgs&)) { return AddOnMissileCreate(handler); }
 
-inline bool AddOnMissileDelete(void(*handler)(const ObjectEventArgs&)) { Initialize(); return detail::MissileDeleteHandlers.Add(handler); }
-inline bool RemoveOnMissileDelete(void(*handler)(const ObjectEventArgs&)) { return detail::MissileDeleteHandlers.Remove(handler); }
+inline bool AddOnMissileDelete(void(*handler)(const ObjectEventArgs&)) {
+    Initialize();
+    return detail::EnsureMissileDeleteRawSubscribed() &&
+           detail::MissileDeleteHandlers.Add(handler);
+}
+inline bool RemoveOnMissileDelete(void(*handler)(const ObjectEventArgs&)) {
+    const bool removed = detail::MissileDeleteHandlers.Remove(handler);
+    if (removed && !detail::MissileDeleteHandlers.HasHandlers()) {
+        detail::ReleaseMissileDeleteRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnMissileDelete(void(*handler)(const ObjectEventArgs&)) { return AddOnMissileDelete(handler); }
 
-inline bool AddOnBuffAdd(void(*handler)(const BuffEventArgs&)) { Initialize(); return detail::BuffAddHandlers.Add(handler); }
-inline bool RemoveOnBuffAdd(void(*handler)(const BuffEventArgs&)) { return detail::BuffAddHandlers.Remove(handler); }
+inline bool AddOnBuffAdd(void(*handler)(const BuffEventArgs&)) {
+    Initialize();
+    return detail::EnsureBuffAddRawSubscribed() &&
+           detail::BuffAddHandlers.Add(handler);
+}
+inline bool RemoveOnBuffAdd(void(*handler)(const BuffEventArgs&)) {
+    const bool removed = detail::BuffAddHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseBuffAddRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnBuffAdd(void(*handler)(const BuffEventArgs&)) { return AddOnBuffAdd(handler); }
 
-inline bool AddOnBuffRemove(void(*handler)(const BuffEventArgs&)) { Initialize(); return detail::BuffRemoveHandlers.Add(handler); }
-inline bool RemoveOnBuffRemove(void(*handler)(const BuffEventArgs&)) { return detail::BuffRemoveHandlers.Remove(handler); }
+inline bool AddOnBuffRemove(void(*handler)(const BuffEventArgs&)) {
+    Initialize();
+    return detail::EnsureBuffRemoveRawSubscribed() &&
+           detail::BuffRemoveHandlers.Add(handler);
+}
+inline bool RemoveOnBuffRemove(void(*handler)(const BuffEventArgs&)) {
+    const bool removed = detail::BuffRemoveHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseBuffRemoveRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnBuffRemove(void(*handler)(const BuffEventArgs&)) { return AddOnBuffRemove(handler); }
 
-inline bool AddOnBuffUpdate(void(*handler)(const BuffEventArgs&)) { Initialize(); return detail::BuffUpdateHandlers.Add(handler); }
-inline bool RemoveOnBuffUpdate(void(*handler)(const BuffEventArgs&)) { return detail::BuffUpdateHandlers.Remove(handler); }
+inline bool AddOnBuffUpdate(void(*handler)(const BuffEventArgs&)) {
+    Initialize();
+    return detail::EnsureBuffUpdateRawSubscribed() &&
+           detail::BuffUpdateHandlers.Add(handler);
+}
+inline bool RemoveOnBuffUpdate(void(*handler)(const BuffEventArgs&)) {
+    const bool removed = detail::BuffUpdateHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseBuffUpdateRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnBuffUpdate(void(*handler)(const BuffEventArgs&)) { return AddOnBuffUpdate(handler); }
 
-inline bool AddOnNewPath(void(*handler)(const NewPathEventArgs&)) { Initialize(); return detail::NewPathHandlers.Add(handler); }
-inline bool RemoveOnNewPath(void(*handler)(const NewPathEventArgs&)) { return detail::NewPathHandlers.Remove(handler); }
+inline bool AddOnNewPath(void(*handler)(const NewPathEventArgs&)) {
+    Initialize();
+    return detail::EnsureNewPathRawSubscribed() &&
+           detail::NewPathHandlers.Add(handler);
+}
+inline bool RemoveOnNewPath(void(*handler)(const NewPathEventArgs&)) {
+    const bool removed = detail::NewPathHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseNewPathRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnNewPath(void(*handler)(const NewPathEventArgs&)) { return AddOnNewPath(handler); }
 
-inline bool AddOnIntegerPropertyChange(void(*handler)(const IntegerPropertyChangeEventArgs&)) { Initialize(); return detail::IntegerPropertyChangeHandlers.Add(handler); }
-inline bool RemoveOnIntegerPropertyChange(void(*handler)(const IntegerPropertyChangeEventArgs&)) { return detail::IntegerPropertyChangeHandlers.Remove(handler); }
+inline bool AddOnIntegerPropertyChange(void(*handler)(const IntegerPropertyChangeEventArgs&)) {
+    Initialize();
+    return detail::EnsureIntegerPropertyChangeRawSubscribed() &&
+           detail::IntegerPropertyChangeHandlers.Add(handler);
+}
+inline bool RemoveOnIntegerPropertyChange(void(*handler)(const IntegerPropertyChangeEventArgs&)) {
+    const bool removed = detail::IntegerPropertyChangeHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseIntegerPropertyChangeRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnIntegerPropertyChange(void(*handler)(const IntegerPropertyChangeEventArgs&)) { return AddOnIntegerPropertyChange(handler); }
 
-inline bool AddOnTeleportRaw(void(*handler)(const TeleportRawEventArgs&)) { Initialize(); return detail::TeleportHandlers.Add(handler); }
-inline bool RemoveOnTeleportRaw(void(*handler)(const TeleportRawEventArgs&)) { return detail::TeleportHandlers.Remove(handler); }
+inline bool AddOnTeleportRaw(void(*handler)(const TeleportRawEventArgs&)) {
+    Initialize();
+    return detail::EnsureTeleportRawSubscribed() &&
+           detail::TeleportHandlers.Add(handler);
+}
+inline bool RemoveOnTeleportRaw(void(*handler)(const TeleportRawEventArgs&)) {
+    const bool removed = detail::TeleportHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseTeleportRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnTeleportRaw(void(*handler)(const TeleportRawEventArgs&)) { return AddOnTeleportRaw(handler); }
 
-inline bool AddOnDoCast(void(*handler)(const ProcessSpellEventArgs&)) { Initialize(); return detail::DoCastHandlers.Add(handler); }
-inline bool RemoveOnDoCast(void(*handler)(const ProcessSpellEventArgs&)) { return detail::DoCastHandlers.Remove(handler); }
+inline bool AddOnDoCast(void(*handler)(const ProcessSpellEventArgs&)) {
+    Initialize();
+    return detail::EnsureDoCastRawSubscribed() &&
+           detail::DoCastHandlers.Add(handler);
+}
+inline bool RemoveOnDoCast(void(*handler)(const ProcessSpellEventArgs&)) {
+    const bool removed = detail::DoCastHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseDoCastRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnDoCast(void(*handler)(const ProcessSpellEventArgs&)) { return AddOnDoCast(handler); }
 
-inline bool AddOnProcessSpell(void(*handler)(const ProcessSpellEventArgs&)) { Initialize(); return detail::ProcessSpellHandlers.Add(handler); }
-inline bool RemoveOnProcessSpell(void(*handler)(const ProcessSpellEventArgs&)) { return detail::ProcessSpellHandlers.Remove(handler); }
+inline bool AddOnProcessSpell(void(*handler)(const ProcessSpellEventArgs&)) {
+    Initialize();
+    return detail::EnsureProcessSpellRawSubscribed() &&
+           detail::ProcessSpellHandlers.Add(handler);
+}
+inline bool RemoveOnProcessSpell(void(*handler)(const ProcessSpellEventArgs&)) {
+    const bool removed = detail::ProcessSpellHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseProcessSpellRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnProcessSpell(void(*handler)(const ProcessSpellEventArgs&)) { return AddOnProcessSpell(handler); }
 
-inline bool AddOnProcessCastSpell(void(*handler)(const CastSpellEventArgs&)) { Initialize(); return detail::ProcessCastSpellHandlers.Add(handler); }
-inline bool RemoveOnProcessCastSpell(void(*handler)(const CastSpellEventArgs&)) { return detail::ProcessCastSpellHandlers.Remove(handler); }
+inline bool AddOnProcessCastSpell(void(*handler)(const CastSpellEventArgs&)) {
+    Initialize();
+    return detail::EnsureProcessCastSpellRawSubscribed() &&
+           detail::ProcessCastSpellHandlers.Add(handler);
+}
+inline bool RemoveOnProcessCastSpell(void(*handler)(const CastSpellEventArgs&)) {
+    const bool removed = detail::ProcessCastSpellHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseProcessCastSpellRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnProcessCastSpell(void(*handler)(const CastSpellEventArgs&)) { return AddOnProcessCastSpell(handler); }
 
-inline bool AddOnFinishCast(void(*handler)(const ProcessSpellEventArgs&)) { Initialize(); return detail::FinishCastHandlers.Add(handler); }
-inline bool RemoveOnFinishCast(void(*handler)(const ProcessSpellEventArgs&)) { return detail::FinishCastHandlers.Remove(handler); }
+inline bool AddOnFinishCast(void(*handler)(const ProcessSpellEventArgs&)) {
+    Initialize();
+    return detail::EnsureFinishCastRawSubscribed() &&
+           detail::FinishCastHandlers.Add(handler);
+}
+inline bool RemoveOnFinishCast(void(*handler)(const ProcessSpellEventArgs&)) {
+    const bool removed = detail::FinishCastHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseFinishCastRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnFinishCast(void(*handler)(const ProcessSpellEventArgs&)) { return AddOnFinishCast(handler); }
 
-inline bool AddOnSpellImpact(void(*handler)(const ProcessSpellEventArgs&)) { Initialize(); return detail::SpellImpactHandlers.Add(handler); }
-inline bool RemoveOnSpellImpact(void(*handler)(const ProcessSpellEventArgs&)) { return detail::SpellImpactHandlers.Remove(handler); }
+inline bool AddOnSpellImpact(void(*handler)(const ProcessSpellEventArgs&)) {
+    Initialize();
+    return detail::EnsureSpellImpactRawSubscribed() &&
+           detail::SpellImpactHandlers.Add(handler);
+}
+inline bool RemoveOnSpellImpact(void(*handler)(const ProcessSpellEventArgs&)) {
+    const bool removed = detail::SpellImpactHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseSpellImpactRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnSpellImpact(void(*handler)(const ProcessSpellEventArgs&)) { return AddOnSpellImpact(handler); }
 
-inline bool AddOnPlayAnimation(void(*handler)(const PlayAnimationEventArgs&)) { Initialize(); return detail::PlayAnimationHandlers.Add(handler); }
-inline bool RemoveOnPlayAnimation(void(*handler)(const PlayAnimationEventArgs&)) { return detail::PlayAnimationHandlers.Remove(handler); }
+inline bool AddOnPlayAnimation(void(*handler)(const PlayAnimationEventArgs&)) {
+    Initialize();
+    return detail::EnsurePlayAnimationRawSubscribed() &&
+           detail::PlayAnimationHandlers.Add(handler);
+}
+inline bool RemoveOnPlayAnimation(void(*handler)(const PlayAnimationEventArgs&)) {
+    const bool removed = detail::PlayAnimationHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleasePlayAnimationRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnPlayAnimation(void(*handler)(const PlayAnimationEventArgs&)) { return AddOnPlayAnimation(handler); }
 
-inline bool AddOnStopCast(void(*handler)(const StopCastEventArgs&)) { Initialize(); return detail::StopCastHandlers.Add(handler); }
-inline bool RemoveOnStopCast(void(*handler)(const StopCastEventArgs&)) { return detail::StopCastHandlers.Remove(handler); }
+inline bool AddOnStopCast(void(*handler)(const StopCastEventArgs&)) {
+    Initialize();
+    return detail::EnsureStopCastRawSubscribed() &&
+           detail::StopCastHandlers.Add(handler);
+}
+inline bool RemoveOnStopCast(void(*handler)(const StopCastEventArgs&)) {
+    const bool removed = detail::StopCastHandlers.Remove(handler);
+    if (removed) {
+        detail::ReleaseStopCastRawIfUnused();
+    }
+    return removed;
+}
 inline bool OnStopCast(void(*handler)(const StopCastEventArgs&)) { return AddOnStopCast(handler); }
 
 template <typename T>

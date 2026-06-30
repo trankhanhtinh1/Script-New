@@ -31,12 +31,32 @@ namespace detail {
 } // namespace detail
 
 inline bool AddOnStealth(StealthHandler handler) {
+    if (!handler) {
+        return false;
+    }
+
     SDK::Events::Initialize();
-    return detail::StealthHandlers.Add(handler);
+    if (!SDK::Events::detail::EnsureIntegerPropertyChangeRawSubscribed()) {
+        return false;
+    }
+
+    const bool hadHandlers = detail::StealthHandlers.HasHandlers();
+    const bool added = detail::StealthHandlers.Add(handler);
+    if (added && !hadHandlers) {
+        ++SDK::Events::detail::StealthConsumerRefs;
+    }
+    return added;
 }
 
 inline bool RemoveOnStealth(StealthHandler handler) {
-    return detail::StealthHandlers.Remove(handler);
+    const bool removed = detail::StealthHandlers.Remove(handler);
+    if (removed && !detail::StealthHandlers.HasHandlers()) {
+        if (SDK::Events::detail::StealthConsumerRefs > 0) {
+            --SDK::Events::detail::StealthConsumerRefs;
+        }
+        SDK::Events::detail::ReleaseIntegerPropertyChangeRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool OnStealth(StealthHandler handler) {

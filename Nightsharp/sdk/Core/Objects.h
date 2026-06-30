@@ -24,6 +24,7 @@
 #include <initializer_list>
 #include <string>
 #include <vector>
+#include <fstream>
 
 namespace SDK {
 
@@ -385,69 +386,120 @@ namespace ObjectDetail {
     }
 } // namespace ObjectDetail
 
-namespace ObjectCache {
-    constexpr int kSnapshotBuckets = 512;
-    struct SnapshotEntry {
-        uintptr_t address = 0;
-        uint32_t gen = 0;
-        ::Core::Objects::ObjectSnapshot snapshot;
-        bool hasWaypoints = false;
+// ---------------------------------------------------------------------------
+// StaticStringCache — populated once on OnCreateObject, cleared on OnDeleteObject.
+// Stores the fields that NEVER change during a unit's lifetime:
+//   - team       (never changes mid-game)
+//   - minionClass (set at spawn, never updated)
+// Name/characterName reads removed — classification is type-based.
+// All other properties (health, position, etc.) are read inline via raw
+// pointer dereference directly from the game object each time they are needed.
+// ---------------------------------------------------------------------------
+namespace StaticStringCache {
+    constexpr int kMaxIndex = 10000;
+    struct Entry {
+        bool valid        = false;
+        std::string characterName;  // populated only for AIHeroClient
+        uint32_t    team       = 0;
+        int         minionClass = 0;
+    };
+    inline Entry entries[kMaxIndex] = {};
+
+    inline void Populate(uintptr_t address, uint32_t index,
+                         ::Core::Objects::ObjectType type) {
+        if (index >= static_cast<uint32_t>(kMaxIndex) || !address) return;
+        Entry& e = entries[index];
+        e.valid = true;
+
+        // characterName — read once, only for heroes (cheap for 10 objects total)
+        if (type == ::Core::Objects::ObjectType::AIHeroClient) {
+            char charBuf[96] = {};
+            if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
+                e.characterName = charBuf;
+        }
+
+        // team — static for a unit's entire lifetime
+        e.team = ::Core::Objects::ReadTeamValue(address);
+
+        // minionClass — replicated once at creation
+        if (type == ::Core::Objects::ObjectType::AIMinionClient ||
+            type == ::Core::Objects::ObjectType::NeutralMinionCampClient) {
+            e.minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(address));
+        }
+    }
+
+    inline void Clear(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return;
+        entries[index] = {};
+    }
+
+    inline const Entry* Get(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
+        return entries[index].valid ? &entries[index] : nullptr;
+    }
+} // namespace StaticStringCache
+
+// ---------------------------------------------------------------------------
+// WaypointCache — per-frame cache for AiManager-derived data only.
+// These require a native game function call so they genuinely benefit from
+// caching within one frame. Direct field reads (health, pos, etc.) do NOT
+// use this cache — they are raw inline dereferences.
+// ---------------------------------------------------------------------------
+namespace WaypointCache {
+    constexpr int kBuckets = 512;
+    struct Entry {
+        uintptr_t address   = 0;
+        uint32_t  gen       = 0;
+        bool hasWaypoints   = false;
+        bool hasServerPos   = false;
         std::vector<Vector3> waypoints;
-        bool hasImmobileTime = false;
-        double immobileTime = 0.0;
-        bool hasServerPosition = false;
         Vector3 serverPosition = {};
     };
-    inline SnapshotEntry entries[kSnapshotBuckets] = {};
-    inline int Bucket(uintptr_t a) { return static_cast<int>((a >> 4) & (kSnapshotBuckets - 1)); }
-    inline SnapshotEntry* GetEntry(uintptr_t a, ::Core::Objects::ObjectType t = ::Core::Objects::ObjectType::GameObject) {
+    inline Entry entries[kBuckets] = {};
+    inline int Bucket(uintptr_t a) {
+        return static_cast<int>((a >> 4) & (kBuckets - 1));
+    }
+    inline Entry* GetEntry(uintptr_t a) {
         int b = Bucket(a);
-        SnapshotEntry& e = entries[b];
-        uint32_t g = CoreRuntime::g_ctx.phaseGeneration;
-        if (e.address == a && e.gen == g) return &e;
-        e.address = a; e.gen = g;
-        e.snapshot = ::Core::ObjectManager::ReadObject(a, t);
-        e.hasWaypoints = false;
-        e.hasImmobileTime = false;
-        e.hasServerPosition = false;
+        Entry& e = entries[b];
+        const uint32_t g = CoreRuntime::g_ctx.phaseGeneration;
+        if (e.address != a || e.gen != g) {
+            e.address       = a;
+            e.gen           = g;
+            e.hasWaypoints  = false;
+            e.hasServerPos  = false;
+        }
         return &e;
     }
-    inline const ::Core::Objects::ObjectSnapshot& GetSnapshot(uintptr_t a, ::Core::Objects::ObjectType t) {
-        return GetEntry(a, t)->snapshot;
-    }
-    // Lazily-populated waypoint cache. GetWaypoints()/CopyPath() each re-resolve
-    // the AiManager (a native game function call) and re-read the nav array on
-    // every call. The prediction pipeline (GetPrediction) calls GetWaypoints()
-    // repeatedly per prediction, so without this cache each prediction did
-    // ~5-10 native AiManager resolutions + nav-array reads. Cached for one
-    // phase (same generation as the snapshot).
     inline std::vector<Vector3>& GetWaypoints(uintptr_t a, int maxPoints) {
-        SnapshotEntry* e = GetEntry(a);
+        Entry* e = GetEntry(a);
         if (!e->hasWaypoints) {
             e->waypoints.clear();
             maxPoints = std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints);
             Vec3 points[::CoreAiManager::kMaxWaypoints] = {};
             const int count = ::CoreAiManager::CopyPath(a, points, maxPoints);
             e->waypoints.reserve(static_cast<std::size_t>(std::max(0, count)));
-            for (int i = 0; i < count; ++i) {
+            for (int i = 0; i < count; ++i)
                 e->waypoints.push_back(points[i]);
-            }
             e->hasWaypoints = true;
         }
         return e->waypoints;
     }
-    // ServerPosition also resolves the AiManager every call. Cache the single
-    // Vec3 read for the phase so the ~10 ServerPosition() calls per prediction
-    // resolve the AiManager only once per frame.
     inline Vector3 GetServerPosition(uintptr_t a) {
-        SnapshotEntry* e = GetEntry(a);
-        if (!e->hasServerPosition) {
+        Entry* e = GetEntry(a);
+        if (!e->hasServerPos) {
             e->serverPosition = ::CoreAiManager::GetServerPosition(a);
-            e->hasServerPosition = true;
+            e->hasServerPos   = true;
         }
         return e->serverPosition;
     }
-}
+} // namespace WaypointCache
+
+// Keep ObjectCache as a thin alias so any existing call-sites that reference
+// ObjectCache::GetWaypoints / ObjectCache::GetServerPosition still compile.
+namespace ObjectCache = WaypointCache;
+
+
 
 class GameObject {
 public:
@@ -499,12 +551,12 @@ public:
         return handle_;
     }
 
-    const ::Core::Objects::ObjectSnapshot& Snapshot() const {
-        return ObjectCache::GetSnapshot(Address(), Type());
-    }
-
     GameObjectTeam Team() const {
-        return ObjectDetail::MapTeam(Snapshot().team);
+        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
+            return ObjectDetail::MapTeam(sc->team);
+        const uintptr_t a = Address();
+        if (!a) return GameObjectTeam::Unknown;
+        return ObjectDetail::MapTeam(::Core::Objects::ReadTeamValue(a));
     }
 
     // Player team is constant for the entire game. Cache it on first use so
@@ -526,18 +578,64 @@ public:
         return cached;
     }
 
+    // Called once at the start of Rebuild() to force the player team static
+    // to resolve before any AddObject()/IsEnemy() calls are made.
+    // Also caches the local player champion name for the whole session.
+    static void WarmPlayerTeamCache() {
+        static std::uint32_t cached = 0;
+        static bool resolved = false;
+        if (resolved) return;
+
+        auto tryResolve = [&](uintptr_t playerAddr) -> bool {
+            if (!Globals::IsValidPtr(playerAddr)) return false;
+            cached = ::Core::Objects::ReadTeamValue(playerAddr);
+            if (cached == 0) return false;
+            // Cache champion name for the whole session.
+            char nameBuf[96] = {};
+            if (::Core::Objects::ReadCharacterName(playerAddr, nameBuf, static_cast<int>(sizeof(nameBuf))))
+                s_cachedChampionName = nameBuf;
+            resolved = true;
+            return true;
+        };
+
+        if (!tryResolve(CoreRuntime::g_ctx.localPlayer))
+            tryResolve(::Core::ObjectManager::PlayerAddress());
+        // After this call, CachedPlayerTeam()'s own static will also populate
+        // on its next invocation since it reads the same g_ctx.localPlayer.
+    }
+
+    // Returns the local player champion name cached at session start.
+    // Empty until WarmPlayerTeamCache() has successfully resolved.
+    static const std::string& GetCachedChampionName() {
+        return s_cachedChampionName;
+    }
+
     bool IsEnemy() const {
-        const auto& self = Snapshot();
-        if (!self.IsValid() || self.team == 0) return false;
-        const std::uint32_t playerTeam = CachedPlayerTeam();
-        return playerTeam != 0 && playerTeam != self.team;
+        uint32_t myTeam = 0;
+        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
+            myTeam = sc->team;
+        else {
+            const uintptr_t a = Address();
+            if (!a) return false;
+            myTeam = ::Core::Objects::ReadTeamValue(a);
+        }
+        if (myTeam == 0) return false;
+        const uint32_t playerTeam = CachedPlayerTeam();
+        return playerTeam != 0 && playerTeam != myTeam;
     }
 
     bool IsAlly() const {
-        const auto& self = Snapshot();
-        if (!self.IsValid() || self.team == 0) return false;
-        const std::uint32_t playerTeam = CachedPlayerTeam();
-        return playerTeam != 0 && playerTeam == self.team;
+        uint32_t myTeam = 0;
+        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
+            myTeam = sc->team;
+        else {
+            const uintptr_t a = Address();
+            if (!a) return false;
+            myTeam = ::Core::Objects::ReadTeamValue(a);
+        }
+        if (myTeam == 0) return false;
+        const uint32_t playerTeam = CachedPlayerTeam();
+        return playerTeam != 0 && playerTeam == myTeam;
     }
 
     bool IsMe() const {
@@ -545,40 +643,70 @@ public:
         return player.HasIdentity() && NetworkId() == static_cast<int>(player.networkId);
     }
 
+    // -----------------------------------------------------------------
+    // Direct inline reads — no snapshot, no SEH, no generation checks.
+    // These are identical to Chimera's RVA_CAST_THIS pattern:
+    //   each call compiles to a single `mov` CPU instruction.
+    // -----------------------------------------------------------------
     bool IsDead() const {
-        return Snapshot().isDead;
+        const uintptr_t a = Address();
+        if (!a) return false;
+        // GameObject doesn't have Health(), read directly using the known offset for now
+        float hp = *reinterpret_cast<const float*>(a + Offset::AttackableUnit::HP);
+        return hp <= 0.0f;
     }
 
     bool IsVisible() const {
-        return Snapshot().isVisible;
+        const uintptr_t a = Address();
+        if (!a) return false;
+        return *reinterpret_cast<const uint8_t*>(a + Offset::All::Visible) != 0;
     }
 
     bool IsTargetable() const {
-        return Snapshot().isTargetable;
+        const uintptr_t a = Address();
+        if (!a) return false;
+        return *reinterpret_cast<const uint8_t*>(a + Offset::AttackableUnit::IsTargetable) != 0;
     }
 
     bool IsInvulnerable() const {
-        return Snapshot().isInvulnerable;
+        const uintptr_t a = Address();
+        if (!a) return false;
+        return *reinterpret_cast<const uint8_t*>(a + Offset::All::IsInvulnerable) != 0;
     }
 
     float BoundingRadius() const {
-        return Snapshot().boundingRadius;
+        const uintptr_t a = Address();
+        if (!a) return 0.0f;
+        const float r = *reinterpret_cast<const float*>(a + Offset::All::Radius);
+        return (r == r && r >= 0.0f && r <= 10000.0f) ? r : 65.0f;
     }
 
     Vector3 Position() const {
-        return Snapshot().position;
+        const uintptr_t a = Address();
+        if (!a) return {};
+        return *reinterpret_cast<const Vector3*>(a + Offset::All::Position);
     }
 
     Vector3 Direction() const {
-        return Snapshot().direction;
+        const uintptr_t a = Address();
+        if (!a) return {};
+        return {}; // direction requires vfunc chain; use AIBaseClient::Direction() instead
     }
 
-    std::string Name() const {
-        return Snapshot().name;
+    // String reads from StaticStringCache (populated once on OnCreateObject).
+    // Returns empty string if the cache hasn't been populated yet (rare —
+    // only possible if the object existed before script injection).
+    const std::string& Name() const {
+        // Entry::name removed — name reads eliminated from hot path.
+        static const std::string kEmpty;
+        return kEmpty;
     }
 
-    std::string CharacterName() const {
-        return Snapshot().characterName;
+    const std::string& CharacterName() const {
+        auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index));
+        if (sc && !sc->characterName.empty()) return sc->characterName;
+        static const std::string kEmpty;
+        return kEmpty;
     }
 
     // Gap #2 fix: EnsoulSharp Compare is strict — only matches when both
@@ -661,24 +789,21 @@ public:
             return false;
         }
 
-        const auto& snapshot = Snapshot();
-        if (static_cast<::Core::Objects::MinionClass>(snapshot.minionClass) ==
-            ::Core::Objects::MinionClass::Pet) {
-            return true;
+        // minionClass == Pet covers all summoned pets — no name read needed.
+        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index))) {
+            return static_cast<::Core::Objects::MinionClass>(sc->minionClass) ==
+                   ::Core::Objects::MinionClass::Pet;
         }
-
-        const std::string name = ObjectDetail::ToLower(
-            snapshot.characterName[0] ? snapshot.characterName : snapshot.name);
-        return ObjectDetail::EqualsAny(name, {
-            "annietibbers", "elisespiderling", "heimertyellow",
-            "heimertblue", "ivernminion", "malzaharvoidling",
-            "shacobox", "yorickghoulmelee", "yorickbigghoul",
-            "zyrathornplant", "zyragraspingplant",
-        });
+        return false;
     }
+
+
 
 protected:
     mutable ::Core::Objects::ObjectHandle handle_ = {};
+
+private:
+    inline static std::string s_cachedChampionName;
 };
 
 inline bool SpellBookClient::CastSpell(SpellSlot slot,
@@ -696,15 +821,30 @@ public:
     explicit AttackableUnit(::Core::Objects::ObjectHandle handle)
         : GameObject(handle) {}
 
-    float Health() const { return Snapshot().health; }
-    float MaxHealth() const { return Snapshot().maxHealth; }
+    float Health() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::HP) : 0.0f;
+    }
+    float MaxHealth() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::MaxHP) : 0.0f;
+    }
     float HealthPercent() const {
         const float maxHealth = MaxHealth();
         return maxHealth > 0.0f ? (Health() * 100.0f / maxHealth) : 0.0f;
     }
-    float AllShield() const { return Snapshot().allShield; }
-    float PhysicalShield() const { return Snapshot().physicalShield; }
-    float MagicalShield() const { return Snapshot().magicalShield; }
+    float AllShield() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::AllShield) : 0.0f;
+    }
+    float PhysicalShield() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::PhysicalShield) : 0.0f;
+    }
+    float MagicalShield() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::MagicalShield) : 0.0f;
+    }
 };
 
 class AIBaseClient : public AttackableUnit {
@@ -716,22 +856,57 @@ public:
     explicit AIBaseClient(::Core::Objects::ObjectHandle handle)
         : AttackableUnit(handle) {}
 
-    float Mana() const { return Snapshot().mana; }
-    float MaxMana() const { return Snapshot().maxMana; }
+    float Mana() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::MP) : 0.0f;
+    }
+    float MaxMana() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::MaxMP) : 0.0f;
+    }
     float ManaPercent() const {
         const float maxMana = MaxMana();
         return maxMana > 0.0f ? (Mana() * 100.0f / maxMana) : 0.0f;
     }
     float GetSpellDamage(const AIBaseClient& target, SpellSlot slot) const;
-    float MoveSpeed() const { return Snapshot().moveSpeed; }
-    float AttackRange() const { return Snapshot().attackRange; }
-    float TotalAttackDamage() const { return Snapshot().totalAttackDamage; }
-    float BaseAttackDamage() const { return Snapshot().baseAttackDamage; }
-    float TotalMagicalDamage() const { return Snapshot().abilityPower; }
-    float Armor() const { return Snapshot().armor; }
-    float SpellBlock() const { return Snapshot().spellBlock; }
-    float AttackSpeedMod() const { return Snapshot().attackSpeedMod; }
-    int Level() const { return Snapshot().level; }
+    float MoveSpeed() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::MoveSpeed) : 0.0f;
+    }
+    float AttackRange() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::AttackRange) : 0.0f;
+    }
+    float BaseAttackDamage() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::BaseAttackDamage) : 0.0f;
+    }
+    float TotalAttackDamage() const {
+        const uintptr_t a = Address();
+        if (!a) return 0.0f;
+        return *reinterpret_cast<const float*>(a + Offset::AIHeroClient::BaseAttackDamage)
+             + *reinterpret_cast<const float*>(a + Offset::AIHeroClient::FlatPhysicalDmgMod);
+    }
+    float TotalMagicalDamage() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::BaseAbilityDamage) : 0.0f;
+    }
+    float Armor() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::Armor) : 0.0f;
+    }
+    float SpellBlock() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::SpellBlock) : 0.0f;
+    }
+    float AttackSpeedMod() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const float*>(a + Offset::AIHeroClient::AttackSpeedMod) : 0.0f;
+    }
+    int Level() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const int*>(a + Offset::AIHeroClient::LevelRef) : 0;
+    }
 
     // ── Hero-specific stat properties (read from AIHeroClient offsets) ──
     // These are safe to call on any AIBaseClient ─ non-hero objects will
@@ -1157,14 +1332,16 @@ public:
     }
 
     ::Core::Objects::MinionClass GetMinionClass() const {
-        return static_cast<::Core::Objects::MinionClass>(Snapshot().minionClass);
+        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
+            return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
+        const uintptr_t a = Address();
+        return a ? ::Core::Objects::ReadMinionClass(a) : ::Core::Objects::MinionClass::Unset;
     }
 
     MinionTypes GetMinionType() const {
-        const auto& snapshot = Snapshot();
-        const std::string name = !std::string(snapshot.characterName).empty()
-            ? snapshot.characterName
-            : snapshot.name;
+        const std::string& charName = CharacterName();
+        const std::string& unitName = Name();
+        const std::string name = !charName.empty() ? charName : unitName;
 
         if (ObjectDetail::EqualsAny(name, {
             "SRU_ChaosMinionMelee", "SRU_OrderMinionMelee",
@@ -1194,18 +1371,16 @@ public:
             return MinionTypes::Super | MinionTypes::Melee;
         }
 
-        // Wards (incl. all trinket variants observed in CDragon Map11 +
-        // legacy modes). Anything tagged as Ward should never be auto-
-        // attacked unless the user explicitly opts in.
         if (ObjectDetail::EqualsAny(name, {
             "SightWard", "VisionWard", "YellowTrinket", "BlueTrinket",
             "JammerDevice", "JammerDeviceItem",
-            "SionUlt_Ward", "SionPassiveCorpse", // Sion passive corpse acts ward-like
+            "SionUlt_Ward", "SionPassiveCorpse",
         })) {
             return MinionTypes::Ward;
         }
 
-        switch (static_cast<::Core::Objects::MinionClass>(snapshot.minionClass)) {
+        // Fall back to cached minionClass byte
+        switch (GetMinionClass()) {
         case ::Core::Objects::MinionClass::MeleeLaneMinion:
             return MinionTypes::Normal | MinionTypes::Melee;
         case ::Core::Objects::MinionClass::RangedLaneMinion:
@@ -1229,10 +1404,9 @@ public:
     // boss itself is "Atakhan_*". KrugAncient is the Krug elder. RiftHrald
     // and Baron retain their classic names.
     JungleType GetJungleType() const {
-        const auto& snapshot = Snapshot();
-        const std::string name = !std::string(snapshot.characterName).empty()
-            ? snapshot.characterName
-            : snapshot.name;
+        const std::string& charName = CharacterName();
+        const std::string& unitName = Name();
+        const std::string name = !charName.empty() ? charName : unitName;
 
         // Plants: blast cone, honeyfruit, scryer's bloom (visible-only +
         // Smolder's Twin Shadows passive variant). Map under the same enum
@@ -1385,14 +1559,38 @@ public:
         handle_.type = ::Core::Objects::ObjectType::MissileClient;
     }
 
-    int CasterIndex() const { return static_cast<int>(Snapshot().missile.casterIndex); }
-    int TargetIndex() const { return static_cast<int>(Snapshot().missile.targetIndex); }
-    int CasterNetworkId() const { return ResolveNetworkIdFromIndex(Snapshot().missile.casterIndex); }
-    int TargetNetworkId() const { return ResolveNetworkIdFromIndex(Snapshot().missile.targetIndex); }
-    std::string SpellName() const { return Snapshot().missile.spellName; }
-    std::string MissileName() const { return Snapshot().missile.missileName; }
-    Vector3 StartPosition() const { return Snapshot().missile.startPosition; }
-    Vector3 EndPosition() const { return Snapshot().missile.endPosition; }
+    int CasterIndex() const {
+        const uintptr_t a = Address();
+        return a ? static_cast<int>(*reinterpret_cast<const uint32_t*>(a + Offset::MissileClient::CasterIndex)) : 0;
+    }
+    int TargetIndex() const {
+        const uintptr_t a = Address();
+        return a ? static_cast<int>(*reinterpret_cast<const uint32_t*>(a + Offset::MissileClient::TargetIndex)) : 0;
+    }
+    int CasterNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(CasterIndex())); }
+    int TargetNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(TargetIndex())); }
+    std::string SpellName() const {
+        const uintptr_t a = Address();
+        if (!a) return {};
+        char buf[96] = {};
+        Globals::ReadRuntimeStringField(a + Offset::MissileClient::SpellName, buf, static_cast<int>(sizeof(buf)));
+        return buf;
+    }
+    std::string MissileName() const {
+        const uintptr_t a = Address();
+        if (!a) return {};
+        char buf[96] = {};
+        Globals::ReadRuntimeStringField(a + Offset::MissileClient::MissileName, buf, static_cast<int>(sizeof(buf)));
+        return buf;
+    }
+    Vector3 StartPosition() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const Vector3*>(a + Offset::MissileClient::StartPos) : Vector3{};
+    }
+    Vector3 EndPosition() const {
+        const uintptr_t a = Address();
+        return a ? *reinterpret_cast<const Vector3*>(a + Offset::MissileClient::EndPos) : Vector3{};
+    }
 
 private:
     static int ResolveNetworkIdFromIndex(std::uint32_t index) {
@@ -1473,7 +1671,7 @@ public:
     // this in sync with the inhibitor state, so we don't need to
     // re-derive it from BarracksDampenerClient health.
     bool HasShield() const {
-        return Snapshot().isInvulnerable;
+        return IsInvulnerable();
     }
 };
 

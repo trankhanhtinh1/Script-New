@@ -17,6 +17,10 @@
 #include <fstream>
 #include <vector>
 
+#ifndef NIGHTSHARP_ORBWALKER_LOGGING
+#define NIGHTSHARP_ORBWALKER_LOGGING 0
+#endif
+
 namespace SDK {
 
 class TargetSelector {
@@ -31,6 +35,20 @@ public:
         humanizer_ = new TargetSelectorHumanizer(internalMenu_);
         mode_ = new TargetSelectorMode(internalMenu_);
         drawing_ = new TargetSelectorDrawing(internalMenu_, selected_, mode_);
+    }
+
+    ~TargetSelector() {
+        delete drawing_;
+        delete mode_;
+        delete humanizer_;
+        delete selected_;
+        drawing_ = nullptr;
+        mode_ = nullptr;
+        humanizer_ = nullptr;
+        selected_ = nullptr;
+        if (Instance_() == this) {
+            Instance_() = nullptr;
+        }
     }
 
     static TargetSelector* Instance() { return Instance_(); }
@@ -147,11 +165,15 @@ public:
         bool ignoreShields = true,
         const Vector3& from = Vector3())
     {
+#if NIGHTSHARP_ORBWALKER_LOGGING
         std::ofstream tsLog("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
         tsLog << "  [TS] Eval: " << hero.CharacterName() << "\n";
+#endif
 
         if (!Extensions::IsValidTarget(hero)) {
+#if NIGHTSHARP_ORBWALKER_LOGGING
             tsLog << "    -> Failed Extensions::IsValidTarget\n";
+#endif
             return false;
         }
 
@@ -162,22 +184,30 @@ public:
             const float effectiveRange = range <= 0.0f ? Utils::AutoAttack::GetRealAutoAttackRange(GameObjects::Player(), hero) : range;
             const float distSqr = origin.DistanceSqr2D(hero.Position());
 
+#if NIGHTSHARP_ORBWALKER_LOGGING
             tsLog << "    -> DistSqr: " << distSqr << " EffRangeSqr: " << (effectiveRange * effectiveRange) << "\n";
+#endif
 
             if (origin.IsValid() && !origin.IsZero() &&
                 distSqr >= effectiveRange * effectiveRange) {
+#if NIGHTSHARP_ORBWALKER_LOGGING
                 tsLog << "    -> Failed Distance Check\n";
+#endif
                 return false;
             }
         }
 
         bool invuln = Utils::Invulnerable::Check(hero, damageType, ignoreShields);
         if (invuln) {
+#if NIGHTSHARP_ORBWALKER_LOGGING
             tsLog << "    -> Failed Invulnerable Check\n";
+#endif
             return false;
         }
 
+#if NIGHTSHARP_ORBWALKER_LOGGING
         tsLog << "    -> SUCCESS\n";
+#endif
         return true;
     }
 

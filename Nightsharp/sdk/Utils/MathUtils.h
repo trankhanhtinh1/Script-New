@@ -163,13 +163,22 @@ public:
     struct WaypointTracker {
         static inline std::unordered_map<std::uint32_t, std::vector<Vec2>> StoredPaths;
         static inline std::unordered_map<std::uint32_t, int> StoredTick;
+        static inline bool Installed = false;
     };
+
+    static void ResetWaypointTracker() {
+        if (WaypointTracker::Installed) {
+            SDK::Events::RemoveOnNewPath(&OnNewPath);
+            WaypointTracker::Installed = false;
+        }
+        WaypointTracker::StoredPaths.clear();
+        WaypointTracker::StoredTick.clear();
+    }
 
 private:
     static void EnsureTracker() {
-        static bool installed = false;
-        if (!installed) {
-            installed = true;
+        if (!WaypointTracker::Installed) {
+            WaypointTracker::Installed = true;
             SDK::Events::AddOnNewPath(&OnNewPath);
         }
     }

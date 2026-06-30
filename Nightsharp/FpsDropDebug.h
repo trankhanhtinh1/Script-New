@@ -36,9 +36,9 @@ struct EventSample {
     DWORD LastTick = 0;
 };
 
-inline bool Enabled = true;
-inline bool OverlayVisible = true;
-inline bool LogEnabled = true;
+inline bool Enabled = false;
+inline bool OverlayVisible = false;
+inline bool LogEnabled = false;
 inline double SlowFrameMs = 33.0;
 inline double SlowPhaseMs = 6.0;
 inline double SlowPluginMs = 2.0;
@@ -463,10 +463,12 @@ class ScopedTimer {
 public:
     explicit ScopedTimer(const char* phase)
         : phase_(phase),
-          start_(Now()) {}
+          start_(Enabled ? Now() : LARGE_INTEGER{}) {}
 
     ~ScopedTimer() {
-        AddPhase(phase_, MsSince(start_));
+        if (Enabled) {
+            AddPhase(phase_, MsSince(start_));
+        }
     }
 
 private:
@@ -489,15 +491,23 @@ inline void ToggleHotkeysWndProc(SDK::Game::WndEventArgs& args) {
     if (args.Msg == WM_KEYDOWN) {
         const DWORD now = GetTickCount();
         if (args.WParam == VK_F10 && now - LastToggleTick >= 150) {
-            OverlayVisible = !OverlayVisible;
+            if (!Enabled) {
+                Enabled = true;
+                OverlayVisible = true;
+            } else {
+                OverlayVisible = !OverlayVisible;
+            }
             LastToggleTick = now;
         }
         if (args.WParam == VK_F11 && now - LastToggleTick >= 150) {
+            Enabled = true;
             LogEnabled = !LogEnabled;
+            SectionLogEnabled = LogEnabled;
             LastToggleTick = now;
         }
         // F12: manual one-shot section dump + toggle continuous section profiling.
         if (args.WParam == VK_F12 && now - LastToggleTick >= 150) {
+            Enabled = true;
             SectionsActive = !SectionsActive;
             if (SectionsActive) {
                 ResetSections();

@@ -105,10 +105,13 @@ inline void Initialize() {
 }
 
 inline void Reset() {
+    if (detail::g_hooksRegistered) {
+        ::SDK::Events::hook.OnNewPath -= detail::OnNewPath;
+        detail::g_hooksRegistered = false;
+    }
     if (detail::PathStore()) {
         detail::PathStore()->clear();
     }
-    detail::g_hooksRegistered = false;
 }
 
 inline void Update() {

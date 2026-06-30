@@ -248,12 +248,6 @@ namespace Globals {
                     return count > 0;
                 }
 
-                const unsigned char uch = static_cast<unsigned char>(ch);
-                if (uch < 0x20 || uch > 0x7E) {
-                    out[0] = 0;
-                    return false;
-                }
-
                 out[count] = ch;
             }
 

@@ -401,6 +401,10 @@ namespace detail {
         return address > 0x10000 && address < 0x7FFFFFFFFFFF;
     }
 
+    inline bool IsValidNetworkId(uint32_t networkId) {
+        return networkId != 0 && networkId != 0xFFFFFFFFu;
+    }
+
     inline bool CopyStringView(uintptr_t address, char* out, int outCount) {
         if (!address || !out || outCount <= 0) {
             return false;
@@ -485,6 +489,23 @@ namespace detail {
             object + Offset::All::CharacterName,
             info.CharacterName,
             static_cast<int>(sizeof(info.CharacterName)));
+        return info;
+    }
+
+    inline ObjectInfo ReadObjectIdentity(uintptr_t object, uint32_t fallbackNetworkId = 0) {
+        ObjectInfo info{};
+        info.Ptr = object;
+        if (!IsValidAddress(object)) {
+            info.Ptr = 0;
+            return info;
+        }
+
+        if (IsValidNetworkId(fallbackNetworkId)) {
+            info.NetworkId = fallbackNetworkId;
+        } else {
+            Read(object + Offset::All::NetId, info.NetworkId);
+        }
+        Read(object + Offset::All::Index, info.Index);
         return info;
     }
 
@@ -794,7 +815,15 @@ namespace detail {
         args.Target = ::CoreHookTest::TargetAddress(id);
         args.HitCount = ::CoreHookTest::HitCount(id);
 
-        args.Object = ReadObject(rcx);
+        if (id == Hooks::OnCreate) {
+            args.Object = ReadObjectIdentity(
+                rcx,
+                static_cast<uint32_t>(rdx & 0xFFFFFFFFu));
+        } else if (id == Hooks::OnDelete) {
+            args.Object = ReadObjectIdentity(rcx);
+        } else if (id != Hooks::OnGameUpdate) {
+            args.Object = ReadObject(rcx);
+        }
         return args;
     }
 
@@ -819,6 +848,25 @@ namespace detail {
 
     inline void Fire(const RawEventArgs& args) {
         FireCallbacks(args);
+    }
+
+    inline bool HasCallbacksForInstallTarget(HookId id) {
+        const uintptr_t installRva = ::CoreHookTest::HookInstallRva(id);
+        if (!installRva) {
+            return false;
+        }
+
+        for (int hook = 0; hook < ::CoreHookTest::HookCount; ++hook) {
+            if (CallbackCounts[hook] <= 0) {
+                continue;
+            }
+
+            const auto hookId = static_cast<HookId>(hook);
+            if (::CoreHookTest::HookInstallRva(hookId) == installRva) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Shared CastInfo decoder used by every spell-style hook (OnDoCast,
@@ -1043,25 +1091,21 @@ inline ObjectEventArgs DecodeObjectLifecycleEvent(const RawEventArgs& raw) {
     if (raw.Id == Hooks::OnCreate) {
         // AssignNetworkId (0x562610): RCX = GameObject*, RDX = networkId
         object = raw.Rcx;
-        if (detail::IsValidAddress(object)) {
-            args.Sender = detail::ReadObject(object);
-            const auto networkId = static_cast<uint32_t>(raw.Rdx & 0xFFFFFFFF);
-            if ((args.Sender.NetworkId == 0 || args.Sender.NetworkId == 0xFFFFFFFFu) &&
-                networkId != 0 && networkId != 0xFFFFFFFFu) {
-                args.Sender.NetworkId = networkId;
-            }
-        }
+        const auto networkId = static_cast<uint32_t>(raw.Rdx & 0xFFFFFFFFu);
+        args.Sender = raw.Object.IsValid()
+            ? raw.Object
+            : detail::ReadObjectIdentity(object, networkId);
     } else if (raw.Id == Hooks::OnDelete) {
         // sub_28EFE0: RCX = GameObject* (this pointer), fires GameEventId.OnDelete
         object = static_cast<uintptr_t>(raw.Rcx);
-        if (detail::IsValidAddress(object)) {
-            args.Sender = detail::ReadObject(object);
-        }
+        args.Sender = raw.Object.IsValid()
+            ? raw.Object
+            : detail::ReadObjectIdentity(object);
     } else {
         return args;
     }
 
-    if (args.Sender.NetworkId == 0 || args.Sender.NetworkId == 0xFFFFFFFFu) {
+    if (!args.Sender.IsValid() || !detail::IsValidNetworkId(args.Sender.NetworkId)) {
         return ObjectEventArgs{};
     }
 
@@ -1578,6 +1622,13 @@ inline bool Add(HookId id, RawCallback callback) {
     Initialize();
 
     const int index = static_cast<int>(id);
+    if (!::CoreHookTest::IsInstalled(id)) {
+        if (!::CoreHookTest::InstallHook(id) &&
+            ::CoreHookTest::g_status[index] != ::CoreEventHook::detail::kInst_OK) {
+            return false;
+        }
+    }
+
     int& count = detail::CallbackCounts[index];
     for (int i = 0; i < count; ++i) {
         if (detail::Callbacks[index][i] == callback) {
@@ -1609,6 +1660,9 @@ inline bool Remove(HookId id, RawCallback callback) {
             detail::Callbacks[index][j] = detail::Callbacks[index][j + 1];
         }
         detail::Callbacks[index][--count] = nullptr;
+        if (count == 0 && !detail::HasCallbacksForInstallTarget(id)) {
+            (void)::CoreHookTest::UninstallHook(id);
+        }
         return true;
     }
 

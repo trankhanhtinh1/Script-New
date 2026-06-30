@@ -442,7 +442,7 @@ private:
     }
 
     MenuKeyBind* m_qKey = nullptr;
-    static constexpr int kPredictionRefreshMs = 150;
+    static constexpr int kPredictionRefreshMs = 250;
     bool m_qWasDown = false;
     SDK::Spell m_q{ SDK::SpellSlot::Q, 1200.0f };
     SDK::PredictionOutput m_lastPrediction = {};

@@ -102,18 +102,47 @@ protected:
     virtual void OnChampionUnload() {}
 
     static bool CanLoadChampion(const char* championName) {
-        if (!championName || !championName[0] ||
-            !CoreRuntime::EnsureInitialized() ||
+        if (!championName || !championName[0]) {
+            return false;
+        }
+
+        // Primary: use the session-level cache populated by WarmPlayerTeamCache().
+        const std::string& cached = SDK::GameObject::GetCachedChampionName();
+        if (!cached.empty()) {
+            return _stricmp(cached.c_str(), championName) == 0;
+        }
+
+        static char s_cachedChampionName[64] = {};
+        if (s_cachedChampionName[0]) {
+            return _stricmp(s_cachedChampionName, championName) == 0;
+        }
+
+        static DWORD s_lastResolveTick = 0;
+        const DWORD now = GetTickCount();
+        if (now - s_lastResolveTick < 1000) {
+            return false;
+        }
+        s_lastResolveTick = now;
+
+        if (!CoreRuntime::EnsureInitialized() ||
             !CoreRuntime::RefreshReadState()) {
             return false;
         }
 
+        // Fallback: read from StaticStringCache via Player().CharacterName().
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) {
             return false;
         }
-
-        return _stricmp(player.CharacterName().c_str(), championName) == 0;
+        const std::string& charName = player.CharacterName();
+        if (charName.empty()) {
+            return false;
+        }
+        strncpy_s(s_cachedChampionName,
+                  sizeof(s_cachedChampionName),
+                  charName.c_str(),
+                  _TRUNCATE);
+        return _stricmp(s_cachedChampionName, championName) == 0;
     }
 
     bool Enabled() const {

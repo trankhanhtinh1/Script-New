@@ -9,6 +9,13 @@
 #include <type_traits>
 #include <vector>
 #include <cstring>
+#include <string> 
+#include <fstream>  // basic_ostream
+
+#ifndef NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS
+#define NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS 0
+#endif
+
 
 namespace SDK::GameObjects {
 
@@ -99,6 +106,8 @@ namespace detail {
     inline AIHeroClient PlayerObject;
     inline bool Initialized = false;
     inline bool Loaded = false;
+    inline bool EventHooksSubscribed = false;
+    inline bool GameUpdateSubscribed = false;
     inline float LastMinionRoleRefresh = -1.0f;
     inline std::size_t NextMinionRoleRefreshIndex = 0;
 
@@ -167,6 +176,44 @@ namespace detail {
                 return entry.Compare(object);
             }),
             list.end());
+    }
+
+    template <typename T>
+    inline void RemoveMatchingIdentity(
+        std::vector<T>& list,
+        uintptr_t address,
+        uint32_t networkId) {
+        list.erase(
+            std::remove_if(list.begin(), list.end(), [&](const T& entry) {
+                if (networkId != 0 && networkId != 0xFFFFFFFFu) {
+                    const uint32_t entryNetworkId =
+                        static_cast<uint32_t>(entry.NetworkId());
+                    if (entryNetworkId != 0 &&
+                        entryNetworkId != 0xFFFFFFFFu &&
+                        entryNetworkId == networkId) {
+                        return true;
+                    }
+                }
+
+                return address != 0 && entry.Address() == address;
+            }),
+            list.end());
+    }
+
+    inline bool MatchesIdentity(
+        const GameObject& object,
+        uintptr_t address,
+        uint32_t networkId) {
+        if (networkId != 0 && networkId != 0xFFFFFFFFu) {
+            const uint32_t objectNetworkId =
+                static_cast<uint32_t>(object.NetworkId());
+            if (objectNetworkId != 0 &&
+                objectNetworkId != 0xFFFFFFFFu &&
+                objectNetworkId == networkId) {
+                return true;
+            }
+        }
+        return address != 0 && object.Address() == address;
     }
 
     inline bool IsWard(const AIMinionClient& minion) {
@@ -276,6 +323,8 @@ namespace detail {
                     AddUnique(AllyMinionsList, minion);
                     AddUnique(AllyList, AIBaseClient(minion.Handle()));
                 }
+                
+            
             }
             return;
         }
@@ -494,6 +543,65 @@ namespace detail {
         }
     }
 
+    inline void RemoveObject(
+        uintptr_t address,
+        uint32_t networkId) {
+        if (address) {
+            ::Core::ObjectManager::TypeCache::Invalidate(address);
+        }
+
+        RemoveMatchingIdentity(GameObjectsList, address, networkId);
+        RemoveMatchingIdentity(AttackableUnitsList, address, networkId);
+        RemoveMatchingIdentity(HeroesList, address, networkId);
+        RemoveMatchingIdentity(AllyHeroesList, address, networkId);
+        RemoveMatchingIdentity(EnemyHeroesList, address, networkId);
+        RemoveMatchingIdentity(MinionsList, address, networkId);
+        RemoveMatchingIdentity(ClonesList, address, networkId);
+        RemoveMatchingIdentity(PetsList, address, networkId);
+        RemoveMatchingIdentity(AllyMinionsList, address, networkId);
+        RemoveMatchingIdentity(AllyClonesList, address, networkId);
+        RemoveMatchingIdentity(AllyPetsList, address, networkId);
+        RemoveMatchingIdentity(EnemyMinionsList, address, networkId);
+        RemoveMatchingIdentity(EnemyClonesList, address, networkId);
+        RemoveMatchingIdentity(EnemyPetsList, address, networkId);
+        RemoveMatchingIdentity(EnemyLaneMinionsList, address, networkId);
+        RemoveMatchingIdentity(EnemySpecialMinionsList, address, networkId);
+        RemoveMatchingIdentity(EnemyIgnoredMinionsList, address, networkId);
+        RemoveMatchingIdentity(AllyLaneMinionsList, address, networkId);
+        RemoveMatchingIdentity(AllySpecialMinionsList, address, networkId);
+        RemoveMatchingIdentity(AllyIgnoredMinionsList, address, networkId);
+        RemoveMatchingIdentity(WardsList, address, networkId);
+        RemoveMatchingIdentity(AllyWardsList, address, networkId);
+        RemoveMatchingIdentity(EnemyWardsList, address, networkId);
+        RemoveMatchingIdentity(JungleList, address, networkId);
+        RemoveMatchingIdentity(JungleSmallList, address, networkId);
+        RemoveMatchingIdentity(JungleLargeList, address, networkId);
+        RemoveMatchingIdentity(JungleLegendaryList, address, networkId);
+        RemoveMatchingIdentity(TurretsList, address, networkId);
+        RemoveMatchingIdentity(AllyTurretsList, address, networkId);
+        RemoveMatchingIdentity(EnemyTurretsList, address, networkId);
+        RemoveMatchingIdentity(AllyList, address, networkId);
+        RemoveMatchingIdentity(EnemyList, address, networkId);
+        RemoveMatchingIdentity(ParticleEmittersList, address, networkId);
+        RemoveMatchingIdentity(ShopsList, address, networkId);
+        RemoveMatchingIdentity(AllyShopsList, address, networkId);
+        RemoveMatchingIdentity(EnemyShopsList, address, networkId);
+        RemoveMatchingIdentity(SpawnPointsList, address, networkId);
+        RemoveMatchingIdentity(AllySpawnPointsList, address, networkId);
+        RemoveMatchingIdentity(EnemySpawnPointsList, address, networkId);
+        RemoveMatchingIdentity(InhibitorsList, address, networkId);
+        RemoveMatchingIdentity(AllyInhibitorsList, address, networkId);
+        RemoveMatchingIdentity(EnemyInhibitorsList, address, networkId);
+        RemoveMatchingIdentity(NexusList, address, networkId);
+
+        if (MatchesIdentity(AllyNexusObject, address, networkId)) {
+            AllyNexusObject = HQClient();
+        }
+        if (MatchesIdentity(EnemyNexusObject, address, networkId)) {
+            EnemyNexusObject = HQClient();
+        }
+    }
+
     inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
         if (!Loaded || !args.Sender.IsValid()) {
             return;
@@ -507,24 +615,48 @@ namespace detail {
             return;
         }
 
-        RemoveObject(GameObject(::Core::ObjectManager::MakeHandle(
-            args.Sender.Ptr,
-            args.Sender.Type)));
+        // Use the index captured at hook time; object memory can already be
+        // fragile by the time this queued delete is flushed.
+        const uint32_t idx = args.Sender.Index & 0xFFFFu;
+        SDK::StaticStringCache::Clear(idx);
+
+        RemoveObject(args.Sender.Ptr, args.Sender.NetworkId);
     }
 
     inline void Rebuild() {
         Clear();
         PlayerObject = SDK::ObjectManager::Player();
 
+        // Force-warm the player team static cache before we categorize any
+        // object. CachedPlayerTeam() is lazy and relies on g_ctx.localPlayer.
+        // If it hasn't resolved yet, IsEnemy()/IsAlly() return false for every
+        // unit and all enemy lists end up empty for the entire session.
+        SDK::GameObject::WarmPlayerTeamCache();
+
         const auto objects = SDK::ObjectManager::Get<GameObject>();
         GameObjectsList.reserve(objects.size());
         AttackableUnitsList.reserve(objects.size() / 2);
         MinionsList.reserve(objects.size() / 2);
+
         for (const auto& object : objects) {
-            AddObject(object.Address());
+            const uintptr_t addr = object.Address();
+            if (!addr) continue;
+
+            // Populate static string cache BEFORE AddObject() so that
+            // IsEnemy()/IsAlly() inside AddHero/AddMinion/AddTurret can
+            // use the cache hit for team comparison.
+            const uint32_t rawIdx = *reinterpret_cast<const uint32_t*>(addr + Offset::All::Index);
+            const uint32_t idx = rawIdx & 0xFFFF;
+
+            const auto inferredType = SDK::ObjectManager::detail::InferExtendedType(addr);
+            SDK::StaticStringCache::Populate(addr, idx, inferredType);
+
+            AddObject(addr, inferredType);
         }
+
         Loaded = true;
     }
+
 
     inline void OnLoad() {
         Rebuild();
@@ -532,6 +664,39 @@ namespace detail {
 
     inline void OnGameUpdate(const SDK::Events::GameUpdateEventArgs&) {
         RefreshMinionRoles();
+    }
+
+    inline void OnLoadEvent(const SDK::Events::LoadEventArgs&) {
+        OnLoad();
+        if (!GameUpdateSubscribed) {
+            GameUpdateSubscribed =
+                SDK::Events::AddOnGameUpdate(&OnGameUpdate);
+        }
+    }
+
+    inline void SubscribeEventHooks() {
+        if (EventHooksSubscribed) {
+            return;
+        }
+
+        (void)SDK::Events::AddOnCreateObject(&OnObjectCreate);
+        (void)SDK::Events::AddOnDeleteObject(&OnObjectDelete);
+        (void)SDK::Events::AddOnLoad(&OnLoadEvent);
+        EventHooksSubscribed = true;
+    }
+
+    inline void UnsubscribeEventHooks() {
+        if (EventHooksSubscribed) {
+            SDK::Events::RemoveOnLoad(&OnLoadEvent);
+            SDK::Events::RemoveOnDeleteObject(&OnObjectDelete);
+            SDK::Events::RemoveOnCreateObject(&OnObjectCreate);
+            EventHooksSubscribed = false;
+        }
+
+        if (GameUpdateSubscribed) {
+            SDK::Events::RemoveOnGameUpdate(&OnGameUpdate);
+            GameUpdateSubscribed = false;
+        }
     }
 } // namespace detail
 
@@ -541,15 +706,15 @@ inline void Initialize() {
     }
 
     detail::Initialized = true;
-    SDK::Events::AddOnCreateObject(&detail::OnObjectCreate);
-    SDK::Events::AddOnDeleteObject(&detail::OnObjectDelete);
-    SDK::Events::AddOnLoad([](const SDK::Events::LoadEventArgs&) {
-        detail::OnLoad();
-        SDK::Events::AddOnGameUpdate(&detail::OnGameUpdate);
-    });
+#if NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS
+    detail::SubscribeEventHooks();
+#endif
 }
 
 inline void Shutdown() {
+#if NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS
+    detail::UnsubscribeEventHooks();
+#endif
     detail::Clear();
     detail::Initialized = false;
 }

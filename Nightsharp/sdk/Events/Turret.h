@@ -55,12 +55,34 @@ namespace detail {
 } // namespace detail
 
 inline bool AddOnTurretAttack(TurretHandler handler) {
+    if (!handler) {
+        return false;
+    }
+
     SDK::Events::Initialize();
-    return detail::TurretHandlers.Add(handler);
+    if (!SDK::Events::detail::EnsureDoCastRawSubscribed()) {
+        return false;
+    }
+
+    const bool hadHandlers = detail::TurretHandlers.HasHandlers();
+    const bool added = detail::TurretHandlers.Add(handler);
+    if (added && !hadHandlers) {
+        ++SDK::Events::detail::TurretConsumerRefs;
+    } else if (!added && !hadHandlers) {
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+    }
+    return added;
 }
 
 inline bool RemoveOnTurretAttack(TurretHandler handler) {
-    return detail::TurretHandlers.Remove(handler);
+    const bool removed = detail::TurretHandlers.Remove(handler);
+    if (removed && !detail::TurretHandlers.HasHandlers()) {
+        if (SDK::Events::detail::TurretConsumerRefs > 0) {
+            --SDK::Events::detail::TurretConsumerRefs;
+        }
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool OnTurretAttack(TurretHandler handler) {

@@ -8,17 +8,31 @@
 
 #include "PluginManager.h"
 
+#include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
+#include "Utility/VisibilityInvulnerabilityOffsetPlugin.h"
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
 #include "Champion/XerathSemiPlugin.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../DebugLog.h"
+
+#ifndef NIGHTSHARP_ENABLE_SDK_WRAPPERS
+#define NIGHTSHARP_ENABLE_SDK_WRAPPERS 1
+#endif
+
+#ifndef NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
+#define NIGHTSHARP_ENABLE_SAMPLE_PLUGINS 1
+#endif
+
+#ifndef NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS
+#define NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS 1
+#endif
 
 
 namespace Plugins {
@@ -38,6 +52,8 @@ namespace PluginBootstrap {
             "champion.ezreal_q_missile_lifecycle",
             "champion.jax_cast_test",
             "champion.xerath_cast_test",
+            "core.object_create_lifecycle_test",
+            "core.object_delete_lifecycle_test",
         };
 
         for (const char* id : kDebugPluginIds) {
@@ -64,14 +80,26 @@ namespace PluginBootstrap {
         g_registered = true;
         g_shutdown = false;
 
+#if NIGHTSHARP_ENABLE_SDK_WRAPPERS
         // Initialize default SDK Wrappers (TargetSelector & Orbwalker)
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
         ::SDK::SdkWrappers::Initialize();
         PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
+#else
+        NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
+#endif
 
         // ─── Core plugins ────────────────────────────────────────────────
+#if NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS
+        NightSharpDebug::Logf("[PluginBootstrap] Register lifecycle test plugins begin");
+        PluginManager::Get().Register<ObjectCreateLifecycleTestPlugin>();
+        PluginManager::Get().Register<ObjectDeleteLifecycleTestPlugin>();
+        NightSharpDebug::Logf("[PluginBootstrap] Register lifecycle test plugins complete");
+#endif
+
+#if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();
@@ -81,6 +109,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<AttackRangeDrawPlugin>();
         PluginManager::Get().Register<MovementStateDrawPlugin>();
         PluginManager::Get().Register<NavGridDrawPlugin>();
+        PluginManager::Get().Register<VisibilityInvulnerabilityOffsetPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins begin");
@@ -90,13 +119,15 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<XerathSemiPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
-        // Load persisted config (AlwaysLoad state from plugins.ini)
+#else
+        NightSharpDebug::Logf("[PluginBootstrap] Sample/debug plugins disabled for FPS test");
+#endif
+
         NightSharpDebug::Logf("[PluginBootstrap] LoadConfig begin");
         PluginRegistry::LoadConfig();
         NightSharpDebug::Logf("[PluginBootstrap] LoadConfig complete");
         ApplyDebugAutoLoadOverrides();
 
-        // Auto-load plugins that have AlwaysLoad=true
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto begin");
         PluginManager::Get().LoadAuto();
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto complete");

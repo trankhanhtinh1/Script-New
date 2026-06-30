@@ -123,12 +123,40 @@ namespace detail {
 } // namespace detail
 
 inline bool AddOnInterruptableTarget(InterruptableTargetHandler handler) {
+    if (!handler) {
+        return false;
+    }
+
     SDK::Events::Initialize();
-    return detail::InterruptableHandlers.Add(handler);
+    if (!SDK::Events::detail::EnsureDoCastRawSubscribed()) {
+        return false;
+    }
+    if (!SDK::Events::detail::EnsureStopCastRawSubscribed()) {
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+        return false;
+    }
+
+    const bool hadHandlers = detail::InterruptableHandlers.HasHandlers();
+    const bool added = detail::InterruptableHandlers.Add(handler);
+    if (added && !hadHandlers) {
+        ++SDK::Events::detail::InterruptableConsumerRefs;
+    } else if (!added && !hadHandlers) {
+        SDK::Events::detail::ReleaseStopCastRawIfUnused();
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+    }
+    return added;
 }
 
 inline bool RemoveOnInterruptableTarget(InterruptableTargetHandler handler) {
-    return detail::InterruptableHandlers.Remove(handler);
+    const bool removed = detail::InterruptableHandlers.Remove(handler);
+    if (removed && !detail::InterruptableHandlers.HasHandlers()) {
+        if (SDK::Events::detail::InterruptableConsumerRefs > 0) {
+            --SDK::Events::detail::InterruptableConsumerRefs;
+        }
+        SDK::Events::detail::ReleaseStopCastRawIfUnused();
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool OnInterruptableTarget(InterruptableTargetHandler handler) {

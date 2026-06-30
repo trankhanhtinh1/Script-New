@@ -50,9 +50,40 @@ static WNDPROC          g_originalWndProc  = nullptr;
 static std::once_flag   g_initDevice;
 static bool             g_active           = false;
 static volatile LONG    g_shutdown         = 0;
+static volatile LONG    g_menuReady        = 0;
 // Set to 1 once PluginBootstrap::EnsureRegistered() has returned (success or crash).
 // Render() gates all SDK/plugin calls on this flag to prevent the bootstrap race.
 static volatile LONG    g_bootstrapDone    = 0;
+
+static constexpr DWORD kMenuStartDelayAfterLocalPlayerMs = 3000;
+static constexpr DWORD kGameReadyPollMs = 500;
+static constexpr int kGameReadyMaxPolls = 240;
+static constexpr DWORD kSwapChainPollMs = 500;
+static constexpr int kSwapChainMaxPolls = 240;
+
+static uintptr_t g_materialRegistrySingletonFn = 0;
+static int32_t g_swapChainOffset = 0;
+static bool g_swapChainLayoutResolved = false;
+
+static bool ReadLocalPlayerForStartup(uintptr_t& outLocalPlayer) {
+    outLocalPlayer = 0;
+    __try {
+        if (!CoreRuntime::EnsureInitialized()) {
+            return false;
+        }
+        (void)CoreRuntime::RefreshReadState();
+        const auto& ctx = CoreRuntime::GetContext();
+        outLocalPlayer = ctx.localPlayer;
+        if ((ctx.statusMask & CoreRuntime::Status_RuntimeObjectsReady) == 0) {
+            return false;
+        }
+    }
+    __except (1) {
+        outLocalPlayer = 0;
+        return false;
+    }
+    return outLocalPlayer != 0;
+}
 
 // -----------------------------------------------------------------------
 // Pattern scanning helpers
@@ -535,6 +566,7 @@ decltype(DxgiResizeBuffers::m_original) DxgiResizeBuffers::m_original;
 static bool BootstrapPluginsSafe() {
     bool ok = false;
     SDK::Events::SetDeliveryEnabled(false);
+    InterlockedExchange(&g_bootstrapDone, 0);
 
     __try {
         Plugins::PluginBootstrap::EnsureRegistered();
@@ -545,10 +577,28 @@ static bool BootstrapPluginsSafe() {
                   GetExceptionInformation())) {
         NightSharpDebug::Logf("[D3D11Hook] Plugin bootstrap crashed");
     }
-    // Signal Render() that it is now safe to call TickRead/OnUpdate/OnRender.
-    // This runs whether bootstrap succeeded or crashed, so the render thread
-    // is never permanently blocked (it will just skip SDK calls if plugins failed).
-    InterlockedExchange(&g_bootstrapDone, 1);
+
+    if (ok) {
+        SDK::Events::SetDeliveryEnabled(true);
+        // Signal Render() that it is now safe to call TickRead/OnUpdate/OnRender.
+        InterlockedExchange(&g_bootstrapDone, 1);
+        return true;
+    }
+
+    SDK::Events::SetDeliveryEnabled(false);
+    __try {
+        Plugins::PluginBootstrap::Shutdown();
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "D3D11Hook::PluginBootstrap::CleanupAfterCrash",
+                  GetExceptionInformation())) {
+    }
+    __try {
+        SDK::Events::Reset();
+    }
+    __except (1) {
+    }
+    return false;
 }
 
 static void ShutdownPluginsSafe() {
@@ -653,42 +703,38 @@ bool Install() {
     NightSharpDebug::Phase("d3d11hook-installed");
     NightSharpDebug::Logf("[D3D11Hook] D3D11 swapchain hooks installed (Present=8, ResizeBuffers=13)");
 
-    // Wait until we can read a sane game time, then delay three in-game
-    // seconds before showing the menu/loading plugins. This matches the old
-    // startup behavior even when the DLL is injected after gameTime is already
-    // greater than 3.0.
+    // Wait until local player is readable, then delay three wall-clock seconds
+    // before showing the menu/loading plugins.
     NightSharpDebug::Phase("d3d11hook-wait-game");
-    NightSharpDebug::Logf("[D3D11Hook] Waiting for game time read + %.1fs...",
-                          kMenuStartDelayAfterGameTimeSeconds);
+    NightSharpDebug::Logf("[D3D11Hook] Waiting for localPlayer read + %.1fs...",
+                          static_cast<double>(kMenuStartDelayAfterLocalPlayerMs) / 1000.0);
 
-    bool sawGameTime = false;
-    float firstGameTime = 0.0f;
+    bool sawLocalPlayer = false;
+    DWORD firstLocalPlayerTick = 0;
+    uintptr_t firstLocalPlayer = 0;
     for (int i = 0; i < kGameReadyMaxPolls; ++i) {
         if (g_shutdown) {
             Uninstall();
             return true;
         }
 
-        float gameTime = 0.0f;
-        if (ReadGameTimeForStartup(gameTime)) {
-            if (!sawGameTime) {
-                sawGameTime = true;
-                firstGameTime = gameTime;
-                NightSharpDebug::Logf("[D3D11Hook] First sane game time read %.2fs; delaying menu/plugins %.1fs",
-                                      gameTime,
-                                      kMenuStartDelayAfterGameTimeSeconds);
+        uintptr_t localPlayer = 0;
+        if (ReadLocalPlayerForStartup(localPlayer)) {
+            if (!sawLocalPlayer) {
+                sawLocalPlayer = true;
+                firstLocalPlayerTick = GetTickCount();
+                firstLocalPlayer = localPlayer;
+                NightSharpDebug::Logf("[D3D11Hook] First localPlayer read %p; delaying menu/plugins %.1fs",
+                                      reinterpret_cast<void*>(localPlayer),
+                                      static_cast<double>(kMenuStartDelayAfterLocalPlayerMs) / 1000.0);
             }
 
-            float elapsed = gameTime - firstGameTime;
-            if (elapsed < 0.0f) {
-                firstGameTime = gameTime;
-                elapsed = 0.0f;
-            }
+            const DWORD elapsedMs = GetTickCount() - firstLocalPlayerTick;
 
-            if (elapsed >= kMenuStartDelayAfterGameTimeSeconds) {
-                NightSharpDebug::Logf("[D3D11Hook] Game ready at %.2fs (elapsed %.2fs), bootstrapping plugins",
-                                      gameTime,
-                                      elapsed);
+            if (elapsedMs >= kMenuStartDelayAfterLocalPlayerMs) {
+                NightSharpDebug::Logf("[D3D11Hook] LocalPlayer ready %p (elapsed %.2fs), bootstrapping plugins",
+                                      reinterpret_cast<void*>(localPlayer),
+                                      static_cast<double>(elapsedMs) / 1000.0);
                 NightSharpDebug::Phase("d3d11hook-plugins");
                 if (!BootstrapPluginsSafe()) {
                     NightSharpDebug::Logf("[D3D11Hook] Plugin bootstrap failed; shutting down hook");
@@ -707,19 +753,21 @@ bool Install() {
         }
 
         if (i > 0 && (i % 20) == 0) {
-            if (sawGameTime) {
-                NightSharpDebug::Logf("[D3D11Hook] Still delaying menu/plugins: gameTime=%.2fs first=%.2fs",
-                                      gameTime,
-                                      firstGameTime);
+            if (sawLocalPlayer) {
+                const DWORD elapsedMs = GetTickCount() - firstLocalPlayerTick;
+                NightSharpDebug::Logf("[D3D11Hook] Still delaying menu/plugins: localPlayer=%p first=%p elapsed=%.2fs",
+                                      reinterpret_cast<void*>(localPlayer),
+                                      reinterpret_cast<void*>(firstLocalPlayer),
+                                      static_cast<double>(elapsedMs) / 1000.0);
             } else {
-                NightSharpDebug::Logf("[D3D11Hook] Still waiting for first sane game time read (%d sec)",
+                NightSharpDebug::Logf("[D3D11Hook] Still waiting for first localPlayer read (%d sec)",
                                       static_cast<int>((i * kGameReadyPollMs) / 1000));
             }
         }
         Sleep(kGameReadyPollMs);
     }
 
-    NightSharpDebug::Logf("[D3D11Hook] Game time wait timed out, bootstrapping anyway");
+    NightSharpDebug::Logf("[D3D11Hook] LocalPlayer wait timed out, bootstrapping anyway");
     NightSharpDebug::Phase("d3d11hook-plugins-timeout");
     if (!BootstrapPluginsSafe()) {
         NightSharpDebug::Logf("[D3D11Hook] Plugin bootstrap failed after timeout; shutting down hook");

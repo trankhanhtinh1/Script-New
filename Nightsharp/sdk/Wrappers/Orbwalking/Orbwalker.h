@@ -19,9 +19,17 @@
 #include <fstream>
 #include <string>
 
+#ifndef NIGHTSHARP_ORBWALKER_LOGGING
+#define NIGHTSHARP_ORBWALKER_LOGGING 0
+#endif
+
 inline void LogOrb(const std::string& msg) {
+#if NIGHTSHARP_ORBWALKER_LOGGING
     std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
     os << "[Tick: " << SDK::Variables::TickCount() << "] " << msg << "\n";
+#else
+    (void)msg;
+#endif
 }
 
 namespace SDK {
@@ -99,6 +107,12 @@ public:
         SetEnabled(enabledOption_->Value);
     }
 
+    ~Orbwalker() override {
+        SetEnabled(false);
+        delete Selector;
+        Selector = nullptr;
+    }
+
     static void OnMenuValueChanged(MenuValueChangedEventArgs args, void* ud) {
         auto* self = static_cast<Orbwalker*>(ud);
         if (!self || !self->Enabled()) return;
@@ -125,6 +139,9 @@ public:
             SDK::Drawing::OnDraw -= &OnDrawingDrawHandler;
         }
         OrbwalkerBase::SetEnabled(value);
+        if (Selector) {
+            Selector->SetEnabled(value);
+        }
         if (enabledOption_) {
             enabledOption_->Value = value;
         }

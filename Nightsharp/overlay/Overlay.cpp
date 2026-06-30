@@ -52,7 +52,7 @@ const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
 constexpr DWORD kTargetOverlayFrameMs = 16; // ~60 Hz — halves per-frame CPU vs 125 Hz
 constexpr DWORD kGameReadyPollMs = 500;
 constexpr int kGameReadyMaxPolls = 240;
-constexpr float kMenuStartDelayAfterGameTimeSeconds = 3.0f;
+constexpr DWORD kMenuStartDelayAfterLocalPlayerMs = 3000;
 
 template <typename T>
 void SafeRelease(T*& ptr) {
@@ -74,29 +74,28 @@ bool IsShutdownRequested() {
     return InterlockedCompareExchange(&g_bShutdown, 0, 0) != 0;
 }
 
-bool IsSaneGameTime(float value) {
-    return value == value && value >= 0.0f && value < 1000000.0f;
-}
-
-float ReadGameTimeSafe() {
-    float gameTime = 0.0f;
+bool ReadLocalPlayerSafe(uintptr_t& outLocalPlayer) {
+    outLocalPlayer = 0;
     __try {
         if (CoreRuntime::EnsureInitialized()) {
             (void)CoreRuntime::RefreshReadState();
-            gameTime = CoreRuntime::GetContext().gameTime;
+            const auto& ctx = CoreRuntime::GetContext();
+            outLocalPlayer = ctx.localPlayer;
+            return (ctx.statusMask & CoreRuntime::Status_RuntimeObjectsReady) != 0 &&
+                   outLocalPlayer != 0;
         }
     } __except (1) {
-        gameTime = 0.0f;
+        outLocalPlayer = 0;
     }
-    return IsSaneGameTime(gameTime) ? gameTime : 0.0f;
+    return false;
 }
 
 bool WaitForGameReady() {
     NightSharpDebug::Phase("overlay-wait-game-ready");
-    Log("[NightSharp] Waiting for first sane game time read, then delaying menu/plugins 3.0s\n");
+    Log("[NightSharp] Waiting for first localPlayer read, then delaying menu/plugins 3.0s\n");
 
-    bool sawGameTime = false;
-    float firstGameTime = 0.0f;
+    bool sawLocalPlayer = false;
+    DWORD firstLocalPlayerTick = 0;
     for (int i = 0; i < kGameReadyMaxPolls; ++i) {
         if (IsShutdownRequested()) {
             return false;
@@ -110,35 +109,27 @@ bool WaitForGameReady() {
             return false;
         }
 
-        const float gameTime = ReadGameTimeSafe();
-        if (gameTime > 0.0f) {
-            if (!sawGameTime) {
-                sawGameTime = true;
-                firstGameTime = gameTime;
+        uintptr_t localPlayer = 0;
+        if (ReadLocalPlayerSafe(localPlayer)) {
+            if (!sawLocalPlayer) {
+                sawLocalPlayer = true;
+                firstLocalPlayerTick = GetTickCount();
                 char buffer[160] = {};
                 wsprintfA(
                     buffer,
-                    "[NightSharp] First GameTime=%d.%02d; delaying menu/plugins 3.0s\n",
-                    static_cast<int>(gameTime),
-                    static_cast<int>(gameTime * 100.0f) % 100);
+                    "[NightSharp] First localPlayer read; delaying menu/plugins 3.0s\n");
                 Log(buffer);
             }
 
-            float elapsed = gameTime - firstGameTime;
-            if (elapsed < 0.0f) {
-                firstGameTime = gameTime;
-                elapsed = 0.0f;
-            }
+            const DWORD elapsedMs = GetTickCount() - firstLocalPlayerTick;
 
-            if (elapsed >= kMenuStartDelayAfterGameTimeSeconds) {
+            if (elapsedMs >= kMenuStartDelayAfterLocalPlayerMs) {
                 char buffer[192] = {};
                 wsprintfA(
                     buffer,
-                    "[NightSharp] Game ready, GameTime=%d.%02d elapsed=%d.%02d. Loading menu/plugins/hooks\n",
-                    static_cast<int>(gameTime),
-                    static_cast<int>(gameTime * 100.0f) % 100,
-                    static_cast<int>(elapsed),
-                    static_cast<int>(elapsed * 100.0f) % 100);
+                    "[NightSharp] LocalPlayer ready, elapsed=%d.%02d. Loading menu/plugins/hooks\n",
+                    static_cast<int>(elapsedMs / 1000),
+                    static_cast<int>((elapsedMs % 1000) / 10));
                 Log(buffer);
                 NightSharpDebug::Phase("overlay-game-ready");
                 return true;
@@ -147,18 +138,17 @@ bool WaitForGameReady() {
 
         if (i > 0 && (i % 20) == 0) {
             char buffer[160] = {};
-            if (sawGameTime) {
+            if (sawLocalPlayer) {
+                const DWORD elapsedMs = GetTickCount() - firstLocalPlayerTick;
                 wsprintfA(
                     buffer,
-                    "[NightSharp] Still delaying menu/plugins, GameTime=%d.%02d first=%d.%02d\n",
-                    static_cast<int>(gameTime),
-                    static_cast<int>(gameTime * 100.0f) % 100,
-                    static_cast<int>(firstGameTime),
-                    static_cast<int>(firstGameTime * 100.0f) % 100);
+                    "[NightSharp] Still delaying menu/plugins, elapsed=%d.%02d\n",
+                    static_cast<int>(elapsedMs / 1000),
+                    static_cast<int>((elapsedMs % 1000) / 10));
             } else {
                 wsprintfA(
                     buffer,
-                    "[NightSharp] Still waiting for first sane GameTime read (%d sec)\n",
+                    "[NightSharp] Still waiting for first localPlayer read (%d sec)\n",
                     static_cast<int>((i * kGameReadyPollMs) / 1000));
             }
             Log(buffer);
@@ -166,7 +156,7 @@ bool WaitForGameReady() {
         Sleep(kGameReadyPollMs);
     }
 
-    Log("[NightSharp] GameTime wait timed out, continuing startup\n");
+    Log("[NightSharp] LocalPlayer wait timed out, continuing startup\n");
     return !IsShutdownRequested();
 }
 

@@ -36,6 +36,11 @@ inline void Shutdown() {
         g_orbwalker->SetEnabled(false);
     }
 
+    delete g_orbwalker;
+    delete g_targetSelector;
+    g_orbwalker = nullptr;
+    g_targetSelector = nullptr;
+
     if (g_orbRootMenu) {
         MenuManager::Instance().Remove(g_orbRootMenu);
         delete g_orbRootMenu;
@@ -47,11 +52,6 @@ inline void Shutdown() {
         delete g_tsRootMenu;
         g_tsRootMenu = nullptr;
     }
-
-    delete g_orbwalker;
-    delete g_targetSelector;
-    g_orbwalker = nullptr;
-    g_targetSelector = nullptr;
     g_initialized = false;
 }
 

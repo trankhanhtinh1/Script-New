@@ -23,7 +23,11 @@
 #include "offset.h"
 
 #ifndef NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL
-#define NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL 1
+#define NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL 0
+#endif
+
+#ifndef NIGHTSHARP_COREHOOK_HIT_LOGGING
+#define NIGHTSHARP_COREHOOK_HIT_LOGGING 0
 #endif
 
 #ifndef NIGHTSHARP_ENABLE_CLIENTMAINLOOP_HOOK
@@ -1007,6 +1011,7 @@ inline void __fastcall Logger(uintptr_t rcx, uint64_t rdx, uintptr_t r8, const H
         } __except (1) {}
     }
 
+#if NIGHTSHARP_COREHOOK_HIT_LOGGING
     if (hit <= 8 || (hit % 1000) == 0) {
         Logf(
             "hit %-24s count=%lld rcx=%p rdx=%p r8=%p r9=%p",
@@ -1017,6 +1022,7 @@ inline void __fastcall Logger(uintptr_t rcx, uint64_t rdx, uintptr_t r8, const H
             (void*)r8,
             (void*)r9);
     }
+#endif
 }
 
 inline bool InstallHook(HookId id);

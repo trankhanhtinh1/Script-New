@@ -26,6 +26,18 @@ public:
         Detector::AddOnDetectSkillshot(&Detector_OnDetectSkillshot);
     }
 
+    static void Shutdown() {
+        if (!Initialized()) {
+            return;
+        }
+
+        Detector::RemoveOnDetectSkillshot(&Detector_OnDetectSkillshot);
+        Events::RemoveOnMissileDelete(&MissileClient_OnDelete);
+        Events::RemoveOnGameUpdate(&Game_OnUpdate);
+        DetectedSkillshots().clear();
+        Initialized() = false;
+    }
+
     static std::vector<std::shared_ptr<Skillshot>>& DetectedSkillshots() {
         static std::vector<std::shared_ptr<Skillshot>> detectedSkillshots;
         return detectedSkillshots;
@@ -48,7 +60,11 @@ public:
         auto& handlers = Handlers();
         const auto oldSize = handlers.size();
         handlers.erase(std::remove(handlers.begin(), handlers.end(), handler), handlers.end());
-        return oldSize != handlers.size();
+        const bool removed = oldSize != handlers.size();
+        if (removed && handlers.empty()) {
+            Shutdown();
+        }
+        return removed;
     }
 
 private:

@@ -52,14 +52,41 @@ public:
     }
 
     bool CanLoad() const override {
+        const std::string& cached = SDK::GameObject::GetCachedChampionName();
+        if (!cached.empty()) {
+            return _stricmp(cached.c_str(), kSpell.Champion) == 0;
+        }
+
+        static char s_cachedChampionName[64] = {};
+        if (s_cachedChampionName[0]) {
+            return _stricmp(s_cachedChampionName, kSpell.Champion) == 0;
+        }
+
+        static DWORD s_lastResolveTick = 0;
+        const DWORD now = GetTickCount();
+        if (now - s_lastResolveTick < 1000) {
+            return false;
+        }
+        s_lastResolveTick = now;
+
         if (!CoreRuntime::EnsureInitialized() ||
             !CoreRuntime::RefreshReadState()) {
             return false;
         }
 
         const auto player = SDK::ObjectManager::Player();
-        return player.IsValid() &&
-               _stricmp(player.CharacterName().c_str(), kSpell.Champion) == 0;
+        if (!player.IsValid()) {
+            return false;
+        }
+        const std::string& charName = player.CharacterName();
+        if (charName.empty()) {
+            return false;
+        }
+        strncpy_s(s_cachedChampionName,
+                  sizeof(s_cachedChampionName),
+                  charName.c_str(),
+                  _TRUNCATE);
+        return _stricmp(s_cachedChampionName, kSpell.Champion) == 0;
     }
 
     void OnLoad() override {
@@ -293,13 +320,64 @@ private:
                _stricmp(left, right) == 0;
     }
 
-    static bool IsKnownQMissileName(const char* value) {
+    static bool IsKnownQName(const char* value) {
         return EqualsInsensitive(value, kSpell.MissileName) ||
-               EqualsInsensitive(value, kSpell.SpellName);
+               EqualsInsensitive(value, kSpell.SpellName) ||
+               EqualsInsensitive(value, "EzrealMysticShot") ||
+               EqualsInsensitive(value, "ezrealq");
+    }
+
+    static bool IsKnownQMissileName(const char* value) {
+        return IsKnownQName(value);
     }
 
     static bool IsKnownQProcessName(const char* value) {
-        return EqualsInsensitive(value, kSpell.SpellName);
+        return IsKnownQName(value);
+    }
+
+    static bool IsKnownQProcessArgs(
+        const SDK::Events::ProcessSpellEventArgs& args) {
+        return IsKnownQProcessName(args.SpellName) ||
+               IsKnownQProcessName(args.SpellSlotName) ||
+               IsKnownQProcessName(args.ScriptName) ||
+               IsKnownQProcessName(args.PayloadSpellName) ||
+               IsKnownQProcessName(args.PayloadMissileName) ||
+               IsKnownQProcessName(args.MissileName);
+    }
+
+    static bool IsLocalPlayerNetworkId(std::uint32_t networkId) {
+        if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+            return false;
+        }
+
+        const auto player = SDK::ObjectManager::Player();
+        return player.IsValid() &&
+               static_cast<std::uint32_t>(player.NetworkId()) == networkId;
+    }
+
+    static bool IsLocalEzrealProcess(
+        const SDK::Events::ProcessSpellEventArgs& args) {
+        const bool local =
+            SDK::Events::IsLocalPlayer(args.Sender) ||
+            IsLocalPlayerNetworkId(args.CasterNetworkId) ||
+            IsLocalPlayerNetworkId(args.Sender.NetworkId);
+        if (!local) {
+            return false;
+        }
+
+        if (args.Sender.CharacterName[0]) {
+            return _stricmp(args.Sender.CharacterName, kSpell.Champion) == 0;
+        }
+
+        const auto player = SDK::ObjectManager::Player();
+        return player.IsValid() &&
+               _stricmp(player.CharacterName().c_str(), kSpell.Champion) == 0;
+    }
+
+    static bool IsLocalEzrealMissileSource(
+        const SDK::Events::ObjectEventArgs& args) {
+        return SDK::Events::IsLocalPlayer(args.Source) ||
+               IsLocalPlayerNetworkId(args.SourceNetworkId);
     }
 
     static bool IsPlausibleWorld(const Vec3& value) {
@@ -402,25 +480,26 @@ private:
         const SDK::Events::ProcessSpellEventArgs& args) {
         auto* self = s_instance;
         if (!self || !self->Enabled() ||
-            !SDK::Events::IsLocalPlayer(args.Sender) ||
-            args.Slot != kSpell.Slot ||
-            _stricmp(args.Sender.CharacterName, kSpell.Champion) != 0) {
+            !IsLocalEzrealProcess(args) ||
+            args.Slot != kSpell.Slot) {
             return;
         }
 
-        if (!IsKnownQProcessName(args.SpellName) &&
-            !IsKnownQProcessName(args.SpellSlotName)) {
-            self->SetLastEvent("ProcessSpell rejected: name mismatch");
+        if (!IsKnownQProcessArgs(args)) {
+            self->SetLastEvent("ProcessSpell accepted: slot/name fallback");
             self->Appendf(
-                "[EzrealQMissile] PROCESS_REJECT tick=%d casterNet=%u slot=%d "
-                "spell='%s' slotSpell='%s' missile='%s' reason=name\r\n",
+                "[EzrealQMissile] PROCESS_NAME_FALLBACK tick=%d casterNet=%u slot=%d "
+                "spell='%s' slotSpell='%s' script='%s' payloadSpell='%s' "
+                "payloadMissile='%s' missile='%s' reason=name\r\n",
                 SDK::Game::TickCount(),
                 args.Sender.NetworkId,
                 args.Slot,
                 args.SpellName,
                 args.SpellSlotName,
+                args.ScriptName,
+                args.PayloadSpellName,
+                args.PayloadMissileName,
                 args.MissileName);
-            return;
         }
 
         const Vec3 start = ResolveStart(args);
@@ -475,7 +554,7 @@ private:
         const SDK::Events::ObjectEventArgs& args) {
         auto* self = s_instance;
         if (!self || !self->Enabled() ||
-            !SDK::Events::IsLocalPlayer(args.Source)) {
+            !IsLocalEzrealMissileSource(args)) {
             return;
         }
 

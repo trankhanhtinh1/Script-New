@@ -119,12 +119,34 @@ namespace detail {
 } // namespace detail
 
 inline bool AddOnGapCloser(GapCloserHandler handler) {
+    if (!handler) {
+        return false;
+    }
+
     SDK::Events::Initialize();
-    return detail::GapCloserHandlers.Add(handler);
+    if (!SDK::Events::detail::EnsureDoCastRawSubscribed()) {
+        return false;
+    }
+
+    const bool hadHandlers = detail::GapCloserHandlers.HasHandlers();
+    const bool added = detail::GapCloserHandlers.Add(handler);
+    if (added && !hadHandlers) {
+        ++SDK::Events::detail::GapcloserConsumerRefs;
+    } else if (!added && !hadHandlers) {
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+    }
+    return added;
 }
 
 inline bool RemoveOnGapCloser(GapCloserHandler handler) {
-    return detail::GapCloserHandlers.Remove(handler);
+    const bool removed = detail::GapCloserHandlers.Remove(handler);
+    if (removed && !detail::GapCloserHandlers.HasHandlers()) {
+        if (SDK::Events::detail::GapcloserConsumerRefs > 0) {
+            --SDK::Events::detail::GapcloserConsumerRefs;
+        }
+        SDK::Events::detail::ReleaseDoCastRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool OnGapCloser(GapCloserHandler handler) {

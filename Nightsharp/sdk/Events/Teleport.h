@@ -116,12 +116,32 @@ namespace detail {
 } // namespace detail
 
 inline bool AddOnTeleport(TeleportHandler handler) {
+    if (!handler) {
+        return false;
+    }
+
     SDK::Events::Initialize();
-    return detail::TeleportHandlers.Add(handler);
+    if (!SDK::Events::detail::EnsureTeleportRawSubscribed()) {
+        return false;
+    }
+
+    const bool hadHandlers = detail::TeleportHandlers.HasHandlers();
+    const bool added = detail::TeleportHandlers.Add(handler);
+    if (added && !hadHandlers) {
+        ++SDK::Events::detail::TeleportConsumerRefs;
+    }
+    return added;
 }
 
 inline bool RemoveOnTeleport(TeleportHandler handler) {
-    return detail::TeleportHandlers.Remove(handler);
+    const bool removed = detail::TeleportHandlers.Remove(handler);
+    if (removed && !detail::TeleportHandlers.HasHandlers()) {
+        if (SDK::Events::detail::TeleportConsumerRefs > 0) {
+            --SDK::Events::detail::TeleportConsumerRefs;
+        }
+        SDK::Events::detail::ReleaseTeleportRawIfUnused();
+    }
+    return removed;
 }
 
 inline bool OnTeleport(TeleportHandler handler) {

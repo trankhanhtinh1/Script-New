@@ -22,6 +22,18 @@ public:
         Events::AddOnProcessCastSpell(&OnCastSpell);
     }
 
+    static void Shutdown() {
+        if (!Initialized()) {
+            return;
+        }
+
+        Events::RemoveOnProcessCastSpell(&OnCastSpell);
+        Events::RemoveOnDoCast(&AIHeroClient_OnDoCast);
+        CastedSpells().clear();
+        LastCastPacketSentStorage() = LastCastPacketSentEntry();
+        Initialized() = false;
+    }
+
     static LastCastedSpellEntry GetLastCastedSpell(const AIHeroClient& target) {
         Initialize();
         const auto it = CastedSpells().find(static_cast<std::uint32_t>(target.NetworkId()));
