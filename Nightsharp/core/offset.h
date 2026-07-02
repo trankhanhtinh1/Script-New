@@ -43,8 +43,7 @@ namespace VTable {
 namespace GameRuntime {
     constexpr auto GameTime = 0x1EABFF0;
     constexpr auto NetInstance = 0x1E9CFB0;
-    constexpr auto ChatClient = 0x1EA01F0;
-    constexpr auto ChatInstance = 0x1EA0458;
+    constexpr auto ChatViewController = 0x1EB34E8;
     constexpr auto ShopInstance = 0x1EB34F0;
     constexpr auto OpenWindowsArray = 0x1F79028;
     constexpr auto OpenWindowsCount = 0x1F79030;
@@ -199,17 +198,24 @@ namespace TacticalMapLayout {
 } // namespace TacticalMapLayout
 
 
-// Chat client object layout (object lives at GameRuntime::ChatClient / ChatInstance).
-// Historically some old code exposed PrimaryOpen via `Offset::Hud::ChatOpen = 0x10`.
-// Editing/Focused bytes are read to detect whether the user is actively typing
-// (primary flag flips slightly before editing on the current build).
-// 26.6 verification: sub_B27470 (allchat command handler) loads ChatClient
-// then guards on `cmp byte ptr [rcx+10h], 0` -> confirms PrimaryOpen = 0x10.
-namespace ChatClientLayout {
-    constexpr auto PrimaryOpen = 0x10;       // verified 26.6: sub_B27470 [rcx+0x10]
-    constexpr auto Editing     = 0x68;
-    constexpr auto Focused     = 0x6C;
-} // namespace ChatClientLayout
+// ChatViewController layout (object lives at GameRuntime::ChatViewController).
+// IDA 13337:
+//   - sub_B3F4A0 stores the constructed ChatViewController in qword_1EB34E8.
+//   - sub_B51C00/sub_B53210 set/clear controller+0x66A when chat opens/closes.
+//   - sub_B60090/sub_B61DB0 write the child panel flags at +0xB1/+0xB0.
+// qword_1EA01F0 and dword_1EA0458 are not chat-open state in this dump.
+namespace ChatViewControllerLayout {
+    constexpr auto InputPanel  = 0x368;
+    constexpr auto Ready       = 0x669;
+    constexpr auto PrimaryOpen = 0x66A;
+    constexpr auto InputMode   = 0x66B;       // callback flag; do not use alone as open
+    constexpr auto Editing     = PrimaryOpen; // compatibility alias
+    constexpr auto Focused     = InputMode;   // compatibility alias
+
+    constexpr auto PanelVisible = 0xB0;
+    constexpr auto PanelFocused = 0xB1;
+    constexpr auto PanelPending = 0xB2;
+} // namespace ChatViewControllerLayout
 
 namespace ControlRuntime {
     constexpr auto IssueOrder = 0x2899D0;
@@ -771,10 +777,14 @@ namespace SpellBookLayout {
     } // namespace ItemRuntime
 
     // ── Object type / classification ─────────────────────────────────────
-    // TypeFlagsRuntime removed Apr 25/2026 - replaced by CoreClassification::Classify (RTTI/name pattern)
+    // Native object-classification offsets removed; object typing now uses
+    // manager lists plus lightweight replicated fields/name scans.
 
     namespace MinionClassRuntime {
-        constexpr auto TypeOffset        = 0x4CF9;
+        // IDA 13337:
+        //   IsLaneMinion    sub_30D690: movzx eax, byte ptr [rcx+4CB9h]
+        //   IsJungleMonster sub_30D420: cmp byte ptr [rcx+4CB9h], 2
+        constexpr auto TypeOffset        = 0x4CB9;
         constexpr auto Unset             = 0x0;
         constexpr auto Pet               = 0x1;
         constexpr auto JungleMonster     = 0x2;
@@ -787,35 +797,18 @@ namespace SpellBookLayout {
     } // namespace MinionClassRuntime
 
     namespace JungleTypeRuntime {
-        constexpr auto TypeOffset = 0x4AB4;
-        constexpr auto Normal     = 0x0;
-        constexpr auto Baron      = 0x1;
-        constexpr auto Dragon     = 0x2;
+        constexpr auto TypeOffset = 0x4CB9;
+        constexpr uint8_t SmallJungle      = 0x0;
+        constexpr uint8_t NormalJungle      = 0x1;
+        constexpr uint8_t LargeJungle      = 0x2;
+    
+        constexpr uint8_t Dragon        = 0x3;
+        constexpr uint8_t RiftHerald    = 0x4;
+        constexpr uint8_t ElderDragon   = 0x5;
+        constexpr uint8_t Baron         = 0x6;
+        constexpr uint8_t Horde         = 0x7;
+        constexpr uint8_t Other         = 0x8;
     } // namespace JungleTypeRuntime
-
-    namespace ClassificationRuntime {
-        constexpr auto CompareTypeFlags = 0x2881F0;
-        constexpr auto IsHero           = 0x2C5290;
-        constexpr auto IsMinion         = 0x2C52F0;
-        constexpr auto IsTurret         = 0x2C5440;
-        constexpr auto IsBarracksDampener = 0x2C51D0;
-        constexpr auto IsHQ               = 0x2C5250;
-        constexpr auto IsShop             = 0x2C5380;
-        constexpr auto IsJungleMonster    = 0x30D420;
-        constexpr auto IsLaneMinion       = 0x30D690;
-        constexpr auto GetJungleType      = 0x6FD620;
-        constexpr auto IsClone            = 0x376DC0;
-        constexpr auto IsBuilding         = 0x2C53C0;
-        constexpr auto IsDead             = 0x287000;
-        constexpr auto IsVulnerable       = 0x287890;
-        constexpr auto IsDragon           = 0x30CE10;
-        constexpr auto IsElderDragon      = 0x30CE70;
-        constexpr auto IsBaron            = 0x30C7E0;
-        constexpr auto IsRiftHerald       = 0x30D960;
-        constexpr auto IsSelectable       = 0x228630;
-        constexpr auto IsFleeing          = 0x225580;
-        constexpr auto IsNoRender         = 0x2255D0;
-    } // namespace ClassificationRuntime
 
     // UnitQueryRuntime removed Apr 25/2026:
     //   IsTargetableByUnit -> AttackableUnit::IsTargetable (memory bool, no syscall)

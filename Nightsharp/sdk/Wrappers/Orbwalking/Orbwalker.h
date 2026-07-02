@@ -1,413 +1,318 @@
 #pragma once
 
-#include "OrbwalkerBase.h"
 #include "OrbwalkerSelector.h"
-#include "../../Enumerations/KeyBindType.h"
-#include "../../UI/UI.h"
-#include "../../UI/Drawing.h"
-#include "../../Utils/AutoAttack.h"
-#include "../../Wrappers/Damages/Damage.h"
-#include "../../Core/Game.h"
-#include "../../Core/Variables.h"
-
-#include <algorithm>
-#include <cfloat>
-#include <cmath>
-#include <cstdint>
-#include <random>
-#include <vector>
-#include <fstream>
-#include <string>
-
-#ifndef NIGHTSHARP_ORBWALKER_LOGGING
-#define NIGHTSHARP_ORBWALKER_LOGGING 0
-#endif
-
-inline void LogOrb(const std::string& msg) {
-#if NIGHTSHARP_ORBWALKER_LOGGING
-    std::ofstream os("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-    os << "[Tick: " << SDK::Variables::TickCount() << "] " << msg << "\n";
-#else
-    (void)msg;
-#endif
-}
 
 namespace SDK {
 
-class Orbwalker : public OrbwalkerBase {
+class Orbwalker {
 public:
-    Menu* menu_;
-    OrbwalkerSelector* Selector;
-    int BlockOrdersUntilTick = 0;
+    using EventHandler = void(*)(OrbwalkingActionArgs&);
 
-    AttackableUnit GetForceTarget() const { return Selector->ForceTarget; }
-    void SetForceTarget(const AttackableUnit& target) { Selector->ForceTarget = target; }
+    struct EventSlot {
+        bool (*Add)(EventHandler) = nullptr;
+        bool (*Remove)(EventHandler) = nullptr;
 
-    MenuKeyBind* comboKey_ = nullptr;
-    MenuKeyBind* hybridKey_ = nullptr;
-    MenuKeyBind* laneClearKey_ = nullptr;
-    MenuKeyBind* lastHitKey_ = nullptr;
-    MenuBool* enabledOption_ = nullptr;
+        bool operator+=(EventHandler handler) const {
+            return Add ? Add(handler) : false;
+        }
 
-    explicit Orbwalker(Menu* parentMenu) {
-        menu_ = new Menu("orbwalker", "Orbwalker");
-        parentMenu->Add(menu_);
+        bool operator-=(EventHandler handler) const {
+            return Remove ? Remove(handler) : false;
+        }
 
-        auto* drawing = new Menu("drawings", "Drawings");
-        drawing->Add(new MenuBool("drawAARange", "Auto-Attack Range", true));
-        drawing->Add(new MenuBool("drawAARangeEnemy", "Auto-Attack Range Enemy"));
-        drawing->Add(new MenuBool("drawExtraHoldPosition", "Extra Hold Position"));
-        drawing->Add(new MenuBool("drawKillableMinion", "Killable Minions"));
-        drawing->Add(new MenuBool("drawKillableMinionFade", "Killable Minions Fade Effect"));
-        menu_->Add(drawing);
+        bool operator()(EventHandler handler) const {
+            return (*this += handler);
+        }
+    };
 
-        auto* advanced = new Menu("advanced", "Advanced");
-
-        advanced->Add(new MenuSeparator("separatorMovement", "Movement"));
-        advanced->Add(new MenuBool("movementRandomize", "Randomize Location", true));
-        advanced->Add(new MenuSlider("movementExtraHold", "Extra Hold Position", 0, 0, 250));
-        advanced->Add(new MenuSlider("movementMaximumDistance", "Maximum Distance", 1500, 500, 1500));
-
-        advanced->Add(new MenuSeparator("separatorDelay", "Delay"));
-        advanced->Add(new MenuSlider("delayMovement", "Movement", 0, 0, 500));
-        advanced->Add(new MenuSlider("delayWindup", "Windup", 80, 0, 200));
-        advanced->Add(new MenuSlider("delayFarm", "Farm", 30, 0, 200));
-
-        advanced->Add(new MenuSeparator("separatorPrioritization", "Prioritization"));
-        advanced->Add(new MenuBool("prioritizeFarm", "Farm Over Harass", true));
-        advanced->Add(new MenuBool("prioritizeMinions", "Minions Over Objectives"));
-        advanced->Add(new MenuBool("prioritizeSmallJungle", "Small Jungle"));
-        advanced->Add(new MenuBool("prioritizeWards", "Wards"));
-        advanced->Add(new MenuBool("prioritizeSpecialMinions", "Special Minions"));
-
-        advanced->Add(new MenuSeparator("separatorAttack", "Attack"));
-        advanced->Add(new MenuBool("attackWards", "Wards"));
-        advanced->Add(new MenuBool("attackBarrels", "Barrels"));
-        advanced->Add(new MenuBool("attackClones", "Clones"));
-        advanced->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
-
-        advanced->Add(new MenuSeparator("separatorMisc", "Miscellaneous"));
-        advanced->Add(new MenuBool("miscMissile", "Use Missile Checks", true));
-        advanced->Add(new MenuBool("miscAttackSpeed", "Don't Kite if Attack Speed > 2.5", true));
-
-        menu_->Add(advanced);
-
-        menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
-        lastHitKey_ = menu_->Add(new MenuKeyBind("lasthitKey", "Last Hit", 'X', KeyBindType::Press));
-        laneClearKey_ = menu_->Add(new MenuKeyBind("laneclearKey", "Lane Clear", 'V', KeyBindType::Press));
-        hybridKey_ = menu_->Add(new MenuKeyBind("hybridKey", "Hybrid", 'C', KeyBindType::Press));
-        comboKey_ = menu_->Add(new MenuKeyBind("comboKey", "Combo", VK_SPACE, KeyBindType::Press));
-        enabledOption_ = menu_->Add(new MenuBool("enabledOption", "Enabled", true));
-
-        Selector = new OrbwalkerSelector(this, menu_);
-
-        menu_->MenuValueChanged = OnMenuValueChanged;
-        menu_->MenuValueChangedUd = this;
-
-        SetEnabled(enabledOption_->Value);
+    explicit Orbwalker(Menu* parentMenu)
+        : sdkImplementation_(parentMenu) {
+        AddOrbwalker("SDK", &sdkImplementation_);
+        SetOrbwalker("SDK");
     }
 
-    ~Orbwalker() override {
-        SetEnabled(false);
-        delete Selector;
-        Selector = nullptr;
-    }
-
-    static void OnMenuValueChanged(MenuValueChangedEventArgs args, void* ud) {
-        auto* self = static_cast<Orbwalker*>(ud);
-        if (!self || !self->Enabled()) return;
-        auto* kb = dynamic_cast<MenuKeyBind*>(args.Item);
-        if (!kb) return;
-        if (self->comboKey_->Active) {
-            self->ActiveMode = OrbwalkingMode::Combo;
-        } else if (self->hybridKey_->Active) {
-            self->ActiveMode = OrbwalkingMode::Hybrid;
-        } else if (self->laneClearKey_->Active) {
-            self->ActiveMode = OrbwalkingMode::LaneClear;
-        } else if (self->lastHitKey_->Active) {
-            self->ActiveMode = OrbwalkingMode::LastHit;
-        } else {
-            self->ActiveMode = OrbwalkingMode::None;
+    ~Orbwalker() {
+        sdkImplementation_.Dispose();
+        auto it = OrbwalkingDetail::Implementations.find("SDK");
+        if (it != OrbwalkingDetail::Implementations.end() && it->second == &sdkImplementation_) {
+            OrbwalkingDetail::Implementations.erase(it);
+        }
+        if (OrbwalkingDetail::Implementation == &sdkImplementation_) {
+            OrbwalkingDetail::Implementation = nullptr;
+            OrbwalkingDetail::SelectedImplementationName.clear();
         }
     }
 
-    void SetEnabled(bool value) override {
-        if (Enabled() == value) return;
-        if (value) {
-            SDK::Drawing::OnDraw += &OnDrawingDrawHandler;
-        } else {
-            SDK::Drawing::OnDraw -= &OnDrawingDrawHandler;
-        }
-        OrbwalkerBase::SetEnabled(value);
-        if (Selector) {
-            Selector->SetEnabled(value);
-        }
-        if (enabledOption_) {
-            enabledOption_->Value = value;
-        }
+    static IOrbwalker* Implementation() {
+        return OrbwalkingDetail::Implementation;
     }
 
-    void Attack(AttackableUnit target) override {
-        NS_PROFILE("orb.Attack.total");
-        if (BlockOrdersUntilTick - Variables::TickCount() > 0) return;
-
-        auto gTarget = target.IsValid() ? target : GetTarget();
-        if (!gTarget.IsValid() || !Utils::AutoAttack::InAutoAttackRange(gTarget)) return;
-
-        OrbwalkingActionArgs eventArgs = {};
-        eventArgs.Target = gTarget;
-        eventArgs.Position = gTarget.Position();
-        eventArgs.Process = true;
-        eventArgs.Type = OrbwalkingType::BeforeAttack;
-        InvokeAction(eventArgs);
-
-        if (eventArgs.Process) {
-            if (Utils::AutoAttack::CanCancelAutoAttack(GameObjects::Player())) {
-                MissileLaunched = false;
-            }
-
-            {
-                NS_PROFILE("orb.CoreControl.IssueAttack");
-                if (CoreControl::IssueAttack(gTarget.Address(), gTarget.Position())) {
-                    LogOrb("ACTION: IssueAttack (SUCCESS) -> Target: " + gTarget.CharacterName()
-                        + " | Tick: " + std::to_string(Variables::TickCount()));
-                    LastAutoAttackCommandTick = Variables::TickCount();
-                    // Set LastAutoAttackTick immediately (local time).
-                    // CanAttack/CanMove use this directly — no server confirmation needed.
-                    LastAutoAttackTick = Variables::TickCount();
-                    LastTarget = gTarget;
-                } else {
-                    LogOrb("ACTION: IssueAttack (FAILED)");
-                }
-            }
-
-            BlockOrdersUntilTick = Variables::TickCount() + 70 + (std::min)(60, Game::Ping());
-        }
-    }
-
-    bool CanAttack(float extraWindup) override {
-        float extraDelay = 0.0f;
-        const auto player = GameObjects::Player();
-
-        if (player.CharacterName() == "Graves") {
-            if (!player.HasBuff("gravesbasicattackammo1")) return false;
-            float attackDelay = FrameCache().attackDelay * 1000.0f;
-            extraDelay = (attackDelay * 1.0740296828f) - 716.2381256175f - attackDelay;
-        } else if (player.CharacterName() == "Jhin" && player.HasBuff("JhinPassiveReload")) {
+    static bool AddOrbwalker(const std::string& name, IOrbwalker* implementation) {
+        if (name.empty() || !implementation ||
+            OrbwalkingDetail::Implementations.find(name) != OrbwalkingDetail::Implementations.end()) {
             return false;
         }
-
-        return OrbwalkerBase::CanAttack(extraWindup + extraDelay);
+        OrbwalkingDetail::Implementations.emplace(name, implementation);
+        if (!OrbwalkingDetail::Implementation) {
+            OrbwalkingDetail::Implementation = implementation;
+            OrbwalkingDetail::SelectedImplementationName = name;
+        }
+        return true;
     }
 
-    bool CanMove(float extraWindup, bool disableMissileCheck) override {
-        int localWindup = 0;
-        const auto player = GameObjects::Player();
-
-        if (player.CharacterName() == "Rengar"
-            && (player.HasBuff("RengarQ") || player.HasBuff("RengarQEmp"))) {
-            localWindup = 200;
+    static bool SetOrbwalker(const std::string& name) {
+        auto it = OrbwalkingDetail::Implementations.find(name);
+        if (it == OrbwalkingDetail::Implementations.end() || !it->second) {
+            return false;
         }
-
-        auto* advanced = menu_->GetSubMenu("advanced");
-        int windupDelay = advanced ? advanced->Get<MenuSlider>("delayWindup")->Value : 0;
-        bool noMissileCheck = disableMissileCheck
-            || (advanced && !advanced->Get<MenuBool>("miscMissile")->Value);
-
-        return OrbwalkerBase::CanMove(
-            extraWindup + static_cast<float>(localWindup + windupDelay),
-            noMissileCheck);
+        OrbwalkingDetail::Implementation = it->second;
+        OrbwalkingDetail::SelectedImplementationName = name;
+        return true;
     }
 
-    AttackableUnit GetTarget() override {
-        return Selector->GetTarget(ActiveMode);
+    static IOrbwalker* GetOrbwalker(const std::string& name) {
+        auto it = OrbwalkingDetail::Implementations.find(name);
+        return it != OrbwalkingDetail::Implementations.end() ? it->second : nullptr;
     }
 
-    bool ShouldWait() override {
-        return Selector->ShouldWait();
+    static const std::string& CurrentOrbwalkerName() {
+        return OrbwalkingDetail::SelectedImplementationName;
     }
 
-    void Move(Vector3 position) override {
-        NS_PROFILE("orb.Move.total");
-        if (BlockOrdersUntilTick - Variables::TickCount() > 0) return;
-        if (!position.IsValid()) return;
+    static AttackableUnit ForceTarget() {
+        return Current() ? Current()->ForceTarget() : AttackableUnit();
+    }
 
-        auto* advanced = menu_->GetSubMenu("advanced");
-
-        int moveDelay = advanced ? advanced->Get<MenuSlider>("delayMovement")->Value : 0;
-        if (Variables::TickCount() - LastMovementOrderTick < moveDelay) return;
-
-        if (advanced && advanced->Get<MenuBool>("miscAttackSpeed")->Value) {
-            float attackDelay;
-            {
-                NS_PROFILE("orb.CoreControl.GetAttackDelay");
-                attackDelay = CoreControl::GetAttackDelay(GameObjects::Player().Address());
-            }
-            if (attackDelay < 1.0f / 2.6f && TotalAutoAttacks % 3 != 0
-                && !CanMove(500.0f, true) && !MovementState) {
-                return;
-            }
-        }
-
-        int extraHold = advanced ? advanced->Get<MenuSlider>("movementExtraHold")->Value : 0;
-        float holdDist = GameObjects::Player().BoundingRadius() + static_cast<float>(extraHold);
-        if (position.Distance(GameObjects::Player().Position()) < holdDist) {
-            if (!GameObjects::Player().Path().empty()) {
-                OrbwalkingActionArgs stopArgs = {};
-                stopArgs.Position = GameObjects::Player().Position();
-                stopArgs.Process = true;
-                stopArgs.Type = OrbwalkingType::StopMovement;
-                InvokeAction(stopArgs);
-                if (stopArgs.Process) {
-                    NS_PROFILE("orb.CoreControl.StopMoving");
-                    CoreControl::StopMoving();
-                    LastMovementOrderTick = Variables::TickCount() - 70;
-                }
-            }
-            return;
-        }
-
-        float playerDist = position.Distance(GameObjects::Player().Position());
-        float bounding = GameObjects::Player().BoundingRadius();
-
-        auto fastRandFloat = [](unsigned int seed) -> float {
-            seed ^= seed << 13;
-            seed ^= seed >> 17;
-            seed ^= seed << 5;
-            return static_cast<float>(seed % 10000u) / 10000.0f;
-        };
-
-        if (playerDist < bounding + 100.0f) {
-            float randFactor = 0.8f + fastRandFloat(static_cast<unsigned>(Variables::TickCount()) ^ 0xA5A5u) * 0.4f;
-            position = GameObjects::Player().Position().Extend(
-                position, bounding + randFactor * 400.0f);
-            playerDist = position.Distance(GameObjects::Player().Position());
-        }
-
-        int maxDist = advanced ? advanced->Get<MenuSlider>("movementMaximumDistance")->Value : 1500;
-        if (playerDist > static_cast<float>(maxDist)) {
-            unsigned int r = static_cast<unsigned>(Variables::TickCount() + 1) ^ 0x5A5Au;
-            r ^= r << 13; r ^= r >> 17; r ^= r << 5;
-            int randInt = static_cast<int>(r % 52u);
-            position = GameObjects::Player().Position().Extend(
-                position,
-                static_cast<float>(maxDist + 25 - randInt));
-            playerDist = position.Distance(GameObjects::Player().Position());
-        }
-
-        if (advanced && advanced->Get<MenuBool>("movementRandomize")->Value
-            && playerDist > 350.0f) {
-            float rAngle = fastRandFloat(static_cast<unsigned>(Variables::TickCount() + 2) ^ 0xF0F0u) * (2.0f * 3.14159265358979323846f);
-            float radius = bounding / 2.0f;
-            float x = position.x + radius * std::cos(rAngle);
-            float z = position.z + radius * std::sin(rAngle);
-            position = Vector3(x, position.y, z);
-        }
-
-        // 1:1 EnsoulSharp path angle movement throttling
-        std::vector<Vector3> waypoints;
-        {
-            NS_PROFILE("orb.Player.GetWaypoints");
-            waypoints = GameObjects::Player().GetWaypoints();
-        }
-        if (waypoints.size() > 1) {
-            Vector3 v1 = waypoints[1] - waypoints[0];
-            Vector3 v2 = position - GameObjects::Player().Position();
-            float angle = v1.AngleBetween(v2);
-            if (angle < 60.0f && Variables::TickCount() - LastMovementOrderTick < 70 + (std::min)(60, Game::Ping())) {
-                return;
-            }
-            if (angle >= 60.0f && Variables::TickCount() - LastMovementOrderTick < 60) {
-                return;
-            }
-        } else {
-            if (Variables::TickCount() - LastMovementOrderTick < 70 + (std::min)(60, Game::Ping())) {
-                return;
-            }
-        }
-
-        OrbwalkingActionArgs eventArgs = {};
-        eventArgs.Position = position;
-        eventArgs.Process = true;
-        eventArgs.Type = OrbwalkingType::Movement;
-        InvokeAction(eventArgs);
-
-        if (eventArgs.Process) {
-            LogOrb("ACTION: Move (SUCCESS) -> Position: " + std::to_string(eventArgs.Position.x) + ", " + std::to_string(eventArgs.Position.z));
-            NS_PROFILE("orb.CoreControl.IssueMove");
-            CoreControl::IssueMove(eventArgs.Position);
-            LastMovementOrderTick = Variables::TickCount();
+    static void ForceTarget(const AttackableUnit& target) {
+        if (Current()) {
+            Current()->ForceTarget(target);
         }
     }
+
+    static AttackableUnit LastTarget() {
+        return Current() ? Current()->LastTarget() : AttackableUnit();
+    }
+
+    static OrbwalkingMode ActiveMode() {
+        return Current() ? Current()->ActiveMode() : OrbwalkingMode::None;
+    }
+
+    static int LastAutoAttackTick() {
+        return Current() ? Current()->LastAutoAttackTick() : 0;
+    }
+
+    static void LastAutoAttackTick(int value) {
+        if (Current()) {
+            Current()->LastAutoAttackTick(value);
+        }
+    }
+
+    static int LastMovementTick() {
+        return Current() ? Current()->LastMovementTick() : 0;
+    }
+
+    static void LastMovementTick(int value) {
+        if (Current()) {
+            Current()->LastMovementTick(value);
+        }
+    }
+
+    static bool AttackEnabled() {
+        return Current() ? Current()->AttackEnabled() : false;
+    }
+
+    static void AttackEnabled(bool value) {
+        if (Current()) {
+            Current()->AttackEnabled(value);
+        }
+    }
+
+    static bool MoveEnabled() {
+        return Current() ? Current()->MoveEnabled() : false;
+    }
+
+    static void MoveEnabled(bool value) {
+        if (Current()) {
+            Current()->MoveEnabled(value);
+        }
+    }
+
+    static void SetOrbwalkerPosition(const Vector3& position) {
+        if (Current()) {
+            Current()->SetOrbwalkerPosition(position);
+        }
+    }
+
+    static void SetPauseTime(int time) {
+        if (Current()) {
+            Current()->SetPauseTime(time);
+        }
+    }
+
+    static void SetServerPauseTime(int time) {
+        if (Current()) {
+            Current()->SetServerPauseTime(time);
+        }
+    }
+
+    static void SetAttackPauseTime(int time) {
+        if (Current()) {
+            Current()->SetAttackPauseTime(time);
+        }
+    }
+
+    static void SetAttackServerPauseTime(int time) {
+        if (Current()) {
+            Current()->SetAttackServerPauseTime(time);
+        }
+    }
+
+    static void SetMovePauseTime(int time) {
+        if (Current()) {
+            Current()->SetMovePauseTime(time);
+        }
+    }
+
+    static void SetMoveServerPauseTime(int time) {
+        if (Current()) {
+            Current()->SetMoveServerPauseTime(time);
+        }
+    }
+
+    static AttackableUnit GetTarget() {
+        return Current() ? Current()->GetTarget() : AttackableUnit();
+    }
+
+    static bool CanAttack() {
+        return Current() && Current()->CanAttack();
+    }
+
+    static bool CanAttack(float extraWindup) {
+        return Current() && Current()->CanAttack(extraWindup);
+    }
+
+    static bool CanMove() {
+        return Current() && Current()->CanMove();
+    }
+
+    static bool CanMove(float extraWindup, bool disableMissileCheck = false) {
+        return Current() && Current()->CanMove(extraWindup, disableMissileCheck);
+    }
+
+    static bool Attack(const AttackableUnit& target) {
+        return Current() && Current()->Attack(target);
+    }
+
+    static void Move(const Vector3& position) {
+        if (Current()) {
+            Current()->Move(position);
+        }
+    }
+
+    static void Orbwalk(const AttackableUnit& target, const Vector3& position = {}) {
+        if (Current()) {
+            Current()->Orbwalk(target, position);
+        }
+    }
+
+    static void ResetAutoAttackTimer() {
+        if (Current()) {
+            Current()->ResetAutoAttackTimer();
+        }
+    }
+
+    static bool IsAutoAttack(const std::string& spellName) {
+        return OrbwalkerBase::IsAutoAttack(spellName);
+    }
+
+    static bool IsAutoAttackReset(const std::string& spellName) {
+        return OrbwalkerBase::IsAutoAttackReset(spellName);
+    }
+
+    static bool AddOnBeforeAttack(EventHandler handler) {
+        return OrbwalkingDetail::BeforeAttackHandlers.Add(handler);
+    }
+
+    static bool RemoveOnBeforeAttack(EventHandler handler) {
+        return OrbwalkingDetail::BeforeAttackHandlers.Remove(handler);
+    }
+
+    static bool AddOnAttack(EventHandler handler) {
+        return OrbwalkingDetail::AttackHandlers.Add(handler);
+    }
+
+    static bool RemoveOnAttack(EventHandler handler) {
+        return OrbwalkingDetail::AttackHandlers.Remove(handler);
+    }
+
+    static bool AddOnAfterAttack(EventHandler handler) {
+        return OrbwalkingDetail::AfterAttackHandlers.Add(handler);
+    }
+
+    static bool RemoveOnAfterAttack(EventHandler handler) {
+        return OrbwalkingDetail::AfterAttackHandlers.Remove(handler);
+    }
+
+    static bool AddOnBeforeMove(EventHandler handler) {
+        return OrbwalkingDetail::BeforeMoveHandlers.Add(handler);
+    }
+
+    static bool RemoveOnBeforeMove(EventHandler handler) {
+        return OrbwalkingDetail::BeforeMoveHandlers.Remove(handler);
+    }
+
+    static bool AddOnNonKillableMinion(EventHandler handler) {
+        return OrbwalkingDetail::NonKillableMinionHandlers.Add(handler);
+    }
+
+    static bool RemoveOnNonKillableMinion(EventHandler handler) {
+        return OrbwalkingDetail::NonKillableMinionHandlers.Remove(handler);
+    }
+
+    static OrbwalkingActionArgs FireBeforeAttack(const AttackableUnit& target,
+                                                 const char* orbwalkerName = "SDK") {
+        OrbwalkingActionArgs args(OrbwalkingType::BeforeAttack, target, {}, orbwalkerName);
+        OrbwalkingDetail::FireBeforeAttack(args);
+        return args;
+    }
+
+    static void FireOnAttack(const AttackableUnit& target,
+                             const char* orbwalkerName = "SDK") {
+        OrbwalkingActionArgs args(OrbwalkingType::OnAttack, target, {}, orbwalkerName);
+        OrbwalkingDetail::FireOnAttack(args);
+    }
+
+    static void FireAfterAttack(const AttackableUnit& target,
+                                const char* orbwalkerName = "SDK") {
+        OrbwalkingActionArgs args(OrbwalkingType::AfterAttack, target, {}, orbwalkerName);
+        OrbwalkingDetail::FireAfterAttack(args);
+    }
+
+    static OrbwalkingActionArgs FirePreMove(const Vector3& position,
+                                            const char* orbwalkerName = "SDK") {
+        OrbwalkingActionArgs args(OrbwalkingType::Movement, {}, position, orbwalkerName);
+        OrbwalkingDetail::FireBeforeMove(args);
+        return args;
+    }
+
+    static void FireNonKillableMinion(const AttackableUnit& target,
+                                      const char* orbwalkerName = "SDK") {
+        OrbwalkingActionArgs args(OrbwalkingType::NonKillableMinion, target, {}, orbwalkerName);
+        OrbwalkingDetail::FireNonKillableMinion(args);
+    }
+
+    inline static EventSlot OnBeforeAttack{ &AddOnBeforeAttack, &RemoveOnBeforeAttack };
+    inline static EventSlot OnAttack{ &AddOnAttack, &RemoveOnAttack };
+    inline static EventSlot OnAfterAttack{ &AddOnAfterAttack, &RemoveOnAfterAttack };
+    inline static EventSlot OnBeforeMove{ &AddOnBeforeMove, &RemoveOnBeforeMove };
+    inline static EventSlot OnNonKillableMinion{ &AddOnNonKillableMinion, &RemoveOnNonKillableMinion };
 
 private:
-    static void OnDrawingDrawHandler() {
-        auto* self = static_cast<Orbwalker*>(Ptr());
-        if (!self || !self->Enabled()) return;
-        self->OnDrawingDraw();
+    static IOrbwalker* Current() {
+        return OrbwalkingDetail::Implementation;
     }
 
-    static void DrawCircleWorld(const Vec3& center, float radius, std::uint32_t color, float thickness) {
-        Vec2 screen;
-        if (!SDK::Drawing::WorldToScreen(center, screen)) return;
-        Vec2 edge;
-        if (!SDK::Drawing::WorldToScreen(Vec3(center.x + radius, center.y, center.z), edge)) return;
-        float screenRadius = std::max(1.0f, screen.Distance(edge));
-        if (!std::isfinite(screenRadius) || screenRadius <= 0.0f || screenRadius >= 10000.0f) return;
-        SDK::Drawing::DrawCircle(screen, screenRadius, thickness, color, 64);
-    }
-
-    void OnDrawingDraw() {
-        const auto player = GameObjects::Player();
-        if (!player.IsValid() || player.IsDead()) return;
-
-        auto* drawings = menu_->GetSubMenu("drawings");
-        if (!drawings) return;
-
-        if (drawings->Get<MenuBool>("drawAARange")->Value) {
-            float aaRange = Utils::AutoAttack::GetRealAutoAttackRange(player);
-            DrawCircleWorld(player.Position(), aaRange, 0xFF00BFFF, 2.0f);
-        }
-
-        if (drawings->Get<MenuBool>("drawExtraHoldPosition")->Value) {
-            auto* advanced = menu_->GetSubMenu("advanced");
-            float holdRadius = player.BoundingRadius()
-                + (advanced ? static_cast<float>(advanced->Get<MenuSlider>("movementExtraHold")->Value) : 0.0f);
-            DrawCircleWorld(player.Position(), holdRadius, 0xFF800080, 2.0f);
-        }
-
-        if (drawings->Get<MenuBool>("drawAARangeEnemy")->Value) {
-            for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) continue;
-                float rangeOnPlayer = Utils::AutoAttack::GetRealAutoAttackRange(enemy, AttackableUnit(player.Address()));
-                DrawCircleWorld(enemy.Position(), rangeOnPlayer, 0xFF00BFFF, 1.0f);
-            }
-        }
-
-        if (drawings->Get<MenuBool>("drawKillableMinion")->Value) {
-            float aaRange = Utils::AutoAttack::GetRealAutoAttackRange(player);
-            auto minions = Selector->GetEnemyMinions(aaRange * 2.0f);
-            bool fade = drawings->Get<MenuBool>("drawKillableMinionFade")->Value;
-
-            for (const auto& m : minions) {
-                float aaDmg = Damage::GetAutoAttackDamage(
-                    AIHeroClient(player.Address()), AIBaseClient(m.Address()), true);
-                float health = m.Health();
-                if (health >= (fade ? aaDmg * 2.0f : aaDmg)) continue;
-
-                if (fade) {
-                    int value = 255 - static_cast<int>(health * 2.0f);
-                    value = (std::max)(0, (std::min)(255, value));
-                    uint32_t blue = static_cast<uint32_t>(255 - value);
-                    DrawCircleWorld(m.Position(), m.BoundingRadius() * 2.0f,
-                        0xFF00FF00 | blue, 1.0f);
-                } else {
-                    DrawCircleWorld(m.Position(), m.BoundingRadius() * 2.0f,
-                        0xFF00FF00, 1.0f);
-                }
-            }
-        }
-    }
+    OrbwalkerSelector sdkImplementation_;
 };
 
 } // namespace SDK

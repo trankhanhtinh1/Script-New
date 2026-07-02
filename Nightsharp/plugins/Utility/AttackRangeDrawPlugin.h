@@ -64,31 +64,7 @@ private:
                                 float radius,
                                 std::uint32_t color,
                                 float thickness) {
-        const int segments = 60;
-        const float step = (2.0f * 3.14159265358979323846f) / segments;
-        
-        Vec2 lastScreen{};
-        bool hasLast = false;
-        
-        for (int i = 0; i <= segments; ++i) {
-            float angle = i * step;
-            Vec3 point = {
-                center.x + radius * std::cos(angle),
-                center.y,
-                center.z + radius * std::sin(angle)
-            };
-            
-            Vec2 screenPoint{};
-            if (SDK::Drawing::WorldToScreen(point, screenPoint)) {
-                if (hasLast) {
-                    SDK::Drawing::DrawLine(lastScreen, screenPoint, thickness, color);
-                }
-                lastScreen = screenPoint;
-                hasLast = true;
-            } else {
-                hasLast = false;
-            }
-        }
+        SDK::Drawing::DrawCircle(center, radius, color, thickness, 64);
     }
 
     static void DrawLabel(const Vec3& center,

@@ -860,26 +860,48 @@ inline void Uninstall() {
 // ── Deferred installer ───────────────────────────────────────────────────────
 
 inline volatile LONG g_crcInstallStarted = 0;
+inline volatile LONG g_crcInstallShutdown = 0;
+
+inline void ResetDeferredCRCInstallShutdown() {
+    InterlockedExchange(&g_crcInstallShutdown, 0);
+}
+
+inline void RequestDeferredCRCInstallShutdown() {
+    InterlockedExchange(&g_crcInstallShutdown, 1);
+}
 
 // DeferredCRCInstallThread: alternative installer (dùng khi cần
 // spawn riêng, không gộp vào BootstrapWorker). Hiện không dùng trong
 // dllmain.cpp vì BootstrapWorker đã cover logic này. Giữ lại cho reference.
 inline DWORD WINAPI DeferredCRCInstallThread(LPVOID) {
+    InterlockedExchange(&g_crcInstallStarted, 1);
     DbgLogTs("[CRC] Deferred thread: init direct syscalls...\r\n");
     DirectSyscall::InitAll();
     DirectSyscall::DumpSyscallTable();
 
     DbgLogTs("[CRC] Deferred thread: chờ stub.dll load (max 60s)\r\n");
     for (int i = 0; i < 120; ++i) {
+        if (InterlockedCompareExchange(&g_crcInstallShutdown, 0, 0) != 0) {
+            DbgLogTs("[CRC] Deferred: shutdown requested, exit\r\n");
+            InterlockedExchange(&g_crcInstallStarted, 0);
+            return 0;
+        }
         DirectSyscall::StealthSleep(500);
+        if (InterlockedCompareExchange(&g_crcInstallShutdown, 0, 0) != 0) {
+            DbgLogTs("[CRC] Deferred: shutdown requested after sleep, exit\r\n");
+            InterlockedExchange(&g_crcInstallStarted, 0);
+            return 0;
+        }
         if (GetModuleHandleA("stub.dll")) {
             DbgLogFmt("[CRC] Deferred: stub.dll xuất hiện sau %d ms, install...\r\n",
                       (i + 1) * 500);
             CRCBypass::Install();
+            InterlockedExchange(&g_crcInstallStarted, 0);
             return 0;
         }
     }
     DbgLogTs("[CRC] Deferred: stub.dll KHÔNG load trong 60s, bỏ\r\n");
+    InterlockedExchange(&g_crcInstallStarted, 0);
     return 0;
 }
 

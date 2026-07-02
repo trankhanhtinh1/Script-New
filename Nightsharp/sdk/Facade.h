@@ -50,6 +50,10 @@ using HQClient = ::SDK::HQClient;
 using ShopClient = ::SDK::ShopClient;
 using Obj_SpawnPoint = ::SDK::Obj_SpawnPoint;
 using EffectEmitter = ::SDK::EffectEmitter;
+using Orbwalker = ::SDK::Orbwalker;
+using OrbwalkerBase = ::SDK::OrbwalkerBase;
+using OrbwalkerSelector = ::SDK::OrbwalkerSelector;
+using OrbwalkingActionArgs = ::SDK::OrbwalkingActionArgs;
 
 using Vector2 = ::SDK::Vector2;
 using Vector3 = ::SDK::Vector3;

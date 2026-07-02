@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../DebugLog.h"
+#include "../Constants.h"
 #include "../Enumerations/LogLevel.h"
 
 #include <Windows.h>
@@ -92,7 +93,7 @@ private:
     }
 
     static std::filesystem::path LogDirectory() {
-        return std::filesystem::path("C:\\Users\\Public\\NightSharp\\Logs\\SDK");
+        return SDK::Constants::LogDirectory();
     }
 
     static void WriteLine(LogLevel level,
@@ -126,16 +127,7 @@ private:
         try {
             const auto dir = LogDirectory();
             std::filesystem::create_directories(dir);
-            char fileName[64] = {};
-            _snprintf_s(
-                fileName,
-                sizeof(fileName),
-                _TRUNCATE,
-                "%04u-%02u-%02u.log",
-                static_cast<unsigned>(st.wYear),
-                static_cast<unsigned>(st.wMonth),
-                static_cast<unsigned>(st.wDay));
-            std::ofstream stream(dir / fileName, std::ios::app);
+            std::ofstream stream(dir / SDK::Constants::LogFileName(), std::ios::app);
             stream << line << "\n";
         } catch (...) {}
     }

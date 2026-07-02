@@ -224,10 +224,6 @@ private:
     }
 
     void Record(const SDK::Events::ObjectEventArgs& args) {
-        if (!args.Sender.IsValid()) {
-            return;
-        }
-
         InterlockedIncrement64(&m_deleteEvents);
 
         AcquireSRWLockExclusive(&m_lock);

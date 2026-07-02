@@ -12,6 +12,7 @@
 #include "UI/Icons.h"
 #include "UI/PermaShow.h"
 #include "UI/UI.h"
+#include "Utils/Storage.h"
 
 #include <Windows.h>
 
@@ -34,6 +35,7 @@ inline void Shutdown() {
 
     // Stop SDK-owned callbacks and discard every pointer that can reference a
     // plugin object before the DLL image is released.
+    __try { Utils::Storage::SaveAll(); } __except (1) {}
     __try { Signals::SignalManager::Reset(); } __except (1) {}
     __try { Events::Reset(); } __except (1) {}
     __try { Game::Reset(); } __except (1) {}

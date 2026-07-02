@@ -43,14 +43,16 @@ public:
             return {};
         }
 
+        ClipperLib::Paths clip = subject;
         ClipperLib::Paths solution;
         ClipperLib::Clipper clipper;
         clipper.AddPaths(subject, ClipperLib::ptSubject, true);
+        clipper.AddPaths(clip, ClipperLib::ptClip, true);
         clipper.Execute(
             ClipperLib::ctUnion,
             solution,
-            ClipperLib::pftNonZero,
-            ClipperLib::pftNonZero);
+            ClipperLib::pftPositive,
+            ClipperLib::pftEvenOdd);
 
         std::vector<std::vector<IntPoint>> result;
         result.reserve(solution.size());
@@ -100,9 +102,8 @@ public:
 
         if (unit.IsVisible()) {
             result.push_back(unit.Position().To2D());
-            const auto stored = WaypointTracker::StoredPaths.find(static_cast<std::uint32_t>(unit.NetworkId()));
-            if (stored != WaypointTracker::StoredPaths.end()) {
-                result.insert(result.end(), stored->second.begin(), stored->second.end());
+            for (const auto& point : unit.Path()) {
+                result.push_back(point.To2D());
             }
         } else {
             const auto pathIt = WaypointTracker::StoredPaths.find(static_cast<std::uint32_t>(unit.NetworkId()));

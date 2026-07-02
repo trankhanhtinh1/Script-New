@@ -36,7 +36,7 @@ namespace CoreRuntime {
         uintptr_t underMouseObjectGlobal = 0;
         uintptr_t netInstanceGlobal = 0;
         uintptr_t gameTimeGlobal = 0;
-        uintptr_t chatClientGlobal = 0;
+        uintptr_t chatViewControllerGlobal = 0;
         uintptr_t shopInstanceGlobal = 0;
         uintptr_t openWindowsArrayGlobal = 0;
         uintptr_t openWindowsCountGlobal = 0;
@@ -68,7 +68,7 @@ namespace CoreRuntime {
         uintptr_t navGrid = 0;
         uintptr_t underMouseObject = 0;
         uintptr_t netInstance = 0;
-        uintptr_t chatClient = 0;
+        uintptr_t chatViewController = 0;
         uintptr_t shopInstance = 0;
         uintptr_t openWindowsArray = 0;
         uint32_t openWindowsCount = 0;
@@ -161,7 +161,7 @@ namespace CoreRuntime {
         g_ctx.underMouseObjectGlobal = ResolveRva(Offset::GameObjectsRuntime::UnderMouseObject);
         g_ctx.netInstanceGlobal      = ResolveRva(Offset::GameRuntime::NetInstance);
         g_ctx.gameTimeGlobal         = ResolveRva(Offset::GameRuntime::GameTime);
-        g_ctx.chatClientGlobal       = ResolveRva(Offset::GameRuntime::ChatClient);
+        g_ctx.chatViewControllerGlobal = ResolveRva(Offset::GameRuntime::ChatViewController);
         g_ctx.shopInstanceGlobal     = ResolveRva(Offset::GameRuntime::ShopInstance);
         g_ctx.openWindowsArrayGlobal = ResolveRva(Offset::GameRuntime::OpenWindowsArray);
         g_ctx.openWindowsCountGlobal = ResolveRva(Offset::GameRuntime::OpenWindowsCount);
@@ -231,7 +231,7 @@ namespace CoreRuntime {
         g_ctx.navGrid = ReadGlobalPtr(g_ctx.navGridGlobal);
         g_ctx.underMouseObject = ReadGlobalPtr(g_ctx.underMouseObjectGlobal);
         g_ctx.netInstance = ReadGlobalPtr(g_ctx.netInstanceGlobal);
-        g_ctx.chatClient = ReadGlobalPtr(g_ctx.chatClientGlobal);
+        g_ctx.chatViewController = ReadGlobalPtr(g_ctx.chatViewControllerGlobal);
         g_ctx.shopInstance = ReadGlobalPtr(g_ctx.shopInstanceGlobal);
         g_ctx.openWindowsArray = ReadGlobalPtr(g_ctx.openWindowsArrayGlobal);
         g_ctx.openWindowsCount = Globals::Read<uint32_t>(g_ctx.openWindowsCountGlobal);

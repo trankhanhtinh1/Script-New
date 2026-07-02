@@ -4,10 +4,14 @@
 #include "../Enumerations/HitChance.h"
 #include "../Enumerations/MinionTypes.h"
 #include "../Enumerations/SkillshotType.h"
+#include "../Extensions/Enumerable.h"
 #include "../GameObjects/ObjectManager.h"
+#include "../Math/ConvexHull.h"
+#include "../Math/Prediction.h"
 
 #include <algorithm>
 #include <cfloat>
+#include <cstddef>
 #include <vector>
 
 namespace SDK::Core::Utils {
@@ -26,12 +30,30 @@ public:
     static FarmLocation GetBestCircularFarmLocation(const std::vector<Vec2>& minionPositions,
                                                     float width,
                                                     float range,
-                                                    int /*useMecMax*/ = 9) {
+                                                    int useMecMax = 9) {
         Vec2 best{};
         int bestCount = 0;
         const Vec2 startPos = SDK::ObjectManager::Player().Position().To2D();
         const float rangeSqr = range * range;
         const float widthSqr = width * width;
+
+        if (minionPositions.empty()) {
+            return FarmLocation(best, bestCount);
+        }
+
+        if (useMecMax > 0 && minionPositions.size() <= static_cast<std::size_t>(useMecMax)) {
+            const auto subGroups = SDK::Extensions::GetCombinations(minionPositions);
+            for (const auto& subGroup : subGroups) {
+                if (subGroup.empty()) {
+                    continue;
+                }
+
+                const auto circle = SDK::ConvexHull::GetMec(subGroup);
+                if (circle.Radius <= width && circle.Center.DistanceSqr(startPos) <= rangeSqr) {
+                    return FarmLocation(circle.Center, static_cast<int>(subGroup.size()));
+                }
+            }
+        }
 
         for (const auto& pos : minionPositions) {
             if (pos.DistanceSqr(startPos) > rangeSqr) {
@@ -93,27 +115,39 @@ public:
     }
 
     static std::vector<Vec2> GetMinionsPredictedPositions(const std::vector<AIBaseClient>& minions,
-                                                          float /*delay*/,
-                                                          float /*width*/,
-                                                          float /*speed*/,
-                                                          Vec3 /*from*/,
+                                                          float delay,
+                                                          float width,
+                                                          float speed,
+                                                          Vec3 from,
                                                           float range,
-                                                          bool /*collision*/,
-                                                          SkillshotType /*stype*/,
+                                                          bool collision,
+                                                          SkillshotType stype,
                                                           Vec3 rangeCheckFrom = {}) {
-        // TODO(Prediction parity): replace current-position fallback with
-        // Movement.GetPrediction once NightSharp/SDK/Math/Prediction is ported.
         std::vector<Vec2> positions;
-        const Vec3 checkFrom = rangeCheckFrom.IsValid() && !rangeCheckFrom.IsZero()
-            ? rangeCheckFrom
-            : SDK::ObjectManager::Player().Position();
-        const float rangeSqr = range * range;
+        const auto player = SDK::ObjectManager::Player();
+        from = from.To2D().IsValid() && !from.To2D().IsZero()
+            ? from
+            : player.Position();
+
         for (const auto& minion : minions) {
             if (!minion.IsValid() || minion.IsDead()) {
                 continue;
             }
-            if (minion.Position().DistanceSqr2D(checkFrom) <= rangeSqr) {
-                positions.push_back(minion.Position().To2D());
+
+            PredictionInput input;
+            input.Unit = minion;
+            input.Delay = delay;
+            input.Radius = width;
+            input.Speed = speed;
+            input.From = from;
+            input.Range = range;
+            input.Collision = collision;
+            input.SetType(stype);
+            input.RangeCheckFrom = rangeCheckFrom;
+
+            const auto prediction = SDK::Prediction::GetPrediction(input);
+            if (prediction.Hitchance >= HitChance::High) {
+                positions.push_back(prediction.GetUnitPosition().To2D());
             }
         }
         return positions;

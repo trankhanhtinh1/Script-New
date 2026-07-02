@@ -24,6 +24,7 @@
 #include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <vector>
@@ -155,6 +156,62 @@ inline Vector3 ServerPositionOrPosition(const AIBaseClient& unit) {
         : unit.Position();
 }
 
+inline bool ContainsAnyLower(const std::string& value,
+                             std::initializer_list<const char*> needles) {
+    for (const auto* needle : needles) {
+        if (needle && value.find(needle) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline std::string RuntimeMinionName(const AIMinionClient& minion) {
+    std::string name = minion.CharacterName();
+    if (name.empty()) {
+        char buffer[96] = {};
+        const uintptr_t address = minion.Address();
+        if (::Core::Objects::ReadCharacterName(address, buffer, static_cast<int>(sizeof(buffer))) ||
+            ::Core::Objects::ReadName(address, buffer, static_cast<int>(sizeof(buffer)))) {
+            name = buffer;
+        }
+    }
+    return ToLower(std::move(name));
+}
+
+inline bool IsJungleCompanionObject(const AIMinionClient& minion) {
+    const std::string name = RuntimeMinionName(minion);
+    return ContainsAnyLower(name, {
+        "junglepet",
+        "jungle_pet",
+        "junglecompanion",
+        "scorchclaw",
+        "gustwalker",
+        "mosstomper"
+    });
+}
+
+inline bool IsCollisionMinionCandidate(const AIMinionClient& minion) {
+    if (!minion.IsValid() || (minion.IsDead() && !minion.IsZombie())) {
+        return false;
+    }
+
+    if (IsJungleCompanionObject(minion) || !minion.IsTargetable()) {
+        return false;
+    }
+
+    if (HasFlag(minion.GetMinionType(), MinionTypes::Ward) || minion.IsPlant()) {
+        return false;
+    }
+
+    const GameObjectTeam team = minion.Team();
+    if (team == GameObjectTeam::Neutral) {
+        return !minion.IsPet() && minion.IsJungle() && minion.MaxHealth() > 6.0f;
+    }
+
+    return team != GameObjectTeam::Unknown && minion.MaxHealth() > 0.0f;
+}
+
 inline bool IsValidCollisionTarget(const GameObject& object,
                                    const PredictionInput& input,
                                    float range) {
@@ -192,6 +249,36 @@ inline bool IsValidCollisionTarget(const GameObject& object,
     const Vector3 origin = input.ResolveRangeCheckFrom();
     return range >= FLT_MAX || origin.IsZero() ||
            position.DistanceSqr2D(origin) < range * range;
+}
+
+inline bool IsValidMinionCollisionTarget(const AIMinionClient& minion,
+                                         const PredictionInput& input,
+                                         float range) {
+    if (minion.Compare(input.Unit)) {
+        return false;
+    }
+
+    if (!IsCollisionMinionCandidate(minion)) {
+        return false;
+    }
+
+    if (Extensions::IsValidTarget(minion, range, true, input.ResolveRangeCheckFrom())) {
+        return true;
+    }
+
+    const auto player = ObjectManager::Player();
+    if (player.IsValid() && player.Team() == minion.Team()) {
+        return false;
+    }
+
+    const Vector3 position = minion.Position();
+    if (!position.IsValid() || position.IsZero()) {
+        return false;
+    }
+
+    const Vector3 origin = input.ResolveRangeCheckFrom();
+    return range >= FLT_MAX || origin.IsZero() ||
+           position.DistanceSqr2D(origin) <= range * range;
 }
 
 inline float DistanceSquaredToSegmentOnly(const Vec2& point,
@@ -443,19 +530,37 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
     const Vec2 position2D = position.To2D();
 
     for (const auto& minion : minions) {
-        if (!IsValidCollisionTarget(minion, input, range)) {
+        if (!IsValidMinionCollisionTarget(minion, input, range)) {
             continue;
         }
 
         AIBaseClient minionUnit(minion.Handle());
         PredictionInput minionInput = input;
         minionInput.Unit = minionUnit;
+        const Vector3 livePosition = minion.Position();
+        const Vector3 serverPosition = ServerPositionOrPosition(minionUnit);
+        const Vector3 basePosition = livePosition.IsValid() && !livePosition.IsZero()
+            ? livePosition
+            : serverPosition;
+        const float distanceFromStart = basePosition.Distance(from);
+
+        if (WillDead(input, minionUnit, distanceFromStart)) {
+            continue;
+        }
+
         const auto minionPrediction = Prediction::Movement::GetPrediction(minionInput, false, false);
-        const int padding = minion.IsJungle() ? 20 : stationaryPadding;
-        const float radius = input.Radius + static_cast<float>(padding) + minion.BoundingRadius();
+        Vector3 collisionPosition = minionPrediction.GetUnitPosition();
+        if (!collisionPosition.IsValid() || collisionPosition.IsZero()) {
+            collisionPosition = basePosition;
+        }
+
+        const float padding = minion.IsJungle()
+            ? 20.0f
+            : static_cast<float>(stationaryPadding);
+        const float radius = input.Radius + padding + minion.BoundingRadius();
 
         if (DistanceSquaredToSegmentOnly(
-                minionPrediction.GetUnitPosition().To2D(),
+                collisionPosition.To2D(),
                 from2D,
                 position2D) <= radius * radius) {
             AddIfUnique(result, minion);
@@ -464,7 +569,72 @@ inline void ProcessMinionList(std::vector<AIBaseClient>& result,
 }
 
 inline std::vector<AIMinionClient> SnapshotCollisionMinions() {
-    return SDK::ObjectManager::Get<AIMinionClient>();
+    static std::vector<AIMinionClient> cached;
+    static int lastRefreshTick = 0;
+
+    const int now = Variables::TickCount();
+    if (now - lastRefreshTick < 50 && !cached.empty()) {
+        return cached;
+    }
+
+    std::vector<AIMinionClient> result;
+    result.reserve(64);
+
+    auto addUnique = [&](const AIMinionClient& minion) {
+        if (!IsCollisionMinionCandidate(minion)) {
+            return;
+        }
+        const int networkId = minion.NetworkId();
+        const uintptr_t address = minion.Address();
+        const auto exists = std::find_if(result.begin(), result.end(), [&](const AIMinionClient& entry) {
+            if (!entry.IsValid()) {
+                return false;
+            }
+            if (networkId != 0 && networkId != -1 && entry.NetworkId() == networkId) {
+                return true;
+            }
+            return address != 0 && entry.Address() == address;
+        });
+        if (exists == result.end()) {
+            result.push_back(minion);
+        }
+    };
+
+    for (const auto& minion : SDK::ObjectManager::Get<AIMinionClient>()) {
+        addUnique(minion);
+    }
+
+    for (const auto& minion : SDK::GameObjects::EnemyMinions()) {
+        addUnique(minion);
+    }
+    for (const auto& minion : SDK::GameObjects::Jungle()) {
+        addUnique(minion);
+    }
+
+    // If the typed minion manager/list is stale or incomplete, fall back to
+    // the object array and classify there. This mirrors EnsoulSharp's
+    // GameObjects source more closely while keeping the scan bounded/cached.
+    if (result.size() < 12) {
+        const auto player = SDK::ObjectManager::Player();
+        const auto playerTeam = player.IsValid()
+            ? player.Team()
+            : GameObjectTeam::Unknown;
+        for (const auto& object : SDK::ObjectManager::Get<GameObject>()) {
+            if (!object.IsValid() || !object.IsMinion()) {
+                continue;
+            }
+            const auto team = object.Team();
+            if (playerTeam != GameObjectTeam::Unknown &&
+                team == playerTeam) {
+                continue;
+            }
+            addUnique(AIMinionClient(object.Handle()));
+        }
+    }
+
+    cached = result;
+    lastRefreshTick = now;
+    return cached;
 }
 
 inline void ProcessBuildings(std::vector<AIBaseClient>& result,

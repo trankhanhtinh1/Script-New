@@ -1,7 +1,7 @@
 #pragma once
 
 // DamageLibrary — zero-runtime-parse using constexpr struct-array data
-// (see `sdk/Data/DamageData.h` for the full 172-champion patch-26.8 dataset).
+// (see `sdk/Data/DamageData.h` for the full 173-champion patch-26.11 dataset).
 // Replaces old nlohmann::json-based init that crashed in manual-map context.
 
 #include "../../Data/DamageData.h"

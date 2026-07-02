@@ -3,7 +3,7 @@
 // IPlugin.h — Plugin interface cho NightSharp
 //
 // Ported from Old/plugins/IPlugin.h.
-// Simplified: no SDK dependencies (ObjectManager, Orbwalker, etc. removed).
+// Simplified: no SDK dependencies.
 // Plugins implement this interface to integrate with PluginManager.
 // ============================================================================
 

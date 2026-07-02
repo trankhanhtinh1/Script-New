@@ -70,9 +70,15 @@ enum class MinionClass : std::uint8_t {
 };
 
 enum class JungleRuntimeType : std::uint8_t {
-    Normal = Offset::JungleTypeRuntime::Normal,
-    Baron = Offset::JungleTypeRuntime::Baron,
+    SmallJungle = Offset::JungleTypeRuntime::SmallJungle,
+    NormalJungle = Offset::JungleTypeRuntime::NormalJungle,
+    LargeJungle = Offset::JungleTypeRuntime::LargeJungle,
     Dragon = Offset::JungleTypeRuntime::Dragon,
+    RiftHerald = Offset::JungleTypeRuntime::RiftHerald,
+    ElderDragon = Offset::JungleTypeRuntime::ElderDragon,
+    Baron = Offset::JungleTypeRuntime::Baron,
+    Horde = Offset::JungleTypeRuntime::Horde,
+    Other = Offset::JungleTypeRuntime::Other,
 };
 
 struct ObjectHandle {
@@ -333,8 +339,8 @@ inline uintptr_t RuntimeAddress(uintptr_t rva) {
 // RVA function pointer cache
 // VirtualQuery (kernel syscall) is expensive. Static game function addresses
 // never change after module load, so we validate once and cache the result.
-// kFnCacheCapacity of 64 comfortably covers all ClassificationRuntime RVAs
-// plus spell/control/drawing functions used every frame.
+// kFnCacheCapacity of 64 comfortably covers spell/control/drawing functions
+// used every frame.
 // -------------------------------------------------------------------------
 namespace FnCache {
     constexpr int kCapacity = 64;
@@ -373,29 +379,6 @@ inline Fn RuntimeFunction(uintptr_t rva) {
     const uintptr_t result  = Globals::IsExecutablePtr(address) ? address : 0;
     FnCache::Store(rva, result);
     return reinterpret_cast<Fn>(result);
-}
-
-inline bool TryCallObjectPredicate(uintptr_t object, uintptr_t rva, bool& out) {
-    if (!Globals::IsValidPtr(object)) {
-        out = false;
-        return false;
-    }
-
-    __try {
-        using ObjectPredicateFn = bool(__fastcall*)(uintptr_t);
-        const auto fn = RuntimeFunction<ObjectPredicateFn>(rva);
-        if (!fn) {
-            out = false;
-            return false;
-        }
-
-        out = fn(object);
-        return true;
-    }
-    __except (1) {
-        out = false;
-        return false;
-    }
 }
 
 inline bool ReadBoolByte(uintptr_t object, uintptr_t offset) {
@@ -590,64 +573,15 @@ inline JungleRuntimeType ReadJungleRuntimeType(uintptr_t object) {
         ReadField<std::uint8_t>(object, Offset::JungleTypeRuntime::TypeOffset));
 }
 
-inline bool IsHero(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsHero, result) && result;
-}
-
-inline bool IsMinion(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsMinion, result) && result;
-}
-
-inline bool IsTurret(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsTurret, result) && result;
-}
-
-inline bool IsBarracksDampener(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsBarracksDampener, result) && result;
-}
-
-inline bool IsHQ(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsHQ, result) && result;
-}
-
-inline bool IsShop(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsShop, result) && result;
-}
-
-inline bool IsBuilding(uintptr_t object) {
-    bool result = false;
-    return TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsBuilding, result) && result;
-}
-
 inline bool IsDead(uintptr_t object) {
-    bool result = false;
-    if (TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsDead, result)) {
-        return result;
-    }
     return ReadBoolByte(object, Offset::All::Dead);
 }
 
 inline bool IsJungleMonster(uintptr_t object) {
-    bool result = false;
-    if (TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsJungleMonster, result)) {
-        return result;
-    }
-
     return ReadMinionClass(object) == MinionClass::JungleMonster;
 }
 
 inline bool IsLaneMinion(uintptr_t object) {
-    bool result = false;
-    if (TryCallObjectPredicate(object, Offset::ClassificationRuntime::IsLaneMinion, result)) {
-        return result;
-    }
-
     const auto minionClass = ReadMinionClass(object);
     return minionClass == MinionClass::TeamMinion ||
            minionClass == MinionClass::MeleeLaneMinion ||
@@ -661,10 +595,6 @@ inline int ReadNativeJungleType(uintptr_t object) {
         return 0;
     }
 
-    // ClassificationRuntime::GetJungleType is tracked for signature parity,
-    // but the current RVA is a handler offset, not a verified int(Object*)
-    // callable getter. Use the replicated jungle-type byte until that calling
-    // convention is proven.
     return static_cast<int>(ReadJungleRuntimeType(object));
 }
 

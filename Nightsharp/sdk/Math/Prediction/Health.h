@@ -125,7 +125,6 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const auto player = SDK::ObjectManager::Player();
     if (player.IsValid() && sender.Distance(player) > 3000.0f) return;
 
-    // DLL: Orbwalker.IsAutoAttack(args.SData.Name)
     // NightSharp: args.IsAutoAttack is set by DecodeDoCast
     if (!args.IsAutoAttack) {
         // Also check by spell name as fallback

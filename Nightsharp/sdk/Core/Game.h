@@ -582,22 +582,27 @@ namespace detail {
         InputDebug.chatMemory = false;
 
         const auto& ctx = CoreRuntime::GetContext();
-        uintptr_t chatClient = ctx.chatClient;
-        if (!Globals::IsValidPtr(chatClient) && ctx.moduleBase) {
-            chatClient = Globals::Read<uintptr_t>(
-                ctx.moduleBase + Offset::GameRuntime::ChatInstance);
+        uintptr_t chatController = ctx.chatViewController;
+        if (!Globals::IsValidPtr(chatController)) {
+            chatController = CoreRuntime::ReadGlobalPtr(ctx.chatViewControllerGlobal);
         }
-        if (!Globals::IsValidPtr(chatClient)) {
+        if (!Globals::IsValidPtr(chatController)) {
             return false;
         }
 
         __try {
             const auto primary = Globals::Read<std::uint8_t>(
-                chatClient + Offset::ChatClientLayout::PrimaryOpen);
-            const auto editing = Globals::Read<std::uint8_t>(
-                chatClient + Offset::ChatClientLayout::Editing);
-            const auto focused = Globals::Read<std::uint8_t>(
-                chatClient + Offset::ChatClientLayout::Focused);
+                chatController + Offset::ChatViewControllerLayout::PrimaryOpen);
+            auto editing = std::uint8_t{0};
+            auto focused = std::uint8_t{0};
+            const uintptr_t inputPanel = Globals::Read<uintptr_t>(
+                chatController + Offset::ChatViewControllerLayout::InputPanel);
+            if (Globals::IsValidPtr(inputPanel)) {
+                editing = Globals::Read<std::uint8_t>(
+                    inputPanel + Offset::ChatViewControllerLayout::PanelVisible);
+                focused = Globals::Read<std::uint8_t>(
+                    inputPanel + Offset::ChatViewControllerLayout::PanelFocused);
+            }
 
             InputDebug.chatPrimary = primary;
             InputDebug.chatEditing = editing;

@@ -10,6 +10,12 @@
 
 namespace SDK::Damage {
 
+    template <typename TVersion>
+    inline void Initialize(const TVersion&) {
+        // Damage tables are compiled into the native SDK; this keeps the
+        // EnsoulSharp bootstrap call shape while preserving native startup.
+    }
+
     inline float CalculateMixedDamage(const AIBaseClient& source,
                                       const AIBaseClient& target,
                                       float physicalAmount,

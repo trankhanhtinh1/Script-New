@@ -4,6 +4,7 @@
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
+#include "../imgui/imgui.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -47,6 +48,8 @@ struct Snapshot {
     Vec3 velocity = {};
 };
 
+inline Snapshot ReadSnapshot(uintptr_t object);
+
 inline bool IsSaneFloat(float value, float minValue, float maxValue) {
     return value == value && value >= minValue && value <= maxValue;
 }
@@ -78,6 +81,85 @@ inline bool IsUsablePosition(const Vec3& value) {
 }
 
 namespace detail {
+    inline constexpr int kFrameCacheBuckets = 512;
+    inline constexpr int kFrameCacheProbeCount = 4;
+
+    struct FrameCacheEntry {
+        uintptr_t object = 0;
+        int frame = -1;
+
+        bool managerCached = false;
+        uintptr_t manager = 0;
+
+        bool serverPositionCached = false;
+        Vec3 serverPosition = {};
+
+        bool pathEndCached = false;
+        Vec3 pathEnd = {};
+
+        bool waypointsCached = false;
+        int waypointsCount = 0;
+        Vec3 waypoints[kMaxWaypoints] = {};
+
+        bool pathCached = false;
+        int pathCount = 0;
+        Vec3 path[kMaxWaypoints] = {};
+
+        bool snapshotCached = false;
+        Snapshot snapshot = {};
+    };
+
+    inline int CurrentFrameKey() {
+        if (ImGui::GetCurrentContext()) {
+            return ImGui::GetFrameCount();
+        }
+
+        const auto generation = CoreRuntime::GetContext().refreshGeneration;
+        return -static_cast<int>((generation & 0x3FFFFFFFu) + 1u);
+    }
+
+    inline int CacheBucket(uintptr_t object) {
+        return static_cast<int>((object >> 4) & (kFrameCacheBuckets - 1));
+    }
+
+    inline void ResetFrameEntry(FrameCacheEntry& entry, uintptr_t object, int frame) {
+        entry.object = object;
+        entry.frame = frame;
+        entry.managerCached = false;
+        entry.manager = 0;
+        entry.serverPositionCached = false;
+        entry.serverPosition = {};
+        entry.pathEndCached = false;
+        entry.pathEnd = {};
+        entry.waypointsCached = false;
+        entry.waypointsCount = 0;
+        entry.pathCached = false;
+        entry.pathCount = 0;
+        entry.snapshotCached = false;
+        entry.snapshot = {};
+    }
+
+    inline FrameCacheEntry& GetFrameEntry(uintptr_t object) {
+        static FrameCacheEntry entries[kFrameCacheBuckets];
+        const int frame = CurrentFrameKey();
+        const int base = CacheBucket(object);
+        FrameCacheEntry* reusable = nullptr;
+
+        for (int i = 0; i < kFrameCacheProbeCount; ++i) {
+            FrameCacheEntry& entry = entries[(base + i) & (kFrameCacheBuckets - 1)];
+            if (entry.object == object && entry.frame == frame) {
+                return entry;
+            }
+            if (!reusable && (entry.object == 0 || entry.frame != frame)) {
+                reusable = &entry;
+            }
+        }
+
+        FrameCacheEntry& entry = reusable ? *reusable : entries[base];
+        ResetFrameEntry(entry, object, frame);
+        return entry;
+    }
+
     inline uintptr_t ResolveManagerSeh(uintptr_t object, uintptr_t function) {
         using GetAiManagerFn = uintptr_t(__fastcall*)(uintptr_t);
         __try {
@@ -97,6 +179,12 @@ inline uintptr_t ResolveManager(uintptr_t object) {
         return 0;
     }
 
+    auto& cache = detail::GetFrameEntry(object);
+    if (cache.managerCached) {
+        return cache.manager;
+    }
+    cache.managerCached = true;
+
     (void)CoreRuntime::EnsureInitialized();
     uintptr_t function = CoreRuntime::GetContext().getAiManagerFn;
     if (!function) {
@@ -109,7 +197,8 @@ inline uintptr_t ResolveManager(uintptr_t object) {
         return 0;
     }
 
-    return detail::ResolveManagerSeh(object, function);
+    cache.manager = detail::ResolveManagerSeh(object, function);
+    return cache.manager;
 }
 
 inline ManagerRef Get(uintptr_t object) {
@@ -120,6 +209,10 @@ inline uintptr_t Address(uintptr_t object) {
     return ResolveManager(object);
 }
 
+inline int FrameCacheKey() {
+    return detail::CurrentFrameKey();
+}
+
 inline Vec3 GetObjectPosition(uintptr_t object) {
     return Globals::IsValidPtr(object)
         ? Globals::Read<Vec3>(object + Offset::All::Position)
@@ -127,20 +220,19 @@ inline Vec3 GetObjectPosition(uintptr_t object) {
 }
 
 inline float GetMoveSpeed(uintptr_t object) {
-    const float speed = Get(object).Read<float>(Offset::AiManager::Velocity);
-    return IsSaneSpeed(speed, 5000.0f) ? speed : 0.0f;
+    return ReadSnapshot(object).moveSpeed;
 }
 
 inline int GetCurrentSegment(uintptr_t object) {
-    return Get(object).Read<int>(Offset::AiManager::CurrentSegment);
+    return ReadSnapshot(object).currentSegment;
 }
 
 inline int GetTotalSegments(uintptr_t object) {
-    return Get(object).Read<int>(Offset::AiManager::SegmentsCount);
+    return ReadSnapshot(object).segmentsCount;
 }
 
 inline int GetPathState(uintptr_t object) {
-    return Get(object).Read<int>(Offset::AiManager::PathState);
+    return ReadSnapshot(object).pathState;
 }
 
 inline int GetWaypointCount(uintptr_t object) {
@@ -154,25 +246,32 @@ inline int GetWaypointCount(uintptr_t object) {
 }
 
 inline Vec3 GetPathStart(uintptr_t object) {
-    return Get(object).Read<Vec3>(Offset::AiManager::StartPath);
+    return ReadSnapshot(object).startPath;
 }
 
 inline Vec3 GetServerPosition(uintptr_t object) {
     NS_PROFILE("ai.GetServerPosition");
+    auto& cache = detail::GetFrameEntry(object);
+    if (cache.serverPositionCached) {
+        return cache.serverPosition;
+    }
+    cache.serverPositionCached = true;
+
     Vec3 position = Get(object).Read<Vec3>(Offset::AiManager::ServerPos);
     if (IsUsablePosition(position)) {
-        return position;
+        cache.serverPosition = position;
+        return cache.serverPosition;
     }
-    return GetObjectPosition(object);
+    cache.serverPosition = GetObjectPosition(object);
+    return cache.serverPosition;
 }
 
 inline Vec3 GetOrderPosition(uintptr_t object) {
-    return Get(object).Read<Vec3>(Offset::AiManager::TargetPos);
+    return ReadSnapshot(object).orderPosition;
 }
 
 inline Vec3 GetMoveVector(uintptr_t object) {
-    const Vec3 vector = Flatten(Get(object).Read<Vec3>(Offset::AiManager::MoveVec3));
-    return vector.IsValid() ? vector : Vec3{};
+    return ReadSnapshot(object).moveVector;
 }
 
 inline int CopyWaypoints(uintptr_t object, Vec3* out, int maxOut) {
@@ -181,46 +280,57 @@ inline int CopyWaypoints(uintptr_t object, Vec3* out, int maxOut) {
         return 0;
     }
 
-    const auto manager = Get(object);
-    if (!manager.IsValid()) {
-        return 0;
-    }
+    auto& cache = detail::GetFrameEntry(object);
+    if (!cache.waypointsCached) {
+        cache.waypointsCached = true;
+        cache.waypointsCount = 0;
 
-    const uintptr_t points = manager.Read<uintptr_t>(Offset::AiManager::NavArray);
-    const int total = manager.Read<int>(Offset::AiManager::SegmentsCount);
-    if (!Globals::IsValidPtr(points) || !IsSaneWaypointCount(total)) {
-        return 0;
-    }
+        const auto manager = Get(object);
+        if (manager.IsValid()) {
+            const uintptr_t points = manager.Read<uintptr_t>(Offset::AiManager::NavArray);
+            const int total = manager.Read<int>(Offset::AiManager::SegmentsCount);
+            if (Globals::IsValidPtr(points) && IsSaneWaypointCount(total)) {
+                const int current = std::clamp(
+                    manager.Read<int>(Offset::AiManager::CurrentSegment), 0, total);
+                const int count = std::min(total - current, kMaxWaypoints);
 
-    const int current = std::clamp(
-        manager.Read<int>(Offset::AiManager::CurrentSegment), 0, total);
-    const int count = std::min(total - current, maxOut);
-    if (count <= 0) {
-        return 0;
-    }
-
-    int copied = 0;
-    for (int i = 0; i < count; ++i) {
-        const Vec3 point = Globals::Read<Vec3>(
-            points + static_cast<uintptr_t>(current + i) * sizeof(Vec3));
-        if (!point.IsValid()) {
-            break;
+                for (int i = 0; i < count; ++i) {
+                    const Vec3 point = Globals::Read<Vec3>(
+                        points + static_cast<uintptr_t>(current + i) * sizeof(Vec3));
+                    if (!point.IsValid()) {
+                        break;
+                    }
+                    cache.waypoints[cache.waypointsCount++] = point;
+                }
+            }
         }
-        out[copied++] = point;
     }
-    return copied;
+
+    const int count = std::min(cache.waypointsCount, maxOut);
+    for (int i = 0; i < count; ++i) {
+        out[i] = cache.waypoints[i];
+    }
+    return count;
 }
 
 inline Vec3 GetPathEnd(uintptr_t object) {
+    auto& cache = detail::GetFrameEntry(object);
+    if (cache.pathEndCached) {
+        return cache.pathEnd;
+    }
+    cache.pathEndCached = true;
+
     const Vec3 target = Get(object).Read<Vec3>(Offset::AiManager::TargetPosition);
     if (IsUsablePosition(target)) {
-        return target;
+        cache.pathEnd = target;
+        return cache.pathEnd;
     }
 
     Vec3 points[64] = {};
     const int count = CopyWaypoints(
         object, points, static_cast<int>(sizeof(points) / sizeof(points[0])));
-    return count > 0 ? points[count - 1] : Vec3{};
+    cache.pathEnd = count > 0 ? points[count - 1] : Vec3{};
+    return cache.pathEnd;
 }
 
 inline Vec3 GetPreviousPosition(uintptr_t object) {
@@ -240,51 +350,19 @@ inline bool HasPath(uintptr_t object) {
 }
 
 inline bool IsMoving(uintptr_t object) {
-    const auto manager = Get(object);
-    if (!manager.IsValid()) {
-        return false;
-    }
-
-    if (manager.Read<std::uint8_t>(Offset::AiManager::IsMoving) != 0) {
-        return true;
-    }
-    return HasPath(object);
+    return ReadSnapshot(object).isMoving;
 }
 
 inline bool IsDashing(uintptr_t object) {
-    return Get(object).Read<std::uint8_t>(Offset::AiManager::IsDashing) != 0;
+    return ReadSnapshot(object).isDashing;
 }
 
 inline float GetDashSpeed(uintptr_t object) {
-    const float speed = Get(object).Read<float>(Offset::AiManager::DashSpeed);
-    if (IsSaneSpeed(speed)) {
-        return speed;
-    }
-
-    const float velocitySpeed = GetMoveVector(object).Length2D();
-    return IsSaneSpeed(velocitySpeed) ? velocitySpeed : GetMoveSpeed(object);
+    return ReadSnapshot(object).dashSpeed;
 }
 
 inline Vec3 GetVelocity(uintptr_t object) {
-    const Vec3 vector = GetMoveVector(object);
-    const float length = vector.Length2D();
-    const float speed = IsDashing(object) ? GetDashSpeed(object) : GetMoveSpeed(object);
-
-    if (length > 0.01f && speed > 0.0f) {
-        return Normalized2D(vector) * speed;
-    }
-    if (length > 0.01f && length < 10000.0f) {
-        return vector;
-    }
-
-    const Vec3 start = GetServerPosition(object);
-    const Vec3 end = GetPathEnd(object);
-    if (speed > 0.0f && IsUsablePosition(start) && IsUsablePosition(end) &&
-        start.Distance2D(end) > 1.0f) {
-        return Normalized2D(end - start) * speed;
-    }
-
-    return {};
+    return ReadSnapshot(object).velocity;
 }
 
 inline Vec3 GetDirection(uintptr_t object) {
@@ -345,33 +423,72 @@ inline int CopyPath(uintptr_t object, Vec3* out, int maxOut) {
         return 0;
     }
 
-    int written = 0;
-    const auto pushPoint = [&](const Vec3& point) {
-        if (written >= maxOut || !IsUsablePosition(point)) {
-            return;
-        }
-        if (written > 0 && point.Distance2D(out[written - 1]) <= 1.0f) {
-            return;
-        }
-        out[written++] = point;
-    };
+    auto& cache = detail::GetFrameEntry(object);
+    if (!cache.pathCached) {
+        cache.pathCached = true;
+        cache.pathCount = 0;
 
-    pushPoint(GetServerPosition(object));
+        const auto pushPoint = [&](const Vec3& point) {
+            if (cache.pathCount >= kMaxWaypoints || !IsUsablePosition(point)) {
+                return;
+            }
+            if (cache.pathCount > 0 &&
+                point.Distance2D(cache.path[cache.pathCount - 1]) <= 1.0f) {
+                return;
+            }
+            cache.path[cache.pathCount++] = point;
+        };
 
-    Vec3 waypoints[64] = {};
-    const int waypointCount = CopyWaypoints(
-        object,
-        waypoints,
-        std::min<int>(static_cast<int>(sizeof(waypoints) / sizeof(waypoints[0])), maxOut));
-    for (int i = 0; i < waypointCount; ++i) {
-        pushPoint(waypoints[i]);
+        pushPoint(GetServerPosition(object));
+
+        Vec3 waypoints[kMaxWaypoints] = {};
+        const int waypointCount = CopyWaypoints(object, waypoints, kMaxWaypoints);
+        for (int i = 0; i < waypointCount; ++i) {
+            pushPoint(waypoints[i]);
+        }
+
+        if (cache.pathCount <= 1) {
+            pushPoint(GetPathEnd(object));
+        }
     }
 
-    if (written <= 1) {
-        pushPoint(GetPathEnd(object));
+    const int count = std::min(cache.pathCount, maxOut);
+    for (int i = 0; i < count; ++i) {
+        out[i] = cache.path[i];
+    }
+    return count;
+}
+
+inline const Vec3* CachedPathData(uintptr_t object, int& count) {
+    count = 0;
+    if (!Globals::IsValidPtr(object)) {
+        return nullptr;
     }
 
-    return written;
+    auto& cache = detail::GetFrameEntry(object);
+    if (!cache.pathCached) {
+        Vec3 discard[kMaxWaypoints] = {};
+        (void)CopyPath(object, discard, kMaxWaypoints);
+    }
+
+    count = cache.pathCount;
+    return count > 0 ? cache.path : nullptr;
+}
+
+inline const Vec3* CachedWaypointsData(uintptr_t object, int& count) {
+    count = 0;
+    if (!Globals::IsValidPtr(object)) {
+        return nullptr;
+    }
+
+    auto& cache = detail::GetFrameEntry(object);
+    if (!cache.waypointsCached) {
+        Vec3 discard[kMaxWaypoints] = {};
+        (void)CopyWaypoints(object, discard, kMaxWaypoints);
+    }
+
+    count = cache.waypointsCount;
+    return count > 0 ? cache.waypoints : nullptr;
 }
 
 inline std::vector<Vec3> GetPath(uintptr_t object, int maxPoints = 32) {
@@ -391,11 +508,18 @@ inline std::vector<Vec3> GetPath(uintptr_t object, int maxPoints = 32) {
 }
 
 inline Snapshot ReadSnapshot(uintptr_t object) {
+    auto& cache = detail::GetFrameEntry(object);
+    if (cache.snapshotCached) {
+        return cache.snapshot;
+    }
+    cache.snapshotCached = true;
+
     Snapshot snapshot{};
     snapshot.owner = object;
     const auto manager = Get(object);
     snapshot.manager = manager.address;
     if (!manager.IsValid()) {
+        cache.snapshot = snapshot;
         return snapshot;
     }
 
@@ -403,17 +527,63 @@ inline Snapshot ReadSnapshot(uintptr_t object) {
     snapshot.currentSegment = manager.Read<int>(Offset::AiManager::CurrentSegment);
     snapshot.segmentsCount = manager.Read<int>(Offset::AiManager::SegmentsCount);
     snapshot.pathState = manager.Read<int>(Offset::AiManager::PathState);
-    snapshot.isMoving = IsMoving(object);
-    snapshot.isDashing = IsDashing(object);
-    snapshot.moveSpeed = GetMoveSpeed(object);
-    snapshot.dashSpeed = GetDashSpeed(object);
+    snapshot.isDashing = manager.Read<std::uint8_t>(Offset::AiManager::IsDashing) != 0;
+    const float moveSpeed = manager.Read<float>(Offset::AiManager::Velocity);
+    snapshot.moveSpeed = IsSaneSpeed(moveSpeed, 5000.0f) ? moveSpeed : 0.0f;
     snapshot.startPath = manager.Read<Vec3>(Offset::AiManager::StartPath);
     snapshot.targetPosition = manager.Read<Vec3>(Offset::AiManager::TargetPosition);
     snapshot.orderPosition = manager.Read<Vec3>(Offset::AiManager::TargetPos);
     snapshot.serverPosition = GetServerPosition(object);
-    snapshot.moveVector = GetMoveVector(object);
-    snapshot.velocity = GetVelocity(object);
-    return snapshot;
+    snapshot.moveVector = Flatten(manager.Read<Vec3>(Offset::AiManager::MoveVec3));
+    if (!snapshot.moveVector.IsValid()) {
+        snapshot.moveVector = {};
+    }
+
+    const float rawDashSpeed = manager.Read<float>(Offset::AiManager::DashSpeed);
+    if (IsSaneSpeed(rawDashSpeed)) {
+        snapshot.dashSpeed = rawDashSpeed;
+    } else {
+        const float vectorSpeed = snapshot.moveVector.Length2D();
+        snapshot.dashSpeed =
+            IsSaneSpeed(vectorSpeed) ? vectorSpeed : snapshot.moveSpeed;
+    }
+
+    int remainingSegments = 0;
+    if (IsSaneWaypointCount(snapshot.segmentsCount)) {
+        const int current = std::clamp(
+            snapshot.currentSegment,
+            0,
+            snapshot.segmentsCount);
+        remainingSegments = std::max(0, snapshot.segmentsCount - current);
+    }
+
+    const Vec3 pathEnd = IsUsablePosition(snapshot.targetPosition)
+        ? snapshot.targetPosition
+        : GetPathEnd(object);
+    const bool hasTargetPath =
+        IsUsablePosition(snapshot.serverPosition) &&
+        IsUsablePosition(pathEnd) &&
+        snapshot.serverPosition.Distance2D(pathEnd) > 5.0f;
+    snapshot.isMoving =
+        manager.Read<std::uint8_t>(Offset::AiManager::IsMoving) != 0 ||
+        remainingSegments > 0 ||
+        hasTargetPath;
+
+    const float vectorLength = snapshot.moveVector.Length2D();
+    const float speed = snapshot.isDashing ? snapshot.dashSpeed : snapshot.moveSpeed;
+    if (vectorLength > 0.01f && speed > 0.0f) {
+        snapshot.velocity = Normalized2D(snapshot.moveVector) * speed;
+    } else if (vectorLength > 0.01f && vectorLength < 10000.0f) {
+        snapshot.velocity = snapshot.moveVector;
+    } else if (speed > 0.0f &&
+               IsUsablePosition(snapshot.serverPosition) &&
+               IsUsablePosition(pathEnd) &&
+               snapshot.serverPosition.Distance2D(pathEnd) > 1.0f) {
+        snapshot.velocity = Normalized2D(pathEnd - snapshot.serverPosition) * speed;
+    }
+
+    cache.snapshot = snapshot;
+    return cache.snapshot;
 }
 
 inline int CopyNativePathArray(

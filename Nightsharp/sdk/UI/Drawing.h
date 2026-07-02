@@ -4,16 +4,13 @@
 #include "../../Core/CoreView.h"
 #include "../../Core/Globals.h"
 #include "../../Core/Vector.h"
-#include "../../Core/offset.h"
 #include "../../imgui/imgui.h"
+#include "../Core/Game.h"
 
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-
-// For SDK::Game::AddOnWndProc (lazy-register the F7 WndProc handler)
-#include "../Core/Game.h"
 
 namespace SDK::Drawing {
 
@@ -74,16 +71,216 @@ namespace detail {
         }
     };
 
+    inline bool DrawingEnabled = true;
+    inline bool F7WndProcInstalled = false;
+
     inline ImU32 FromArgb(std::uint32_t argb) {
-        const auto a = static_cast<int>((argb >> 24) & 0xFF);
-        const auto r = static_cast<int>((argb >> 16) & 0xFF);
-        const auto g = static_cast<int>((argb >> 8) & 0xFF);
-        const auto b = static_cast<int>(argb & 0xFF);
+        const int a = static_cast<int>((argb >> 24) & 0xFF);
+        const int r = static_cast<int>((argb >> 16) & 0xFF);
+        const int g = static_cast<int>((argb >> 8) & 0xFF);
+        const int b = static_cast<int>(argb & 0xFF);
         return IM_COL32(r, g, b, a);
     }
 
-    inline bool DrawingEnabled = true;
-    inline bool F7WndProcInstalled = false;
+    inline std::uint32_t ToArgb(int r, int g, int b, int a = 255) {
+        return (static_cast<std::uint32_t>(a & 0xFF) << 24) |
+               (static_cast<std::uint32_t>(r & 0xFF) << 16) |
+               (static_cast<std::uint32_t>(g & 0xFF) << 8) |
+               static_cast<std::uint32_t>(b & 0xFF);
+    }
+
+    inline constexpr int kCircleSegments32 = 32;
+    inline constexpr int kCircleSegments64 = 64;
+    inline constexpr int kCircleSegments128 = 128;
+    inline constexpr int kMaxCircleSegments = kCircleSegments128;
+    inline constexpr int kMaxPolylinePoints = 128;
+    inline constexpr int kRainbowColorCount = 128;
+    inline constexpr float kScreenRejectPadding = 128.0f;
+
+    struct UnitCirclePoint {
+        float x = 0.0f;
+        float z = 0.0f;
+    };
+
+    struct CircleLut {
+        int segments = 0;
+        UnitCirclePoint points[kMaxCircleSegments + 1] = {};
+    };
+
+    inline constexpr CircleLut MakeCircleLut(int segments, float stepCos, float stepSin) {
+        CircleLut lut = {};
+        lut.segments = segments;
+
+        float unitX = 1.0f;
+        float unitZ = 0.0f;
+        for (int i = 0; i <= segments && i <= kMaxCircleSegments; ++i) {
+            lut.points[i] = { unitX, unitZ };
+
+            const float nextX = unitX * stepCos - unitZ * stepSin;
+            const float nextZ = unitX * stepSin + unitZ * stepCos;
+            unitX = nextX;
+            unitZ = nextZ;
+        }
+
+        lut.points[segments] = { 1.0f, 0.0f };
+        return lut;
+    }
+
+    inline constexpr CircleLut CircleLut32 =
+        MakeCircleLut(kCircleSegments32, 0.9807852804f, 0.1950903220f);
+    inline constexpr CircleLut CircleLut64 =
+        MakeCircleLut(kCircleSegments64, 0.9951847267f, 0.0980171403f);
+    inline constexpr CircleLut CircleLut128 =
+        MakeCircleLut(kCircleSegments128, 0.9987954562f, 0.0490676743f);
+
+    inline const CircleLut& SelectCircleLut(int segments) {
+        if (segments <= kCircleSegments32) {
+            return CircleLut32;
+        }
+        if (segments <= kCircleSegments64) {
+            return CircleLut64;
+        }
+        return CircleLut128;
+    }
+
+    inline constexpr ImU32 PackRgba(int r, int g, int b, int a = 255) {
+        return (static_cast<ImU32>(r & 0xFF) << IM_COL32_R_SHIFT) |
+               (static_cast<ImU32>(g & 0xFF) << IM_COL32_G_SHIFT) |
+               (static_cast<ImU32>(b & 0xFF) << IM_COL32_B_SHIFT) |
+               (static_cast<ImU32>(a & 0xFF) << IM_COL32_A_SHIFT);
+    }
+
+    inline constexpr int ToColorByte(float value) {
+        return static_cast<int>(value * 255.0f + 0.5f);
+    }
+
+    inline constexpr ImU32 MakeRainbowColor(int index) {
+        const float scaledHue =
+            (static_cast<float>(index) / static_cast<float>(kRainbowColorCount)) * 6.0f;
+        const int sector = static_cast<int>(scaledHue);
+        const float fraction = scaledHue - static_cast<float>(sector);
+        const float inverse = 1.0f - fraction;
+
+        float r = 0.0f;
+        float g = 0.0f;
+        float b = 0.0f;
+        switch (sector % 6) {
+        case 0:
+            r = 1.0f;
+            g = fraction;
+            break;
+        case 1:
+            r = inverse;
+            g = 1.0f;
+            break;
+        case 2:
+            g = 1.0f;
+            b = fraction;
+            break;
+        case 3:
+            g = inverse;
+            b = 1.0f;
+            break;
+        case 4:
+            r = fraction;
+            b = 1.0f;
+            break;
+        default:
+            r = 1.0f;
+            b = inverse;
+            break;
+        }
+
+        return PackRgba(ToColorByte(r), ToColorByte(g), ToColorByte(b));
+    }
+
+    struct RainbowLut {
+        ImU32 colors[kRainbowColorCount] = {};
+    };
+
+    inline constexpr RainbowLut MakeRainbowLut() {
+        RainbowLut lut = {};
+        for (int i = 0; i < kRainbowColorCount; ++i) {
+            lut.colors[i] = MakeRainbowColor(i);
+        }
+        return lut;
+    }
+
+    inline constexpr RainbowLut RainbowColors = MakeRainbowLut();
+
+    inline int NormalizeRainbowIndex(int index) {
+        index %= kRainbowColorCount;
+        return index < 0 ? index + kRainbowColorCount : index;
+    }
+
+    inline ImU32 RainbowColor(int index) {
+        return RainbowColors.colors[NormalizeRainbowIndex(index)];
+    }
+
+    inline bool HasRendererSize(const Vec2& size) {
+        return size.x > 0.0f && size.y > 0.0f;
+    }
+
+    inline bool IsScreenCircleOutside(const Vec2& center,
+                                      float radius,
+                                      const Vec2& size,
+                                      float padding = 0.0f) {
+        if (!HasRendererSize(size)) {
+            return false;
+        }
+
+        return center.x + radius < -padding ||
+               center.x - radius > size.x + padding ||
+               center.y + radius < -padding ||
+               center.y - radius > size.y + padding;
+    }
+
+    inline bool IsScreenLineOutside(const Vec2& start,
+                                    const Vec2& end,
+                                    const Vec2& size,
+                                    float padding = 0.0f) {
+        if (!HasRendererSize(size)) {
+            return false;
+        }
+
+        const float minX = (std::min)(start.x, end.x);
+        const float maxX = (std::max)(start.x, end.x);
+        const float minY = (std::min)(start.y, end.y);
+        const float maxY = (std::max)(start.y, end.y);
+        return maxX < -padding ||
+               minX > size.x + padding ||
+               maxY < -padding ||
+               minY > size.y + padding;
+    }
+
+    inline bool IsScreenBoundsOutside(float minX,
+                                      float maxX,
+                                      float minY,
+                                      float maxY,
+                                      const Vec2& size,
+                                      float padding = 0.0f) {
+        if (!HasRendererSize(size)) {
+            return false;
+        }
+
+        return maxX < -padding ||
+               minX > size.x + padding ||
+               maxY < -padding ||
+               minY > size.y + padding;
+    }
+
+    inline bool IsPlausibleWorldCircle(const Vec3& center, float radius) {
+        return center.IsValid() &&
+               std::isfinite(radius) &&
+               radius > 0.0f &&
+               radius <= 30000.0f &&
+               center.x + radius >= -30000.0f &&
+               center.x - radius <= 30000.0f &&
+               center.y >= -5000.0f &&
+               center.y <= 5000.0f &&
+               center.z + radius >= -30000.0f &&
+               center.z - radius <= 30000.0f;
+    }
 
     inline void F7WndProcHandler(SDK::Game::WndEventArgs& args) {
         if (args.Msg == WM_KEYDOWN && args.WParam == VK_F7) {
@@ -98,183 +295,107 @@ namespace detail {
         }
     }
 
-    inline HWND FindProcessWindow() {
-        struct EnumData {
-            DWORD processId = 0;
-            HWND window = nullptr;
-        } data{ GetCurrentProcessId(), nullptr };
+    struct ViewProjectionFrameCache {
+        int frame = -1;
+        bool valid = false;
+        ::CoreView::Matrix4x4 matrix = {};
+        Vec2 rendererSize = {};
+    };
 
-        EnumWindows([](HWND window, LPARAM parameter) -> BOOL {
-            auto* state = reinterpret_cast<EnumData*>(parameter);
-            DWORD processId = 0;
-            GetWindowThreadProcessId(window, &processId);
-            if (processId != state->processId ||
-                !IsWindowVisible(window) ||
-                (GetWindowLongPtrW(window, GWL_STYLE) & WS_CHILD) != 0) {
-                return TRUE;
-            }
-
-            RECT rect = {};
-            if (!GetClientRect(window, &rect) ||
-                rect.right <= rect.left ||
-                rect.bottom <= rect.top) {
-                return TRUE;
-            }
-
-            state->window = window;
-            return FALSE;
-        }, reinterpret_cast<LPARAM>(&data));
-        return data.window;
-    }
-
-    inline bool GetRendererSize(Vec2& out) {
-        out = {};
-        const auto renderer = CoreRuntime::GetContext().renderer;
-        if (Globals::IsValidPtr(renderer)) {
-            const int width = Globals::Read<int>(renderer + 0xC);
-            const int height = Globals::Read<int>(renderer + 0x10);
-            if (width > 0 && height > 0 && width < 20000 && height < 20000) {
-                out = { static_cast<float>(width), static_cast<float>(height) };
-                return true;
-            }
+    inline ViewProjectionFrameCache& GetViewProjectionFrameCache() {
+        static ViewProjectionFrameCache cache = {};
+        const int frame = ImGui::GetCurrentContext() ? ImGui::GetFrameCount() : -1;
+        if (cache.frame != frame) {
+            cache = {};
+            cache.frame = frame;
+            cache.valid =
+                ::CoreView::ReadViewProjection(cache.matrix) &&
+                ::CoreView::GetRendererSize(cache.rendererSize);
         }
-
-        const HWND window = FindProcessWindow();
-        RECT rect = {};
-        if (window && GetClientRect(window, &rect) &&
-            rect.right > rect.left && rect.bottom > rect.top) {
-            out = {
-                static_cast<float>(rect.right - rect.left),
-                static_cast<float>(rect.bottom - rect.top)
-            };
-            return true;
-        }
-        return false;
-    }
-
-    inline bool IsPlausibleWorld(const Vec3& value) {
-        return value.IsValid() &&
-               value.x >= -30000.0f && value.x <= 30000.0f &&
-               value.y >= -5000.0f && value.y <= 5000.0f &&
-               value.z >= -30000.0f && value.z <= 30000.0f;
-    }
-
-    inline bool ReadViewProjection(float out[16]) {
-        if (!out) {
-            return false;
-        }
-
-        const auto instance = CoreRuntime::GetContext().viewProjInstance;
-        if (!Globals::IsValidPtr(instance)) {
-            return false;
-        }
-
-        float view[16] = {};
-        float projection[16] = {};
-        for (int i = 0; i < 16; ++i) {
-            view[i] = Globals::Read<float>(
-                instance + static_cast<uintptr_t>(i) * sizeof(float));
-            projection[i] = Globals::Read<float>(
-                instance + Offset::DrawingMatrixRuntime::ProjMatrixRelative +
-                static_cast<uintptr_t>(i) * sizeof(float));
-            if (!std::isfinite(view[i]) || !std::isfinite(projection[i])) {
-                return false;
-            }
-        }
-
-        for (int row = 0; row < 4; ++row) {
-            for (int column = 0; column < 4; ++column) {
-                float value = 0.0f;
-                for (int k = 0; k < 4; ++k) {
-                    value += view[row * 4 + k] * projection[k * 4 + column];
-                }
-                out[row * 4 + column] = value;
-            }
-        }
-        return true;
+        return cache;
     }
 
     inline bool ProjectWorldToScreen(const Vec3& world,
-                                     const float matrix[16],
-                                     const Vec2& size,
+                                     const ViewProjectionFrameCache& cache,
                                      Vec2& screen) {
-        screen = {};
-        if (!matrix || size.x <= 0.0f || size.y <= 0.0f) {
-            return false;
-        }
-
-        Vec4 clip = {};
-        clip.x = world.x * matrix[0] + world.y * matrix[4] +
-                 world.z * matrix[8] + matrix[12];
-        clip.y = world.x * matrix[1] + world.y * matrix[5] +
-                 world.z * matrix[9] + matrix[13];
-        clip.w = world.x * matrix[3] + world.y * matrix[7] +
-                 world.z * matrix[11] + matrix[15];
-        if (!std::isfinite(clip.w) || clip.w < 0.01f) {
-            return false;
-        }
-
-        const float ndcX = clip.x / clip.w;
-        const float ndcY = clip.y / clip.w;
-        screen = {
-            size.x * 0.5f * (1.0f + ndcX),
-            size.y * 0.5f * (1.0f - ndcY)
-        };
-        return screen.IsValid();
-    }
-
-    inline bool WorldToScreenNative(const Vec3& world, Vec2& screen) {
-        screen = {};
-        const auto& ctx = CoreRuntime::GetContext();
-        if (!Globals::IsValidPtr(ctx.worldToScreenFn)) {
-            return false;
-        }
-
-        const uintptr_t rootGlobal =
-            CoreRuntime::ResolveRva(Offset::DrawingRuntime::ViewProjectionRoot);
-        const uintptr_t root = Globals::Read<uintptr_t>(rootGlobal);
-        if (!Globals::IsValidPtr(root)) {
-            return false;
-        }
-
-        using WorldToScreenFn =
-            bool(__fastcall*)(uintptr_t, const Vec3*, Vec3*);
-        Vec3 output = {};
-        bool result = false;
-        __try {
-            result = reinterpret_cast<WorldToScreenFn>(ctx.worldToScreenFn)(
-                root + Offset::DrawingRuntime::WorldToScreenContextOffset,
-                &world,
-                &output);
-        }
-        __except (1) {
-            return false;
-        }
-
-        if (!std::isfinite(output.x) || !std::isfinite(output.y)) {
-            return false;
-        }
-        screen = { output.x, output.y };
-        return result || (!screen.IsZero() &&
-                          screen.x > -100000.0f &&
-                          screen.y > -100000.0f);
-    }
-
-    inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
-        if (!IsPlausibleWorld(world)) {
-            screen = {};
-            return false;
-        }
-
-        if (WorldToScreenNative(world, screen)) {
+        if (cache.valid &&
+            ::CoreView::ProjectWorldToScreen(
+                world,
+                cache.matrix,
+                cache.rendererSize,
+                screen)) {
             return true;
         }
+        return ::CoreView::WorldToScreen(world, screen);
+    }
 
-        float matrix[16] = {};
-        Vec2 size = {};
-        return ReadViewProjection(matrix) &&
-               GetRendererSize(size) &&
-               ProjectWorldToScreen(world, matrix, size, screen);
+    inline bool ProjectWorldToScreen(const Vec3& world, Vec2& screen) {
+        return ProjectWorldToScreen(world, GetViewProjectionFrameCache(), screen);
+    }
+
+    inline void IncludeScreenPoint(const Vec2& point,
+                                   float& minX,
+                                   float& maxX,
+                                   float& minY,
+                                   float& maxY) {
+        minX = (std::min)(minX, point.x);
+        maxX = (std::max)(maxX, point.x);
+        minY = (std::min)(minY, point.y);
+        maxY = (std::max)(maxY, point.y);
+    }
+
+    inline bool IsWorldCircleOutsideScreen(const Vec3& center,
+                                           float radius,
+                                           const ViewProjectionFrameCache& cache) {
+        if (!cache.valid) {
+            return false;
+        }
+
+        Vec2 centerScreen = {};
+        if (!::CoreView::ProjectWorldToScreen(
+                center,
+                cache.matrix,
+                cache.rendererSize,
+                centerScreen)) {
+            return false;
+        }
+
+        float minX = centerScreen.x;
+        float maxX = centerScreen.x;
+        float minY = centerScreen.y;
+        float maxY = centerScreen.y;
+        int projectedSamples = 0;
+
+        const Vec3 samples[4] = {
+            { center.x + radius, center.y, center.z },
+            { center.x - radius, center.y, center.z },
+            { center.x, center.y, center.z + radius },
+            { center.x, center.y, center.z - radius }
+        };
+
+        for (const Vec3& sample : samples) {
+            Vec2 screen = {};
+            if (!::CoreView::ProjectWorldToScreen(
+                    sample,
+                    cache.matrix,
+                    cache.rendererSize,
+                    screen)) {
+                continue;
+            }
+
+            IncludeScreenPoint(screen, minX, maxX, minY, maxY);
+            ++projectedSamples;
+        }
+
+        if (projectedSamples == 0) {
+            return false;
+        }
+
+        const Vec2 size = cache.rendererSize;
+        return maxX < -kScreenRejectPadding ||
+               minX > size.x + kScreenRejectPadding ||
+               maxY < -kScreenRejectPadding ||
+               minY > size.y + kScreenRejectPadding;
     }
 
     inline HandlerList<void(*)()> DrawHandlers;
@@ -285,6 +406,10 @@ namespace detail {
 
 using DrawHandler = void(*)();
 using Matrix4x4 = ::CoreView::Matrix4x4;
+
+inline std::uint32_t Color(int r, int g, int b, int a = 255) {
+    return detail::ToArgb(r, g, b, a);
+}
 
 inline bool IsEnabled() {
     detail::UpdateHotkey();
@@ -300,30 +425,37 @@ inline bool ToggleEnabled() {
     return detail::DrawingEnabled;
 }
 
-inline int Width() {
-    if (ImGui::GetCurrentContext()) {
-        const int width = static_cast<int>(ImGui::GetIO().DisplaySize.x);
-        if (width > 0) {
-            return width;
-        }
+inline ImDrawList* GetDrawList(bool foreground = true) {
+    if (!ImGui::GetCurrentContext()) {
+        return nullptr;
     }
+    return foreground
+        ? ImGui::GetForegroundDrawList()
+        : ImGui::GetBackgroundDrawList();
+}
+
+inline int Width() {
     Vec2 size = {};
-    return ::CoreView::GetRendererSize(size)
-        ? static_cast<int>(size.x)
-        : 0;
+    return ::CoreView::GetRendererSize(size) ? static_cast<int>(size.x) : 0;
 }
 
 inline int Height() {
-    if (ImGui::GetCurrentContext()) {
-        const int height = static_cast<int>(ImGui::GetIO().DisplaySize.y);
-        if (height > 0) {
-            return height;
-        }
-    }
     Vec2 size = {};
-    return ::CoreView::GetRendererSize(size)
-        ? static_cast<int>(size.y)
-        : 0;
+    return ::CoreView::GetRendererSize(size) ? static_cast<int>(size.y) : 0;
+}
+
+inline float GetRendererWidth() {
+    return static_cast<float>(Width());
+}
+
+inline float GetRendererHeight() {
+    return static_cast<float>(Height());
+}
+
+inline Vec2 GetRendererSize() {
+    Vec2 size = {};
+    (void)::CoreView::GetRendererSize(size);
+    return size;
 }
 
 inline bool ReadView(Matrix4x4& out) {
@@ -358,16 +490,16 @@ inline Vec3 ScreenToWorld(const Vec2& screen) {
 }
 
 inline bool WorldToScreen(const Vec3& world, Vec2& screen) {
-    (void)CoreRuntime::EnsureInitialized();
     if (!IsEnabled()) {
         screen = {};
         return false;
     }
-    return ::CoreView::WorldToScreen(world, screen);
+    (void)CoreRuntime::EnsureInitialized();
+    return detail::ProjectWorldToScreen(world, screen);
 }
 
 inline Vec2 WorldToScreen(const Vec3& world) {
-    Vec2 screen{};
+    Vec2 screen = {};
     (void)WorldToScreen(world, screen);
     return screen;
 }
@@ -395,46 +527,553 @@ inline Vec3 MinimapToWorld(const Vec2& minimap) {
 }
 
 inline bool OnScreen(const Vec2& point) {
-    if (!IsEnabled()) {
+    if (!IsEnabled() || !point.IsValid()) {
         return false;
     }
-    return point.x > 0.0f && point.y > 0.0f &&
-           point.x < static_cast<float>(Width()) &&
-           point.y < static_cast<float>(Height());
+    const Vec2 size = GetRendererSize();
+    return point.x >= 0.0f && point.y >= 0.0f &&
+           point.x <= size.x && point.y <= size.y;
 }
 
-inline void DrawLine(float x1, float y1, float x2, float y2, float width, std::uint32_t color) {
-    if (!IsEnabled() || !ImGui::GetCurrentContext()) {
+inline bool OnScreen(const Vec3& world) {
+    Vec2 screen = {};
+    return WorldToScreen(world, screen) && OnScreen(screen);
+}
+
+inline void DrawLine(float x1,
+                     float y1,
+                     float x2,
+                     float y2,
+                     float width,
+                     std::uint32_t color,
+                     bool foreground = true) {
+    if (!IsEnabled() || width <= 0.0f) {
         return;
     }
-    ImGui::GetForegroundDrawList()->AddLine(
-        ImVec2(x1, y1),
-        ImVec2(x2, y2),
-        detail::FromArgb(color),
-        width);
-}
 
-inline void DrawLine(const Vec2& start, const Vec2& end, float width, std::uint32_t color) {
-    DrawLine(start.x, start.y, end.x, end.y, width, color);
-}
-
-inline void DrawCircle(const Vec2& position, float radius, float thickness, std::uint32_t color, int segments = 64) {
-    if (!IsEnabled() || !ImGui::GetCurrentContext()) {
+    const Vec2 start{ x1, y1 };
+    const Vec2 end{ x2, y2 };
+    if (!start.IsValid() || !end.IsValid()) {
         return;
     }
-    ImGui::GetForegroundDrawList()->AddCircle(
-        ImVec2(position.x, position.y),
-        radius,
+
+    const Vec2 rendererSize = GetRendererSize();
+    if (detail::IsScreenLineOutside(start, end, rendererSize, detail::kScreenRejectPadding)) {
+        return;
+    }
+
+    if (auto* draw = GetDrawList(foreground)) {
+        draw->AddLine(
+            ImVec2(start.x, start.y),
+            ImVec2(end.x, end.y),
+            detail::FromArgb(color),
+            width);
+    }
+}
+
+inline void DrawLine(const Vec2& start,
+                     const Vec2& end,
+                     float width,
+                     std::uint32_t color,
+                     bool foreground = true) {
+    if (!start.IsValid() || !end.IsValid()) {
+        return;
+    }
+    DrawLine(start.x, start.y, end.x, end.y, width, color, foreground);
+}
+
+inline void DrawLine(const Vec2& start,
+                     const Vec2& end,
+                     std::uint32_t color,
+                     float thickness = 1.5f,
+                     bool foreground = true) {
+    DrawLine(start, end, thickness, color, foreground);
+}
+
+inline void DrawLine(const Vec3& start,
+                     const Vec3& end,
+                     std::uint32_t color,
+                     float thickness = 1.5f,
+                     bool foreground = true) {
+    if (!IsEnabled() ||
+        thickness <= 0.0f ||
+        !start.IsValid() ||
+        !end.IsValid()) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& cache = detail::GetViewProjectionFrameCache();
+    if (!cache.valid) {
+        return;
+    }
+
+    Vec2 screenStart = {};
+    Vec2 screenEnd = {};
+    if (!detail::ProjectWorldToScreen(start, cache, screenStart) ||
+        !detail::ProjectWorldToScreen(end, cache, screenEnd) ||
+        !screenStart.IsValid() ||
+        !screenEnd.IsValid()) {
+        return;
+    }
+
+    if (detail::IsScreenLineOutside(
+            screenStart,
+            screenEnd,
+            cache.rendererSize,
+            detail::kScreenRejectPadding)) {
+        return;
+    }
+
+    draw->AddLine(
+        ImVec2(screenStart.x, screenStart.y),
+        ImVec2(screenEnd.x, screenEnd.y),
         detail::FromArgb(color),
-        segments,
         thickness);
 }
 
-inline void DrawText(float x, float y, std::uint32_t color, const char* text) {
-    if (!IsEnabled() || !ImGui::GetCurrentContext() || !text) {
+inline void DrawPolyline(const Vec2* points,
+                         int count,
+                         float thickness,
+                         std::uint32_t color,
+                         bool closed = false,
+                         bool foreground = true) {
+    if (!IsEnabled() || !points || count < 2 || thickness <= 0.0f) {
         return;
     }
-    ImGui::GetForegroundDrawList()->AddText(ImVec2(x, y), detail::FromArgb(color), text);
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const int cappedCount = (std::min)(count, detail::kMaxPolylinePoints);
+    ImVec2 screenPoints[detail::kMaxPolylinePoints] = {};
+    int visible = 0;
+    float minX = 0.0f;
+    float maxX = 0.0f;
+    float minY = 0.0f;
+    float maxY = 0.0f;
+
+    for (int i = 0; i < cappedCount; ++i) {
+        const Vec2& point = points[i];
+        if (!point.IsValid()) {
+            continue;
+        }
+
+        screenPoints[visible++] = ImVec2(point.x, point.y);
+        if (visible == 1) {
+            minX = maxX = point.x;
+            minY = maxY = point.y;
+        } else {
+            detail::IncludeScreenPoint(point, minX, maxX, minY, maxY);
+        }
+    }
+
+    if (visible < 2) {
+        return;
+    }
+
+    const Vec2 rendererSize = GetRendererSize();
+    if (detail::IsScreenBoundsOutside(
+            minX,
+            maxX,
+            minY,
+            maxY,
+            rendererSize,
+            detail::kScreenRejectPadding)) {
+        return;
+    }
+
+    draw->AddPolyline(
+        screenPoints,
+        visible,
+        detail::FromArgb(color),
+        closed && visible == count && count <= detail::kMaxPolylinePoints,
+        thickness);
+}
+
+inline void DrawPolylineWorld(const Vec3* points,
+                              int count,
+                              float thickness,
+                              std::uint32_t color,
+                              bool closed = false,
+                              bool foreground = true) {
+    if (!IsEnabled() || !points || count < 2 || thickness <= 0.0f) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& cache = detail::GetViewProjectionFrameCache();
+    if (!cache.valid) {
+        return;
+    }
+
+    const int cappedCount = (std::min)(count, detail::kMaxPolylinePoints);
+    ImVec2 screenPoints[detail::kMaxPolylinePoints] = {};
+    int visible = 0;
+    float minX = 0.0f;
+    float maxX = 0.0f;
+    float minY = 0.0f;
+    float maxY = 0.0f;
+
+    for (int i = 0; i < cappedCount; ++i) {
+        if (!points[i].IsValid()) {
+            continue;
+        }
+
+        Vec2 screen = {};
+        if (!detail::ProjectWorldToScreen(points[i], cache, screen) ||
+            !screen.IsValid()) {
+            continue;
+        }
+
+        screenPoints[visible++] = ImVec2(screen.x, screen.y);
+        if (visible == 1) {
+            minX = maxX = screen.x;
+            minY = maxY = screen.y;
+        } else {
+            detail::IncludeScreenPoint(screen, minX, maxX, minY, maxY);
+        }
+    }
+
+    if (visible < 2) {
+        return;
+    }
+
+    if (detail::IsScreenBoundsOutside(
+            minX,
+            maxX,
+            minY,
+            maxY,
+            cache.rendererSize,
+            detail::kScreenRejectPadding)) {
+        return;
+    }
+
+    draw->AddPolyline(
+        screenPoints,
+        visible,
+        detail::FromArgb(color),
+        closed && visible == count && count <= detail::kMaxPolylinePoints,
+        thickness);
+}
+
+inline void DrawCircle(const Vec2& position,
+                       float radius,
+                       float thickness,
+                       std::uint32_t color,
+                       int segments = 64,
+                       bool foreground = true) {
+    if (!IsEnabled() ||
+        !position.IsValid() ||
+        !std::isfinite(radius) ||
+        radius <= 0.0f ||
+        thickness <= 0.0f) {
+        return;
+    }
+
+    const Vec2 rendererSize = GetRendererSize();
+    if (detail::IsScreenCircleOutside(
+            position,
+            radius,
+            rendererSize,
+            detail::kScreenRejectPadding)) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& lut = detail::SelectCircleLut(segments);
+    ImVec2 points[detail::kMaxCircleSegments] = {};
+    for (int i = 0; i < lut.segments; ++i) {
+        points[i] = ImVec2(
+            position.x + lut.points[i].x * radius,
+            position.y + lut.points[i].z * radius);
+    }
+
+    draw->AddPolyline(
+        points,
+        lut.segments,
+        detail::FromArgb(color),
+        true,
+        thickness);
+}
+
+inline void DrawCircle(const Vec3& center,
+                       float radius,
+                       std::uint32_t color,
+                       float thickness = 1.5f,
+                       int segments = 64,
+                       bool foreground = true) {
+    if (!IsEnabled() ||
+        !detail::IsPlausibleWorldCircle(center, radius) ||
+        thickness <= 0.0f ||
+        segments < 8) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& cache = detail::GetViewProjectionFrameCache();
+    if (!cache.valid) {
+        return;
+    }
+
+    if (detail::IsWorldCircleOutsideScreen(center, radius, cache)) {
+        return;
+    }
+
+    const auto& lut = detail::SelectCircleLut(segments);
+    ImVec2 points[detail::kMaxCircleSegments] = {};
+    int visible = 0;
+    for (int i = 0; i < lut.segments; ++i) {
+        const Vec3 point{
+            center.x + lut.points[i].x * radius,
+            center.y,
+            center.z + lut.points[i].z * radius
+        };
+
+        Vec2 screen = {};
+        if (detail::ProjectWorldToScreen(point, cache, screen) && screen.IsValid()) {
+            points[visible++] = ImVec2(screen.x, screen.y);
+        }
+    }
+
+    if (visible >= 2) {
+        draw->AddPolyline(
+            points,
+            visible,
+            detail::FromArgb(color),
+            visible == lut.segments,
+            thickness);
+    }
+}
+
+inline void DrawText(float x,
+                     float y,
+                     std::uint32_t color,
+                     const char* text,
+                     bool foreground = true) {
+    if (!IsEnabled() || !text || !*text) {
+        return;
+    }
+    if (auto* draw = GetDrawList(foreground)) {
+        draw->AddText(ImVec2(x, y), detail::FromArgb(color), text);
+    }
+}
+
+inline void DrawText(const Vec2& position,
+                     const char* text,
+                     std::uint32_t color = 0xFFFFFFFFu,
+                     bool centered = false,
+                     bool foreground = true) {
+    if (!position.IsValid() || !text || !*text) {
+        return;
+    }
+
+    ImVec2 screen(position.x, position.y);
+    if (centered && ImGui::GetCurrentContext()) {
+        const ImVec2 textSize = ImGui::CalcTextSize(text);
+        screen.x -= textSize.x * 0.5f;
+        screen.y -= textSize.y * 0.5f;
+    }
+    DrawText(screen.x, screen.y, color, text, foreground);
+}
+
+inline void DrawText(const Vec3& world,
+                     const char* text,
+                     std::uint32_t color = 0xFFFFFFFFu,
+                     bool centered = false,
+                     bool foreground = true) {
+    Vec2 screen = {};
+    if (WorldToScreen(world, screen)) {
+        DrawText(screen, text, color, centered, foreground);
+    }
+}
+
+inline std::uint32_t ColorHSV(float h, float s, float v, float a = 1.0f) {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    ImGui::ColorConvertHSVtoRGB(h, s, v, r, g, b);
+    return Color(
+        static_cast<int>(r * 255.0f),
+        static_cast<int>(g * 255.0f),
+        static_cast<int>(b * 255.0f),
+        static_cast<int>(a * 255.0f));
+}
+
+inline void DrawCircleRainbowStatic(const Vec3& center,
+                                    float radius,
+                                    float thickness = 2.0f,
+                                    int segments = 64,
+                                    bool foreground = true) {
+    if (!IsEnabled() ||
+        !detail::IsPlausibleWorldCircle(center, radius) ||
+        thickness <= 0.0f ||
+        segments < 8) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& cache = detail::GetViewProjectionFrameCache();
+    if (!cache.valid) {
+        return;
+    }
+
+    if (detail::IsWorldCircleOutsideScreen(center, radius, cache)) {
+        return;
+    }
+
+    const auto& lut = detail::SelectCircleLut(segments);
+    ImVec2 points[detail::kMaxCircleSegments] = {};
+    bool projected[detail::kMaxCircleSegments] = {};
+    int visible = 0;
+
+    for (int i = 0; i < lut.segments; ++i) {
+        const Vec3 point{
+            center.x + lut.points[i].x * radius,
+            center.y,
+            center.z + lut.points[i].z * radius
+        };
+
+        Vec2 screen = {};
+        if (detail::ProjectWorldToScreen(point, cache, screen) && screen.IsValid()) {
+            points[i] = ImVec2(screen.x, screen.y);
+            projected[i] = true;
+            ++visible;
+        }
+    }
+
+    if (visible < 2) {
+        return;
+    }
+
+    for (int i = 0; i < lut.segments; ++i) {
+        const int next = i + 1 == lut.segments ? 0 : i + 1;
+        if (!projected[i] || !projected[next]) {
+            continue;
+        }
+
+        const int colorIndex = i * detail::kRainbowColorCount / lut.segments;
+        draw->AddLine(
+            points[i],
+            points[next],
+            detail::RainbowColor(colorIndex),
+            thickness);
+    }
+}
+
+inline void DrawCircleRainbow(const Vec3& center,
+                              float radius,
+                              float thickness = 2.0f,
+                              int segments = 64,
+                              bool foreground = true,
+                              float speed = 1.0f) {
+    if (!IsEnabled() ||
+        !detail::IsPlausibleWorldCircle(center, radius) ||
+        thickness <= 0.0f ||
+        segments < 8) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& cache = detail::GetViewProjectionFrameCache();
+    if (!cache.valid) {
+        return;
+    }
+
+    if (detail::IsWorldCircleOutsideScreen(center, radius, cache)) {
+        return;
+    }
+
+    const auto& lut = detail::SelectCircleLut(segments);
+    ImVec2 points[detail::kMaxCircleSegments] = {};
+    bool projected[detail::kMaxCircleSegments] = {};
+    int visible = 0;
+
+    for (int i = 0; i < lut.segments; ++i) {
+        const Vec3 point{
+            center.x + lut.points[i].x * radius,
+            center.y,
+            center.z + lut.points[i].z * radius
+        };
+
+        Vec2 screen = {};
+        if (detail::ProjectWorldToScreen(point, cache, screen) && screen.IsValid()) {
+            points[i] = ImVec2(screen.x, screen.y);
+            projected[i] = true;
+            ++visible;
+        }
+    }
+
+    if (visible < 2) {
+        return;
+    }
+
+    int phase = 0;
+    if (ImGui::GetCurrentContext() && std::isfinite(speed)) {
+        phase = static_cast<int>(
+            static_cast<float>(ImGui::GetTime()) *
+            speed *
+            static_cast<float>(detail::kRainbowColorCount));
+    }
+
+    for (int i = 0; i < lut.segments; ++i) {
+        const int next = i + 1 == lut.segments ? 0 : i + 1;
+        if (!projected[i] || !projected[next]) {
+            continue;
+        }
+
+        const int colorIndex =
+            i * detail::kRainbowColorCount / lut.segments + phase;
+        draw->AddLine(
+            points[i],
+            points[next],
+            detail::RainbowColor(colorIndex),
+            thickness);
+    }
+}
+
+inline Vec2 HpBarScreenPos(const Vec3& worldPos, float hpBarHeight) {
+    Vec3 offsetPos = worldPos;
+    offsetPos.y += hpBarHeight;
+
+    Vec2 screenPos = {};
+    if (!WorldToScreen(offsetPos, screenPos)) {
+        return {};
+    }
+
+    screenPos.y -= GetRendererHeight() * 0.00083333335f * hpBarHeight;
+    return screenPos;
+}
+
+template <typename TGameObject>
+inline Vec2 HpBarScreenPos(const TGameObject& obj) {
+    return HpBarScreenPos(obj.Position(), obj.GetHpBarHeight());
 }
 
 inline bool AddOnDraw(DrawHandler handler) { return detail::DrawHandlers.Add(handler); }
@@ -451,11 +1090,13 @@ inline void DispatchDraw() {
         detail::DrawHandlers.Fire();
     }
 }
+
 inline void DispatchEndScene() {
     if (IsEnabled()) {
         detail::EndSceneHandlers.Fire();
     }
 }
+
 inline void DispatchPreReset() { detail::PreResetHandlers.Fire(); }
 inline void DispatchPostReset() { detail::PostResetHandlers.Fire(); }
 

@@ -99,8 +99,12 @@ struct ObjectEventArgs {
     ObjectInfo Sender = {};
     // Populated for missile events: the AIBaseClient that created the missile.
     ObjectInfo Source = {};
+    // Populated for missile events when the payload exposes a target index.
+    ObjectInfo Target = {};
     uint32_t SourceIndex = 0;
     uint32_t SourceNetworkId = 0;
+    uint32_t TargetIndex = 0;
+    uint32_t TargetNetworkId = 0;
     uint32_t MissileNetworkId = 0;
     Vec3 StartPosition = {};
     Vec3 EndPosition = {};
@@ -1129,6 +1133,9 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
                 Offset::MissileEventLayout::CreatePacketCasterIndex,
             args.SourceIndex);
         detail::Read(
+            payload + Offset::MissileEventLayout::TargetIndex,
+            args.TargetIndex);
+        detail::Read(
             payload + Offset::MissileEventLayout::CreatePacketMissileNetId,
             args.MissileNetworkId);
     } else if (raw.Id == Hooks::OnMissileDelete) {
@@ -1136,6 +1143,9 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
         detail::Read(
             raw.Rcx + Offset::MissileClient::CasterIndex,
             args.SourceIndex);
+        detail::Read(
+            raw.Rcx + Offset::MissileClient::TargetIndex,
+            args.TargetIndex);
         detail::Read(
             raw.Rcx + Offset::MissileClient::ObjectNetId,
             args.MissileNetworkId);
@@ -1180,6 +1190,18 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     }
     if (args.Source.IsValid()) {
         args.SourceNetworkId = args.Source.NetworkId;
+    }
+
+    if (args.TargetIndex != 0 && args.TargetIndex != 0xFFFFFFFFu) {
+        args.Target =
+            detail::ResolveObjectByIndex(static_cast<int>(args.TargetIndex));
+        if (!args.Target.IsValid()) {
+            args.Target =
+                detail::ResolveObjectByNetworkId(args.TargetIndex);
+        }
+        if (args.Target.IsValid()) {
+            args.TargetNetworkId = args.Target.NetworkId;
+        }
     }
 
     if (!args.MissileName[0]) {

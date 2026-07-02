@@ -7,6 +7,8 @@
 #include <any>
 #include <chrono>
 #include <functional>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -54,6 +56,10 @@ public:
         return instance;
     }
 
+    static const char* Name() {
+        return "SDK Cache";
+    }
+
     std::any& operator[](const std::string& key) {
         return regions_["Default"][key];
     }
@@ -93,11 +99,38 @@ public:
         return value;
     }
 
+    std::any AddOrGetExisting(const std::string& key,
+                              const std::any& value,
+                              std::chrono::system_clock::time_point absoluteExpiration,
+                              const std::string& regionName = "Default") {
+        return AddOrGetExisting(key, value, MillisecondsUntil(absoluteExpiration), regionName);
+    }
+
     CacheItem AddOrGetExisting(const CacheItem& item, const CacheItemPolicy& policy) {
         const std::string regionName = item.RegionName.empty() ? "Default" : item.RegionName;
-        const std::any value = AddOrGetExisting(item.Key, item.Value, policy.AbsoluteExpirationMs, regionName);
+        auto& region = Region(regionName);
+        const auto it = region.find(item.Key);
+        if (it != region.end()) {
+            return CacheItem{ item.Key, it->second, regionName };
+        }
+
         RegisterPolicy(item.Key, regionName, policy);
+        const std::any value = AddOrGetExisting(item.Key, item.Value, policy.AbsoluteExpirationMs, regionName);
         return CacheItem{ item.Key, value, regionName };
+    }
+
+    std::any AddOrGetExisting(const std::string& key,
+                              const std::any& value,
+                              const CacheItemPolicy& policy,
+                              const std::string& regionName = "Default") {
+        auto& region = Region(regionName);
+        const auto it = region.find(key);
+        if (it != region.end()) {
+            return it->second;
+        }
+
+        RegisterPolicy(key, regionName.empty() ? "Default" : regionName, policy);
+        return AddOrGetExisting(key, value, policy.AbsoluteExpirationMs, regionName);
     }
 
     bool Contains(const std::string& key, const std::string& regionName = "Default") const {
@@ -129,6 +162,28 @@ public:
         return region != regions_.end() ? static_cast<long long>(region->second.size()) : 0;
     }
 
+    std::unordered_map<std::string, std::any> GetValues(const std::vector<std::string>& keys,
+                                                        const std::string& regionName = "Default") const {
+        std::unordered_map<std::string, std::any> values;
+        const auto region = regions_.find(regionName);
+        if (region == regions_.end()) {
+            return values;
+        }
+
+        for (const auto& key : keys) {
+            const auto value = region->second.find(key);
+            if (value != region->second.end()) {
+                values.emplace(key, value->second);
+            }
+        }
+        return values;
+    }
+
+    void CreateCacheEntryChangeMonitor(const std::vector<std::string>&,
+                                       const std::string& = "Default") const {
+        throw std::runtime_error("CacheEntryChangeMonitors are not implemented.");
+    }
+
     std::any Remove(const std::string& key, const std::string& regionName = "Default") {
         auto& region = Region(regionName);
         auto it = region.find(key);
@@ -156,10 +211,25 @@ public:
         ScheduleExpiration(key, regionName, absoluteExpirationMs);
     }
 
+    void Set(const std::string& key,
+             const std::any& value,
+             std::chrono::system_clock::time_point absoluteExpiration,
+             const std::string& regionName = "Default") {
+        Set(key, value, MillisecondsUntil(absoluteExpiration), regionName);
+    }
+
     void Set(const CacheItem& item, const CacheItemPolicy& policy) {
         const std::string regionName = item.RegionName.empty() ? "Default" : item.RegionName;
         RegisterPolicy(item.Key, regionName, policy);
         Set(item.Key, item.Value, policy.AbsoluteExpirationMs, regionName);
+    }
+
+    void Set(const std::string& key,
+             const std::any& value,
+             const CacheItemPolicy& policy,
+             const std::string& regionName = "Default") {
+        RegisterPolicy(key, regionName.empty() ? "Default" : regionName, policy);
+        Set(key, value, policy.AbsoluteExpirationMs, regionName);
     }
 
     bool TryGetValue(const std::string& key, std::any& value, const std::string& regionName = "Default") const {
@@ -220,6 +290,17 @@ private:
             region.erase(key);
             CallEntryRemoved(key, value, CacheEntryRemovedReason::Expired, regionName);
         });
+    }
+
+    static int MillisecondsUntil(std::chrono::system_clock::time_point absoluteExpiration) {
+        const auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
+            absoluteExpiration - std::chrono::system_clock::now());
+        if (delta.count() <= 0) {
+            return 1;
+        }
+        return delta.count() > static_cast<long long>(std::numeric_limits<int>::max())
+            ? std::numeric_limits<int>::max()
+            : static_cast<int>(delta.count());
     }
 
     void CallEntryRemoved(const std::string& key,

@@ -217,8 +217,12 @@ namespace SDK::Extensions {
                               float range = FLT_MAX,
                               bool checkTeam = true,
                               const Vector3& from = Vector3()) {
-        if (!unit.IsValid() /* || (unit.IsDead() && !unit.IsZombie()) || */
-            /* !unit.IsVisible() || !unit.IsTargetable() || unit.IsInvulnerable() */) {
+        if (!unit.IsValid() || (unit.IsDead() && !unit.IsZombie())) {
+            return false;
+        }
+
+        if (unit.IsHero() &&
+            (!unit.IsVisible() || !unit.IsTargetable() || unit.IsInvulnerable())) {
             return false;
         }
 

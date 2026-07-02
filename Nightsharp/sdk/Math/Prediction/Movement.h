@@ -113,22 +113,25 @@ struct ProjectionInfo {
     Vec2 SegmentPoint = {};
 
     ProjectionInfo() = default;
-    ProjectionInfo(bool isOnSegment, const Vec2& linePoint, const Vec2& segmentPoint)
+    ProjectionInfo(bool isOnSegment, const Vec2& segmentPoint, const Vec2& linePoint)
         : IsOnSegment(isOnSegment), LinePoint(linePoint), SegmentPoint(segmentPoint) {}
 };
 
 inline ProjectionInfo ProjectOn(const Vec2& point, const Vec2& segmentStart, const Vec2& segmentEnd) {
-    float rs = (segmentStart - segmentEnd).LengthSqr();
-    if (rs < 0.0001f) {
+    const Vec2 segment = segmentEnd - segmentStart;
+    const float lengthSqr = segment.LengthSqr();
+    if (lengthSqr < 0.0001f) {
         return { false, segmentStart, segmentStart };
     }
 
-    float rp = (point - segmentEnd).Dot(segmentStart - segmentEnd) / rs;
-    if (rp < 0 || rp > 1) {
-        return { false, segmentStart + (segmentStart - segmentEnd) * rp, segmentStart };
-    }
-
-    return { true, segmentStart + (segmentStart - segmentEnd) * rp, segmentStart + (segmentStart - segmentEnd) * rp };
+    const float projection = (point - segmentStart).Dot(segment) / lengthSqr;
+    const Vec2 linePoint = segmentStart + segment * projection;
+    const float segmentProjection = std::clamp(projection, 0.0f, 1.0f);
+    const bool isOnSegment = segmentProjection == projection;
+    const Vec2 segmentPoint = isOnSegment
+        ? linePoint
+        : segmentStart + segment * segmentProjection;
+    return { isOnSegment, segmentPoint, linePoint };
 }
 
 // IntersectionResult (from Vector2Extensions.cs)

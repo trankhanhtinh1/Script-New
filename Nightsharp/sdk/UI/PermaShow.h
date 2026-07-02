@@ -33,6 +33,10 @@ namespace SDK { namespace UI { namespace PermaShow {
     inline const Entry& At(int i)       { return s_Items[i]; }
     inline Entry* Items()               { return s_Items; }
 
+    inline void Initialize(Menu* menu = nullptr) {
+        (void)menu;
+    }
+
     // Returns -1 if not found.
     inline int IndexOf(MenuItem* item) {
         if (!item) return -1;

@@ -1,11 +1,13 @@
 #pragma once
 
 #include "../../libs/nlohmann/json.hpp"
+#include "../Constants.h"
 #include "Logging.h"
 
 #include <Windows.h>
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -19,7 +21,50 @@ public:
     explicit Storage(std::string storageName = "Generic")
         : storageName_(std::move(storageName)) {
         ValidateName(storageName_);
-        StorageList().push_back(this);
+        RegisterInstance();
+    }
+
+    Storage(std::string storageName, bool isAttribute)
+        : storageName_(std::move(storageName)) {
+        ValidateName(storageName_);
+        if (!isAttribute) {
+            RegisterInstance();
+        }
+    }
+
+    Storage(const Storage& other)
+        : contents_(other.contents_),
+          storageName_(other.storageName_),
+          bindings_(other.bindings_) {
+        RegisterInstance();
+    }
+
+    Storage(Storage&& other) noexcept
+        : contents_(std::move(other.contents_)),
+          storageName_(std::move(other.storageName_)),
+          bindings_(std::move(other.bindings_)) {
+        RegisterInstance();
+    }
+
+    Storage& operator=(const Storage& other) {
+        if (this != &other) {
+            contents_ = other.contents_;
+            storageName_ = other.storageName_;
+            bindings_ = other.bindings_;
+            ValidateName(storageName_);
+            RegisterInstance();
+        }
+        return *this;
+    }
+
+    Storage& operator=(Storage&& other) noexcept {
+        if (this != &other) {
+            contents_ = std::move(other.contents_);
+            storageName_ = std::move(other.storageName_);
+            bindings_ = std::move(other.bindings_);
+            RegisterInstance();
+        }
+        return *this;
     }
 
     ~Storage() {
@@ -66,7 +111,8 @@ public:
         return contents_.erase(key) != 0;
     }
 
-    void Save() const {
+    void Save() {
+        SyncBindingsToContents();
         std::filesystem::create_directories(StoragePath());
         std::ofstream stream(PathFor(storageName_), std::ios::trunc);
         stream << contents_.dump(4);
@@ -79,6 +125,46 @@ public:
         }
         contents_[key] = value;
         return true;
+    }
+
+    template <typename T>
+    Storage& Bind(const std::string& key, T& value) {
+        ValidateKey(key);
+        Binding binding;
+        binding.Key = key;
+        binding.Getter = [&value]() { return nlohmann::json(value); };
+        binding.Setter = [&value](const nlohmann::json& data) {
+            if (!data.is_null()) {
+                value = data.template get<T>();
+            }
+        };
+        bindings_.push_back(std::move(binding));
+        ApplyBindingFromContents(bindings_.back());
+        return *this;
+    }
+
+    template <typename T, typename Getter, typename Setter>
+    Storage& Bind(const std::string& key, Getter getter, Setter setter) {
+        ValidateKey(key);
+        Binding binding;
+        binding.Key = key;
+        binding.Getter = [getter = std::move(getter)]() mutable {
+            return nlohmann::json(static_cast<T>(std::invoke(getter)));
+        };
+        binding.Setter = [setter = std::move(setter)](const nlohmann::json& data) mutable {
+            if (!data.is_null()) {
+                std::invoke(setter, data.template get<T>());
+            }
+        };
+        bindings_.push_back(std::move(binding));
+        ApplyBindingFromContents(bindings_.back());
+        return *this;
+    }
+
+    void LoadBoundValues() {
+        for (const auto& binding : bindings_) {
+            ApplyBindingFromContents(binding);
+        }
     }
 
     const nlohmann::json& Contents() const {
@@ -102,18 +188,26 @@ public:
     }
 
 private:
+    struct Binding {
+        std::string Key;
+        std::function<nlohmann::json()> Getter;
+        std::function<void(const nlohmann::json&)> Setter;
+    };
+
     static std::vector<Storage*>& StorageList() {
         static std::vector<Storage*> list;
         return list;
     }
 
+    void RegisterInstance() {
+        auto& list = StorageList();
+        if (std::find(list.begin(), list.end(), this) == list.end()) {
+            list.push_back(this);
+        }
+    }
+
     static std::filesystem::path StoragePath() {
-        char appData[MAX_PATH] = {};
-        DWORD len = GetEnvironmentVariableA("APPDATA", appData, MAX_PATH);
-        std::filesystem::path root = (len > 0 && len < MAX_PATH)
-            ? std::filesystem::path(appData)
-            : std::filesystem::path("C:\\Users\\Public");
-        return root / "NightSharp" / "Storage";
+        return SDK::Constants::EnsoulSharpAppData() / "Storage";
     }
 
     static std::filesystem::path PathFor(const std::string& storageName) {
@@ -127,8 +221,43 @@ private:
         }
     }
 
+    static void ValidateKey(const std::string& key) {
+        if (key.empty()) {
+            throw std::invalid_argument("Storage key can't be empty.");
+        }
+    }
+
+    void ApplyBindingFromContents(const Binding& binding) {
+        if (!binding.Setter) {
+            return;
+        }
+        const auto it = contents_.find(binding.Key);
+        if (it == contents_.end()) {
+            return;
+        }
+        try {
+            binding.Setter(*it);
+        } catch (...) {
+            Logging::Write()(LogLevel::Error, "Storage binding load failed for key %s", binding.Key.c_str());
+        }
+    }
+
+    void SyncBindingsToContents() {
+        for (const auto& binding : bindings_) {
+            if (!binding.Getter) {
+                continue;
+            }
+            try {
+                contents_[binding.Key] = binding.Getter();
+            } catch (...) {
+                Logging::Write()(LogLevel::Error, "Storage binding save failed for key %s", binding.Key.c_str());
+            }
+        }
+    }
+
     nlohmann::json contents_ = nlohmann::json::object();
     std::string storageName_ = "Generic";
+    std::vector<Binding> bindings_;
 };
 
 } // namespace SDK::Core::Utils

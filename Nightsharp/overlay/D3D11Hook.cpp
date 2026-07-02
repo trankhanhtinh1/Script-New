@@ -14,6 +14,7 @@
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
+#include "../SDK/Lifecycle.h"
 #include "../SDK/Core/Game.h"
 #include "../SDK/Events/Events.h"
 #include "../SDK/UI/UI.h"
@@ -50,7 +51,11 @@ static WNDPROC          g_originalWndProc  = nullptr;
 static std::once_flag   g_initDevice;
 static bool             g_active           = false;
 static volatile LONG    g_shutdown         = 0;
+static volatile LONG    g_uninstalling     = 0;
+static volatile LONG    g_hookCalls        = 0;
 static volatile LONG    g_menuReady        = 0;
+static volatile LONG    g_imguiContextReady = 0;
+static volatile LONG    g_imguiBackendReady = 0;
 // Set to 1 once PluginBootstrap::EnsureRegistered() has returned (success or crash).
 // Render() gates all SDK/plugin calls on this flag to prevent the bootstrap race.
 static volatile LONG    g_bootstrapDone    = 0;
@@ -83,6 +88,29 @@ static bool ReadLocalPlayerForStartup(uintptr_t& outLocalPlayer) {
         return false;
     }
     return outLocalPlayer != 0;
+}
+
+struct HookCallScope {
+    HookCallScope() {
+        InterlockedIncrement(&g_hookCalls);
+    }
+
+    ~HookCallScope() {
+        InterlockedDecrement(&g_hookCalls);
+    }
+};
+
+static bool IsUnloading() {
+    return InterlockedCompareExchange(&g_shutdown, 0, 0) != 0 ||
+           InterlockedCompareExchange(&g_uninstalling, 0, 0) != 0;
+}
+
+static void WaitForHookCallsToDrain(DWORD timeoutMs = 2000) {
+    const DWORD start = GetTickCount();
+    while (InterlockedCompareExchange(&g_hookCalls, 0, 0) != 0 &&
+           GetTickCount() - start < timeoutMs) {
+        Sleep(1);
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -376,6 +404,12 @@ static void CleanupRenderTargetInternal() {
 // WndProc hook
 // -----------------------------------------------------------------------
 static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (IsUnloading()) {
+        return g_originalWndProc
+            ? CallWindowProcW(g_originalWndProc, hWnd, msg, wParam, lParam)
+            : DefWindowProcW(hWnd, msg, wParam, lParam);
+    }
+
     // Let ImGui process input first
     if (ImGui::GetCurrentContext() &&
         ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
@@ -407,7 +441,9 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     }
 
     // Forward to original game WndProc
-    return CallWindowProcW(g_originalWndProc, hWnd, msg, wParam, lParam);
+    return g_originalWndProc
+        ? CallWindowProcW(g_originalWndProc, hWnd, msg, wParam, lParam)
+        : DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
 static bool HookWndProc(HWND hWnd) {
@@ -445,6 +481,7 @@ static void InitImGui(IDXGISwapChain* swapChain) {
     NsHeapInit();
     ImGui::SetAllocatorFunctions(NsImGuiAlloc, NsImGuiFree, nullptr);
     ImGui::CreateContext();
+    InterlockedExchange(&g_imguiContextReady, 1);
     ImGui::StyleColorsDark();
 
     ImGuiIO& io = ImGui::GetIO();
@@ -465,6 +502,7 @@ static void InitImGui(IDXGISwapChain* swapChain) {
     ImGui_ImplWin32_Init(g_gameHwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
     ImGui_ImplDX11_CreateDeviceObjects();
+    InterlockedExchange(&g_imguiBackendReady, 1);
 
     NightSharpDebug::Logf("[D3D11Hook] ImGui initialized with game device");
 }
@@ -484,7 +522,10 @@ static void RenderMenuSafe() {
 }
 
 static void Render() {
-    if (g_shutdown)
+    if (IsUnloading() ||
+        InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) == 0 ||
+        !g_pd3dContext ||
+        !g_pRenderTargetView)
         return;
 
     NightSharpPerf::BeginFrame();
@@ -535,10 +576,15 @@ static void Render() {
 // -----------------------------------------------------------------------
 struct DxgiPresent {
     static long WINAPI Hooked(IDXGISwapChain* pSwapChain, UINT syncInterval, UINT flags) {
-        std::call_once(g_initDevice, [&]() {
-            InitImGui(pSwapChain);
-        });
-        Render();
+        HookCallScope scope;
+        if (!IsUnloading()) {
+            std::call_once(g_initDevice, [&]() {
+                if (!IsUnloading()) {
+                    InitImGui(pSwapChain);
+                }
+            });
+            Render();
+        }
         NightSharpPerf::ScopedTimer timer("Present");
         return m_original(pSwapChain, syncInterval, flags);
     }
@@ -550,10 +596,17 @@ struct DxgiResizeBuffers {
     static long WINAPI Hooked(IDXGISwapChain* pSwapChain,
                               UINT bufferCount, UINT width, UINT height,
                               DXGI_FORMAT newFormat, UINT swapChainFlags)
-    {
+{
+        HookCallScope scope;
+        if (IsUnloading()) {
+            return m_original(pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
+        }
+
         CleanupRenderTargetInternal();
         auto hr = m_original(pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
-        CreateRenderTargetInternal();
+        if (!IsUnloading()) {
+            CreateRenderTargetInternal();
+        }
         return hr;
     }
     static decltype(&Hooked) m_original;
@@ -646,7 +699,13 @@ bool Install() {
 
     NightSharpDebug::Phase("d3d11hook-install");
     NightSharpDebug::Logf("[D3D11Hook] Installing D3D11 swapchain hooks...");
+    InterlockedExchange(&g_shutdown, 0);
+    InterlockedExchange(&g_uninstalling, 0);
+    InterlockedExchange(&g_hookCalls, 0);
     InterlockedExchange(&g_menuReady, 0);
+    InterlockedExchange(&g_imguiContextReady, 0);
+    InterlockedExchange(&g_imguiBackendReady, 0);
+    InterlockedExchange(&g_bootstrapDone, 0);
     NightSharpMenu::showMenu = false;
 
     // Retry FindGameWindow: the game window may not be visible/owned by the render
@@ -786,23 +845,49 @@ bool Install() {
 }
 
 void Uninstall() {
-    if (!g_active) return;
+    InterlockedExchange(&g_shutdown, 1);
+    if (InterlockedCompareExchange(&g_uninstalling, 1, 0) != 0) {
+        return;
+    }
+
+    const bool wasActive = g_active;
     g_active = false;
     InterlockedExchange(&g_menuReady, 0);
+    InterlockedExchange(&g_bootstrapDone, 0);
     NightSharpMenu::showMenu = false;
 
     NightSharpDebug::Phase("d3d11hook-uninstall");
     NightSharpDebug::Logf("[D3D11Hook] Uninstalling...");
 
+    if (g_vmtHook) {
+        g_vmtHook->Unhook();
+    }
+    WaitForHookCallsToDrain();
+
+    UnhookWndProc();
+
     ShutdownPluginsSafe();
+    __try {
+        SDK::Lifecycle::Shutdown();
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "D3D11Hook::SDK::Lifecycle::Shutdown",
+                  GetExceptionInformation())) {
+    }
     ShutdownCoreEventsSafe();
 
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
+    if (InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) != 0) {
+        ImGui_ImplDX11_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        InterlockedExchange(&g_imguiBackendReady, 0);
+    }
+    if (InterlockedCompareExchange(&g_imguiContextReady, 0, 0) != 0 &&
+        ImGui::GetCurrentContext()) {
+        ImGui::DestroyContext();
+        InterlockedExchange(&g_imguiContextReady, 0);
+    }
 
     CleanupRenderTargetInternal();
-    UnhookWndProc();
 
     if (g_vmtHook) {
         delete g_vmtHook;
@@ -813,7 +898,8 @@ void Uninstall() {
     SafeRelease(g_pd3dDevice);
     g_pSwapChain = nullptr;
 
-    NightSharpDebug::Logf("[D3D11Hook] Uninstall complete");
+    InterlockedExchange(&g_uninstalling, 0);
+    NightSharpDebug::Logf("[D3D11Hook] Uninstall complete active=%d", wasActive ? 1 : 0);
 }
 
 bool IsActive() {

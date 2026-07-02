@@ -120,8 +120,30 @@ void operator delete[](void* ptr, size_t, std::align_val_t al) noexcept {
 // Overlay worker thread
 // ========================================================================
 static volatile LONG g_workerStarted = 0;
+static volatile LONG g_selfUnloading = 0;
+static HANDLE g_crcThread = nullptr;
 
-static DWORD WINAPI OverlayWorker(LPVOID) {
+static void StopDeferredCRCThread() {
+    RequestDeferredCRCInstallShutdown();
+
+    HANDLE thread = g_crcThread;
+    g_crcThread = nullptr;
+    if (thread) {
+        WaitForSingleObject(thread, 2500);
+        CloseHandle(thread);
+    }
+}
+
+static void ShutdownNightSharpRuntime() {
+    D3D11Hook::RequestShutdown();
+    D3D11Hook::Uninstall();
+    StopDeferredCRCThread();
+    CRCBypass::Uninstall();
+}
+
+static DWORD WINAPI OverlayWorker(LPVOID param) {
+    HMODULE module = reinterpret_cast<HMODULE>(param);
+
     NightSharpDebug::Phase("overlay-worker-enter");
     NightSharpDebug::Logf("[NightSharp] OverlayWorker entered");
 
@@ -138,15 +160,24 @@ static DWORD WINAPI OverlayWorker(LPVOID) {
     InterlockedExchange(&g_workerStarted, 0);
     NightSharpDebug::Phase("overlay-worker-exit");
     NightSharpDebug::Logf("[NightSharp] OverlayWorker exiting");
+
+    if (module) {
+        InterlockedExchange(&g_selfUnloading, 1);
+        ShutdownNightSharpRuntime();
+        NightSharpDebug::Phase("self-unload");
+        NightSharpDebug::Logf("[NightSharp] FreeLibraryAndExitThread module=%p", module);
+        FreeLibraryAndExitThread(module, 0);
+    }
+
     return 0;
 }
 
-static void StartOverlayWorker() {
+static void StartOverlayWorker(HMODULE module) {
     if (InterlockedCompareExchange(&g_workerStarted, 1, 0) != 0) {
         return;
     }
 
-    HANDLE hThread = CreateThread(nullptr, 0, OverlayWorker, nullptr, 0, nullptr);
+    HANDLE hThread = CreateThread(nullptr, 0, OverlayWorker, module, 0, nullptr);
     if (hThread) {
         CloseHandle(hThread);
         NightSharpDebug::Logf("[NightSharp] Overlay worker thread created");
@@ -196,18 +227,21 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         ResetLogFile();
         DirectSyscall::InitAll();
         DirectSyscall::DumpSyscallTable();
+        ResetDeferredCRCInstallShutdown();
         HANDLE hCrc = CreateThread(nullptr, 0, DeferredCRCInstallThread, nullptr, 0, nullptr);
-        if (hCrc) CloseHandle(hCrc);
+        if (hCrc) {
+            g_crcThread = hCrc;
+        }
 
-        StartOverlayWorker();
+        StartOverlayWorker(hModule);
         break;
     }
     case DLL_PROCESS_DETACH:
         NightSharpDebug::Phase("dll-detach");
         NightSharpDebug::Logf("[NightSharp] DllMain detach");
-        D3D11Hook::RequestShutdown();
-        D3D11Hook::Uninstall();
-        CRCBypass::Uninstall();
+        if (InterlockedCompareExchange(&g_selfUnloading, 0, 0) == 0) {
+            ShutdownNightSharpRuntime();
+        }
         NightSharpDebug::CrashReporter::Uninstall();
         break;
     default:

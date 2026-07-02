@@ -154,16 +154,34 @@ protected:
     }
 
     bool IsChatTyping() const {
-        const uintptr_t chatClient = CoreRuntime::GetContext().chatClient;
-        if (!Globals::IsValidPtr(chatClient)) {
+        const auto& ctx = CoreRuntime::GetContext();
+        uintptr_t chatController = ctx.chatViewController;
+        if (!Globals::IsValidPtr(chatController)) {
+            chatController = CoreRuntime::ReadGlobalPtr(ctx.chatViewControllerGlobal);
+        }
+        if (!Globals::IsValidPtr(chatController)) {
             return false;
         }
 
-        const std::uint8_t editing = Globals::Read<std::uint8_t>(
-            chatClient + Offset::ChatClientLayout::Editing);
-        const std::uint8_t focused = Globals::Read<std::uint8_t>(
-            chatClient + Offset::ChatClientLayout::Focused);
-        return editing != 0 || focused != 0;
+        const std::uint8_t primary = Globals::Read<std::uint8_t>(
+            chatController + Offset::ChatViewControllerLayout::PrimaryOpen);
+        if (primary != 0) {
+            return true;
+        }
+
+        const uintptr_t inputPanel = Globals::Read<uintptr_t>(
+            chatController + Offset::ChatViewControllerLayout::InputPanel);
+        if (!Globals::IsValidPtr(inputPanel)) {
+            return false;
+        }
+
+        const std::uint8_t panelVisible = Globals::Read<std::uint8_t>(
+            inputPanel + Offset::ChatViewControllerLayout::PanelVisible);
+        const std::uint8_t panelFocused = Globals::Read<std::uint8_t>(
+            inputPanel + Offset::ChatViewControllerLayout::PanelFocused);
+        const std::uint8_t panelPending = Globals::Read<std::uint8_t>(
+            inputPanel + Offset::ChatViewControllerLayout::PanelPending);
+        return panelVisible != 0 || panelFocused != 0 || panelPending != 0;
     }
 
     static bool KeyDown(const MenuKeyBind* keyBind) {
