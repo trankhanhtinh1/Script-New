@@ -29,6 +29,17 @@ struct LoadedTexture {
     int Height = 0;
 };
 
+struct ImagePixels {
+    std::vector<std::uint8_t> Rgba;
+    int Width = 0;
+    int Height = 0;
+
+    bool IsValid() const {
+        return Width > 0 && Height > 0 &&
+               Rgba.size() == static_cast<std::size_t>(Width) * static_cast<std::size_t>(Height) * 4u;
+    }
+};
+
 namespace detail {
     using Microsoft::WRL::ComPtr;
     using IconCache = std::unordered_map<std::string, LoadedTexture>;
@@ -163,7 +174,7 @@ namespace detail {
         return result;
     }
 
-    inline bool DecodeFrame(IWICBitmapFrameDecode* frame, LoadedTexture& out) {
+    inline bool DecodeFrameToPixels(IWICBitmapFrameDecode* frame, ImagePixels& out) {
         out = {};
         if (!frame) {
             return false;
@@ -198,13 +209,25 @@ namespace detail {
         }
 
         const UINT stride = width * 4;
-        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(stride) * height);
-        hr = converter->CopyPixels(nullptr, stride, static_cast<UINT>(pixels.size()), pixels.data());
+        out.Rgba.resize(static_cast<std::size_t>(stride) * height);
+        hr = converter->CopyPixels(nullptr, stride, static_cast<UINT>(out.Rgba.size()), out.Rgba.data());
         if (FAILED(hr)) {
+            out = {};
             return false;
         }
 
-        out = UploadRGBA(pixels.data(), static_cast<int>(width), static_cast<int>(height));
+        out.Width = static_cast<int>(width);
+        out.Height = static_cast<int>(height);
+        return out.IsValid();
+    }
+
+    inline bool DecodeFrame(IWICBitmapFrameDecode* frame, LoadedTexture& out) {
+        out = {};
+        ImagePixels pixels{};
+        if (!DecodeFrameToPixels(frame, pixels)) {
+            return false;
+        }
+        out = UploadRGBA(pixels.Rgba.data(), pixels.Width, pixels.Height);
         return out.Texture != nullptr;
     }
 
@@ -276,6 +299,38 @@ inline LoadedTexture LoadTextureFromFile(const char* file) {
     return texture;
 }
 
+inline bool LoadPixelsFromFile(const char* file, ImagePixels& out) {
+    out = {};
+    if (!file || !file[0]) {
+        return false;
+    }
+
+    IWICImagingFactory* factory = detail::EnsureWicFactory();
+    if (!factory) {
+        return false;
+    }
+
+    const std::wstring wideFile = detail::ToWide(file);
+    if (wideFile.empty()) {
+        return false;
+    }
+
+    detail::ComPtr<IWICBitmapDecoder> decoder;
+    HRESULT hr = factory->CreateDecoderFromFilename(
+        wideFile.c_str(),
+        nullptr,
+        GENERIC_READ,
+        WICDecodeMetadataCacheOnLoad,
+        decoder.GetAddressOf());
+    if (FAILED(hr) || !decoder) {
+        return false;
+    }
+
+    detail::ComPtr<IWICBitmapFrameDecode> frame;
+    hr = decoder->GetFrame(0, frame.GetAddressOf());
+    return SUCCEEDED(hr) && detail::DecodeFrameToPixels(frame.Get(), out);
+}
+
 inline bool LoadTextureFromMemory(const std::uint8_t* data, int size, LoadedTexture& out) {
     out = {};
     if (!detail::Device() || !data || size <= 0) {
@@ -315,6 +370,51 @@ inline LoadedTexture LoadTextureFromMemory(const std::uint8_t* data, int size) {
     LoadedTexture texture{};
     (void)LoadTextureFromMemory(data, size, texture);
     return texture;
+}
+
+inline bool LoadPixelsFromMemory(const std::uint8_t* data, int size, ImagePixels& out) {
+    out = {};
+    if (!data || size <= 0) {
+        return false;
+    }
+
+    IWICImagingFactory* factory = detail::EnsureWicFactory();
+    if (!factory) {
+        return false;
+    }
+
+    detail::ComPtr<IWICStream> stream;
+    HRESULT hr = factory->CreateStream(stream.GetAddressOf());
+    if (FAILED(hr) || !stream) {
+        return false;
+    }
+
+    hr = stream->InitializeFromMemory(
+        const_cast<BYTE*>(reinterpret_cast<const BYTE*>(data)),
+        static_cast<DWORD>(size));
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    detail::ComPtr<IWICBitmapDecoder> decoder;
+    hr = factory->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnLoad, decoder.GetAddressOf());
+    if (FAILED(hr) || !decoder) {
+        return false;
+    }
+
+    detail::ComPtr<IWICBitmapFrameDecode> frame;
+    hr = decoder->GetFrame(0, frame.GetAddressOf());
+    return SUCCEEDED(hr) && detail::DecodeFrameToPixels(frame.Get(), out);
+}
+
+inline LoadedTexture CreateTextureFromRgba(const std::uint8_t* data, int width, int height) {
+    return detail::UploadRGBA(data, width, height);
+}
+
+inline LoadedTexture CreateTextureFromPixels(const ImagePixels& pixels) {
+    return pixels.IsValid()
+        ? CreateTextureFromRgba(pixels.Rgba.data(), pixels.Width, pixels.Height)
+        : LoadedTexture{};
 }
 
 inline void ReleaseTexture(LoadedTexture& texture) {

@@ -3,6 +3,7 @@
 #include "../../Core/CoreControl.h"
 #include "../Core/Game.h"
 #include "../Data/GameData.h"
+#include "../Extensions/Unit.h"
 #include "../GameObjects/ObjectManager.h"
 
 #include <algorithm>
@@ -81,14 +82,7 @@ public:
         if (!target.IsValid()) {
             return false;
         }
-        // Bypass broken IsDead, IsTargetable, and IsInvulnerable bitfield offsets.
-        // if ((target.IsDead() && !target.IsZombie()) ||
-        //     !target.IsTargetable() || target.IsInvulnerable()) {
-        //     return false;
-        // }
-        const auto player = SDK::ObjectManager::Player();
-        return player.IsValid() && target.IsEnemy() &&
-               player.Position().Distance2D(target.Position()) <= GetRealAutoAttackRange(player, target);
+        return SDK::Extensions::IsValidTarget(target, GetRealAutoAttackRange(target));
     }
 
     static bool IsAutoAttack(std::string name) {

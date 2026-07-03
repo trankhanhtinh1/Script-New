@@ -48,7 +48,7 @@ public:
         }
 
         constexpr int kBuffTypeInvulnerability = 18; // EnsoulSharp.BuffType.Invulnerability.
-        if (CoreBuffs::HasBuffType(hero.Address(), kBuffTypeInvulnerability) /* || hero.IsInvulnerable() */) {
+        if (CoreBuffs::HasBuffType(hero.Address(), kBuffTypeInvulnerability) || hero.IsInvulnerable()) {
             return true;
         }
 
@@ -144,9 +144,10 @@ private:
         entries.push_back(Make("SivirE", "Sivir", std::nullopt, true));
         entries.push_back(Make("TaricR"));
         entries.push_back(Make("UndyingRage", "Tryndamere", std::nullopt, false, 0, [](const AIBaseClient& target, DamageType) {
-            // TODO(Spellbook parity): EnsoulSharp scales this threshold by Tryndamere R level.
-            // NightSharp currently exposes no spell level reader, so use the highest threshold.
-            return target.Health() <= 70.0f;
+            static constexpr float thresholds[] = { 30.0f, 50.0f, 70.0f };
+            const int level = target.Spellbook().GetSpell(SpellSlot::R).Level();
+            const int index = std::clamp(level - 1, 0, 2);
+            return target.Health() <= thresholds[index];
         }));
         entries.push_back(Make("XinZhaoRRangedImmunity", "XinZhao", DamageType::Physical));
         entries.push_back(Make("bansheesveil", "", DamageType::Magical, true));

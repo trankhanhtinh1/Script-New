@@ -4,9 +4,11 @@
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
+#include "../imgui/imgui.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 
 namespace CoreNavGrid {
@@ -60,6 +62,68 @@ inline bool RawHasGlobalVision(std::uint16_t rawFlags) {
     return rawFlags != kInvalidRawFlags &&
            (rawFlags & Collision_GlobalVision) != 0;
 }
+
+namespace detail {
+    inline constexpr int kRawFlagCacheSize = 8192;
+    inline constexpr int kRawFlagCacheMask = kRawFlagCacheSize - 1;
+
+    struct RawFlagCacheEntry {
+        uintptr_t cellData = 0;
+        int frame = -1;
+        int x = -1;
+        int y = -1;
+        std::uint16_t flags = kInvalidRawFlags;
+    };
+
+    inline RawFlagCacheEntry* RawFlagCache() {
+        static RawFlagCacheEntry cache[kRawFlagCacheSize] = {};
+        return cache;
+    }
+
+    inline int FrameKey() {
+        if (ImGui::GetCurrentContext()) {
+            return ImGui::GetFrameCount();
+        }
+
+        const auto generation = CoreRuntime::GetContext().refreshGeneration;
+        return -static_cast<int>((generation & 0x3FFFFFFFu) + 1u);
+    }
+
+    inline unsigned HashCell(uintptr_t cellData, int x, int y) {
+        unsigned hash = static_cast<unsigned>((cellData >> 4) ^ (cellData >> 16));
+        hash ^= static_cast<unsigned>(x) * 73856093u;
+        hash ^= static_cast<unsigned>(y) * 19349663u;
+        return hash & kRawFlagCacheMask;
+    }
+
+    inline bool LookupRawFlag(uintptr_t cellData,
+                              int x,
+                              int y,
+                              std::uint16_t& outFlags) {
+        const int frame = FrameKey();
+        const RawFlagCacheEntry& entry = RawFlagCache()[HashCell(cellData, x, y)];
+        if (entry.frame == frame &&
+            entry.cellData == cellData &&
+            entry.x == x &&
+            entry.y == y) {
+            outFlags = entry.flags;
+            return true;
+        }
+        return false;
+    }
+
+    inline void StoreRawFlag(uintptr_t cellData,
+                             int x,
+                             int y,
+                             std::uint16_t flags) {
+        RawFlagCacheEntry& entry = RawFlagCache()[HashCell(cellData, x, y)];
+        entry.cellData = cellData;
+        entry.frame = FrameKey();
+        entry.x = x;
+        entry.y = y;
+        entry.flags = flags;
+    }
+} // namespace detail
 
 inline std::uint16_t RawToPublicFlags(std::uint16_t rawFlags) {
     if (rawFlags == kInvalidRawFlags) {
@@ -196,19 +260,29 @@ struct GridRef {
             return kInvalidRawFlags;
         }
 
+        std::uint16_t cached = kInvalidRawFlags;
+        if (detail::LookupRawFlag(cellData, x, y, cached)) {
+            return cached;
+        }
+
+        std::uint16_t result = kInvalidRawFlags;
         __try {
             const uintptr_t overlay = Globals::Read<uintptr_t>(
                 cell + Offset::NavGridCellLayout::CellOverlay);
             if (Globals::IsValidPtr(overlay)) {
-                return Globals::Read<std::uint16_t>(
+                result = Globals::Read<std::uint16_t>(
                     overlay + Offset::NavGridCellLayout::OverlayFlagsOff);
+            } else {
+                result = Globals::Read<std::uint16_t>(
+                    cell + Offset::NavGridCellLayout::CellFlags);
             }
-            return Globals::Read<std::uint16_t>(
-                cell + Offset::NavGridCellLayout::CellFlags);
         }
         __except (1) {
-            return kInvalidRawFlags;
+            result = kInvalidRawFlags;
         }
+
+        detail::StoreRawFlag(cellData, x, y, result);
+        return result;
     }
 
     std::uint16_t GetRawCellFlags(const Vec3& pos) const {
@@ -232,7 +306,11 @@ struct GridRef {
             const uintptr_t target = Globals::IsValidPtr(overlay)
                 ? overlay + Offset::NavGridCellLayout::OverlayFlagsOff
                 : cell + Offset::NavGridCellLayout::CellFlags;
-            return Globals::Write<std::uint16_t>(target, rawFlags);
+            const bool written = Globals::Write<std::uint16_t>(target, rawFlags);
+            if (written) {
+                detail::StoreRawFlag(cellData, x, y, rawFlags);
+            }
+            return written;
         }
         __except (1) {
             return false;
@@ -364,22 +442,43 @@ struct GridRef {
     }
 
     bool IsWallBetween(const Vec3& from, const Vec3& to, float step = 40.0f) const {
-        if (!IsValid() || step <= 0.0f) {
+        if (!IsValid() || step <= 0.0f || !from.IsValid() || !to.IsValid()) {
             return false;
         }
 
-        const float distance = from.Distance2D(to);
-        if (distance <= 0.0f) {
-            return IsWall(from);
+        int x0 = 0;
+        int y0 = 0;
+        int x1 = 0;
+        int y1 = 0;
+        if (!WorldToCell(from, x0, y0, true) ||
+            !WorldToCell(to, x1, y1, true)) {
+            return false;
         }
 
-        const Vec3 delta = to - from;
-        const int steps = std::max(1, static_cast<int>(distance / step));
-        for (int i = 0; i <= steps; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(steps);
-            const Vec3 sample = from + delta * t;
-            if (IsWall(sample)) {
+        const int dx = std::abs(x1 - x0);
+        const int dy = -std::abs(y1 - y0);
+        const int sx = x0 < x1 ? 1 : -1;
+        const int sy = y0 < y1 ? 1 : -1;
+        int error = dx + dy;
+
+        int x = x0;
+        int y = y0;
+        for (;;) {
+            if (RawHasWall(GetRawCellFlags(x, y))) {
                 return true;
+            }
+            if (x == x1 && y == y1) {
+                break;
+            }
+
+            const int twiceError = error * 2;
+            if (twiceError >= dy) {
+                error += dy;
+                x += sx;
+            }
+            if (twiceError <= dx) {
+                error += dx;
+                y += sy;
             }
         }
         return false;
@@ -387,24 +486,50 @@ struct GridRef {
 
     bool FindWallCollision(const Vec3& from, const Vec3& to, Vec3& hitPoint, float step = 10.0f) const {
         hitPoint = {};
-        if (!IsValid() || step <= 0.0f) {
+        if (!IsValid() || step <= 0.0f || !from.IsValid() || !to.IsValid()) {
             return false;
         }
 
-        const float distance = from.Distance2D(to);
-        if (distance <= 0.0f) {
+        int x0 = 0;
+        int y0 = 0;
+        int x1 = 0;
+        int y1 = 0;
+        if (!WorldToCell(from, x0, y0, true) ||
+            !WorldToCell(to, x1, y1, true) ||
+            (x0 == x1 && y0 == y1)) {
             return false;
         }
 
-        const Vec3 delta = to - from;
-        const int steps = std::max(1, static_cast<int>(distance / step));
-        for (int i = 1; i <= steps; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(steps);
-            const Vec3 sample = from + delta * t;
-            if (IsWall(sample)) {
-                const float previousT = static_cast<float>(i - 1) /
-                    static_cast<float>(steps);
-                hitPoint = from + delta * previousT;
+        const int dx = std::abs(x1 - x0);
+        const int dy = -std::abs(y1 - y0);
+        const int sx = x0 < x1 ? 1 : -1;
+        const int sy = y0 < y1 ? 1 : -1;
+        int error = dx + dy;
+
+        int x = x0;
+        int y = y0;
+        int previousX = x0;
+        int previousY = y0;
+        for (;;) {
+            if (x == x1 && y == y1) {
+                break;
+            }
+
+            previousX = x;
+            previousY = y;
+
+            const int twiceError = error * 2;
+            if (twiceError >= dy) {
+                error += dy;
+                x += sx;
+            }
+            if (twiceError <= dx) {
+                error += dx;
+                y += sy;
+            }
+
+            if (RawHasWall(GetRawCellFlags(x, y))) {
+                hitPoint = CellToWorld(previousX, previousY, from.y);
                 return true;
             }
         }
@@ -412,18 +537,44 @@ struct GridRef {
     }
 
     int CountWallsInRadius(const Vec3& center, float radius, float step = 25.0f) const {
-        if (!IsValid() || radius <= 0.0f || step <= 0.0f) {
+        if (!IsValid() ||
+            radius <= 0.0f ||
+            step <= 0.0f ||
+            !center.IsValid()) {
             return 0;
+        }
+
+        int minCellX = 0;
+        int minCellY = 0;
+        int maxCellX = 0;
+        int maxCellY = 0;
+        (void)WorldToCell({ center.x - radius, center.y, center.z - radius }, minCellX, minCellY, true);
+        (void)WorldToCell({ center.x + radius, center.y, center.z + radius }, maxCellX, maxCellY, true);
+
+        if (minCellX > maxCellX) {
+            std::swap(minCellX, maxCellX);
+        }
+        if (minCellY > maxCellY) {
+            std::swap(minCellY, maxCellY);
         }
 
         int count = 0;
         const float radiusSqr = radius * radius;
-        for (float dx = -radius; dx <= radius; dx += step) {
-            for (float dz = -radius; dz <= radius; dz += step) {
-                if (dx * dx + dz * dz > radiusSqr) {
+        for (int y = minCellY; y <= maxCellY; ++y) {
+            const float cellZ = minZ + (static_cast<float>(y) + 0.5f) * cellSize;
+            const float dz = cellZ - center.z;
+            const float dzSqr = dz * dz;
+            if (dzSqr > radiusSqr) {
+                continue;
+            }
+
+            for (int x = minCellX; x <= maxCellX; ++x) {
+                const float cellX = minX + (static_cast<float>(x) + 0.5f) * cellSize;
+                const float dx = cellX - center.x;
+                if (dx * dx + dzSqr > radiusSqr) {
                     continue;
                 }
-                if (IsWall({ center.x + dx, center.y, center.z + dz })) {
+                if (RawHasWall(GetRawCellFlags(x, y))) {
                     ++count;
                 }
             }
@@ -439,6 +590,13 @@ struct GridRef {
 inline GridRef Get() {
     (void)CoreRuntime::EnsureInitialized();
 
+    static int cachedFrame = -1;
+    static GridRef cachedGrid = {};
+    const int frame = detail::FrameKey();
+    if (cachedFrame == frame) {
+        return cachedGrid;
+    }
+
     GridRef grid = {};
     const auto& ctx = CoreRuntime::GetContext();
     uintptr_t navGrid = ctx.navGrid;
@@ -446,12 +604,16 @@ inline GridRef Get() {
         navGrid = Globals::Read<uintptr_t>(ctx.navGridGlobal);
     }
     if (!Globals::IsValidPtr(navGrid)) {
+        cachedFrame = frame;
+        cachedGrid = grid;
         return grid;
     }
 
     const uintptr_t manager = Globals::Read<uintptr_t>(
         navGrid + Offset::NavGridLayout::NavGridMgr);
     if (!Globals::IsValidPtr(manager)) {
+        cachedFrame = frame;
+        cachedGrid = grid;
         return grid;
     }
 
@@ -467,6 +629,8 @@ inline GridRef Get() {
     grid.maxZ = Globals::Read<float>(manager + Offset::NavGridLayout::MaxZ);
     grid.cellSize = Globals::Read<float>(manager + Offset::NavGridLayout::Scale);
     grid.inverseScale = Globals::Read<float>(manager + Offset::NavGridLayout::InverseScale);
+    cachedFrame = frame;
+    cachedGrid = grid;
     return grid;
 }
 

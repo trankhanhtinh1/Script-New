@@ -43,8 +43,8 @@ public:
         }
 
         const auto ai = player.AiManagerSnapshot();
-        const bool isMoving = player.IsMoving();
-        const bool isDashing = player.IsDashing();
+        const bool isMoving = ai.isMoving;
+        const bool isDashing = ai.isDashing;
         const Vec3 serverPos = ai.serverPosition.IsZero()
             ? player.Position()
             : ai.serverPosition;
@@ -148,15 +148,11 @@ private:
 
         const std::uint32_t color = isDashing ? kDashPathColor : kPathColor;
         const float thickness = isDashing ? 3.0f : 2.0f;
-        for (std::size_t i = 0; i + 1 < path.size(); ++i) {
-            Vec2 from = {};
-            Vec2 to = {};
-            if (!SDK::Drawing::WorldToScreen(path[i], from) ||
-                !SDK::Drawing::WorldToScreen(path[i + 1], to)) {
-                continue;
-            }
-            SDK::Drawing::DrawLine(from, to, thickness, color);
-        }
+        SDK::Drawing::DrawPolylineWorld(
+            path.data(),
+            static_cast<int>(path.size()),
+            thickness,
+            color);
     }
 
     static void DrawPointRings(const Vec3& point,

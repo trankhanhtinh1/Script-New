@@ -17,6 +17,20 @@
 
 namespace CoreControl {
 
+// Disk-logging for IssueOrder is OFF by default. Previously AppendIssueOrderDebug()
+// opened/wrote/closed a file (CreateFileA + WriteFile + CloseHandle) synchronously on
+// the game/render thread every single time an order was blocked or failed, with NO
+// throttling on those two paths (only the "ok" path was rate-limited to 2s). While
+// Combo/Harass/LaneClear/LastHit (Space/C/V/X) is held, Orbwalk() attempts an
+// Attack/Move order almost every tick, so any transient CanIssueOrder()/write-phase
+// failure turned into dozens of blocking disk I/O calls per second — this is the
+// actual cause of the 10-15 FPS drop, not CPU work. Flip this to true only for
+// short debugging sessions.
+inline constexpr bool kIssueOrderDebugEnabled = false;
+// Even when the flag above is enabled for debugging, never write more than once per
+// this many ms for a given message class, so enabling it can't reintroduce the stall.
+inline constexpr DWORD kIssueOrderDebugThrottleMs = 1000;
+
 inline constexpr float DefaultAttackDelaySeconds = 0.625f;
 inline constexpr float DefaultAttackWindupSeconds = 0.300f;
 inline constexpr int AttackWindupIdBase = 0x40;
@@ -64,10 +78,21 @@ inline bool IsSanePosition(const Vec3& value) {
            !value.IsZero();
 }
 
-inline void AppendIssueOrderDebug(const char* text) {
-    if (!text || !*text) {
+// `channel` groups messages that should share one throttle bucket (e.g. all "blocked"
+// logs vs all "failed" logs), so a debugging session can't spam disk I/O even if
+// kIssueOrderDebugEnabled is turned on.
+inline void AppendIssueOrderDebug(const char* text, int channel = 0) {
+    if (!kIssueOrderDebugEnabled || !text || !*text) {
         return;
     }
+
+    static DWORD s_lastWriteTick[4] = {};
+    const int slot = (channel >= 0 && channel < 4) ? channel : 0;
+    const DWORD now = GetTickCount();
+    if (s_lastWriteTick[slot] != 0 && now - s_lastWriteTick[slot] < kIssueOrderDebugThrottleMs) {
+        return;
+    }
+    s_lastWriteTick[slot] = now;
 
     HANDLE hFile = CreateFileA(
         "C:\\Users\\Public\\ns_orbwalker_debug.txt",
@@ -364,29 +389,38 @@ inline bool IssueOrder(OrderType order,
                        bool triggerEvent = true) {
     auto& ctx = CoreRuntime::g_ctx;
     if (!CoreRuntime::IsWritePhase() || !CanIssueOrder()) {
-        char buf[384] = {};
-        std::snprintf(
-            buf,
-            sizeof(buf),
-            "[NightSharp][IssueOrder] blocked order=%u name=%s phase=%u validation=0x%08X local=0x%llX fn=0x%llX spoof=0x%llX target=0x%llX pos=%.1f %.1f %.1f\r\n",
-            static_cast<unsigned>(order),
-            OrderName(order),
-            ctx.currentPhase,
-            ctx.validationMask,
-            static_cast<unsigned long long>(ctx.localPlayer),
-            static_cast<unsigned long long>(ctx.issueOrderFn),
-            static_cast<unsigned long long>(ctx.spoofTrampoline),
-            static_cast<unsigned long long>(target),
-            requestedPosition.x,
-            requestedPosition.y,
-            requestedPosition.z);
-        AppendIssueOrderDebug(buf);
+        // This is the hot path while an orbwalking key (Space/C/V/X) is held: Orbwalk()
+        // tries to issue an order almost every tick, and any transient write-phase /
+        // validation miss used to land here. Building+writing a debug string on every
+        // such miss (formerly unconditionally) is what caused the FPS drop, so the
+        // string is only ever built when debugging is explicitly enabled.
+        if constexpr (kIssueOrderDebugEnabled) {
+            char buf[384] = {};
+            std::snprintf(
+                buf,
+                sizeof(buf),
+                "[NightSharp][IssueOrder] blocked order=%u name=%s phase=%u validation=0x%08X local=0x%llX fn=0x%llX spoof=0x%llX target=0x%llX pos=%.1f %.1f %.1f\r\n",
+                static_cast<unsigned>(order),
+                OrderName(order),
+                ctx.currentPhase,
+                ctx.validationMask,
+                static_cast<unsigned long long>(ctx.localPlayer),
+                static_cast<unsigned long long>(ctx.issueOrderFn),
+                static_cast<unsigned long long>(ctx.spoofTrampoline),
+                static_cast<unsigned long long>(target),
+                requestedPosition.x,
+                requestedPosition.y,
+                requestedPosition.z);
+            AppendIssueOrderDebug(buf, /*channel=*/0);
+        }
         CoreValidation::MarkIssueOrderResult(false);
         return false;
     }
 
     if (NeedsTarget(order) && !Globals::IsValidPtr(target)) {
-        AppendIssueOrderDebug("[NightSharp][IssueOrder] blocked missing target\r\n");
+        if constexpr (kIssueOrderDebugEnabled) {
+            AppendIssueOrderDebug("[NightSharp][IssueOrder] blocked missing target\r\n", /*channel=*/0);
+        }
         CoreValidation::MarkIssueOrderResult(false);
         return false;
     }
@@ -450,28 +484,27 @@ inline bool IssueOrder(OrderType order,
     }
 
     if (!ok) {
-        char buf[384] = {};
-        std::snprintf(
-            buf,
-            sizeof(buf),
-            "[NightSharp][IssueOrder] failed order=%u name=%s phase=%u validation=0x%08X local=0x%llX fn=0x%llX spoof=0x%llX target=0x%llX pos=%.1f %.1f %.1f\r\n",
-            static_cast<unsigned>(order),
-            OrderName(order),
-            ctx.currentPhase,
-            ctx.validationMask,
-            static_cast<unsigned long long>(ctx.localPlayer),
-            static_cast<unsigned long long>(ctx.issueOrderFn),
-            static_cast<unsigned long long>(ctx.spoofTrampoline),
-            static_cast<unsigned long long>(target),
-            position.x,
-            position.y,
-            position.z);
-        AppendIssueOrderDebug(buf);
+        if constexpr (kIssueOrderDebugEnabled) {
+            char buf[384] = {};
+            std::snprintf(
+                buf,
+                sizeof(buf),
+                "[NightSharp][IssueOrder] failed order=%u name=%s phase=%u validation=0x%08X local=0x%llX fn=0x%llX spoof=0x%llX target=0x%llX pos=%.1f %.1f %.1f\r\n",
+                static_cast<unsigned>(order),
+                OrderName(order),
+                ctx.currentPhase,
+                ctx.validationMask,
+                static_cast<unsigned long long>(ctx.localPlayer),
+                static_cast<unsigned long long>(ctx.issueOrderFn),
+                static_cast<unsigned long long>(ctx.spoofTrampoline),
+                static_cast<unsigned long long>(target),
+                position.x,
+                position.y,
+                position.z);
+            AppendIssueOrderDebug(buf, /*channel=*/1);
+        }
     } else if (NeedsTarget(order)) {
-        static DWORD s_lastOkLog = 0;
-        const DWORD now = GetTickCount();
-        if (now - s_lastOkLog > 2000) {
-            s_lastOkLog = now;
+        if constexpr (kIssueOrderDebugEnabled) {
             char buf[384] = {};
             std::snprintf(
                 buf,
@@ -487,7 +520,7 @@ inline bool IssueOrder(OrderType order,
                 position.y,
                 position.z,
                 patchedHudInput ? 1 : 0);
-            AppendIssueOrderDebug(buf);
+            AppendIssueOrderDebug(buf, /*channel=*/2);
         }
     }
 

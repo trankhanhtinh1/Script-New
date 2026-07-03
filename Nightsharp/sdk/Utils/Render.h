@@ -252,10 +252,16 @@ public:
 
         explicit Sprite(Vec2 position) : Position(position), X(static_cast<int>(position.x)), Y(static_cast<int>(position.y)) {}
         Sprite(const char* fileLocation, Vec2 position) : Sprite(position) {
-            SetTexture(SDK::UI::Icons::LoadTextureFromFile(fileLocation), true);
+            SDK::UI::Icons::ImagePixels pixels{};
+            if (SDK::UI::Icons::LoadPixelsFromFile(fileLocation, pixels)) {
+                UpdateTexturePixels(pixels, position);
+            }
         }
         Sprite(const std::vector<std::uint8_t>& bytes, Vec2 position) : Sprite(position) {
-            SetTexture(SDK::UI::Icons::LoadTextureFromMemory(bytes.data(), static_cast<int>(bytes.size())), true);
+            SDK::UI::Icons::ImagePixels pixels{};
+            if (SDK::UI::Icons::LoadPixelsFromMemory(bytes.data(), static_cast<int>(bytes.size()), pixels)) {
+                UpdateTexturePixels(pixels, position);
+            }
         }
         Sprite(ImTextureID texture, int width, int height, Vec2 position) : Sprite(position) {
             SDK::UI::Icons::LoadedTexture loaded{};
@@ -279,6 +285,43 @@ public:
             ownsTexture_ = ownsTexture;
             Width = texture.Width;
             Height = texture.Height;
+            originalPixels_ = {};
+            currentPixels_ = {};
+        }
+
+        void UpdateTexturePixels(const SDK::UI::Icons::ImagePixels& pixels, Vec2 position = {}) {
+            if (!pixels.IsValid()) {
+                return;
+            }
+            if (position.IsValid()) {
+                Position = position;
+                X = static_cast<int>(position.x);
+                Y = static_cast<int>(position.y);
+            }
+
+            if (!originalPixels_.IsValid()) {
+                originalPixels_ = pixels;
+            }
+            currentPixels_ = pixels;
+            SDK::UI::Icons::LoadedTexture texture = SDK::UI::Icons::CreateTextureFromPixels(currentPixels_);
+            if (!texture.Texture) {
+                return;
+            }
+
+            Dispose();
+            texture_ = texture;
+            ownsTexture_ = true;
+            Width = texture.Width;
+            Height = texture.Height;
+        }
+
+        bool UpdateTextureBytes(const std::vector<std::uint8_t>& bytes, Vec2 position = {}) {
+            SDK::UI::Icons::ImagePixels pixels{};
+            if (!SDK::UI::Icons::LoadPixelsFromMemory(bytes.data(), static_cast<int>(bytes.size()), pixels)) {
+                return false;
+            }
+            UpdateTexturePixels(pixels, position);
+            return texture_.Texture != nullptr;
         }
 
         void Crop(int x, int y, int w, int h, bool scale = false) {
@@ -303,12 +346,63 @@ public:
             Height = h;
         }
 
-        void Complement() {}
-        void GrayScale() {}
+        void Complement() {
+            SetSaturation(-1.0f);
+        }
+
+        void Fade() {
+            SetSaturation(0.5f);
+        }
+
+        void GrayScale() {
+            SetSaturation(0.0f);
+        }
+
+        void Hide() {
+            Visible(false);
+        }
+
         void Reset() {
+            saturation_ = 1.0f;
+            if (originalPixels_.IsValid()) {
+                currentPixels_ = originalPixels_;
+                SDK::UI::Icons::LoadedTexture texture = SDK::UI::Icons::CreateTextureFromPixels(currentPixels_);
+                if (texture.Texture) {
+                    Dispose();
+                    texture_ = texture;
+                    ownsTexture_ = true;
+                    Width = texture.Width;
+                    Height = texture.Height;
+                }
+            }
             if (OnReset) {
                 OnReset(this);
             }
+        }
+
+        void SetSaturation(float saturation) {
+            saturation_ = saturation;
+            if (!originalPixels_.IsValid()) {
+                return;
+            }
+
+            currentPixels_ = SaturatePixels(originalPixels_, saturation_);
+            SDK::UI::Icons::LoadedTexture texture = SDK::UI::Icons::CreateTextureFromPixels(currentPixels_);
+            if (!texture.Texture) {
+                return;
+            }
+
+            const int oldWidth = Width;
+            const int oldHeight = Height;
+            Dispose();
+            texture_ = texture;
+            ownsTexture_ = true;
+            Width = oldWidth > 0 ? oldWidth : texture.Width;
+            Height = oldHeight > 0 ? oldHeight : texture.Height;
+        }
+
+        void Show() {
+            Visible(true);
         }
 
         void OnEndScene() override {
@@ -326,7 +420,7 @@ public:
             const ImVec2 min(static_cast<float>(X), static_cast<float>(Y));
             const ImVec2 max(static_cast<float>(X) + width, static_cast<float>(Y) + height);
             ImDrawList* drawList = ImGui::GetForegroundDrawList();
-            const ImU32 tint = ToImColor(Color);
+            const ImU32 tint = ToImColor(SaturatedColor());
 
             if (std::fabs(Rotation) <= 0.0001f) {
                 drawList->AddImage(texture_.Texture, min, max, uv0_, uv1_, tint);
@@ -358,9 +452,67 @@ public:
 
     private:
         SDK::UI::Icons::LoadedTexture texture_{};
+        SDK::UI::Icons::ImagePixels originalPixels_{};
+        SDK::UI::Icons::ImagePixels currentPixels_{};
         bool ownsTexture_ = true;
         ImVec2 uv0_ = ImVec2(0.0f, 0.0f);
         ImVec2 uv1_ = ImVec2(1.0f, 1.0f);
+        float saturation_ = 1.0f;
+
+        static SDK::UI::Icons::ImagePixels SaturatePixels(const SDK::UI::Icons::ImagePixels& source,
+                                                          float saturation) {
+            SDK::UI::Icons::ImagePixels result = source;
+            if (!result.IsValid()) {
+                return result;
+            }
+
+            constexpr float kRWeight = 0.3086f;
+            constexpr float kGWeight = 0.6094f;
+            constexpr float kBWeight = 0.0820f;
+            const float a = ((1.0f - saturation) * kRWeight) + saturation;
+            const float b = (1.0f - saturation) * kRWeight;
+            const float c = (1.0f - saturation) * kRWeight;
+            const float d = (1.0f - saturation) * kGWeight;
+            const float e = ((1.0f - saturation) * kGWeight) + saturation;
+            const float f = (1.0f - saturation) * kGWeight;
+            const float g = (1.0f - saturation) * kBWeight;
+            const float h = (1.0f - saturation) * kBWeight;
+            const float i = ((1.0f - saturation) * kBWeight) + saturation;
+            const auto clampByte = [](float value) {
+                return static_cast<std::uint8_t>(std::clamp(std::round(value), 0.0f, 255.0f));
+            };
+
+            for (std::size_t offset = 0; offset + 3 < result.Rgba.size(); offset += 4) {
+                const float r = static_cast<float>(source.Rgba[offset + 0]);
+                const float gr = static_cast<float>(source.Rgba[offset + 1]);
+                const float bl = static_cast<float>(source.Rgba[offset + 2]);
+                result.Rgba[offset + 0] = clampByte((a * r) + (d * gr) + (g * bl));
+                result.Rgba[offset + 1] = clampByte((b * r) + (e * gr) + (h * bl));
+                result.Rgba[offset + 2] = clampByte((c * r) + (f * gr) + (i * bl));
+            }
+            return result;
+        }
+
+        std::uint32_t SaturatedColor() const {
+            if (originalPixels_.IsValid()) {
+                return Color;
+            }
+            const float a = static_cast<float>((Color >> 24) & 0xFF);
+            float r = static_cast<float>((Color >> 16) & 0xFF);
+            float g = static_cast<float>((Color >> 8) & 0xFF);
+            float b = static_cast<float>(Color & 0xFF);
+            const float gray = (0.299f * r) + (0.587f * g) + (0.114f * b);
+            r = gray + ((r - gray) * saturation_);
+            g = gray + ((g - gray) * saturation_);
+            b = gray + ((b - gray) * saturation_);
+            const auto clampByte = [](float value) {
+                return static_cast<std::uint32_t>(std::clamp(value, 0.0f, 255.0f));
+            };
+            return (clampByte(a) << 24) |
+                   (clampByte(r) << 16) |
+                   (clampByte(g) << 8) |
+                   clampByte(b);
+        }
     };
 
     class Text : public RenderObject {

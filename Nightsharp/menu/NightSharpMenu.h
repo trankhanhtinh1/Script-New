@@ -88,6 +88,63 @@ namespace NightSharpMenu {
         return a > b ? a : b;
     }
 
+    inline int ClampI(int value, int minValue, int maxValue) {
+        if (maxValue < minValue) {
+            maxValue = minValue;
+        }
+        if (value < minValue) {
+            return minValue;
+        }
+        if (value > maxValue) {
+            return maxValue;
+        }
+        return value;
+    }
+
+    inline ImVec2 GetOverlayDisplaySize() {
+        ImVec2 size = ImGui::GetIO().DisplaySize;
+        if (ImGuiViewport* vp = ImGui::GetMainViewport()) {
+            if (vp->Size.x > 0.0f && vp->Size.y > 0.0f) {
+                size = vp->Size;
+            }
+        }
+
+        if (size.x <= 0.0f) {
+            size.x = 1920.0f;
+        }
+        if (size.y <= 0.0f) {
+            size.y = 1080.0f;
+        }
+        return size;
+    }
+
+    inline float GetPermaShowTotalHeight(int rows) {
+        const float padding = 8.0f;
+        const float lineHeight = ImGui::GetFontSize() * 1.35f;
+        const float titleHeight = lineHeight + 4.0f;
+        const int visibleRows = rows > 0 ? rows : 1;
+        return padding * 2.0f + titleHeight + static_cast<float>(visibleRows) * lineHeight;
+    }
+
+    inline void ClampPermaShowPosition(float width, float totalHeight) {
+        const ImVec2 display = GetOverlayDisplaySize();
+        const int maxX = MaxI(0, static_cast<int>(display.x - width));
+        const int maxY = MaxI(0, static_cast<int>(display.y - totalHeight));
+        Config::PermaShow::x = ClampI(Config::PermaShow::x, 0, maxX);
+        Config::PermaShow::y = ClampI(Config::PermaShow::y, 0, maxY);
+    }
+
+    inline void EnsurePermaShowPositionInitialized(float width, float totalHeight) {
+        if (!Config::PermaShow::positionInitialized) {
+            const ImVec2 anchor = GetOverlayDisplaySize();
+            Config::PermaShow::x = static_cast<int>(anchor.x - width - PERMASHOW_EDGE_MARGIN);
+            Config::PermaShow::y = static_cast<int>(anchor.y - totalHeight - PERMASHOW_EDGE_MARGIN);
+            Config::PermaShow::positionInitialized = true;
+        }
+
+        ClampPermaShowPosition(width, totalHeight);
+    }
+
     inline bool IsPointInside(float x, float y) {
         if (!showMenu) {
             return false;
@@ -508,13 +565,7 @@ namespace NightSharpMenu {
     // Pull the bottom-right anchor for the PermaShow box. Falls back to the
     // current ImGui display size when no main viewport is active.
     inline ImVec2 GetPermaShowAnchor() {
-        ImVec2 size = ImGui::GetIO().DisplaySize;
-        if (ImGuiViewport* vp = ImGui::GetMainViewport()) {
-            if (vp->Size.x > 0.0f && vp->Size.y > 0.0f) {
-                size = vp->Size;
-            }
-        }
-        return size;
+        return GetOverlayDisplaySize();
     }
 
     inline void DrawPermaShowOverlay() {
@@ -526,14 +577,6 @@ namespace NightSharpMenu {
         }
 
         const int rows = SDK::UI::PermaShow::Count();
-        if (rows <= 0) {
-            // Empty by default — nothing renders until plugins register items.
-            permaShowDragging = false;
-            permaShowBoundsRight = 0.0f;
-            permaShowBoundsBottom = 0.0f;
-            return;
-        }
-
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         if (!dl) {
             permaShowBoundsRight = 0.0f;
@@ -546,18 +589,11 @@ namespace NightSharpMenu {
         const float padding = 8.0f;
         const float lineHeight = ImGui::GetFontSize() * 1.35f;
         const float titleHeight = lineHeight + 4.0f;
-        const float totalHeight = padding * 2.0f + titleHeight + static_cast<float>(rows) * lineHeight;
+        const float totalHeight = GetPermaShowTotalHeight(rows);
 
         // Anchor to the bottom-right corner the very first time we render,
         // and re-anchor when the configured position is offscreen.
-        const ImVec2 anchor = GetPermaShowAnchor();
-        if (!Config::PermaShow::positionInitialized) {
-            Config::PermaShow::x = (int)(anchor.x - width - PERMASHOW_EDGE_MARGIN);
-            Config::PermaShow::y = (int)(anchor.y - totalHeight - PERMASHOW_EDGE_MARGIN);
-            if (Config::PermaShow::x < 0) Config::PermaShow::x = 0;
-            if (Config::PermaShow::y < 0) Config::PermaShow::y = 0;
-            Config::PermaShow::positionInitialized = true;
-        }
+        EnsurePermaShowPositionInitialized(width, totalHeight);
 
         float x = static_cast<float>(Config::PermaShow::x);
         float y = static_cast<float>(Config::PermaShow::y);
@@ -583,6 +619,8 @@ namespace NightSharpMenu {
             if (permaShowDragging) {
                 Config::PermaShow::x = static_cast<int>(mouse.x - permaShowDragOffX);
                 Config::PermaShow::y = static_cast<int>(mouse.y - permaShowDragOffY);
+                Config::PermaShow::positionInitialized = true;
+                ClampPermaShowPosition(width, totalHeight);
                 x = static_cast<float>(Config::PermaShow::x);
                 y = static_cast<float>(Config::PermaShow::y);
             }
@@ -598,10 +636,16 @@ namespace NightSharpMenu {
         dl->AddText(ImVec2(x + padding, y + padding - 1.0f), COL_ACCENT, "PermaShow");
 
         float currentY = y + padding + titleHeight;
-        for (int i = 0; i < rows; ++i) {
-            DrawPermaShowEntry(dl, SDK::UI::PermaShow::At(i),
-                               x, width, indicatorWidth, padding,
-                               currentY, lineHeight);
+        if (rows <= 0) {
+            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
+                             currentY, lineHeight,
+                             "No PermaShow items", "", false, false, COL_TEXT_DIM);
+        } else {
+            for (int i = 0; i < rows; ++i) {
+                DrawPermaShowEntry(dl, SDK::UI::PermaShow::At(i),
+                                   x, width, indicatorWidth, padding,
+                                   currentY, lineHeight);
+            }
         }
     }
 
@@ -634,6 +678,31 @@ namespace NightSharpMenu {
         return secondaryIdx == 0 ? "Menu" : "?";
     }
 
+    inline SDK::UI::Menu* FindMenuByPluginName(SDK::UI::Menu* menu, const char* internalId, const char* displayName) {
+        if (!menu) {
+            return nullptr;
+        }
+
+        if ((internalId && menu->Name.equals(internalId)) ||
+            (displayName && menu->Name.equals(displayName)) ||
+            (displayName && menu->DisplayName.equals(displayName))) {
+            return menu;
+        }
+
+        for (int i = 0; i < menu->Components.size(); ++i) {
+            auto* component = menu->Components[i];
+            if (!component || !component->IsMenu()) {
+                continue;
+            }
+
+            if (auto* found = FindMenuByPluginName(static_cast<SDK::UI::Menu*>(component), internalId, displayName)) {
+                return found;
+            }
+        }
+
+        return nullptr;
+    }
+
     inline void DrawPluginContentPanel(int pluginIdx) {
         if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
             return;
@@ -648,18 +717,20 @@ namespace NightSharpMenu {
         if (p.RuntimeMenu) {
             PluginRegistry::DrawPluginMenu(pluginIdx);
         } else {
-            // Fallback: render any SDK::UI root menus that match this plugin's
-            // name. This lets plugins that register Menus through Attach() get
-            // a default content panel without a custom RuntimeMenu callback.
+            // Fallback: render any SDK::UI menu that matches this plugin's name.
+            // SDK wrappers live as children of the EnsoulSharp root menu.
             bool drewAny = false;
             auto& mm = SDK::UI::MenuManager::Instance();
             for (int i = 0; i < mm.Menus.size(); ++i) {
                 SDK::UI::Menu* root = mm.Menus[i];
-                if (!root || !p.InternalId) continue;
-                if (root->Name.equals(p.InternalId) ||
-                    (p.Name && root->Name.equals(p.Name))) {
-                    root->DrawImGui();
+                if (!root || !p.InternalId) {
+                    continue;
+                }
+
+                if (auto* menu = FindMenuByPluginName(root, p.InternalId, p.Name)) {
+                    menu->DrawImGui();
                     drewAny = true;
+                    break;
                 }
             }
 

@@ -37,10 +37,9 @@ struct ManagerView {
 
 // -------------------------------------------------------------------------
 // Object type cache
-// InferType calls 6+ native game predicates (IsHero, IsMinion, IsTurret…)
-// per object. For a typical game state (80+ objects) this was hundreds of
-// calls per frame. Cache the result by object address — types are stable for
-// an object's lifetime. 512 buckets covers a full game without eviction.
+// InferType uses typed manager lists instead of native classification
+// predicates. Cache the result by object address; types are stable for an
+// object's lifetime. 512 buckets covers a full game without eviction.
 // Same-address reuse after object death is safe: a new object of the same
 // type produces the same cached result; a different type (rare pool reuse)
 // overwrites the slot on first access via the hash collision path.
@@ -442,18 +441,6 @@ inline ObjectType InferType(uintptr_t object) {
     ObjectType result = ObjectType::GameObject;
     if (object == PlayerAddress()) {
         result = ObjectType::AIHeroClient;
-    } else if (Core::Objects::IsHero(object)) {
-        result = ObjectType::AIHeroClient;
-    } else if (Core::Objects::IsMinion(object)) {
-        result = ObjectType::AIMinionClient;
-    } else if (Core::Objects::IsTurret(object)) {
-        result = ObjectType::AITurretClient;
-    } else if (Core::Objects::IsBarracksDampener(object)) {
-        result = ObjectType::BarracksDampenerClient;
-    } else if (Core::Objects::IsHQ(object)) {
-        result = ObjectType::HQClient;
-    } else if (Core::Objects::IsShop(object)) {
-        result = ObjectType::ShopClient;
     } else if (ManagerContains(ManagerKind::Heroes, object)) {
         result = ObjectType::AIHeroClient;
     } else if (ManagerContains(ManagerKind::Minions, object)) {

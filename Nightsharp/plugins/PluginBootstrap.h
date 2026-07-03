@@ -14,6 +14,7 @@
 #include "Utility/AttackRangeDrawPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
+#include "Utility/ObjectDefinitionDrawPlugin.h"
 #include "Utility/VisibilityInvulnerabilityOffsetPlugin.h"
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
@@ -52,8 +53,8 @@ namespace PluginBootstrap {
             "champion.ezreal_q_missile_lifecycle",
             "champion.jax_cast_test",
             "champion.xerath_cast_test",
-            "core.object_create_lifecycle_test",
             "core.object_delete_lifecycle_test",
+            "utility.object_definition_draw",
         };
 
         for (const char* id : kDebugPluginIds) {
@@ -81,11 +82,11 @@ namespace PluginBootstrap {
         g_shutdown = false;
 
 #if NIGHTSHARP_ENABLE_SDK_WRAPPERS
-        // Initialize default SDK Wrappers (TargetSelector & Orbwalker)
+        // Initialize default SDK Wrappers.
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
         ::SDK::SdkWrappers::Initialize();
-        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 #else
         NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
@@ -94,7 +95,6 @@ namespace PluginBootstrap {
         // ─── Core plugins ────────────────────────────────────────────────
 #if NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register lifecycle test plugins begin");
-        PluginManager::Get().Register<ObjectCreateLifecycleTestPlugin>();
         PluginManager::Get().Register<ObjectDeleteLifecycleTestPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register lifecycle test plugins complete");
 #endif
@@ -109,6 +109,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<AttackRangeDrawPlugin>();
         PluginManager::Get().Register<MovementStateDrawPlugin>();
         PluginManager::Get().Register<NavGridDrawPlugin>();
+        PluginManager::Get().Register<ObjectDefinitionDrawPlugin>();
         PluginManager::Get().Register<VisibilityInvulnerabilityOffsetPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 

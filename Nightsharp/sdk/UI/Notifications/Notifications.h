@@ -8,6 +8,11 @@ namespace SDK::UI::Notifications {
 
     class Notifications {
     public:
+        static void Initialize(::SDK::Menu* menu = nullptr) {
+            (void)menu;
+            ::SDK::Notifications::SetEnabled(true);
+        }
+
         static void Add(const ANotification& notification) {
             ::SDK::Notifications::Add(
                 notification.Id,

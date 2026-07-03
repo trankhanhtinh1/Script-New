@@ -427,24 +427,32 @@ private:
         DrawLineWorld(from, Vec3::From2D(rightEnd), kColorSkillshot, 1.0f);
 
         const int segments = 24;
-        Vec2 prev = leftEnd;
+        Vec3 arcPoints[segments + 1] = {};
+        arcPoints[0] = Vec3::From2D(leftEnd);
         for (int i = 1; i <= segments; ++i) {
             const float t = static_cast<float>(i) / segments;
             const Vec2 cur(
                 leftEnd.x + (rightEnd.x - leftEnd.x) * t,
                 leftEnd.y + (rightEnd.y - leftEnd.y) * t);
-            DrawLineWorld(Vec3::From2D(prev), Vec3::From2D(cur), kColorSkillshot, 1.0f);
-            prev = cur;
+            arcPoints[i] = Vec3::From2D(cur);
         }
+
+        SDK::Drawing::DrawPolylineWorld(
+            arcPoints,
+            segments + 1,
+            1.0f,
+            kColorSkillshot);
     }
 
     void DrawPathWorld(const SDK::AIBaseClient& unit) {
         const auto waypoints = unit.GetWaypoints();
         if (waypoints.size() < 2) return;
 
-        for (size_t i = 1; i < waypoints.size(); ++i) {
-            DrawLineWorld(waypoints[i - 1], waypoints[i], kColorPath, 1.0f);
-        }
+        SDK::Drawing::DrawPolylineWorld(
+            waypoints.data(),
+            static_cast<int>(waypoints.size()),
+            1.0f,
+            kColorPath);
         for (const auto& wp : waypoints) {
             DrawCircleWorld(wp, 8.0f, kColorPath, 1.0f, true);
         }

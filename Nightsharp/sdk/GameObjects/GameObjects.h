@@ -1,774 +1,1178 @@
 #pragma once
 
 #include "ObjectManager.h"
-#include "../Events/Load.h"
+#include "../Events/Events.h"
 
+#include <Windows.h>
 #include <algorithm>
+#include <cfloat>
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
-#include <vector>
 #include <cstring>
-#include <string> 
-#include <fstream>  // basic_ostream
-
-#ifndef NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS
-#define NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS 0
-#endif
-
+#include <string>
+#include <type_traits>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace SDK::GameObjects {
 
 namespace detail {
-    inline std::vector<AIHeroClient> AllyHeroesList;
-    inline std::vector<BarracksDampenerClient> AllyInhibitorsList;
-    inline std::vector<AIBaseClient> AllyList;
-    inline std::vector<AIMinionClient> AllyMinionsList;
-    inline std::vector<AIMinionClient> AllyClonesList;
-    inline std::vector<AIMinionClient> AllyPetsList;
-    inline std::vector<ShopClient> AllyShopsList;
-    inline std::vector<Obj_SpawnPoint> AllySpawnPointsList;
-    inline std::vector<AITurretClient> AllyTurretsList;
-    inline std::vector<AIMinionClient> AllyWardsList;
-    inline std::vector<AttackableUnit> AttackableUnitsList;
-    inline std::vector<AIHeroClient> EnemyHeroesList;
-    inline std::vector<BarracksDampenerClient> EnemyInhibitorsList;
-    inline std::vector<AIBaseClient> EnemyList;
-    inline std::vector<AIMinionClient> EnemyMinionsList;
-    inline std::vector<AIMinionClient> EnemyClonesList;
-    inline std::vector<AIMinionClient> EnemyPetsList;
-    inline std::vector<AIMinionClient> EnemyLaneMinionsList;
-    inline std::vector<AIMinionClient> EnemySpecialMinionsList;
-    inline std::vector<AIMinionClient> EnemyIgnoredMinionsList;
-    inline std::vector<AIMinionClient> AllyLaneMinionsList;
-    inline std::vector<AIMinionClient> AllySpecialMinionsList;
-    inline std::vector<AIMinionClient> AllyIgnoredMinionsList;
-
-    static constexpr const char* kClones[] = {
-        "leblanc", "monkeyking", "neeko", "shaco"
-    };
-    static constexpr const char* kIgnoreMinions[] = {
-        "jarvanivstandard"
-    };
-    static constexpr const char* kSpecialMinions[] = {
-        "annietibbers", "elisespiderling", "heimertyellow",
-        "heimertblue", "ivernminion", "malzaharvoidling",
-        "shacobox", "teemomushroom", "yorickghoulmelee",
-        "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
-    };
-
-    inline bool IsIgnoredMinion(const char* name) {
-        if (!name || !name[0]) return false;
-        for (const auto* ign : kIgnoreMinions) {
-            if (_stricmp(name, ign) == 0) return true;
-        }
-        return false;
-    }
-
-    inline bool IsSpecialMinion(const char* name) {
-        if (!name || !name[0]) return false;
-        for (const auto* spec : kSpecialMinions) {
-            if (_stricmp(name, spec) == 0) return true;
-        }
-        return false;
-    }
-
-    inline bool IsCloneStr(const char* name) {
-        if (!name || !name[0]) return false;
-        for (const auto* clone : kClones) {
-            if (_stricmp(name, clone) == 0) return true;
-        }
-        return false;
-    }
-    inline std::vector<ShopClient> EnemyShopsList;
-    inline std::vector<Obj_SpawnPoint> EnemySpawnPointsList;
-    inline std::vector<AITurretClient> EnemyTurretsList;
-    inline std::vector<AIMinionClient> EnemyWardsList;
-    inline std::vector<GameObject> GameObjectsList;
-    inline std::vector<AIHeroClient> HeroesList;
-    inline std::vector<BarracksDampenerClient> InhibitorsList;
-    inline std::vector<AIMinionClient> JungleLargeList;
-    inline std::vector<AIMinionClient> JungleLegendaryList;
-    inline std::vector<AIMinionClient> JungleList;
-    inline std::vector<AIMinionClient> JungleSmallList;
-    inline std::vector<AIMinionClient> MinionsList;
-    inline std::vector<AIMinionClient> ClonesList;
-    inline std::vector<AIMinionClient> PetsList;
-    inline std::vector<HQClient> NexusList;
-    inline std::vector<EffectEmitter> ParticleEmittersList;
-    inline std::vector<ShopClient> ShopsList;
-    inline std::vector<Obj_SpawnPoint> SpawnPointsList;
-    inline std::vector<AITurretClient> TurretsList;
-    inline std::vector<AIMinionClient> WardsList;
-
-    inline HQClient AllyNexusObject;
-    inline HQClient EnemyNexusObject;
-    inline AIHeroClient PlayerObject;
-    inline bool Initialized = false;
-    inline bool Loaded = false;
-    inline bool EventHooksSubscribed = false;
-    inline bool GameUpdateSubscribed = false;
-    inline float LastMinionRoleRefresh = -1.0f;
-    inline std::size_t NextMinionRoleRefreshIndex = 0;
-
     template <typename T>
-    inline bool Contains(const std::vector<T>& list, const GameObject& object) {
-        const uintptr_t address = object.Address();
-        const int networkId = object.NetworkId();
-        return std::find_if(list.begin(), list.end(), [&](const T& entry) {
-            if (address != 0 && entry.Address() == address) {
-                const int entryNetworkId = entry.NetworkId();
-                return networkId == 0 ||
-                       networkId == -1 ||
-                       entryNetworkId == 0 ||
-                       entryNetworkId == -1 ||
-                       entryNetworkId == networkId;
-            }
-            return entry.Compare(object);
-        }) != list.end();
-    }
+    class IndexedObjectList {
+    public:
+        using iterator = typename std::vector<T>::iterator;
+        using const_iterator = typename std::vector<T>::const_iterator;
 
-    template <typename T>
-    inline bool ContainsAddress(
-        const std::vector<T>& list,
-        uintptr_t address,
-        uint32_t networkId = 0) {
-        if (!address) {
-            return false;
+        bool Add(const T& object) {
+            const uintptr_t address = object.Address();
+            return Add(address, object);
         }
-        return std::find_if(list.begin(), list.end(), [&](const T& entry) {
-            if (entry.Address() != address) {
+
+        bool Add(uintptr_t address, const T& object) {
+            if (address == 0 || indexByAddress_.find(address) != indexByAddress_.end()) {
                 return false;
             }
-            if (networkId == 0 || networkId == 0xFFFFFFFFu) {
-                return true;
+
+            indexByAddress_.emplace(address, items_.size());
+            addresses_.push_back(address);
+            items_.push_back(object);
+            return true;
+        }
+
+        bool Remove(uintptr_t address) {
+            if (address == 0) {
+                return false;
             }
-            const uint32_t entryNetworkId =
-                static_cast<uint32_t>(entry.NetworkId());
-            return entryNetworkId == 0 ||
-                   entryNetworkId == 0xFFFFFFFFu ||
-                   entryNetworkId == networkId;
-        }) != list.end();
+
+            const auto it = indexByAddress_.find(address);
+            if (it == indexByAddress_.end()) {
+                return false;
+            }
+
+            const std::size_t index = it->second;
+            const std::size_t last = items_.size() - 1;
+            if (index != last) {
+                items_[index] = std::move(items_[last]);
+                const uintptr_t movedAddress = addresses_[last];
+                addresses_[index] = movedAddress;
+                indexByAddress_[movedAddress] = index;
+            }
+
+            items_.pop_back();
+            addresses_.pop_back();
+            indexByAddress_.erase(address);
+            return true;
+        }
+
+        bool Contains(uintptr_t address) const {
+            return address != 0 && indexByAddress_.find(address) != indexByAddress_.end();
+        }
+
+        void clear() {
+            items_.clear();
+            addresses_.clear();
+            indexByAddress_.clear();
+        }
+
+        std::size_t size() const { return items_.size(); }
+        bool empty() const { return items_.empty(); }
+        iterator begin() { return items_.begin(); }
+        iterator end() { return items_.end(); }
+        const_iterator begin() const { return items_.begin(); }
+        const_iterator end() const { return items_.end(); }
+
+        const std::vector<T>& Items() const { return items_; }
+        std::vector<T>& Items() { return items_; }
+
+    private:
+        std::vector<T> items_;
+        std::vector<uintptr_t> addresses_;
+        std::unordered_map<uintptr_t, std::size_t> indexByAddress_;
+    };
+
+    inline IndexedObjectList<GameObject> GameObjectsList;
+    inline IndexedObjectList<AttackableUnit> AttackableUnitsList;
+    inline IndexedObjectList<AIBaseClient> AllyList;
+    inline IndexedObjectList<AIBaseClient> EnemyList;
+
+    inline IndexedObjectList<AIHeroClient> HeroesList;
+    inline IndexedObjectList<AIHeroClient> AllyHeroesList;
+    inline IndexedObjectList<AIHeroClient> EnemyHeroesList;
+
+    inline IndexedObjectList<AIMinionClient> MinionsList;
+    inline IndexedObjectList<AIMinionClient> AllyMinionsList;
+    inline IndexedObjectList<AIMinionClient> EnemyMinionsList;
+    inline IndexedObjectList<AIMinionClient> AllyLaneMinionsList;
+    inline IndexedObjectList<AIMinionClient> EnemyLaneMinionsList;
+    inline IndexedObjectList<AIMinionClient> AllySpecialMinionsList;
+    inline IndexedObjectList<AIMinionClient> EnemySpecialMinionsList;
+    inline IndexedObjectList<AIMinionClient> AllyIgnoredMinionsList;
+    inline IndexedObjectList<AIMinionClient> EnemyIgnoredMinionsList;
+    inline IndexedObjectList<AIMinionClient> WardsList;
+    inline IndexedObjectList<AIMinionClient> AllyWardsList;
+    inline IndexedObjectList<AIMinionClient> EnemyWardsList;
+    inline IndexedObjectList<AIMinionClient> JungleList;
+    inline IndexedObjectList<AIMinionClient> JungleSmallList;
+    inline IndexedObjectList<AIMinionClient> JungleLargeList;
+    inline IndexedObjectList<AIMinionClient> JungleLegendaryList;
+    inline IndexedObjectList<AIMinionClient> PlantsList;
+    inline IndexedObjectList<AIMinionClient> ClonesList;
+    inline IndexedObjectList<AIMinionClient> AllyClonesList;
+    inline IndexedObjectList<AIMinionClient> EnemyClonesList;
+    inline IndexedObjectList<AIMinionClient> PetsList;
+    inline IndexedObjectList<AIMinionClient> AllyPetsList;
+    inline IndexedObjectList<AIMinionClient> EnemyPetsList;
+
+    inline IndexedObjectList<AITurretClient> TurretsList;
+    inline IndexedObjectList<AITurretClient> AllyTurretsList;
+    inline IndexedObjectList<AITurretClient> EnemyTurretsList;
+
+    inline IndexedObjectList<BarracksDampenerClient> InhibitorsList;
+    inline IndexedObjectList<BarracksDampenerClient> AllyInhibitorsList;
+    inline IndexedObjectList<BarracksDampenerClient> EnemyInhibitorsList;
+    inline IndexedObjectList<HQClient> NexusList;
+    inline HQClient AllyNexusObject;
+    inline HQClient EnemyNexusObject;
+    inline uintptr_t AllyNexusAddress = 0;
+    inline uintptr_t EnemyNexusAddress = 0;
+    inline IndexedObjectList<ShopClient> ShopsList;
+    inline IndexedObjectList<ShopClient> AllyShopsList;
+    inline IndexedObjectList<ShopClient> EnemyShopsList;
+    inline IndexedObjectList<Obj_SpawnPoint> SpawnPointsList;
+    inline IndexedObjectList<Obj_SpawnPoint> AllySpawnPointsList;
+    inline IndexedObjectList<Obj_SpawnPoint> EnemySpawnPointsList;
+    inline IndexedObjectList<EffectEmitter> ParticleEmittersList;
+    inline IndexedObjectList<MissileClient> MissilesList;
+
+    inline AIHeroClient PlayerObject;
+    inline bool Initialized = false;
+    inline constexpr bool kObjectEventsEnabled = true;
+    inline DWORD HeroesTick = 0;
+    inline DWORD MinionsTick = 0;
+    inline DWORD TurretsTick = 0;
+    inline DWORD StructuresTick = 0;
+    inline DWORD MissilesTick = 0;
+    inline DWORD AggregateTick = 0;
+
+    constexpr DWORD kHeroesCacheMs = 250;
+    constexpr DWORD kMinionsCacheMs = 60;
+    constexpr DWORD kTurretsCacheMs = 250;
+    constexpr DWORD kStructuresCacheMs = 250;
+    constexpr DWORD kMissilesCacheMs = 80;
+    constexpr DWORD kAggregateCacheMs = 250;
+
+    inline DWORD NowMs() {
+        return ::GetTickCount();
     }
 
-    template <typename T>
-    inline void AddUnique(std::vector<T>& list, const T& object) {
-        if (!object.IsValid() || Contains(list, object)) {
+    inline bool Expired(DWORD tick, DWORD interval) {
+        return tick == 0 || NowMs() - tick >= interval;
+    }
+
+    inline void InvalidateAggregate() {
+        AggregateTick = 0;
+    }
+
+    inline std::string ToLower(std::string value) {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        return value;
+    }
+
+    inline std::string ReadRuntimeName(uintptr_t address, bool characterName) {
+        char buf[96] = {};
+        const bool ok = characterName
+            ? ::Core::Objects::ReadCharacterName(address, buf, static_cast<int>(sizeof(buf)))
+            : ::Core::Objects::ReadName(address, buf, static_cast<int>(sizeof(buf)));
+        return ok ? std::string(buf) : std::string();
+    }
+
+    inline std::string BestName(uintptr_t address) {
+        std::string name = ReadRuntimeName(address, true);
+        if (name.empty()) {
+            name = ReadRuntimeName(address, false);
+        }
+        return ToLower(std::move(name));
+    }
+
+    inline void PopulateStatic(
+        uintptr_t address,
+        std::uint32_t index,
+        ::Core::Objects::ObjectType type) {
+        if (!Globals::IsValidPtr(address)) {
             return;
         }
-        list.push_back(object);
+        SDK::StaticStringCache::Populate(address, index & 0xFFFFu, type);
+    }
+
+    inline void PopulateStatic(uintptr_t address, ::Core::Objects::ObjectType type) {
+        if (!Globals::IsValidPtr(address)) {
+            return;
+        }
+        PopulateStatic(address, ::Core::Objects::ReadIndex(address), type);
+    }
+
+    template <typename TObject>
+    inline void PopulateStatic(const TObject& object) {
+        PopulateStatic(object.Address(), object.Type());
+    }
+
+    inline int TeamValue(const GameObject& object) {
+        return static_cast<int>(object.Team());
+    }
+
+    inline int PlayerTeam() {
+        const auto player = SDK::ObjectManager::Player();
+        return player.IsValid() ? TeamValue(player) : 0;
     }
 
     template <typename T>
-    inline void RemoveMatching(std::vector<T>& list, const GameObject& object) {
-        const uintptr_t address = object.Address();
-        const int networkId = object.NetworkId();
-        list.erase(
-            std::remove_if(list.begin(), list.end(), [&](const T& entry) {
-                if (address != 0 && entry.Address() == address) {
-                    const int entryNetworkId = entry.NetworkId();
-                    return networkId == 0 ||
-                           networkId == -1 ||
-                           entryNetworkId == 0 ||
-                           entryNetworkId == -1 ||
-                           entryNetworkId == networkId;
-                }
-                return entry.Compare(object);
-            }),
-            list.end());
+    inline bool ContainsAddress(const IndexedObjectList<T>& list, uintptr_t address) {
+        return list.Contains(address);
     }
 
     template <typename T>
-    inline void RemoveMatchingIdentity(
-        std::vector<T>& list,
-        uintptr_t address,
-        uint32_t networkId) {
-        list.erase(
-            std::remove_if(list.begin(), list.end(), [&](const T& entry) {
-                if (networkId != 0 && networkId != 0xFFFFFFFFu) {
-                    const uint32_t entryNetworkId =
-                        static_cast<uint32_t>(entry.NetworkId());
-                    if (entryNetworkId != 0 &&
-                        entryNetworkId != 0xFFFFFFFFu &&
-                        entryNetworkId == networkId) {
-                        return true;
-                    }
-                }
-
-                return address != 0 && entry.Address() == address;
-            }),
-            list.end());
+    inline bool AddUnique(IndexedObjectList<T>& list, const T& object) {
+        return list.Add(object);
     }
 
-    inline bool MatchesIdentity(
-        const GameObject& object,
-        uintptr_t address,
-        uint32_t networkId) {
-        if (networkId != 0 && networkId != 0xFFFFFFFFu) {
-            const uint32_t objectNetworkId =
-                static_cast<uint32_t>(object.NetworkId());
-            if (objectNetworkId != 0 &&
-                objectNetworkId != 0xFFFFFFFFu &&
-                objectNetworkId == networkId) {
+    template <typename T>
+    inline bool AddKnownAddress(IndexedObjectList<T>& list, uintptr_t address, const T& object) {
+        return list.Add(address, object);
+    }
+
+    template <typename T>
+    inline bool RemoveByAddress(IndexedObjectList<T>& list, uintptr_t address) {
+        return list.Remove(address);
+    }
+
+    template <typename T>
+    inline bool RemoveEnemyThenAlly(
+        IndexedObjectList<T>& enemyList,
+        IndexedObjectList<T>& allyList,
+        uintptr_t address) {
+        if (RemoveByAddress(enemyList, address)) {
+            return true;
+        }
+        return RemoveByAddress(allyList, address);
+    }
+
+    inline bool ContainsAny(const std::string& value, std::initializer_list<const char*> needles) {
+        for (const auto* needle : needles) {
+            if (!needle) {
+                continue;
+            }
+            if (value.find(ToLower(needle)) != std::string::npos) {
                 return true;
             }
         }
-        return address != 0 && object.Address() == address;
+        return false;
     }
 
-    inline bool IsWard(const AIMinionClient& minion) {
-        return HasFlag(minion.GetMinionType(), MinionTypes::Ward);
+    inline ::Core::Objects::ObjectHandle MakeEventHandle(
+        const SDK::Events::ObjectEventArgs& args,
+        ::Core::Objects::ObjectType type) {
+        ::Core::Objects::ObjectHandle handle{};
+        handle.address = args.Sender.Ptr;
+        handle.index = args.Sender.Index;
+        handle.networkId = args.Sender.NetworkId;
+        handle.type = type;
+        return handle;
     }
 
-    inline bool IsWardCorpse(const AIMinionClient& minion) {
-        return minion.Name() == "WardCorpse" || minion.CharacterName() == "WardCorpse";
+    inline ::Core::Objects::ObjectType ResolveCreateType(
+        const SDK::Events::ObjectEventArgs& args) {
+        if (args.Sender.Type != ::Core::Objects::ObjectType::Unknown) {
+            return args.Sender.Type;
+        }
+        return ::Core::ObjectManager::InferType(args.Sender.Ptr);
     }
 
-    inline void Clear() {
-        AllyHeroesList.clear();
-        AllyInhibitorsList.clear();
-        AllyList.clear();
-        AllyMinionsList.clear();
-        AllyClonesList.clear();
-        AllyPetsList.clear();
-        AllyShopsList.clear();
-        AllySpawnPointsList.clear();
-        AllyTurretsList.clear();
-        AllyWardsList.clear();
-        AttackableUnitsList.clear();
-        EnemyHeroesList.clear();
-        EnemyInhibitorsList.clear();
-        EnemyList.clear();
-        EnemyMinionsList.clear();
-        EnemyClonesList.clear();
-        EnemyPetsList.clear();
-        EnemyLaneMinionsList.clear();
-        EnemySpecialMinionsList.clear();
-        EnemyIgnoredMinionsList.clear();
-        AllyLaneMinionsList.clear();
-        AllySpecialMinionsList.clear();
-        AllyIgnoredMinionsList.clear();
-        EnemyShopsList.clear();
-        EnemySpawnPointsList.clear();
-        EnemyTurretsList.clear();
-        EnemyWardsList.clear();
+    inline std::uint32_t ResolveCreateTeam(
+        const SDK::Events::ObjectEventArgs& args,
+        uintptr_t address) {
+        if (args.Sender.Team != 0) {
+            return args.Sender.Team;
+        }
+        return ::Core::Objects::ReadTeamValue(address);
+    }
+
+    inline std::string ResolveCreateName(
+        const SDK::Events::ObjectEventArgs& args,
+        uintptr_t address) {
+        if (args.Sender.CharacterName[0]) {
+            return ToLower(args.Sender.CharacterName);
+        }
+        if (args.Sender.Name[0]) {
+            return ToLower(args.Sender.Name);
+        }
+        return BestName(address);
+    }
+
+    inline bool EqualsAny(const std::string& value, std::initializer_list<const char*> needles) {
+        for (const auto* needle : needles) {
+            if (needle && value == ToLower(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline bool IsKnownJunglePlantName(const std::string& name) {
+        return ContainsAny(name, {
+            "sru_plant", "hiddenminionplantdemon",
+            "planthealthmirrored", "plantmasterminion", "minimapicon",
+            "plant_satchel", "plant_health", "plant_vision"
+        });
+    }
+
+    inline bool IsKnownJungleMonsterName(const std::string& name) {
+        if (IsKnownJunglePlantName(name)) {
+            return false;
+        }
+        return ContainsAny(name, {
+            "sru_baron", "sru_dragon", "sru_riftherald", "voidgrub",
+            "sru_atakhan", "atakhan", "sru_sentinel", "sru_blue",
+            "sru_red", "sru_gromp", "sru_krug", "sru_murkwolf",
+            "sru_razorbeak", "sru_crab", "sru_riftscuttler"
+        });
+    }
+
+    inline bool IsLaneMinionName(const std::string& name) {
+        return ContainsAny(name, {
+            "sru_chaosminion", "sru_orderminion",
+            "ha_chaosminion", "ha_orderminion"
+        });
+    }
+
+    inline bool IsWardObject(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+        const std::string name = BestName(minion.Address());
+        return HasFlag(minion.GetMinionType(), MinionTypes::Ward) ||
+               ContainsAny(name, {
+                   "ward", "jammerdevice", "trinket", "sightward", "visionward"
+               });
+    }
+
+    inline bool IsPlantObject(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+        const std::string name = BestName(minion.Address());
+        const float maxHp = minion.MaxHealth();
+        return minion.GetJungleType() == JungleType::Plant ||
+               IsKnownJunglePlantName(name) ||
+               (TeamValue(minion) == 300 && maxHp > 0.0f && maxHp <= 6.0f);
+    }
+
+    inline bool IsJungleObject(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+        if (TeamValue(minion) != 300 || IsPlantObject(minion)) {
+            return false;
+        }
+        const float maxHp = minion.MaxHealth();
+        if (maxHp <= 6.0f) {
+            return false;
+        }
+        const std::string name = BestName(minion.Address());
+        return minion.IsJungle() || IsKnownJungleMonsterName(name);
+    }
+
+    inline bool IsLaneMinionObject(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+        if (TeamValue(minion) == 300 || IsPlantObject(minion)) {
+            return false;
+        }
+        const float maxHp = minion.MaxHealth();
+        if (maxHp <= 0.0f || maxHp >= 10000.0f) {
+            return false;
+        }
+        const std::string name = BestName(minion.Address());
+        if (IsKnownJungleMonsterName(name)) {
+            return false;
+        }
+        return minion.IsMinion() || IsLaneMinionName(name);
+    }
+
+    inline bool IsCloneObject(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+        return minion.IsClone() || EqualsAny(BestName(minion.Address()), {
+            "leblanc", "monkeyking", "neeko", "shaco"
+        });
+    }
+
+    inline bool IsPetObject(const AIMinionClient& minion) {
+        return minion.IsValid() && !minion.IsDead() &&
+               !IsPlantObject(minion) && minion.IsPet();
+    }
+
+    inline bool IsSpecialMinionObject(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+        return EqualsAny(BestName(minion.Address()), {
+            "annietibbers", "elisespiderling", "heimertyellow",
+            "heimertblue", "ivernminion", "malzaharvoidling",
+            "shacobox", "teemomushroom", "yorickghoulmelee",
+            "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
+        });
+    }
+
+    inline bool IsIgnoredMinionObject(const AIMinionClient& minion) {
+        return minion.IsValid() && EqualsAny(BestName(minion.Address()), {
+            "jarvanivstandard"
+        });
+    }
+
+    inline void ClearAggregateOnly() {
         GameObjectsList.clear();
+        AttackableUnitsList.clear();
+        AllyList.clear();
+        EnemyList.clear();
+    }
+
+    inline void RefreshHeroes() {
+        if (!Expired(HeroesTick, kHeroesCacheMs)) {
+            return;
+        }
+        HeroesTick = NowMs();
+        InvalidateAggregate();
+
+        PlayerObject = SDK::ObjectManager::Player();
+        SDK::GameObject::WarmPlayerTeamCache();
+
         HeroesList.clear();
-        InhibitorsList.clear();
-        JungleLargeList.clear();
-        JungleLegendaryList.clear();
+        AllyHeroesList.clear();
+        EnemyHeroesList.clear();
+
+        const int myTeam = PlayerTeam();
+        auto heroes = SDK::ObjectManager::Get<AIHeroClient>();
+        for (auto& hero : heroes) {
+            PopulateStatic(hero);
+            if (!hero.IsValid()) {
+                continue;
+            }
+            AddUnique(HeroesList, hero);
+            const int team = TeamValue(hero);
+            if (myTeam != 0 && team == myTeam) {
+                AddUnique(AllyHeroesList, hero);
+            } else if (team != 0 && team != 300) {
+                AddUnique(EnemyHeroesList, hero);
+            }
+        }
+    }
+
+    inline void RefreshMinions() {
+        if (!Expired(MinionsTick, kMinionsCacheMs)) {
+            return;
+        }
+        MinionsTick = NowMs();
+        InvalidateAggregate();
+
+        MinionsList.clear();
+        AllyMinionsList.clear();
+        EnemyMinionsList.clear();
+        AllyLaneMinionsList.clear();
+        EnemyLaneMinionsList.clear();
+        AllySpecialMinionsList.clear();
+        EnemySpecialMinionsList.clear();
+        AllyIgnoredMinionsList.clear();
+        EnemyIgnoredMinionsList.clear();
+        WardsList.clear();
+        AllyWardsList.clear();
+        EnemyWardsList.clear();
         JungleList.clear();
         JungleSmallList.clear();
-        MinionsList.clear();
+        JungleLargeList.clear();
+        JungleLegendaryList.clear();
+        PlantsList.clear();
         ClonesList.clear();
+        AllyClonesList.clear();
+        EnemyClonesList.clear();
         PetsList.clear();
-        NexusList.clear();
-        ParticleEmittersList.clear();
-        ShopsList.clear();
-        SpawnPointsList.clear();
-        TurretsList.clear();
-        WardsList.clear();
-        AllyNexusObject = HQClient();
-        EnemyNexusObject = HQClient();
-        PlayerObject = AIHeroClient();
-        LastMinionRoleRefresh = -1.0f;
-        NextMinionRoleRefreshIndex = 0;
-        Loaded = false;
-    }
+        AllyPetsList.clear();
+        EnemyPetsList.clear();
 
-    inline void AddHero(const AIHeroClient& hero) {
-        AddUnique(HeroesList, hero);
-        if (hero.IsEnemy()) {
-            AddUnique(EnemyHeroesList, hero);
-            AddUnique(EnemyList, AIBaseClient(hero.Handle()));
-        } else {
-            AddUnique(AllyHeroesList, hero);
-            AddUnique(AllyList, AIBaseClient(hero.Handle()));
-        }
-    }
-
-    inline void AddMinionRole(const AIMinionClient& minion) {
-        if (minion.IsClone()) {
-            AddUnique(ClonesList, minion);
-            if (minion.IsEnemy()) {
-                AddUnique(EnemyClonesList, minion);
-            } else {
-                AddUnique(AllyClonesList, minion);
+        const int myTeam = PlayerTeam();
+        auto minions = SDK::ObjectManager::Get<AIMinionClient>();
+        for (auto& minion : minions) {
+            PopulateStatic(minion);
+            if (!minion.IsValid() || minion.IsDead()) {
+                continue;
             }
-        } else if (minion.IsPet()) {
-            AddUnique(PetsList, minion);
-            if (minion.IsEnemy()) {
-                AddUnique(EnemyPetsList, minion);
-            } else {
-                AddUnique(AllyPetsList, minion);
-            }
-        }
-    }
 
-    inline void AddMinion(const AIMinionClient& minion) {
-        if (minion.Team() != GameObjectTeam::Neutral) {
-            if (IsWard(minion)) {
+            const int team = TeamValue(minion);
+            const bool ally = myTeam != 0 && team == myTeam;
+            const bool enemy = team != 0 && team != 300 && !ally;
+
+            if (IsWardObject(minion)) {
                 AddUnique(WardsList, minion);
-                if (minion.IsEnemy()) {
+                if (enemy) {
                     AddUnique(EnemyWardsList, minion);
                 } else {
                     AddUnique(AllyWardsList, minion);
                 }
-            } else {
-                AddUnique(MinionsList, minion);
-                if (minion.IsEnemy()) {
-                    AddUnique(EnemyMinionsList, minion);
-                    AddUnique(EnemyList, AIBaseClient(minion.Handle()));
+                continue;
+            }
+
+            if (IsPlantObject(minion)) {
+                AddUnique(PlantsList, minion);
+                continue;
+            }
+
+            if (IsJungleObject(minion)) {
+                AddUnique(JungleList, minion);
+                const JungleType jungleType = minion.GetJungleType();
+                if (jungleType == JungleType::Small) {
+                    AddUnique(JungleSmallList, minion);
+                } else if (jungleType == JungleType::Legendary || jungleType == JungleType::Epic) {
+                    AddUnique(JungleLegendaryList, minion);
                 } else {
-                    AddUnique(AllyMinionsList, minion);
-                    AddUnique(AllyList, AIBaseClient(minion.Handle()));
+                    AddUnique(JungleLargeList, minion);
                 }
-                
-            
-            }
-            return;
-        }
-
-        if (IsWardCorpse(minion)) {
-            return;
-        }
-
-        switch (minion.GetJungleType()) {
-        case JungleType::Small:
-            AddUnique(JungleSmallList, minion);
-            break;
-        case JungleType::Large:
-            AddUnique(JungleLargeList, minion);
-            break;
-        case JungleType::Legendary:
-            AddUnique(JungleLegendaryList, minion);
-            break;
-        default:
-            break;
-        }
-        AddUnique(JungleList, minion);
-    }
-
-    // The common object-create hook can run before a newly constructed
-    // AIMinionClient has received its CharacterName/MinionClass replication.
-    // Re-evaluate only the clone/pet role lists after creation so delayed
-    // fields cannot permanently classify a clone as an ordinary minion.
-    inline void RefreshMinionRoles() {
-        const float now = CoreRuntime::GetContext().gameTime;
-        if (now <= 0.0f) {
-            return;
-        }
-        if (now > 0.0f && LastMinionRoleRefresh >= 0.0f &&
-            now - LastMinionRoleRefresh < 0.25f) {
-            return;
-        }
-        LastMinionRoleRefresh = now;
-
-        constexpr std::size_t kMaxRoleRefreshPerTick = 8;
-        const std::size_t count = MinionsList.size();
-        if (count == 0) {
-            NextMinionRoleRefreshIndex = 0;
-            return;
-        }
-
-        if (NextMinionRoleRefreshIndex >= count) {
-            NextMinionRoleRefreshIndex = 0;
-        }
-
-        const std::size_t limit = std::min(kMaxRoleRefreshPerTick, count);
-        for (std::size_t i = 0; i < limit; ++i) {
-            const auto& minion = MinionsList[NextMinionRoleRefreshIndex];
-            if (minion.IsValid()) {
-                AddMinionRole(minion);
+                continue;
             }
 
-            ++NextMinionRoleRefreshIndex;
-            if (NextMinionRoleRefreshIndex >= count) {
-                NextMinionRoleRefreshIndex = 0;
+            if (IsCloneObject(minion)) {
+                AddUnique(ClonesList, minion);
+                if (enemy) {
+                    AddUnique(EnemyClonesList, minion);
+                } else {
+                    AddUnique(AllyClonesList, minion);
+                }
+                continue;
+            }
+
+            if (IsPetObject(minion)) {
+                AddUnique(PetsList, minion);
+                if (enemy) {
+                    AddUnique(EnemyPetsList, minion);
+                } else {
+                    AddUnique(AllyPetsList, minion);
+                }
+                continue;
+            }
+
+            if (IsSpecialMinionObject(minion)) {
+                if (enemy) {
+                    AddUnique(EnemySpecialMinionsList, minion);
+                } else {
+                    AddUnique(AllySpecialMinionsList, minion);
+                }
+                continue;
+            }
+
+            if (IsIgnoredMinionObject(minion)) {
+                if (enemy) {
+                    AddUnique(EnemyIgnoredMinionsList, minion);
+                } else {
+                    AddUnique(AllyIgnoredMinionsList, minion);
+                }
+                continue;
+            }
+
+            if (!IsLaneMinionObject(minion)) {
+                continue;
+            }
+
+            AddUnique(MinionsList, minion);
+            if (enemy) {
+                AddUnique(EnemyMinionsList, minion);
+                AddUnique(EnemyLaneMinionsList, minion);
+            } else {
+                AddUnique(AllyMinionsList, minion);
+                AddUnique(AllyLaneMinionsList, minion);
             }
         }
     }
 
-    inline void AddTurret(const AITurretClient& turret) {
-        AddUnique(TurretsList, turret);
-        if (turret.IsEnemy()) {
-            AddUnique(EnemyTurretsList, turret);
-            AddUnique(EnemyList, AIBaseClient(turret.Handle()));
-        } else {
-            AddUnique(AllyTurretsList, turret);
-            AddUnique(AllyList, AIBaseClient(turret.Handle()));
+    inline void RefreshTurrets() {
+        if (!Expired(TurretsTick, kTurretsCacheMs)) {
+            return;
+        }
+        TurretsTick = NowMs();
+        InvalidateAggregate();
+
+        TurretsList.clear();
+        AllyTurretsList.clear();
+        EnemyTurretsList.clear();
+
+        const int myTeam = PlayerTeam();
+        auto turrets = SDK::ObjectManager::Get<AITurretClient>();
+        for (auto& turret : turrets) {
+            PopulateStatic(turret);
+            if (!turret.IsValid()) {
+                continue;
+            }
+            AddUnique(TurretsList, turret);
+            const int team = TeamValue(turret);
+            if (myTeam != 0 && team == myTeam) {
+                AddUnique(AllyTurretsList, turret);
+            } else if (team != 0 && team != 300) {
+                AddUnique(EnemyTurretsList, turret);
+            }
         }
     }
 
-    inline void AddShop(const ShopClient& shop) {
-        AddUnique(ShopsList, shop);
-        if (shop.IsAlly()) {
-            AddUnique(AllyShopsList, shop);
-        } else {
-            AddUnique(EnemyShopsList, shop);
+    inline void RefreshStructures() {
+        if (!Expired(StructuresTick, kStructuresCacheMs)) {
+            return;
+        }
+        StructuresTick = NowMs();
+        InvalidateAggregate();
+
+        InhibitorsList.clear();
+        AllyInhibitorsList.clear();
+        EnemyInhibitorsList.clear();
+        NexusList.clear();
+        AllyNexusObject = {};
+        EnemyNexusObject = {};
+        AllyNexusAddress = 0;
+        EnemyNexusAddress = 0;
+        ShopsList.clear();
+        AllyShopsList.clear();
+        EnemyShopsList.clear();
+        SpawnPointsList.clear();
+        AllySpawnPointsList.clear();
+        EnemySpawnPointsList.clear();
+        ParticleEmittersList.clear();
+
+        const int myTeam = PlayerTeam();
+
+        auto addTeamObject = [&](auto& allList, auto& allyList, auto& enemyList, auto& object) {
+            PopulateStatic(object);
+            if (!object.IsValid()) {
+                return;
+            }
+            AddUnique(allList, object);
+            const int team = TeamValue(object);
+            if (myTeam != 0 && team == myTeam) {
+                AddUnique(allyList, object);
+            } else if (team != 0 && team != 300) {
+                AddUnique(enemyList, object);
+            }
+        };
+
+        auto inhibitors = SDK::ObjectManager::Get<BarracksDampenerClient>();
+        for (auto& inhibitor : inhibitors) {
+            addTeamObject(InhibitorsList, AllyInhibitorsList, EnemyInhibitorsList, inhibitor);
+        }
+
+        auto nexuses = SDK::ObjectManager::Get<HQClient>();
+        for (auto& nexus : nexuses) {
+            PopulateStatic(nexus);
+            if (!nexus.IsValid()) {
+                continue;
+            }
+            AddUnique(NexusList, nexus);
+            const int team = TeamValue(nexus);
+            if (myTeam != 0 && team == myTeam) {
+                AllyNexusObject = nexus;
+                AllyNexusAddress = nexus.Address();
+            } else if (team != 0 && team != 300) {
+                EnemyNexusObject = nexus;
+                EnemyNexusAddress = nexus.Address();
+            }
+        }
+
+        auto shops = SDK::ObjectManager::Get<ShopClient>();
+        for (auto& shop : shops) {
+            addTeamObject(ShopsList, AllyShopsList, EnemyShopsList, shop);
+        }
+
+        auto spawns = SDK::ObjectManager::Get<Obj_SpawnPoint>();
+        for (auto& spawn : spawns) {
+            addTeamObject(SpawnPointsList, AllySpawnPointsList, EnemySpawnPointsList, spawn);
+        }
+
+        auto effects = SDK::ObjectManager::Get<EffectEmitter>();
+        for (auto& effect : effects) {
+            PopulateStatic(effect);
+            AddUnique(ParticleEmittersList, effect);
         }
     }
 
-    inline void AddSpawnPoint(const Obj_SpawnPoint& spawnPoint) {
-        AddUnique(SpawnPointsList, spawnPoint);
-        if (spawnPoint.IsAlly()) {
-            AddUnique(AllySpawnPointsList, spawnPoint);
-        } else {
-            AddUnique(EnemySpawnPointsList, spawnPoint);
+    inline void RefreshMissiles() {
+        if (!Expired(MissilesTick, kMissilesCacheMs)) {
+            return;
+        }
+        MissilesTick = NowMs();
+        InvalidateAggregate();
+
+        MissilesList.clear();
+        auto missiles = SDK::ObjectManager::Get<MissileClient>();
+        for (auto& missile : missiles) {
+            PopulateStatic(missile);
+            AddUnique(MissilesList, missile);
         }
     }
 
-    inline void AddInhibitor(const BarracksDampenerClient& inhibitor) {
-        AddUnique(InhibitorsList, inhibitor);
-        if (inhibitor.IsAlly()) {
-            AddUnique(AllyInhibitorsList, inhibitor);
-        } else {
-            AddUnique(EnemyInhibitorsList, inhibitor);
+    inline void RefreshAggregate() {
+        if (!Expired(AggregateTick, kAggregateCacheMs)) {
+            return;
         }
+
+        RefreshHeroes();
+        RefreshMinions();
+        RefreshTurrets();
+        RefreshStructures();
+
+        AggregateTick = NowMs();
+        ClearAggregateOnly();
+
+        auto all = SDK::ObjectManager::Get<GameObject>();
+        for (auto& object : all) {
+            PopulateStatic(object);
+            if (!object.IsValid()) {
+                continue;
+            }
+            AddUnique(GameObjectsList, object);
+            if (::Core::Objects::IsAttackable(object.Type())) {
+                AddUnique(AttackableUnitsList, AttackableUnit(object.Handle()));
+            }
+        }
+
+        auto appendBase = [](auto& out, const auto& list) {
+            for (const auto& object : list) {
+                AddUnique(out, AIBaseClient(object.Handle()));
+            }
+        };
+        appendBase(AllyList, AllyHeroesList);
+        appendBase(AllyList, AllyMinionsList);
+        appendBase(AllyList, AllyTurretsList);
+        appendBase(AllyList, AllyInhibitorsList);
+
+        appendBase(EnemyList, EnemyHeroesList);
+        appendBase(EnemyList, EnemyMinionsList);
+        appendBase(EnemyList, EnemyTurretsList);
+        appendBase(EnemyList, EnemyInhibitorsList);
     }
 
-    inline void AddNexus(const HQClient& nexus) {
-        AddUnique(NexusList, nexus);
-        if (nexus.IsAlly()) {
-            AllyNexusObject = nexus;
-        } else {
-            EnemyNexusObject = nexus;
-        }
-    }
-
-    inline void AddObject(
-        uintptr_t address,
-        ::Core::Objects::ObjectType knownType =
-            ::Core::Objects::ObjectType::Unknown) {
+    inline void OnCreate(const SDK::Events::ObjectEventArgs& args) {
+        const uintptr_t address = args.Sender.Ptr;
         if (!Globals::IsValidPtr(address)) {
             return;
         }
 
-        const uint32_t networkId = ::Core::Objects::ReadNetworkId(address);
-        if (ContainsAddress(GameObjectsList, address, networkId)) {
+        const auto type = ResolveCreateType(args);
+        auto handle = MakeEventHandle(args, type);
+        if (handle.index == 0) {
+            handle.index = ::Core::Objects::ReadIndex(address);
+        }
+        if (!handle.HasIdentity()) {
+            handle.networkId = ::Core::Objects::ReadNetworkId(address);
+        }
+        if (!handle.HasIdentity()) {
             return;
         }
 
-        const auto type =
-            knownType == ::Core::Objects::ObjectType::Unknown
-                ? SDK::ObjectManager::detail::InferExtendedType(address)
-                : knownType;
-        GameObject gameObject(::Core::ObjectManager::MakeHandle(address, type));
-        AddUnique(GameObjectsList, gameObject);
+        PopulateStatic(address, handle.index, type);
 
-        if (::Core::Objects::IsAttackable(type)) {
-            AddUnique(AttackableUnitsList, AttackableUnit(gameObject.Handle()));
+        const GameObject sender(handle);
+        AddKnownAddress(GameObjectsList, address, sender);
+
+        const bool attackable = ::Core::Objects::IsAttackable(type);
+        if (attackable) {
+            AddKnownAddress(AttackableUnitsList, address, AttackableUnit(handle));
         }
+
+        const std::uint32_t team = ResolveCreateTeam(args, address);
+        const int myTeam = PlayerTeam();
+        const bool ally = myTeam != 0 && static_cast<int>(team) == myTeam;
+        const bool enemy = team != 0 && team != 300 && !ally;
+
+        auto addBase = [&](auto& list) {
+            AddKnownAddress(list, address, AIBaseClient(handle));
+        };
+
+        auto addTeamObject = [&](auto& allList, auto& allyList, auto& enemyList, const auto& object) {
+            AddKnownAddress(allList, address, object);
+            if (enemy) {
+                AddKnownAddress(enemyList, address, object);
+                addBase(EnemyList);
+            } else if (ally) {
+                AddKnownAddress(allyList, address, object);
+                addBase(AllyList);
+            }
+        };
 
         switch (type) {
-        case ::Core::Objects::ObjectType::AIHeroClient:
-            AddHero(AIHeroClient(gameObject.Handle()));
-            break;
-        case ::Core::Objects::ObjectType::AIMinionClient:
-            AddMinion(AIMinionClient(gameObject.Handle()));
-            break;
-        case ::Core::Objects::ObjectType::AITurretClient:
-            AddTurret(AITurretClient(gameObject.Handle()));
-            break;
+        case ::Core::Objects::ObjectType::AIHeroClient: {
+            const AIHeroClient hero(handle);
+            addTeamObject(HeroesList, AllyHeroesList, EnemyHeroesList, hero);
+            return;
+        }
+
+        case ::Core::Objects::ObjectType::AIMinionClient: {
+            const AIMinionClient minion(handle);
+            const std::string name = ResolveCreateName(args, address);
+            const MinionTypes minionType = minion.GetMinionType();
+            const JungleType jungleType = minion.GetJungleType();
+            const float maxHp = Globals::Read<float>(address + Offset::AttackableUnit::MaxHP);
+
+            const bool isWard =
+                HasFlag(minionType, MinionTypes::Ward) ||
+                ContainsAny(name, { "ward", "jammerdevice", "trinket", "sightward", "visionward" });
+            const bool isPlant =
+                jungleType == JungleType::Plant ||
+                IsKnownJunglePlantName(name) ||
+                (team == 300 && maxHp > 0.0f && maxHp <= 6.0f);
+            const bool isKnownJungle = IsKnownJungleMonsterName(name);
+            const bool isJungle =
+                team == 300 &&
+                !isPlant &&
+                maxHp > 6.0f &&
+                ((jungleType != JungleType::Unknown && jungleType != JungleType::Plant) || isKnownJungle);
+            const bool isLaneMinion =
+                team != 300 &&
+                !isPlant &&
+                maxHp > 0.0f &&
+                maxHp < 10000.0f &&
+                !isKnownJungle &&
+                (HasFlag(minionType, MinionTypes::Melee) ||
+                 HasFlag(minionType, MinionTypes::Ranged) ||
+                 IsLaneMinionName(name));
+            const bool isClone =
+                args.Sender.IsClone ||
+                EqualsAny(name, { "leblanc", "monkeyking", "neeko", "shaco" });
+            const bool isPet =
+                args.Sender.IsPet ||
+                (!isPlant &&
+                 !isClone &&
+                 minion.GetMinionClass() == ::Core::Objects::MinionClass::Pet);
+            const bool isSpecial = EqualsAny(name, {
+                "annietibbers", "elisespiderling", "heimertyellow",
+                "heimertblue", "ivernminion", "malzaharvoidling",
+                "shacobox", "teemomushroom", "yorickghoulmelee",
+                "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
+            });
+            const bool isIgnored = EqualsAny(name, { "jarvanivstandard" });
+
+            if (team != 300) {
+                if (isWard) {
+                    AddKnownAddress(WardsList, address, minion);
+                    if (enemy) {
+                        AddKnownAddress(EnemyWardsList, address, minion);
+                    } else if (ally) {
+                        AddKnownAddress(AllyWardsList, address, minion);
+                    }
+                } else if (isLaneMinion) {
+                    AddKnownAddress(MinionsList, address, minion);
+                    if (enemy) {
+                        AddKnownAddress(EnemyMinionsList, address, minion);
+                        AddKnownAddress(EnemyLaneMinionsList, address, minion);
+                        addBase(EnemyList);
+                    } else if (ally) {
+                        AddKnownAddress(AllyMinionsList, address, minion);
+                        AddKnownAddress(AllyLaneMinionsList, address, minion);
+                        addBase(AllyList);
+                    }
+                } else if (isSpecial) {
+                    if (enemy) {
+                        AddKnownAddress(EnemySpecialMinionsList, address, minion);
+                    } else if (ally) {
+                        AddKnownAddress(AllySpecialMinionsList, address, minion);
+                    }
+                } else if (isIgnored) {
+                    if (enemy) {
+                        AddKnownAddress(EnemyIgnoredMinionsList, address, minion);
+                    } else if (ally) {
+                        AddKnownAddress(AllyIgnoredMinionsList, address, minion);
+                    }
+                } else if (isClone) {
+                    AddKnownAddress(ClonesList, address, minion);
+                    if (enemy) {
+                        AddKnownAddress(EnemyClonesList, address, minion);
+                    } else if (ally) {
+                        AddKnownAddress(AllyClonesList, address, minion);
+                    }
+                } else if (isPet) {
+                    AddKnownAddress(PetsList, address, minion);
+                    if (enemy) {
+                        AddKnownAddress(EnemyPetsList, address, minion);
+                    } else if (ally) {
+                        AddKnownAddress(AllyPetsList, address, minion);
+                    }
+                }
+            } else if (!EqualsAny(name, { "wardcorpse" })) {
+                if (isPlant) {
+                    AddKnownAddress(PlantsList, address, minion);
+                } else if (isJungle) {
+                    AddKnownAddress(JungleList, address, minion);
+                    if (jungleType == JungleType::Small) {
+                        AddKnownAddress(JungleSmallList, address, minion);
+                    } else if (jungleType == JungleType::Legendary || jungleType == JungleType::Epic) {
+                        AddKnownAddress(JungleLegendaryList, address, minion);
+                    } else {
+                        AddKnownAddress(JungleLargeList, address, minion);
+                    }
+                }
+            }
+            return;
+        }
+
         case ::Core::Objects::ObjectType::EffectEmitter:
-            AddUnique(ParticleEmittersList, EffectEmitter(gameObject.Handle()));
-            break;
+            AddKnownAddress(ParticleEmittersList, address, EffectEmitter(handle));
+            return;
+
+        case ::Core::Objects::ObjectType::AITurretClient:
+            addTeamObject(TurretsList, AllyTurretsList, EnemyTurretsList, AITurretClient(handle));
+            return;
+
         case ::Core::Objects::ObjectType::ShopClient:
-            AddShop(ShopClient(gameObject.Handle()));
-            break;
+            AddKnownAddress(ShopsList, address, ShopClient(handle));
+            if (enemy) {
+                AddKnownAddress(EnemyShopsList, address, ShopClient(handle));
+            } else if (ally) {
+                AddKnownAddress(AllyShopsList, address, ShopClient(handle));
+            }
+            return;
+
         case ::Core::Objects::ObjectType::Obj_SpawnPoint:
-            AddSpawnPoint(Obj_SpawnPoint(gameObject.Handle()));
-            break;
+            AddKnownAddress(SpawnPointsList, address, Obj_SpawnPoint(handle));
+            if (enemy) {
+                AddKnownAddress(EnemySpawnPointsList, address, Obj_SpawnPoint(handle));
+            } else if (ally) {
+                AddKnownAddress(AllySpawnPointsList, address, Obj_SpawnPoint(handle));
+            }
+            return;
+
         case ::Core::Objects::ObjectType::BarracksDampenerClient:
-            AddInhibitor(BarracksDampenerClient(gameObject.Handle()));
-            break;
-        case ::Core::Objects::ObjectType::HQClient:
-            AddNexus(HQClient(gameObject.Handle()));
-            break;
+            addTeamObject(InhibitorsList, AllyInhibitorsList, EnemyInhibitorsList, BarracksDampenerClient(handle));
+            return;
+
+        case ::Core::Objects::ObjectType::HQClient: {
+            const HQClient nexus(handle);
+            AddKnownAddress(NexusList, address, nexus);
+            if (enemy) {
+                EnemyNexusObject = nexus;
+                EnemyNexusAddress = address;
+            } else if (ally) {
+                AllyNexusObject = nexus;
+                AllyNexusAddress = address;
+            }
+            return;
+        }
+
         default:
-            break;
+            return;
         }
     }
 
-    inline void RemoveObject(const GameObject& object) {
-        RemoveMatching(GameObjectsList, object);
-        RemoveMatching(AttackableUnitsList, object);
-        RemoveMatching(HeroesList, object);
-        RemoveMatching(AllyHeroesList, object);
-        RemoveMatching(EnemyHeroesList, object);
-        RemoveMatching(MinionsList, object);
-        RemoveMatching(ClonesList, object);
-        RemoveMatching(PetsList, object);
-        RemoveMatching(AllyMinionsList, object);
-        RemoveMatching(AllyClonesList, object);
-        RemoveMatching(AllyPetsList, object);
-        RemoveMatching(EnemyMinionsList, object);
-        RemoveMatching(EnemyClonesList, object);
-        RemoveMatching(EnemyPetsList, object);
-        RemoveMatching(EnemyLaneMinionsList, object);
-        RemoveMatching(EnemySpecialMinionsList, object);
-        RemoveMatching(EnemyIgnoredMinionsList, object);
-        RemoveMatching(AllyLaneMinionsList, object);
-        RemoveMatching(AllySpecialMinionsList, object);
-        RemoveMatching(AllyIgnoredMinionsList, object);
-        RemoveMatching(WardsList, object);
-        RemoveMatching(AllyWardsList, object);
-        RemoveMatching(EnemyWardsList, object);
-        RemoveMatching(JungleList, object);
-        RemoveMatching(JungleSmallList, object);
-        RemoveMatching(JungleLargeList, object);
-        RemoveMatching(JungleLegendaryList, object);
-        RemoveMatching(TurretsList, object);
-        RemoveMatching(AllyTurretsList, object);
-        RemoveMatching(EnemyTurretsList, object);
-        RemoveMatching(AllyList, object);
-        RemoveMatching(EnemyList, object);
-        RemoveMatching(ParticleEmittersList, object);
-        RemoveMatching(ShopsList, object);
-        RemoveMatching(AllyShopsList, object);
-        RemoveMatching(EnemyShopsList, object);
-        RemoveMatching(SpawnPointsList, object);
-        RemoveMatching(AllySpawnPointsList, object);
-        RemoveMatching(EnemySpawnPointsList, object);
-        RemoveMatching(InhibitorsList, object);
-        RemoveMatching(AllyInhibitorsList, object);
-        RemoveMatching(EnemyInhibitorsList, object);
-        RemoveMatching(NexusList, object);
-
-        if (AllyNexusObject.Compare(object)) {
-            AllyNexusObject = HQClient();
-        }
-        if (EnemyNexusObject.Compare(object)) {
-            EnemyNexusObject = HQClient();
-        }
-    }
-
-    inline void RemoveObject(
-        uintptr_t address,
-        uint32_t networkId) {
-        if (address) {
-            ::Core::ObjectManager::TypeCache::Invalidate(address);
-        }
-
-        RemoveMatchingIdentity(GameObjectsList, address, networkId);
-        RemoveMatchingIdentity(AttackableUnitsList, address, networkId);
-        RemoveMatchingIdentity(HeroesList, address, networkId);
-        RemoveMatchingIdentity(AllyHeroesList, address, networkId);
-        RemoveMatchingIdentity(EnemyHeroesList, address, networkId);
-        RemoveMatchingIdentity(MinionsList, address, networkId);
-        RemoveMatchingIdentity(ClonesList, address, networkId);
-        RemoveMatchingIdentity(PetsList, address, networkId);
-        RemoveMatchingIdentity(AllyMinionsList, address, networkId);
-        RemoveMatchingIdentity(AllyClonesList, address, networkId);
-        RemoveMatchingIdentity(AllyPetsList, address, networkId);
-        RemoveMatchingIdentity(EnemyMinionsList, address, networkId);
-        RemoveMatchingIdentity(EnemyClonesList, address, networkId);
-        RemoveMatchingIdentity(EnemyPetsList, address, networkId);
-        RemoveMatchingIdentity(EnemyLaneMinionsList, address, networkId);
-        RemoveMatchingIdentity(EnemySpecialMinionsList, address, networkId);
-        RemoveMatchingIdentity(EnemyIgnoredMinionsList, address, networkId);
-        RemoveMatchingIdentity(AllyLaneMinionsList, address, networkId);
-        RemoveMatchingIdentity(AllySpecialMinionsList, address, networkId);
-        RemoveMatchingIdentity(AllyIgnoredMinionsList, address, networkId);
-        RemoveMatchingIdentity(WardsList, address, networkId);
-        RemoveMatchingIdentity(AllyWardsList, address, networkId);
-        RemoveMatchingIdentity(EnemyWardsList, address, networkId);
-        RemoveMatchingIdentity(JungleList, address, networkId);
-        RemoveMatchingIdentity(JungleSmallList, address, networkId);
-        RemoveMatchingIdentity(JungleLargeList, address, networkId);
-        RemoveMatchingIdentity(JungleLegendaryList, address, networkId);
-        RemoveMatchingIdentity(TurretsList, address, networkId);
-        RemoveMatchingIdentity(AllyTurretsList, address, networkId);
-        RemoveMatchingIdentity(EnemyTurretsList, address, networkId);
-        RemoveMatchingIdentity(AllyList, address, networkId);
-        RemoveMatchingIdentity(EnemyList, address, networkId);
-        RemoveMatchingIdentity(ParticleEmittersList, address, networkId);
-        RemoveMatchingIdentity(ShopsList, address, networkId);
-        RemoveMatchingIdentity(AllyShopsList, address, networkId);
-        RemoveMatchingIdentity(EnemyShopsList, address, networkId);
-        RemoveMatchingIdentity(SpawnPointsList, address, networkId);
-        RemoveMatchingIdentity(AllySpawnPointsList, address, networkId);
-        RemoveMatchingIdentity(EnemySpawnPointsList, address, networkId);
-        RemoveMatchingIdentity(InhibitorsList, address, networkId);
-        RemoveMatchingIdentity(AllyInhibitorsList, address, networkId);
-        RemoveMatchingIdentity(EnemyInhibitorsList, address, networkId);
-        RemoveMatchingIdentity(NexusList, address, networkId);
-
-        if (MatchesIdentity(AllyNexusObject, address, networkId)) {
-            AllyNexusObject = HQClient();
-        }
-        if (MatchesIdentity(EnemyNexusObject, address, networkId)) {
-            EnemyNexusObject = HQClient();
-        }
-    }
-
-    inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
-        if (!Loaded || !args.Sender.IsValid()) {
+    inline void OnDelete(const SDK::Events::ObjectEventArgs& args) {
+        const uintptr_t address = args.Sender.Ptr;
+        if (address == 0) {
             return;
         }
 
-        AddObject(args.Sender.Ptr, args.Sender.Type);
-    }
+        RemoveByAddress(GameObjectsList, address);
+        RemoveByAddress(AttackableUnitsList, address);
 
-    inline void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
-        if (!Loaded || !args.Sender.IsValid()) {
-            return;
+        RemoveByAddress(HeroesList, address);
+        RemoveEnemyThenAlly(EnemyHeroesList, AllyHeroesList, address);
+
+        RemoveByAddress(MinionsList, address);
+        RemoveEnemyThenAlly(EnemyMinionsList, AllyMinionsList, address);
+        RemoveEnemyThenAlly(EnemyLaneMinionsList, AllyLaneMinionsList, address);
+        RemoveEnemyThenAlly(EnemySpecialMinionsList, AllySpecialMinionsList, address);
+        RemoveEnemyThenAlly(EnemyIgnoredMinionsList, AllyIgnoredMinionsList, address);
+
+        RemoveByAddress(WardsList, address);
+        RemoveEnemyThenAlly(EnemyWardsList, AllyWardsList, address);
+
+        RemoveByAddress(JungleList, address);
+        RemoveByAddress(JungleSmallList, address);
+        RemoveByAddress(JungleLargeList, address);
+        RemoveByAddress(JungleLegendaryList, address);
+        RemoveByAddress(PlantsList, address);
+
+        RemoveByAddress(ClonesList, address);
+        RemoveEnemyThenAlly(EnemyClonesList, AllyClonesList, address);
+
+        RemoveByAddress(PetsList, address);
+        RemoveEnemyThenAlly(EnemyPetsList, AllyPetsList, address);
+
+        RemoveByAddress(TurretsList, address);
+        RemoveEnemyThenAlly(EnemyTurretsList, AllyTurretsList, address);
+
+        RemoveByAddress(InhibitorsList, address);
+        RemoveEnemyThenAlly(EnemyInhibitorsList, AllyInhibitorsList, address);
+
+        RemoveByAddress(ShopsList, address);
+        RemoveEnemyThenAlly(EnemyShopsList, AllyShopsList, address);
+
+        RemoveByAddress(SpawnPointsList, address);
+        RemoveEnemyThenAlly(EnemySpawnPointsList, AllySpawnPointsList, address);
+
+        RemoveByAddress(ParticleEmittersList, address);
+        RemoveByAddress(MissilesList, address);
+
+        RemoveByAddress(NexusList, address);
+        if (EnemyNexusAddress == address) {
+            EnemyNexusObject = {};
+            EnemyNexusAddress = 0;
+        } else if (AllyNexusAddress == address) {
+            AllyNexusObject = {};
+            AllyNexusAddress = 0;
         }
 
-        // Use the index captured at hook time; object memory can already be
-        // fragile by the time this queued delete is flushed.
-        const uint32_t idx = args.Sender.Index & 0xFFFFu;
-        SDK::StaticStringCache::Clear(idx);
-
-        RemoveObject(args.Sender.Ptr, args.Sender.NetworkId);
+        RemoveEnemyThenAlly(EnemyList, AllyList, address);
     }
 
-    inline void Rebuild() {
-        Clear();
-        PlayerObject = SDK::ObjectManager::Player();
-
-        // Force-warm the player team static cache before we categorize any
-        // object. CachedPlayerTeam() is lazy and relies on g_ctx.localPlayer.
-        // If it hasn't resolved yet, IsEnemy()/IsAlly() return false for every
-        // unit and all enemy lists end up empty for the entire session.
-        SDK::GameObject::WarmPlayerTeamCache();
-
-        const auto objects = SDK::ObjectManager::Get<GameObject>();
-        GameObjectsList.reserve(objects.size());
-        AttackableUnitsList.reserve(objects.size() / 2);
-        MinionsList.reserve(objects.size() / 2);
-
-        for (const auto& object : objects) {
-            const uintptr_t addr = object.Address();
-            if (!addr) continue;
-
-            // Populate static string cache BEFORE AddObject() so that
-            // IsEnemy()/IsAlly() inside AddHero/AddMinion/AddTurret can
-            // use the cache hit for team comparison.
-            const uint32_t rawIdx = *reinterpret_cast<const uint32_t*>(addr + Offset::All::Index);
-            const uint32_t idx = rawIdx & 0xFFFF;
-
-            const auto inferredType = SDK::ObjectManager::detail::InferExtendedType(addr);
-            SDK::StaticStringCache::Populate(addr, idx, inferredType);
-
-            AddObject(addr, inferredType);
-        }
-
-        Loaded = true;
+    inline void Clear() {
+        GameObjectsList.clear();
+        AttackableUnitsList.clear();
+        AllyList.clear();
+        EnemyList.clear();
+        HeroesList.clear();
+        AllyHeroesList.clear();
+        EnemyHeroesList.clear();
+        MinionsList.clear();
+        AllyMinionsList.clear();
+        EnemyMinionsList.clear();
+        AllyLaneMinionsList.clear();
+        EnemyLaneMinionsList.clear();
+        AllySpecialMinionsList.clear();
+        EnemySpecialMinionsList.clear();
+        AllyIgnoredMinionsList.clear();
+        EnemyIgnoredMinionsList.clear();
+        WardsList.clear();
+        AllyWardsList.clear();
+        EnemyWardsList.clear();
+        JungleList.clear();
+        JungleSmallList.clear();
+        JungleLargeList.clear();
+        JungleLegendaryList.clear();
+        PlantsList.clear();
+        ClonesList.clear();
+        AllyClonesList.clear();
+        EnemyClonesList.clear();
+        PetsList.clear();
+        AllyPetsList.clear();
+        EnemyPetsList.clear();
+        TurretsList.clear();
+        AllyTurretsList.clear();
+        EnemyTurretsList.clear();
+        InhibitorsList.clear();
+        AllyInhibitorsList.clear();
+        EnemyInhibitorsList.clear();
+        NexusList.clear();
+        AllyNexusObject = {};
+        EnemyNexusObject = {};
+        AllyNexusAddress = 0;
+        EnemyNexusAddress = 0;
+        ShopsList.clear();
+        AllyShopsList.clear();
+        EnemyShopsList.clear();
+        SpawnPointsList.clear();
+        AllySpawnPointsList.clear();
+        EnemySpawnPointsList.clear();
+        ParticleEmittersList.clear();
+        MissilesList.clear();
+        PlayerObject = {};
+        HeroesTick = MinionsTick = TurretsTick = StructuresTick = MissilesTick = AggregateTick = 0;
     }
 
-
-    inline void OnLoad() {
-        Rebuild();
-    }
-
-    inline void OnGameUpdate(const SDK::Events::GameUpdateEventArgs&) {
-        RefreshMinionRoles();
-    }
-
-    inline void OnLoadEvent(const SDK::Events::LoadEventArgs&) {
-        OnLoad();
-        if (!GameUpdateSubscribed) {
-            GameUpdateSubscribed =
-                SDK::Events::AddOnGameUpdate(&OnGameUpdate);
-        }
-    }
-
-    inline void SubscribeEventHooks() {
-        if (EventHooksSubscribed) {
-            return;
-        }
-
-        (void)SDK::Events::AddOnCreateObject(&OnObjectCreate);
-        (void)SDK::Events::AddOnDeleteObject(&OnObjectDelete);
-        (void)SDK::Events::AddOnLoad(&OnLoadEvent);
-        EventHooksSubscribed = true;
-    }
-
-    inline void UnsubscribeEventHooks() {
-        if (EventHooksSubscribed) {
-            SDK::Events::RemoveOnLoad(&OnLoadEvent);
-            SDK::Events::RemoveOnDeleteObject(&OnObjectDelete);
-            SDK::Events::RemoveOnCreateObject(&OnObjectCreate);
-            EventHooksSubscribed = false;
-        }
-
-        if (GameUpdateSubscribed) {
-            SDK::Events::RemoveOnGameUpdate(&OnGameUpdate);
-            GameUpdateSubscribed = false;
-        }
-    }
 } // namespace detail
 
 inline void Initialize() {
     if (detail::Initialized) {
         return;
     }
-
     detail::Initialized = true;
-#if NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS
-    detail::SubscribeEventHooks();
-#endif
+    SDK::GameObject::WarmPlayerTeamCache();
+    if constexpr (detail::kObjectEventsEnabled) {
+        SDK::Events::AddOnCreateObject(&detail::OnCreate);
+        SDK::Events::AddOnDeleteObject(&detail::OnDelete);
+    }
 }
 
 inline void Shutdown() {
-#if NIGHTSHARP_ENABLE_GAMEOBJECTS_EVENT_HOOKS
-    detail::UnsubscribeEventHooks();
-#endif
+    if constexpr (detail::kObjectEventsEnabled) {
+        SDK::Events::RemoveOnCreateObject(&detail::OnCreate);
+        SDK::Events::RemoveOnDeleteObject(&detail::OnDelete);
+    }
     detail::Clear();
     detail::Initialized = false;
 }
 
 inline void EnsureInitialized() {
     Initialize();
-    if (!detail::Loaded && CoreRuntime::IsReady() && CoreRuntime::GetContext().gameTime > 0.0f) {
-        detail::Rebuild();
-    }
+    detail::PlayerObject = SDK::ObjectManager::Player();
 }
 
-inline const std::vector<GameObject>& AllGameObjects() { EnsureInitialized(); return detail::GameObjectsList; }
-inline const std::vector<AIBaseClient>& Ally() { EnsureInitialized(); return detail::AllyList; }
-inline const std::vector<AIHeroClient>& AllyHeroes() { EnsureInitialized(); return detail::AllyHeroesList; }
-inline const std::vector<BarracksDampenerClient>& AllyInhibitors() { EnsureInitialized(); return detail::AllyInhibitorsList; }
-inline const std::vector<AIMinionClient>& AllyMinions() { EnsureInitialized(); return detail::AllyMinionsList; }
-inline const std::vector<AIMinionClient>& AllyClones() { EnsureInitialized(); return detail::AllyClonesList; }
-inline const std::vector<AIMinionClient>& AllyPets() { EnsureInitialized(); return detail::AllyPetsList; }
-inline HQClient AllyNexus() { EnsureInitialized(); return detail::AllyNexusObject; }
-inline const std::vector<ShopClient>& AllyShops() { EnsureInitialized(); return detail::AllyShopsList; }
-inline const std::vector<Obj_SpawnPoint>& AllySpawnPoints() { EnsureInitialized(); return detail::AllySpawnPointsList; }
-inline const std::vector<AITurretClient>& AllyTurrets() { EnsureInitialized(); return detail::AllyTurretsList; }
-inline const std::vector<AIMinionClient>& AllyWards() { EnsureInitialized(); return detail::AllyWardsList; }
-inline const std::vector<AttackableUnit>& AttackableUnits() { EnsureInitialized(); return detail::AttackableUnitsList; }
-inline const std::vector<AIBaseClient>& Enemy() { EnsureInitialized(); return detail::EnemyList; }
-inline const std::vector<AIHeroClient>& EnemyHeroes() { EnsureInitialized(); return detail::EnemyHeroesList; }
-inline const std::vector<BarracksDampenerClient>& EnemyInhibitors() { EnsureInitialized(); return detail::EnemyInhibitorsList; }
-inline const std::vector<AIMinionClient>& EnemyMinions() { EnsureInitialized(); return detail::EnemyMinionsList; }
-inline const std::vector<AIMinionClient>& EnemyClones() { EnsureInitialized(); return detail::EnemyClonesList; }
-inline const std::vector<AIMinionClient>& EnemyPets() { EnsureInitialized(); return detail::EnemyPetsList; }
-inline const std::vector<AIMinionClient>& EnemyLaneMinions() { EnsureInitialized(); return detail::EnemyLaneMinionsList; }
-inline const std::vector<AIMinionClient>& EnemySpecialMinions() { EnsureInitialized(); return detail::EnemySpecialMinionsList; }
-inline const std::vector<AIMinionClient>& EnemyIgnoredMinions() { EnsureInitialized(); return detail::EnemyIgnoredMinionsList; }
-inline HQClient EnemyNexus() { EnsureInitialized(); return detail::EnemyNexusObject; }
-inline const std::vector<ShopClient>& EnemyShops() { EnsureInitialized(); return detail::EnemyShopsList; }
-inline const std::vector<Obj_SpawnPoint>& EnemySpawnPoints() { EnsureInitialized(); return detail::EnemySpawnPointsList; }
-inline const std::vector<AITurretClient>& EnemyTurrets() { EnsureInitialized(); return detail::EnemyTurretsList; }
-inline const std::vector<AIMinionClient>& EnemyWards() { EnsureInitialized(); return detail::EnemyWardsList; }
-inline const std::vector<AIHeroClient>& Heroes() { EnsureInitialized(); return detail::HeroesList; }
-inline const std::vector<BarracksDampenerClient>& Inhibitors() { EnsureInitialized(); return detail::InhibitorsList; }
-inline const std::vector<AIMinionClient>& Jungle() { EnsureInitialized(); return detail::JungleList; }
-inline const std::vector<AIMinionClient>& JungleLarge() { EnsureInitialized(); return detail::JungleLargeList; }
-inline const std::vector<AIMinionClient>& JungleLegendary() { EnsureInitialized(); return detail::JungleLegendaryList; }
-inline const std::vector<AIMinionClient>& JungleSmall() { EnsureInitialized(); return detail::JungleSmallList; }
-inline const std::vector<AIMinionClient>& Minions() { EnsureInitialized(); return detail::MinionsList; }
-inline const std::vector<AIMinionClient>& Clones() { EnsureInitialized(); return detail::ClonesList; }
-inline const std::vector<AIMinionClient>& Pets() { EnsureInitialized(); return detail::PetsList; }
-inline const std::vector<HQClient>& Nexuses() { EnsureInitialized(); return detail::NexusList; }
-inline const std::vector<EffectEmitter>& ParticleEmitters() { EnsureInitialized(); return detail::ParticleEmittersList; }
-inline AIHeroClient Player() { EnsureInitialized(); return detail::PlayerObject; }
-inline const std::vector<ShopClient>& Shops() { EnsureInitialized(); return detail::ShopsList; }
-inline const std::vector<Obj_SpawnPoint>& SpawnPoints() { EnsureInitialized(); return detail::SpawnPointsList; }
-inline const std::vector<AITurretClient>& Turrets() { EnsureInitialized(); return detail::TurretsList; }
-inline const std::vector<AIMinionClient>& Wards() { EnsureInitialized(); return detail::WardsList; }
+inline AIHeroClient Player() {
+    EnsureInitialized();
+    detail::PlayerObject = SDK::ObjectManager::Player();
+    return detail::PlayerObject;
+}
+
+inline const std::vector<AIHeroClient>& Heroes() { EnsureInitialized(); detail::RefreshHeroes(); return detail::HeroesList.Items(); }
+inline const std::vector<AIHeroClient>& AllyHeroes() { EnsureInitialized(); detail::RefreshHeroes(); return detail::AllyHeroesList.Items(); }
+inline const std::vector<AIHeroClient>& EnemyHeroes() { EnsureInitialized(); detail::RefreshHeroes(); return detail::EnemyHeroesList.Items(); }
+
+inline const std::vector<AIMinionClient>& Minions() { EnsureInitialized(); detail::RefreshMinions(); return detail::MinionsList.Items(); }
+inline const std::vector<AIMinionClient>& AllyMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllyMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& EnemyMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemyMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& AllyLaneMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllyLaneMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& EnemyLaneMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemyLaneMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& AllySpecialMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllySpecialMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& EnemySpecialMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemySpecialMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& AllyIgnoredMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllyIgnoredMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& EnemyIgnoredMinions() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemyIgnoredMinionsList.Items(); }
+inline const std::vector<AIMinionClient>& Wards() { EnsureInitialized(); detail::RefreshMinions(); return detail::WardsList.Items(); }
+inline const std::vector<AIMinionClient>& AllyWards() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllyWardsList.Items(); }
+inline const std::vector<AIMinionClient>& EnemyWards() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemyWardsList.Items(); }
+inline const std::vector<AIMinionClient>& Jungle() { EnsureInitialized(); detail::RefreshMinions(); return detail::JungleList.Items(); }
+inline const std::vector<AIMinionClient>& JungleMinions() { return Jungle(); }
+inline const std::vector<AIMinionClient>& JungleSmall() { EnsureInitialized(); detail::RefreshMinions(); return detail::JungleSmallList.Items(); }
+inline const std::vector<AIMinionClient>& JungleLarge() { EnsureInitialized(); detail::RefreshMinions(); return detail::JungleLargeList.Items(); }
+inline const std::vector<AIMinionClient>& JungleLegendary() { EnsureInitialized(); detail::RefreshMinions(); return detail::JungleLegendaryList.Items(); }
+inline const std::vector<AIMinionClient>& SmallJungle() { return JungleSmall(); }
+inline const std::vector<AIMinionClient>& LargeJungle() { return JungleLarge(); }
+inline const std::vector<AIMinionClient>& EpicJungle() { return JungleLegendary(); }
+inline const std::vector<AIMinionClient>& Plants() { EnsureInitialized(); detail::RefreshMinions(); return detail::PlantsList.Items(); }
+inline const std::vector<AIMinionClient>& JunglePlants() { return Plants(); }
+inline const std::vector<AIMinionClient>& Clones() { EnsureInitialized(); detail::RefreshMinions(); return detail::ClonesList.Items(); }
+inline const std::vector<AIMinionClient>& AllyClones() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllyClonesList.Items(); }
+inline const std::vector<AIMinionClient>& EnemyClones() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemyClonesList.Items(); }
+inline const std::vector<AIMinionClient>& Pets() { EnsureInitialized(); detail::RefreshMinions(); return detail::PetsList.Items(); }
+inline const std::vector<AIMinionClient>& AllyPets() { EnsureInitialized(); detail::RefreshMinions(); return detail::AllyPetsList.Items(); }
+inline const std::vector<AIMinionClient>& EnemyPets() { EnsureInitialized(); detail::RefreshMinions(); return detail::EnemyPetsList.Items(); }
+
+inline const std::vector<AITurretClient>& Turrets() { EnsureInitialized(); detail::RefreshTurrets(); return detail::TurretsList.Items(); }
+inline const std::vector<AITurretClient>& AllyTurrets() { EnsureInitialized(); detail::RefreshTurrets(); return detail::AllyTurretsList.Items(); }
+inline const std::vector<AITurretClient>& EnemyTurrets() { EnsureInitialized(); detail::RefreshTurrets(); return detail::EnemyTurretsList.Items(); }
+
+inline const std::vector<BarracksDampenerClient>& Inhibitors() { EnsureInitialized(); detail::RefreshStructures(); return detail::InhibitorsList.Items(); }
+inline const std::vector<BarracksDampenerClient>& AllyInhibitors() { EnsureInitialized(); detail::RefreshStructures(); return detail::AllyInhibitorsList.Items(); }
+inline const std::vector<BarracksDampenerClient>& EnemyInhibitors() { EnsureInitialized(); detail::RefreshStructures(); return detail::EnemyInhibitorsList.Items(); }
+inline const std::vector<HQClient>& Nexuses() { EnsureInitialized(); detail::RefreshStructures(); return detail::NexusList.Items(); }
+inline HQClient AllyNexus() { EnsureInitialized(); detail::RefreshStructures(); return detail::AllyNexusObject; }
+inline HQClient EnemyNexus() { EnsureInitialized(); detail::RefreshStructures(); return detail::EnemyNexusObject; }
+inline const std::vector<ShopClient>& Shops() { EnsureInitialized(); detail::RefreshStructures(); return detail::ShopsList.Items(); }
+inline const std::vector<ShopClient>& AllyShops() { EnsureInitialized(); detail::RefreshStructures(); return detail::AllyShopsList.Items(); }
+inline const std::vector<ShopClient>& EnemyShops() { EnsureInitialized(); detail::RefreshStructures(); return detail::EnemyShopsList.Items(); }
+inline const std::vector<Obj_SpawnPoint>& SpawnPoints() { EnsureInitialized(); detail::RefreshStructures(); return detail::SpawnPointsList.Items(); }
+inline const std::vector<Obj_SpawnPoint>& AllySpawnPoints() { EnsureInitialized(); detail::RefreshStructures(); return detail::AllySpawnPointsList.Items(); }
+inline const std::vector<Obj_SpawnPoint>& EnemySpawnPoints() { EnsureInitialized(); detail::RefreshStructures(); return detail::EnemySpawnPointsList.Items(); }
+inline const std::vector<EffectEmitter>& ParticleEmitters() { EnsureInitialized(); detail::RefreshStructures(); return detail::ParticleEmittersList.Items(); }
+inline const std::vector<MissileClient>& Missiles() { EnsureInitialized(); detail::RefreshMissiles(); return detail::MissilesList.Items(); }
+
+inline const std::vector<GameObject>& AllGameObjects() { EnsureInitialized(); detail::RefreshAggregate(); return detail::GameObjectsList.Items(); }
+inline const std::vector<AttackableUnit>& AttackableUnits() { EnsureInitialized(); detail::RefreshAggregate(); return detail::AttackableUnitsList.Items(); }
+inline const std::vector<AIBaseClient>& Ally() { EnsureInitialized(); detail::RefreshAggregate(); return detail::AllyList.Items(); }
+inline const std::vector<AIBaseClient>& Enemy() { EnsureInitialized(); detail::RefreshAggregate(); return detail::EnemyList.Items(); }
 
 inline bool Compare(const GameObject& gameObject, const GameObject& object) {
     return gameObject.Compare(object);
@@ -781,41 +1185,47 @@ inline Vec3 PlayerPosition() {
 
 template <typename T>
 inline std::vector<T> Get() {
-    EnsureInitialized();
     if constexpr (std::is_same_v<T, GameObject>) {
-        return detail::GameObjectsList;
+        return AllGameObjects();
     } else if constexpr (std::is_same_v<T, AttackableUnit>) {
-        return detail::AttackableUnitsList;
+        return AttackableUnits();
     } else if constexpr (std::is_same_v<T, AIBaseClient>) {
         std::vector<T> result;
-        result.reserve(detail::HeroesList.size() + detail::MinionsList.size() +
-                       detail::WardsList.size() + detail::JungleList.size() +
-                       detail::TurretsList.size());
-        for (const auto& object : detail::HeroesList) result.emplace_back(object.Handle());
-        for (const auto& object : detail::MinionsList) result.emplace_back(object.Handle());
-        for (const auto& object : detail::WardsList) result.emplace_back(object.Handle());
-        for (const auto& object : detail::JungleList) result.emplace_back(object.Handle());
-        for (const auto& object : detail::TurretsList) result.emplace_back(object.Handle());
+        const auto& ally = Ally();
+        const auto& enemy = Enemy();
+        result.reserve(ally.size() + enemy.size());
+        result.insert(result.end(), ally.begin(), ally.end());
+        result.insert(result.end(), enemy.begin(), enemy.end());
         return result;
     } else if constexpr (std::is_same_v<T, AIHeroClient>) {
-        return detail::HeroesList;
+        return Heroes();
     } else if constexpr (std::is_same_v<T, AIMinionClient>) {
-        std::vector<T> result = detail::MinionsList;
-        result.insert(result.end(), detail::WardsList.begin(), detail::WardsList.end());
-        result.insert(result.end(), detail::JungleList.begin(), detail::JungleList.end());
+        std::vector<T> result = Minions();
+        const auto& wards = Wards();
+        const auto& jungle = Jungle();
+        const auto& plants = Plants();
+        const auto& pets = Pets();
+        const auto& clones = Clones();
+        result.insert(result.end(), wards.begin(), wards.end());
+        result.insert(result.end(), jungle.begin(), jungle.end());
+        result.insert(result.end(), plants.begin(), plants.end());
+        result.insert(result.end(), pets.begin(), pets.end());
+        result.insert(result.end(), clones.begin(), clones.end());
         return result;
     } else if constexpr (std::is_same_v<T, AITurretClient>) {
-        return detail::TurretsList;
+        return Turrets();
     } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
-        return detail::InhibitorsList;
+        return Inhibitors();
     } else if constexpr (std::is_same_v<T, HQClient>) {
-        return detail::NexusList;
+        return Nexuses();
     } else if constexpr (std::is_same_v<T, EffectEmitter>) {
-        return detail::ParticleEmittersList;
+        return ParticleEmitters();
+    } else if constexpr (std::is_same_v<T, MissileClient>) {
+        return Missiles();
     } else if constexpr (std::is_same_v<T, ShopClient>) {
-        return detail::ShopsList;
+        return Shops();
     } else if constexpr (std::is_same_v<T, Obj_SpawnPoint>) {
-        return detail::SpawnPointsList;
+        return SpawnPoints();
     } else {
         return {};
     }
@@ -829,21 +1239,32 @@ inline std::vector<T> GetNative() {
 } // namespace SDK::GameObjects
 
 namespace SDK::ObjectManager {
+    inline const std::vector<AIHeroClient>& Heroes() { return SDK::GameObjects::Heroes(); }
     inline const std::vector<AIHeroClient>& AllyHeroes() { return SDK::GameObjects::AllyHeroes(); }
     inline const std::vector<AIHeroClient>& EnemyHeroes() { return SDK::GameObjects::EnemyHeroes(); }
+    inline const std::vector<AIMinionClient>& Minions() { return SDK::GameObjects::Minions(); }
     inline const std::vector<AIMinionClient>& AllyMinions() { return SDK::GameObjects::AllyMinions(); }
-    inline const std::vector<AIMinionClient>& AllyClones() { return SDK::GameObjects::AllyClones(); }
-    inline const std::vector<AIMinionClient>& AllyPets() { return SDK::GameObjects::AllyPets(); }
     inline const std::vector<AIMinionClient>& EnemyMinions() { return SDK::GameObjects::EnemyMinions(); }
+    inline const std::vector<AIMinionClient>& AllyClones() { return SDK::GameObjects::AllyClones(); }
     inline const std::vector<AIMinionClient>& EnemyClones() { return SDK::GameObjects::EnemyClones(); }
+    inline const std::vector<AIMinionClient>& Clones() { return SDK::GameObjects::Clones(); }
+    inline const std::vector<AIMinionClient>& AllyPets() { return SDK::GameObjects::AllyPets(); }
     inline const std::vector<AIMinionClient>& EnemyPets() { return SDK::GameObjects::EnemyPets(); }
+    inline const std::vector<AIMinionClient>& Pets() { return SDK::GameObjects::Pets(); }
+    inline const std::vector<AIMinionClient>& Jungle() { return SDK::GameObjects::Jungle(); }
+    inline const std::vector<AIMinionClient>& JungleMinions() { return SDK::GameObjects::JungleMinions(); }
+    inline const std::vector<AIMinionClient>& SmallJungle() { return SDK::GameObjects::SmallJungle(); }
+    inline const std::vector<AIMinionClient>& LargeJungle() { return SDK::GameObjects::LargeJungle(); }
+    inline const std::vector<AIMinionClient>& EpicJungle() { return SDK::GameObjects::EpicJungle(); }
+    inline const std::vector<AIMinionClient>& Plants() { return SDK::GameObjects::Plants(); }
+    inline const std::vector<AIMinionClient>& Wards() { return SDK::GameObjects::Wards(); }
+    inline const std::vector<AITurretClient>& Turrets() { return SDK::GameObjects::Turrets(); }
     inline const std::vector<AITurretClient>& AllyTurrets() { return SDK::GameObjects::AllyTurrets(); }
     inline const std::vector<AITurretClient>& EnemyTurrets() { return SDK::GameObjects::EnemyTurrets(); }
-    inline const std::vector<AIMinionClient>& Minions() { return SDK::GameObjects::Minions(); }
-    inline const std::vector<AIMinionClient>& Clones() { return SDK::GameObjects::Clones(); }
-    inline const std::vector<AIMinionClient>& Pets() { return SDK::GameObjects::Pets(); }
-    inline const std::vector<AIHeroClient>& Heroes() { return SDK::GameObjects::Heroes(); }
-    inline const std::vector<AITurretClient>& Turrets() { return SDK::GameObjects::Turrets(); }
+    inline const std::vector<BarracksDampenerClient>& EnemyInhibitors() { return SDK::GameObjects::EnemyInhibitors(); }
+    inline HQClient EnemyNexus() { return SDK::GameObjects::EnemyNexus(); }
+    inline const std::vector<MissileClient>& Missiles() { return SDK::GameObjects::Missiles(); }
+    inline const std::vector<GameObject>& AllObjects() { return SDK::GameObjects::AllGameObjects(); }
 }
 
 namespace SDK {
@@ -903,6 +1324,3 @@ inline bool AIBaseClient::IsUnderEnemyTurret() const {
 }
 
 } // namespace SDK
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────

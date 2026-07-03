@@ -34,7 +34,7 @@ public:
         selected_ = new TargetSelectorSelected(internalMenu_);
         humanizer_ = new TargetSelectorHumanizer(internalMenu_);
         mode_ = new TargetSelectorMode(internalMenu_);
-        drawing_ = new TargetSelectorDrawing(internalMenu_, selected_, mode_);
+        drawing_ = new TargetSelectorDrawing(internalMenu_, selected_, mode_, [this]() { return this->GetTarget(2000.0f); });
     }
 
     ~TargetSelector() {

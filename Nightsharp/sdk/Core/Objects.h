@@ -336,8 +336,17 @@ private:
 
 namespace ObjectDetail {
     inline bool EqualsAny(const std::string& text, std::initializer_list<const char*> values) {
+        std::string lowerText = text;
+        std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
         for (const char* value : values) {
-            if (value && text == value) {
+            if (!value) continue;
+            std::string lowerVal = value;
+            std::transform(lowerVal.begin(), lowerVal.end(), lowerVal.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (lowerText == lowerVal) {
                 return true;
             }
         }
@@ -345,8 +354,17 @@ namespace ObjectDetail {
     }
 
     inline bool ContainsAny(const std::string& text, std::initializer_list<const char*> values) {
+        std::string lowerText = text;
+        std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
         for (const char* value : values) {
-            if (value && text.find(value) != std::string::npos) {
+            if (!value) continue;
+            std::string lowerVal = value;
+            std::transform(lowerVal.begin(), lowerVal.end(), lowerVal.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (lowerText.find(lowerVal) != std::string::npos) {
                 return true;
             }
         }
@@ -473,7 +491,11 @@ namespace StaticStringCache {
         e.valid = true;
 
         // characterName — read once, only for heroes (cheap for 10 objects total)
-        if (type == ::Core::Objects::ObjectType::AIHeroClient) {
+        if (type == ::Core::Objects::ObjectType::AIHeroClient ||
+            type == ::Core::Objects::ObjectType::AIMinionClient ||
+            type == ::Core::Objects::ObjectType::AITurretClient ||
+            type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+            type == ::Core::Objects::ObjectType::HQClient) {
             char charBuf[96] = {};
             if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
                 e.characterName = charBuf;
@@ -510,7 +532,7 @@ namespace WaypointCache {
     constexpr int kBuckets = 512;
     struct Entry {
         uintptr_t address   = 0;
-        uint32_t  gen       = 0;
+        int frame           = -1;
         bool hasWaypoints   = false;
         bool hasServerPos   = false;
         std::vector<Vector3> waypoints;
@@ -523,29 +545,65 @@ namespace WaypointCache {
     inline Entry* GetEntry(uintptr_t a) {
         int b = Bucket(a);
         Entry& e = entries[b];
-        const uint32_t g = CoreRuntime::g_ctx.phaseGeneration;
-        if (e.address != a || e.gen != g) {
+        const int frame = ::CoreAiManager::FrameCacheKey();
+        if (e.address != a || e.frame != frame) {
+            if (e.waypoints.capacity() < static_cast<std::size_t>(::CoreAiManager::kMaxWaypoints)) {
+                e.waypoints.reserve(::CoreAiManager::kMaxWaypoints);
+            }
             e.address       = a;
-            e.gen           = g;
+            e.frame         = frame;
             e.hasWaypoints  = false;
             e.hasServerPos  = false;
         }
         return &e;
     }
-    inline std::vector<Vector3>& GetWaypoints(uintptr_t a, int maxPoints) {
+    inline const std::vector<Vector3>& GetWaypointsFull(uintptr_t a) {
         Entry* e = GetEntry(a);
         if (!e->hasWaypoints) {
             e->waypoints.clear();
-            maxPoints = std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints);
-            Vec3 points[::CoreAiManager::kMaxWaypoints] = {};
-            const int count = ::CoreAiManager::CopyPath(a, points, maxPoints);
-            e->waypoints.reserve(static_cast<std::size_t>(std::max(0, count)));
-            for (int i = 0; i < count; ++i)
+            int count = 0;
+            const Vec3* points = ::CoreAiManager::CachedPathData(a, count);
+            count = std::clamp(count, 0, ::CoreAiManager::kMaxWaypoints);
+            for (int i = 0; i < count; ++i) {
                 e->waypoints.push_back(points[i]);
+            }
             e->hasWaypoints = true;
         }
         return e->waypoints;
     }
+
+    inline int CopyWaypoints(uintptr_t a, Vector3* out, int maxPoints) {
+        if (!Globals::IsValidPtr(a) || !out || maxPoints <= 0) {
+            return 0;
+        }
+
+        const auto& cached = GetWaypointsFull(a);
+        const int count = std::min<int>(
+            std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints),
+            static_cast<int>(cached.size()));
+        for (int i = 0; i < count; ++i) {
+            out[i] = cached[static_cast<std::size_t>(i)];
+        }
+        return count;
+    }
+
+    inline std::vector<Vector3> GetWaypoints(uintptr_t a, int maxPoints) {
+        std::vector<Vector3> result;
+        if (!Globals::IsValidPtr(a) || maxPoints <= 0) {
+            return result;
+        }
+
+        const auto& cached = GetWaypointsFull(a);
+        const int count = std::min<int>(
+            std::clamp(maxPoints, 1, ::CoreAiManager::kMaxWaypoints),
+            static_cast<int>(cached.size()));
+        result.reserve(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            result.push_back(cached[static_cast<std::size_t>(i)]);
+        }
+        return result;
+    }
+
     inline Vector3 GetServerPosition(uintptr_t a) {
         Entry* e = GetEntry(a);
         if (!e->hasServerPos) {
@@ -1169,10 +1227,18 @@ public:
         if (!IsValid() || maxPoints <= 0) {
             return {};
         }
-        // Served from the per-phase ObjectCache so repeated calls during one
+        // Served from the per-frame ObjectCache so repeated calls during one
         // prediction (GamePath / Movement call GetWaypoints 5-10x) resolve the
         // AiManager + read the nav array only once per frame.
         return ObjectCache::GetWaypoints(Address(), maxPoints);
+    }
+
+    const std::vector<Vector3>& CachedWaypoints() const {
+        return ObjectCache::GetWaypointsFull(Address());
+    }
+
+    int CopyCachedWaypoints(Vector3* out, int maxPoints = 32) const {
+        return ObjectCache::CopyWaypoints(Address(), out, maxPoints);
     }
 
     std::vector<Vector3> GetPath(int maxPoints = 32) const {
@@ -1184,7 +1250,7 @@ public:
     }
 
     int GetPathLength() const {
-        return static_cast<int>(GetWaypoints().size());
+        return static_cast<int>(CachedWaypoints().size());
     }
 
     bool IsMelee() const {

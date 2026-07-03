@@ -58,6 +58,14 @@ inline CollisionFlags GetCollisionFlags(const Vector3& position) {
         ::CoreNavGrid::GetCollisionFlags(position));
 }
 
+inline std::uint16_t GetRawCellFlags(int x, int y) {
+    return ::CoreNavGrid::Get().GetRawCellFlags(x, y);
+}
+
+inline std::uint16_t GetRawCellFlags(const Vector3& position) {
+    return ::CoreNavGrid::GetRawCellFlags(position);
+}
+
 inline bool SetCollisionFlags(CollisionFlags flags, float x, float y) {
     return ::CoreNavGrid::SetCollisionFlags({ x, 0.0f, y }, ::SDK::ToMask(flags));
 }
@@ -80,6 +88,35 @@ inline bool IsWater(float x, float y) {
 
 inline bool IsWater(const Vector3& position) {
     return ::CoreNavGrid::IsWater(position);
+}
+
+inline bool IsWall(float x, float y) {
+    return ::CoreNavGrid::IsWall({ x, 0.0f, y });
+}
+
+inline bool IsWall(const Vector3& position) {
+    return ::CoreNavGrid::IsWall(position);
+}
+
+inline bool IsWalkable(float x, float y) {
+    return ::CoreNavGrid::IsWalkable({ x, 0.0f, y });
+}
+
+inline bool IsWalkable(const Vector3& position) {
+    return ::CoreNavGrid::IsWalkable(position);
+}
+
+inline bool IsWallBetween(const Vector3& from,
+                          const Vector3& to,
+                          float step = 40.0f) {
+    return ::CoreNavGrid::IsWallBetween(from, to, step);
+}
+
+inline bool FindWallCollision(const Vector3& from,
+                              const Vector3& to,
+                              Vector3& hitPoint,
+                              float step = 10.0f) {
+    return ::CoreNavGrid::FindWallCollision(from, to, hitPoint, step);
 }
 
 inline Vector2 WorldToGrid(float x, float y) {

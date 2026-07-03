@@ -130,7 +130,7 @@ namespace SDK {
     // those modules exist.
     namespace Drawing {
         bool WorldToScreen(const Vec3& world, Vec2& screen);
-        void DrawLine(float x1, float y1, float x2, float y2, float width, std::uint32_t color);
+        void DrawLine(float x1, float y1, float x2, float y2, float width, std::uint32_t color, bool foreground);
     }
 
     namespace GameObjects {
@@ -188,7 +188,7 @@ namespace SDK {
                     continue;
                 }
 
-                SDK::Drawing::DrawLine(from.x, from.y, to.x, to.y, static_cast<float>(width), color);
+                SDK::Drawing::DrawLine(from.x, from.y, to.x, to.y, static_cast<float>(width), color, true);
             }
         }
 
