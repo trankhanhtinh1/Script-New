@@ -57,10 +57,14 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
 
     const float oneWayPing = OneWayPingMs();
     const float cappedPing = std::min(oneWayPing, 15.0f);
-    const float pingLead = pending
+    const bool rangedPreCast = !player.IsMelee() && !context_.attackCastComplete;
+    const float pingLead = pending || rangedPreCast
         ? 0.0f
         : (context_.hasConfirmedAttack ? std::min(oneWayPing, kMoveSafetyMs) : 0.0f);
-    const float moveSafety = pending ? (kMoveSafetyMs + cappedPing) : MoveSafetyMs();
+    float moveSafety = pending ? (kMoveSafetyMs + cappedPing) : MoveSafetyMs();
+    if (rangedPreCast) {
+        moveSafety += kRangedPreCastMoveSafetyMs;
+    }
     const float readyAt = static_cast<float>(attackTick) +
                           context_.attackWindupMs +
                           moveSafety;
@@ -79,13 +83,23 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
 
+    const int now = Tick();
+    const int targetNetworkId = target.NetworkId();
+    if (context_.lastAttackOrderTick > 0 &&
+        context_.lastAttackOrderNetworkId == targetNetworkId &&
+        now - context_.lastAttackOrderTick >= 0 &&
+        now - context_.lastAttackOrderTick < kAttackOrderDelayMs) {
+        return false;
+    }
+
     OrbwalkingActionArgs beforeArgs(OrbwalkingType::BeforeAttack, target, {}, "SDK");
     OrbwalkingDetail::FireBeforeAttack(beforeArgs);
     if (!beforeArgs.Process) {
         return false;
     }
 
-    const int now = Tick();
+    context_.lastAttackOrderTick = now;
+    context_.lastAttackOrderNetworkId = targetNetworkId;
     if (!CoreControl::IssueAttack(target.Address(), target.Position(), true)) {
         return false;
     }
@@ -113,7 +127,9 @@ inline void OrbwalkerBase::Move(const Vector3& position) {
     }
 
     const int now = Tick();
-    if (now - context_.lastMovementTick < kMoveDelayMs) {
+    if (context_.lastMoveOrderTick > 0 &&
+        now - context_.lastMoveOrderTick >= 0 &&
+        now - context_.lastMoveOrderTick < kMoveDelayMs) {
         return;
     }
 
@@ -128,6 +144,16 @@ inline void OrbwalkerBase::Move(const Vector3& position) {
         return;
     }
 
+    if (!context_.lastMoveOrderPosition.IsZero() &&
+        args.Position.DistanceSqr2D(context_.lastMoveOrderPosition) <=
+            kMoveDuplicateDistance * kMoveDuplicateDistance &&
+        now - context_.lastMoveOrderTick >= 0 &&
+        now - context_.lastMoveOrderTick < kMoveDuplicateDelayMs) {
+        return;
+    }
+
+    context_.lastMoveOrderTick = now;
+    context_.lastMoveOrderPosition = args.Position;
     if (CoreControl::IssueMove(args.Position, true)) {
         context_.lastMovementTick = now;
     }
@@ -145,14 +171,7 @@ inline void OrbwalkerBase::Orbwalk(const AttackableUnit& target, const Vector3& 
         return;
     }
 
-    const bool farmMode =
-        mode == OrbwalkingMode::LaneClear ||
-        mode == OrbwalkingMode::Harass ||
-        mode == OrbwalkingMode::LastHit;
-    const float moveLead = farmMode
-        ? std::clamp(context_.attackWindupMs * 0.35f, 60.0f, 140.0f)
-        : 0.0f;
-    if (CanMove(moveLead, false)) {
+    if (CanMove(0.0f, false)) {
         Move(position.IsZero() ? context_.orbwalkerPosition : position);
     }
 }
@@ -222,10 +241,13 @@ inline float OrbwalkerBase::GetAttackWindupMs(const AIHeroClient& player) const 
     const float delay = GetAttackDelayMs(player);
     const float windup = CoreControl::GetAttackWindup(player.Address()) * 1000.0f;
     const float maxWindup = std::clamp(delay * 0.62f, 120.0f, 360.0f);
+    const float minWindup = player.IsMelee()
+        ? std::min(maxWindup, std::clamp(delay * 0.30f, 160.0f, 260.0f))
+        : std::min(maxWindup, std::clamp(delay * 0.22f, 95.0f, 240.0f));
     if (windup <= 0.0f || windup >= delay - 25.0f) {
         return maxWindup;
     }
-    return std::clamp(windup, 80.0f, maxWindup);
+    return std::clamp(windup, minWindup, maxWindup);
 }
 
 } // namespace SDK

@@ -9,6 +9,7 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     Events::AddOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
+    Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
 }
 
 inline OrbwalkerBase::~OrbwalkerBase() {
@@ -28,7 +29,10 @@ inline void OrbwalkerBase::LastAutoAttackTick(int value) {
 }
 
 inline int OrbwalkerBase::LastMovementTick() const { return context_.lastMovementTick; }
-inline void OrbwalkerBase::LastMovementTick(int value) { context_.lastMovementTick = value; }
+inline void OrbwalkerBase::LastMovementTick(int value) {
+    context_.lastMovementTick = value;
+    context_.lastMoveOrderTick = value;
+}
 inline bool OrbwalkerBase::AttackEnabled() const { return context_.attackEnabled; }
 inline void OrbwalkerBase::AttackEnabled(bool value) { context_.attackEnabled = value; }
 inline bool OrbwalkerBase::MoveEnabled() const { return context_.moveEnabled; }
@@ -43,6 +47,8 @@ inline void OrbwalkerBase::SetMoveServerPauseTime(int time) { SetMovePauseTime(t
 
 inline void OrbwalkerBase::ResetAutoAttackTimer() {
     context_.lastAutoAttackTick = 0;
+    context_.lastAttackOrderTick = 0;
+    context_.lastAttackOrderNetworkId = 0;
     context_.pendingAttack = false;
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
@@ -58,6 +64,7 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
+    Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
     if (OrbwalkingDetail::RuntimeInstance == this) {
         OrbwalkingDetail::RuntimeInstance = nullptr;
     }

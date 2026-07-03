@@ -27,7 +27,18 @@ inline void OrbwalkerBase::OnStopCastStatic(const Events::StopCastEventArgs& arg
     }
 }
 
+inline void OrbwalkerBase::OnDrawStatic() {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnDraw();
+    }
+}
+
 inline void OrbwalkerBase::OnGameUpdate() {
+    if (!menu_.Enabled()) {
+        context_.activeMode = OrbwalkingMode::None;
+        return;
+    }
+
     context_.activeMode = ActiveMode();
     if (context_.activeMode == OrbwalkingMode::None) {
         return;
@@ -158,6 +169,87 @@ inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs
         return false;
     }
     return args.IsAutoAttack || IsAutoAttack(args.SpellName);
+}
+
+inline void OrbwalkerBase::OnDraw() {
+    if (!menu_.Enabled()) {
+        return;
+    }
+
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || player.IsDead()) {
+        return;
+    }
+
+    if (menu_.DrawAARange()) {
+        Drawing::DrawCircle(
+            player.Position(),
+            Utils::AutoAttack::GetRealAutoAttackRange(player),
+            0xFF00BFFFu,
+            1.5f,
+            64);
+    }
+
+    if (menu_.DrawExtraHoldPosition()) {
+        Drawing::DrawCircle(
+            player.Position(),
+            player.BoundingRadius() + static_cast<float>(menu_.MovementExtraHold()),
+            0xFF800080u,
+            1.5f,
+            48);
+    }
+
+    if (menu_.DrawAARangeEnemy()) {
+        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) {
+                continue;
+            }
+            Drawing::DrawCircle(
+                enemy.Position(),
+                Utils::AutoAttack::GetRealAutoAttackRange(enemy, player),
+                0xFF00BFFFu,
+                1.5f,
+                64);
+        }
+    }
+
+    if (!menu_.DrawKillableMinion()) {
+        return;
+    }
+
+    const float range = Utils::AutoAttack::GetRealAutoAttackRange(player) * 2.0f;
+    const float rangeSqr = range * range;
+    for (const auto& minion : GameObjects::EnemyMinions()) {
+        if (!OrbwalkingDetail::IsValidMinionTarget(minion) ||
+            player.Position().DistanceSqr2D(minion.Position()) > rangeSqr) {
+            continue;
+        }
+
+        const float damage = Damage::GetAutoAttackDamage(player, minion);
+        if (damage <= 0.0f) {
+            continue;
+        }
+
+        if (menu_.DrawKillableMinionFade()) {
+            if (minion.Health() >= damage * 2.0f) {
+                continue;
+            }
+            const int blue = static_cast<int>(std::clamp(255.0f - minion.Health() * 2.0f, 0.0f, 255.0f));
+            Drawing::DrawCircle(
+                minion.Position(),
+                minion.BoundingRadius() * 2.0f,
+                0xFF00FF00u | static_cast<std::uint32_t>(blue),
+                1.5f,
+                32);
+        } else if (OrbwalkingDetail::CanLastHitMinion(player, minion, menu_.DelayFarm())) {
+            Drawing::DrawCircle(
+                minion.Position(),
+                minion.BoundingRadius() * 2.0f,
+                0xFF00FF00u,
+                1.5f,
+                32);
+        }
+    }
 }
 
 } // namespace SDK

@@ -9,8 +9,10 @@
 #include "../../Events/Events.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../Math/HealthPrediction.h"
+#include "../../UI/Drawing.h"
 #include "../../Utils/AutoAttack.h"
 #include "../Damages/Damage.h"
+#include "../TargetSelector/TargetSelector.h"
 #include "../../../Core/CoreControl.h"
 
 #include <algorithm>
@@ -67,13 +69,17 @@ protected:
 
 private:
     static constexpr int kMoveDelayMs = 25;
+    static constexpr int kMoveDuplicateDelayMs = 85;
+    static constexpr int kAttackOrderDelayMs = 45;
     static constexpr int kAttackRetryDelayMs = 45;
     static constexpr int kPendingEventGraceMs = 150;
     static constexpr int kDuplicateAttackEventMs = 80;
+    static constexpr float kMoveDuplicateDistance = 55.0f;
     static constexpr float kMaxPingLeadMs = 90.0f;
     static constexpr float kAttackSafetyMs = 35.0f;
     static constexpr float kHighAttackSpeedSafetyMs = 30.0f;
     static constexpr float kMoveSafetyMs = 10.0f;
+    static constexpr float kRangedPreCastMoveSafetyMs = 35.0f;
     static constexpr float kDefaultAttackDelayMs = 625.0f;
     static constexpr float kDefaultAttackWindupMs = 300.0f;
 
@@ -81,11 +87,13 @@ private:
     static void OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args);
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
+    static void OnDrawStatic();
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
+    void OnDraw();
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
     void ExpirePendingAttack();
