@@ -6,13 +6,212 @@
 #include <cstdio>
 #include <cstring>
 
+#ifndef NIGHTSHARP_DEBUG_FILE_LOG
+#define NIGHTSHARP_DEBUG_FILE_LOG 1
+#endif
+
+#ifndef NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
+#define NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE 1
+#endif
+
+#ifndef NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE_AUTOSTART
+#define NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE_AUTOSTART 1
+#endif
+
 namespace NightSharpDebug {
 
 inline constexpr const char* kCrashLogPath =
     "C:\\Users\\Public\\nightsharp_crash.txt";
+inline constexpr const char* kDebugConsolePipeName =
+    R"(\\.\pipe\NightSharpDebugConsole)";
+inline constexpr const char* kDebugConsoleExeName = "console.exe";
+inline constexpr DWORD kDebugConsoleConnectRetryMs = 250;
 
 inline volatile LONG g_phaseLock = 0;
 inline char g_phase[128] = "dll-load";
+inline volatile LONG g_consolePipeLock = 0;
+inline volatile LONG g_consoleLaunchAttempted = 0;
+inline DWORD g_lastConsoleConnectAttempt = 0;
+inline HANDLE g_consolePipe = INVALID_HANDLE_VALUE;
+
+inline void CloseExternalConsolePipe() {
+#if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
+    HANDLE pipe = g_consolePipe;
+    if (pipe != INVALID_HANDLE_VALUE) {
+        g_consolePipe = INVALID_HANDLE_VALUE;
+        CloseHandle(pipe);
+    }
+#endif
+}
+
+inline bool TryConnectExternalConsole() {
+#if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
+    if (g_consolePipe != INVALID_HANDLE_VALUE) {
+        return true;
+    }
+
+    const DWORD now = GetTickCount();
+    if (g_lastConsoleConnectAttempt != 0 &&
+        now - g_lastConsoleConnectAttempt < kDebugConsoleConnectRetryMs) {
+        return false;
+    }
+    g_lastConsoleConnectAttempt = now;
+
+    if (!WaitNamedPipeA(kDebugConsolePipeName, 0)) {
+        return false;
+    }
+
+    HANDLE pipe = CreateFileA(
+        kDebugConsolePipeName,
+        GENERIC_WRITE,
+        0,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (pipe == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    DWORD mode = PIPE_READMODE_BYTE;
+    SetNamedPipeHandleState(pipe, &mode, nullptr, nullptr);
+    g_consolePipe = pipe;
+    return true;
+#else
+    return false;
+#endif
+}
+
+inline void WriteExternalConsoleRaw(const char* text, DWORD length) {
+#if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
+    if (!text || length == 0) {
+        return;
+    }
+
+    if (InterlockedCompareExchange(&g_consolePipeLock, 1, 0) != 0) {
+        return;
+    }
+
+    if (TryConnectExternalConsole()) {
+        DWORD written = 0;
+        if (!WriteFile(g_consolePipe, text, length, &written, nullptr)) {
+            CloseExternalConsolePipe();
+        }
+    }
+
+    InterlockedExchange(&g_consolePipeLock, 0);
+#else
+    (void)text;
+    (void)length;
+#endif
+}
+
+inline bool BuildSiblingConsolePath(HMODULE module, char* out, DWORD outSize) {
+    if (!out || outSize == 0) {
+        return false;
+    }
+    out[0] = '\0';
+
+    DWORD len = 0;
+    if (module) {
+        len = GetModuleFileNameA(module, out, outSize);
+    }
+    if (len == 0 || len >= outSize) {
+        len = GetModuleFileNameA(nullptr, out, outSize);
+    }
+    if (len == 0 || len >= outSize) {
+        out[0] = '\0';
+        return false;
+    }
+
+    char* slash = nullptr;
+    for (char* p = out; *p; ++p) {
+        if (*p == '\\' || *p == '/') {
+            slash = p;
+        }
+    }
+    if (!slash) {
+        return false;
+    }
+
+    slash[1] = '\0';
+    strcat_s(out, outSize, kDebugConsoleExeName);
+    return true;
+}
+
+inline void StartExternalConsole(HMODULE module) {
+#if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE && NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE_AUTOSTART
+    if (InterlockedCompareExchange(&g_consoleLaunchAttempted, 1, 0) != 0) {
+        return;
+    }
+
+    if (WaitNamedPipeA(kDebugConsolePipeName, 0)) {
+        return;
+    }
+
+    char path[MAX_PATH] = {};
+    if (!BuildSiblingConsolePath(module, path, MAX_PATH)) {
+        return;
+    }
+
+    if (GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+        return;
+    }
+
+    char workDir[MAX_PATH] = {};
+    lstrcpynA(workDir, path, MAX_PATH);
+    char* slash = nullptr;
+    for (char* p = workDir; *p; ++p) {
+        if (*p == '\\' || *p == '/') {
+            slash = p;
+        }
+    }
+    if (slash) {
+        *slash = '\0';
+    }
+
+    char commandLine[MAX_PATH + 4] = {};
+    _snprintf_s(commandLine, sizeof(commandLine), _TRUNCATE, "\"%s\"", path);
+
+    STARTUPINFOA si = {};
+    PROCESS_INFORMATION pi = {};
+    si.cb = sizeof(si);
+
+    if (CreateProcessA(
+            path,
+            commandLine,
+            nullptr,
+            nullptr,
+            FALSE,
+            CREATE_NEW_CONSOLE,
+            nullptr,
+            workDir[0] ? workDir : nullptr,
+            &si,
+            &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        g_lastConsoleConnectAttempt = 0;
+    }
+#else
+    (void)module;
+#endif
+}
+
+inline void ResetFileLog() {
+#if NIGHTSHARP_DEBUG_FILE_LOG
+    HANDLE hFile = CreateFileA(
+        kCrashLogPath,
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        CloseHandle(hFile);
+    }
+#endif
+}
 
 inline void WriteRaw(const char* text) {
     if (!text || !*text) {
@@ -21,6 +220,11 @@ inline void WriteRaw(const char* text) {
 
     OutputDebugStringA(text);
 
+#if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
+    WriteExternalConsoleRaw(text, static_cast<DWORD>(lstrlenA(text)));
+#endif
+
+#if NIGHTSHARP_DEBUG_FILE_LOG
     HANDLE hFile = CreateFileA(
         kCrashLogPath,
         FILE_APPEND_DATA,
@@ -36,6 +240,7 @@ inline void WriteRaw(const char* text) {
     DWORD written = 0;
     WriteFile(hFile, text, static_cast<DWORD>(lstrlenA(text)), &written, nullptr);
     CloseHandle(hFile);
+#endif
 }
 
 inline const char* BaseName(const char* path) {
