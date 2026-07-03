@@ -62,6 +62,7 @@ private:
     static constexpr int kMoveDelayMs = 45;
     static constexpr int kAttackRetryDelayMs = 45;
     static constexpr int kPendingTimeoutBaseMs = 150;
+    static constexpr int kDuplicateAttackEventMs = 80;
     static constexpr float kMaxPingLeadMs = 90.0f;
     static constexpr float kAttackSafetyMs = 5.0f;
     static constexpr float kMoveSafetyMs = 18.0f;
@@ -71,10 +72,12 @@ private:
     static void OnGameUpdateStatic(const Events::GameUpdateEventArgs& args);
     static void OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args);
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
+    static void OnStopCastStatic(const Events::StopCastEventArgs& args);
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
+    void OnStopCast(const Events::StopCastEventArgs& args);
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
     void ExpirePendingAttack();

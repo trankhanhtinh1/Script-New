@@ -8,6 +8,7 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     Events::AddOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::AddOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
+    Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
 }
 
 inline OrbwalkerBase::~OrbwalkerBase() {
@@ -23,6 +24,7 @@ inline int OrbwalkerBase::LastAutoAttackTick() const { return context_.lastAutoA
 inline void OrbwalkerBase::LastAutoAttackTick(int value) {
     context_.lastAutoAttackTick = value;
     context_.pendingAttack = false;
+    context_.attackCastComplete = value > 0;
 }
 
 inline int OrbwalkerBase::LastMovementTick() const { return context_.lastMovementTick; }
@@ -45,6 +47,7 @@ inline void OrbwalkerBase::ResetAutoAttackTimer() {
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
     context_.hasConfirmedAttack = false;
+    context_.attackCastComplete = false;
 }
 
 inline void OrbwalkerBase::Dispose() {
@@ -54,6 +57,7 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::RemoveOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
+    Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     if (OrbwalkingDetail::RuntimeInstance == this) {
         OrbwalkingDetail::RuntimeInstance = nullptr;
     }

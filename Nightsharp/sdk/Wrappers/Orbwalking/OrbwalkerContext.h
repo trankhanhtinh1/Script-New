@@ -25,6 +25,7 @@ struct OrbwalkerRuntimeContext {
     bool moveEnabled = true;
     bool pendingAttack = false;
     bool hasConfirmedAttack = false;
+    bool attackCastComplete = false;
     bool disposed = false;
 };
 
