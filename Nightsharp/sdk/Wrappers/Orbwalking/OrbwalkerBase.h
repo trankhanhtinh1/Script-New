@@ -18,6 +18,7 @@
 #include "../../Math/Collision.h"
 #include "../../Math/HealthPrediction.h"
 #include "../../UI/Drawing.h"
+#include "../../UI/Icons.h"
 #include "../../UI/UI.h"
 #include "../../Utils/AutoAttack.h"
 #include "../../Variables.h"
@@ -38,6 +39,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <map>
@@ -532,6 +534,7 @@ public:
     }
 
     bool Attack(const AttackableUnit& target) override {
+        OrbwalkerDropFpsScope perf(this, "Attack");
         if (!initialized_) {
             FarmDebugLogState(FarmDebugSlot::Attack, "attack-blocked", target, "not-initialized", true);
             return false;
@@ -611,6 +614,8 @@ public:
                 lastLocalAttackTick_,
                 lastAutoAttackTick_);
             FarmDebugLogState(FarmDebugSlot::Attack, "attack-ok", target, "issue-attack-ok", true);
+            perf.Finish();
+            TryShowFakeClick(Hud::ClickType::Attack, target.Position(), now, lastFakeAttackClickTick_);
             return true;
         }
         AADebugAppend(
@@ -625,6 +630,7 @@ public:
     }
 
     void Move(const Vector3& position) override {
+        OrbwalkerDropFpsScope perf(this, "Move");
         if (!initialized_ || !position.IsValid() || position.IsZero()) {
             AADebugLogMoveBlocked("not-initialized-or-invalid-position", position, position, 0, -1.0f, -1.0f, 0.0f);
             FarmDebugLogState(FarmDebugSlot::Move, "move-blocked", {}, "not-initialized-or-invalid-position", true);
@@ -736,11 +742,8 @@ public:
                 args.Position.y,
                 args.Position.z);
             FarmDebugLogState(FarmDebugSlot::Move, "move-ok", {}, "issue-move-ok", true);
-            if (Bool(drawingMenu_, "ShowFakeClick", false) &&
-                now - lastFakeClickTick_ > std::max(0, 250 - Game::Ping() * 10)) {
-                Hud::ShowClick(Hud::ClickType::Move, args.Position);
-                lastFakeClickTick_ = now;
-            }
+            perf.Finish();
+            TryShowFakeClick(Hud::ClickType::Move, args.Position, now, lastFakeMoveClickTick_);
         } else {
             AADebugAppend(
                 "[AADebug] ISSUE_MOVE_FAIL id=%d dtAA=%d dtLocal=%d pending=%d missile=%d damageIssued=%d",
@@ -793,10 +796,6 @@ public:
             CanMove(static_cast<float>(Slider(orbwalkerMenu_, "WindupDelay", 100)), false);
         const bool comboWithMove = KeyActive("ComboWithMove");
         const bool limitAttackOk =
-<<<<<<< HEAD
-=======
-            isFleeMode ||
->>>>>>> local-changes-backup
             !Bool(orbwalkerMenu_, "LimitAttack", false) ||
             GetAttackDelay() >= 0.3846154f ||
             (autoAttackCounter_ % 3) == 0 ||
@@ -860,6 +859,11 @@ public:
         Events::hook.OnMissileCreate -= &OrbwalkerBase::OnMissileCreateStatic;
         Events::hook.OnMissileDelete -= &OrbwalkerBase::OnMissileDeleteStatic;
         Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
+        if (fakeCursorTexture_.Texture) {
+            UI::Icons::ReleaseTexture(fakeCursorTexture_);
+        }
+        fakeCursorTextureLoadTried_ = false;
+        fakeCursorTexturePath_.clear();
         if (OrbwalkingDetail::RuntimeInstance == this) {
             OrbwalkingDetail::RuntimeInstance = nullptr;
         }
@@ -879,9 +883,18 @@ public:
 
 protected:
     static constexpr bool kFarmDebugEnabled = false;
-    static constexpr bool kAADebugEnabled = true;
+    static constexpr bool kAADebugEnabled = false;
     static constexpr const char* kAADebugPath =
         "C:\\Users\\Public\\ns_orbwalker_aa_debug.txt";
+    static constexpr bool kFakeClickDropFpsDebugEnabled = false;
+    static constexpr bool kFakeCursorDropFpsDebugEnabled = false;
+    static constexpr const char* kFakeClickDropFpsDebugPath =
+        "C:\\Users\\Public\\ns_orbwalker_fake_click_dropfps.txt";
+    static constexpr const char* kFakeCursorDropFpsDebugPath =
+        "C:\\Users\\Public\\ns_orbwalker_fake_cursor_dropfps.txt";
+    static constexpr bool kOrbwalkerDropFpsDebugEnabled = false;
+    static constexpr const char* kOrbwalkerDropFpsDebugPath =
+        "C:\\Users\\Public\\ns_orbwalker_dropfps.txt";
 
     enum class FarmDebugSlot {
         Frame,
@@ -890,6 +903,274 @@ protected:
         Orbwalk,
         Attack,
         Move,
+    };
+
+    struct DropFpsDebugStats {
+        int WindowStartTick = 0;
+        int LastSlowLogTick = 0;
+        int Hits = 0;
+        int SlowHits = 0;
+        double TotalMs = 0.0;
+        double MaxMs = 0.0;
+        char MaxPhase[48] = {};
+    };
+
+    struct KillableDrawCircle {
+        AttackableUnit Target = {};
+        float RadiusPadding = 25.0f;
+    };
+
+    static LARGE_INTEGER DropFpsNow() {
+        static LARGE_INTEGER frequency = {};
+        if (frequency.QuadPart == 0) {
+            QueryPerformanceFrequency(&frequency);
+        }
+
+        LARGE_INTEGER now = {};
+        QueryPerformanceCounter(&now);
+        return now;
+    }
+
+    static double DropFpsMsSince(const LARGE_INTEGER& start) {
+        static LARGE_INTEGER frequency = {};
+        if (frequency.QuadPart == 0) {
+            QueryPerformanceFrequency(&frequency);
+        }
+
+        LARGE_INTEGER now = {};
+        QueryPerformanceCounter(&now);
+        return static_cast<double>(now.QuadPart - start.QuadPart) * 1000.0 /
+            static_cast<double>(frequency.QuadPart);
+    }
+
+    static void DropFpsAppend(const char* path, const char* text) {
+        if (!path || !path[0] || !text || !text[0]) {
+            return;
+        }
+
+        HANDLE file = CreateFileA(
+            path,
+            FILE_APPEND_DATA,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (file == INVALID_HANDLE_VALUE) {
+            return;
+        }
+
+        DWORD written = 0;
+        WriteFile(file, text, static_cast<DWORD>(std::strlen(text)), &written, nullptr);
+        CloseHandle(file);
+    }
+
+    static bool FileExists(const std::string& path) {
+        if (path.empty()) {
+            return false;
+        }
+        const DWORD attr = GetFileAttributesA(path.c_str());
+        return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+    }
+
+    static std::string DirectoryOf(std::string path) {
+        const auto slash = path.find_last_of("\\/");
+        return slash == std::string::npos ? std::string() : path.substr(0, slash);
+    }
+
+    static std::string FullPath(const std::string& path) {
+        char full[MAX_PATH] = {};
+        const DWORD len = GetFullPathNameA(path.c_str(), MAX_PATH, full, nullptr);
+        if (len == 0 || len >= MAX_PATH) {
+            return path;
+        }
+        return std::string(full, full + len);
+    }
+
+    static std::string ModuleDirectory() {
+        HMODULE module = Variables::Detail::CurrentModule();
+        char path[MAX_PATH] = {};
+        if (!module || GetModuleFileNameA(module, path, MAX_PATH) == 0) {
+            return {};
+        }
+        return DirectoryOf(path);
+    }
+
+    static std::string HostDirectory() {
+        char path[MAX_PATH] = {};
+        if (GetModuleFileNameA(nullptr, path, MAX_PATH) == 0) {
+            return {};
+        }
+        return DirectoryOf(path);
+    }
+
+    static std::string ResolveHandCursorPath() {
+        const std::string moduleDir = ModuleDirectory();
+        const std::string hostDir = HostDirectory();
+
+        std::vector<std::string> candidates;
+        candidates.push_back("NightSharp\\SDK\\Data\\hand1.png");
+        candidates.push_back("C:\\Users\\MR THINH\\Downloads\\New\\NightSharp\\SDK\\Data\\hand1.png");
+        if (!moduleDir.empty()) {
+            candidates.push_back(moduleDir + "\\..\\..\\SDK\\Data\\hand1.png");
+            candidates.push_back(moduleDir + "\\..\\SDK\\Data\\hand1.png");
+            candidates.push_back(moduleDir + "\\SDK\\Data\\hand1.png");
+            candidates.push_back(moduleDir + "\\data\\hand1.png");
+        }
+        if (!hostDir.empty()) {
+            candidates.push_back(hostDir + "\\NightSharp\\SDK\\Data\\hand1.png");
+            candidates.push_back(hostDir + "\\data\\hand1.png");
+        }
+        candidates.push_back("C:\\NightSharp\\data\\hand1.png");
+
+        for (const auto& candidate : candidates) {
+            const std::string full = FullPath(candidate);
+            if (FileExists(full)) {
+                return full;
+            }
+        }
+        return candidates.empty() ? std::string() : FullPath(candidates.front());
+    }
+
+    void RecordDropFpsDebug(DropFpsDebugStats& stats,
+                            const char* path,
+                            const char* tag,
+                            const char* phase,
+                            double ms,
+                            const char* detail,
+                            double slowThresholdMs) {
+        if ((!kFakeClickDropFpsDebugEnabled &&
+             path && std::strcmp(path, kFakeClickDropFpsDebugPath) == 0) ||
+            (!kFakeCursorDropFpsDebugEnabled &&
+             path && std::strcmp(path, kFakeCursorDropFpsDebugPath) == 0) ||
+            (!kOrbwalkerDropFpsDebugEnabled &&
+             path && std::strcmp(path, kOrbwalkerDropFpsDebugPath) == 0)) {
+            return;
+        }
+
+        const int now = Tick();
+        if (stats.WindowStartTick == 0) {
+            stats.WindowStartTick = now;
+        }
+
+        ++stats.Hits;
+        stats.TotalMs += ms;
+        if (ms > stats.MaxMs) {
+            stats.MaxMs = ms;
+            _snprintf_s(stats.MaxPhase, sizeof(stats.MaxPhase), _TRUNCATE, "%s", phase ? phase : "?");
+        }
+
+        if (ms >= slowThresholdMs && now - stats.LastSlowLogTick >= 250) {
+            ++stats.SlowHits;
+            stats.LastSlowLogTick = now;
+            SYSTEMTIME st = {};
+            GetLocalTime(&st);
+            char line[768] = {};
+            _snprintf_s(
+                line,
+                sizeof(line),
+                _TRUNCATE,
+                "[%02d:%02d:%02d.%03d tick=%d] [%s] slow phase=%s ms=%.3f detail=%s\r\n",
+                st.wHour,
+                st.wMinute,
+                st.wSecond,
+                st.wMilliseconds,
+                now,
+                tag ? tag : "?",
+                phase ? phase : "?",
+                ms,
+                detail ? detail : "");
+            DropFpsAppend(path, line);
+        }
+
+        if (now - stats.WindowStartTick >= 1000 && stats.Hits > 0) {
+            SYSTEMTIME st = {};
+            GetLocalTime(&st);
+            char line[768] = {};
+            _snprintf_s(
+                line,
+                sizeof(line),
+                _TRUNCATE,
+                "[%02d:%02d:%02d.%03d tick=%d] [%s] summary hits=%d slow=%d total=%.3f avg=%.4f max=%.3f maxPhase=%s detail=%s\r\n",
+                st.wHour,
+                st.wMinute,
+                st.wSecond,
+                st.wMilliseconds,
+                now,
+                tag ? tag : "?",
+                stats.Hits,
+                stats.SlowHits,
+                stats.TotalMs,
+                stats.TotalMs / static_cast<double>(std::max(1, stats.Hits)),
+                stats.MaxMs,
+                stats.MaxPhase[0] ? stats.MaxPhase : "?",
+                detail ? detail : "");
+            DropFpsAppend(path, line);
+            stats.WindowStartTick = now;
+            stats.Hits = 0;
+            stats.SlowHits = 0;
+            stats.TotalMs = 0.0;
+            stats.MaxMs = 0.0;
+            stats.MaxPhase[0] = '\0';
+        }
+    }
+
+    bool ShouldRecordOrbwalkerDropFps() const {
+        if (!kOrbwalkerDropFpsDebugEnabled || !initialized_) {
+            return false;
+        }
+        const OrbwalkingMode mode = ActiveMode();
+        return mode != OrbwalkingMode::None ||
+            Bool(drawingMenu_, "DrawAttackRange", true) ||
+            Bool(drawingMenu_, "DrawHoldPosition", false) ||
+            Bool(drawingMenu_, "DrawKillableMinion", false);
+    }
+
+    void RecordOrbwalkerDropFps(const char* phase, double ms, const char* detail) {
+        if (!ShouldRecordOrbwalkerDropFps()) {
+            return;
+        }
+        RecordDropFpsDebug(
+            orbwalkerPerfStats_,
+            kOrbwalkerDropFpsDebugPath,
+            "Orbwalker",
+            phase,
+            ms,
+            detail,
+            0.35);
+    }
+
+    class OrbwalkerDropFpsScope {
+    public:
+        OrbwalkerDropFpsScope(OrbwalkerBase* owner, const char* phase, const char* detail = "")
+            : owner_(owner),
+              phase_(phase),
+              detail_(detail),
+              enabled_(owner && owner->ShouldRecordOrbwalkerDropFps()) {
+            if (enabled_) {
+                start_ = DropFpsNow();
+            }
+        }
+
+        ~OrbwalkerDropFpsScope() {
+            Finish();
+        }
+
+        void Finish() {
+            if (finished_ || !owner_ || !enabled_) {
+                return;
+            }
+            finished_ = true;
+            owner_->RecordOrbwalkerDropFps(phase_, DropFpsMsSince(start_), detail_);
+        }
+
+    private:
+        OrbwalkerBase* owner_ = nullptr;
+        const char* phase_ = "";
+        const char* detail_ = "";
+        LARGE_INTEGER start_ = {};
+        bool enabled_ = false;
+        bool finished_ = false;
     };
 
     static const char* ModeName(OrbwalkingMode mode) {
@@ -917,6 +1198,270 @@ protected:
             return "turret";
         }
         return "object";
+    }
+
+    void TryShowFakeClick(Hud::ClickType type, const Vector3& position, int now, int& lastTick) {
+        const bool fakeClickEnabled = Bool(drawingMenu_, "ShowFakeClick", false);
+        const bool fakeCursorEnabled = fakeClickEnabled && Bool(drawingMenu_, "ShowFakeCursor", false);
+        if (!fakeClickEnabled) {
+            fakeCursorScreenValid_ = false;
+            return;
+        }
+
+        LARGE_INTEGER perfStart = {};
+        if (kFakeClickDropFpsDebugEnabled) {
+            perfStart = DropFpsNow();
+        }
+        const char* typeName = type == Hud::ClickType::Attack ? "attack" : "move";
+
+        if (!position.IsValid() || position.IsZero()) {
+            if (kFakeClickDropFpsDebugEnabled) {
+                RecordDropFpsDebug(
+                    fakeClickPerfStats_,
+                    kFakeClickDropFpsDebugPath,
+                    "FakeClick",
+                    "invalid-position",
+                    DropFpsMsSince(perfStart),
+                    typeName,
+                    0.25);
+            }
+            return;
+        }
+
+        const int minDelay = std::max(0, 250 - Game::Ping() * 10);
+        if (now - lastTick <= minDelay) {
+            if (kFakeClickDropFpsDebugEnabled) {
+                RecordDropFpsDebug(
+                    fakeClickPerfStats_,
+                    kFakeClickDropFpsDebugPath,
+                    "FakeClick",
+                    "throttled",
+                    DropFpsMsSince(perfStart),
+                    typeName,
+                    0.25);
+            }
+            return;
+        }
+
+        bool nativeOk = false;
+        if (fakeClickEnabled) {
+            nativeOk = Hud::ShowClick(type, position);
+        }
+        if (fakeClickEnabled && !nativeOk) {
+            fakeClickPosition_ = position;
+            fakeClickExpireTick_ = now + 350;
+        }
+        if (fakeCursorEnabled) {
+            TrackFakeCursorClick(position, now);
+        }
+        lastTick = now;
+
+        if (kFakeClickDropFpsDebugEnabled) {
+            char detail[192] = {};
+            _snprintf_s(
+                detail,
+                sizeof(detail),
+                _TRUNCATE,
+                "type=%s native=%d pos=(%.1f,%.1f,%.1f)",
+                typeName,
+                fakeClickEnabled && nativeOk ? 1 : 0,
+                position.x,
+                position.y,
+                position.z);
+            RecordDropFpsDebug(
+                fakeClickPerfStats_,
+                kFakeClickDropFpsDebugPath,
+                "FakeClick",
+                nativeOk ? "native-show-click" : "fallback-draw",
+                DropFpsMsSince(perfStart),
+                detail,
+                0.25);
+        }
+    }
+
+    void TrackFakeCursorClick(const Vector3& position, int now) {
+        const bool enabled = Bool(drawingMenu_, "ShowFakeClick", false) &&
+            Bool(drawingMenu_, "ShowFakeCursor", false);
+        if (!enabled) {
+            fakeCursorScreenValid_ = false;
+            return;
+        }
+
+        LARGE_INTEGER perfStart = {};
+        if (kFakeCursorDropFpsDebugEnabled) {
+            perfStart = DropFpsNow();
+        }
+        if (!position.IsValid() || position.IsZero()) {
+            if (kFakeCursorDropFpsDebugEnabled) {
+                RecordDropFpsDebug(
+                    fakeCursorPerfStats_,
+                    kFakeCursorDropFpsDebugPath,
+                    "FakeCursor",
+                    "track-invalid-click",
+                    DropFpsMsSince(perfStart),
+                    "click-invalid",
+                    0.20);
+            }
+            return;
+        }
+
+        fakeCursorTargetPosition_ = position;
+        fakeCursorVisibleUntilTick_ = now + 350;
+        fakeCursorScreenValid_ = false;
+        if (kFakeCursorDropFpsDebugEnabled) {
+            RecordDropFpsDebug(
+                fakeCursorPerfStats_,
+                kFakeCursorDropFpsDebugPath,
+                "FakeCursor",
+                "track-click",
+                DropFpsMsSince(perfStart),
+                "fake-click-position",
+                0.20);
+        }
+    }
+
+    bool EnsureFakeCursorTexture() {
+        if (fakeCursorTexture_.Texture) {
+            return true;
+        }
+        const int now = Tick();
+        if (fakeCursorTextureLoadTried_ && now - fakeCursorTextureLastTryTick_ < 1000) {
+            return false;
+        }
+
+        fakeCursorTextureLoadTried_ = true;
+        fakeCursorTextureLastTryTick_ = now;
+        LARGE_INTEGER perfStart = {};
+        if (kFakeCursorDropFpsDebugEnabled) {
+            perfStart = DropFpsNow();
+        }
+        fakeCursorTexturePath_ = ResolveHandCursorPath();
+        const bool ok =
+            !fakeCursorTexturePath_.empty() &&
+            UI::Icons::LoadTextureFromFile(fakeCursorTexturePath_.c_str(), fakeCursorTexture_);
+
+        if (kFakeCursorDropFpsDebugEnabled) {
+            char detail[384] = {};
+            _snprintf_s(
+                detail,
+                sizeof(detail),
+                _TRUNCATE,
+                "ok=%d size=%dx%d path=%s",
+                ok ? 1 : 0,
+                fakeCursorTexture_.Width,
+                fakeCursorTexture_.Height,
+                fakeCursorTexturePath_.c_str());
+            RecordDropFpsDebug(
+                fakeCursorPerfStats_,
+                kFakeCursorDropFpsDebugPath,
+                "FakeCursor",
+                "texture-load",
+                DropFpsMsSince(perfStart),
+                detail,
+                0.20);
+        }
+        return ok;
+    }
+
+    void DrawFakeCursor() {
+        const bool enabled = Bool(drawingMenu_, "ShowFakeClick", false) &&
+            Bool(drawingMenu_, "ShowFakeCursor", false);
+        if (!enabled ||
+            fakeCursorVisibleUntilTick_ <= Tick() ||
+            !fakeCursorTargetPosition_.IsValid() ||
+            fakeCursorTargetPosition_.IsZero()) {
+            fakeCursorScreenValid_ = false;
+            return;
+        }
+
+        LARGE_INTEGER perfStart = {};
+        if (kFakeCursorDropFpsDebugEnabled) {
+            perfStart = DropFpsNow();
+        }
+        Vec2 targetScreen = {};
+        if (!Drawing::WorldToScreen(fakeCursorTargetPosition_, targetScreen) ||
+            !Drawing::OnScreen(targetScreen)) {
+            fakeCursorScreenValid_ = false;
+            if (kFakeCursorDropFpsDebugEnabled) {
+                RecordDropFpsDebug(
+                    fakeCursorPerfStats_,
+                    kFakeCursorDropFpsDebugPath,
+                    "FakeCursor",
+                    "project-offscreen",
+                    DropFpsMsSince(perfStart),
+                    "world-to-screen-failed",
+                    0.20);
+            }
+            return;
+        }
+
+        fakeCursorScreenPosition_ = targetScreen;
+        fakeCursorScreenValid_ = true;
+
+        auto* draw = Drawing::GetDrawList(true);
+        if (!draw) {
+            if (kFakeCursorDropFpsDebugEnabled) {
+                RecordDropFpsDebug(
+                    fakeCursorPerfStats_,
+                    kFakeCursorDropFpsDebugPath,
+                    "FakeCursor",
+                    "missing-draw-list",
+                    DropFpsMsSince(perfStart),
+                    "draw-list-null",
+                    0.20);
+            }
+            return;
+        }
+
+        const bool textureReady = EnsureFakeCursorTexture();
+        if (!textureReady) {
+            if (kFakeCursorDropFpsDebugEnabled) {
+                RecordDropFpsDebug(
+                    fakeCursorPerfStats_,
+                    kFakeCursorDropFpsDebugPath,
+                    "FakeCursor",
+                    "texture-missing",
+                    DropFpsMsSince(perfStart),
+                    fakeCursorTexturePath_.c_str(),
+                    0.20);
+            }
+            return;
+        }
+
+        const float scale =
+            std::clamp(static_cast<float>(Slider(drawingMenu_, "FakeCursorSize", 22)), 12.0f, 42.0f) / 22.0f;
+        const Vec2 p = fakeCursorScreenPosition_;
+        const float width = static_cast<float>(fakeCursorTexture_.Width) * scale;
+        const float height = static_cast<float>(fakeCursorTexture_.Height) * scale;
+        draw->AddImage(
+            fakeCursorTexture_.Texture,
+            ImVec2(p.x, p.y),
+            ImVec2(p.x + width, p.y + height),
+            ImVec2(0.0f, 0.0f),
+            ImVec2(1.0f, 1.0f),
+            IM_COL32(255, 255, 255, 245));
+
+        if (kFakeCursorDropFpsDebugEnabled) {
+            char detail[256] = {};
+            _snprintf_s(
+                detail,
+                sizeof(detail),
+                _TRUNCATE,
+                "texture=%d screen=(%.1f,%.1f) target=(%.1f,%.1f)",
+                textureReady ? 1 : 0,
+                p.x,
+                p.y,
+                targetScreen.x,
+                targetScreen.y);
+            RecordDropFpsDebug(
+                fakeCursorPerfStats_,
+                kFakeCursorDropFpsDebugPath,
+                "FakeCursor",
+                "draw",
+                DropFpsMsSince(perfStart),
+                detail,
+                0.20);
+        }
     }
 
     static unsigned AADebugHash(const char* text) {
@@ -1486,6 +2031,7 @@ protected:
     }
 
     virtual void OnGameUpdate(const Events::GameUpdateEventArgs&) {
+        OrbwalkerDropFpsScope perf(this, "OnGameUpdate.pre");
         farmDebugFrameMask_ = ComputeFarmDebugKeyMask();
         if (!initialized_) {
             FarmDebugLogState(FarmDebugSlot::Frame, "update-blocked", {}, "not-initialized", true);
@@ -1509,9 +2055,10 @@ protected:
             FarmDebugLogState(FarmDebugSlot::Frame, "update-blocked", {}, "player-dead", true);
             return;
         }
+        const OrbwalkingMode mode = ActiveMode();
         const bool chatMemory = Game::IsChatOpen();
         const bool chatKeyboard = ::CoreGame::IsChatOpenByKeyboard();
-        if (ShouldBlockForChat()) {
+        if (mode != OrbwalkingMode::Flee && ShouldBlockForChat()) {
             char reason[96] = {};
             _snprintf_s(
                 reason,
@@ -1527,11 +2074,12 @@ protected:
             FarmDebugLogState(FarmDebugSlot::Frame, "update-blocked", {}, "shop-open", true);
             return;
         }
-        if (ActiveMode() == OrbwalkingMode::None) {
+        if (mode == OrbwalkingMode::None) {
             FarmDebugLogState(FarmDebugSlot::Frame, "update-blocked", {}, "active-mode-none", false);
             return;
         }
 
+        perf.Finish();
         AttackableUnit target = GetThrottledTarget();
         FarmDebugLogState(
             FarmDebugSlot::Frame,
@@ -1549,18 +2097,41 @@ protected:
     // direct cause of the FPS drop. The game logic only needs a fresh target roughly
     // every kTargetSelectionIntervalMs; Attack()/Move() are still re-issued every frame
     // below, only the expensive *selection* step is throttled here.
-    static constexpr int kTargetSelectionIntervalMs = 15;
+    static constexpr int kTargetSelectionIntervalMs = 50;
 
     AttackableUnit GetThrottledTarget() {
+        OrbwalkerDropFpsScope perf(this, "GetThrottledTarget");
         const int now = Tick();
-        const bool expired = (now - lastTargetSelectTick_) >= kTargetSelectionIntervalMs;
+        const OrbwalkingMode mode = ActiveMode();
+        const bool modeChanged = cachedOrbwalkTargetMode_ != mode;
+        if (modeChanged) {
+            cachedOrbwalkTarget_ = {};
+            lastTargetSelectTick_ = 0;
+            cachedOrbwalkTargetMode_ = mode;
+        }
+
+        const float attackDelayMs = std::max(350.0f, GetAttackDelay() * 1000.0f);
+        const bool nearAttackReady =
+            lastAutoAttackTick_ <= 0 ||
+            static_cast<float>(now + 120) >= static_cast<float>(lastAutoAttackTick_) + attackDelayMs;
+        if (!nearAttackReady && !CanAttack()) {
+            return cachedOrbwalkTarget_;
+        }
+
+        const bool firstSelection = lastTargetSelectTick_ <= 0;
+        const bool expired = firstSelection || (now - lastTargetSelectTick_) >= kTargetSelectionIntervalMs;
         const bool staleTarget = cachedOrbwalkTarget_.IsValid() &&
             !OrbwalkingDetail::IsValidAttackTarget(
                 cachedOrbwalkTarget_, GetAutoAttackRange(cachedOrbwalkTarget_));
 
-        if (expired || staleTarget || !cachedOrbwalkTarget_.IsValid()) {
+        if (staleTarget) {
+            cachedOrbwalkTarget_ = {};
+        }
+
+        if (expired) {
             cachedOrbwalkTarget_ = GetTarget();
             lastTargetSelectTick_ = now;
+            cachedOrbwalkTargetMode_ = mode;
         }
         return cachedOrbwalkTarget_;
     }
@@ -1575,23 +2146,86 @@ protected:
             return;
         }
 
+        OrbwalkerDropFpsScope drawCorePerf(this, "OnDraw.core");
+        const Vector3 playerPosition = player.Position();
         if (Bool(drawingMenu_, "DrawAttackRange", true)) {
-            Drawing::DrawCircle(player.Position(), GetAutoAttackRange(AttackableUnit()), 0xAAFFFFFFu, 1.5f);
+            float drawRange = Utils::AutoAttack::GetRealAutoAttackRange(player);
+            if (!IsSaneDrawRange(drawRange)) {
+                drawRange = player.AttackRange() + std::max(0.0f, player.BoundingRadius());
+            }
+            if (playerPosition.IsValid() && !playerPosition.IsZero() && IsSaneDrawRange(drawRange)) {
+                Drawing::DrawCircle(playerPosition, drawRange, 0xAA66FF66u, 2.0f, 64);
+            }
         }
 
         if (Bool(drawingMenu_, "DrawHoldPosition", false) &&
-            orbwalkerPosition_.IsValid() && !orbwalkerPosition_.IsZero()) {
-            Drawing::DrawCircle(orbwalkerPosition_, 80.0f, 0xAA66CCFFu, 1.5f);
+            playerPosition.IsValid() && !playerPosition.IsZero()) {
+            const float holdRadius =
+                player.BoundingRadius() + static_cast<float>(Slider(orbwalkerMenu_, "ExtraHold", 50));
+            if (IsSaneDrawRange(holdRadius)) {
+                Drawing::DrawCircle(playerPosition, holdRadius, 0xB0A050FFu, 1.5f, 64);
+            }
+        }
+        drawCorePerf.Finish();
+
+        if (Bool(drawingMenu_, "ShowFakeClick", false) &&
+            fakeClickExpireTick_ > Tick() &&
+            fakeClickPosition_.IsValid() &&
+            !fakeClickPosition_.IsZero()) {
+            Drawing::DrawCircle(fakeClickPosition_, 65.0f, 0xAA66CCFFu, 1.5f, 48);
+            Drawing::DrawCircle(fakeClickPosition_, 14.0f, 0xCCFFFFFFu, 1.25f, 32);
         }
 
+        DrawFakeCursor();
+
         if (Bool(drawingMenu_, "DrawKillableMinion", false)) {
-            const float range = GetAutoAttackRange(AttackableUnit());
-            for (const auto& minion : GameObjects::EnemyMinions()) {
-                if (!OrbwalkingDetail::IsValidAttackTarget(minion, range)) {
+            OrbwalkerDropFpsScope killablePerf(this, "OnDraw.killable");
+            const int now = Tick();
+            if (now - killableDrawCacheTick_ >= 220) {
+                killableDrawCacheTick_ = now;
+                killableDrawCache_.clear();
+                const float range = GetAutoAttackRange(AttackableUnit());
+                const float rangeSqr = range * range;
+                const float quickDamageGate =
+                    std::max(120.0f, player.TotalAttackDamage() * 2.0f + 40.0f);
+
+                auto scanMinion = [&](const AIMinionClient& minion) {
+                    if (!minion.IsValid() || minion.IsDead() ||
+                        !minion.IsTargetable() || minion.IsInvulnerable()) {
+                        return;
+                    }
+                    const Vector3 minionPosition = minion.Position();
+                    if (!minionPosition.IsValid() || minionPosition.IsZero() ||
+                        playerPosition.DistanceSqr2D(minionPosition) > rangeSqr ||
+                        minion.Health() > quickDamageGate) {
+                        return;
+                    }
+                    if (minion.Health() <= GetAutoAttackDamage(minion)) {
+                        killableDrawCache_.push_back({ AttackableUnit(minion.Handle()), 25.0f });
+                    }
+                };
+
+                const auto& laneMinions = GameObjects::EnemyLaneMinions();
+                if (!laneMinions.empty()) {
+                    for (const auto& minion : laneMinions) {
+                        scanMinion(minion);
+                    }
+                } else {
+                    for (const auto& minion : GameObjects::EnemyMinions()) {
+                        if (OrbwalkingDetail::IsLaneMinion(minion)) {
+                            scanMinion(minion);
+                        }
+                    }
+                }
+            }
+            for (const auto& circle : killableDrawCache_) {
+                if (!circle.Target.IsValid() || circle.Target.IsDead()) {
                     continue;
                 }
-                if (minion.Health() <= GetAutoAttackDamage(minion)) {
-                    Drawing::DrawCircle(minion.Position(), minion.BoundingRadius() + 25.0f, 0xAA33FF66u, 1.25f);
+                const Vector3 position = circle.Target.Position();
+                const float radius = circle.Target.BoundingRadius() + circle.RadiusPadding;
+                if (position.IsValid() && !position.IsZero() && radius > 0.0f) {
+                    Drawing::DrawCircle(position, radius, 0xAA33FF66u, 1.25f, 32);
                 }
             }
         }
@@ -2065,6 +2699,7 @@ protected:
 
         farmMenu_ = rootMenu_->AddSubMenu(new Menu("Farm", "Farm"));
         farmMenu_->Add(new MenuSlider("FarmDelay", "Farm Delay", 30, 0, 200));
+        farmMenu_->Add(new MenuSlider("FastFarmDelay", "Fast Farm Delay", 220, 0, 1000));
         farmMenu_->Add(new MenuBool("ShouldWait", "Should Wait", true));
         farmMenu_->Add(new MenuList("TurretFarm", "Turret Farm", { "Enabled", "Off" }, 0));
         farmMenu_->Add(new MenuSlider("TurretFramMaxLevel", "Turret Farm Max Level", 13, 1, 18));
@@ -2072,7 +2707,7 @@ protected:
         advancedMenu_ = rootMenu_->AddSubMenu(new Menu("Advanced", "Advanced"));
         advancedMenu_->Add(new MenuBool("CalcItemDamage", "Calc Item Damage", false));
         advancedMenu_->Add(new MenuBool("YasuoWallCheck", "Yasuo Wall Check", true));
-        advancedMenu_->Add(new MenuBool("MissileCheck", "Missile Check", true));
+        advancedMenu_->Add(new MenuBool("MissileCheck", "Missile Check", false));
 
         const auto player = GameObjects::Player();
         const std::string championName = player.IsValid() ? player.CharacterName() : "Player";
@@ -2084,12 +2719,15 @@ protected:
         drawingMenu_->Add(new MenuBool("DrawHoldPosition", "Draw Hold Position", false));
         drawingMenu_->Add(new MenuBool("DrawKillableMinion", "Draw Killable Minion", false));
         drawingMenu_->Add(new MenuBool("ShowFakeClick", "Show Fake Click", false));
+        drawingMenu_->Add(new MenuBool("ShowFakeCursor", "Show Fake Cursor", false));
+        drawingMenu_->Add(new MenuSlider("FakeCursorSize", "Fake Cursor Size", 22, 12, 42));
 
         keyMenu_ = rootMenu_->AddSubMenu(new Menu("Keys", "Keys"));
         keyMenu_->Add(new MenuKeyBind("Combo", "Combo", VK_SPACE, KeyBindType::Hold));
         keyMenu_->Add(new MenuKeyBind("ComboWithMove", "Combo Without Move", 'N', KeyBindType::Hold));
         keyMenu_->Add(new MenuKeyBind("Harass", "Harass", 'C', KeyBindType::Hold));
         keyMenu_->Add(new MenuKeyBind("LaneClear", "LaneClear", 'V', KeyBindType::Hold));
+        keyMenu_->Add(new MenuKeyBind("FastLaneClear", "Fast LaneClear", VK_LBUTTON, KeyBindType::Press));
         keyMenu_->Add(new MenuKeyBind("LastHit", "LastHit", 'X', KeyBindType::Hold));
         keyMenu_->Add(new MenuKeyBind("Flee", "Flee", 'Z', KeyBindType::Hold));
     }
@@ -2136,6 +2774,16 @@ protected:
             return (::GetAsyncKeyState(key->Key) & 0x8000) != 0;
         }
         return false;
+    }
+
+    bool IsFastLaneClear() const {
+        return ActiveMode() == OrbwalkingMode::LaneClear &&
+               (KeyActive("FastLaneClear") ||
+                ((::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0));
+    }
+
+    static bool IsSaneDrawRange(float value) {
+        return std::isfinite(value) && value > 0.0f && value < 5000.0f;
     }
 
     static bool Bool(const Menu* menu, const char* name, bool fallback) {
@@ -2677,9 +3325,13 @@ protected:
     int attackPauseTick_ = 0;
     int movePauseTick_ = 0;
     int allPauseTick_ = 0;
-    int lastFakeClickTick_ = 0;
+    int lastFakeMoveClickTick_ = 0;
+    int lastFakeAttackClickTick_ = 0;
+    int fakeClickExpireTick_ = 0;
+    int fakeCursorVisibleUntilTick_ = 0;
     int lastTargetSelectTick_ = 0;
     AttackableUnit cachedOrbwalkTarget_ = {};
+    OrbwalkingMode cachedOrbwalkTargetMode_ = OrbwalkingMode::None;
 
     bool attackEnabled_ = true;
     bool moveEnabled_ = true;
@@ -2701,12 +3353,24 @@ protected:
     bool gangplankInGame_ = false;
     bool tahmKenchInGame_ = false;
 
+    DropFpsDebugStats fakeClickPerfStats_ = {};
+    DropFpsDebugStats fakeCursorPerfStats_ = {};
+    DropFpsDebugStats orbwalkerPerfStats_ = {};
+
     struct SettAttackInfo {
         bool IsPassive = true;
         int AttackTime = 0;
     } settInfo_ = {};
 
     Vector3 lastMoveOrderPosition_ = {};
+    Vector3 fakeClickPosition_ = {};
+    Vector3 fakeCursorTargetPosition_ = {};
+    Vec2 fakeCursorScreenPosition_ = {};
+    bool fakeCursorScreenValid_ = false;
+    UI::Icons::LoadedTexture fakeCursorTexture_ = {};
+    bool fakeCursorTextureLoadTried_ = false;
+    int fakeCursorTextureLastTryTick_ = 0;
+    std::string fakeCursorTexturePath_;
     std::string supportModeName_;
     std::mt19937 random_{ static_cast<std::uint32_t>(Variables::TickCount()) };
 
@@ -2728,6 +3392,8 @@ protected:
     mutable unsigned aaDebugLastMoveBlockReasonHash_ = 0;
     mutable std::vector<FarmMissileAttack> farmMissileAttacks_ = {};
     mutable int farmMissileVersion_ = 0;
+    mutable int killableDrawCacheTick_ = 0;
+    mutable std::vector<KillableDrawCircle> killableDrawCache_ = {};
 
     static constexpr int kBuffPolymorph = 10;
     static constexpr int kBuffFear = 22;

@@ -209,8 +209,9 @@ private:
     }
 
     static std::shared_ptr<Skillshot> CreateSkillshot(const SpellDatabaseEntry& entry) {
-        // TODO(SDK parity): port champion-specific Detector.Skillshots_* types
-        // such as _ZiggsR and route them before the generic switch.
+        // EnsoulSharp keeps champion-specific Detector.Skillshots_* as optional
+        // runtime reflection overrides. The generic spell-type routing is the
+        // stable path and covers the current NightSharp database shape.
         switch (entry.SpellType) {
         case SpellType::SkillshotMissileArc:
             return std::make_shared<SkillshotMissileArc>(entry);

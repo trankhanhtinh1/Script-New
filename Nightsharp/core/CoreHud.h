@@ -9,6 +9,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 
 namespace CoreHud {
 
@@ -146,6 +147,13 @@ inline uintptr_t Input() {
     const uintptr_t hud = HudInstance();
     return Globals::IsValidPtr(hud)
         ? Globals::Read<uintptr_t>(hud + Offset::HudRuntime::Input)
+        : 0;
+}
+
+inline uintptr_t CursorTargetLogic() {
+    const uintptr_t hud = HudInstance();
+    return Globals::IsValidPtr(hud)
+        ? Globals::Read<uintptr_t>(hud + Offset::HudRuntime::CursorTargetLogic)
         : 0;
 }
 
@@ -459,11 +467,39 @@ inline bool PingStat(uintptr_t /*target*/, PingStatType /*type*/) {
     return false;
 }
 
-inline bool ShowClick(ClickType /*type*/, const Vec3& /*position*/) {
-    detail::LogOnce(
-        "showclick-native-missing",
-        "[CoreHud] HudCursorTargetLogic.UpdateGroundAttackMode offset is not verified; Hud.ShowClick is disabled.");
-    return false;
+inline bool ShowClick(ClickType type, const Vec3& position) {
+    static_assert(std::is_trivially_copyable_v<Vec3>);
+
+    const int index = static_cast<int>(type);
+    if (index < 0 || index >= 5 || !position.IsValid()) {
+        return false;
+    }
+
+    const uintptr_t cursor = CursorTargetLogic();
+    if (!Globals::IsValidPtr(cursor) ||
+        !Globals::Write<Vec3>(cursor + Offset::HudCursorTargetLogicLayout::ClickPosition, position)) {
+        return false;
+    }
+
+    const auto& ctx = CoreRuntime::GetContext();
+    const uintptr_t fn = ctx.moduleBase
+        ? (ctx.moduleBase + Offset::HudCursorTargetLogicRuntime::ShowClickEffect)
+        : 0;
+    if (!Globals::IsExecutablePtr(fn)) {
+        detail::LogOnce(
+            "showclick-native-missing",
+            "[CoreHud] HudCursorTargetLogic click effect function is not executable; Hud.ShowClick is disabled.");
+        return false;
+    }
+
+    using ShowClickEffectFn = void(__fastcall*)(uintptr_t, std::uint8_t);
+    __try {
+        reinterpret_cast<ShowClickEffectFn>(fn)(cursor, static_cast<std::uint8_t>(index));
+        return true;
+    }
+    __except (1) {
+        return false;
+    }
 }
 
 inline HudSnapshot Snapshot() {

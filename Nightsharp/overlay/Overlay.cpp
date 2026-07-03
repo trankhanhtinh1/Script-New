@@ -13,6 +13,7 @@
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 #include "../SDK/Lifecycle.h"
+#include "../SDK/UI/Icons.h"
 
 #include <d3d11.h>
 #include <dcomp.h>
@@ -645,6 +646,7 @@ void Overlay::Run() {
 
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
+    SDK::UI::Icons::SetDevice(g_pd3dDevice, g_pd3dContext);
 
     if (WaitForGameReady()) {
         InterlockedExchange(&g_bMenuVisible, 1);

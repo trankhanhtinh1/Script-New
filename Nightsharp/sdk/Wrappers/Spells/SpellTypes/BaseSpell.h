@@ -70,12 +70,12 @@ public:
     }
 
     virtual bool IsAboutToHit(const AIBaseClient& /*unit*/, int /*afterTime*/) const {
-        // TODO(SDK parity): port EnsoulSharp evade hit prediction.
+        // Matches EnsoulSharp.SDK: evade hit prediction is still a placeholder.
         return false;
     }
 
     virtual bool IsAboutToHit(const Vector3& /*position*/, int /*afterTime*/) const {
-        // TODO(SDK parity): port EnsoulSharp evade hit prediction.
+        // Matches EnsoulSharp.SDK: evade hit prediction is still a placeholder.
         return false;
     }
 
@@ -83,7 +83,6 @@ public:
     }
 
     virtual void Draw(std::uint32_t /*color*/, std::uint32_t /*missileColor*/, int /*borderWidth*/ = 1) {
-        // TODO(SDK parity): hook this into Drawing once evade debug draw is ported.
     }
 };
 

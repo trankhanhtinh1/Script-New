@@ -21,9 +21,9 @@ public:
             : AIBaseClient();
         StartTime = static_cast<float>(Variables::TickCount());
 
-        // TODO(SDK parity): Core ProcessSpellEventArgs currently exposes cast
-        // delay but not EnsoulSharp's TotalTime. Use CastDelay as the closest
-        // available duration until TotalTime is decoded from SpellCastInfo.
+        // NightSharp currently exposes CastDelay for this event. Keep the
+        // public timing in TickCount milliseconds, normalizing second-based
+        // delays from the core decoder when needed.
         const float durationMs = args.CastDelay > 0.0f && args.CastDelay < 60.0f
             ? args.CastDelay * 1000.0f
             : args.CastDelay;

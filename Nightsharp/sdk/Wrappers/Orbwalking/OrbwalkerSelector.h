@@ -157,6 +157,14 @@ public:
             }
         }
 
+        FarmDebugBreadcrumb("before-structure-fallback", minions.size());
+        AttackableUnit structure = GetStructureTarget();
+        FarmDebugBreadcrumb("after-structure-fallback", minions.size(), structure);
+        if (structure.IsValid()) {
+            FarmDebugLogTargetDecision("return:structure-fallback", structure, minions.size(), waitForFarm, true);
+            return structure;
+        }
+
         FarmDebugLogTargetDecision("return:none", {}, minions.size(), waitForFarm, true);
         return {};
     }
@@ -541,25 +549,43 @@ protected:
     }
 
     AttackableUnit GetSpecialMinion() const {
-        if (!Bool(attackableMenu_, "SpecialMinions", true)) {
-            return {};
-        }
-
         std::vector<AIMinionClient> candidates;
-        for (const auto& minion : GameObjects::EnemySpecialMinions()) {
-            if (OrbwalkingDetail::IsValidAttackTarget(minion, GetAutoAttackRange(minion))) {
-                candidates.push_back(minion);
+        if (Bool(attackableMenu_, "SpecialMinions", true)) {
+            for (const auto& minion : GameObjects::EnemySpecialMinions()) {
+                if (OrbwalkingDetail::IsValidAttackTarget(minion, GetAutoAttackRange(minion))) {
+                    candidates.push_back(minion);
+                }
             }
-        }
-        for (const auto& pet : GameObjects::EnemyPets()) {
-            if (OrbwalkingDetail::IsValidAttackTarget(pet, GetAutoAttackRange(pet))) {
-                candidates.push_back(pet);
+            for (const auto& pet : GameObjects::EnemyPets()) {
+                if (OrbwalkingDetail::IsValidAttackTarget(pet, GetAutoAttackRange(pet))) {
+                    candidates.push_back(pet);
+                }
             }
         }
         std::stable_sort(candidates.begin(), candidates.end(), [](const AIMinionClient& a, const AIMinionClient& b) {
             return a.MaxHealth() > b.MaxHealth();
         });
-        return candidates.empty() ? AttackableUnit() : AttackableUnit(candidates.front().Handle());
+        if (!candidates.empty()) {
+            return AttackableUnit(candidates.front().Handle());
+        }
+
+        if (Bool(attackableMenu_, "Wards", true)) {
+            for (const auto& ward : GameObjects::EnemyWards()) {
+                if (OrbwalkingDetail::IsValidAttackTarget(ward, GetAutoAttackRange(ward))) {
+                    return AttackableUnit(ward.Handle());
+                }
+            }
+        }
+
+        if (Bool(attackableMenu_, "JunglePlant", false)) {
+            for (const auto& plant : GameObjects::JunglePlants()) {
+                if (OrbwalkingDetail::IsValidAttackTarget(plant, GetAutoAttackRange(plant))) {
+                    return AttackableUnit(plant.Handle());
+                }
+            }
+        }
+
+        return {};
     }
 
     AttackableUnit GetJungleTarget() const {
@@ -589,7 +615,7 @@ protected:
     AttackableUnit GetTurretFarmTarget(const std::vector<AIMinionClient>& minions) {
         const auto player = GameObjects::Player();
         if (!player.IsValid() ||
-            player.Level() > Slider(farmMenu_, "TurretFramMaxLevel", 13)) {
+            player.Level() >= Slider(farmMenu_, "TurretFramMaxLevel", 13)) {
             return {};
         }
 
@@ -669,12 +695,13 @@ protected:
     }
 
     AttackableUnit GetLaneClearTarget(const std::vector<AIMinionClient>& minions) {
+        const int farmDelay = Slider(farmMenu_, "FarmDelay", 30);
         if (laneClearMinion_.IsValid() &&
             OrbwalkingDetail::IsValidAttackTarget(laneClearMinion_, GetAutoAttackRange(laneClearMinion_))) {
             const float prediction = HealthPrediction::GetPrediction(
                 laneClearMinion_,
                 static_cast<int>(GetAttackDelay() * 2000.0f),
-                0,
+                farmDelay,
                 HealthPredictionType::Simulated);
             const float damage = GetAutoAttackDamage(laneClearMinion_);
             if (laneClearMinion_.MaxHealth() <= 10.0f ||
@@ -705,7 +732,7 @@ protected:
             const float prediction = HealthPrediction::GetPrediction(
                 minion,
                 static_cast<int>(GetAttackDelay() * 2000.0f),
-                0,
+                farmDelay,
                 HealthPredictionType::Simulated);
             const float damage = GetAutoAttackDamage(minion);
             if (minion.MaxHealth() <= 10.0f ||
@@ -744,13 +771,16 @@ protected:
     bool ShouldWait(const std::vector<AIMinionClient>& minions) {
         const int now = Tick();
         const int missileVersion = FarmMissileVersion();
+        const bool fastLaneClear = IsFastLaneClear();
         if (now - cachedShouldWaitTick_ < 80 &&
-            cachedShouldWaitMissileVersion_ == missileVersion) {
+            cachedShouldWaitMissileVersion_ == missileVersion &&
+            cachedShouldWaitFastLaneClear_ == fastLaneClear) {
             return cachedShouldWait_;
         }
 
         cachedShouldWait_ = ComputeShouldWait(minions);
         cachedShouldWaitMissileVersion_ = missileVersion;
+        cachedShouldWaitFastLaneClear_ = fastLaneClear;
         cachedShouldWaitTick_ = now;
         return cachedShouldWait_;
     }
@@ -771,7 +801,11 @@ protected:
         }
 
         const int farmDelay = Slider(farmMenu_, "FarmDelay", 30);
-        const float time = GetAttackDelay() * 1000.0f * 2.0f;
+        const int fastDelay = Slider(farmMenu_, "FastFarmDelay", 220);
+        const bool fastLaneClear = IsFastLaneClear();
+        const float time = fastLaneClear
+            ? GetAttackDelay() * 1000.0f + static_cast<float>(fastDelay)
+            : GetAttackDelay() * 1000.0f * 2.0f;
         int inspected = 0;
         std::string bestName;
         float bestPrediction = FLT_MAX;
@@ -1015,7 +1049,7 @@ protected:
     bool ShouldWaitForTurretFarm(const AIMinionClient& minion) const {
         const auto player = GameObjects::Player();
         if (!player.IsValid() ||
-            player.Level() > Slider(farmMenu_, "TurretFramMaxLevel", 13) ||
+            player.Level() >= Slider(farmMenu_, "TurretFramMaxLevel", 13) ||
             ListIndex(farmMenu_, "TurretFarm", 0) == 1) {
             return false;
         }
@@ -1065,6 +1099,7 @@ protected:
     }
 
     bool cachedShouldWait_ = false;
+    bool cachedShouldWaitFastLaneClear_ = false;
     int cachedShouldWaitTick_ = 0;
     int cachedShouldWaitMissileVersion_ = -1;
 };

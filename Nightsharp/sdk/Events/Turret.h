@@ -1,6 +1,12 @@
 #pragma once
 
 #include "Events.h"
+#include "../GameObjects/GameObjects.h"
+#include "../GameObjects/ObjectManager.h"
+#include "../../Core/CoreControl.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace SDK::Events::Turret {
 
@@ -52,6 +58,31 @@ namespace detail {
         entry.NetworkId = networkId;
         return &entry;
     }
+
+    inline float ResolveMissileSpeed(const ::Core::Events::ProcessSpellEventArgs& args) {
+        if (std::isfinite(args.MissileSpeed) && args.MissileSpeed > 0.0f) {
+            return args.MissileSpeed;
+        }
+        return 1200.0f;
+    }
+
+    inline void SeedFromGameObjects() {
+        for (const auto& turret : SDK::GameObjects::Turrets()) {
+            if (!turret.IsValid()) {
+                continue;
+            }
+
+            const uint32_t key = static_cast<uint32_t>(turret.NetworkId());
+            auto* entry = Find(key, true);
+            if (!entry) {
+                continue;
+            }
+
+            entry->Turret = turret.Address();
+            entry->NetworkId = key;
+            entry->IsWindingUp = turret.Spellbook().IsWindingUp();
+        }
+    }
 } // namespace detail
 
 inline bool AddOnTurretAttack(TurretHandler handler) {
@@ -98,33 +129,44 @@ namespace SDK::Events {
 
 namespace detail {
     inline void EventTurret(const ProcessSpellEventArgs& args) {
+        if (args.Sender.Type != ::Core::Objects::ObjectType::AITurretClient ||
+            !args.IsAutoAttack ||
+            args.TargetNetworkId == 0 ||
+            args.TargetNetworkId == 0xFFFFFFFFu) {
+            return;
+        }
+
         const uint32_t key = Turret::detail::KeyFor(args.Sender);
         auto* turret = Turret::detail::Find(key, true);
         if (!turret) {
             return;
         }
 
-        // TODO(EnsoulSharp parity): only fire for real turret basic attacks and
-        // fill attack delay/windup from spell data. Waiting on unit type checks,
-        // spell basic-attack classification, attack cast delay, and attack delay.
+        const AITurretClient turretObject(args.Sender.Ptr);
+        const AttackableUnit target =
+            ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+                static_cast<int>(args.TargetNetworkId));
+
         turret->Turret = args.Sender.Ptr;
         turret->NetworkId = key;
         turret->TargetNetworkId = args.TargetNetworkId;
         turret->AttackStart = Turret::detail::TickCount();
-        turret->AttackDelay = 0.0f;
-        turret->AttackEnd = 0;
-        turret->IsWindingUp = true;
+        turret->AttackDelay = CoreControl::GetAttackWindupMs(args.Sender.Ptr);
+        if (target.IsValid()) {
+            const float missileSpeed = Turret::detail::ResolveMissileSpeed(args);
+            turret->AttackDelay +=
+                turretObject.Distance(target) / missileSpeed * 1000.0f;
+        }
+        turret->AttackEnd = static_cast<int>(
+            turret->AttackStart + std::max(0.0f, turret->AttackDelay));
+        turret->IsWindingUp = turretObject.Spellbook().IsWindingUp();
         turret->Raw = args;
 
-        if (args.TargetNetworkId != 0 && args.TargetNetworkId != 0xFFFFFFFFu) {
-            Turret::detail::TurretHandlers.Fire(*turret);
-        }
+        Turret::detail::TurretHandlers.Fire(*turret);
     }
 
     inline void EventTurretConstruct() {
-        // TODO(EnsoulSharp parity): EnsoulSharp initializes this from OnLoad by
-        // enumerating GameObjects.Turrets. Waiting on ObjectManager::Turrets and
-        // AITurretClient wrappers; entries are lazily created from raw OnDoCast.
+        Turret::detail::SeedFromGameObjects();
     }
 } // namespace detail
 } // namespace SDK::Events

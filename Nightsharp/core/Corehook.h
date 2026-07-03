@@ -21,7 +21,7 @@
 #include <intrin.h>
 
 #include "offset.h"
-#include "Core/PackmanHook.h"
+#include "PackmanHook.h"
 
 #ifndef NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL
 #define NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL 0

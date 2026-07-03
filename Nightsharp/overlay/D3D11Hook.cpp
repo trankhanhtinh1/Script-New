@@ -17,6 +17,7 @@
 #include "../SDK/Lifecycle.h"
 #include "../SDK/Core/Game.h"
 #include "../SDK/Events/Events.h"
+#include "../SDK/UI/Icons.h"
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/Drawing.h"
 
@@ -503,6 +504,7 @@ static void InitImGui(IDXGISwapChain* swapChain) {
     ImGui_ImplWin32_Init(g_gameHwnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
     ImGui_ImplDX11_CreateDeviceObjects();
+    SDK::UI::Icons::SetDevice(g_pd3dDevice, g_pd3dContext);
     InterlockedExchange(&g_imguiBackendReady, 1);
 
     NightSharpDebug::Logf("[D3D11Hook] ImGui initialized with game device");

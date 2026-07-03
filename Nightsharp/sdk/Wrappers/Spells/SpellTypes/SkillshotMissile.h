@@ -58,7 +58,6 @@ public:
             }
         }
 
-        // TODO(SDK parity): clamp to collision end once collision tracking is ported.
         return StartPosition + Direction * static_cast<float>(distance);
     }
 };

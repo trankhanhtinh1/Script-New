@@ -3,6 +3,7 @@
 #include "Database/SpellDatabase.h"
 
 #include "../../Core/Game.h"
+#include "../../Core/NavMesh.h"
 #include "../../Core/Objects.h"
 #include "../../Core/Variables.h"
 #include "../../Enumerations/CastStates.h"
@@ -11,6 +12,7 @@
 #include "../../Enumerations/DamageType.h"
 #include "../../Enumerations/HitChance.h"
 #include "../../Enumerations/SkillshotType.h"
+#include "../../Events/Events.h"
 #include "../../Extensions/Extensions.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../Utils/Minion.h"
@@ -160,6 +162,10 @@ public:
 
     float WidthSqr() const {
         return Width * Width;
+    }
+
+    ~Spell() {
+        UnregisterChargedSpell(this);
     }
 
     Vector3 SourcePosition() const {
@@ -515,10 +521,7 @@ public:
         ChargeDuration = static_cast<int>(deltaT * 1000.0f);
         chargedCastedT_ = 0;
 
-        // TODO(SDK parity): EventList is function-pointer based, so per-spell
-        // member subscriptions for OnDoCast/OnUpdateChargeableSpell need a
-        // lightweight instance registry before charged-spell suppression can
-        // match EnsoulSharp exactly.
+        RegisterChargedSpell(this);
         return *this;
     }
 
@@ -659,10 +662,76 @@ public:
 
 private:
     static void ShootChargedSpell(SpellSlot slot, Vector3 position, bool releaseCast = true) {
-        // TODO(SDK parity): set position.y via NavMesh.GetHeightForPosition
-        // after the NavMesh wrapper exposes the exact C# API.
+        position.y = NavMesh::GetHeightForPosition(position.x, position.z);
         auto spellbook = GameObjects::Player().Spellbook();
         spellbook.UpdateChargedSpell(slot, position, releaseCast, false);
+        spellbook.CastSpell(slot, position, false);
+    }
+
+    static std::vector<Spell*>& ChargedSpellRegistry() {
+        static std::vector<Spell*> registry;
+        return registry;
+    }
+
+    static void RegisterChargedSpell(Spell* spell) {
+        if (!spell) {
+            return;
+        }
+
+        auto& registry = ChargedSpellRegistry();
+        if (std::find(registry.begin(), registry.end(), spell) == registry.end()) {
+            registry.push_back(spell);
+        }
+
+        Events::AddOnDoCast(&OnDoCastStatic);
+        Events::AddOnProcessCastSpell(&OnProcessCastSpellStatic);
+    }
+
+    static void UnregisterChargedSpell(Spell* spell) {
+        auto& registry = ChargedSpellRegistry();
+        registry.erase(std::remove(registry.begin(), registry.end(), spell), registry.end());
+        if (registry.empty()) {
+            Events::RemoveOnProcessCastSpell(&OnProcessCastSpellStatic);
+            Events::RemoveOnDoCast(&OnDoCastStatic);
+        }
+    }
+
+    static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args) {
+        for (Spell* spell : ChargedSpellRegistry()) {
+            if (spell) {
+                spell->OnDoCast(args);
+            }
+        }
+    }
+
+    static void OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args) {
+        for (Spell* spell : ChargedSpellRegistry()) {
+            if (spell) {
+                spell->OnProcessCastSpell(args);
+            }
+        }
+    }
+
+    void OnDoCast(const Events::ProcessSpellEventArgs& args) {
+        const auto player = GameObjects::Player();
+        if (!player.IsValid() ||
+            args.Sender.NetworkId != player.NetworkId() ||
+            ChargedSpellName.empty() ||
+            ChargedSpellName != args.SpellName) {
+            return;
+        }
+
+        chargedCastedT_ = Variables::TickCount();
+    }
+
+    void OnProcessCastSpell(const Events::CastSpellEventArgs& args) {
+        if (args.Slot != static_cast<int>(Slot) ||
+            Variables::TickCount() - chargedReqSentT_ <= 500 ||
+            !IsCharging()) {
+            return;
+        }
+
+        Cast(args.EndPosition);
     }
 
     static Vector2 Rotate2D(const Vector2& value, float angle) {

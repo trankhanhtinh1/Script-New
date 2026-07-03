@@ -76,8 +76,10 @@ namespace detail {
             return;
         }
 
-        // TODO(EnsoulSharp parity): EnsoulSharp only fires for AIHeroClient.
-        // Waiting on SDK object type checks and hero wrappers.
+        if (args.Sender.Type != ::Core::Objects::ObjectType::AIHeroClient) {
+            return;
+        }
+
         const bool wasStealthed = (args.OldValue & Stealth::detail::IsStealthedMask) != 0;
         const bool isStealthed = (args.NewValue & Stealth::detail::IsStealthedMask) != 0;
         if (wasStealthed == isStealthed) {

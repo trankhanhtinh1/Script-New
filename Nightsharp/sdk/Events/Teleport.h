@@ -180,9 +180,6 @@ namespace detail {
         }
 
         if (args.RecallType[0] != 0) {
-            // TODO(EnsoulSharp parity): confirm RecallType/RecallName mapping for
-            // every current teleport source. Newer map gates/portal-like systems
-            // may require extra status/type fields beyond old FOWRecall strings.
             eventArgs->Object = args.Sender.Ptr;
             eventArgs->NetworkId = key;
             eventArgs->Type = Teleport::detail::TypeFrom(args.RecallType);

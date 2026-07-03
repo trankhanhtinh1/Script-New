@@ -137,6 +137,7 @@ namespace DrawingMatrixRuntime {
 namespace HudRuntime {
     constexpr auto Camera = 0x18;
     constexpr auto Input = 0x28;
+    constexpr auto CursorTargetLogic = 0x28;
     constexpr auto UserData = 0x60;
     constexpr auto SpellTargeting = 0x60;
     constexpr auto SpellInfo = 0x68;
@@ -148,6 +149,14 @@ namespace HudRuntime {
     constexpr auto MouseWorldPos = 0x34;
     constexpr auto ViewportW2S = 0x2B0;
 } // namespace HudRuntime
+
+namespace HudCursorTargetLogicRuntime {
+    constexpr auto ShowClickEffect = 0xBC78C0; // sub_BC78C0(this, clickType): CursorMoveTo/CursorMoveToRed effect
+} // namespace HudCursorTargetLogicRuntime
+
+namespace HudCursorTargetLogicLayout {
+    constexpr auto ClickPosition = 0x34; // Native Vector3f, used by sub_BC78C0 as effect origin
+} // namespace HudCursorTargetLogicLayout
 
 namespace HudSpellTargetingLayout {
     // Read-only target picker state verified while manually casting Jax Q.
