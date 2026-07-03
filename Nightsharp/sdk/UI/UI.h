@@ -87,6 +87,63 @@ namespace SDK { namespace UI {
 
     using KeyBindType = ::SDK::KeyBindType;
 
+    inline bool DrawStateToggleButton(const char* id,
+                                      const char* label,
+                                      bool active,
+                                      bool positive,
+                                      const ImVec2& size) {
+        ImVec4 activeBase = positive
+            ? ImVec4(0.18f, 0.55f, 0.28f, 0.98f)
+            : ImVec4(0.65f, 0.22f, 0.24f, 0.98f);
+        ImVec4 activeHover = positive
+            ? ImVec4(0.22f, 0.64f, 0.32f, 1.0f)
+            : ImVec4(0.75f, 0.27f, 0.29f, 1.0f);
+        ImVec4 activePress = positive
+            ? ImVec4(0.15f, 0.48f, 0.24f, 1.0f)
+            : ImVec4(0.58f, 0.18f, 0.20f, 1.0f);
+        ImVec4 inactiveBase = ImVec4(0.14f, 0.16f, 0.24f, 0.95f);
+        ImVec4 inactiveHover = ImVec4(0.20f, 0.24f, 0.34f, 0.98f);
+        ImVec4 inactivePress = ImVec4(0.24f, 0.28f, 0.40f, 1.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, active ? activeBase : inactiveBase);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? activeHover : inactiveHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePress : inactivePress);
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        bool clicked = ImGui::Button(label, size);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+        return clicked;
+    }
+
+    inline bool DrawOnOffEditor(const char* label, bool& value, const char* idSuffix = nullptr) {
+        bool changed = false;
+        ImGui::PushID(idSuffix ? idSuffix : label);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label ? label : "");
+        ImGui::SameLine();
+
+        const float totalWidth = 86.0f;
+        const float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - totalWidth;
+        if (targetX > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetX);
+        }
+
+        if (DrawStateToggleButton("##on", "On", value, true, ImVec2(40.0f, 0.0f)) && !value) {
+            value = true;
+            changed = true;
+        }
+        ImGui::SameLine(0.0f, 6.0f);
+        if (DrawStateToggleButton("##off", "Off", !value, false, ImVec2(40.0f, 0.0f)) && value) {
+            value = false;
+            changed = true;
+        }
+
+        ImGui::PopID();
+        return changed;
+    }
+
     // ---------- Tiny POD vector (no STL) ----------
     template <typename T>
     class TinyVec {
@@ -452,9 +509,7 @@ namespace SDK { namespace UI {
         void DrawImGui() override {
             ImGui::PushID(this);
             bool v = Value;
-            // EnsoulSharp displays `DisplayName` followed by a checkbox-like toggle.
-            // A simple ImGui::Checkbox is the closest 1:1 we can do.
-            if (ImGui::Checkbox(DisplayName.c_str(), &v)) Set(v);
+            if (DrawOnOffEditor(DisplayName.c_str(), v, Name.c_str())) Set(v);
             DrawTooltipIfHovered();
             ImGui::PopID();
         }
@@ -509,9 +564,7 @@ namespace SDK { namespace UI {
             ImGui::PushID(this);
             int v = Value;
             ImGui::SetNextItemWidth(-FLT_MIN);
-            char fmt[64];
-            ::wsprintfA(fmt, "%s: %%d", DisplayName.c_str());
-            if (ImGui::SliderInt("##sl", &v, MinValue, MaxValue, fmt)) Set(v);
+            if (ImGui::SliderInt(DisplayName.c_str(), &v, MinValue, MaxValue)) Set(v);
             Interacting = ImGui::IsItemActive();
             DrawTooltipIfHovered();
             ImGui::PopID();
@@ -558,9 +611,7 @@ namespace SDK { namespace UI {
             ImGui::PushID(this);
             float v = Value;
             ImGui::SetNextItemWidth(-FLT_MIN);
-            char fmt[80];
-            ::wsprintfA(fmt, "%s: %%.2f", DisplayName.c_str());
-            if (ImGui::SliderFloat("##sf", &v, MinValue, MaxValue, fmt)) Set(v);
+            if (ImGui::SliderFloat(DisplayName.c_str(), &v, MinValue, MaxValue)) Set(v);
             Interacting = ImGui::IsItemActive();
             DrawTooltipIfHovered();
             ImGui::PopID();
@@ -756,17 +807,45 @@ namespace SDK { namespace UI {
 
         void DrawImGui() override {
             ImGui::PushID(this);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            char label[160];
-            ::wsprintfA(label, "%s##cmb", DisplayName.c_str());
-            if (ImGui::BeginCombo(label, SelectedValue())) {
-                for (int i = 0; i < Options.size(); ++i) {
-                    bool sel = (Index == i);
-                    if (ImGui::Selectable(Options[i].c_str(), sel)) Set(i);
-                    if (sel) ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(DisplayName.c_str());
+            ImGui::SameLine();
+
+            if (Options.empty()) {
+                ImGui::TextDisabled("-");
+                DrawTooltipIfHovered();
+                ImGui::PopID();
+                return;
             }
+
+            if (Index < 0) {
+                Index = 0;
+            }
+            if (Index >= Options.size()) {
+                Index = Options.size() - 1;
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+
+            const float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 212.0f;
+            if (rightStart > ImGui::GetCursorPosX()) {
+                ImGui::SetCursorPosX(rightStart);
+            }
+
+            if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) {
+                Set((Index - 1 + Options.size()) % Options.size());
+            }
+            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::Button(SelectedValue(), ImVec2(160.0f, 0.0f));
+            ImGui::SameLine(0.0f, 6.0f);
+            if (ImGui::ArrowButton("##next", ImGuiDir_Right)) {
+                Set((Index + 1) % Options.size());
+            }
+
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor();
             DrawTooltipIfHovered();
             ImGui::PopID();
         }

@@ -28,7 +28,7 @@ public:
     explicit TargetSelector(Menu* parentMenu) {
         Instance_() = this;
         parentMenu_ = parentMenu;
-        internalMenu_ = new Menu("targetselector", "TargetSelector");
+        internalMenu_ = new Menu("targetselector", "Target Selector");
         parentMenu_->Add(internalMenu_);
 
         selected_ = new TargetSelectorSelected(internalMenu_);
