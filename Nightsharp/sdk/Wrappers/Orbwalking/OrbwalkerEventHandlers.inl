@@ -28,12 +28,14 @@ inline void OrbwalkerBase::OnStopCastStatic(const Events::StopCastEventArgs& arg
 }
 
 inline void OrbwalkerBase::OnGameUpdate() {
-    if (ActiveMode() == OrbwalkingMode::None) {
+    context_.activeMode = ActiveMode();
+    if (context_.activeMode == OrbwalkingMode::None) {
         return;
     }
 
+    const Vector3 position = context_.orbwalkerPosition.IsZero() ? Game::CursorPos() : context_.orbwalkerPosition;
     const AttackableUnit target = GetTarget();
-    Orbwalk(target, context_.orbwalkerPosition.IsZero() ? Game::CursorPos() : context_.orbwalkerPosition);
+    Orbwalk(target, position);
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
@@ -44,7 +46,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     const int now = Tick();
     const bool hadPendingAttack = context_.pendingAttack;
     const int attackStartTick = hadPendingAttack
-        ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
+        ? std::max(context_.pendingAttackTick + static_cast<int>(OneWayPingMs()), now)
         : now;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
@@ -75,8 +77,12 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     }
 
     const int now = Tick();
+    SnapshotAttackTimings(GameObjects::Player());
+    const int estimatedAttackStartTick = now - static_cast<int>(context_.attackWindupMs);
     const int attackStartTick = context_.pendingAttack
-        ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
+        ? std::max(
+            context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
+            estimatedAttackStartTick)
         : 0;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
@@ -92,9 +98,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
 
     if (attackStartTick > 0) {
         context_.lastAutoAttackTick = attackStartTick;
-        SnapshotAttackTimings(GameObjects::Player());
     } else if (context_.lastAutoAttackTick <= 0 || now - context_.lastAutoAttackTick > 300) {
-        SnapshotAttackTimings(GameObjects::Player());
         context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
     }
 }
@@ -125,6 +129,10 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
         return;
     }
 
+    const int stoppedAttackTick = stoppedPending
+        ? context_.pendingAttackTick
+        : context_.lastAutoAttackTick;
+
     context_.pendingAttack = false;
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
@@ -138,7 +146,7 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
         return;
     }
 
-    context_.lastAutoAttackTick = 0;
+    context_.lastAutoAttackTick = stoppedAttackTick > 0 ? stoppedAttackTick : now;
     context_.lastAttackConfirmTick = 0;
     context_.hasConfirmedAttack = false;
     context_.attackCastComplete = false;

@@ -7,6 +7,7 @@ namespace SDK {
 struct OrbwalkerRuntimeContext {
     AttackableUnit forceTarget = {};
     AttackableUnit lastTarget = {};
+    AttackableUnit laneClearMinion = {};
     Vector3 orbwalkerPosition = {};
 
     int lastAutoAttackTick = 0;
@@ -27,6 +28,7 @@ struct OrbwalkerRuntimeContext {
     bool hasConfirmedAttack = false;
     bool attackCastComplete = false;
     bool disposed = false;
+    OrbwalkingMode activeMode = OrbwalkingMode::None;
 };
 
 } // namespace SDK

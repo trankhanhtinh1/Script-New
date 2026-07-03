@@ -28,27 +28,37 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         return {};
     }
 
+    const OrbwalkingMode mode = context_.activeMode != OrbwalkingMode::None
+        ? context_.activeMode
+        : ActiveMode();
+    if (mode != OrbwalkingMode::Combo) {
+        return {};
+    }
+
     if (context_.forceTarget.IsValid() &&
         OrbwalkingDetail::IsValidAttackTarget(context_.forceTarget, GetAutoAttackRange(context_.forceTarget))) {
         return context_.forceTarget;
     }
 
-    AIHeroClient best;
+    AttackableUnit best;
     float bestDistance = FLT_MAX;
     for (const auto& hero : GameObjects::EnemyHeroes()) {
         const AttackableUnit target(hero.Handle());
-        const float range = GetAutoAttackRange(target);
-        if (!OrbwalkingDetail::IsValidAttackTarget(target, range)) {
+        if (!OrbwalkingDetail::IsValidAttackTarget(target, GetAutoAttackRange(target))) {
             continue;
         }
 
-        const float distance = player.Distance(hero);
+        const float distance = player.Distance(target);
         if (distance < bestDistance) {
-            best = hero;
+            best = target;
             bestDistance = distance;
         }
     }
-    return best.IsValid() ? AttackableUnit(best.Handle()) : AttackableUnit();
+    return best;
+}
+
+inline bool OrbwalkerBase::ShouldWait() {
+    return false;
 }
 
 inline float OrbwalkerBase::GetAutoAttackRange(const AttackableUnit& target) const {

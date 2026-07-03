@@ -69,6 +69,7 @@ public:
     virtual bool Attack(const AttackableUnit& target) = 0;
     virtual void Move(const Vector3& position) = 0;
     virtual void Orbwalk(const AttackableUnit& target, const Vector3& position = {}) = 0;
+    virtual bool ShouldWait() = 0;
     virtual void ResetAutoAttackTimer() = 0;
     virtual void Dispose() = 0;
 };

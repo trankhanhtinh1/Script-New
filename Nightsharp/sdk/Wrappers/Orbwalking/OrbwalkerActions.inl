@@ -23,11 +23,10 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     }
 
     SnapshotAttackTimings(player);
-    const float pingLead = context_.hasConfirmedAttack ? OneWayPingMs() : 0.0f;
     const float readyAt = static_cast<float>(context_.lastAutoAttackTick) +
                           context_.attackDelayMs +
                           AttackSafetyMs();
-    return static_cast<float>(now) + pingLead + extraWindup >= readyAt;
+    return static_cast<float>(now) + extraWindup >= readyAt;
 }
 
 inline bool OrbwalkerBase::CanMove() { return CanMove(0.0f, false); }
@@ -52,9 +51,16 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     }
 
     SnapshotAttackTimings(player);
+    if (!pending && context_.attackCastComplete) {
+        return true;
+    }
+
     const float oneWayPing = OneWayPingMs();
-    const float pingLead = pending ? 0.0f : (context_.hasConfirmedAttack ? oneWayPing : 0.0f);
-    const float moveSafety = pending ? (kMoveSafetyMs + oneWayPing) : MoveSafetyMs();
+    const float cappedPing = std::min(oneWayPing, 15.0f);
+    const float pingLead = pending
+        ? 0.0f
+        : (context_.hasConfirmedAttack ? std::min(oneWayPing, kMoveSafetyMs) : 0.0f);
+    const float moveSafety = pending ? (kMoveSafetyMs + cappedPing) : MoveSafetyMs();
     const float readyAt = static_cast<float>(attackTick) +
                           context_.attackWindupMs +
                           moveSafety;
@@ -67,6 +73,9 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
     if (context_.pendingAttack) {
+        return false;
+    }
+    if (!CanAttack()) {
         return false;
     }
 
@@ -82,9 +91,12 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     }
 
     context_.lastTarget = target;
+    context_.lastAutoAttackTick = now;
+    context_.lastAttackConfirmTick = 0;
     context_.pendingAttack = true;
     context_.pendingAttackTick = now;
     context_.pendingAttackTargetNetworkId = target.NetworkId();
+    context_.hasConfirmedAttack = false;
     context_.attackCastComplete = false;
     SnapshotAttackTimings(GameObjects::Player());
 
@@ -122,7 +134,10 @@ inline void OrbwalkerBase::Move(const Vector3& position) {
 }
 
 inline void OrbwalkerBase::Orbwalk(const AttackableUnit& target, const Vector3& position) {
-    if (ActiveMode() == OrbwalkingMode::None) {
+    const OrbwalkingMode mode = context_.activeMode != OrbwalkingMode::None
+        ? context_.activeMode
+        : ActiveMode();
+    if (mode == OrbwalkingMode::None) {
         return;
     }
 
@@ -130,7 +145,14 @@ inline void OrbwalkerBase::Orbwalk(const AttackableUnit& target, const Vector3& 
         return;
     }
 
-    if (CanMove()) {
+    const bool farmMode =
+        mode == OrbwalkingMode::LaneClear ||
+        mode == OrbwalkingMode::Harass ||
+        mode == OrbwalkingMode::LastHit;
+    const float moveLead = farmMode
+        ? std::clamp(context_.attackWindupMs * 0.35f, 60.0f, 140.0f)
+        : 0.0f;
+    if (CanMove(moveLead, false)) {
         Move(position.IsZero() ? context_.orbwalkerPosition : position);
     }
 }
@@ -141,6 +163,7 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
     }
 
     const int now = Tick();
+    const int pendingTick = context_.pendingAttackTick;
     if (now - context_.pendingAttackTick < PendingAttackTimeoutMs()) {
         return;
     }
@@ -149,11 +172,19 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
     context_.attackCastComplete = false;
+    if (context_.lastAutoAttackTick <= 0) {
+        context_.lastAutoAttackTick = pendingTick > 0 ? pendingTick : now;
+        context_.hasConfirmedAttack = false;
+    }
     context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs);
 }
 
 inline int OrbwalkerBase::PendingAttackTimeoutMs() const {
-    return kPendingTimeoutBaseMs + static_cast<int>(OneWayPingMs());
+    const int oneWayPing = static_cast<int>(OneWayPingMs());
+    const int eventGrace = kPendingEventGraceMs + oneWayPing;
+    const int windupGate = static_cast<int>(
+        context_.attackWindupMs + kMoveSafetyMs + static_cast<float>(oneWayPing));
+    return std::max(eventGrace, windupGate + kAttackRetryDelayMs);
 }
 
 inline float OrbwalkerBase::OneWayPingMs() const {
@@ -161,11 +192,15 @@ inline float OrbwalkerBase::OneWayPingMs() const {
 }
 
 inline float OrbwalkerBase::AttackSafetyMs() const {
-    return context_.hasConfirmedAttack ? kAttackSafetyMs : kAttackSafetyMs + OneWayPingMs();
+    const float highAttackSpeedSafety =
+        context_.attackDelayMs <= 450.0f ? kHighAttackSpeedSafetyMs : 0.0f;
+    const float confirmationSafety =
+        context_.hasConfirmedAttack ? 0.0f : std::min(OneWayPingMs(), 45.0f);
+    return kAttackSafetyMs + highAttackSpeedSafety + confirmationSafety;
 }
 
 inline float OrbwalkerBase::MoveSafetyMs() const {
-    return context_.hasConfirmedAttack ? kMoveSafetyMs : kMoveSafetyMs + OneWayPingMs();
+    return context_.hasConfirmedAttack ? kMoveSafetyMs : kMoveSafetyMs + std::min(OneWayPingMs(), 15.0f);
 }
 
 inline void OrbwalkerBase::SnapshotAttackTimings(const AIHeroClient& player) {
@@ -186,7 +221,11 @@ inline float OrbwalkerBase::GetAttackDelayMs(const AIHeroClient& player) const {
 inline float OrbwalkerBase::GetAttackWindupMs(const AIHeroClient& player) const {
     const float delay = GetAttackDelayMs(player);
     const float windup = CoreControl::GetAttackWindup(player.Address()) * 1000.0f;
-    return std::clamp(windup, 80.0f, delay);
+    const float maxWindup = std::clamp(delay * 0.62f, 120.0f, 360.0f);
+    if (windup <= 0.0f || windup >= delay - 25.0f) {
+        return maxWindup;
+    }
+    return std::clamp(windup, 80.0f, maxWindup);
 }
 
 } // namespace SDK

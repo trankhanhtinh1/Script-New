@@ -16,19 +16,22 @@ public:
     }
 
     OrbwalkingMode ActiveMode() const {
-        const bool active = orbwalkKey_
-            ? orbwalkKey_->Active
-            : ((::GetAsyncKeyState(VK_SPACE) & 0x8000) != 0);
-        if (!active) {
-            return OrbwalkingMode::None;
-        }
         if (Game::IsChatOpen() || Game::IsShopOpen()) {
             return OrbwalkingMode::None;
         }
-        return OrbwalkingMode::Combo;
+        return IsKeyActive(comboKey_, VK_SPACE)
+            ? OrbwalkingMode::Combo
+            : OrbwalkingMode::None;
     }
 
 private:
+    static bool IsKeyActive(const MenuKeyBind* key, int fallbackKey) {
+        const int vk = key ? key->Key : fallbackKey;
+        return (key && key->Active) ||
+               ((::GetAsyncKeyState(vk) & 0x8000) != 0) ||
+               ((::GetAsyncKeyState(fallbackKey) & 0x8000) != 0);
+    }
+
     void Build() {
         if (!parentMenu_) {
             return;
@@ -44,17 +47,13 @@ private:
             return;
         }
 
-        orbwalkKey_ = keysMenu_->Add(new MenuKeyBind(
-            "orbwalk",
-            "Orbwalk",
-            VK_SPACE,
-            KeyBindType::Press));
+        comboKey_ = keysMenu_->Add(new MenuKeyBind("combo", "Combo", VK_SPACE, KeyBindType::Press));
     }
 
     Menu* parentMenu_ = nullptr;
     Menu* menu_ = nullptr;
     Menu* keysMenu_ = nullptr;
-    MenuKeyBind* orbwalkKey_ = nullptr;
+    MenuKeyBind* comboKey_ = nullptr;
 };
 
 } // namespace SDK

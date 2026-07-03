@@ -8,11 +8,17 @@
 #include "../../Core/Game.h"
 #include "../../Events/Events.h"
 #include "../../GameObjects/GameObjects.h"
+#include "../../Math/HealthPrediction.h"
+#include "../../Utils/AutoAttack.h"
+#include "../Damages/Damage.h"
 #include "../../../Core/CoreControl.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cfloat>
+#include <cctype>
 #include <string>
+#include <vector>
 
 namespace SDK {
 
@@ -48,6 +54,7 @@ public:
     bool Attack(const AttackableUnit& target) override;
     void Move(const Vector3& position) override;
     void Orbwalk(const AttackableUnit& target, const Vector3& position = {}) override;
+    bool ShouldWait() override;
     void ResetAutoAttackTimer() override;
     void Dispose() override;
 
@@ -59,13 +66,14 @@ protected:
     float GetAutoAttackRange(const AttackableUnit& target) const;
 
 private:
-    static constexpr int kMoveDelayMs = 45;
+    static constexpr int kMoveDelayMs = 25;
     static constexpr int kAttackRetryDelayMs = 45;
-    static constexpr int kPendingTimeoutBaseMs = 150;
+    static constexpr int kPendingEventGraceMs = 150;
     static constexpr int kDuplicateAttackEventMs = 80;
     static constexpr float kMaxPingLeadMs = 90.0f;
-    static constexpr float kAttackSafetyMs = 5.0f;
-    static constexpr float kMoveSafetyMs = 18.0f;
+    static constexpr float kAttackSafetyMs = 35.0f;
+    static constexpr float kHighAttackSpeedSafetyMs = 30.0f;
+    static constexpr float kMoveSafetyMs = 10.0f;
     static constexpr float kDefaultAttackDelayMs = 625.0f;
     static constexpr float kDefaultAttackWindupMs = 300.0f;
 

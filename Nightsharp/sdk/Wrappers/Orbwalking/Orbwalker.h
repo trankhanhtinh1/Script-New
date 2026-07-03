@@ -215,6 +215,10 @@ public:
         }
     }
 
+    static bool ShouldWait() {
+        return Current() && Current()->ShouldWait();
+    }
+
     static void ResetAutoAttackTimer() {
         if (Current()) {
             Current()->ResetAutoAttackTimer();
