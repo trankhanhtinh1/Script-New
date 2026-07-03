@@ -483,10 +483,22 @@ private:
 
 } // namespace NightSharpPerf
 
+namespace NightSharpPerf {
+
+#ifdef NIGHTSHARP_SDK_PACKAGE_BUILD
+
+inline void ToggleHotkeys() {}
+
+#else
+
 // WndProc-based hotkey handler (declared here after NightSharpPerf types to avoid circular include with Events.h)
+
+} // namespace NightSharpPerf
+
 #include "SDK/Core/Game.h"
 
 namespace NightSharpPerf {
+
 inline void ToggleHotkeysWndProc(SDK::Game::WndEventArgs& args) {
     if (args.Msg == WM_KEYDOWN) {
         const DWORD now = GetTickCount();
@@ -527,4 +539,7 @@ inline void ToggleHotkeys() {
         ToggleHotkeysWndProcInstalled = true;
     }
 }
+
+#endif
+
 } // namespace NightSharpPerf

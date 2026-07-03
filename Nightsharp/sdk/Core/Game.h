@@ -1,12 +1,12 @@
 #pragma once
 
 #include "../../Core/CoreGame.h"
+#include "../../Core/CoreEvents.h"
 #include "../../Core/CoreRuntime.h"
 #include "../../Core/CoreMap.h"
 #include "../../Core/Globals.h"
 #include "../../Core/Vector.h"
 #include "../../DebugLog.h"
-#include "../Events/Events.h"
 #include "../GameObjects/ObjectManager.h"
 #include "Objects.h"
 
@@ -16,6 +16,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+
+namespace SDK::Events {
+using GameUpdateEventArgs = ::Core::Events::GameUpdateEventArgs;
+inline bool AddOnGameUpdate(void(*handler)(const GameUpdateEventArgs&));
+inline bool RemoveOnGameUpdate(void(*handler)(const GameUpdateEventArgs&));
+} // namespace SDK::Events
 
 namespace SDK::Game {
 

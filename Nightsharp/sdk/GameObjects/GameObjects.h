@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ObjectManager.h"
-#include "../Events/Events.h"
+#include "../../Core/CoreEvents.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -14,6 +14,14 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+namespace SDK::Events {
+using ObjectEventArgs = ::Core::Events::ObjectEventArgs;
+inline bool AddOnCreateObject(void(*handler)(const ObjectEventArgs&));
+inline bool RemoveOnCreateObject(void(*handler)(const ObjectEventArgs&));
+inline bool AddOnDeleteObject(void(*handler)(const ObjectEventArgs&));
+inline bool RemoveOnDeleteObject(void(*handler)(const ObjectEventArgs&));
+} // namespace SDK::Events
 
 namespace SDK::GameObjects {
 

@@ -1191,7 +1191,7 @@ inline float GameTime() {
     return detail::GameTime();
 }
 
-inline bool IsLocalPlayer(const Core::Events::ObjectInfo& sender) {
+inline bool IsLocalPlayer(const ::Core::Events::ObjectInfo& sender) {
     if (!sender.IsValid()) {
         return false;
     }
