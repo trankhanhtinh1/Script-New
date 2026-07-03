@@ -48,7 +48,7 @@ private:
             "orbwalk",
             "Orbwalk",
             VK_SPACE,
-            KeyBindType::Hold));
+            KeyBindType::Press));
     }
 
     Menu* parentMenu_ = nullptr;
