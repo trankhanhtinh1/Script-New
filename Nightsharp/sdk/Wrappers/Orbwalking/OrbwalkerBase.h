@@ -859,6 +859,7 @@ public:
         Events::hook.OnMissileCreate -= &OrbwalkerBase::OnMissileCreateStatic;
         Events::hook.OnMissileDelete -= &OrbwalkerBase::OnMissileDeleteStatic;
         Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
+        Drawing::RemoveOnAlwaysDraw(&OrbwalkerBase::OnAlwaysDrawStatic);
         if (fakeCursorTexture_.Texture) {
             UI::Icons::ReleaseTexture(fakeCursorTexture_);
         }
@@ -1462,6 +1463,18 @@ protected:
                 detail,
                 0.20);
         }
+    }
+
+    void DrawFakeVisuals() {
+        if (Bool(drawingMenu_, "ShowFakeClick", false) &&
+            fakeClickExpireTick_ > Tick() &&
+            fakeClickPosition_.IsValid() &&
+            !fakeClickPosition_.IsZero()) {
+            Drawing::DrawCircle(fakeClickPosition_, 65.0f, 0xAA66CCFFu, 1.5f, 48);
+            Drawing::DrawCircle(fakeClickPosition_, 14.0f, 0xCCFFFFFFu, 1.25f, 32);
+        }
+
+        DrawFakeCursor();
     }
 
     static unsigned AADebugHash(const char* text) {
@@ -2168,16 +2181,6 @@ protected:
         }
         drawCorePerf.Finish();
 
-        if (Bool(drawingMenu_, "ShowFakeClick", false) &&
-            fakeClickExpireTick_ > Tick() &&
-            fakeClickPosition_.IsValid() &&
-            !fakeClickPosition_.IsZero()) {
-            Drawing::DrawCircle(fakeClickPosition_, 65.0f, 0xAA66CCFFu, 1.5f, 48);
-            Drawing::DrawCircle(fakeClickPosition_, 14.0f, 0xCCFFFFFFu, 1.25f, 32);
-        }
-
-        DrawFakeCursor();
-
         if (Bool(drawingMenu_, "DrawKillableMinion", false)) {
             OrbwalkerDropFpsScope killablePerf(this, "OnDraw.killable");
             const int now = Tick();
@@ -2200,7 +2203,7 @@ protected:
                         minion.Health() > quickDamageGate) {
                         return;
                     }
-                    if (minion.Health() <= GetAutoAttackDamage(minion)) {
+                    if (IsDrawKillableMinionThreshold(minion)) {
                         killableDrawCache_.push_back({ AttackableUnit(minion.Handle()), 25.0f });
                     }
                 };
@@ -2229,6 +2232,19 @@ protected:
                 }
             }
         }
+    }
+
+    virtual void OnAlwaysDraw() {
+        if (!initialized_ || !drawingMenu_) {
+            return;
+        }
+
+        const auto player = GameObjects::Player();
+        if (!player.IsValid() || player.IsDead()) {
+            return;
+        }
+
+        DrawFakeVisuals();
     }
 
     virtual void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
@@ -2562,7 +2578,7 @@ protected:
         record.SourceIsTurret = sourceIsTurret;
         record.SourceIsMinion = sourceIsMinion;
         record.Damage = sourceIsTurret
-            ? AITurretClient(source.Handle()).GetAutoAttackDamage(target, true)
+            ? Prediction::Health::GetAutoAttackDamage(AITurretClient(source.Handle()), target)
             : source.GetAutoAttackDamage(target, true);
         record.ExpireTick = now + (sourceIsTurret ? 1800 : 1400);
 
@@ -2608,6 +2624,11 @@ protected:
     static void OnDrawStatic() {
         if (OrbwalkingDetail::RuntimeInstance) {
             OrbwalkingDetail::RuntimeInstance->OnDraw();
+        }
+    }
+    static void OnAlwaysDrawStatic() {
+        if (OrbwalkingDetail::RuntimeInstance) {
+            OrbwalkingDetail::RuntimeInstance->OnAlwaysDraw();
         }
     }
     static void OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args) {
@@ -2668,6 +2689,7 @@ protected:
         Events::hook.OnMissileCreate += &OrbwalkerBase::OnMissileCreateStatic;
         Events::hook.OnMissileDelete += &OrbwalkerBase::OnMissileDeleteStatic;
         Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
+        Drawing::AddOnAlwaysDraw(&OrbwalkerBase::OnAlwaysDrawStatic);
     }
 
     void InitializeMenu(Menu* parentMenu) {
@@ -2701,7 +2723,7 @@ protected:
         farmMenu_->Add(new MenuSlider("FarmDelay", "Farm Delay", 30, 0, 200));
         farmMenu_->Add(new MenuSlider("FastFarmDelay", "Fast Farm Delay", 220, 0, 1000));
         farmMenu_->Add(new MenuBool("ShouldWait", "Should Wait", true));
-        farmMenu_->Add(new MenuList("TurretFarm", "Turret Farm", { "Enabled", "Off" }, 0));
+        farmMenu_->Add(new MenuBool("TurretFarm", "Turret Farm", true));
         farmMenu_->Add(new MenuSlider("TurretFramMaxLevel", "Turret Farm Max Level", 13, 1, 18));
 
         advancedMenu_ = rootMenu_->AddSubMenu(new Menu("Advanced", "Advanced"));
@@ -2723,13 +2745,14 @@ protected:
         drawingMenu_->Add(new MenuSlider("FakeCursorSize", "Fake Cursor Size", 22, 12, 42));
 
         keyMenu_ = rootMenu_->AddSubMenu(new Menu("Keys", "Keys"));
-        keyMenu_->Add(new MenuKeyBind("Combo", "Combo", VK_SPACE, KeyBindType::Hold));
-        keyMenu_->Add(new MenuKeyBind("ComboWithMove", "Combo Without Move", 'N', KeyBindType::Hold));
-        keyMenu_->Add(new MenuKeyBind("Harass", "Harass", 'C', KeyBindType::Hold));
-        keyMenu_->Add(new MenuKeyBind("LaneClear", "LaneClear", 'V', KeyBindType::Hold));
-        keyMenu_->Add(new MenuKeyBind("FastLaneClear", "Fast LaneClear", VK_LBUTTON, KeyBindType::Press));
-        keyMenu_->Add(new MenuKeyBind("LastHit", "LastHit", 'X', KeyBindType::Hold));
-        keyMenu_->Add(new MenuKeyBind("Flee", "Flee", 'Z', KeyBindType::Hold));
+        keyMenu_->Add(new MenuKeyBind("Combo", "Combo", Keys::Space, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("ComboWithMove", "Combo Without Move", Keys::N, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("Harass", "Harass", Keys::C, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("LaneClear", "LaneClear", Keys::V, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("FastLaneClear", "Fast LaneClear", Keys::LMB, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("FastLaneClearToggle", "Fast LaneClear Toggle", Keys::CapsLock, KeyBindType::Toggle));
+        keyMenu_->Add(new MenuKeyBind("LastHit", "LastHit", Keys::X, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("Flee", "Flee", Keys::Z, KeyBindType::Press));
     }
 
     void InitializeChampionFlags() {
@@ -2770,7 +2793,7 @@ protected:
         if (key->Active) {
             return true;
         }
-        if (key->Type == KeyBindType::Hold || key->Type == KeyBindType::Press) {
+        if (key->Type == KeyBindType::Press) {
             return (::GetAsyncKeyState(key->Key) & 0x8000) != 0;
         }
         return false;
@@ -2779,6 +2802,7 @@ protected:
     bool IsFastLaneClear() const {
         return ActiveMode() == OrbwalkingMode::LaneClear &&
                (KeyActive("FastLaneClear") ||
+                KeyActive("FastLaneClearToggle") ||
                 ((::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0));
     }
 
@@ -2842,6 +2866,19 @@ protected:
             return 0.0f;
         }
         return Damage::GetAutoAttackDamage(player, AIBaseClient(target.Handle()), true);
+    }
+
+    bool IsDrawKillableMinionThreshold(const AIMinionClient& minion, float damage) const {
+        return minion.IsValid() &&
+               !minion.IsDead() &&
+               minion.IsTargetable() &&
+               !minion.IsInvulnerable() &&
+               damage > 0.0f &&
+               minion.Health() <= damage;
+    }
+
+    bool IsDrawKillableMinionThreshold(const AIMinionClient& minion) const {
+        return IsDrawKillableMinionThreshold(minion, GetAutoAttackDamage(minion));
     }
 
     float GetProjectileSpeed() const {

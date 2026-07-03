@@ -31,8 +31,8 @@ protected:
         m_qKey = settings->Add(new MenuKeyBind(
             "autoChargeQ",
             "Press: auto charge/release Q at selected enemy",
-            'A',
-            SDK::KeyBindType::Hold));
+            SDK::Keys::A,
+            SDK::KeyBindType::Press));
     }
 
     void HandleGameUpdate(const SDK::Events::GameUpdateEventArgs&) override {

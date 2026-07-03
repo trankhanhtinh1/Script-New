@@ -94,24 +94,13 @@ namespace CoreValidation {
         }
 
         __try {
-            const auto primary = Globals::Read<std::uint8_t>(
-                chatView + Offset::ChatViewControllerLayout::PrimaryOpen);
+            const auto inputActive = Globals::Read<std::uint8_t>(
+                chatView + Offset::ChatViewControllerLayout::InputActive);
 
-            std::uint8_t editing = 0;
-            std::uint8_t focused = 0;
-            const auto inputPanel =
-                Globals::Read<uintptr_t>(chatView + Offset::ChatViewControllerLayout::InputPanel);
-            if (Globals::IsValidPtr(inputPanel)) {
-                editing = Globals::Read<std::uint8_t>(
-                    inputPanel + Offset::ChatViewControllerLayout::PanelVisible);
-                focused = Globals::Read<std::uint8_t>(
-                    inputPanel + Offset::ChatViewControllerLayout::PanelFocused);
-            }
-
-            if (primary > 1 || editing > 1 || focused > 1) {
+            if (inputActive > 1) {
                 return false;
             }
-            return primary != 0 || editing != 0 || focused != 0;
+            return inputActive != 0;
         }
         __except (1) {
             return false;

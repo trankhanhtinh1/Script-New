@@ -26,8 +26,8 @@ protected:
         m_qKey = settings->Add(new MenuKeyBind(
             "castQ",
             "Cast Q with SDK Prediction/Collision",
-            'A',
-            SDK::KeyBindType::Hold));
+            SDK::Keys::A,
+            SDK::KeyBindType::Press));
     }
 
     void HandleGameUpdate(const SDK::Events::GameUpdateEventArgs&) override {
