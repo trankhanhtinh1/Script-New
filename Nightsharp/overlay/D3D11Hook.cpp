@@ -1,4 +1,5 @@
 #include "D3D11Hook.h"
+#include "OverlayStatus.h"
 #include "VmtHook.h"
 
 #include "../crt_shim.h"
@@ -573,6 +574,8 @@ static void Render() {
             RenderMenuSafe();
         }
     }
+
+    OverlayStatus::Render(OverlayStatus::Mode::Internal);
 
     ImGui::EndFrame();
     ImGui::Render();

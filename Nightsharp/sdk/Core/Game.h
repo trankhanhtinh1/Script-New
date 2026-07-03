@@ -591,30 +591,18 @@ namespace detail {
         }
 
         __try {
-            const auto primary = Globals::Read<std::uint8_t>(
+            const auto panelOpen = Globals::Read<std::uint8_t>(
                 chatController + Offset::ChatViewControllerLayout::PrimaryOpen);
-            auto editing = std::uint8_t{0};
-            auto focused = std::uint8_t{0};
-            const uintptr_t inputPanel = Globals::Read<uintptr_t>(
-                chatController + Offset::ChatViewControllerLayout::InputPanel);
-            if (Globals::IsValidPtr(inputPanel)) {
-                editing = Globals::Read<std::uint8_t>(
-                    inputPanel + Offset::ChatViewControllerLayout::PanelVisible);
-                focused = Globals::Read<std::uint8_t>(
-                    inputPanel + Offset::ChatViewControllerLayout::PanelFocused);
-            }
+            const auto inputActive = Globals::Read<std::uint8_t>(
+                chatController + Offset::ChatViewControllerLayout::InputActive);
 
-            InputDebug.chatPrimary = primary;
-            InputDebug.chatEditing = editing;
-            InputDebug.chatFocused = focused;
-
-            const bool sane = primary <= 1 && editing <= 1 && focused <= 1;
-            if (!sane) {
+            InputDebug.chatPrimary = panelOpen;
+            InputDebug.chatEditing = inputActive;
+            if (inputActive > 1) {
                 return false;
             }
 
-            InputDebug.chatMemory =
-                primary != 0 || editing != 0 || focused != 0;
+            InputDebug.chatMemory = inputActive != 0;
             return InputDebug.chatMemory;
         }
         __except (1) {

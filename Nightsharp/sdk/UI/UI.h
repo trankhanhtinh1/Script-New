@@ -28,7 +28,7 @@
  *   auto* combo = root->AddSubMenu(new Menu("combo", "Combo"));
  *   combo->Add(new MenuBool("useQ", "Use Q", true));
  *   combo->Add(new MenuKeyBind("flyhack", "Fly Hack",
- *                               'T', SDK::KeyBindType::Toggle))
+ *                               SDK::Keys::T, SDK::KeyBindType::Toggle))
  *        ->AddPermashow();        // append to PermaShow registry
  *   root->Attach();
  *
@@ -621,7 +621,7 @@ namespace SDK { namespace UI {
             if (vkCode != Key) return false;
             const bool firstDown = down && !WasDown;
             WasDown = down;
-            if (Type == KeyBindType::Press || Type == KeyBindType::Hold) {
+            if (Type == KeyBindType::Press) {
                 if (Active != down) SetActive(down);
             } else { // Toggle on key-down only
                 if (firstDown) SetActive(!Active);
@@ -631,7 +631,6 @@ namespace SDK { namespace UI {
 
         static const char* TypeToText(KeyBindType type) {
             if (type == KeyBindType::Toggle) return "Toggle";
-            if (type == KeyBindType::Hold) return "Hold";
             return "Press";
         }
 

@@ -215,6 +215,9 @@
     <ClInclude Include="overlay\Overlay.h">
       <Filter>overlay</Filter>
     </ClInclude>
+    <ClInclude Include="overlay\OverlayStatus.h">
+      <Filter>overlay</Filter>
+    </ClInclude>
     <ClInclude Include="overlay\VmtHook.h">
       <Filter>overlay</Filter>
     </ClInclude>

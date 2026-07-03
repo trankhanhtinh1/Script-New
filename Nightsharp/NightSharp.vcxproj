@@ -159,6 +159,7 @@
     <ClInclude Include="ns_strtod.h" />
     <ClInclude Include="overlay\D3D11Hook.h" />
     <ClInclude Include="overlay\Overlay.h" />
+    <ClInclude Include="overlay\OverlayStatus.h" />
     <ClInclude Include="overlay\VmtHook.h" />
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h" />
     <ClInclude Include="Plugins\Champion\EzrealMissileLifecyclePlugin.h" />

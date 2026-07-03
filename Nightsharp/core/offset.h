@@ -212,16 +212,19 @@ namespace TacticalMapLayout {
 
 // ChatViewController layout (object lives at GameRuntime::ChatViewController).
 // IDA 13337:
+//   - Pattern "48 8B 05 ? ? ? ? 44 0F B6 FA" in sub_B5A730 resolves qword_1EB34E8.
 //   - sub_B3F4A0 stores the constructed ChatViewController in qword_1EB34E8.
-//   - sub_B51C00/sub_B53210 set/clear controller+0x66A when chat opens/closes.
+//   - sub_B51C00/sub_B53210 set/clear controller+0x66A when the chat panel expands/collapses.
 //   - sub_B60090/sub_B61DB0 write the child panel flags at +0xB1/+0xB0.
+// controller+0x5D0 is the narrower input/typing gate used for IsOpenChat blocking.
 // qword_1EA01F0 and dword_1EA0458 are not chat-open state in this dump.
 namespace ChatViewControllerLayout {
     constexpr auto InputPanel  = 0x368;
+    constexpr auto InputActive = 0x5D0;
     constexpr auto Ready       = 0x669;
     constexpr auto PrimaryOpen = 0x66A;
     constexpr auto InputMode   = 0x66B;       // callback flag; do not use alone as open
-    constexpr auto Editing     = PrimaryOpen; // compatibility alias
+    constexpr auto Editing     = InputActive; // compatibility alias
     constexpr auto Focused     = InputMode;   // compatibility alias
 
     constexpr auto PanelVisible = 0xB0;

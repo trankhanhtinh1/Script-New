@@ -29,12 +29,21 @@ namespace ObjectManager = ::SDK::ObjectManager;
 namespace GameObjects = ::SDK::GameObjects;
 namespace Events = ::SDK::Events;
 namespace Extensions = ::SDK::Extensions;
+namespace Prediction = ::SDK::Prediction;
+namespace Collision = ::SDK::Collision;
+namespace Collisions = ::SDK::Collisions;
+namespace HealthPrediction = ::SDK::HealthPrediction;
+namespace Geometry = ::SDK::Geometry;
+namespace Damage = ::SDK::Damage;
+namespace DamageMod = ::SDK::DamageMod;
+namespace Interrupter = ::SDK::Interrupter;
 namespace Signals = ::SDK::Signals;
 namespace Utils = ::SDK::Utils;
 namespace MenuGUI = ::SDK::MenuGUI;
 namespace MenuUI = ::SDK::MenuUI;
 namespace PermaShow = ::SDK::UI::PermaShow;
 namespace Icons = ::SDK::UI::Icons;
+namespace Keys = ::SDK::Keys;
 
 using GameObject = ::SDK::GameObject;
 using AttackableUnit = ::SDK::AttackableUnit;
@@ -136,5 +145,24 @@ using HudSnapshot = ::SDK::Hud::Snapshot;
 using HudSelectedSpellInfo = ::SDK::Hud::SelectedSpellInfo;
 using DragonSRXInfo = ::SDK::Hud::DragonSRXInfo;
 inline DragonSRXInfo DragonSRX() { return ::SDK::Hud::DragonSRX(); }
+
+// Script-friendly function facade. This intentionally mirrors C# plugin code
+// where common SDK helpers can be called without spelling their namespace.
+using namespace ::SDK::Extensions;
+using namespace ::SDK::Game;
+using namespace ::SDK::GameObjects;
+using namespace ::SDK::Drawing;
+using namespace ::SDK::Hud;
+using namespace ::SDK::Map;
+using namespace ::SDK::NavMesh;
+using namespace ::SDK::View;
+using namespace ::SDK::Prediction;
+using namespace ::SDK::Collision;
+using namespace ::SDK::HealthPrediction;
+using namespace ::SDK::Geometry;
+using namespace ::SDK::Damage;
+using namespace ::SDK::DamageMod;
+using namespace ::SDK::Interrupter;
+using namespace ::SDK::MenuGUI;
 
 #endif

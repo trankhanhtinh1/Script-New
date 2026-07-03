@@ -163,25 +163,9 @@ protected:
             return false;
         }
 
-        const std::uint8_t primary = Globals::Read<std::uint8_t>(
-            chatController + Offset::ChatViewControllerLayout::PrimaryOpen);
-        if (primary != 0) {
-            return true;
-        }
-
-        const uintptr_t inputPanel = Globals::Read<uintptr_t>(
-            chatController + Offset::ChatViewControllerLayout::InputPanel);
-        if (!Globals::IsValidPtr(inputPanel)) {
-            return false;
-        }
-
-        const std::uint8_t panelVisible = Globals::Read<std::uint8_t>(
-            inputPanel + Offset::ChatViewControllerLayout::PanelVisible);
-        const std::uint8_t panelFocused = Globals::Read<std::uint8_t>(
-            inputPanel + Offset::ChatViewControllerLayout::PanelFocused);
-        const std::uint8_t panelPending = Globals::Read<std::uint8_t>(
-            inputPanel + Offset::ChatViewControllerLayout::PanelPending);
-        return panelVisible != 0 || panelFocused != 0 || panelPending != 0;
+        const std::uint8_t inputActive = Globals::Read<std::uint8_t>(
+            chatController + Offset::ChatViewControllerLayout::InputActive);
+        return inputActive == 1;
     }
 
     static bool KeyDown(const MenuKeyBind* keyBind) {

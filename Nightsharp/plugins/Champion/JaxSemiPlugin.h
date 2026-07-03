@@ -22,13 +22,13 @@ protected:
         m_qKey = settings->Add(new MenuKeyBind(
             "castQ",
             "Cast Q at target-selector enemy",
-            'A',
-            SDK::KeyBindType::Hold));
+            SDK::Keys::A,
+            SDK::KeyBindType::Press));
         m_wKey = settings->Add(new MenuKeyBind(
             "castW",
             "Cast self W",
-            'S',
-            SDK::KeyBindType::Hold));
+            SDK::Keys::S,
+            SDK::KeyBindType::Press));
     }
 
     void HandleGameUpdate(const SDK::Events::GameUpdateEventArgs&) override {

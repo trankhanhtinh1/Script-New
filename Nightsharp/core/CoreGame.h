@@ -334,29 +334,18 @@ inline bool IsChatOpen() {
     }
 
     __try {
-        const auto primary =
+        const auto panelOpen =
             Globals::Read<std::uint8_t>(chatView + Offset::ChatViewControllerLayout::PrimaryOpen);
+        const auto inputActive =
+            Globals::Read<std::uint8_t>(chatView + Offset::ChatViewControllerLayout::InputActive);
 
-        std::uint8_t editing = 0;
-        std::uint8_t focused = 0;
-        const auto inputPanel =
-            Globals::Read<uintptr_t>(chatView + Offset::ChatViewControllerLayout::InputPanel);
-        if (Globals::IsValidPtr(inputPanel)) {
-            editing =
-                Globals::Read<std::uint8_t>(inputPanel + Offset::ChatViewControllerLayout::PanelVisible);
-            focused =
-                Globals::Read<std::uint8_t>(inputPanel + Offset::ChatViewControllerLayout::PanelFocused);
-        }
-
-        g_inputDebug.chatPrimary = primary;
-        g_inputDebug.chatEditing = editing;
-        g_inputDebug.chatFocused = focused;
-
-        if (primary > 1 || editing > 1 || focused > 1) {
+        g_inputDebug.chatPrimary = panelOpen;
+        g_inputDebug.chatEditing = inputActive;
+        if (inputActive > 1) {
             return false;
         }
 
-        g_inputDebug.chatMemory = primary != 0 || editing != 0 || focused != 0;
+        g_inputDebug.chatMemory = inputActive != 0;
         return g_inputDebug.chatMemory;
     }
     __except (1) {

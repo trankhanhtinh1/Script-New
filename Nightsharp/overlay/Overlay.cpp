@@ -1,5 +1,6 @@
 #include "Overlay.h"
 
+#include "OverlayStatus.h"
 #include "../crt_shim.h"
 #include "../imgui/imgui.h"
 #include "../imgui/imgui_impl_dx11.h"
@@ -768,6 +769,7 @@ void Overlay::Run() {
             NightSharpPerf::MsSince(perfStart));
 
         NightSharpPerf::RenderOverlay();
+        OverlayStatus::Render(OverlayStatus::Mode::External);
 
         ImGui::EndFrame();
         ImGui::Render();

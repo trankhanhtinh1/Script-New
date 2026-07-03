@@ -399,6 +399,7 @@ namespace detail {
     }
 
     inline HandlerList<void(*)()> DrawHandlers;
+    inline HandlerList<void(*)()> AlwaysDrawHandlers;
     inline HandlerList<void(*)()> EndSceneHandlers;
     inline HandlerList<void(*)()> PreResetHandlers;
     inline HandlerList<void(*)()> PostResetHandlers;
@@ -1078,6 +1079,8 @@ inline Vec2 HpBarScreenPos(const TGameObject& obj) {
 
 inline bool AddOnDraw(DrawHandler handler) { return detail::DrawHandlers.Add(handler); }
 inline bool RemoveOnDraw(DrawHandler handler) { return detail::DrawHandlers.Remove(handler); }
+inline bool AddOnAlwaysDraw(DrawHandler handler) { return detail::AlwaysDrawHandlers.Add(handler); }
+inline bool RemoveOnAlwaysDraw(DrawHandler handler) { return detail::AlwaysDrawHandlers.Remove(handler); }
 inline bool AddOnEndScene(DrawHandler handler) { return detail::EndSceneHandlers.Add(handler); }
 inline bool RemoveOnEndScene(DrawHandler handler) { return detail::EndSceneHandlers.Remove(handler); }
 inline bool AddOnPreReset(DrawHandler handler) { return detail::PreResetHandlers.Add(handler); }
@@ -1089,6 +1092,7 @@ inline void DispatchDraw() {
     if (IsEnabled()) {
         detail::DrawHandlers.Fire();
     }
+    detail::AlwaysDrawHandlers.Fire();
 }
 
 inline void DispatchEndScene() {
@@ -1102,6 +1106,7 @@ inline void DispatchPostReset() { detail::PostResetHandlers.Fire(); }
 
 inline void Reset() {
     detail::DrawHandlers.Clear();
+    detail::AlwaysDrawHandlers.Clear();
     detail::EndSceneHandlers.Clear();
     detail::PreResetHandlers.Clear();
     detail::PostResetHandlers.Clear();
@@ -1116,6 +1121,7 @@ struct DrawEventSlot {
 };
 
 inline DrawEventSlot OnDraw{ &AddOnDraw, &RemoveOnDraw };
+inline DrawEventSlot OnAlwaysDraw{ &AddOnAlwaysDraw, &RemoveOnAlwaysDraw };
 inline DrawEventSlot OnEndScene{ &AddOnEndScene, &RemoveOnEndScene };
 inline DrawEventSlot OnPreReset{ &AddOnPreReset, &RemoveOnPreReset };
 inline DrawEventSlot OnPostReset{ &AddOnPostReset, &RemoveOnPostReset };
