@@ -20,10 +20,10 @@
 namespace NightSharpMenu {
 
     inline bool showMenu = true;
-    inline int activePrimaryIdx = 0;
-    inline int activeSecondaryIdx = 1;
-    inline bool primarySelected = true;
-    inline bool secondarySelected = true;
+    inline int activePrimaryIdx = -1;
+    inline int activeSecondaryIdx = -1;
+    inline bool primarySelected = false;
+    inline bool secondarySelected = false;
     inline int activePluginIdx = -1;
     inline int pluginManagerFilter = 0;
 
@@ -52,16 +52,16 @@ namespace NightSharpMenu {
     // Margin from the screen edges when auto-positioning PermaShow.
     constexpr float PERMASHOW_EDGE_MARGIN = 18.0f;
 
-    inline ImU32 COL_BG = IM_COL32(18, 20, 26, 255);
-    inline ImU32 COL_CONTENT_BG = IM_COL32(14, 16, 22, 255);
-    inline ImU32 COL_HEADER = IM_COL32(24, 26, 36, 255);
-    inline ImU32 COL_ITEM = IM_COL32(28, 30, 42, 255);
-    inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 255);
-    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 255);
+    inline ImU32 COL_BG = IM_COL32(8, 10, 18, 214);
+    inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 128);
+    inline ImU32 COL_HEADER = IM_COL32(16, 18, 28, 236);
+    inline ImU32 COL_ITEM = IM_COL32(18, 20, 30, 118);
+    inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 215);
+    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 232);
     inline ImU32 COL_ACCENT = IM_COL32(120, 235, 120, 255);
     inline ImU32 COL_TEXT = IM_COL32(255, 255, 255, 255);
     inline ImU32 COL_TEXT_DIM = IM_COL32(185, 185, 205, 255);
-    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 255);
+    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 180);
 
     struct SidebarEntry {
         const char* label;
@@ -673,11 +673,6 @@ namespace NightSharpMenu {
              p.Kind == PluginRegistry::PluginKind::External);
     }
 
-    inline const char* GetPluginSecondaryLabel(int pluginIdx, int secondaryIdx) {
-        (void)pluginIdx;
-        return secondaryIdx == 0 ? "Menu" : "?";
-    }
-
     inline SDK::UI::Menu* FindMenuByPluginName(SDK::UI::Menu* menu, const char* internalId, const char* displayName) {
         if (!menu) {
             return nullptr;
@@ -703,7 +698,154 @@ namespace NightSharpMenu {
         return nullptr;
     }
 
-    inline void DrawPluginContentPanel(int pluginIdx) {
+    inline SDK::UI::Menu* FindPluginSdkMenu(int pluginIdx) {
+        if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
+            return nullptr;
+        }
+
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        auto& mm = SDK::UI::MenuManager::Instance();
+        for (int i = 0; i < mm.Menus.size(); ++i) {
+            SDK::UI::Menu* root = mm.Menus[i];
+            if (!root || !p.InternalId) {
+                continue;
+            }
+
+            if (auto* menu = FindMenuByPluginName(root, p.InternalId, p.Name)) {
+                return menu;
+            }
+        }
+
+        return nullptr;
+    }
+
+    inline bool HasRootLeafItems(SDK::UI::Menu* menu) {
+        if (!menu) {
+            return false;
+        }
+
+        for (int i = 0; i < menu->Components.size(); ++i) {
+            auto* component = menu->Components[i];
+            if (component && component->Visible && !component->IsMenu()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline int CountRootSubMenus(SDK::UI::Menu* menu) {
+        if (!menu) {
+            return 0;
+        }
+
+        int count = 0;
+        for (int i = 0; i < menu->Components.size(); ++i) {
+            auto* component = menu->Components[i];
+            if (component && component->Visible && component->IsMenu()) {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    inline int GetPluginSecondaryCount(int pluginIdx) {
+        if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
+            return 0;
+        }
+
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (p.RuntimeMenu) {
+            return 1;
+        }
+
+        SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
+        if (!menu) {
+            return 1;
+        }
+
+        const int subMenus = CountRootSubMenus(menu);
+        const bool hasLeafItems = HasRootLeafItems(menu);
+        if (subMenus <= 0) {
+            return 1;
+        }
+        return subMenus + (hasLeafItems ? 1 : 0);
+    }
+
+    inline SDK::UI::Menu* GetPluginSecondaryMenu(int pluginIdx, int secondaryIdx) {
+        SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
+        if (!root || secondaryIdx < 0) {
+            return nullptr;
+        }
+
+        int seen = 0;
+        for (int i = 0; i < root->Components.size(); ++i) {
+            auto* component = root->Components[i];
+            if (!component || !component->Visible || !component->IsMenu()) {
+                continue;
+            }
+
+            if (seen == secondaryIdx) {
+                return static_cast<SDK::UI::Menu*>(component);
+            }
+            ++seen;
+        }
+
+        return nullptr;
+    }
+
+    inline bool IsPluginLeafSection(int pluginIdx, int secondaryIdx) {
+        SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
+        if (!root || secondaryIdx < 0) {
+            return false;
+        }
+
+        const int subMenus = CountRootSubMenus(root);
+        return HasRootLeafItems(root) && secondaryIdx == subMenus;
+    }
+
+    inline const char* GetPluginSecondaryLabel(int pluginIdx, int secondaryIdx) {
+        if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
+            return "?";
+        }
+
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (p.RuntimeMenu) {
+            return "Menu";
+        }
+
+        if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
+            return section->DisplayName.c_str();
+        }
+
+        if (IsPluginLeafSection(pluginIdx, secondaryIdx)) {
+            SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
+            return CountRootSubMenus(root) > 0 ? "General" : "Menu";
+        }
+
+        return "?";
+    }
+
+    inline void DrawRootLeafItems(SDK::UI::Menu* menu) {
+        if (!menu) {
+            return;
+        }
+
+        bool drewAny = false;
+        for (int i = 0; i < menu->Components.size(); ++i) {
+            auto* component = menu->Components[i];
+            if (!component || !component->Visible || component->IsMenu()) {
+                continue;
+            }
+            component->DrawImGui();
+            drewAny = true;
+        }
+
+        if (!drewAny) {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No items in this section.");
+        }
+    }
+
+    inline void DrawPluginContentPanel(int pluginIdx, int secondaryIdx) {
         if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
             return;
         }
@@ -716,30 +858,28 @@ namespace NightSharpMenu {
 
         if (p.RuntimeMenu) {
             PluginRegistry::DrawPluginMenu(pluginIdx);
-        } else {
-            // Fallback: render any SDK::UI menu that matches this plugin's name.
-            // SDK wrappers live as children of the EnsoulSharp root menu.
-            bool drewAny = false;
-            auto& mm = SDK::UI::MenuManager::Instance();
-            for (int i = 0; i < mm.Menus.size(); ++i) {
-                SDK::UI::Menu* root = mm.Menus[i];
-                if (!root || !p.InternalId) {
-                    continue;
-                }
-
-                if (auto* menu = FindMenuByPluginName(root, p.InternalId, p.Name)) {
-                    menu->DrawImGui();
-                    drewAny = true;
-                    break;
-                }
-            }
-
-            if (!drewAny) {
-                ImGui::Text("%s", p.Name ? p.Name : "Plugin");
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
-            }
+            return;
         }
+
+        SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
+        if (!menu) {
+            ImGui::Text("%s", p.Name ? p.Name : "Plugin");
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
+            return;
+        }
+
+        if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
+            section->DrawChildren();
+            return;
+        }
+
+        if (IsPluginLeafSection(pluginIdx, secondaryIdx) || CountRootSubMenus(menu) <= 0) {
+            DrawRootLeafItems(menu);
+            return;
+        }
+
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No menu section selected.");
     }
 
     inline void Render() {
@@ -754,9 +894,10 @@ namespace NightSharpMenu {
         constexpr int MAX_PRIMARY = 64;
         const char* primaryLabels[MAX_PRIMARY] = {};
         int primaryPluginMap[MAX_PRIMARY] = {};
-        int primaryCount = 1;
+        int primaryCount = 0;
         primaryLabels[0] = "Core";
         primaryPluginMap[0] = -1;
+        primaryCount = 1;
 
         for (int i = 0; i < PluginRegistry::PluginCount && primaryCount < MAX_PRIMARY; ++i) {
             auto& p = PluginRegistry::Plugins[i];
@@ -767,76 +908,260 @@ namespace NightSharpMenu {
             }
         }
 
-        if (activePrimaryIdx < 0 || activePrimaryIdx >= primaryCount) {
-            activePrimaryIdx = 0;
+        if (activePrimaryIdx >= primaryCount) {
+            activePrimaryIdx = -1;
+            activeSecondaryIdx = -1;
+            primarySelected = false;
+            secondarySelected = false;
         }
-        primarySelected = true;
 
-        const int activePluginMap = primaryPluginMap[activePrimaryIdx];
-        const int secCount = activePluginMap < 0 ? CORE_SECONDARY_COUNT : 1;
-        if (activeSecondaryIdx < 0 || activeSecondaryIdx >= secCount) {
-            activeSecondaryIdx = 0;
+        const bool showSecondary = primarySelected && activePrimaryIdx >= 0;
+        const bool showContent = showSecondary && secondarySelected && activeSecondaryIdx >= 0;
+
+        float totalW = PRIMARY_W;
+        if (showSecondary) {
+            totalW += PANEL_GAP + SECONDARY_W;
         }
-        secondarySelected = true;
-        activePluginIdx = activePluginMap;
+        if (showContent) {
+            totalW += PANEL_GAP + CONTENT_W;
+        }
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.07f, 0.08f, 0.10f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.06f, 0.08f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.35f, 0.40f, 0.58f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
+        ImVec2 mouse = ImGui::GetIO().MousePos;
+        const float titleMaxX = menuPosX + totalW;
+        const float titleMaxY = menuPosY + HEADER_H;
+        const bool inTitle =
+            mouse.x >= menuPosX &&
+            mouse.x <= titleMaxX &&
+            mouse.y >= menuPosY &&
+            mouse.y <= titleMaxY;
 
-        ImGui::SetNextWindowSize(ImVec2(800.0f, 540.0f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("NightSharp Menu", &showMenu, ImGuiWindowFlags_NoCollapse)) {
-            ImVec2 winPos = ImGui::GetWindowPos();
-            ImVec2 winSize = ImGui::GetWindowSize();
-            menuPosX = winPos.x;
-            menuPosY = winPos.y;
-            menuBoundsRight = winPos.x + winSize.x;
-            menuBoundsBottom = winPos.y + winSize.y;
+        if (ImGui::IsMouseClicked(0) &&
+            inTitle &&
+            !ImGui::IsAnyItemHovered() &&
+            !ImGui::IsAnyItemActive()) {
+            isDragging = true;
+            dragOffX = mouse.x - menuPosX;
+            dragOffY = mouse.y - menuPosY;
+        }
+        if (!ImGui::IsMouseDown(0)) {
+            isDragging = false;
+        }
+        if (isDragging) {
+            menuPosX = mouse.x - dragOffX;
+            menuPosY = mouse.y - dragOffY;
+        }
 
-            // Left Sidebar (Primary categories / plugins)
-            ImGui::BeginChild("PrimarySidebar", ImVec2(160.0f, 0.0f), true);
-            for (int i = 0; i < primaryCount; ++i) {
-                if (ImGui::Selectable(primaryLabels[i], activePrimaryIdx == i)) {
-                    if (activePrimaryIdx != i) {
-                        activeSecondaryIdx = 0;
-                    }
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        if (!dl) {
+            return;
+        }
+
+        ImVec2 primaryPos(menuPosX, menuPosY);
+        ImVec2 secondaryPos(menuPosX + PRIMARY_W + PANEL_GAP, menuPosY);
+        ImVec2 contentPos(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2.0f, menuPosY);
+
+        int secCount = 0;
+        int activePluginMap = -1;
+        if (showSecondary && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount) {
+            activePluginMap = primaryPluginMap[activePrimaryIdx];
+            secCount = activePluginMap < 0
+                ? CORE_SECONDARY_COUNT
+                : GetPluginSecondaryCount(activePluginMap);
+        }
+
+        const float primaryH = HEADER_H + ITEM_H * static_cast<float>(MaxI(1, primaryCount)) + 4.0f;
+        float secondaryH = showSecondary
+            ? HEADER_H + ITEM_H * static_cast<float>(MaxI(1, secCount)) + 4.0f
+            : 0.0f;
+        float sidebarH = MaxF(primaryH, secondaryH > 0.0f ? secondaryH : primaryH);
+        float contentH = MaxF(sidebarH, MAX_CONTENT_H);
+
+        // Primary sidebar.
+        dl->AddRectFilled(
+            primaryPos,
+            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH),
+            COL_BG,
+            4.0f);
+        dl->AddRectFilled(
+            primaryPos,
+            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H),
+            COL_HEADER,
+            4.0f);
+        dl->AddRect(
+            primaryPos,
+            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH),
+            COL_BORDER,
+            4.0f);
+        dl->AddText(ImVec2(primaryPos.x + 10.0f, primaryPos.y + 8.0f), COL_ACCENT, "NightSharp");
+        dl->AddLine(
+            ImVec2(primaryPos.x, primaryPos.y + HEADER_H),
+            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H),
+            COL_BORDER);
+
+        float y = primaryPos.y + HEADER_H + 2.0f;
+        for (int i = 0; i < primaryCount; ++i) {
+            if (DrawSidebarItem(
+                    dl,
+                    ImVec2(primaryPos.x, y),
+                    PRIMARY_W,
+                    primaryLabels[i],
+                    activePrimaryIdx == i,
+                    true)) {
+                if (activePrimaryIdx != i) {
                     activePrimaryIdx = i;
-                    activePluginIdx = primaryPluginMap[i];
+                    activeSecondaryIdx = -1;
+                    secondarySelected = false;
                 }
+                primarySelected = true;
+                activePluginIdx = primaryPluginMap[i];
             }
-            ImGui::EndChild();
-
-            ImGui::SameLine();
-
-            // Middle Sidebar (Secondary sub-categories)
-            ImGui::BeginChild("SecondarySidebar", ImVec2(160.0f, 0.0f), true);
-            for (int i = 0; i < secCount; ++i) {
-                const char* label = activePluginIdx < 0
-                    ? CORE_SECONDARY[i].label
-                    : GetPluginSecondaryLabel(activePluginIdx, i);
-                if (ImGui::Selectable(label, activeSecondaryIdx == i)) {
-                    activeSecondaryIdx = i;
-                }
-            }
-            ImGui::EndChild();
-
-            ImGui::SameLine();
-
-            // Content Panel
-            ImGui::BeginChild("ContentPanel", ImVec2(0.0f, 0.0f), true);
-            if (activePluginIdx < 0) {
-                DrawCoreContentPanel(activeSecondaryIdx);
-            } else {
-                DrawPluginContentPanel(activePluginIdx);
-            }
-            ImGui::EndChild();
+            y += ITEM_H;
         }
-        ImGui::End();
 
-        ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(3);
+        if (!(primarySelected && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount)) {
+            menuBoundsRight = menuPosX + PRIMARY_W;
+            menuBoundsBottom = menuPosY + primaryH;
+            return;
+        }
+
+        activePluginMap = primaryPluginMap[activePrimaryIdx];
+        activePluginIdx = activePluginMap;
+        secCount = activePluginMap < 0
+            ? CORE_SECONDARY_COUNT
+            : GetPluginSecondaryCount(activePluginMap);
+        if (activeSecondaryIdx >= secCount) {
+            activeSecondaryIdx = -1;
+            secondarySelected = false;
+        }
+
+        secondaryH = HEADER_H + ITEM_H * static_cast<float>(MaxI(1, secCount)) + 4.0f;
+        sidebarH = MaxF(primaryH, secondaryH);
+        contentH = MaxF(sidebarH, MAX_CONTENT_H);
+
+        // Secondary sidebar.
+        dl->AddRectFilled(
+            secondaryPos,
+            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH),
+            COL_BG,
+            4.0f);
+        dl->AddRectFilled(
+            secondaryPos,
+            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H),
+            COL_HEADER,
+            4.0f);
+        dl->AddRect(
+            secondaryPos,
+            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH),
+            COL_BORDER,
+            4.0f);
+
+        const char* headerLabel = primaryLabels[activePrimaryIdx] ? primaryLabels[activePrimaryIdx] : "?";
+        dl->AddText(ImVec2(secondaryPos.x + 10.0f, secondaryPos.y + 8.0f), COL_ACCENT, headerLabel);
+        dl->AddLine(
+            ImVec2(secondaryPos.x, secondaryPos.y + HEADER_H),
+            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H),
+            COL_BORDER);
+
+        y = secondaryPos.y + HEADER_H + 2.0f;
+        for (int i = 0; i < secCount; ++i) {
+            const char* secLabel = activePluginMap < 0
+                ? CORE_SECONDARY[i].label
+                : GetPluginSecondaryLabel(activePluginMap, i);
+            if (!secLabel) {
+                secLabel = "?";
+            }
+
+            if (DrawSidebarItem(
+                    dl,
+                    ImVec2(secondaryPos.x, y),
+                    SECONDARY_W,
+                    secLabel,
+                    activeSecondaryIdx == i,
+                    true)) {
+                activeSecondaryIdx = i;
+                secondarySelected = true;
+            }
+            y += ITEM_H;
+        }
+
+        if (!(secondarySelected && activeSecondaryIdx >= 0)) {
+            menuBoundsRight = menuPosX + PRIMARY_W + PANEL_GAP + SECONDARY_W;
+            menuBoundsBottom = menuPosY + sidebarH;
+            return;
+        }
+
+        // Content panel.
+        dl->AddRectFilled(
+            contentPos,
+            ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH),
+            COL_CONTENT_BG,
+            4.0f);
+        dl->AddRectFilled(
+            contentPos,
+            ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
+            COL_HEADER,
+            4.0f);
+        dl->AddRect(
+            contentPos,
+            ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH),
+            COL_BORDER,
+            4.0f);
+
+        const char* sectionLabel = "?";
+        if (activePluginMap < 0 && activeSecondaryIdx < CORE_SECONDARY_COUNT) {
+            sectionLabel = CORE_SECONDARY[activeSecondaryIdx].label;
+        } else if (activePluginMap >= 0) {
+            sectionLabel = GetPluginSecondaryLabel(activePluginMap, activeSecondaryIdx);
+        }
+
+        dl->AddText(ImVec2(contentPos.x + 10.0f, contentPos.y + 8.0f), COL_ACCENT, sectionLabel);
+        dl->AddLine(
+            ImVec2(contentPos.x, contentPos.y + HEADER_H),
+            ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
+            COL_BORDER);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.08f, 0.13f, 0.22f, 0.72f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.12f, 0.20f, 0.34f, 0.88f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.15f, 0.26f, 0.44f, 0.96f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.20f, 0.39f, 0.72f, 0.95f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.28f, 0.50f, 0.88f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.17f, 0.28f, 0.78f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.28f, 0.46f, 0.92f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.36f, 0.58f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.12f, 0.22f, 0.36f, 0.78f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.18f, 0.30f, 0.50f, 0.90f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.22f, 0.38f, 0.62f, 0.98f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 4.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 5.0f));
+
+        ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
+        ImGui::Begin(
+            "##ns_content",
+            nullptr,
+            ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoBackground);
+
+        if (activePluginMap < 0) {
+            DrawCoreContentPanel(activeSecondaryIdx);
+        } else {
+            DrawPluginContentPanel(activePluginMap, activeSecondaryIdx);
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(14);
+
+        menuBoundsRight = menuPosX + PRIMARY_W + PANEL_GAP + SECONDARY_W + PANEL_GAP + CONTENT_W;
+        menuBoundsBottom = menuPosY + contentH;
     }
 
 } // namespace NightSharpMenu

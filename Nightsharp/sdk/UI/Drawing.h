@@ -505,6 +505,17 @@ inline Vec2 WorldToScreen(const Vec3& world) {
     return screen;
 }
 
+inline bool WorldToScreenAlways(const Vec3& world, Vec2& screen) {
+    (void)CoreRuntime::EnsureInitialized();
+    return detail::ProjectWorldToScreen(world, screen);
+}
+
+inline Vec2 WorldToScreenAlways(const Vec3& world) {
+    Vec2 screen = {};
+    (void)WorldToScreenAlways(world, screen);
+    return screen;
+}
+
 inline bool WorldToMinimap(const Vec3& world, Vec2& minimap) {
     (void)CoreRuntime::EnsureInitialized();
     return ::CoreView::WorldToMinimap(world, minimap);
@@ -536,9 +547,23 @@ inline bool OnScreen(const Vec2& point) {
            point.x <= size.x && point.y <= size.y;
 }
 
+inline bool OnScreenAlways(const Vec2& point) {
+    if (!point.IsValid()) {
+        return false;
+    }
+    const Vec2 size = GetRendererSize();
+    return point.x >= 0.0f && point.y >= 0.0f &&
+           point.x <= size.x && point.y <= size.y;
+}
+
 inline bool OnScreen(const Vec3& world) {
     Vec2 screen = {};
     return WorldToScreen(world, screen) && OnScreen(screen);
+}
+
+inline bool OnScreenAlways(const Vec3& world) {
+    Vec2 screen = {};
+    return WorldToScreenAlways(world, screen) && OnScreenAlways(screen);
 }
 
 inline void DrawLine(float x1,
@@ -820,6 +845,58 @@ inline void DrawCircle(const Vec3& center,
                        bool foreground = true) {
     if (!IsEnabled() ||
         !detail::IsPlausibleWorldCircle(center, radius) ||
+        thickness <= 0.0f ||
+        segments < 8) {
+        return;
+    }
+
+    auto* draw = GetDrawList(foreground);
+    if (!draw) {
+        return;
+    }
+
+    const auto& cache = detail::GetViewProjectionFrameCache();
+    if (!cache.valid) {
+        return;
+    }
+
+    if (detail::IsWorldCircleOutsideScreen(center, radius, cache)) {
+        return;
+    }
+
+    const auto& lut = detail::SelectCircleLut(segments);
+    ImVec2 points[detail::kMaxCircleSegments] = {};
+    int visible = 0;
+    for (int i = 0; i < lut.segments; ++i) {
+        const Vec3 point{
+            center.x + lut.points[i].x * radius,
+            center.y,
+            center.z + lut.points[i].z * radius
+        };
+
+        Vec2 screen = {};
+        if (detail::ProjectWorldToScreen(point, cache, screen) && screen.IsValid()) {
+            points[visible++] = ImVec2(screen.x, screen.y);
+        }
+    }
+
+    if (visible >= 2) {
+        draw->AddPolyline(
+            points,
+            visible,
+            detail::FromArgb(color),
+            visible == lut.segments,
+            thickness);
+    }
+}
+
+inline void DrawCircleAlways(const Vec3& center,
+                             float radius,
+                             std::uint32_t color,
+                             float thickness = 1.5f,
+                             int segments = 64,
+                             bool foreground = true) {
+    if (!detail::IsPlausibleWorldCircle(center, radius) ||
         thickness <= 0.0f ||
         segments < 8) {
         return;

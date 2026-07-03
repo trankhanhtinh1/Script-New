@@ -1364,6 +1364,28 @@ protected:
         return ok;
     }
 
+    void DrawFakeCursorFallback(ImDrawList* draw, const Vec2& position, float size) const {
+        if (!draw || !position.IsValid()) {
+            return;
+        }
+
+        const float s = std::clamp(size, 12.0f, 42.0f);
+        const ImVec2 tip(position.x, position.y);
+        const ImVec2 left(position.x + s * 0.10f, position.y + s * 1.20f);
+        const ImVec2 right(position.x + s * 0.62f, position.y + s * 0.82f);
+        const ImVec2 innerTip(position.x + s * 0.08f, position.y + s * 0.10f);
+        const ImVec2 innerLeft(position.x + s * 0.16f, position.y + s * 0.98f);
+        const ImVec2 innerRight(position.x + s * 0.50f, position.y + s * 0.74f);
+        const ImVec2 stemStart(position.x + s * 0.30f, position.y + s * 0.82f);
+        const ImVec2 stemEnd(position.x + s * 0.56f, position.y + s * 1.36f);
+
+        draw->AddTriangleFilled(tip, left, right, IM_COL32(0, 0, 0, 220));
+        draw->AddTriangleFilled(innerTip, innerLeft, innerRight, IM_COL32(255, 255, 255, 245));
+        draw->AddTriangle(tip, left, right, IM_COL32(0, 0, 0, 240), 1.4f);
+        draw->AddLine(stemStart, stemEnd, IM_COL32(0, 0, 0, 230), 4.0f);
+        draw->AddLine(stemStart, stemEnd, IM_COL32(255, 255, 255, 245), 2.0f);
+    }
+
     void DrawFakeCursor() {
         const bool enabled = Bool(drawingMenu_, "ShowFakeClick", false) &&
             Bool(drawingMenu_, "ShowFakeCursor", false);
@@ -1380,8 +1402,8 @@ protected:
             perfStart = DropFpsNow();
         }
         Vec2 targetScreen = {};
-        if (!Drawing::WorldToScreen(fakeCursorTargetPosition_, targetScreen) ||
-            !Drawing::OnScreen(targetScreen)) {
+        if (!Drawing::WorldToScreenAlways(fakeCursorTargetPosition_, targetScreen) ||
+            !Drawing::OnScreenAlways(targetScreen)) {
             fakeCursorScreenValid_ = false;
             if (kFakeCursorDropFpsDebugEnabled) {
                 RecordDropFpsDebug(
@@ -1414,14 +1436,16 @@ protected:
             return;
         }
 
+        const float size = std::clamp(static_cast<float>(Slider(drawingMenu_, "FakeCursorSize", 22)), 12.0f, 42.0f);
         const bool textureReady = EnsureFakeCursorTexture();
         if (!textureReady) {
+            DrawFakeCursorFallback(draw, fakeCursorScreenPosition_, size);
             if (kFakeCursorDropFpsDebugEnabled) {
                 RecordDropFpsDebug(
                     fakeCursorPerfStats_,
                     kFakeCursorDropFpsDebugPath,
                     "FakeCursor",
-                    "texture-missing",
+                    "draw-fallback-texture-missing",
                     DropFpsMsSince(perfStart),
                     fakeCursorTexturePath_.c_str(),
                     0.20);
@@ -1429,8 +1453,7 @@ protected:
             return;
         }
 
-        const float scale =
-            std::clamp(static_cast<float>(Slider(drawingMenu_, "FakeCursorSize", 22)), 12.0f, 42.0f) / 22.0f;
+        const float scale = size / 22.0f;
         const Vec2 p = fakeCursorScreenPosition_;
         const float width = static_cast<float>(fakeCursorTexture_.Width) * scale;
         const float height = static_cast<float>(fakeCursorTexture_.Height) * scale;
@@ -1470,8 +1493,8 @@ protected:
             fakeClickExpireTick_ > Tick() &&
             fakeClickPosition_.IsValid() &&
             !fakeClickPosition_.IsZero()) {
-            Drawing::DrawCircle(fakeClickPosition_, 65.0f, 0xAA66CCFFu, 1.5f, 48);
-            Drawing::DrawCircle(fakeClickPosition_, 14.0f, 0xCCFFFFFFu, 1.25f, 32);
+            Drawing::DrawCircleAlways(fakeClickPosition_, 65.0f, 0xAA66CCFFu, 1.5f, 48);
+            Drawing::DrawCircleAlways(fakeClickPosition_, 14.0f, 0xCCFFFFFFu, 1.25f, 32);
         }
 
         DrawFakeCursor();
@@ -2701,7 +2724,7 @@ protected:
             rootMenu_->Attach();
         }
 
-        attackableMenu_ = rootMenu_->AddSubMenu(new Menu("Attackable", "Attackable"));
+        attackableMenu_ = rootMenu_->AddSubMenu(new Menu("Attackable", "Attackable Unit"));
         attackableMenu_->Add(new MenuBool("Barrels", "Barrels", true));
         attackableMenu_->Add(new MenuBool("JunglePlant", "Jungle Plant", false));
         attackableMenu_->Add(new MenuBool("SpecialMinions", "Special Minions", true));
