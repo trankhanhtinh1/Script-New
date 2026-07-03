@@ -40,18 +40,19 @@ public:
     void AddToMenu(Menu* menu) override {
         parentMenu_ = menu;
         sub_ = new Menu("priority_sub", "Priority Settings");
-        for (const auto& hero : GameObjects::EnemyHeroes()) {
-            std::string cname = hero.CharacterName();
-            if (cname.empty()) cname = hero.Name();
-            if (cname.empty()) continue;
-            int defVal = GetDefaultPriority(cname);
-            sub_->Add(new MenuSlider(("p_" + cname).c_str(), cname.c_str(), defVal, 1, 5));
-        }
+        EnsureHeroSliders();
         menu->Add(sub_);
     }
 
     int GetHeroPriority(const AIHeroClient& hero) {
+        EnsureHeroSliders();
         std::string cname = hero.CharacterName();
+        if (cname.empty() && hero.Address()) {
+            char buf[96] = {};
+            if (::Core::Objects::ReadCharacterName(hero.Address(), buf, static_cast<int>(sizeof(buf)))) {
+                cname = buf;
+            }
+        }
         if (cname.empty()) cname = hero.Name();
         if (sub_ && !cname.empty()) {
             auto* s = sub_->Get<MenuSlider>(("p_" + cname).c_str());
@@ -61,6 +62,7 @@ public:
     }
 
     std::vector<AIHeroClient> OrderChampions(const std::vector<AIHeroClient>& heroes) override {
+        EnsureHeroSliders();
         auto result = heroes;
         std::sort(result.begin(), result.end(), [this](const AIHeroClient& a, const AIHeroClient& b) {
             int pa = GetHeroPriority(a);
@@ -74,6 +76,27 @@ public:
     }
 
 private:
+    void EnsureHeroSliders() {
+        if (!sub_) return;
+        for (const auto& hero : GameObjects::EnemyHeroes()) {
+            if (!hero.IsValid()) continue;
+            std::string cname = hero.CharacterName();
+            if (cname.empty() && hero.Address()) {
+                char buf[96] = {};
+                if (::Core::Objects::ReadCharacterName(hero.Address(), buf, static_cast<int>(sizeof(buf)))) {
+                    cname = buf;
+                }
+            }
+            if (cname.empty()) cname = hero.Name();
+            if (cname.empty()) continue;
+
+            std::string key = "p_" + cname;
+            if (!sub_->Get<MenuSlider>(key.c_str())) {
+                int defVal = GetDefaultPriority(cname);
+                sub_->Add(new MenuSlider(key.c_str(), cname.c_str(), defVal, 1, 5));
+            }
+        }
+    }
     int GetDefaultPriority(const std::string& charName) {
         for (const auto& cat : categories_) {
             if (cat.Champions.find(charName) != cat.Champions.end()) {

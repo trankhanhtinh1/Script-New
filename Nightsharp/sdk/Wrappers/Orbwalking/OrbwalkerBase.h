@@ -451,6 +451,10 @@ public:
             return false;
         }
 
+        if (ActiveMode() == OrbwalkingMode::Flee) {
+            return true;
+        }
+
         const int now = Tick();
         if ((allPauseTick_ > 0 && now < allPauseTick_) ||
             (movePauseTick_ > 0 && now < movePauseTick_)) {
@@ -758,7 +762,9 @@ public:
 
         const int now = Tick();
         const auto player = GameObjects::Player();
+        const bool isFleeMode = (ActiveMode() == OrbwalkingMode::Flee);
         const bool attackWindupGate =
+            !isFleeMode &&
             player.IsValid() &&
             lastLocalAttackTick_ > 0 &&
             static_cast<float>(now - lastLocalAttackTick_) <
@@ -787,6 +793,10 @@ public:
             CanMove(static_cast<float>(Slider(orbwalkerMenu_, "WindupDelay", 100)), false);
         const bool comboWithMove = KeyActive("ComboWithMove");
         const bool limitAttackOk =
+<<<<<<< HEAD
+=======
+            isFleeMode ||
+>>>>>>> local-changes-backup
             !Bool(orbwalkerMenu_, "LimitAttack", false) ||
             GetAttackDelay() >= 0.3846154f ||
             (autoAttackCounter_ % 3) == 0 ||
@@ -2055,7 +2065,7 @@ protected:
 
         farmMenu_ = rootMenu_->AddSubMenu(new Menu("Farm", "Farm"));
         farmMenu_->Add(new MenuSlider("FarmDelay", "Farm Delay", 30, 0, 200));
-        //farmMenu_->Add(new MenuBool("ShouldWait", "ShouldWait", true));
+        farmMenu_->Add(new MenuBool("ShouldWait", "Should Wait", true));
         farmMenu_->Add(new MenuList("TurretFarm", "Turret Farm", { "Enabled", "Off" }, 0));
         farmMenu_->Add(new MenuSlider("TurretFramMaxLevel", "Turret Farm Max Level", 13, 1, 18));
 

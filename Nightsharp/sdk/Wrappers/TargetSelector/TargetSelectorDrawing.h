@@ -10,17 +10,25 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 
 namespace SDK {
 
 class TargetSelectorDrawing {
 public:
-    TargetSelectorDrawing(Menu* menu, TargetSelectorSelected* selected, TargetSelectorMode* mode) {
+    TargetSelectorDrawing(Menu* menu, TargetSelectorSelected* selected, TargetSelectorMode* mode, std::function<AIHeroClient()> getTarget = nullptr) {
         Ptr() = this;
         selected_ = selected;
         mode_ = mode;
+        getTarget_ = getTarget;
 
         auto* drawingMenu = new Menu("drawing", "Drawing");
+
+        auto* targetMenu = new Menu("target", "Target");
+        targetMenu->Add(new MenuColor("color", "Color", 0xFF00FF00u));
+        targetMenu->Add(new MenuSlider("radius", "Radius", 35, 0, 200));
+        targetMenu->Add(new MenuBool("enabled", "Enabled", true));
+        drawingMenu->Add(targetMenu);
 
         auto* selectedMenu = new Menu("selected", "Selected");
         selectedMenu->Add(new MenuColor("color", "Color", 0xFFFF0000u));
@@ -29,7 +37,7 @@ public:
         drawingMenu->Add(selectedMenu);
 
         auto* weightsMenu = new Menu("weights", "Weights");
-        weightsMenu->Add(new MenuBool("enabled", "Enabled", true));
+        weightsMenu->Add(new MenuBool("enabled", "Enabled", false));
         drawingMenu->Add(weightsMenu);
 
         menu->Add(drawingMenu);
@@ -48,6 +56,27 @@ private:
         auto* self = Ptr();
         if (!self || !self->drawingMenu_) return;
 
+        // Draw Current Target indicator
+        if (self->getTarget_) {
+            auto* targetMenu = self->drawingMenu_->GetSubMenu("target");
+            if (targetMenu) {
+                auto* enabledBool = targetMenu->Get<MenuBool>("enabled");
+                if (enabledBool && enabledBool->Value) {
+                    const AIHeroClient target = self->getTarget_();
+                    if (target.IsValid() && !target.IsDead() && target.IsVisible() && Extensions::IsValidTarget(target)) {
+                        auto* radiusSlider = targetMenu->Get<MenuSlider>("radius");
+                        const float worldRadius = target.BoundingRadius() + static_cast<float>(radiusSlider ? radiusSlider->Value : 35);
+                        unsigned int color = 0xFF00FF00;
+                        auto* colorItem = targetMenu->Get<MenuColor>("color");
+                        if (colorItem) {
+                            color = colorItem->Value;
+                        }
+                        Drawing::DrawCircle(target.Position(), worldRadius, color, 2.0f);
+                    }
+                }
+            }
+        }
+
         // Draw Selected target indicator
         if (self->selected_) {
             auto* selMenu = self->drawingMenu_->GetSubMenu("selected");
@@ -55,28 +84,15 @@ private:
                 auto* enabledBool = selMenu->Get<MenuBool>("enabled");
                 if (enabledBool && enabledBool->Value && self->selected_->Focus()) {
                     const AIHeroClient target = self->selected_->Target();
-                    if (target.IsValid() && Extensions::IsValidTarget(target)) {
-                        Vec2 center;
-                        if (Drawing::WorldToScreen(target.Position(), center)) {
-                            auto* radiusSlider = selMenu->Get<MenuSlider>("radius");
-                            const float worldRadius = target.BoundingRadius() + static_cast<float>(radiusSlider ? radiusSlider->Value : 35);
-                            Vec2 edge;
-                            const Vec3 edgeWorld(target.Position().x + worldRadius, target.Position().y, target.Position().z);
-                            if (Drawing::WorldToScreen(edgeWorld, edge)) {
-                                const float screenRadius = std::max(1.0f, center.Distance(edge));
-                                unsigned int color = 0xFFFF0000;
-                                auto* colorItem = selMenu->Get<MenuColor>("color");
-                                if (colorItem) {
-                                    const auto c = colorItem->Value;
-                                    const unsigned int a = (c >> 24) & 0xFF;
-                                    const unsigned int r = c & 0xFF;
-                                    const unsigned int g = (c >> 8) & 0xFF;
-                                    const unsigned int b = (c >> 16) & 0xFF;
-                                    color = (a << 24) | (r << 16) | (g << 8) | b;
-                                }
-                                Drawing::DrawCircle(center, screenRadius, 2.0f, color);
-                            }
+                    if (target.IsValid() && !target.IsDead() && target.IsVisible() && Extensions::IsValidTarget(target)) {
+                        auto* radiusSlider = selMenu->Get<MenuSlider>("radius");
+                        const float worldRadius = target.BoundingRadius() + static_cast<float>(radiusSlider ? radiusSlider->Value : 35);
+                        unsigned int color = 0xFFFF0000;
+                        auto* colorItem = selMenu->Get<MenuColor>("color");
+                        if (colorItem) {
+                            color = colorItem->Value;
                         }
+                        Drawing::DrawCircle(target.Position(), worldRadius, color, 2.0f);
                     }
                 }
             }
@@ -106,6 +122,7 @@ private:
 
     TargetSelectorSelected* selected_ = nullptr;
     TargetSelectorMode* mode_ = nullptr;
+    std::function<AIHeroClient()> getTarget_ = nullptr;
     Menu* drawingMenu_ = nullptr;
 };
 

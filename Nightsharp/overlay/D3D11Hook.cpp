@@ -18,6 +18,7 @@
 #include "../SDK/Core/Game.h"
 #include "../SDK/Events/Events.h"
 #include "../SDK/UI/UI.h"
+#include "../SDK/UI/Drawing.h"
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -552,6 +553,16 @@ static void Render() {
         {
             NightSharpPerf::ScopedTimer timer("PluginManager::OnRender");
             Plugins::PluginManager::Get().OnRender();
+        }
+
+        // SDK Drawing handlers (TargetSelector, Orbwalker, Core Render objects)
+        {
+            NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchDraw");
+            SDK::Drawing::DispatchDraw();
+        }
+        {
+            NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchEndScene");
+            SDK::Drawing::DispatchEndScene();
         }
 
         // Menu + PermaShow render
