@@ -262,6 +262,31 @@ namespace detail {
 
         return BuildFallbackState(out);
     }
+
+    inline std::uint32_t ReadMissionInfoMapId() {
+        if (!CoreRuntime::EnsureInitialized()) {
+            return 0;
+        }
+
+        auto& ctx = CoreRuntime::g_ctx;
+        if (!Globals::IsValidPtr(ctx.missionInfo)) {
+            (void)CoreRuntime::RefreshReadState();
+        }
+
+        uintptr_t missionInfo = ctx.missionInfo;
+        if (!Globals::IsValidPtr(missionInfo)) {
+            const uintptr_t base = ctx.moduleBase ? ctx.moduleBase : Globals::base;
+            if (!base) {
+                return 0;
+            }
+            missionInfo = Globals::Read<uintptr_t>(
+                base + Offset::GameRuntime::MissionInfoInstance);
+        }
+
+        return Globals::IsValidPtr(missionInfo)
+            ? Globals::Read<std::uint32_t>(missionInfo + Offset::MissionInfo::MapId)
+            : 0;
+    }
 } // namespace detail
 
 inline bool GetMapBounds(MapBounds& out) {
@@ -309,6 +334,17 @@ inline Vec3 MinimapToWorld(const Vec2& minimap, float y = 0.0f) {
 }
 
 inline MapId GetMapId() {
+    switch (detail::ReadMissionInfoMapId()) {
+    case static_cast<std::uint32_t>(MapId::SummonersRift):
+        return MapId::SummonersRift;
+    case static_cast<std::uint32_t>(MapId::HowlingAbyss):
+        return MapId::HowlingAbyss;
+    case static_cast<std::uint32_t>(MapId::TwistedTreeline):
+        return MapId::TwistedTreeline;
+    default:
+        break;
+    }
+
     const auto grid = CoreNavGrid::Get();
     if (!grid.IsValid()) {
         return MapId::Unknown;

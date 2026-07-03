@@ -272,15 +272,9 @@ namespace NightSharpMenu {
 
         DrawOnOffEditor("PermaShow", Config::PermaShow::enabled, "perma_show");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
-        if (Config::StreamProtection::bypassObs) {
-            ImGui::TextColored(
-                ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
-                "Bypass OBS: capture protection requested");
-            ImGui::TextColored(
-                ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
-                "(requires Win10 2004+ capture affinity support)");
-        }
         ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(requires Win10 2004+)");
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click-through always on: clicks pass through the overlay.");
     }
 

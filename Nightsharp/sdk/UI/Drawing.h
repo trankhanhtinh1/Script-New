@@ -403,6 +403,7 @@ namespace detail {
     inline HandlerList<void(*)()> EndSceneHandlers;
     inline HandlerList<void(*)()> PreResetHandlers;
     inline HandlerList<void(*)()> PostResetHandlers;
+    inline volatile LONG CaptureVisibleUntilTick = 0;
 } // namespace detail
 
 using DrawHandler = void(*)();
@@ -433,6 +434,23 @@ inline ImDrawList* GetDrawList(bool foreground = true) {
     return foreground
         ? ImGui::GetForegroundDrawList()
         : ImGui::GetBackgroundDrawList();
+}
+
+inline void MarkCaptureVisibleContent(DWORD durationMs = 150) {
+    const DWORD now = GetTickCount();
+    InterlockedExchange(
+        &detail::CaptureVisibleUntilTick,
+        static_cast<LONG>(now + durationMs));
+}
+
+inline bool HasCaptureVisibleContent() {
+    const DWORD until = static_cast<DWORD>(
+        InterlockedCompareExchange(&detail::CaptureVisibleUntilTick, 0, 0));
+    return static_cast<LONG>(until - GetTickCount()) > 0;
+}
+
+inline void ClearCaptureVisibleContent() {
+    InterlockedExchange(&detail::CaptureVisibleUntilTick, 0);
 }
 
 inline int Width() {
@@ -1187,6 +1205,7 @@ inline void Reset() {
     detail::EndSceneHandlers.Clear();
     detail::PreResetHandlers.Clear();
     detail::PostResetHandlers.Clear();
+    ClearCaptureVisibleContent();
 }
 
 struct DrawEventSlot {

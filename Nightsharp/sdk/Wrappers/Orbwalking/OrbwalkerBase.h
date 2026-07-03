@@ -1420,6 +1420,7 @@ protected:
 
         fakeCursorScreenPosition_ = targetScreen;
         fakeCursorScreenValid_ = true;
+        Drawing::MarkCaptureVisibleContent(180);
 
         auto* draw = Drawing::GetDrawList(true);
         if (!draw) {
@@ -2752,7 +2753,7 @@ protected:
         advancedMenu_ = rootMenu_->AddSubMenu(new Menu("Advanced", "Advanced"));
         advancedMenu_->Add(new MenuBool("CalcItemDamage", "Calc Item Damage", false));
         advancedMenu_->Add(new MenuBool("YasuoWallCheck", "Yasuo Wall Check", true));
-        advancedMenu_->Add(new MenuBool("MissileCheck", "Missile Check", false));
+        advancedMenu_->Add(new MenuBool("MissileCheck", "Missile Check", true));
 
         const auto player = GameObjects::Player();
         const std::string championName = player.IsValid() ? player.CharacterName() : "Player";

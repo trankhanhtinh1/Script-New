@@ -1,5 +1,7 @@
 #include "D3D11Hook.h"
+#include "MissionInfoOverlay.h"
 #include "OverlayStatus.h"
+#include "OverlayManager.h"
 #include "VmtHook.h"
 
 #include "../crt_shim.h"
@@ -12,6 +14,8 @@
 #include "../Plugins/PluginManager.h"
 #include "../Core/CoreRuntime.h"
 #include "../Core/CoreEvents.h"
+#include "../Core/CoreSkinChanger.h"
+#include "../Core/CoreZoomHack.h"
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
@@ -25,7 +29,6 @@
 #include <d3d11.h>
 #include <dxgi.h>
 #include <cstdlib>
-#include <mutex>
 #include <new>
 
 template <typename T>
@@ -51,8 +54,8 @@ ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
 static VmtHook*         g_vmtHook          = nullptr;
 static HWND             g_gameHwnd         = nullptr;
 static WNDPROC          g_originalWndProc  = nullptr;
-static std::once_flag   g_initDevice;
 static bool             g_active           = false;
+static volatile LONG    g_initDeviceState  = 0; // 0=not started, 1=initializing, 2=done
 static volatile LONG    g_shutdown         = 0;
 static volatile LONG    g_uninstalling     = 0;
 static volatile LONG    g_hookCalls        = 0;
@@ -428,8 +431,14 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             NightSharpMenu::showMenu = !NightSharpMenu::showMenu;
             return TRUE;
         }
+        if (wParam == VK_F8) {
+            NightSharpDebug::Logf("[D3D11Hook] VK_F8 received in internal WndProc");
+            OverlayManager::RequestSwitch();
+            return TRUE;
+        }
         if (wParam == VK_END) {
-            InterlockedExchange(&g_shutdown, 1);
+            NightSharpDebug::Logf("[D3D11Hook] VK_END received in internal WndProc");
+            OverlayManager::RequestShutdown();
             return TRUE;
         }
     }
@@ -511,6 +520,20 @@ static void InitImGui(IDXGISwapChain* swapChain) {
     NightSharpDebug::Logf("[D3D11Hook] ImGui initialized with game device");
 }
 
+static void EnsureImGuiInitialized(IDXGISwapChain* swapChain) {
+    const LONG state = InterlockedCompareExchange(&g_initDeviceState, 1, 0);
+    if (state != 0) {
+        return;
+    }
+
+    if (!IsUnloading()) {
+        InitImGui(swapChain);
+    }
+
+    const bool backendReady = InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) != 0;
+    InterlockedExchange(&g_initDeviceState, backendReady ? 2 : 0);
+}
+
 // -----------------------------------------------------------------------
 // Rendering
 // -----------------------------------------------------------------------
@@ -522,6 +545,34 @@ static void RenderMenuSafe() {
                   "D3D11Hook::NightSharpMenu::Render",
                   GetExceptionInformation())) {
         NightSharpDebug::Logf("[D3D11Hook] Menu render crashed");
+    }
+}
+
+static void TickCoreMemoryHacks() {
+    __try {
+        CoreZoomHack::Tick(Config::ZoomHack::enabled, Config::ZoomHack::maxZoom);
+    }
+    __except (1) {
+    }
+
+    __try {
+        CoreSkinChanger::Tick(Config::SkinChanger::enabled, Config::SkinChanger::skinId);
+    }
+    __except (1) {
+    }
+}
+
+static void RestoreCoreMemoryHacks() {
+    __try {
+        CoreSkinChanger::Tick(false, Config::SkinChanger::skinId);
+    }
+    __except (1) {
+    }
+
+    __try {
+        CoreZoomHack::Tick(false, Config::ZoomHack::maxZoom);
+    }
+    __except (1) {
     }
 }
 
@@ -546,6 +597,10 @@ static void Render() {
         {
             NightSharpPerf::ScopedTimer timer("CoreRuntime::TickRead");
             CoreRuntime::TickRead();
+        }
+        {
+            NightSharpPerf::ScopedTimer timer("CoreMemoryHacks::Tick");
+            TickCoreMemoryHacks();
         }
 
         // Plugin update + render
@@ -576,6 +631,7 @@ static void Render() {
     }
 
     OverlayStatus::Render(OverlayStatus::Mode::Internal);
+    MissionInfoOverlay::RenderDragonSoulName();
 
     ImGui::EndFrame();
     ImGui::Render();
@@ -594,11 +650,7 @@ struct DxgiPresent {
     static long WINAPI Hooked(IDXGISwapChain* pSwapChain, UINT syncInterval, UINT flags) {
         HookCallScope scope;
         if (!IsUnloading()) {
-            std::call_once(g_initDevice, [&]() {
-                if (!IsUnloading()) {
-                    InitImGui(pSwapChain);
-                }
-            });
+            EnsureImGuiInitialized(pSwapChain);
             Render();
         }
         NightSharpPerf::ScopedTimer timer("Present");
@@ -715,6 +767,7 @@ bool Install() {
 
     NightSharpDebug::Phase("d3d11hook-install");
     NightSharpDebug::Logf("[D3D11Hook] Installing D3D11 swapchain hooks...");
+    InterlockedExchange(&g_initDeviceState, 0);
     InterlockedExchange(&g_shutdown, 0);
     InterlockedExchange(&g_uninstalling, 0);
     InterlockedExchange(&g_hookCalls, 0);
@@ -882,6 +935,7 @@ void Uninstall() {
 
     UnhookWndProc();
 
+    RestoreCoreMemoryHacks();
     ShutdownPluginsSafe();
     __try {
         SDK::Lifecycle::Shutdown();
@@ -913,6 +967,7 @@ void Uninstall() {
     SafeRelease(g_pd3dContext);
     SafeRelease(g_pd3dDevice);
     g_pSwapChain = nullptr;
+    InterlockedExchange(&g_initDeviceState, 0);
 
     InterlockedExchange(&g_uninstalling, 0);
     NightSharpDebug::Logf("[D3D11Hook] Uninstall complete active=%d", wasActive ? 1 : 0);
@@ -923,6 +978,7 @@ bool IsActive() {
 }
 
 void RequestShutdown() {
+    NightSharpDebug::Logf("[D3D11Hook] RequestShutdown");
     InterlockedExchange(&g_shutdown, 1);
 }
 

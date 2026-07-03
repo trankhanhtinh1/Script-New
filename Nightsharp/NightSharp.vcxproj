@@ -104,6 +104,8 @@
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="overlay\D3D11Hook.cpp" />
+    <ClCompile Include="overlay\Overlay.cpp" />
+    <ClCompile Include="overlay\OverlayManager.cpp" />
     <ClCompile Include="Third_Party\clipper\clipper.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -137,6 +139,8 @@
     <ClInclude Include="ns_sscanf.h" />
     <ClInclude Include="ns_strtod.h" />
     <ClInclude Include="overlay\D3D11Hook.h" />
+    <ClInclude Include="overlay\Overlay.h" />
+    <ClInclude Include="overlay\OverlayManager.h" />
     <ClInclude Include="overlay\OverlayStatus.h" />
     <ClInclude Include="overlay\VmtHook.h" />
   </ItemGroup>

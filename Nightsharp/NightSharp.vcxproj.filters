@@ -63,6 +63,12 @@
     <ClCompile Include="overlay\D3D11Hook.cpp">
       <Filter>overlay</Filter>
     </ClCompile>
+    <ClCompile Include="overlay\Overlay.cpp">
+      <Filter>overlay</Filter>
+    </ClCompile>
+    <ClCompile Include="overlay\OverlayManager.cpp">
+      <Filter>overlay</Filter>
+    </ClCompile>
     <ClCompile Include="Third_Party\clipper\clipper.cpp">
       <Filter>Third_Party</Filter>
     </ClCompile>
@@ -141,6 +147,12 @@
       <Filter>imgui</Filter>
     </ClInclude>
     <ClInclude Include="overlay\D3D11Hook.h">
+      <Filter>overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="overlay\Overlay.h">
+      <Filter>overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="overlay\OverlayManager.h">
       <Filter>overlay</Filter>
     </ClInclude>
     <ClInclude Include="overlay\OverlayStatus.h">

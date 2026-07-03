@@ -1,5 +1,7 @@
 #include "Overlay.h"
 
+#include "MissionInfoOverlay.h"
+#include "OverlayManager.h"
 #include "OverlayStatus.h"
 #include "../crt_shim.h"
 #include "../imgui/imgui.h"
@@ -10,14 +12,21 @@
 #include "../Plugins/PluginBootstrap.h"
 #include "../Plugins/PluginManager.h"
 #include "../Core/CoreRuntime.h"
+#include "../Core/CoreSkinChanger.h"
+#include "../Core/CoreZoomHack.h"
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 #include "../SDK/Lifecycle.h"
+#include "../SDK/Data/DragonSoulData.h"
+#include "../SDK/UI/Drawing.h"
 #include "../SDK/UI/Icons.h"
 
+#include <cstdio>
+#include <cstdint>
 #include <d3d11.h>
 #include <dcomp.h>
+#include <dwmapi.h>
 #include <dxgi.h>
 #include <dxgi1_2.h>
 #include <windowsx.h>
@@ -29,11 +38,147 @@
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+namespace MissionInfoOverlay {
+
+namespace {
+
+std::uint8_t FirstSetMissionBit(std::uint8_t mask) {
+    for (std::uint8_t result = 1; result < 8; ++result) {
+        if ((mask & static_cast<std::uint8_t>(1u << result)) != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+uintptr_t ReadMissionInfoAddress() {
+    uintptr_t missionInfo = CoreRuntime::g_ctx.missionInfo;
+    if (Globals::IsValidPtr(missionInfo)) {
+        return missionInfo;
+    }
+
+    const uintptr_t global = CoreRuntime::g_ctx.missionInfoGlobal;
+    return Globals::IsValidPtr(global)
+        ? Globals::Read<uintptr_t>(global)
+        : 0;
+}
+
+void DrawTextWithShadowSized(ImDrawList* draw,
+                             const ImVec2& pos,
+                             float fontSize,
+                             ImU32 color,
+                             const char* text) {
+    if (!draw || !text || !*text) {
+        return;
+    }
+
+    ImFont* font = ImGui::GetFont();
+    const ImU32 shadow = IM_COL32(0, 0, 0, 230);
+    draw->AddText(font, fontSize, ImVec2(pos.x + 2.0f, pos.y + 2.0f), shadow, text);
+    draw->AddText(font, fontSize, ImVec2(pos.x - 1.0f, pos.y + 1.0f), shadow, text);
+    draw->AddText(font, fontSize, pos, color, text);
+}
+
+void EnsureDragonSoulIconsLoaded(const SDK::Data::DragonSoulData::DragonSoulEntry* entry) {
+    if (!entry || entry->IconKey.empty()) {
+        return;
+    }
+
+    const std::string key(entry->IconKey);
+    if (SDK::UI::Icons::HasIcon(key)) {
+        return;
+    }
+
+    static DWORD lastLoadAttempt = 0;
+    const DWORD now = ::GetTickCount();
+    if (lastLoadAttempt != 0 && now - lastLoadAttempt < 1000) {
+        return;
+    }
+    lastLoadAttempt = now;
+
+    const std::string directory = SDK::Data::DragonSoulData::IconDirectory();
+    if (!directory.empty()) {
+        SDK::UI::Icons::LoadIconsFromDirectory(directory.c_str());
+    }
+}
+
+std::uint8_t ReadSelectedElementalTerrainSafe() {
+    std::uint8_t terrainId = 0;
+    __try {
+        const uintptr_t missionInfo = ReadMissionInfoAddress();
+        if (Globals::IsValidPtr(missionInfo)) {
+            const std::uint8_t mask = Globals::Read<std::uint8_t>(
+                missionInfo + Offset::MissionInfo::SelectedElementalTerrain);
+            terrainId = FirstSetMissionBit(mask);
+        }
+    }
+    __except (1) {
+        terrainId = 0;
+    }
+    return terrainId;
+}
+
+} // namespace
+
+void RenderDragonSoulName() {
+    if (!ImGui::GetCurrentContext()) {
+        return;
+    }
+
+    const std::uint8_t terrainId = ReadSelectedElementalTerrainSafe();
+
+    const auto* soulData = SDK::Data::DragonSoulData::FindByTerrainId(terrainId);
+    EnsureDragonSoulIconsLoaded(soulData);
+
+    const char* soulName = "Unknown";
+    if (soulData && !soulData->Name.empty()) {
+        soulName = soulData->Name.data();
+    }
+
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    if (!draw) {
+        return;
+    }
+
+    constexpr float kX = 10.0f;
+    constexpr float kY = 10.0f;
+    constexpr float kIconSize = 34.0f;
+    constexpr float kFontSize = 22.0f;
+    constexpr float kGap = 8.0f;
+
+    float textX = kX;
+    if (soulData && !soulData->IconKey.empty()) {
+        const std::string iconKey(soulData->IconKey);
+        ImTextureID texture = SDK::UI::Icons::GetIcon(iconKey);
+        if (texture && texture != SDK::UI::Icons::GetPlaceholder()) {
+            draw->AddImage(
+                texture,
+                ImVec2(kX, kY),
+                ImVec2(kX + kIconSize, kY + kIconSize),
+                ImVec2(0.0f, 0.0f),
+                ImVec2(1.0f, 1.0f),
+                IM_COL32(255, 255, 255, 255));
+            textX = kX + kIconSize + kGap;
+        }
+    }
+
+    char text[64] = {};
+    std::snprintf(text, sizeof(text), "DragonSoulName: %s", soulName);
+    DrawTextWithShadowSized(
+        draw,
+        ImVec2(textX, kY + 4.0f),
+        kFontSize,
+        IM_COL32(255, 220, 80, 255),
+        text);
+}
+
+} // namespace MissionInfoOverlay
+
 namespace {
 
 ID3D11Device* g_pd3dDevice = nullptr;
 ID3D11DeviceContext* g_pd3dContext = nullptr;
-IDXGISwapChain1* g_pSwapChain = nullptr;
+IDXGISwapChain* g_pSwapChain = nullptr;
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr;
 IDCompositionDevice* g_pDcompDevice = nullptr;
 IDCompositionTarget* g_pDcompTarget = nullptr;
@@ -49,6 +194,7 @@ volatile LONG g_bRunning = 0;
 volatile LONG g_bShutdown = 0;
 volatile LONG g_bMenuVisible = 1;
 volatile LONG g_bMenuReady = 0;
+volatile LONG g_bOverlayShown = 0;
 
 const wchar_t* OVERLAY_CLASS_BASE = L"NightSharpOverlay";
 constexpr DWORD kTargetOverlayFrameMs = 16; // ~60 Hz — halves per-frame CPU vs 125 Hz
@@ -76,6 +222,8 @@ bool IsShutdownRequested() {
     return InterlockedCompareExchange(&g_bShutdown, 0, 0) != 0;
 }
 
+bool IsTargetForeground();
+
 bool ReadLocalPlayerSafe(uintptr_t& outLocalPlayer) {
     outLocalPlayer = 0;
     __try {
@@ -92,6 +240,34 @@ bool ReadLocalPlayerSafe(uintptr_t& outLocalPlayer) {
     return false;
 }
 
+void TickCoreMemoryHacks() {
+    __try {
+        CoreZoomHack::Tick(Config::ZoomHack::enabled, Config::ZoomHack::maxZoom);
+    }
+    __except (1) {
+    }
+
+    __try {
+        CoreSkinChanger::Tick(Config::SkinChanger::enabled, Config::SkinChanger::skinId);
+    }
+    __except (1) {
+    }
+}
+
+void RestoreCoreMemoryHacks() {
+    __try {
+        CoreSkinChanger::Tick(false, Config::SkinChanger::skinId);
+    }
+    __except (1) {
+    }
+
+    __try {
+        CoreZoomHack::Tick(false, Config::ZoomHack::maxZoom);
+    }
+    __except (1) {
+    }
+}
+
 bool WaitForGameReady() {
     NightSharpDebug::Phase("overlay-wait-game-ready");
     Log("[NightSharp] Waiting for first localPlayer read, then delaying menu/plugins 3.0s\n");
@@ -102,12 +278,20 @@ bool WaitForGameReady() {
         if (IsShutdownRequested()) {
             return false;
         }
-        if (GetAsyncKeyState(VK_END) & 1) {
-            InterlockedExchange(&g_bShutdown, 1);
+        const bool targetForeground = IsTargetForeground();
+        if (targetForeground && (GetAsyncKeyState(VK_END) & 1)) {
+            NightSharpDebug::Logf("[Overlay] VK_END pressed while waiting for game readiness");
+            OverlayManager::RequestShutdown();
+            return false;
+        }
+        if (targetForeground && (GetAsyncKeyState(VK_F8) & 1)) {
+            NightSharpDebug::Logf("[Overlay] VK_F8 pressed while waiting for game readiness");
+            OverlayManager::RequestSwitch();
             return false;
         }
         if (g_hTargetWindow && !IsWindow(g_hTargetWindow)) {
-            InterlockedExchange(&g_bShutdown, 1);
+            NightSharpDebug::Logf("[Overlay] Target window became invalid while waiting");
+            OverlayManager::RequestShutdown();
             return false;
         }
 
@@ -195,117 +379,35 @@ void CleanupDeviceD3D11() {
 bool CreateDeviceD3D11(HWND hWnd) {
     CleanupDeviceD3D11();
 
-    const D3D_FEATURE_LEVEL levels[] = {
-        D3D_FEATURE_LEVEL_11_0,
-        D3D_FEATURE_LEVEL_10_0,
-    };
+    DXGI_SWAP_CHAIN_DESC sd = {};
+    sd.BufferCount = 2;
+    sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    sd.BufferDesc.RefreshRate.Numerator = 60;
+    sd.BufferDesc.RefreshRate.Denominator = 1;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.OutputWindow = hWnd;
+    sd.SampleDesc.Count = 1;
+    sd.Windowed = TRUE;
+    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+    const D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
     D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_0;
 
-    HRESULT hr = D3D11CreateDevice(
+    HRESULT hr = D3D11CreateDeviceAndSwapChain(
         nullptr,
         D3D_DRIVER_TYPE_HARDWARE,
         nullptr,
-        D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        0,
         levels,
         2,
         D3D11_SDK_VERSION,
+        &sd,
+        &g_pSwapChain,
         &g_pd3dDevice,
         &featureLevel,
         &g_pd3dContext);
 
-    if (FAILED(hr) || !g_pd3dDevice || !g_pd3dContext) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    IDXGIDevice* dxgiDevice = nullptr;
-    IDXGIAdapter* adapter = nullptr;
-    IDXGIFactory2* factory = nullptr;
-
-    hr = g_pd3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
-    if (FAILED(hr) || !dxgiDevice) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = dxgiDevice->GetAdapter(&adapter);
-    if (FAILED(hr) || !adapter) {
-        SafeRelease(dxgiDevice);
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = adapter->GetParent(IID_PPV_ARGS(&factory));
-    SafeRelease(adapter);
-    if (FAILED(hr) || !factory) {
-        SafeRelease(dxgiDevice);
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    RECT rc = {};
-    GetClientRect(hWnd, &rc);
-    UINT width = static_cast<UINT>(rc.right - rc.left);
-    UINT height = static_cast<UINT>(rc.bottom - rc.top);
-    if (width == 0) {
-        width = 1;
-    }
-    if (height == 0) {
-        height = 1;
-    }
-
-    DXGI_SWAP_CHAIN_DESC1 desc = {};
-    desc.Width = width;
-    desc.Height = height;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    desc.BufferCount = 2;
-    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-    desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-    desc.Scaling = DXGI_SCALING_STRETCH;
-
-    hr = factory->CreateSwapChainForComposition(g_pd3dDevice, &desc, nullptr, &g_pSwapChain);
-    SafeRelease(factory);
-    if (FAILED(hr) || !g_pSwapChain) {
-        SafeRelease(dxgiDevice);
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = DCompositionCreateDevice(dxgiDevice, IID_PPV_ARGS(&g_pDcompDevice));
-    SafeRelease(dxgiDevice);
-    if (FAILED(hr) || !g_pDcompDevice) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = g_pDcompDevice->CreateTargetForHwnd(hWnd, TRUE, &g_pDcompTarget);
-    if (FAILED(hr) || !g_pDcompTarget) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = g_pDcompDevice->CreateVisual(&g_pDcompVisual);
-    if (FAILED(hr) || !g_pDcompVisual) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = g_pDcompVisual->SetContent(g_pSwapChain);
-    if (FAILED(hr)) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = g_pDcompTarget->SetRoot(g_pDcompVisual);
-    if (FAILED(hr)) {
-        CleanupDeviceD3D11();
-        return false;
-    }
-
-    hr = g_pDcompDevice->Commit();
-    if (FAILED(hr)) {
+    if (FAILED(hr) || !g_pSwapChain || !g_pd3dDevice || !g_pd3dContext) {
         CleanupDeviceD3D11();
         return false;
     }
@@ -319,6 +421,15 @@ bool CreateDeviceD3D11(HWND hWnd) {
 }
 
 HWND FindProcessWindow() {
+    HWND riotWindow = FindWindowA("RiotWindowClass", nullptr);
+    if (riotWindow) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(riotWindow, &pid);
+        if (pid == GetCurrentProcessId()) {
+            return riotWindow;
+        }
+    }
+
     struct EnumData {
         DWORD pid;
         HWND result;
@@ -367,40 +478,64 @@ void GetOverlayRect(RECT* outRect) {
     outRect->bottom = GetSystemMetrics(SM_CYSCREEN);
 }
 
-void MoveOverlayToTarget() {
+void SetClickThrough(bool through);
+
+bool IsTargetForeground() {
+    if (!g_hTargetWindow || !IsWindow(g_hTargetWindow)) {
+        return true;
+    }
+
+    HWND foreground = GetForegroundWindow();
+    if (!foreground) {
+        return false;
+    }
+
+    if (foreground == g_hTargetWindow || foreground == g_hOverlay) {
+        return true;
+    }
+
+    if (GetAncestor(foreground, GA_ROOT) == g_hTargetWindow) {
+        return true;
+    }
+
+    DWORD foregroundPid = 0;
+    GetWindowThreadProcessId(foreground, &foregroundPid);
+    return foregroundPid == GetCurrentProcessId();
+}
+
+void SetOverlayShown(bool shown) {
     if (!g_hOverlay) {
         return;
     }
 
-    const DWORD now = GetTickCount();
-    static DWORD s_lastRectCheckTick = 0;
-    if (now - s_lastRectCheckTick < 100) {
+    const LONG desired = shown ? 1 : 0;
+    if (InterlockedExchange(&g_bOverlayShown, desired) == desired) {
         return;
     }
-    s_lastRectCheckTick = now;
+
+    ShowWindow(g_hOverlay, shown ? SW_SHOWNOACTIVATE : SW_HIDE);
+    NightSharpDebug::Logf("[Overlay] %s external overlay",
+                          shown ? "Showing" : "Hiding");
+}
+
+bool MoveOverlayToTarget() {
+    if (!g_hOverlay) {
+        return false;
+    }
+
+    if ((g_hTargetWindow && IsIconic(g_hTargetWindow)) || !IsTargetForeground()) {
+        SetClickThrough(true);
+        SetOverlayShown(false);
+        return false;
+    }
 
     RECT rc = {};
     GetOverlayRect(&rc);
-
-    static RECT s_lastRect = {};
-    static DWORD s_lastSetWindowPosTick = 0;
-    const bool sameRect = EqualRect(&rc, &s_lastRect) != FALSE;
-    if (sameRect && now - s_lastSetWindowPosTick < 500) {
-        return;
-    }
-
-    HWND zOrder = g_hTargetWindow ? HWND_TOP : HWND_TOPMOST;
-    SetWindowPos(
-        g_hOverlay,
-        zOrder,
-        rc.left,
-        rc.top,
-        rc.right - rc.left,
-        rc.bottom - rc.top,
+    SetOverlayShown(true);
+    SetWindowPos(g_hOverlay, HWND_TOP,
+        rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
         SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-    s_lastRect = rc;
-    s_lastSetWindowPosTick = now;
+    return true;
 }
 
 bool IsClientPointOverMenu(POINT pt) {
@@ -439,35 +574,20 @@ void SetClickThrough(bool through) {
 }
 
 void SetAntiCapture(bool enabled) {
-    if (!g_hOverlay || enabled == g_antiCaptureEnabled) {
-        return;
-    }
-
-    constexpr DWORD kWdaNone = 0x00000000u;
-    constexpr DWORD kWdaExcludeFromCapture = 0x00000011u;
-    const DWORD affinity = enabled ? kWdaExcludeFromCapture : kWdaNone;
-
+    if (!g_hOverlay) return;
+    if (enabled == g_antiCaptureEnabled) return;
+    const DWORD affinity = enabled ? 0x00000011u : 0x00000000u;
     if (SetWindowDisplayAffinity(g_hOverlay, affinity)) {
         g_antiCaptureEnabled = enabled;
-        NightSharpDebug::Logf(
-            "[Overlay] SetWindowDisplayAffinity affinity=0x%08lX enabled=%d",
-            affinity,
-            enabled ? 1 : 0);
-        return;
-    }
-
-    static DWORD s_lastFailureTick = 0;
-    const DWORD now = GetTickCount();
-    if (now - s_lastFailureTick > 5000) {
-        s_lastFailureTick = now;
-        NightSharpDebug::Logf(
-            "[Overlay] SetWindowDisplayAffinity failed affinity=0x%08lX gle=%lu",
-            affinity,
-            GetLastError());
     }
 }
 
 void UpdateClickThroughFromMenuBounds() {
+    if (!IsTargetForeground()) {
+        SetClickThrough(true);
+        return;
+    }
+
     if (Config::OverlayInput::clickThrough) {
         SetClickThrough(true);
         return;
@@ -505,14 +625,42 @@ void SyncImGuiMouse() {
 
     ImGuiIO& io = ImGui::GetIO();
     io.MousePos = ImVec2(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-    const bool acceptMenuInput = g_bMenuVisible != 0;
+    const bool acceptMenuInput = g_bMenuVisible != 0 && IsTargetForeground();
     io.MouseDown[0] = acceptMenuInput && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     io.MouseDown[1] = acceptMenuInput && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 }
 
+void RenderStatusOnlyFrame() {
+    if (!g_pd3dContext || !g_pRenderTargetView || !g_pSwapChain) {
+        return;
+    }
+
+    const bool overlayActive = MoveOverlayToTarget();
+    SetClickThrough(overlayActive ? Config::OverlayInput::clickThrough : true);
+    if (!overlayActive) {
+        return;
+    }
+
+    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    ImGui_ImplDX11_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    SyncImGuiMouse();
+    ImGui::NewFrame();
+    OverlayStatus::Render(OverlayStatus::Mode::External);
+    MissionInfoOverlay::RenderDragonSoulName();
+    ImGui::EndFrame();
+    ImGui::Render();
+
+    g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
+    g_pd3dContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
+    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    g_pSwapChain->Present(0, 0);
+}
+
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_NCHITTEST) {
-        if (Config::OverlayInput::clickThrough) {
+        if (!IsTargetForeground() || Config::OverlayInput::clickThrough) {
             return HTTRANSPARENT;
         }
 
@@ -547,6 +695,7 @@ void Overlay::Run() {
     NightSharpDebug::Phase("overlay-run-start");
     InterlockedExchange(&g_bRunning, 1);
     InterlockedExchange(&g_bShutdown, 0);
+    InterlockedExchange(&g_bOverlayShown, 0);
     InterlockedExchange(&g_bMenuReady, 0);
     InterlockedExchange(&g_bMenuVisible, 0);
     NightSharpMenu::showMenu = false;
@@ -589,11 +738,10 @@ void Overlay::Run() {
     GetOverlayRect(&overlayRect);
 
     const DWORD exStyle =
-        WS_EX_LAYERED |
         WS_EX_TRANSPARENT |
         WS_EX_NOACTIVATE |
-        WS_EX_TOOLWINDOW |
-        (g_hTargetWindow ? 0 : WS_EX_TOPMOST);
+        WS_EX_LAYERED |
+        WS_EX_TOOLWINDOW;
 
     NightSharpDebug::Phase("overlay-create-window");
     g_hOverlay = CreateWindowExW(
@@ -619,6 +767,10 @@ void Overlay::Run() {
         InterlockedExchange(&g_bRunning, 0);
         return;
     }
+
+    SetLayeredWindowAttributes(g_hOverlay, 0, 255, LWA_ALPHA);
+    const MARGINS margins = { -1, -1, -1, -1 };
+    DwmExtendFrameIntoClientArea(g_hOverlay, &margins);
 
     NightSharpDebug::Phase("overlay-create-d3d11");
     if (!CreateDeviceD3D11(g_hOverlay)) {
@@ -648,6 +800,10 @@ void Overlay::Run() {
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
     SDK::UI::Icons::SetDevice(g_pd3dDevice, g_pd3dContext);
+    SetOverlayShown(true);
+    UpdateWindow(g_hOverlay);
+    MoveOverlayToTarget();
+    RenderStatusOnlyFrame();
 
     if (WaitForGameReady()) {
         InterlockedExchange(&g_bMenuVisible, 1);
@@ -672,10 +828,11 @@ void Overlay::Run() {
     }
 
     if (!IsShutdownRequested()) {
-        ShowWindow(g_hOverlay, SW_SHOWNOACTIVATE);
-        UpdateWindow(g_hOverlay);
-        MoveOverlayToTarget();
-        SetClickThrough(Config::OverlayInput::clickThrough);
+        const bool overlayActive = MoveOverlayToTarget();
+        if (overlayActive) {
+            UpdateWindow(g_hOverlay);
+        }
+        SetClickThrough(overlayActive ? Config::OverlayInput::clickThrough : true);
     }
 
     const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -690,6 +847,7 @@ void Overlay::Run() {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
             if (msg.message == WM_QUIT) {
+                NightSharpDebug::Logf("[Overlay] WM_QUIT received in external message pump");
                 InterlockedExchange(&g_bShutdown, 1);
             }
         }
@@ -699,7 +857,8 @@ void Overlay::Run() {
         }
 
         if (g_hTargetWindow && !IsWindow(g_hTargetWindow)) {
-            InterlockedExchange(&g_bShutdown, 1);
+            NightSharpDebug::Logf("[Overlay] Target window became invalid in external frame loop");
+            OverlayManager::RequestShutdown();
             break;
         }
 
@@ -711,20 +870,31 @@ void Overlay::Run() {
             CreateRenderTarget();
         }
 
-        MoveOverlayToTarget();
-        SetAntiCapture(Config::StreamProtection::bypassObs);
+        const bool overlayActive = MoveOverlayToTarget();
+        SetAntiCapture(
+            Config::StreamProtection::bypassObs &&
+            !SDK::Drawing::HasCaptureVisibleContent());
 
-        if ((GetAsyncKeyState(VK_F1) & 1) &&
-            InterlockedCompareExchange(&g_bMenuReady, 0, 0) != 0) {
-            ToggleMenuVisible();
+        if (overlayActive) {
+            if ((GetAsyncKeyState(VK_F1) & 1) &&
+                InterlockedCompareExchange(&g_bMenuReady, 0, 0) != 0) {
+                ToggleMenuVisible();
+            }
+            if (GetAsyncKeyState(VK_F8) & 1) {
+                NightSharpDebug::Logf("[Overlay] VK_F8 pressed in external frame loop");
+                OverlayManager::RequestSwitch();
+                break;
+            }
+            if (GetAsyncKeyState(VK_END) & 1) {
+                NightSharpDebug::Logf("[Overlay] VK_END pressed in external frame loop");
+                OverlayManager::RequestShutdown();
+                break;
+            }
+            NightSharpPerf::ToggleHotkeys();
+            UpdateClickThroughFromMenuBounds();
+        } else {
+            SetClickThrough(true);
         }
-        if (GetAsyncKeyState(VK_END) & 1) {
-            InterlockedExchange(&g_bShutdown, 1);
-            break;
-        }
-        NightSharpPerf::ToggleHotkeys();
-
-        UpdateClickThroughFromMenuBounds();
 
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -741,6 +911,12 @@ void Overlay::Run() {
             NightSharpPerf::MsSince(perfStart));
 
         perfStart = NightSharpPerf::Now();
+        TickCoreMemoryHacks();
+        NightSharpPerf::AddPhase(
+            "CoreMemoryHacks::Tick",
+            NightSharpPerf::MsSince(perfStart));
+
+        perfStart = NightSharpPerf::Now();
         Plugins::PluginManager::Get().OnUpdate();
         NightSharpPerf::AddPhase(
             "PluginManager::OnUpdate",
@@ -750,6 +926,18 @@ void Overlay::Run() {
         Plugins::PluginManager::Get().OnRender();
         NightSharpPerf::AddPhase(
             "PluginManager::OnRender",
+            NightSharpPerf::MsSince(perfStart));
+
+        perfStart = NightSharpPerf::Now();
+        SDK::Drawing::DispatchDraw();
+        NightSharpPerf::AddPhase(
+            "SDK::Drawing::DispatchDraw",
+            NightSharpPerf::MsSince(perfStart));
+
+        perfStart = NightSharpPerf::Now();
+        SDK::Drawing::DispatchEndScene();
+        NightSharpPerf::AddPhase(
+            "SDK::Drawing::DispatchEndScene",
             NightSharpPerf::MsSince(perfStart));
 
         perfStart = NightSharpPerf::Now();
@@ -770,6 +958,7 @@ void Overlay::Run() {
 
         NightSharpPerf::RenderOverlay();
         OverlayStatus::Render(OverlayStatus::Mode::External);
+        MissionInfoOverlay::RenderDragonSoulName();
 
         ImGui::EndFrame();
         ImGui::Render();
@@ -790,7 +979,13 @@ void Overlay::Run() {
         NightSharpPerf::EndFrame();
     }
 
+    NightSharpDebug::Logf(
+        "[Overlay] external render loop exited localShutdown=%ld switch=%d",
+        InterlockedCompareExchange(&g_bShutdown, 0, 0),
+        OverlayManager::IsSwitchRequested() ? 1 : 0);
+
     NightSharpDebug::Phase("overlay-shutdown-plugins");
+    RestoreCoreMemoryHacks();
     SDK::Events::SetDeliveryEnabled(false);
     __try {
         Plugins::PluginBootstrap::Shutdown();
@@ -822,6 +1017,7 @@ void Overlay::Run() {
         DestroyWindow(g_hOverlay);
         g_hOverlay = nullptr;
     }
+    g_antiCaptureEnabled = false;
 
     if (classRegistered) {
         UnregisterClassW(overlayClassName, wc.hInstance);

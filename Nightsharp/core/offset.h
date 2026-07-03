@@ -46,6 +46,7 @@ namespace VTable {
 namespace GameRuntime {
     constexpr auto GameTime = 0x1EABFF0;
     constexpr auto NetInstance = 0x1E9CFB0;
+    constexpr auto MissionInfoInstance = 0x1E9D0C8;
     constexpr auto ChatViewController = 0x1EB34E8;
     constexpr auto ShopInstance = 0x1EB34F0;
     constexpr auto OpenWindowsArray = 0x1F79028;
@@ -118,6 +119,18 @@ namespace StatsRuntime {
     constexpr auto ElderDragonKills = ElderDragonKillsEntry + StatEntryValue; // 0x6D0
     constexpr auto RiftHeraldKills = RiftHeraldKillsEntry + StatEntryValue;   // 0x6F8
 } // namespace StatsRuntime
+
+namespace MissionInfo {
+    constexpr auto MapId = 0x8;
+    constexpr auto GameMode = 0x38;
+    constexpr auto GameId = 0xB0;
+    constexpr auto GameType = 0x108;
+    // Level-script helpers registered in sub_3780D0:
+    // GetSelectedElementalTerrain -> MissionInfo+0x150
+    // GetSelectedBaronPit         -> MissionInfo+0x151
+    constexpr auto SelectedElementalTerrain = 0x150;
+    constexpr auto SelectedBaronPit = 0x151;
+} // namespace MissionInfo
 
 // All offsets below are RELATIVE struct field offsets (not RVAs), so they
 // remain stable across patches as long as the Riot client doesn't rewrite
@@ -1045,14 +1058,15 @@ namespace SpellBookLayout {
         // writes can leave model resources out of sync and crash while moving.
         constexpr auto CharacterDataSkinId = 0x68;
 
-        // R3nzSkin-style runtime path, IDA/CE verified on 26.7 (May 2026):
+        // R3nzSkin-style runtime path, updated from R3nzSkin 16.13.1
+        // signature set / newoffset 16.13.
         // local + CharacterDataStack -> std::vector + base_skin.
         // base_skin.skin = stack + BaseSkin + CharacterStackSkin.
-        // CharacterDataStackUpdate is sub_217490(stack, change).
-        // CharacterDataStackPush is sub_231740(this, model, skin, ...).
+        // CharacterDataStackUpdate is sub_210F70(stack, change).
+        // CharacterDataStackPush is sub_22B750(this, model, skin, ...).
         constexpr auto CharacterDataStack       = 0x4108;
-        constexpr auto CharacterDataStackUpdate = 0x217490;
-        constexpr auto CharacterDataStackPush   = 0x231740;  // hotfix verified
+        constexpr auto CharacterDataStackUpdate = 0x210F70;
+        constexpr auto CharacterDataStackPush   = 0x22B750;
         constexpr auto CharacterDataStackBegin  = 0x00;
         constexpr auto CharacterDataStackEnd    = 0x08;
         constexpr auto CharacterDataStackCap    = 0x10;
@@ -1101,6 +1115,7 @@ namespace SpellBookLayout {
         constexpr auto TurretManager  = GameObjectsRuntime::Turrets;
         constexpr auto UnderMouse     = GameObjectsRuntime::UnderMouseObject;
         constexpr auto NetInstance    = GameRuntime::NetInstance;
+        constexpr auto MissionInfoInstance = GameRuntime::MissionInfoInstance;
         constexpr auto HudInstance    = DrawingRuntime::HudInstance;
         constexpr auto Renderer       = DrawingRuntime::Renderer;
     } // namespace Global

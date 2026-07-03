@@ -4,6 +4,7 @@ namespace Config {
 
     namespace ZoomHack {
         inline bool enabled = false;
+        inline float maxZoom = 4000.0f;
     }
 
     namespace SkinChanger {
