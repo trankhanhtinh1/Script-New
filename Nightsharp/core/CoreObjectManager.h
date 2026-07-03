@@ -241,23 +241,26 @@ inline uintptr_t FindByIndex(std::uint32_t index) {
 }
 
 // Walk the MSVC std::map<uint32, GameObject*> red-black tree maintained by
-// each manager at `manager + NetworkIdTree`. Verified on IDA 13337 against
+// managers at a caller-selected tree field offset. Verified on IDA 13337 against
 // sub_560700 (object insert) and sub_2F6930 (object destroy/unregister) —
 // both walk identical trees keyed on `obj+0xCC` (NetworkId).
 //
-// Tree control word at +0x38 holds a pointer to the head sentinel.
+// ObjectManager uses +0x38; MissileManager uses +0x08.
+// The tree field holds a pointer to the head sentinel.
 // Sentinel layout (head): left=leftmost, parent=root, right=rightmost.
 // Node layout: left=+0x00, parent=+0x08, right=+0x10, color=+0x18,
 //              is_nil=+0x19, key(uint32)=+0x20, value(GameObject*)=+0x28.
 // Search direction matches std::map lower_bound: go LEFT when key >= target,
 // RIGHT otherwise; remember the smallest candidate >= target along the way.
-inline uintptr_t FindInNetworkIdTree(uintptr_t manager, std::uint32_t networkId) {
+inline uintptr_t FindInNetworkIdTree(
+    uintptr_t manager,
+    std::uint32_t networkId,
+    std::uintptr_t treeOffset) {
     if (!Globals::IsValidPtr(manager)) {
         return 0;
     }
 
-    const uintptr_t head = Globals::Read<uintptr_t>(
-        manager + Offset::ObjectManagerRuntime::NetworkIdTree);
+    const uintptr_t head = Globals::Read<uintptr_t>(manager + treeOffset);
     if (!Globals::IsValidPtr(head)) {
         return 0;
     }
@@ -313,21 +316,20 @@ inline uintptr_t FindByNetworkId(std::uint32_t networkId) {
 
     const auto& ctx = CoreRuntime::GetContext();
 
-    // Fast path: walk per-manager NetworkId red-black trees in O(log N).
-    // The Heroes/Minions/Turrets/Missiles managers each register their
-    // owned objects into their own tree at `manager + NetworkIdTree`, so a
-    // typed object resolves without scanning the whole object array. Try
-    // the main object manager last because its tree may not include every
-    // misc object (effects/spawn points are kept in the linear array).
-    const uintptr_t managers[] = {
-        ctx.heroManager,
-        ctx.minionManager,
-        ctx.turretManager,
-        ctx.missileManager,
-        ctx.objectManager,
+    // Fast path: walk native NetworkId red-black trees in O(log N). The main
+    // ObjectManager tree is the canonical lookup used by the game; MissileManager
+    // has a separate map keyed by missile network id.
+    struct NetworkIdTreeSource {
+        uintptr_t manager;
+        std::uintptr_t treeOffset;
     };
-    for (const uintptr_t manager : managers) {
-        const uintptr_t object = FindInNetworkIdTree(manager, networkId);
+    const NetworkIdTreeSource managers[] = {
+        { ctx.objectManager, Offset::ObjectManagerRuntime::NetworkIdTree },
+        { ctx.missileManager, Offset::ObjectManagerRuntime::MissileManagerNetworkIdTree },
+    };
+    for (const NetworkIdTreeSource& source : managers) {
+        const uintptr_t object =
+            FindInNetworkIdTree(source.manager, networkId, source.treeOffset);
         if (Globals::IsValidPtr(object) &&
             Core::Objects::ReadNetworkId(object) == networkId) {
             return object;

@@ -53,7 +53,7 @@ protected:
         }
         if (wPressed) {
             const Vec3 selfPosition = SDK::ObjectManager::Player().Position();
-            const bool ok = CoreCastSpell::CastSelfSpell(CoreCastSpell::SlotW);
+            const bool ok = m_w.Cast();
             RecordAttempt("JaxW", ok, selfPosition);
         }
     }
@@ -67,6 +67,8 @@ protected:
 private:
     MenuKeyBind* m_qKey = nullptr;
     MenuKeyBind* m_wKey = nullptr;
+    SDK::Spell m_q{ SDK::SpellSlot::Q, 700.0f };
+    SDK::Spell m_w{ SDK::SpellSlot::W };
     bool m_qWasDown = false;
     bool m_wWasDown = false;
 
@@ -91,11 +93,9 @@ private:
             return;
         }
 
-        const Vec3 targetPosition =
-            Globals::Read<Vec3>(targetAddress + Offset::All::Position);
-        const bool ok = CoreCastSpell::CastTargetSpell(
-            CoreCastSpell::SlotQ,
-            targetAddress);
+        const SDK::AIHeroClient target(targetAddress);
+        const Vec3 targetPosition = target.Position();
+        const bool ok = m_q.CastOnUnit(target);
         RecordAttempt("JaxQ", ok, targetPosition, targetAddress);
     }
 };

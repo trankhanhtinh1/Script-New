@@ -252,7 +252,7 @@ public:
             if (IsCharging()) {
                 ShootChargedSpell(Slot, prediction.GetCastPosition());
             } else {
-                StartCharging();
+                StartCharging(prediction.GetCastPosition());
             }
         } else if (!player.Spellbook().CastSpell(Slot, prediction.GetCastPosition())) {
             return CastStates::NotCasted;
@@ -262,7 +262,12 @@ public:
     }
 
     bool Cast() {
-        return CastOnUnit(GameObjects::Player());
+        if (!IsReady()) {
+            return false;
+        }
+
+        LastCastAttemptT = Variables::TickCount();
+        return GameObjects::Player().Spellbook().CastSpell(Slot);
     }
 
     bool Cast(const Vector2& fromPosition, const Vector2& toPosition) {
@@ -292,7 +297,7 @@ public:
             if (IsCharging()) {
                 ShootChargedSpell(Slot, position);
             } else {
-                StartCharging();
+                StartCharging(position);
             }
             return false;
         }
@@ -603,7 +608,7 @@ public:
             return;
         }
 
-        GameObjects::Player().Spellbook().CastSpell(Slot);
+        GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, Game::CursorPos(), false);
         chargedReqSentT_ = Variables::TickCount();
     }
 
@@ -612,7 +617,7 @@ public:
             return;
         }
 
-        GameObjects::Player().Spellbook().CastSpell(Slot, position);
+        GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, position, false);
         chargedReqSentT_ = Variables::TickCount();
     }
 
@@ -658,7 +663,6 @@ private:
         // after the NavMesh wrapper exposes the exact C# API.
         auto spellbook = GameObjects::Player().Spellbook();
         spellbook.UpdateChargedSpell(slot, position, releaseCast, false);
-        spellbook.CastSpell(slot, position, false);
     }
 
     static Vector2 Rotate2D(const Vector2& value, float angle) {

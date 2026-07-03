@@ -105,9 +105,7 @@ protected:
             return;
         }
 
-        const bool ok = SDK::ObjectManager::Player().Spellbook().CastSpell(
-            SDK::SpellSlot::Q,
-            castPosition);
+        const bool ok = m_q.Cast(castPosition);
         RecordAttempt("EzrealQ", ok, castPosition, target);
     }
 

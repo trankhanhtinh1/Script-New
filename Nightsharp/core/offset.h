@@ -21,13 +21,16 @@ namespace VTable {
     namespace ObjectManagerRuntime {
         constexpr auto ManagerListItems = 0x8;
         constexpr auto ManagerListSize = 0x10;
-        // Per-manager NetworkId red-black tree (MSVC std::map style), verified
+        // NetworkId red-black tree (MSVC std::map style), verified
         // on IDA 13337 in sub_560700 (insertion) and sub_2F6930 (destructor
         // unregister) — both walk the tree headed at `manager + 0x38`.
         // Header is the sentinel; header->parent (+0x08) holds the root.
         // Node layout: left=+0x00, parent=+0x08, right=+0x10, color=+0x18,
         // is_nil=+0x19, key(uint32)=+0x20, value(object ptr)=+0x28.
+        // Main ObjectManager uses +0x38; MissileManager uses +0x08
+        // for the same NetworkId std::map header.
         constexpr auto NetworkIdTree = 0x38;
+        constexpr auto MissileManagerNetworkIdTree = 0x8;
         constexpr auto NetworkIdTreeRootSlot = 0x8; // header->parent → root
         constexpr auto NetworkIdTreeNodeLeft = 0x0;
         constexpr auto NetworkIdTreeNodeParent = 0x8;

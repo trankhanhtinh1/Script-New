@@ -19,6 +19,15 @@ protected:
     }
 
     void BuildChampionMenu(Menu* settings) override {
+        m_q = SDK::Spell(SDK::SpellSlot::Q, kMinQRange);
+        m_q.SetSkillshot(0.55f, 65.0f, FLT_MAX, false, SDK::SpellType::Line);
+        m_q.SetCharged(
+            "XerathArcanopulseChargeUp",
+            "XerathArcanopulseChargeUp",
+            static_cast<int>(kMinQRange),
+            static_cast<int>(kMaxQRange),
+            static_cast<float>(kRangeGrowMs) / 1000.0f);
+
         m_qKey = settings->Add(new MenuKeyBind(
             "autoChargeQ",
             "Press: auto charge/release Q at selected enemy",
@@ -63,6 +72,7 @@ private:
     static constexpr int kMinimumHoldMs = 100;
 
     MenuKeyBind* m_qKey = nullptr;
+    SDK::Spell m_q{ SDK::SpellSlot::Q, kMinQRange };
     bool m_qWasDown = false;
     bool m_charging = false;
     int m_chargeStartTick = 0;
@@ -102,9 +112,10 @@ private:
             return;
         }
 
-        const bool ok = CoreCastSpell::BeginChargeSpell(
-            CoreCastSpell::SlotQ,
-            m_lastPrediction);
+        const bool ok = SDK::ObjectManager::Player().Spellbook().UpdateChargedSpell(
+            SDK::SpellSlot::Q,
+            m_lastPrediction,
+            false);
         RecordAttempt(
             "XerathQBeginAuto",
             ok,
@@ -162,9 +173,10 @@ private:
     }
 
     void ReleaseAutoQ(float targetDistance) {
-        const bool ok = CoreCastSpell::ReleaseChargeSpell(
-            CoreCastSpell::SlotQ,
-            m_lastPrediction);
+        const bool ok = SDK::ObjectManager::Player().Spellbook().UpdateChargedSpell(
+            SDK::SpellSlot::Q,
+            m_lastPrediction,
+            true);
         Appendf(
             "[XerathCastTest] auto-release tick=%d elapsed=%d range=%.1f targetDistance=%.1f target=0x%llX prediction=%.1f %.1f %.1f ok=%d\r\n",
             SDK::Game::TickCount(),
