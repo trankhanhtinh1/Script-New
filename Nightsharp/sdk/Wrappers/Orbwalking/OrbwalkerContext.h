@@ -16,6 +16,7 @@ struct OrbwalkerRuntimeContext {
     int lastMoveOrderTick = 0;
     int lastAttackOrderTick = 0;
     int lastAttackOrderNetworkId = 0;
+    int timingSnapshotTick = 0;
     int pendingAttackTick = 0;
     int pendingAttackTargetNetworkId = 0;
     int lastAttackConfirmTick = 0;

@@ -223,6 +223,12 @@ inline float OrbwalkerBase::MoveSafetyMs() const {
 }
 
 inline void OrbwalkerBase::SnapshotAttackTimings(const AIHeroClient& player) {
+    const int now = Tick();
+    if (context_.timingSnapshotTick == now) {
+        return;
+    }
+    context_.timingSnapshotTick = now;
+
     if (!player.IsValid() || player.IsDead()) {
         context_.attackDelayMs = kDefaultAttackDelayMs;
         context_.attackWindupMs = kDefaultAttackWindupMs;
