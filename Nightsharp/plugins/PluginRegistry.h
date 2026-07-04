@@ -25,8 +25,11 @@ namespace PluginRegistry {
         const char*  ChampionName = nullptr;
         const char*  ConfigFileName = nullptr;
         bool         Loaded      = false;
+        bool         Enabled     = true;
         bool         AlwaysLoad  = true;
         bool         AlwaysLoadConfigured = false;
+        int          CrashCount  = 0;
+        const char*  LastRuntimeError = nullptr;
         void*        RuntimeUserData = nullptr;
         bool       (*RuntimeLoad)(void*) = nullptr;
         bool       (*RuntimeUnload)(void*) = nullptr;
@@ -184,6 +187,7 @@ namespace PluginRegistry {
         Plugins[idx].AlwaysLoad = autoLoad;
         Plugins[idx].AlwaysLoadConfigured = false;
         Plugins[idx].Loaded     = autoLoad;
+        Plugins[idx].Enabled    = true;
         NightSharpDebug::Logf("[PluginRegistry] Register idx=%d name=%s id=%s auto=%d",
                               idx,
                               name ? name : "",

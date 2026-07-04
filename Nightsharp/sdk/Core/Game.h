@@ -6,6 +6,7 @@
 #include "../../Core/CoreMap.h"
 #include "../../Core/Globals.h"
 #include "../../Core/Vector.h"
+#include "../../CrashReporter.h"
 #include "../../DebugLog.h"
 #include "../GameObjects/ObjectManager.h"
 #include "Objects.h"
@@ -47,6 +48,16 @@ struct InputDebugState {
 };
 
 namespace detail {
+    inline bool FunctionInModule(const void* function, HMODULE module) {
+        if (!function || !module) {
+            return false;
+        }
+
+        MEMORY_BASIC_INFORMATION mbi = {};
+        return VirtualQuery(function, &mbi, sizeof(mbi)) &&
+               mbi.AllocationBase == module;
+    }
+
     template <typename Handler, int MaxHandlers = 64>
     struct HandlerList {
         Handler handlers[MaxHandlers] = {};
@@ -83,6 +94,34 @@ namespace detail {
                 return true;
             }
             return false;
+        }
+
+        void RemoveAt(int index) {
+            if (index < 0 || index >= count) {
+                return;
+            }
+            for (int j = index; j + 1 < count; ++j) {
+                handlers[j] = handlers[j + 1];
+            }
+            handlers[--count] = nullptr;
+        }
+
+        int RemoveHandlersInModule(HMODULE module) {
+            if (!module) {
+                return 0;
+            }
+
+            int removed = 0;
+            for (int i = 0; i < count;) {
+                Handler handler = handlers[i];
+                if (!handler || FunctionInModule(reinterpret_cast<const void*>(handler), module)) {
+                    RemoveAt(i);
+                    ++removed;
+                    continue;
+                }
+                ++i;
+            }
+            return removed;
         }
 
         void Clear() {
@@ -191,12 +230,31 @@ namespace detail {
     }
 
     inline void OnCoreUpdate(const SDK::Events::GameUpdateEventArgs&) {
-        for (int i = 0; i < UpdateHandlers.count; ++i) {
-            if (auto handler = UpdateHandlers.handlers[i]) {
-                __try {
-                    handler();
-                } __except (1) {}
+        for (int i = 0; i < UpdateHandlers.count;) {
+            auto handler = UpdateHandlers.handlers[i];
+            if (!handler) {
+                UpdateHandlers.RemoveAt(i);
+                continue;
             }
+
+            bool crashed = false;
+            __try {
+                handler();
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "SDK::Game::OnUpdate",
+                          GetExceptionInformation())) {
+                crashed = true;
+                NightSharpDebug::Logf("[SDK::Game] OnUpdate handler crashed and was removed index=%d handler=%p",
+                                      i,
+                                      reinterpret_cast<void*>(handler));
+            }
+
+            if (crashed) {
+                UpdateHandlers.RemoveAt(i);
+                continue;
+            }
+            ++i;
         }
     }
 
@@ -209,23 +267,61 @@ namespace detail {
     }
 
     inline bool DispatchSendChat(GameSendChatEventArgs& args) {
-        for (int i = 0; i < SendChatHandlers.count; ++i) {
-            if (auto handler = SendChatHandlers.handlers[i]) {
-                __try {
-                    handler(args);
-                } __except (1) {}
+        for (int i = 0; i < SendChatHandlers.count;) {
+            auto handler = SendChatHandlers.handlers[i];
+            if (!handler) {
+                SendChatHandlers.RemoveAt(i);
+                continue;
             }
+
+            bool crashed = false;
+            __try {
+                handler(args);
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "SDK::Game::OnSendChat",
+                          GetExceptionInformation())) {
+                crashed = true;
+                NightSharpDebug::Logf("[SDK::Game] OnSendChat handler crashed and was removed index=%d handler=%p",
+                                      i,
+                                      reinterpret_cast<void*>(handler));
+            }
+
+            if (crashed) {
+                SendChatHandlers.RemoveAt(i);
+                continue;
+            }
+            ++i;
         }
         return args.Process;
     }
 
     inline bool DispatchDisplayChat(GameDisplayChatEventArgs& args) {
-        for (int i = 0; i < DisplayChatHandlers.count; ++i) {
-            if (auto handler = DisplayChatHandlers.handlers[i]) {
-                __try {
-                    handler(args);
-                } __except (1) {}
+        for (int i = 0; i < DisplayChatHandlers.count;) {
+            auto handler = DisplayChatHandlers.handlers[i];
+            if (!handler) {
+                DisplayChatHandlers.RemoveAt(i);
+                continue;
             }
+
+            bool crashed = false;
+            __try {
+                handler(args);
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "SDK::Game::OnDisplayChat",
+                          GetExceptionInformation())) {
+                crashed = true;
+                NightSharpDebug::Logf("[SDK::Game] OnDisplayChat handler crashed and was removed index=%d handler=%p",
+                                      i,
+                                      reinterpret_cast<void*>(handler));
+            }
+
+            if (crashed) {
+                DisplayChatHandlers.RemoveAt(i);
+                continue;
+            }
+            ++i;
         }
         return args.Process;
     }
@@ -797,14 +893,51 @@ inline bool DispatchWndProc(HWND hWnd, std::uint32_t msg, std::uintptr_t wParam,
     args.LParam = lParam;
     args.Process = true;
 
-    for (int i = 0; i < detail::WndProcHandlers.count; ++i) {
-        if (auto handler = detail::WndProcHandlers.handlers[i]) {
-            __try {
-                handler(args);
-            } __except (1) {}
+    for (int i = 0; i < detail::WndProcHandlers.count;) {
+        auto handler = detail::WndProcHandlers.handlers[i];
+        if (!handler) {
+            detail::WndProcHandlers.RemoveAt(i);
+            continue;
         }
+
+        bool crashed = false;
+        __try {
+            handler(args);
+        }
+        __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                      "SDK::Game::WndProc",
+                      GetExceptionInformation())) {
+            crashed = true;
+            NightSharpDebug::Logf("[SDK::Game] WndProc handler crashed and was removed index=%d handler=%p",
+                                  i,
+                                  reinterpret_cast<void*>(handler));
+        }
+
+        if (crashed) {
+            detail::WndProcHandlers.RemoveAt(i);
+            continue;
+        }
+        ++i;
     }
     return args.Process;
+}
+
+inline int RemoveHandlersFromModule(HMODULE module) {
+    if (!module) {
+        return 0;
+    }
+
+    int removed = 0;
+    removed += detail::UpdateHandlers.RemoveHandlersInModule(module);
+    removed += detail::WndProcHandlers.RemoveHandlersInModule(module);
+    removed += detail::SendChatHandlers.RemoveHandlersInModule(module);
+    removed += detail::DisplayChatHandlers.RemoveHandlersInModule(module);
+    if (removed > 0) {
+        NightSharpDebug::Logf("[SDK::Game] Removed %d handlers from module=%p",
+                              removed,
+                              module);
+    }
+    return removed;
 }
 
 inline void Reset() {

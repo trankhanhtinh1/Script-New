@@ -44,7 +44,7 @@ namespace Plugins {
             if (plugin->m_loaded) return true;
             NightSharpDebug::Logf("[PluginManager] Load begin name=%s id=%s",
                                   plugin->GetName(), plugin->GetInternalId());
-            if (!plugin->CanLoad()) {
+            if (!SafeCanLoad(plugin, "PluginManager::Load/CanLoad")) {
                 NightSharpDebug::Logf("[PluginManager] Load blocked by CanLoad name=%s",
                                       plugin->GetName());
                 plugin->m_loaded = false;
@@ -60,11 +60,15 @@ namespace Plugins {
                           GetExceptionInformation())) {
                 NightSharpDebug::Logf("[PluginManager] Load crashed name=%s id=%s",
                                       plugin->GetName(), plugin->GetInternalId());
+                DisableAfterCrash(plugin, "PluginManager::Load/OnLoad");
                 plugin->m_loaded = false;
                 SyncRegistry(plugin);
                 return false;
             }
             plugin->m_loaded = true;
+            plugin->m_enabled = true;
+            ClearRuntimeError(plugin);
+            ResetCanLoadCache(plugin);
             SyncRegistry(plugin);
             NightSharpDebug::Logf("[PluginManager] Load complete name=%s id=%s",
                                   plugin->GetName(), plugin->GetInternalId());
@@ -77,6 +81,7 @@ namespace Plugins {
 
             NightSharpDebug::Logf("[PluginManager] Unload begin name=%s id=%s",
                                   plugin->GetName(), plugin->GetInternalId());
+            bool crashed = false;
             __try {
                 plugin->OnUnload();
             }
@@ -85,15 +90,16 @@ namespace Plugins {
                           GetExceptionInformation())) {
                 NightSharpDebug::Logf("[PluginManager] Unload crashed name=%s id=%s",
                                       plugin->GetName(), plugin->GetInternalId());
-                plugin->m_loaded = false;
-                SyncRegistry(plugin);
-                return false;
+                MarkRuntimeCrash(plugin, "PluginManager::Unload/OnUnload");
+                crashed = true;
             }
+
+            RuntimeCleanup(plugin, "PluginManager::Unload/Cleanup");
             plugin->m_loaded = false;
             SyncRegistry(plugin);
             NightSharpDebug::Logf("[PluginManager] Unload complete name=%s id=%s",
                                   plugin->GetName(), plugin->GetInternalId());
-            return true;
+            return !crashed;
         }
 
         void LoadAuto() {
@@ -144,7 +150,7 @@ namespace Plugins {
                         NightSharpDebug::Logf("[PluginManager] OnUpdate crashed; disabling name=%s id=%s",
                                               plugin->GetName(),
                                               plugin->GetInternalId());
-                        plugin->m_enabled = false;
+                        DisableAfterCrash(plugin.get(), "PluginManager::OnUpdate");
                         SyncRegistry(plugin.get());
                     }
                     NightSharpPerf::AddPluginTiming(
@@ -173,7 +179,7 @@ namespace Plugins {
                         NightSharpDebug::Logf("[PluginManager] OnRender crashed; disabling name=%s id=%s",
                                               plugin->GetName(),
                                               plugin->GetInternalId());
-                        plugin->m_enabled = false;
+                        DisableAfterCrash(plugin.get(), "PluginManager::OnRender");
                         SyncRegistry(plugin.get());
                     }
                     NightSharpPerf::AddPluginTiming(
@@ -188,6 +194,92 @@ namespace Plugins {
         }
 
     private:
+        void ClearRuntimeError(IPlugin* plugin) {
+            if (!plugin) {
+                return;
+            }
+            plugin->m_lastRuntimeError[0] = '\0';
+        }
+
+        void MarkRuntimeCrash(IPlugin* plugin, const char* stage) {
+            if (!plugin) {
+                return;
+            }
+
+            plugin->m_enabled = false;
+            ++plugin->m_crashCount;
+            lstrcpynA(plugin->m_lastRuntimeError,
+                      stage && stage[0] ? stage : "runtime-crash",
+                      static_cast<int>(sizeof(plugin->m_lastRuntimeError)));
+            NightSharpDebug::Logf("[PluginManager] Disabled crashed plugin name=%s id=%s crashes=%d stage=%s",
+                                  plugin->GetName(),
+                                  plugin->GetInternalId(),
+                                  plugin->m_crashCount,
+                                  plugin->m_lastRuntimeError);
+            SyncRegistry(plugin);
+        }
+
+        void DisableAfterCrash(IPlugin* plugin, const char* stage) {
+            if (!plugin) {
+                return;
+            }
+
+            MarkRuntimeCrash(plugin, stage);
+            RuntimeCleanup(plugin, stage && stage[0] ? stage : "PluginManager::CrashCleanup");
+            plugin->m_loaded = false;
+            SyncRegistry(plugin);
+        }
+
+        void ResetCanLoadCache(IPlugin* plugin) {
+            if (!plugin) {
+                return;
+            }
+            const int idx = plugin->m_registryIndex;
+            if (idx < 0 || idx >= PluginRegistry::PluginCount) {
+                return;
+            }
+            auto& entry = PluginRegistry::Plugins[idx];
+            entry.CanLoadCached = true;
+            entry.CanLoadChecked = false;
+        }
+
+        bool SafeCanLoad(IPlugin* plugin, const char* stage) {
+            if (!plugin) {
+                return false;
+            }
+
+            __try {
+                return plugin->CanLoad();
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          stage ? stage : "PluginManager::CanLoad",
+                          GetExceptionInformation())) {
+                NightSharpDebug::Logf("[PluginManager] CanLoad crashed name=%s id=%s",
+                                      plugin->GetName(),
+                                      plugin->GetInternalId());
+                DisableAfterCrash(plugin, stage ? stage : "PluginManager::CanLoad");
+                return false;
+            }
+        }
+
+        void RuntimeCleanup(IPlugin* plugin, const char* stage) {
+            if (!plugin) {
+                return;
+            }
+
+            __try {
+                plugin->OnRuntimeCleanup();
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          stage ? stage : "PluginManager::RuntimeCleanup",
+                          GetExceptionInformation())) {
+                NightSharpDebug::Logf("[PluginManager] Runtime cleanup crashed name=%s id=%s",
+                                      plugin->GetName(),
+                                      plugin->GetInternalId());
+                MarkRuntimeCrash(plugin, stage ? stage : "PluginManager::RuntimeCleanup");
+            }
+        }
+
         IPlugin* RegisterOwned(std::unique_ptr<IPlugin> plugin, PluginRegistry::PluginKind kind) {
             if (!plugin) {
                 NightSharpDebug::Logf("[PluginManager] RegisterOwned skipped: null plugin");
@@ -276,7 +368,7 @@ namespace Plugins {
                     NightSharpDebug::Logf("[PluginManager] OnMenu crashed; disabling name=%s id=%s",
                                           plugin->GetName(),
                                           plugin->GetInternalId());
-                    plugin->m_enabled = false;
+                    Get().DisableAfterCrash(plugin, stage);
                     Get().SyncRegistry(plugin);
                 }
                 NightSharpPerf::AddPluginTiming(
@@ -299,17 +391,7 @@ namespace Plugins {
                         _TRUNCATE,
                         "PluginManager::CanLoad/%s",
                         plugin->GetInternalId());
-            __try {
-                return plugin->CanLoad();
-            }
-            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                          stage,
-                          GetExceptionInformation())) {
-                NightSharpDebug::Logf("[PluginManager] CanLoad crashed name=%s id=%s",
-                                      plugin->GetName(),
-                                      plugin->GetInternalId());
-                return false;
-            }
+            return Get().SafeCanLoad(plugin, stage);
         }
 
         void SyncRegistry(IPlugin* plugin) {
@@ -319,8 +401,15 @@ namespace Plugins {
 
             auto& entry = PluginRegistry::Plugins[idx];
             entry.Loaded = plugin->m_loaded;
+            entry.Enabled = plugin->m_enabled;
             entry.Category = ToRegistryCategory(plugin->GetCategory());
             entry.ChampionName = plugin->GetChampionName();
+            entry.CrashCount = plugin->m_crashCount;
+            entry.LastRuntimeError = plugin->m_lastRuntimeError[0] ? plugin->m_lastRuntimeError : nullptr;
+            if (!plugin->m_enabled && plugin->m_crashCount > 0) {
+                entry.CanLoadCached = false;
+                entry.CanLoadChecked = true;
+            }
         }
 
         PluginManager() = default;

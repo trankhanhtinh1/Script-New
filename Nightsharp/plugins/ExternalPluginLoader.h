@@ -12,6 +12,11 @@
 #include "PluginRegistry.h"
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
+#include "../SDK/Core/Game.h"
+#include "../SDK/Events/Events.h"
+#include "../SDK/UI/Drawing.h"
+#include "../SDK/UI/UI.h"
+#include "../SDK/Wrappers/Orbwalking/OrbwalkerBase.h"
 
 #include <NightSharp.SDK.Plugin.h>
 
@@ -312,6 +317,8 @@ namespace Detail {
 
         ~ExternalPlugin() override {
             if (m_module) {
+                CleanupModuleCallbacks();
+                DetachOwnedRuntimeMenus();
                 char modulePath[MAX_PATH] = {};
                 GetModuleFileNameA(m_module, modulePath, MAX_PATH);
                 NightSharpDebug::Logf("[ExternalPluginLoader] FreeLibrary name=%s path=%s",
@@ -388,7 +395,62 @@ namespace Detail {
             }
         }
 
+        void OnRuntimeCleanup() override {
+            CleanupModuleCallbacks();
+            DetachOwnedRuntimeMenus();
+        }
+
     private:
+        void CleanupModuleCallbacks() {
+            if (!m_module) {
+                return;
+            }
+
+            int removed = 0;
+            removed += SDK::Events::RemoveHandlersFromModule(m_module);
+            removed += SDK::Game::RemoveHandlersFromModule(m_module);
+            removed += SDK::Drawing::RemoveHandlersFromModule(m_module);
+            removed += SDK::OrbwalkingDetail::RemoveHandlersFromModule(m_module);
+            if (removed > 0) {
+                NightSharpDebug::Logf("[ExternalPluginLoader] Removed %d callbacks for name=%s module=%p",
+                                      removed,
+                                      m_name.c_str(),
+                                      m_module);
+            }
+        }
+
+        bool IsOwnedRuntimeMenu(const SDK::UI::Menu* menu) const {
+            if (!menu) {
+                return false;
+            }
+
+            return menu->Name.equals(m_internalId.c_str()) ||
+                   menu->DisplayName.equals(m_internalId.c_str()) ||
+                   menu->Name.equals(m_name.c_str()) ||
+                   menu->DisplayName.equals(m_name.c_str());
+        }
+
+        void DetachOwnedRuntimeMenus() {
+            auto& manager = SDK::UI::MenuManager::Instance();
+            int removed = 0;
+            for (int i = manager.Menus.size() - 1; i >= 0; --i) {
+                SDK::UI::Menu* root = manager.Menus[i];
+                if (!IsOwnedRuntimeMenu(root)) {
+                    continue;
+                }
+
+                manager.Remove(root);
+                ++removed;
+            }
+
+            if (removed > 0) {
+                NightSharpDebug::Logf("[ExternalPluginLoader] Detached %d SDK menus for name=%s id=%s",
+                                      removed,
+                                      m_name.c_str(),
+                                      m_internalId.c_str());
+            }
+        }
+
         HMODULE m_module = nullptr;
         const NightSharp::Plugin::Exports* m_exports = nullptr;
         std::string m_name;
