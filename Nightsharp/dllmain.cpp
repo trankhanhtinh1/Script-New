@@ -143,7 +143,6 @@ static void ShutdownNightSharpRuntime() {
 static DWORD WINAPI OverlayWorker(LPVOID param) {
     HMODULE module = reinterpret_cast<HMODULE>(param);
 
-    NightSharpDebug::StartExternalConsole(module);
     NightSharpDebug::Phase("overlay-worker-enter");
     NightSharpDebug::Logf("[NightSharp] OverlayWorker entered");
 
@@ -205,7 +204,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     switch (reason) {
     case DLL_PROCESS_ATTACH: {
         DisableThreadLibraryCalls(hModule);
-        NightSharpDebug::ResetFileLog();
         NightSharpDebug::CrashReporter::Install(hModule);
         NightSharpDebug::Phase("dll-attach");
         NightSharpDebug::Logf("[NightSharp] DllMain attach module=%p", hModule);
@@ -244,7 +242,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             ShutdownNightSharpRuntime();
         }
         NightSharpDebug::CrashReporter::Uninstall();
-        NightSharpDebug::CloseExternalConsolePipe();
         break;
     default:
         break;

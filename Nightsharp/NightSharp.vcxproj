@@ -66,7 +66,7 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PreprocessorDefinitions>WIN32;_WINDOWS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\NightSharp.SDK\include;$(ProjectDir)imgui;$(ProjectDir)overlay;$(ProjectDir)Core;$(ProjectDir)Plugins;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)imgui;$(ProjectDir)overlay;$(ProjectDir)Core;$(ProjectDir)Plugins;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -85,7 +85,7 @@
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PreprocessorDefinitions>WIN32;_WINDOWS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\NightSharp.SDK\include;$(ProjectDir)imgui;$(ProjectDir)overlay;$(ProjectDir)Core;$(ProjectDir)Plugins;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)imgui;$(ProjectDir)overlay;$(ProjectDir)Core;$(ProjectDir)Plugins;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -106,6 +106,7 @@
     <ClCompile Include="overlay\D3D11Hook.cpp" />
     <ClCompile Include="overlay\Overlay.cpp" />
     <ClCompile Include="overlay\OverlayManager.cpp" />
+    <ClCompile Include="sdk\Data\EmbeddedAssets.cpp" />
     <ClCompile Include="Third_Party\clipper\clipper.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -114,7 +115,6 @@
   <ItemGroup>
     <ClInclude Include="Core\*.h" />
     <ClInclude Include="DebugLog.h" />
-    <ClInclude Include="InternalDebugConsole.h" />
     <ClInclude Include="libs\**\*.h" />
     <ClInclude Include="Plugins\**\*.h" />
     <ClInclude Include="SDK\**\*.h" />

@@ -58,7 +58,6 @@ using InventorySlot = ::SDK::InventorySlot;
 using Spell = ::SDK::Spell;
 using SpellBookClient = ::SDK::SpellBookClient;
 using SpellDataInstClient = ::SDK::SpellDataInstClient;
-using TargetSelector = ::SDK::TargetSelector;
 using BarracksDampenerClient = ::SDK::BarracksDampenerClient;
 using HQClient = ::SDK::HQClient;
 using ShopClient = ::SDK::ShopClient;

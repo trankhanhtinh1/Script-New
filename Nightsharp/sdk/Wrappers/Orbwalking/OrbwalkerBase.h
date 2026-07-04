@@ -17,14 +17,13 @@
 #include "../../GameObjects/ObjectManager.h"
 #include "../../Math/Collision.h"
 #include "../../Math/HealthPrediction.h"
-#include "../../Data/EmbeddedAssets.h"
 #include "../../UI/Drawing.h"
 #include "../../UI/Icons.h"
 #include "../../UI/UI.h"
+#include "../../Utils/AssetInstaller.h"
 #include "../../Utils/AutoAttack.h"
 #include "../../Variables.h"
 #include "../../Wrappers/Damages/Damage.h"
-#include "../../../CrashReporter.h"
 #include "../../../Core/CoreAttackableUnit.h"
 #include "../../../Core/CoreBuffs.h"
 #include "../../../Core/CoreControl.h"
@@ -129,9 +128,6 @@ class EventList {
 public:
     using Handler = void(*)(T&);
 
-    EventList() = default;
-    explicit EventList(const char* name) : name_(name ? name : "") {}
-
     bool Add(Handler handler) {
         if (!handler) {
             return false;
@@ -165,112 +161,32 @@ public:
         return false;
     }
 
-    void RemoveAt(int index) {
-        if (index < 0 || index >= count_) {
-            return;
-        }
-        for (int j = index; j + 1 < count_; ++j) {
-            handlers_[j] = handlers_[j + 1];
-        }
-        handlers_[--count_] = nullptr;
-    }
-
-    int RemoveHandlersInModule(HMODULE module) {
-        if (!module) {
-            return 0;
-        }
-
-        int removed = 0;
-        for (int i = 0; i < count_;) {
+    void Fire(T& args) const {
+        for (int i = 0; i < count_; ++i) {
             Handler handler = handlers_[i];
             if (!handler) {
-                RemoveAt(i);
                 continue;
             }
-
-            MEMORY_BASIC_INFORMATION mbi = {};
-            if (VirtualQuery(reinterpret_cast<const void*>(handler), &mbi, sizeof(mbi)) &&
-                mbi.AllocationBase == module) {
-                RemoveAt(i);
-                ++removed;
-                continue;
-            }
-            ++i;
-        }
-        return removed;
-    }
-
-    void Fire(T& args) {
-        for (int i = 0; i < count_;) {
-            Handler handler = handlers_[i];
-            if (!handler) {
-                RemoveAt(i);
-                continue;
-            }
-
-            bool crashed = false;
-            char stage[160] = {};
-            _snprintf_s(stage,
-                        sizeof(stage),
-                        _TRUNCATE,
-                        "SDK::Orbwalker/%s[%d]",
-                        name_,
-                        i);
             __try {
                 handler(args);
-            }
-            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                          stage,
-                          GetExceptionInformation())) {
-                crashed = true;
-                NightSharpDebug::Logf("[SDK::Orbwalker] Handler crashed and was removed event=%s index=%d handler=%p",
-                                      name_,
-                                      i,
-                                      reinterpret_cast<void*>(handler));
-            }
-
-            if (crashed) {
-                RemoveAt(i);
-                continue;
-            }
-            ++i;
+            } __except (1) {}
         }
     }
 
 private:
-    const char* name_ = "OrbwalkerEvent";
     Handler handlers_[MaxHandlers] = {};
     int count_ = 0;
 };
 
-inline EventList<OrbwalkingActionArgs> BeforeAttackHandlers{ "BeforeAttack" };
-inline EventList<OrbwalkingActionArgs> AttackHandlers{ "OnAttack" };
-inline EventList<OrbwalkingActionArgs> AfterAttackHandlers{ "AfterAttack" };
-inline EventList<OrbwalkingActionArgs> BeforeMoveHandlers{ "BeforeMove" };
-inline EventList<OrbwalkingActionArgs> NonKillableMinionHandlers{ "NonKillableMinion" };
+inline EventList<OrbwalkingActionArgs> BeforeAttackHandlers;
+inline EventList<OrbwalkingActionArgs> AttackHandlers;
+inline EventList<OrbwalkingActionArgs> AfterAttackHandlers;
+inline EventList<OrbwalkingActionArgs> BeforeMoveHandlers;
+inline EventList<OrbwalkingActionArgs> NonKillableMinionHandlers;
 inline OrbwalkerBase* RuntimeInstance = nullptr;
 inline IOrbwalker* Implementation = nullptr;
 inline std::unordered_map<std::string, IOrbwalker*> Implementations;
 inline std::string SelectedImplementationName = "SDK";
-
-inline int RemoveHandlersFromModule(HMODULE module) {
-    if (!module) {
-        return 0;
-    }
-
-    int removed = 0;
-    removed += BeforeAttackHandlers.RemoveHandlersInModule(module);
-    removed += AttackHandlers.RemoveHandlersInModule(module);
-    removed += AfterAttackHandlers.RemoveHandlersInModule(module);
-    removed += BeforeMoveHandlers.RemoveHandlersInModule(module);
-    removed += NonKillableMinionHandlers.RemoveHandlersInModule(module);
-    if (removed > 0) {
-        NightSharpDebug::Logf("[SDK::Orbwalker] Removed %d handlers from module=%p",
-                              removed,
-                              module);
-    }
-    return removed;
-}
 
 inline std::string ToLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
@@ -1421,18 +1337,14 @@ protected:
         if (kFakeCursorDropFpsDebugEnabled) {
             perfStart = DropFpsNow();
         }
-        fakeCursorTexturePath_ = "<embedded:hand1>";
-        bool ok = UI::Icons::LoadTextureFromMemory(
-            SDK::Data::EmbeddedAssets::kHandCursor.Data,
-            static_cast<int>(SDK::Data::EmbeddedAssets::kHandCursor.Size),
-            fakeCursorTexture_);
-
-        if (!ok) {
+        fakeCursorTexturePath_ = Utils::AssetInstaller::CursorHandPath();
+        if (fakeCursorTexturePath_.empty() || !FileExists(fakeCursorTexturePath_)) {
             fakeCursorTexturePath_ = ResolveHandCursorPath();
-            ok =
-                !fakeCursorTexturePath_.empty() &&
-                UI::Icons::LoadTextureFromFile(fakeCursorTexturePath_.c_str(), fakeCursorTexture_);
         }
+
+        const bool ok =
+            !fakeCursorTexturePath_.empty() &&
+            UI::Icons::LoadTextureFromFile(fakeCursorTexturePath_.c_str(), fakeCursorTexture_);
 
         if (kFakeCursorDropFpsDebugEnabled) {
             char detail[384] = {};

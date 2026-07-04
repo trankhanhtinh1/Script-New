@@ -2,7 +2,6 @@
 
 #include "../../Core/CoreEvents.h"
 #include "../../FpsDropDebug.h"
-#include "../../CrashReporter.h"
 #include "../Data/Database.h"
 
 #include <atomic>
@@ -28,16 +27,6 @@ using PlayAnimationEventArgs = ::Core::Events::PlayAnimationEventArgs;
 using StopCastEventArgs = ::Core::Events::StopCastEventArgs;
 
 namespace detail {
-    inline bool FunctionInModule(const void* function, HMODULE module) {
-        if (!function || !module) {
-            return false;
-        }
-
-        MEMORY_BASIC_INFORMATION mbi = {};
-        return VirtualQuery(function, &mbi, sizeof(mbi)) &&
-               mbi.AllocationBase == module;
-    }
-
     inline float GameTime() {
         const auto& ctx = CoreRuntime::GetContext();
         if ((ctx.statusMask & CoreRuntime::Status_GameTimeReady) != 0) {
@@ -98,87 +87,30 @@ namespace detail {
             return false;
         }
 
-        void RemoveAt(int index) {
-            if (index < 0 || index >= Count) {
-                return;
-            }
-            for (int j = index; j + 1 < Count; ++j) {
-                Handlers[j] = Handlers[j + 1];
-            }
-            Handlers[--Count] = nullptr;
-        }
-
-        int RemoveHandlersInModule(HMODULE module) {
-            if (!module) {
-                return 0;
-            }
-
-            int removed = 0;
-            for (int i = 0; i < Count;) {
-                Handler handler = Handlers[i];
-                if (!handler) {
-                    RemoveAt(i);
-                    continue;
-                }
-
-                if (FunctionInModule(reinterpret_cast<const void*>(handler), module)) {
-                    RemoveAt(i);
-                    ++removed;
-                    continue;
-                }
-                ++i;
-            }
-            return removed;
-        }
-
-        void Fire(const T& args) {
+        void Fire(const T& args) const {
             if (Count <= 0) {
                 return;
             }
-            const int startCount = Count;
             const auto perfStart = NightSharpPerf::Now();
-            for (int i = 0; i < Count;) {
+            for (int i = 0; i < Count; ++i) {
                 Handler handler = Handlers[i];
                 if (!handler) {
-                    RemoveAt(i);
                     continue;
                 }
                 const auto handlerPerfStart = NightSharpPerf::Now();
-                bool crashed = false;
-                char stage[160] = {};
-                _snprintf_s(stage,
-                            sizeof(stage),
-                            _TRUNCATE,
-                            "SDK::Events/%s[%d]",
-                            Name ? Name : "Event",
-                            i);
                 __try {
                     handler(args);
-                }
-                __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                              stage,
-                              GetExceptionInformation())) {
-                    crashed = true;
-                    NightSharpDebug::Logf("[SDK::Events] Handler crashed and was removed event=%s index=%d handler=%p",
-                                          Name ? Name : "",
-                                          i,
-                                          reinterpret_cast<void*>(handler));
-                }
+                } __except (1) {}
                 NightSharpPerf::AddEventHandlerTiming(
                     Name,
                     i,
                     reinterpret_cast<const void*>(handler),
                     NightSharpPerf::MsSince(handlerPerfStart));
-                if (crashed) {
-                    RemoveAt(i);
-                    continue;
-                }
-                ++i;
             }
             NightSharpPerf::AddEventTiming(
                 Name,
                 NightSharpPerf::MsSince(perfStart),
-                startCount);
+                Count);
         }
 
         void Clear() {
@@ -1259,7 +1191,7 @@ inline float GameTime() {
     return detail::GameTime();
 }
 
-inline bool IsLocalPlayer(const ::Core::Events::ObjectInfo& sender) {
+inline bool IsLocalPlayer(const Core::Events::ObjectInfo& sender) {
     if (!sender.IsValid()) {
         return false;
     }
@@ -1671,100 +1603,5 @@ namespace detail {
         Turret::detail::TurretCount = 0;
     }
 } // namespace detail
-
-inline int RemoveLoadHandlersFromModule(HMODULE module) {
-    if (!module) {
-        return 0;
-    }
-
-    int removed = 0;
-    for (int i = 0; i < detail::LoadHandlerCount;) {
-        auto handler = detail::LoadHandlers[i];
-        if (!handler || detail::FunctionInModule(reinterpret_cast<const void*>(handler), module)) {
-            for (int j = i; j + 1 < detail::LoadHandlerCount; ++j) {
-                detail::LoadHandlers[j] = detail::LoadHandlers[j + 1];
-                detail::LoadInvoked[j] = detail::LoadInvoked[j + 1];
-            }
-            --detail::LoadHandlerCount;
-            detail::LoadHandlers[detail::LoadHandlerCount] = nullptr;
-            detail::LoadInvoked[detail::LoadHandlerCount] = false;
-            ++removed;
-            continue;
-        }
-        ++i;
-    }
-    return removed;
-}
-
-inline int RemoveHandlersFromModule(HMODULE module) {
-    if (!module) {
-        return 0;
-    }
-
-    int removed = 0;
-    removed += detail::CoreHookHandlers.RemoveHandlersInModule(module);
-    removed += detail::GameUpdateHandlers.RemoveHandlersInModule(module);
-    removed += detail::ObjectCreateHandlers.RemoveHandlersInModule(module);
-    removed += detail::ObjectDeleteHandlers.RemoveHandlersInModule(module);
-    removed += detail::MissileCreateHandlers.RemoveHandlersInModule(module);
-    removed += detail::MissileDeleteHandlers.RemoveHandlersInModule(module);
-    removed += detail::BuffAddHandlers.RemoveHandlersInModule(module);
-    removed += detail::BuffRemoveHandlers.RemoveHandlersInModule(module);
-    removed += detail::BuffUpdateHandlers.RemoveHandlersInModule(module);
-    removed += detail::NewPathHandlers.RemoveHandlersInModule(module);
-    removed += detail::IntegerPropertyChangeHandlers.RemoveHandlersInModule(module);
-    removed += detail::TeleportHandlers.RemoveHandlersInModule(module);
-    removed += detail::DoCastHandlers.RemoveHandlersInModule(module);
-    removed += detail::ProcessSpellHandlers.RemoveHandlersInModule(module);
-    removed += detail::ProcessCastSpellHandlers.RemoveHandlersInModule(module);
-    removed += detail::FinishCastHandlers.RemoveHandlersInModule(module);
-    removed += detail::SpellImpactHandlers.RemoveHandlersInModule(module);
-    removed += detail::PlayAnimationHandlers.RemoveHandlersInModule(module);
-    removed += detail::StopCastHandlers.RemoveHandlersInModule(module);
-    removed += RemoveLoadHandlersFromModule(module);
-
-    removed += Dash::detail::DashHandlers.RemoveHandlersInModule(module);
-    removed += Stealth::detail::StealthHandlers.RemoveHandlersInModule(module);
-    removed += Teleport::detail::TeleportHandlers.RemoveHandlersInModule(module);
-    removed += Gapcloser::detail::GapCloserHandlers.RemoveHandlersInModule(module);
-    removed += InterruptableSpell::detail::InterruptableHandlers.RemoveHandlersInModule(module);
-    removed += Turret::detail::TurretHandlers.RemoveHandlersInModule(module);
-
-    detail::DashConsumerRefs = Dash::detail::DashHandlers.HasHandlers() ? 1 : 0;
-    detail::StealthConsumerRefs = Stealth::detail::StealthHandlers.HasHandlers() ? 1 : 0;
-    detail::TeleportConsumerRefs = Teleport::detail::TeleportHandlers.HasHandlers() ? 1 : 0;
-    detail::GapcloserConsumerRefs = Gapcloser::detail::GapCloserHandlers.HasHandlers() ? 1 : 0;
-    detail::InterruptableConsumerRefs = InterruptableSpell::detail::InterruptableHandlers.HasHandlers() ? 1 : 0;
-    detail::TurretConsumerRefs = Turret::detail::TurretHandlers.HasHandlers() ? 1 : 0;
-
-    if (!detail::CoreHookHandlers.HasHandlers()) {
-        detail::ReleaseCoreHookRawSubscribed();
-    }
-    detail::ReleaseGameUpdateRawIfUnused();
-    detail::ReleaseObjectCreateRawIfUnused();
-    detail::ReleaseObjectDeleteRawIfUnused();
-    detail::ReleaseMissileCreateRawIfUnused();
-    detail::ReleaseMissileDeleteRawIfUnused();
-    detail::ReleaseBuffAddRawIfUnused();
-    detail::ReleaseBuffRemoveRawIfUnused();
-    detail::ReleaseBuffUpdateRawIfUnused();
-    detail::ReleaseNewPathRawIfUnused();
-    detail::ReleaseIntegerPropertyChangeRawIfUnused();
-    detail::ReleaseTeleportRawIfUnused();
-    detail::ReleaseDoCastRawIfUnused();
-    detail::ReleaseProcessSpellRawIfUnused();
-    detail::ReleaseProcessCastSpellRawIfUnused();
-    detail::ReleaseFinishCastRawIfUnused();
-    detail::ReleaseSpellImpactRawIfUnused();
-    detail::ReleasePlayAnimationRawIfUnused();
-    detail::ReleaseStopCastRawIfUnused();
-
-    if (removed > 0) {
-        NightSharpDebug::Logf("[SDK::Events] Removed %d handlers from module=%p",
-                              removed,
-                              module);
-    }
-    return removed;
-}
 
 } // namespace SDK::Events

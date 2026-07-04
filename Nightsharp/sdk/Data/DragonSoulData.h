@@ -100,20 +100,23 @@ inline std::string IconDirectory() {
     }
 
     const std::string selfDir = detail::SelfModuleDirectory();
-    const std::string candidates[] = {
-        selfDir + "\\..\\..\\SDK\\Data",
-        selfDir + "\\SDK\\Data",
-        selfDir + "\\Data",
-        "C:\\NightSharp\\SDK\\Data",
-    };
+    std::string candidates[4] = {};
+    int candidateCount = 0;
+    if (!selfDir.empty()) {
+        candidates[candidateCount++] = selfDir + "\\..\\..\\SDK\\Data";
+        candidates[candidateCount++] = selfDir + "\\SDK\\Data";
+        candidates[candidateCount++] = selfDir + "\\Data";
+    }
+    candidates[candidateCount++] = "C:\\NightSharp\\SDK\\Data";
 
-    for (const auto& candidate : candidates) {
+    for (int i = 0; i < candidateCount; ++i) {
+        const auto& candidate = candidates[i];
         if (detail::FolderHasDragonSoulIcons(candidate)) {
             return candidate;
         }
     }
 
-    return candidates[0];
+    return {};
 }
 
 inline std::string IconPath(std::uint8_t terrainId) {
@@ -121,7 +124,8 @@ inline std::string IconPath(std::uint8_t terrainId) {
     if (fileName.empty()) {
         return {};
     }
-    return IconDirectory() + "\\" + std::string(fileName);
+    const std::string directory = IconDirectory();
+    return directory.empty() ? std::string() : directory + "\\" + std::string(fileName);
 }
 
 } // namespace SDK::Data::DragonSoulData

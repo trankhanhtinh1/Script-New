@@ -82,38 +82,15 @@ namespace detail {
         }
 
         const LoadEventArgs args{};
-        for (int i = 0; i < LoadHandlerCount;) {
+        for (int i = 0; i < LoadHandlerCount; ++i) {
             if (!LoadHandlers[i] || LoadInvoked[i]) {
-                ++i;
                 continue;
             }
 
-            LoadHandler handler = LoadHandlers[i];
             LoadInvoked[i] = true;
-            bool crashed = false;
-            char stage[160] = {};
-            _snprintf_s(stage,
-                        sizeof(stage),
-                        _TRUNCATE,
-                        "SDK::Events/Load[%d]",
-                        i);
             __try {
-                handler(args);
-            }
-            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                          stage,
-                          GetExceptionInformation())) {
-                crashed = true;
-                NightSharpDebug::Logf("[SDK::Events] OnLoad handler crashed and was removed index=%d handler=%p",
-                                      i,
-                                      reinterpret_cast<void*>(handler));
-            }
-
-            if (crashed) {
-                RemoveOnLoad(handler);
-                continue;
-            }
-            ++i;
+                LoadHandlers[i](args);
+            } __except (1) {}
         }
     }
 } // namespace detail

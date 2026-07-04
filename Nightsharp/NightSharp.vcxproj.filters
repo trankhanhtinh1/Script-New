@@ -69,6 +69,9 @@
     <ClCompile Include="overlay\OverlayManager.cpp">
       <Filter>overlay</Filter>
     </ClCompile>
+    <ClCompile Include="sdk\Data\EmbeddedAssets.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
     <ClCompile Include="Third_Party\clipper\clipper.cpp">
       <Filter>Third_Party</Filter>
     </ClCompile>
@@ -105,9 +108,6 @@
       <Filter>Third_Party</Filter>
     </ClInclude>
     <ClInclude Include="DebugLog.h">
-      <Filter>Root</Filter>
-    </ClInclude>
-    <ClInclude Include="InternalDebugConsole.h">
       <Filter>Root</Filter>
     </ClInclude>
     <ClInclude Include="crt_shim.h">
