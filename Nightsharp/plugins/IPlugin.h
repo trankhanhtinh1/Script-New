@@ -28,6 +28,7 @@ namespace Plugins {
         virtual const char* GetAuthor() const { return "NightSharp"; }
         virtual PluginCategory GetCategory() const { return PluginCategory::Core; }
         virtual const char* GetChampionName() const { return nullptr; }
+        virtual const char* GetConfigFileName() const { return GetInternalId(); }
         virtual bool AutoLoadByDefault() const { return true; }
         virtual bool CanLoad() const { return true; }
 

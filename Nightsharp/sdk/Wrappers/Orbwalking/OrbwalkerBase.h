@@ -17,6 +17,7 @@
 #include "../../GameObjects/ObjectManager.h"
 #include "../../Math/Collision.h"
 #include "../../Math/HealthPrediction.h"
+#include "../../Data/EmbeddedAssets.h"
 #include "../../UI/Drawing.h"
 #include "../../UI/Icons.h"
 #include "../../UI/UI.h"
@@ -1336,10 +1337,18 @@ protected:
         if (kFakeCursorDropFpsDebugEnabled) {
             perfStart = DropFpsNow();
         }
-        fakeCursorTexturePath_ = ResolveHandCursorPath();
-        const bool ok =
-            !fakeCursorTexturePath_.empty() &&
-            UI::Icons::LoadTextureFromFile(fakeCursorTexturePath_.c_str(), fakeCursorTexture_);
+        fakeCursorTexturePath_ = "<embedded:hand1>";
+        bool ok = UI::Icons::LoadTextureFromMemory(
+            SDK::Data::EmbeddedAssets::kHandCursor.Data,
+            static_cast<int>(SDK::Data::EmbeddedAssets::kHandCursor.Size),
+            fakeCursorTexture_);
+
+        if (!ok) {
+            fakeCursorTexturePath_ = ResolveHandCursorPath();
+            ok =
+                !fakeCursorTexturePath_.empty() &&
+                UI::Icons::LoadTextureFromFile(fakeCursorTexturePath_.c_str(), fakeCursorTexture_);
+        }
 
         if (kFakeCursorDropFpsDebugEnabled) {
             char detail[384] = {};

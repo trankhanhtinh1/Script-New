@@ -31,39 +31,12 @@ namespace Plugins {
             NightSharpDebug::Logf("[PluginManager] Register begin");
             auto plugin = std::make_unique<T>(std::forward<Args>(args)...);
             T* raw = plugin.get();
-            NightSharpDebug::Logf("[PluginManager] Register created name=%s id=%s",
-                                  raw->GetName(), raw->GetInternalId());
+            IPlugin* registered = RegisterOwned(std::move(plugin), PluginRegistry::PluginKind::Plugin);
+            return registered ? raw : nullptr;
+        }
 
-            int idx = PluginRegistry::FindByInternalId(raw->GetInternalId());
-            if (idx < 0) {
-                idx = PluginRegistry::Register(
-                    raw->GetName(),
-                    raw->GetInternalId(),
-                    ToRegistryKind(raw->GetCategory()),
-                    raw->AutoLoadByDefault(),
-                    ToRegistryCategory(raw->GetCategory()),
-                    raw->GetChampionName());
-            } else {
-                auto& entry = PluginRegistry::Plugins[idx];
-                entry.Name = raw->GetName();
-                entry.InternalId = raw->GetInternalId();
-                entry.Category = ToRegistryCategory(raw->GetCategory());
-                entry.ChampionName = raw->GetChampionName();
-                if (!entry.AlwaysLoadConfigured) {
-                    entry.AlwaysLoad = raw->AutoLoadByDefault();
-                }
-            }
-
-            raw->m_registryIndex = idx;
-            PluginRegistry::BindRuntime(idx, raw, &PluginManager::LoadThunk,
-                &PluginManager::UnloadThunk, &PluginManager::MenuThunk,
-                &PluginManager::CanLoadThunk);
-
-            m_plugins.push_back(std::move(plugin));
-            SyncRegistry(raw);
-            NightSharpDebug::Logf("[PluginManager] Register complete name=%s idx=%d",
-                                  raw->GetName(), raw->m_registryIndex);
-            return raw;
+        IPlugin* RegisterExternal(std::unique_ptr<IPlugin> plugin) {
+            return RegisterOwned(std::move(plugin), PluginRegistry::PluginKind::External);
         }
 
         bool Load(IPlugin* plugin) {
@@ -215,6 +188,57 @@ namespace Plugins {
         }
 
     private:
+        IPlugin* RegisterOwned(std::unique_ptr<IPlugin> plugin, PluginRegistry::PluginKind kind) {
+            if (!plugin) {
+                NightSharpDebug::Logf("[PluginManager] RegisterOwned skipped: null plugin");
+                return nullptr;
+            }
+
+            IPlugin* raw = plugin.get();
+            NightSharpDebug::Logf("[PluginManager] Register created name=%s id=%s kind=%d",
+                                  raw->GetName(), raw->GetInternalId(), static_cast<int>(kind));
+
+            int idx = PluginRegistry::FindByInternalId(raw->GetInternalId());
+            if (idx < 0) {
+                idx = PluginRegistry::Register(
+                    raw->GetName(),
+                    raw->GetInternalId(),
+                    kind,
+                    raw->AutoLoadByDefault(),
+                    ToRegistryCategory(raw->GetCategory()),
+                    raw->GetChampionName(),
+                    raw->GetConfigFileName());
+            } else {
+                auto& entry = PluginRegistry::Plugins[idx];
+                entry.Name = raw->GetName();
+                entry.InternalId = raw->GetInternalId();
+                entry.Kind = kind;
+                entry.Category = ToRegistryCategory(raw->GetCategory());
+                entry.ChampionName = raw->GetChampionName();
+                entry.ConfigFileName = raw->GetConfigFileName();
+                if (!entry.AlwaysLoadConfigured) {
+                    entry.AlwaysLoad = raw->AutoLoadByDefault();
+                }
+            }
+
+            if (idx < 0) {
+                NightSharpDebug::Logf("[PluginManager] Register failed name=%s id=%s kind=%d",
+                                      raw->GetName(), raw->GetInternalId(), static_cast<int>(kind));
+                return nullptr;
+            }
+
+            raw->m_registryIndex = idx;
+            PluginRegistry::BindRuntime(idx, raw, &PluginManager::LoadThunk,
+                &PluginManager::UnloadThunk, &PluginManager::MenuThunk,
+                &PluginManager::CanLoadThunk);
+
+            m_plugins.push_back(std::move(plugin));
+            SyncRegistry(raw);
+            NightSharpDebug::Logf("[PluginManager] Register complete name=%s idx=%d",
+                                  raw->GetName(), raw->m_registryIndex);
+            return raw;
+        }
+
         static PluginRegistry::PluginCategory ToRegistryCategory(PluginCategory category) {
             switch (category) {
             case PluginCategory::Champion: return PluginRegistry::PluginCategory::Champion;
@@ -223,11 +247,6 @@ namespace Plugins {
             case PluginCategory::Core:
             default:                       return PluginRegistry::PluginCategory::Core;
             }
-        }
-
-        static PluginRegistry::PluginKind ToRegistryKind(PluginCategory category) {
-            (void)category;
-            return PluginRegistry::PluginKind::Plugin;
         }
 
         static bool LoadThunk(void* userData) {

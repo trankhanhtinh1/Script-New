@@ -14,6 +14,7 @@
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/PermaShow.h"
 #include "MenuConfig.h"
+#include "MenuSettingsConfig.h"
 
 #include <cstdio>
 
@@ -243,13 +244,12 @@ namespace NightSharpMenu {
 
     inline void DrawLanguageSection() {
         DrawSectionTitle("Language");
-        static int lang = 0;
         const char* langs[] = { "EN", "CN", "VN" };
 
         for (int i = 0; i < 3; ++i) {
             ImGui::PushID(langs[i]);
-            if (DrawStateButton(langs[i], langs[i], lang == i, true, 56.0f)) {
-                lang = i;
+            if (DrawStateButton(langs[i], langs[i], Config::Language::index == i, true, 56.0f)) {
+                Config::Language::index = i;
             }
             ImGui::PopID();
             if (i < 2) {
@@ -877,6 +877,9 @@ namespace NightSharpMenu {
     }
 
     inline void Render() {
+        MenuSettingsConfig::ApplyNewMenuValues();
+        MenuSettingsConfig::AutoSaveScope autoSaveSettings;
+
         DrawPermaShowOverlay();
 
         if (!showMenu) {

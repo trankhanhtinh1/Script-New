@@ -2,6 +2,10 @@
 
 namespace Config {
 
+    namespace Language {
+        inline int index = 0;
+    }
+
     namespace ZoomHack {
         inline bool enabled = false;
         inline float maxZoom = 4000.0f;

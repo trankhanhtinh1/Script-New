@@ -18,6 +18,7 @@
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 #include "../InternalDebugConsole.h"
+#include "../SDK/Data/EmbeddedAssets.h"
 #include "../SDK/Lifecycle.h"
 #include "../SDK/Data/DragonSoulData.h"
 #include "../SDK/UI/Drawing.h"
@@ -90,16 +91,14 @@ void EnsureDragonSoulIconsLoaded(const SDK::Data::DragonSoulData::DragonSoulEntr
         return;
     }
 
-    static DWORD lastLoadAttempt = 0;
-    const DWORD now = ::GetTickCount();
-    if (lastLoadAttempt != 0 && now - lastLoadAttempt < 1000) {
-        return;
-    }
-    lastLoadAttempt = now;
-
-    const std::string directory = SDK::Data::DragonSoulData::IconDirectory();
-    if (!directory.empty()) {
-        SDK::UI::Icons::LoadIconsFromDirectory(directory.c_str());
+    for (const auto& asset : SDK::Data::EmbeddedAssets::kDragonSoulIcons) {
+        if (asset.Key == entry->IconKey) {
+            SDK::UI::Icons::LoadIconFromBytes(
+                std::string(asset.Key),
+                asset.Data,
+                static_cast<int>(asset.Size));
+            return;
+        }
     }
 }
 
