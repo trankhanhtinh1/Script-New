@@ -46,6 +46,7 @@
 #include "GameObjects/InventorySlot.h"
 #include "GameObjects/GameObjects.h"
 #include "Wrappers/Damages/Damage.h"
+#include "Wrappers/TargetSelector/TargetSelector.h"
 #include "Wrappers/Orbwalking/Orbwalker.h"
 #include "Wrappers/Spells/Database/SpellDatabaseEntry.h"
 #include "Wrappers/Spells/Database/SpellDatabase.h"

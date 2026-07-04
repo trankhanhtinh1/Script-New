@@ -13,14 +13,40 @@
     <Filter Include="NightSharp SDK Source">
       <UniqueIdentifier>{D345EF20-0901-4C91-B656-50B58C50B111}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Dear ImGui">
+      <UniqueIdentifier>{5A41F9B3-D0CB-4F5B-A24E-401E6EA72D90}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core Runtime Glue">
+      <UniqueIdentifier>{C74D6016-21EC-4DA0-9386-908C6E37DDA7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\NightSharp\imgui\imgui.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NightSharp\imgui\imgui_draw.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NightSharp\imgui\imgui_tables.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NightSharp\imgui\imgui_widgets.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
     <ClCompile Include="src\NightSharp.SDK.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <MASM Include="..\NightSharp\Core\spoof\spoof.asm">
+      <Filter>Core Runtime Glue</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="include\NightSharp.SDK.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\NightSharp.SDK.Plugin.h">
       <Filter>Include</Filter>
     </ClInclude>
     <ClInclude Include="include\NightSharp.SDK.Version.h">

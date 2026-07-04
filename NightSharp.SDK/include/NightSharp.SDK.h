@@ -7,6 +7,7 @@
 // folders directly.
 
 #include "NightSharp.SDK.Version.h"
+#include "NightSharp.SDK.Plugin.h"
 
 #include <SDK/SDK.h>
 
