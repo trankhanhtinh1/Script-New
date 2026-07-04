@@ -4,9 +4,11 @@ These samples build external DLL plugins against `NightSharp.SDK`.
 
 - `UtilitySample`: lifecycle, update, and render callback smoke sample.
 - `ChampionSample`: Ezreal Q skeleton using Spell, GameObjects, and Prediction.
-  It calculates the predicted Q cast position but does not call TargetSelector,
-  Orbwalker, or the native cast path until the Phase 3 host bridge exists.
+  It calculates the predicted Q cast position and verifies SDK-facing champion
+  plugin wiring.
 
-Phase 3 will add the runtime loader that consumes `NightSharpGetPluginExports`
-and binds menu/drawing services from the NightSharp host instead of giving each
-external DLL its own UI state.
+Raw DLLs can be loaded from `%AppData%\NightSharp\Plugins\Dev` in developer
+mode. Debug builds enable this by default; Release builds require
+`NIGHTSHARP_ENABLE_DEV_PLUGINS=1`. For release mode, use
+`NightSharp.Plugin.Packager` to create `.NS` packages and place them in
+`%AppData%\NightSharp\Plugins`.

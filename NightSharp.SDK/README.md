@@ -6,6 +6,8 @@ plugins with Visual Studio.
 The SDK source of truth remains `../NightSharp/SDK`. This package only provides
 the Visual Studio project, include entrypoint, version/ABI metadata, and a
 property sheet that plugin projects can import.
+`include/NightSharp.SDK.Package.h` defines the shared `.NS` package format used
+by the packager and NightSharp runtime loader.
 
 ## Build Contract
 

@@ -126,6 +126,10 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] Sample/debug plugins disabled for FPS test");
 #endif
 
+        NightSharpDebug::Logf("[PluginBootstrap] Register external release plugins begin");
+        ExternalPluginLoader::RegisterReleasePlugins();
+        NightSharpDebug::Logf("[PluginBootstrap] Register external release plugins complete");
+
         NightSharpDebug::Logf("[PluginBootstrap] Register external dev plugins begin");
         ExternalPluginLoader::RegisterDevPlugins();
         NightSharpDebug::Logf("[PluginBootstrap] Register external dev plugins complete");

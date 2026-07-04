@@ -9,5 +9,28 @@ MSBuild NightSharp.Plugin.Template.vcxproj /p:Configuration=Release /p:Platform=
 ```
 
 The project imports `..\NightSharp.SDK\build\NightSharp.SDK.props` and exports
-`NightSharpGetPluginExports`. Phase 3 loader work will consume this export and
-bind plugin menu/runtime services through the host bridge.
+`NightSharpGetPluginExports`.
+
+Developer mode can load the raw DLL from:
+
+```text
+%AppData%\NightSharp\Plugins\Dev
+```
+
+Debug builds enable this by default. Release builds require:
+
+```text
+NIGHTSHARP_ENABLE_DEV_PLUGINS=1
+```
+
+Release mode should pack the DLL into `.NS`:
+
+```text
+..\NightSharp.Plugin.Packager\bin\Release\NightSharp.Plugin.Packager.exe bin\Release\NightSharp.Plugin.Template.dll
+```
+
+NightSharp loads release packages from:
+
+```text
+%AppData%\NightSharp\Plugins
+```
