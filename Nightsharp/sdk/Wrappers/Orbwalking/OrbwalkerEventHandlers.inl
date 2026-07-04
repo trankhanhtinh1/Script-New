@@ -35,12 +35,14 @@ inline void OrbwalkerBase::OnDrawStatic() {
 
 inline void OrbwalkerBase::OnGameUpdate() {
     if (!menu_.Enabled()) {
+        ClearPendingAttackState();
         context_.activeMode = OrbwalkingMode::None;
         return;
     }
 
     context_.activeMode = ActiveMode();
     if (context_.activeMode == OrbwalkingMode::None) {
+        ClearPendingAttackState();
         return;
     }
 
@@ -50,7 +52,14 @@ inline void OrbwalkerBase::OnGameUpdate() {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
-    if (!IsLocalAutoAttack(args)) {
+    const bool isAttack = IsLocalAutoAttack(args);
+    const bool isAttackReset = IsLocalAutoAttackReset(args);
+    if (isAttackReset && !isAttack) {
+        ResetAutoAttackTimer();
+        return;
+    }
+
+    if (!isAttack) {
         return;
     }
 
@@ -83,7 +92,11 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
 }
 
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
+    const bool isAttackReset = IsLocalAutoAttackReset(args);
     if (!IsLocalAutoAttack(args)) {
+        if (isAttackReset) {
+            ResetAutoAttackTimer();
+        }
         return;
     }
 
@@ -106,11 +119,19 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     context_.lastAttackConfirmTick = now;
     context_.hasConfirmedAttack = true;
     context_.attackCastComplete = true;
+    if (context_.lastAttackRequiresDoCastBeforeMove) {
+        context_.lastAttackDoCastComplete = true;
+        context_.lastAttackDoCastWaitTick = 0;
+    }
 
     if (attackStartTick > 0) {
         context_.lastAutoAttackTick = attackStartTick;
     } else if (context_.lastAutoAttackTick <= 0 || now - context_.lastAutoAttackTick > 300) {
         context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
+    }
+
+    if (isAttackReset) {
+        ResetAutoAttackTimer();
     }
 }
 
@@ -144,9 +165,7 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
         ? context_.pendingAttackTick
         : context_.lastAutoAttackTick;
 
-    context_.pendingAttack = false;
-    context_.pendingAttackTick = 0;
-    context_.pendingAttackTargetNetworkId = 0;
+    ClearPendingAttackState();
 
     if (args.HasBeenCast || args.DestroyMissile) {
         if (stoppedPending && context_.lastAutoAttackTick <= 0) {
@@ -169,6 +188,13 @@ inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs
         return false;
     }
     return args.IsAutoAttack || IsAutoAttack(args.SpellName);
+}
+
+inline bool OrbwalkerBase::IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const {
+    if (!Events::IsLocalPlayer(args.Sender)) {
+        return false;
+    }
+    return IsAutoAttackReset(args.SpellName);
 }
 
 inline void OrbwalkerBase::OnDraw() {

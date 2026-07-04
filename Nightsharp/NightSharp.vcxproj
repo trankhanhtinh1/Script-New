@@ -166,6 +166,7 @@
     <ClInclude Include="Plugins\Champion\EzrealSemiPlugin.h" />
     <ClInclude Include="Plugins\Champion\JaxSemiPlugin.h" />
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h" />
+    <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h" />
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h" />
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h" />
     <ClInclude Include="Plugins\Core\SpellTrackingDebugPlugin.h" />

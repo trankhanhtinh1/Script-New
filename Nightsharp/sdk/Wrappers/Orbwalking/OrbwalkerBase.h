@@ -95,10 +95,17 @@ private:
     void OnStopCast(const Events::StopCastEventArgs& args);
     void OnDraw();
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
+    bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
+    void ClearDoCastMoveGate();
+    void ClearPendingAttackState();
     void ExpirePendingAttack();
     int PendingAttackTimeoutMs() const;
+    int DoCastMoveGateTimeoutMs() const;
     float OneWayPingMs() const;
+    float ChampionExtraAttackDelayMs(const AIHeroClient& player) const;
+    bool ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const;
+    bool ChampionCanAttack(const AIHeroClient& player) const;
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     void SnapshotAttackTimings(const AIHeroClient& player);

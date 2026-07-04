@@ -13,18 +13,22 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     if (context_.pendingAttack) {
         return false;
     }
-    if (context_.lastAutoAttackTick <= 0) {
-        return true;
-    }
 
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return false;
     }
+    if (!ChampionCanAttack(player)) {
+        return false;
+    }
+    if (context_.lastAutoAttackTick <= 0) {
+        return true;
+    }
 
     SnapshotAttackTimings(player);
     const float readyAt = static_cast<float>(context_.lastAutoAttackTick) +
                           context_.attackDelayMs +
+                          ChampionExtraAttackDelayMs(player) +
                           AttackSafetyMs();
     return static_cast<float>(now) + extraWindup >= readyAt;
 }
@@ -51,10 +55,23 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     }
 
     SnapshotAttackTimings(player);
+    if (context_.lastAttackRequiresDoCastBeforeMove) {
+        if (context_.lastAttackDoCastComplete) {
+            return true;
+        }
+
+        const int gateTick = context_.lastAttackDoCastWaitTick > 0
+            ? context_.lastAttackDoCastWaitTick
+            : attackTick;
+        if (now - gateTick < DoCastMoveGateTimeoutMs()) {
+            return false;
+        }
+
+        ClearDoCastMoveGate();
+    }
     if (!pending && context_.attackCastComplete) {
         return true;
     }
-
     const float oneWayPing = OneWayPingMs();
     const float cappedPing = std::min(oneWayPing, 15.0f);
     const bool rangedPreCast = !player.IsMelee() && !context_.attackCastComplete;
@@ -98,12 +115,15 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
 
-    context_.lastAttackOrderTick = now;
-    context_.lastAttackOrderNetworkId = targetNetworkId;
     if (!CoreControl::IssueAttack(target.Address(), target.Position(), true)) {
+        context_.lastAttackOrderTick = 0;
+        context_.lastAttackOrderNetworkId = 0;
+        ClearPendingAttackState();
         return false;
     }
 
+    context_.lastAttackOrderTick = now;
+    context_.lastAttackOrderNetworkId = targetNetworkId;
     context_.lastTarget = target;
     context_.lastAutoAttackTick = now;
     context_.lastAttackConfirmTick = 0;
@@ -112,6 +132,10 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     context_.pendingAttackTargetNetworkId = target.NetworkId();
     context_.hasConfirmedAttack = false;
     context_.attackCastComplete = false;
+    context_.lastAttackRequiresDoCastBeforeMove =
+        ChampionRequiresDoCastBeforeMove(GameObjects::Player());
+    context_.lastAttackDoCastComplete = false;
+    context_.lastAttackDoCastWaitTick = context_.lastAttackRequiresDoCastBeforeMove ? now : 0;
     SnapshotAttackTimings(GameObjects::Player());
 
     OrbwalkingActionArgs attackArgs(OrbwalkingType::OnAttack, target, {}, "SDK");
@@ -187,9 +211,7 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
         return;
     }
 
-    context_.pendingAttack = false;
-    context_.pendingAttackTick = 0;
-    context_.pendingAttackTargetNetworkId = 0;
+    ClearPendingAttackState();
     context_.attackCastComplete = false;
     if (context_.lastAutoAttackTick <= 0) {
         context_.lastAutoAttackTick = pendingTick > 0 ? pendingTick : now;
@@ -206,8 +228,39 @@ inline int OrbwalkerBase::PendingAttackTimeoutMs() const {
     return std::max(eventGrace, windupGate + kAttackRetryDelayMs);
 }
 
+inline int OrbwalkerBase::DoCastMoveGateTimeoutMs() const {
+    return std::clamp(PendingAttackTimeoutMs(), 180, 550);
+}
+
 inline float OrbwalkerBase::OneWayPingMs() const {
     return std::clamp(static_cast<float>(Game::Ping()) * 0.5f, 0.0f, kMaxPingLeadMs);
+}
+
+inline float OrbwalkerBase::ChampionExtraAttackDelayMs(const AIHeroClient& player) const {
+    if (player.CharacterName() == "Graves") {
+        return (context_.attackDelayMs * 1.0740296828f) - 716.2381256175f - context_.attackDelayMs;
+    }
+    return 0.0f;
+}
+
+inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const {
+    return player.CharacterName() == "Rengar" &&
+           (player.HasBuff("RengarQ") ||
+            player.HasBuff("RengarQEmp") ||
+            player.HasBuff("rengarqbase") ||
+            player.HasBuff("rengarqemp"));
+}
+
+inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
+    if (player.CharacterName() == "Graves" &&
+        !player.HasBuff("gravesbasicattackammo1")) {
+        return false;
+    }
+    if (player.CharacterName() == "Jhin" &&
+        player.HasBuff("JhinPassiveReload")) {
+        return false;
+    }
+    return true;
 }
 
 inline float OrbwalkerBase::AttackSafetyMs() const {

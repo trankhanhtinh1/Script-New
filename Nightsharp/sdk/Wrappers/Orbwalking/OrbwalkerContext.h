@@ -20,6 +20,7 @@ struct OrbwalkerRuntimeContext {
     int pendingAttackTick = 0;
     int pendingAttackTargetNetworkId = 0;
     int lastAttackConfirmTick = 0;
+    int lastAttackDoCastWaitTick = 0;
     int allPauseTick = 0;
     int attackPauseTick = 0;
     int movePauseTick = 0;
@@ -32,6 +33,8 @@ struct OrbwalkerRuntimeContext {
     bool pendingAttack = false;
     bool hasConfirmedAttack = false;
     bool attackCastComplete = false;
+    bool lastAttackRequiresDoCastBeforeMove = false;
+    bool lastAttackDoCastComplete = false;
     bool disposed = false;
     OrbwalkingMode activeMode = OrbwalkingMode::None;
 };

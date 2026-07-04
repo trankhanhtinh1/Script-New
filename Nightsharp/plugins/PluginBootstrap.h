@@ -9,6 +9,7 @@
 #include "PluginManager.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
+#include "Core/EnsoulsharpOrbPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
@@ -91,6 +92,10 @@ namespace PluginBootstrap {
 #else
         NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
 #endif
+
+        NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb begin");
+        PluginManager::Get().Register<EnsoulsharpOrbPlugin>();
+        NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb complete");
 
         // ─── Core plugins ────────────────────────────────────────────────
 #if NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS

@@ -114,17 +114,20 @@ private:
 
     static const char* const* AttackResets() {
         static const char* values[] = {
-            "powerfist","camilleq","camilleq2","vorpalspikes",
-            "dariusnoxiantacticsonh","masochism","ekkoe","fiorae",
-            "fizzw","garenq","gravesmove","hecarimramp",
+            "asheq","powerfist","camilleq","camilleq2","vorpalspikes",
+            "dariusnoxiantacticsonh","elisespiderw","masochism","ekkoe","fiorae",
+            "fizzw","garenq","gangplankqwrapper","gravesmove","hecarimramp",
             "illaoiw","jaxempowertwo","jaycehypercharge","netherblade",
             "kaylee","kindredq","leonashieldofdaybreak","luciane",
             "meditate","monkeykingdoubleattack","mordekaisermaceofspades","nasusq",
             "nautiluspiercinggaze","takedown","reksaiq","renektonpreexecute",
-            "rengarq","riventricleave","shyvanadoubleattack","shyvanadoubleattackdragon",
-            "sivirw","talonqattack","trundletrollsmash","vaynetumble",
-            "vie","volibearq","xinzhaoq","yorickq",
-            "itemtitanichydracleave",
+            "rengarq","rengarqemp","riventricleave","settq",
+            "shyvanadoubleattack","shyvanadoubleattackdragon",
+            "sejuaninorthernwinds","sivirw","talonqattack","talonnoxiandiplomacy",
+            "trundletrollsmash","vaynetumble",
+            "vie","volibearq","xinzhaoq","xinzhaocombotarget",
+            "yorickq","yorickspectral","apheliosinfernumq",
+            "itemtitanichydracleave","gravesautoattackrecoilcastedummy",
             nullptr
         };
         return values;
@@ -132,6 +135,10 @@ private:
 
     static const char* const* Attacks() {
         static const char* values[] = {
+            "aphelioscalibrumattackmis","aphelioscrescendumattackmis",
+            "aphelioscrescendumattackmisin","aphelioscrescendumattackmisout",
+            "apheliosgravitumattackmis","apheliosinfernumattackmis",
+            "apheliosseverumattackmis",
             "caitlynheadshotmissile","kennenmegaproc","masteryidoublestrike",
             "quinnwenhanced","renektonexecute","renektonsuperexecute",
             "trundleq","viktorqbuff",

@@ -40,16 +40,18 @@ namespace Database {
 inline const char* const* AttackResets() {
     static const char* values[] = {
         "asheq", "camilleq2", "camilleq", "dariusnoxiantacticsonh", "elisespiderw",
-        "fiorae", "gravesmove", "garenq", "gangplankqwrapper", "illaoiw",
-        "jaycehypercharge", "jaxempowertwo", "kaylee", "luciane",
+        "ekkoe", "fiorae", "fizzw", "gravesmove", "garenq", "gangplankqwrapper",
+        "hecarimramp", "illaoiw", "itemtitanichydracleave",
+        "jaycehypercharge", "jaxempowertwo", "kaylee", "kindredq", "luciane",
         "leonashieldofdaybreakattack", "leonashieldofdaybreak",
         "mordekaisermaceofspades", "monkeykingdoubleattack", "meditate",
         "masochism", "netherblade", "nautiluspiercinggaze", "nasusq", "powerfist",
-        "rengarqemp", "rengarq", "renektonpreexecute", "reksaiq", "settq",
-        "sivirw", "shyvanadoubleattack", "sejuaninorthernwinds",
-        "trundletrollsmash", "talonnoxiandiplomacy", "takedown", "vorpalspikes",
+        "rengarqemp", "rengarq", "renektonpreexecute", "reksaiq", "riventricleave",
+        "settq", "sivirw", "shyvanadoubleattack", "shyvanadoubleattackdragon",
+        "sejuaninorthernwinds", "trundletrollsmash", "talonqattack",
+        "talonnoxiandiplomacy", "takedown", "vorpalspikes",
         "volibearq", "vie", "vaynetumble", "xinzhaoq", "xinzhaocombotarget",
-        "yorickspectral", "apheliosinfernumq", "gravesautoattackrecoilcastedummy",
+        "yorickq", "yorickspectral", "apheliosinfernumq", "gravesautoattackrecoilcastedummy",
         nullptr
     };
     return values;
@@ -57,6 +59,10 @@ inline const char* const* AttackResets() {
 
 inline const char* const* Attacks() {
     static const char* values[] = {
+        "aphelioscalibrumattackmis", "aphelioscrescendumattackmis",
+        "aphelioscrescendumattackmisin", "aphelioscrescendumattackmisout",
+        "apheliosgravitumattackmis", "apheliosinfernumattackmis",
+        "apheliosseverumattackmis",
         "caitlynpassivemissile", "itemtitanichydracleave", "itemtiamatcleave",
         "kennenmegaproc", "masteryidoublestrike", "quinnwenhanced",
         "renektonsuperexecute", "renektonexecute", "trundleq", "viktorqbuff",
@@ -83,9 +89,8 @@ inline const char* const* NoAttacks() {
         "yorickghoulmeleebasicattack3", "yorickbigghoulbasicattack",
         "zyraeplantattack", "zoebasicattackspecial1", "zoebasicattackspecial2",
         "zoebasicattackspecial3", "zoebasicattackspecial4",
-        "apheliosseverumattackmis", "aphelioscrescendumattackmisin",
-        "aphelioscrescendumattackmisout", "gravesautoattackrecoilcastedummy",
-        "gravesautoattackrecoil", "gravesbasicattackspread",
+        "gravesautoattackrecoilcastedummy", "gravesautoattackrecoil",
+        "gravesbasicattackspread",
         nullptr
     };
     return values;

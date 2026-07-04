@@ -22,9 +22,22 @@ inline AttackableUnit OrbwalkerBase::LastTarget() const { return context_.lastTa
 inline OrbwalkingMode OrbwalkerBase::ActiveMode() const { return menu_.ActiveMode(); }
 inline int OrbwalkerBase::LastAutoAttackTick() const { return context_.lastAutoAttackTick; }
 
+inline void OrbwalkerBase::ClearDoCastMoveGate() {
+    context_.lastAttackRequiresDoCastBeforeMove = false;
+    context_.lastAttackDoCastComplete = false;
+    context_.lastAttackDoCastWaitTick = 0;
+}
+
+inline void OrbwalkerBase::ClearPendingAttackState() {
+    context_.pendingAttack = false;
+    context_.pendingAttackTick = 0;
+    context_.pendingAttackTargetNetworkId = 0;
+    ClearDoCastMoveGate();
+}
+
 inline void OrbwalkerBase::LastAutoAttackTick(int value) {
     context_.lastAutoAttackTick = value;
-    context_.pendingAttack = false;
+    ClearPendingAttackState();
     context_.attackCastComplete = value > 0;
 }
 
@@ -49,9 +62,7 @@ inline void OrbwalkerBase::ResetAutoAttackTimer() {
     context_.lastAutoAttackTick = 0;
     context_.lastAttackOrderTick = 0;
     context_.lastAttackOrderNetworkId = 0;
-    context_.pendingAttack = false;
-    context_.pendingAttackTick = 0;
-    context_.pendingAttackTargetNetworkId = 0;
+    ClearPendingAttackState();
     context_.hasConfirmedAttack = false;
     context_.attackCastComplete = false;
 }

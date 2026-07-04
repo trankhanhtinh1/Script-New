@@ -236,6 +236,9 @@
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h">
+      <Filter>Plugins\Core</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
