@@ -107,6 +107,9 @@
     <ClInclude Include="DebugLog.h">
       <Filter>Root</Filter>
     </ClInclude>
+    <ClInclude Include="InternalDebugConsole.h">
+      <Filter>Root</Filter>
+    </ClInclude>
     <ClInclude Include="crt_shim.h">
       <Filter>Root</Filter>
     </ClInclude>

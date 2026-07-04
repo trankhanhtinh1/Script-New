@@ -114,6 +114,7 @@
   <ItemGroup>
     <ClInclude Include="Core\*.h" />
     <ClInclude Include="DebugLog.h" />
+    <ClInclude Include="InternalDebugConsole.h" />
     <ClInclude Include="libs\**\*.h" />
     <ClInclude Include="Plugins\**\*.h" />
     <ClInclude Include="SDK\**\*.h" />

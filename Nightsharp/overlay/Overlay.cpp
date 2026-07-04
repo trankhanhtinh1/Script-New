@@ -17,6 +17,7 @@
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
+#include "../InternalDebugConsole.h"
 #include "../SDK/Lifecycle.h"
 #include "../SDK/Data/DragonSoulData.h"
 #include "../SDK/UI/Drawing.h"
@@ -891,6 +892,7 @@ void Overlay::Run() {
                 break;
             }
             NightSharpPerf::ToggleHotkeys();
+            NightSharpDebug::InternalConsole::ToggleHotkey();
             UpdateClickThroughFromMenuBounds();
         } else {
             SetClickThrough(true);
@@ -957,6 +959,7 @@ void Overlay::Run() {
             NightSharpPerf::MsSince(perfStart));
 
         NightSharpPerf::RenderOverlay();
+        NightSharpDebug::InternalConsole::Render();
         OverlayStatus::Render(OverlayStatus::Mode::External);
         MissionInfoOverlay::RenderDragonSoulName();
 

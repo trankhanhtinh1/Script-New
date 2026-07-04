@@ -18,6 +18,10 @@
 #define NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE_AUTOSTART 1
 #endif
 
+#ifndef NIGHTSHARP_DEBUG_INTERNAL_CONSOLE
+#define NIGHTSHARP_DEBUG_INTERNAL_CONSOLE 1
+#endif
+
 namespace NightSharpDebug {
 
 inline constexpr const char* kCrashLogPath =
@@ -33,6 +37,116 @@ inline volatile LONG g_consolePipeLock = 0;
 inline volatile LONG g_consoleLaunchAttempted = 0;
 inline DWORD g_lastConsoleConnectAttempt = 0;
 inline HANDLE g_consolePipe = INVALID_HANDLE_VALUE;
+
+#if NIGHTSHARP_DEBUG_INTERNAL_CONSOLE
+inline constexpr int kInternalConsoleMaxLines = 512;
+inline constexpr int kInternalConsoleLineSize = 384;
+inline volatile LONG g_internalConsoleLock = 0;
+inline char g_internalConsoleLines[kInternalConsoleMaxLines][kInternalConsoleLineSize] = {};
+inline char g_internalConsoleCurrent[kInternalConsoleLineSize] = {};
+inline int g_internalConsoleCurrentLen = 0;
+inline int g_internalConsoleStart = 0;
+inline int g_internalConsoleCount = 0;
+inline unsigned g_internalConsoleDropped = 0;
+
+inline void LockInternalConsole() {
+    while (InterlockedCompareExchange(&g_internalConsoleLock, 1, 0) != 0) {
+        Sleep(0);
+    }
+}
+
+inline void UnlockInternalConsole() {
+    InterlockedExchange(&g_internalConsoleLock, 0);
+}
+
+inline void CommitInternalConsoleLineLocked() {
+    if (g_internalConsoleCurrentLen <= 0) {
+        return;
+    }
+
+    g_internalConsoleCurrent[g_internalConsoleCurrentLen] = '\0';
+
+    int index = 0;
+    if (g_internalConsoleCount < kInternalConsoleMaxLines) {
+        index = (g_internalConsoleStart + g_internalConsoleCount) % kInternalConsoleMaxLines;
+        ++g_internalConsoleCount;
+    } else {
+        index = g_internalConsoleStart;
+        g_internalConsoleStart = (g_internalConsoleStart + 1) % kInternalConsoleMaxLines;
+        ++g_internalConsoleDropped;
+    }
+
+    lstrcpynA(
+        g_internalConsoleLines[index],
+        g_internalConsoleCurrent,
+        kInternalConsoleLineSize);
+    g_internalConsoleCurrentLen = 0;
+    g_internalConsoleCurrent[0] = '\0';
+}
+
+inline void AppendInternalConsoleRaw(const char* text) {
+    if (!text || !*text) {
+        return;
+    }
+
+    LockInternalConsole();
+    for (const char* p = text; *p; ++p) {
+        const char ch = *p;
+        if (ch == '\r') {
+            continue;
+        }
+        if (ch == '\n') {
+            CommitInternalConsoleLineLocked();
+            continue;
+        }
+
+        if (g_internalConsoleCurrentLen >= kInternalConsoleLineSize - 2) {
+            CommitInternalConsoleLineLocked();
+        }
+
+        g_internalConsoleCurrent[g_internalConsoleCurrentLen++] = ch;
+        g_internalConsoleCurrent[g_internalConsoleCurrentLen] = '\0';
+    }
+    UnlockInternalConsole();
+}
+
+inline void ClearInternalConsole() {
+    LockInternalConsole();
+    for (int i = 0; i < kInternalConsoleMaxLines; ++i) {
+        g_internalConsoleLines[i][0] = '\0';
+    }
+    g_internalConsoleCurrent[0] = '\0';
+    g_internalConsoleCurrentLen = 0;
+    g_internalConsoleStart = 0;
+    g_internalConsoleCount = 0;
+    g_internalConsoleDropped = 0;
+    UnlockInternalConsole();
+}
+
+inline int InternalConsoleLineCountUnsafe() {
+    return g_internalConsoleCount;
+}
+
+inline unsigned InternalConsoleDroppedUnsafe() {
+    return g_internalConsoleDropped;
+}
+
+inline const char* InternalConsoleLineUnsafe(int index) {
+    if (index < 0 || index >= g_internalConsoleCount) {
+        return "";
+    }
+    const int physical = (g_internalConsoleStart + index) % kInternalConsoleMaxLines;
+    return g_internalConsoleLines[physical];
+}
+#else
+inline void AppendInternalConsoleRaw(const char*) {}
+inline void ClearInternalConsole() {}
+inline void LockInternalConsole() {}
+inline void UnlockInternalConsole() {}
+inline int InternalConsoleLineCountUnsafe() { return 0; }
+inline unsigned InternalConsoleDroppedUnsafe() { return 0; }
+inline const char* InternalConsoleLineUnsafe(int) { return ""; }
+#endif
 
 inline void CloseExternalConsolePipe() {
 #if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
@@ -218,6 +332,7 @@ inline void WriteRaw(const char* text) {
         return;
     }
 
+    AppendInternalConsoleRaw(text);
     OutputDebugStringA(text);
 
 #if NIGHTSHARP_DEBUG_EXTERNAL_CONSOLE
