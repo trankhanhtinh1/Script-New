@@ -4,6 +4,7 @@
 #include "../../Core/CoreView.h"
 #include "../../Core/Globals.h"
 #include "../../Core/Vector.h"
+#include "../../CrashReporter.h"
 #include "../../imgui/imgui.h"
 #include "../Core/Game.h"
 
@@ -15,10 +16,24 @@
 namespace SDK::Drawing {
 
 namespace detail {
+    inline bool FunctionInModule(const void* function, HMODULE module) {
+        if (!function || !module) {
+            return false;
+        }
+
+        MEMORY_BASIC_INFORMATION mbi = {};
+        return VirtualQuery(function, &mbi, sizeof(mbi)) &&
+               mbi.AllocationBase == module;
+    }
+
     template <typename Handler, int MaxHandlers = 64>
     struct HandlerList {
+        const char* name = "";
         Handler handlers[MaxHandlers] = {};
         int count = 0;
+
+        HandlerList() = default;
+        explicit HandlerList(const char* eventName) : name(eventName ? eventName : "") {}
 
         bool Add(Handler handler) {
             if (!handler) {
@@ -53,13 +68,68 @@ namespace detail {
             return false;
         }
 
-        void Fire() const {
-            for (int i = 0; i < count; ++i) {
-                if (auto handler = handlers[i]) {
-                    __try {
-                        handler();
-                    } __except (1) {}
+        void RemoveAt(int index) {
+            if (index < 0 || index >= count) {
+                return;
+            }
+            for (int j = index; j + 1 < count; ++j) {
+                handlers[j] = handlers[j + 1];
+            }
+            handlers[--count] = nullptr;
+        }
+
+        int RemoveHandlersInModule(HMODULE module) {
+            if (!module) {
+                return 0;
+            }
+
+            int removed = 0;
+            for (int i = 0; i < count;) {
+                Handler handler = handlers[i];
+                if (!handler || FunctionInModule(reinterpret_cast<const void*>(handler), module)) {
+                    RemoveAt(i);
+                    ++removed;
+                    continue;
                 }
+                ++i;
+            }
+            return removed;
+        }
+
+        void Fire() {
+            for (int i = 0; i < count;) {
+                auto handler = handlers[i];
+                if (!handler) {
+                    RemoveAt(i);
+                    continue;
+                }
+
+                bool crashed = false;
+                char stage[160] = {};
+                _snprintf_s(stage,
+                            sizeof(stage),
+                            _TRUNCATE,
+                            "SDK::Drawing/%s[%d]",
+                            name ? name : "Draw",
+                            i);
+                __try {
+                    handler();
+                }
+                __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                              stage,
+                              GetExceptionInformation())) {
+                    crashed = true;
+                    NightSharpDebug::Logf("[SDK::Drawing] Handler crashed and was removed event=%s index=%d handler=%p",
+                                          name ? name : "",
+                                          i,
+                                          reinterpret_cast<void*>(handler));
+                }
+
+                if (crashed) {
+                    RemoveAt(i);
+                    continue;
+                }
+                ++i;
             }
         }
 
@@ -398,11 +468,12 @@ namespace detail {
                minY > size.y + kScreenRejectPadding;
     }
 
-    inline HandlerList<void(*)()> DrawHandlers;
-    inline HandlerList<void(*)()> AlwaysDrawHandlers;
-    inline HandlerList<void(*)()> EndSceneHandlers;
-    inline HandlerList<void(*)()> PreResetHandlers;
-    inline HandlerList<void(*)()> PostResetHandlers;
+    inline HandlerList<void(*)()> DrawHandlers{ "OnDraw" };
+    inline HandlerList<void(*)()> AlwaysDrawHandlers{ "OnAlwaysDraw" };
+    inline HandlerList<void(*)()> EndSceneHandlers{ "OnEndScene" };
+    inline HandlerList<void(*)()> PreResetHandlers{ "OnPreReset" };
+    inline HandlerList<void(*)()> PostResetHandlers{ "OnPostReset" };
+    inline volatile LONG CaptureVisibleUntilTick = 0;
 } // namespace detail
 
 using DrawHandler = void(*)();
@@ -433,6 +504,23 @@ inline ImDrawList* GetDrawList(bool foreground = true) {
     return foreground
         ? ImGui::GetForegroundDrawList()
         : ImGui::GetBackgroundDrawList();
+}
+
+inline void MarkCaptureVisibleContent(DWORD durationMs = 150) {
+    const DWORD now = GetTickCount();
+    InterlockedExchange(
+        &detail::CaptureVisibleUntilTick,
+        static_cast<LONG>(now + durationMs));
+}
+
+inline bool HasCaptureVisibleContent() {
+    const DWORD until = static_cast<DWORD>(
+        InterlockedCompareExchange(&detail::CaptureVisibleUntilTick, 0, 0));
+    return static_cast<LONG>(until - GetTickCount()) > 0;
+}
+
+inline void ClearCaptureVisibleContent() {
+    InterlockedExchange(&detail::CaptureVisibleUntilTick, 0);
 }
 
 inline int Width() {
@@ -1181,12 +1269,32 @@ inline void DispatchEndScene() {
 inline void DispatchPreReset() { detail::PreResetHandlers.Fire(); }
 inline void DispatchPostReset() { detail::PostResetHandlers.Fire(); }
 
+inline int RemoveHandlersFromModule(HMODULE module) {
+    if (!module) {
+        return 0;
+    }
+
+    int removed = 0;
+    removed += detail::DrawHandlers.RemoveHandlersInModule(module);
+    removed += detail::AlwaysDrawHandlers.RemoveHandlersInModule(module);
+    removed += detail::EndSceneHandlers.RemoveHandlersInModule(module);
+    removed += detail::PreResetHandlers.RemoveHandlersInModule(module);
+    removed += detail::PostResetHandlers.RemoveHandlersInModule(module);
+    if (removed > 0) {
+        NightSharpDebug::Logf("[SDK::Drawing] Removed %d handlers from module=%p",
+                              removed,
+                              module);
+    }
+    return removed;
+}
+
 inline void Reset() {
     detail::DrawHandlers.Clear();
     detail::AlwaysDrawHandlers.Clear();
     detail::EndSceneHandlers.Clear();
     detail::PreResetHandlers.Clear();
     detail::PostResetHandlers.Clear();
+    ClearCaptureVisibleContent();
 }
 
 struct DrawEventSlot {

@@ -14,7 +14,7 @@
 
 #include "CrashReporter.h"
 #include "DebugLog.h"
-#include "overlay/D3D11Hook.h"
+#include "overlay/OverlayManager.h"
 
 #include "Core/PackmanHook.h"
 #pragma comment(lib, "psapi.lib")
@@ -135,8 +135,7 @@ static void StopDeferredCRCThread() {
 }
 
 static void ShutdownNightSharpRuntime() {
-    D3D11Hook::RequestShutdown();
-    D3D11Hook::Uninstall();
+    OverlayManager::ShutdownCurrent();
     StopDeferredCRCThread();
     CRCBypass::Uninstall();
 }
@@ -144,17 +143,18 @@ static void ShutdownNightSharpRuntime() {
 static DWORD WINAPI OverlayWorker(LPVOID param) {
     HMODULE module = reinterpret_cast<HMODULE>(param);
 
+    NightSharpDebug::StartExternalConsole(module);
     NightSharpDebug::Phase("overlay-worker-enter");
     NightSharpDebug::Logf("[NightSharp] OverlayWorker entered");
 
     __try {
-        NightSharpDebug::Phase("d3d11hook-install");
-        D3D11Hook::Install();
-        NightSharpDebug::Logf("[NightSharp] D3D11Hook exited");
+        NightSharpDebug::Phase("overlay-manager-run");
+        OverlayManager::Run();
+        NightSharpDebug::Logf("[NightSharp] OverlayManager exited");
     } __except (NightSharpDebug::CrashReporter::LogAndDumpException(
-                    "OverlayWorker/D3D11Hook::Install",
+                    "OverlayWorker/OverlayManager::Run",
                     GetExceptionInformation())) {
-        NightSharpDebug::Logf("[NightSharp] D3D11Hook crashed");
+        NightSharpDebug::Logf("[NightSharp] OverlayManager crashed");
     }
 
     InterlockedExchange(&g_workerStarted, 0);
@@ -205,6 +205,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     switch (reason) {
     case DLL_PROCESS_ATTACH: {
         DisableThreadLibraryCalls(hModule);
+        NightSharpDebug::ResetFileLog();
         NightSharpDebug::CrashReporter::Install(hModule);
         NightSharpDebug::Phase("dll-attach");
         NightSharpDebug::Logf("[NightSharp] DllMain attach module=%p", hModule);
@@ -243,6 +244,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             ShutdownNightSharpRuntime();
         }
         NightSharpDebug::CrashReporter::Uninstall();
+        NightSharpDebug::CloseExternalConsolePipe();
         break;
     default:
         break;

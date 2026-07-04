@@ -23,9 +23,13 @@ namespace PluginRegistry {
         PluginKind   Kind        = PluginKind::SDK;
         PluginCategory Category  = PluginCategory::Core;
         const char*  ChampionName = nullptr;
+        const char*  ConfigFileName = nullptr;
         bool         Loaded      = false;
+        bool         Enabled     = true;
         bool         AlwaysLoad  = true;
         bool         AlwaysLoadConfigured = false;
+        int          CrashCount  = 0;
+        const char*  LastRuntimeError = nullptr;
         void*        RuntimeUserData = nullptr;
         bool       (*RuntimeLoad)(void*) = nullptr;
         bool       (*RuntimeUnload)(void*) = nullptr;
@@ -53,7 +57,7 @@ namespace PluginRegistry {
         CreateDirectoryA(parentDir, nullptr);
 
         char dirPath[MAX_PATH] = {};
-        wsprintfA(dirPath, "%s\\config", parentDir);
+        wsprintfA(dirPath, "%s\\Config", parentDir);
         CreateDirectoryA(dirPath, nullptr);
 
         wsprintfA(outPath, "%s\\plugins.ini", dirPath);
@@ -169,7 +173,8 @@ namespace PluginRegistry {
     inline int Register(const char* name, const char* internalId,
                         PluginKind kind, bool autoLoad = true,
                         PluginCategory category = PluginCategory::Core,
-                        const char* championName = nullptr)
+                        const char* championName = nullptr,
+                        const char* configFileName = nullptr)
     {
         if (PluginCount >= MAX_PLUGINS) return -1;
         int idx = PluginCount++;
@@ -178,9 +183,11 @@ namespace PluginRegistry {
         Plugins[idx].Kind       = kind;
         Plugins[idx].Category   = category;
         Plugins[idx].ChampionName = championName;
+        Plugins[idx].ConfigFileName = configFileName;
         Plugins[idx].AlwaysLoad = autoLoad;
         Plugins[idx].AlwaysLoadConfigured = false;
         Plugins[idx].Loaded     = autoLoad;
+        Plugins[idx].Enabled    = true;
         NightSharpDebug::Logf("[PluginRegistry] Register idx=%d name=%s id=%s auto=%d",
                               idx,
                               name ? name : "",

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{10E61120-28B9-407E-B39B-6A1905FDD2A8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include">
+      <UniqueIdentifier>{54046480-9B69-43C2-A625-1EC9D9657783}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Build">
+      <UniqueIdentifier>{45FB2E22-6F0D-4E9A-8530-EBA706A364FB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="NightSharp SDK Source">
+      <UniqueIdentifier>{D345EF20-0901-4C91-B656-50B58C50B111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dear ImGui">
+      <UniqueIdentifier>{5A41F9B3-D0CB-4F5B-A24E-401E6EA72D90}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Core Runtime Glue">
+      <UniqueIdentifier>{C74D6016-21EC-4DA0-9386-908C6E37DDA7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\NightSharp\imgui\imgui.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NightSharp\imgui\imgui_draw.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NightSharp\imgui\imgui_tables.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\NightSharp\imgui\imgui_widgets.cpp">
+      <Filter>Dear ImGui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\NightSharp.SDK.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="..\NightSharp\Core\spoof\spoof.asm">
+      <Filter>Core Runtime Glue</Filter>
+    </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\NightSharp.SDK.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\NightSharp.SDK.Plugin.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\NightSharp.SDK.Version.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\NightSharp\SDK\**\*.h">
+      <Filter>NightSharp SDK Source</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="build\NightSharp.SDK.props">
+      <Filter>Build</Filter>
+    </None>
+    <None Include="README.md" />
+  </ItemGroup>
+</Project>

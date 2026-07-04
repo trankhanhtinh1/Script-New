@@ -14,6 +14,7 @@
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/PermaShow.h"
 #include "MenuConfig.h"
+#include "MenuSettingsConfig.h"
 
 #include <cstdio>
 
@@ -243,13 +244,12 @@ namespace NightSharpMenu {
 
     inline void DrawLanguageSection() {
         DrawSectionTitle("Language");
-        static int lang = 0;
         const char* langs[] = { "EN", "CN", "VN" };
 
         for (int i = 0; i < 3; ++i) {
             ImGui::PushID(langs[i]);
-            if (DrawStateButton(langs[i], langs[i], lang == i, true, 56.0f)) {
-                lang = i;
+            if (DrawStateButton(langs[i], langs[i], Config::Language::index == i, true, 56.0f)) {
+                Config::Language::index = i;
             }
             ImGui::PopID();
             if (i < 2) {
@@ -272,15 +272,9 @@ namespace NightSharpMenu {
 
         DrawOnOffEditor("PermaShow", Config::PermaShow::enabled, "perma_show");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
-        if (Config::StreamProtection::bypassObs) {
-            ImGui::TextColored(
-                ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
-                "Bypass OBS: capture protection requested");
-            ImGui::TextColored(
-                ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
-                "(requires Win10 2004+ capture affinity support)");
-        }
         ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(requires Win10 2004+)");
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click-through always on: clicks pass through the overlay.");
     }
 
@@ -313,9 +307,11 @@ namespace NightSharpMenu {
         auto& p = PluginRegistry::Plugins[idx];
         if (p.Kind != kind || !p.Name || !p.InternalId) return false;
 
-        if (p.Category == PluginRegistry::PluginCategory::Champion &&
-            !PluginRegistry::CanPluginLoad(idx)) {
-            return false;
+        if (p.Category == PluginRegistry::PluginCategory::Champion) {
+            const bool canLoad = PluginRegistry::CanPluginLoad(idx);
+            if (!canLoad && p.Enabled) {
+                return false;
+            }
         }
 
         if (pluginManagerFilter <= 0) {
@@ -365,12 +361,16 @@ namespace NightSharpMenu {
             }
 
             const bool canLoad = PluginRegistry::CanPluginLoad(i);
+            const bool runtimeError = !p.Enabled && p.CrashCount > 0;
             ImGui::PushID(i + idBase);
 
             ImVec4 statusColor = !canLoad
                 ? ImVec4(0.75f, 0.55f, 0.18f, 1.0f)
                 : (p.Loaded ? ImVec4(0.30f, 0.86f, 0.34f, 1.0f) : ImVec4(0.62f, 0.64f, 0.70f, 1.0f));
-            ImGui::TextColored(statusColor, "%s", p.Loaded ? "[ON]" : (canLoad ? "[--]" : "[NC]"));
+            if (runtimeError) {
+                statusColor = ImVec4(0.95f, 0.24f, 0.24f, 1.0f);
+            }
+            ImGui::TextColored(statusColor, "%s", runtimeError ? "[ERR]" : (p.Loaded ? "[ON]" : (canLoad ? "[--]" : "[NC]")));
             ImGui::SameLine(0, 8);
             ImGui::Text("%s", p.Name);
             ImGui::SameLine(0, 8);
@@ -386,7 +386,8 @@ namespace NightSharpMenu {
                 ImGui::SetCursorPosX(targetX);
             }
 
-            if (canLoad) {
+            const bool canTryLoad = canLoad || runtimeError;
+            if (canTryLoad) {
                 if (p.Loaded) {
                     if (DrawStateButton("unload", "Unload", true, false, 74.0f)) {
                         PluginRegistry::UnloadPlugin(i);
@@ -410,6 +411,12 @@ namespace NightSharpMenu {
 
             if (!p.RuntimeMenu) {
                 ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.64f, 1.0f), "No custom ImGui menu callback.");
+            }
+            if (runtimeError && p.LastRuntimeError && p.LastRuntimeError[0]) {
+                ImGui::TextColored(ImVec4(0.95f, 0.38f, 0.34f, 1.0f),
+                                   "Disabled after crash: %s (%d)",
+                                   p.LastRuntimeError,
+                                   p.CrashCount);
             }
 
             ImGui::Separator();
@@ -883,6 +890,9 @@ namespace NightSharpMenu {
     }
 
     inline void Render() {
+        MenuSettingsConfig::ApplyNewMenuValues();
+        MenuSettingsConfig::AutoSaveScope autoSaveSettings;
+
         DrawPermaShowOverlay();
 
         if (!showMenu) {
