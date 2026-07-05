@@ -372,23 +372,13 @@ inline bool IsSoonKillableMinion(const AIHeroClient& player,
     if (damage <= 0.0f) {
         return false;
     }
-    if (CanLastHitMinion(player, minion, farmDelay)) {
-        return false;
-    }
 
     const float predictedHealth = HealthPrediction::GetPrediction(
         minion,
         predictionTime,
         farmDelay,
         HealthPredictionType::Simulated);
-    return predictedHealth > 0.0f && predictedHealth <= damage;
-}
-
-inline bool ShouldHoldTargetForFarm(OrbwalkingMode mode,
-                                    const OrbwalkerMenu& menu) {
-    return mode == OrbwalkingMode::LaneClear ||
-           mode == OrbwalkingMode::LastHit ||
-           (mode == OrbwalkingMode::Hybrid && menu.PrioritizeFarm());
+    return predictedHealth < damage;
 }
 
 inline bool HasSoonKillableMinion(const AIHeroClient& player,
@@ -470,6 +460,14 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         return cachedHeroTarget;
     };
 
+    if ((mode == OrbwalkingMode::Hybrid || mode == OrbwalkingMode::LaneClear) &&
+        !menu_.PrioritizeFarm()) {
+        const AttackableUnit target = getHeroTarget();
+        if (target.IsValid()) {
+            return cacheTarget(target);
+        }
+    }
+
     const bool farmMode =
         mode == OrbwalkingMode::LaneClear ||
         mode == OrbwalkingMode::Hybrid ||
@@ -508,35 +506,6 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
 
         if (killableMinion.IsValid()) {
             return cacheTarget(killableMinion);
-        }
-    }
-
-    const bool shouldHoldForFarm =
-        farmMode && OrbwalkingDetail::ShouldHoldTargetForFarm(mode, menu_);
-    if (shouldHoldForFarm) {
-        const int predictionTime = static_cast<int>(
-            context_.attackDelayMs * OrbwalkingDetail::kLaneClearWaitTime);
-        const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
-            player,
-            minionLists.laneMinions,
-            {},
-            farmDelay,
-            predictionTime);
-        context_.cachedShouldWait = shouldWait;
-        context_.cachedShouldWaitTick = now;
-        if (shouldWait) {
-            return cacheTarget(AttackableUnit());
-        }
-    } else {
-        context_.cachedShouldWait = false;
-        context_.cachedShouldWaitTick = now;
-    }
-
-    if ((mode == OrbwalkingMode::Hybrid || mode == OrbwalkingMode::LaneClear) &&
-        !menu_.PrioritizeFarm()) {
-        const AttackableUnit target = getHeroTarget();
-        if (target.IsValid()) {
-            return cacheTarget(target);
         }
     }
 
@@ -624,6 +593,20 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     }
 
     if (mode == OrbwalkingMode::LaneClear) {
+        const int predictionTime = static_cast<int>(
+            context_.attackDelayMs * OrbwalkingDetail::kLaneClearWaitTime);
+        const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
+            player,
+            minionLists.laneMinions,
+            {},
+            farmDelay,
+            predictionTime);
+        context_.cachedShouldWait = shouldWait;
+        context_.cachedShouldWaitTick = now;
+        if (shouldWait) {
+            return cacheTarget(AttackableUnit());
+        }
+
         auto canLaneClear = [&](const AIMinionClient& minion) {
             if (!OrbwalkingDetail::IsValidMinionTarget(
                     player,
@@ -667,28 +650,17 @@ inline bool OrbwalkerBase::ShouldWait() {
     }
 
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || player.IsDead() || !menu_.Enabled()) {
-        context_.cachedShouldWait = false;
-        context_.cachedShouldWaitTick = now;
-        return false;
-    }
-
-    const OrbwalkingMode mode = context_.activeMode != OrbwalkingMode::None
-        ? context_.activeMode
-        : ActiveMode();
-    if (!OrbwalkingDetail::ShouldHoldTargetForFarm(mode, menu_)) {
+    if (!player.IsValid() || player.IsDead()) {
         context_.cachedShouldWait = false;
         context_.cachedShouldWaitTick = now;
         return false;
     }
 
     SnapshotAttackTimings(player);
-    const auto minionLists = OrbwalkingDetail::GetMinionsForMode(mode, menu_, player);
     const int predictionTime = static_cast<int>(
         context_.attackDelayMs * OrbwalkingDetail::kLaneClearWaitTime);
     context_.cachedShouldWait = OrbwalkingDetail::HasSoonKillableMinion(
         player,
-        minionLists.laneMinions,
         {},
         menu_.DelayFarm(),
         predictionTime);
