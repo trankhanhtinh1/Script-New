@@ -9,6 +9,16 @@
 
 namespace SDK::OrbwalkingDetail {
 
+inline bool FunctionInModule(const void* function, HMODULE module) {
+    if (!function || !module) {
+        return false;
+    }
+
+    MEMORY_BASIC_INFORMATION mbi = {};
+    return VirtualQuery(function, &mbi, sizeof(mbi)) &&
+           mbi.AllocationBase == module;
+}
+
 template <typename T, int MaxHandlers = 32>
 class EventList {
 public:
@@ -47,6 +57,34 @@ public:
         return false;
     }
 
+    void RemoveAt(int index) {
+        if (index < 0 || index >= count_) {
+            return;
+        }
+        for (int j = index; j + 1 < count_; ++j) {
+            handlers_[j] = handlers_[j + 1];
+        }
+        handlers_[--count_] = nullptr;
+    }
+
+    int RemoveHandlersInModule(HMODULE module) {
+        if (!module) {
+            return 0;
+        }
+
+        int removed = 0;
+        for (int i = 0; i < count_;) {
+            Handler handler = handlers_[i];
+            if (!handler || FunctionInModule(reinterpret_cast<const void*>(handler), module)) {
+                RemoveAt(i);
+                ++removed;
+                continue;
+            }
+            ++i;
+        }
+        return removed;
+    }
+
     void Fire(T& args) const {
         for (int i = 0; i < count_; ++i) {
             Handler handler = handlers_[i];
@@ -77,5 +115,14 @@ inline void FireBeforeAttack(OrbwalkingActionArgs& args) { BeforeAttackHandlers.
 inline void FireOnAttack(OrbwalkingActionArgs& args) { AttackHandlers.Fire(args); }
 inline void FireAfterAttack(OrbwalkingActionArgs& args) { AfterAttackHandlers.Fire(args); }
 inline void FireBeforeMove(OrbwalkingActionArgs& args) { BeforeMoveHandlers.Fire(args); }
+
+inline int RemoveHandlersFromModule(HMODULE module) {
+    int removed = 0;
+    removed += BeforeAttackHandlers.RemoveHandlersInModule(module);
+    removed += AttackHandlers.RemoveHandlersInModule(module);
+    removed += AfterAttackHandlers.RemoveHandlersInModule(module);
+    removed += BeforeMoveHandlers.RemoveHandlersInModule(module);
+    return removed;
+}
 
 } // namespace SDK::OrbwalkingDetail

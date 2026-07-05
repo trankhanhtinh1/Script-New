@@ -90,7 +90,8 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
 
 inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     ExpirePendingAttack();
-    if (!context_.attackEnabled || !OrbwalkingDetail::IsValidAttackTarget(target, GetAutoAttackRange(target))) {
+    if (!context_.attackEnabled ||
+        !OrbwalkingDetail::IsValidAttackTarget(target, Utils::AutoAttack::GetRealAutoAttackRange(target))) {
         return false;
     }
     if (context_.pendingAttack) {
@@ -288,25 +289,9 @@ inline void OrbwalkerBase::SnapshotAttackTimings(const AIHeroClient& player) {
         return;
     }
 
-    context_.attackDelayMs = GetAttackDelayMs(player);
-    context_.attackWindupMs = GetAttackWindupMs(player);
-}
-
-inline float OrbwalkerBase::GetAttackDelayMs(const AIHeroClient& player) const {
-    return std::max(250.0f, CoreControl::GetAttackDelay(player.Address()) * 1000.0f);
-}
-
-inline float OrbwalkerBase::GetAttackWindupMs(const AIHeroClient& player) const {
-    const float delay = GetAttackDelayMs(player);
-    const float windup = CoreControl::GetAttackWindup(player.Address()) * 1000.0f;
-    const float maxWindup = std::clamp(delay * 0.62f, 120.0f, 360.0f);
-    const float minWindup = player.IsMelee()
-        ? std::min(maxWindup, std::clamp(delay * 0.30f, 160.0f, 260.0f))
-        : std::min(maxWindup, std::clamp(delay * 0.22f, 95.0f, 240.0f));
-    if (windup <= 0.0f || windup >= delay - 25.0f) {
-        return maxWindup;
-    }
-    return std::clamp(windup, minWindup, maxWindup);
+    // ponytail: CoreControl already owns timing fallback/caching; SDK just consumes ms values.
+    context_.attackDelayMs = CoreControl::GetAttackDelayMs(player.Address());
+    context_.attackWindupMs = CoreControl::GetAttackWindupMs(player.Address());
 }
 
 } // namespace SDK

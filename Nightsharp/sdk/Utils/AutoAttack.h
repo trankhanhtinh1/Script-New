@@ -64,8 +64,8 @@ public:
 
     static float GetTimeToHit(const AttackableUnit& target) {
         const auto player = SDK::ObjectManager::Player();
-        const float attackCastDelay = CoreControl::GetAttackWindup(player.Address());
-        float time = (attackCastDelay * 1000.0f) - 100.0f + (SDK::Game::Ping() / 2.0f);
+        const float attackCastDelay = CoreControl::GetAttackWindupMs(player.Address());
+        float time = attackCastDelay - 100.0f + (SDK::Game::Ping() / 2.0f);
 
         const float missileSpeed = GetProjectileSpeed(player);
         if (std::fabs(missileSpeed - std::numeric_limits<float>::max()) > FLT_EPSILON && target.IsValid()) {
@@ -93,7 +93,9 @@ public:
 
     static bool IsAutoAttackReset(std::string name) {
         ToLower(name);
-        return Contains(AttackResets(), name);
+        return Contains(AttackResets(), name) ||
+               name.find("attackreset") != std::string::npos ||
+               name.find("takedown") != std::string::npos;
     }
 
 private:
@@ -118,7 +120,7 @@ private:
             "dariusnoxiantacticsonh","elisespiderw","masochism","ekkoe","fiorae",
             "fizzw","garenq","gangplankqwrapper","gravesmove","hecarimramp",
             "illaoiw","jaxempowertwo","jaycehypercharge","netherblade",
-            "kaylee","kindredq","leonashieldofdaybreak","luciane",
+            "kaylee","kindredq","leonashieldofdaybreakattack","leonashieldofdaybreak","luciane",
             "meditate","monkeykingdoubleattack","mordekaisermaceofspades","nasusq",
             "nautiluspiercinggaze","takedown","reksaiq","renektonpreexecute",
             "rengarq","rengarqemp","riventricleave","settq",
@@ -139,7 +141,9 @@ private:
             "aphelioscrescendumattackmisin","aphelioscrescendumattackmisout",
             "apheliosgravitumattackmis","apheliosinfernumattackmis",
             "apheliosseverumattackmis",
-            "caitlynheadshotmissile","kennenmegaproc","masteryidoublestrike",
+            "caitlynheadshotmissile","caitlynpassivemissile",
+            "itemtitanichydracleave","itemtiamatcleave",
+            "kennenmegaproc","masteryidoublestrike",
             "quinnwenhanced","renektonexecute","renektonsuperexecute",
             "trundleq","viktorqbuff",
             "xinzhaoqthrust1","xinzhaoqthrust2","xinzhaoqthrust3",
@@ -155,7 +159,7 @@ private:
             "azirbasicattacksoldier",
             "dravenattackp_r","dravenattackp_l","dravenattackp_rc","dravenattackp_rq","dravenattackp_lc","dravenattackp_lq",
             "elisespiderlingbasicattack",
-            "gravesbasicattackspread","gravesautoattackrecoil",
+            "gravesbasicattackspread","gravesautoattackrecoil","gravesautoattackrecoilcastedummy",
             "heimertyellowbasicattack","heimertyellowbasicattack2","heimertbluebasicattack","heimerdingerwattack2","heimerdingerwattack2ult",
             "ivernminionbasicattack","ivernminionbasicattack2",
             "kindredwolfbasicattack",

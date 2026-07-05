@@ -54,7 +54,7 @@ inline void OrbwalkerBase::OnGameUpdate() {
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
     const bool isAttack = IsLocalAutoAttack(args);
     const bool isAttackReset = IsLocalAutoAttackReset(args);
-    if (isAttackReset && !isAttack) {
+    if (isAttackReset) {
         ResetAutoAttackTimer();
         return;
     }
@@ -187,7 +187,7 @@ inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs
     if (!Events::IsLocalPlayer(args.Sender)) {
         return false;
     }
-    return args.IsAutoAttack || IsAutoAttack(args.SpellName);
+    return args.IsAutoAttack;
 }
 
 inline bool OrbwalkerBase::IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "OrbwalkerContext.h"
-#include "OrbwalkerDatabase.h"
 #include "OrbwalkerEventBus.h"
 #include "OrbwalkerMenu.h"
 
@@ -65,7 +64,6 @@ public:
 
 protected:
     static int Tick();
-    float GetAutoAttackRange(const AttackableUnit& target) const;
 
 private:
     static constexpr int kMoveDelayMs = 25;
@@ -109,8 +107,6 @@ private:
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     void SnapshotAttackTimings(const AIHeroClient& player);
-    float GetAttackDelayMs(const AIHeroClient& player) const;
-    float GetAttackWindupMs(const AIHeroClient& player) const;
 
     OrbwalkerMenu menu_;
     OrbwalkerRuntimeContext context_ = {};

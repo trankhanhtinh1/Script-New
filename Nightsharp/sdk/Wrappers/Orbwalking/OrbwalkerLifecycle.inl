@@ -83,15 +83,15 @@ inline void OrbwalkerBase::Dispose() {
 }
 
 inline bool OrbwalkerBase::IsAutoAttack(std::string name) {
-    return OrbwalkingDetail::IsAutoAttackName(std::move(name));
+    return Utils::AutoAttack::IsAutoAttack(std::move(name));
 }
 
 inline bool OrbwalkerBase::IsAutoAttackReset(std::string name) {
-    return OrbwalkingDetail::IsAutoAttackResetName(std::move(name));
+    return Utils::AutoAttack::IsAutoAttackReset(std::move(name));
 }
 
 inline int OrbwalkerBase::Tick() {
-    return Variables::TickCount();
+    return Game::TickCount();
 }
 
 } // namespace SDK
