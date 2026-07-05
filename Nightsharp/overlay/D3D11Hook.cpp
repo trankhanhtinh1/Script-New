@@ -62,6 +62,10 @@ static volatile LONG    g_hookCalls        = 0;
 static volatile LONG    g_menuReady        = 0;
 static volatile LONG    g_imguiContextReady = 0;
 static volatile LONG    g_imguiBackendReady = 0;
+static volatile LONG    g_zoomTickFaultLogged = 0;
+static volatile LONG    g_skinTickFaultLogged = 0;
+static volatile LONG    g_zoomRestoreFaultLogged = 0;
+static volatile LONG    g_skinRestoreFaultLogged = 0;
 // Set to 1 once PluginBootstrap::EnsureRegistered() has returned (success or crash).
 // Render() gates all SDK/plugin calls on this flag to prevent the bootstrap race.
 static volatile LONG    g_bootstrapDone    = 0;
@@ -487,8 +491,33 @@ static void UnhookWndProc() {
 // -----------------------------------------------------------------------
 // ImGui initialization
 // -----------------------------------------------------------------------
-static void InitImGui(IDXGISwapChain* swapChain) {
+static void CleanupFailedImGuiInit(bool win32Started, bool dx11Started) {
+    if (dx11Started) {
+        ImGui_ImplDX11_Shutdown();
+    }
+    if (win32Started) {
+        ImGui_ImplWin32_Shutdown();
+    }
+
+    CleanupRenderTargetInternal();
+    SafeRelease(g_pd3dContext);
+    SafeRelease(g_pd3dDevice);
+    g_pSwapChain = nullptr;
+
+    if (InterlockedCompareExchange(&g_imguiContextReady, 0, 0) != 0 &&
+        ImGui::GetCurrentContext()) {
+        ImGui::DestroyContext();
+        InterlockedExchange(&g_imguiContextReady, 0);
+    }
+    InterlockedExchange(&g_imguiBackendReady, 0);
+}
+
+static bool InitImGui(IDXGISwapChain* swapChain) {
     NightSharpDebug::Phase("d3d11hook-imgui-init");
+    if (!swapChain || !g_gameHwnd || !IsWindow(g_gameHwnd)) {
+        NightSharpDebug::Logf("[D3D11Hook] ImGui init skipped: invalid swapchain/window");
+        return false;
+    }
 
     NsHeapInit();
     ImGui::SetAllocatorFunctions(NsImGuiAlloc, NsImGuiFree, nullptr);
@@ -503,21 +532,49 @@ static void InitImGui(IDXGISwapChain* swapChain) {
     io.Fonts->AddFontDefault();
 
     g_pSwapChain = swapChain;
-    g_pSwapChain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&g_pd3dDevice));
+    HRESULT hr = g_pSwapChain->GetDevice(
+        __uuidof(ID3D11Device),
+        reinterpret_cast<void**>(&g_pd3dDevice));
+    if (FAILED(hr) || !g_pd3dDevice) {
+        NightSharpDebug::Logf("[D3D11Hook] ImGui init failed: GetDevice hr=0x%08lX",
+                              static_cast<unsigned long>(hr));
+        CleanupFailedImGuiInit(false, false);
+        return false;
+    }
+
     g_pd3dDevice->GetImmediateContext(&g_pd3dContext);
+    if (!g_pd3dContext) {
+        NightSharpDebug::Logf("[D3D11Hook] ImGui init failed: null immediate context");
+        CleanupFailedImGuiInit(false, false);
+        return false;
+    }
 
     if (!CreateRenderTargetInternal()) {
         NightSharpDebug::Logf("[D3D11Hook] Failed to create render target");
-        return;
+        CleanupFailedImGuiInit(false, false);
+        return false;
     }
 
-    ImGui_ImplWin32_Init(g_gameHwnd);
-    ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
+    bool win32Started = false;
+    if (!ImGui_ImplWin32_Init(g_gameHwnd)) {
+        NightSharpDebug::Logf("[D3D11Hook] ImGui Win32 backend init failed");
+        CleanupFailedImGuiInit(false, false);
+        return false;
+    }
+    win32Started = true;
+
+    if (!ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext)) {
+        NightSharpDebug::Logf("[D3D11Hook] ImGui DX11 backend init failed");
+        CleanupFailedImGuiInit(win32Started, false);
+        return false;
+    }
+
     ImGui_ImplDX11_CreateDeviceObjects();
     SDK::UI::Icons::SetDevice(g_pd3dDevice, g_pd3dContext);
     InterlockedExchange(&g_imguiBackendReady, 1);
 
     NightSharpDebug::Logf("[D3D11Hook] ImGui initialized with game device");
+    return true;
 }
 
 static void EnsureImGuiInitialized(IDXGISwapChain* swapChain) {
@@ -526,11 +583,10 @@ static void EnsureImGuiInitialized(IDXGISwapChain* swapChain) {
         return;
     }
 
-    if (!IsUnloading()) {
-        InitImGui(swapChain);
-    }
-
-    const bool backendReady = InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) != 0;
+    const bool backendReady =
+        !IsUnloading() &&
+        InitImGui(swapChain) &&
+        InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) != 0;
     InterlockedExchange(&g_initDeviceState, backendReady ? 2 : 0);
 }
 
@@ -548,17 +604,32 @@ static void RenderMenuSafe() {
     }
 }
 
+static LONG LogOnceAndContinue(const char* stage,
+                               volatile LONG* flag,
+                               EXCEPTION_POINTERS* exceptionPointers) {
+    if (flag && InterlockedCompareExchange(flag, 1, 0) == 0) {
+        NightSharpDebug::LogException(stage, exceptionPointers);
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 static void TickCoreMemoryHacks() {
     __try {
         CoreZoomHack::Tick(Config::ZoomHack::enabled, Config::ZoomHack::maxZoom);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreZoomHack::Tick",
+                  &g_zoomTickFaultLogged,
+                  GetExceptionInformation())) {
     }
 
     __try {
         CoreSkinChanger::Tick(Config::SkinChanger::enabled, Config::SkinChanger::skinId);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreSkinChanger::Tick",
+                  &g_skinTickFaultLogged,
+                  GetExceptionInformation())) {
     }
 }
 
@@ -566,13 +637,39 @@ static void RestoreCoreMemoryHacks() {
     __try {
         CoreSkinChanger::Tick(false, Config::SkinChanger::skinId);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreSkinChanger::Restore",
+                  &g_skinRestoreFaultLogged,
+                  GetExceptionInformation())) {
     }
 
     __try {
         CoreZoomHack::Tick(false, Config::ZoomHack::maxZoom);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreZoomHack::Restore",
+                  &g_zoomRestoreFaultLogged,
+                  GetExceptionInformation())) {
+    }
+}
+
+static void RenderStatusOverlaysSafe(OverlayStatus::Mode mode) {
+    __try {
+        OverlayStatus::Render(mode);
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "D3D11Hook::OverlayStatus::Render",
+                  GetExceptionInformation())) {
+        NightSharpDebug::Logf("[D3D11Hook] Overlay status render crashed");
+    }
+
+    __try {
+        MissionInfoOverlay::RenderDragonSoulName();
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "D3D11Hook::MissionInfoOverlay::RenderDragonSoulName",
+                  GetExceptionInformation())) {
+        NightSharpDebug::Logf("[D3D11Hook] Mission info overlay render crashed");
     }
 }
 
@@ -583,8 +680,10 @@ static void Render() {
         !g_pRenderTargetView)
         return;
 
+    NightSharpDebug::SetPhase("d3d11hook-render-begin");
     NightSharpPerf::BeginFrame();
 
+    NightSharpDebug::SetPhase("d3d11hook-imgui-newframe");
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
@@ -595,52 +694,76 @@ static void Render() {
     if (g_bootstrapDone) {
         // Read game state once per frame
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-tickread");
             NightSharpPerf::ScopedTimer timer("CoreRuntime::TickRead");
             CoreRuntime::TickRead();
         }
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-memory-hacks");
             NightSharpPerf::ScopedTimer timer("CoreMemoryHacks::Tick");
             TickCoreMemoryHacks();
         }
 
         // Plugin update + render
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-plugin-update");
             NightSharpPerf::ScopedTimer timer("PluginManager::OnUpdate");
             Plugins::PluginManager::Get().OnUpdate();
         }
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-plugin-render");
             NightSharpPerf::ScopedTimer timer("PluginManager::OnRender");
             Plugins::PluginManager::Get().OnRender();
         }
 
         // SDK Drawing handlers (TargetSelector, Orbwalker, Core Render objects)
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-drawing-dispatch");
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchDraw");
             SDK::Drawing::DispatchDraw();
         }
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-endscene-dispatch");
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchEndScene");
             SDK::Drawing::DispatchEndScene();
         }
 
         // Menu + PermaShow render
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-menu");
             NightSharpPerf::ScopedTimer timer("NightSharpMenu::Render");
             RenderMenuSafe();
         }
     }
 
-    OverlayStatus::Render(OverlayStatus::Mode::Internal);
-    MissionInfoOverlay::RenderDragonSoulName();
+    NightSharpDebug::SetPhase("d3d11hook-render-status-overlays");
+    RenderStatusOverlaysSafe(OverlayStatus::Mode::Internal);
 
+    NightSharpDebug::SetPhase("d3d11hook-imgui-render");
     ImGui::EndFrame();
     ImGui::Render();
 
+    NightSharpDebug::SetPhase("d3d11hook-dx11-submit");
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
     NightSharpPerf::DumpSections();
     NightSharpPerf::EndFrame();
+    NightSharpDebug::SetPhase("d3d11hook-render-idle");
+}
+
+static void PresentFrameSafe(IDXGISwapChain* pSwapChain) {
+    __try {
+        NightSharpDebug::SetPhase("d3d11hook-present-frame");
+        EnsureImGuiInitialized(pSwapChain);
+        Render();
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "D3D11Hook::PresentFrame",
+                  GetExceptionInformation())) {
+        NightSharpDebug::Logf("[D3D11Hook] Present frame crashed; disabling internal overlay");
+        InterlockedExchange(&g_shutdown, 1);
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -650,8 +773,7 @@ struct DxgiPresent {
     static long WINAPI Hooked(IDXGISwapChain* pSwapChain, UINT syncInterval, UINT flags) {
         HookCallScope scope;
         if (!IsUnloading()) {
-            EnsureImGuiInitialized(pSwapChain);
-            Render();
+            PresentFrameSafe(pSwapChain);
         }
         NightSharpPerf::ScopedTimer timer("Present");
         return m_original(pSwapChain, syncInterval, flags);

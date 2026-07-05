@@ -19,7 +19,7 @@ struct OnStealthEventArgs {
 using StealthHandler = void(*)(const OnStealthEventArgs&);
 
 namespace detail {
-    inline SDK::Events::detail::EventList<OnStealthEventArgs> StealthHandlers;
+    inline SDK::Events::detail::EventList<OnStealthEventArgs> StealthHandlers{ "Stealth" };
     inline constexpr int IsStealthedMask = 0x20;
 
     inline bool EqualsIgnoreCase(const char* a, const char* b) {

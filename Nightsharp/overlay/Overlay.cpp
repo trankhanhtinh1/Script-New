@@ -17,12 +17,11 @@
 #include "../CrashReporter.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
-#include "../InternalDebugConsole.h"
-#include "../SDK/Data/EmbeddedAssets.h"
 #include "../SDK/Lifecycle.h"
 #include "../SDK/Data/DragonSoulData.h"
 #include "../SDK/UI/Drawing.h"
 #include "../SDK/UI/Icons.h"
+#include "../SDK/Utils/AssetInstaller.h"
 
 #include <cstdio>
 #include <cstdint>
@@ -81,6 +80,21 @@ void DrawTextWithShadowSized(ImDrawList* draw,
     draw->AddText(font, fontSize, pos, color, text);
 }
 
+void LoadDragonSoulIconDirectorySafe(const char* directory) {
+    if (!directory || !directory[0]) {
+        return;
+    }
+
+    __try {
+        SDK::UI::Icons::LoadIconsFromDirectory(directory);
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "MissionInfoOverlay::LoadDragonSoulIconDirectory",
+                  GetExceptionInformation())) {
+        NightSharpDebug::Logf("[MissionInfoOverlay] Dragon soul icon load crashed");
+    }
+}
+
 void EnsureDragonSoulIconsLoaded(const SDK::Data::DragonSoulData::DragonSoulEntry* entry) {
     if (!entry || entry->IconKey.empty()) {
         return;
@@ -91,13 +105,22 @@ void EnsureDragonSoulIconsLoaded(const SDK::Data::DragonSoulData::DragonSoulEntr
         return;
     }
 
-    for (const auto& asset : SDK::Data::EmbeddedAssets::kDragonSoulIcons) {
-        if (asset.Key == entry->IconKey) {
-            SDK::UI::Icons::LoadIconFromBytes(
-                std::string(asset.Key),
-                asset.Data,
-                static_cast<int>(asset.Size));
-            return;
+    static DWORD lastLoadAttempt = 0;
+    const DWORD now = ::GetTickCount();
+    if (lastLoadAttempt != 0 && now - lastLoadAttempt < 1000) {
+        return;
+    }
+    lastLoadAttempt = now;
+
+    const std::string embeddedDirectory = SDK::Utils::AssetInstaller::DragonSoulDirectory();
+    if (!embeddedDirectory.empty()) {
+        LoadDragonSoulIconDirectorySafe(embeddedDirectory.c_str());
+    }
+
+    if (!SDK::UI::Icons::HasIcon(key)) {
+        const std::string directory = SDK::Data::DragonSoulData::IconDirectory();
+        if (!directory.empty() && directory != embeddedDirectory) {
+            LoadDragonSoulIconDirectorySafe(directory.c_str());
         }
     }
 }
@@ -265,6 +288,26 @@ void RestoreCoreMemoryHacks() {
         CoreZoomHack::Tick(false, Config::ZoomHack::maxZoom);
     }
     __except (1) {
+    }
+}
+
+void RenderStatusOverlaysSafe(OverlayStatus::Mode mode) {
+    __try {
+        OverlayStatus::Render(mode);
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "Overlay::OverlayStatus::Render",
+                  GetExceptionInformation())) {
+        NightSharpDebug::Logf("[Overlay] Overlay status render crashed");
+    }
+
+    __try {
+        MissionInfoOverlay::RenderDragonSoulName();
+    }
+    __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                  "Overlay::MissionInfoOverlay::RenderDragonSoulName",
+                  GetExceptionInformation())) {
+        NightSharpDebug::Logf("[Overlay] Mission info overlay render crashed");
     }
 }
 
@@ -647,8 +690,7 @@ void RenderStatusOnlyFrame() {
     ImGui_ImplWin32_NewFrame();
     SyncImGuiMouse();
     ImGui::NewFrame();
-    OverlayStatus::Render(OverlayStatus::Mode::External);
-    MissionInfoOverlay::RenderDragonSoulName();
+    RenderStatusOverlaysSafe(OverlayStatus::Mode::External);
     ImGui::EndFrame();
     ImGui::Render();
 
@@ -891,7 +933,6 @@ void Overlay::Run() {
                 break;
             }
             NightSharpPerf::ToggleHotkeys();
-            NightSharpDebug::InternalConsole::ToggleHotkey();
             UpdateClickThroughFromMenuBounds();
         } else {
             SetClickThrough(true);
@@ -958,9 +999,7 @@ void Overlay::Run() {
             NightSharpPerf::MsSince(perfStart));
 
         NightSharpPerf::RenderOverlay();
-        NightSharpDebug::InternalConsole::Render();
-        OverlayStatus::Render(OverlayStatus::Mode::External);
-        MissionInfoOverlay::RenderDragonSoulName();
+        RenderStatusOverlaysSafe(OverlayStatus::Mode::External);
 
         ImGui::EndFrame();
         ImGui::Render();

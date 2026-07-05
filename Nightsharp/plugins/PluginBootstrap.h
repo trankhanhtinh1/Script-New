@@ -7,7 +7,6 @@
 // ============================================================================
 
 #include "PluginManager.h"
-#include "ExternalPluginLoader.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/EnsoulsharpOrbPlugin.h"
@@ -24,7 +23,6 @@
 #include "Champion/XerathSemiPlugin.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../DebugLog.h"
-#include "../menu/MenuSettingsConfig.h"
 
 #ifndef NIGHTSHARP_ENABLE_SDK_WRAPPERS
 #define NIGHTSHARP_ENABLE_SDK_WRAPPERS 1
@@ -131,14 +129,6 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] Sample/debug plugins disabled for FPS test");
 #endif
 
-        NightSharpDebug::Logf("[PluginBootstrap] Register external release plugins begin");
-        ExternalPluginLoader::RegisterReleasePlugins();
-        NightSharpDebug::Logf("[PluginBootstrap] Register external release plugins complete");
-
-        NightSharpDebug::Logf("[PluginBootstrap] Register external dev plugins begin");
-        ExternalPluginLoader::RegisterDevPlugins();
-        NightSharpDebug::Logf("[PluginBootstrap] Register external dev plugins complete");
-
         NightSharpDebug::Logf("[PluginBootstrap] LoadConfig begin");
         PluginRegistry::LoadConfig();
         NightSharpDebug::Logf("[PluginBootstrap] LoadConfig complete");
@@ -147,10 +137,6 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto begin");
         PluginManager::Get().LoadAuto();
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto complete");
-
-        NightSharpDebug::Logf("[PluginBootstrap] Apply menu settings config begin");
-        NightSharpMenu::MenuSettingsConfig::ApplyNewMenuValues();
-        NightSharpDebug::Logf("[PluginBootstrap] Apply menu settings config complete");
     }
 
     inline void Shutdown() {
@@ -159,10 +145,8 @@ namespace PluginBootstrap {
         }
         g_shutdown = true;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown begin");
-        NightSharpMenu::MenuSettingsConfig::SaveAllNow();
         ::SDK::SdkWrappers::Shutdown();
         PluginManager::Get().Shutdown();
-        ExternalPluginLoader::Shutdown();
         PluginRegistry::Reset();
         g_registered = false;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown complete");

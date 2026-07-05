@@ -7,6 +7,7 @@
 #include "Corehook.h"
 #include "Vector.h"
 #include "offset.h"
+#include "../CrashReporter.h"
 
 #include <cmath>
 #include <cstdint>
@@ -221,6 +222,51 @@ namespace detail {
     inline volatile LONG Initialized = 0;
     inline volatile LONG ShuttingDown = 0;
     inline volatile LONG ActiveDispatches = 0;
+
+    inline const char* HookNameForLog(int id) {
+        return (id >= 0 && id < ::CoreHookTest::HookCount)
+            ? ::CoreHookTest::kHookSpecs[id].name
+            : "unknown";
+    }
+
+    inline LONG LogRawCallbackException(int id,
+                                        int index,
+                                        RawCallback callback,
+                                        EXCEPTION_POINTERS* exceptionPointers) {
+        const char* hookName = HookNameForLog(id);
+        char stage[160] = {};
+        _snprintf_s(stage,
+                    sizeof(stage),
+                    _TRUNCATE,
+                    "Core::Events::%s/callback[%d]",
+                    hookName,
+                    index);
+        NightSharpDebug::Logf("[CoreEvents] callback crashed hook=%s idx=%d fn=%p; disabling callback",
+                              hookName,
+                              index,
+                              reinterpret_cast<const void*>(callback));
+        return NightSharpDebug::CrashReporter::LogAndDumpException(
+            stage,
+            exceptionPointers);
+    }
+
+    inline LONG LogPreviousCallbackException(int id,
+                                             ::CoreHookTest::HookCallbackFn callback,
+                                             EXCEPTION_POINTERS* exceptionPointers) {
+        const char* hookName = HookNameForLog(id);
+        char stage[160] = {};
+        _snprintf_s(stage,
+                    sizeof(stage),
+                    _TRUNCATE,
+                    "Core::Events::PreviousCallback/%s",
+                    hookName);
+        NightSharpDebug::Logf("[CoreEvents] previous callback crashed hook=%s fn=%p; detaching previous callback",
+                              hookName,
+                              reinterpret_cast<const void*>(callback));
+        return NightSharpDebug::CrashReporter::LogAndDumpException(
+            stage,
+            exceptionPointers);
+    }
 
     template <typename T>
     inline bool Read(uintptr_t address, T& out) {
@@ -838,6 +884,7 @@ namespace detail {
         }
 
         const int count = CallbackCounts[id];
+        bool compactCallbacks = false;
         for (int i = 0; i < count; ++i) {
             RawCallback callback = Callbacks[id][i];
             if (!callback) {
@@ -846,7 +893,27 @@ namespace detail {
 
             __try {
                 callback(args);
-            } __except (1) {}
+            } __except (LogRawCallbackException(
+                             id,
+                             i,
+                             callback,
+                             GetExceptionInformation())) {
+                Callbacks[id][i] = nullptr;
+                compactCallbacks = true;
+            }
+        }
+
+        if (compactCallbacks) {
+            int write = 0;
+            for (int read = 0; read < CallbackCounts[id]; ++read) {
+                if (Callbacks[id][read]) {
+                    Callbacks[id][write++] = Callbacks[id][read];
+                }
+            }
+            for (int clear = write; clear < CallbackCounts[id]; ++clear) {
+                Callbacks[id][clear] = nullptr;
+            }
+            CallbackCounts[id] = write;
         }
     }
 
@@ -1539,7 +1606,12 @@ inline void __fastcall Dispatch(int id,
             previous(
                 id, rcx, rdx, r8, r9, xmm0, xmm1, xmm2, xmm3,
                 stack0, stack1, stack2, stack3, stack4, stack5);
-        } __except (1) {}
+        } __except (detail::LogPreviousCallbackException(
+                         id,
+                         previous,
+                         GetExceptionInformation())) {
+            detail::PreviousCallback = nullptr;
+        }
     }
 
     if (id < 0 || id >= ::CoreHookTest::HookCount) {

@@ -32,6 +32,8 @@ inline volatile LONG g_installed = 0;
 inline volatile LONG g_dumping = 0;
 inline volatile LONG g_dumpSerial = 0;
 inline volatile LONG g_guardRunning = 0;
+inline volatile LONG g_symbolLock = 0;
+inline volatile LONG g_symbolsReady = 0;
 inline HANDLE g_guardThread = nullptr;
 
 inline constexpr const char* kDumpDirectory = "C:\\Users\\Public\\NightSharpDumps";
@@ -50,10 +52,47 @@ inline bool IsSeriousException(DWORD code) {
     case EXCEPTION_NONCONTINUABLE_EXCEPTION:
     case EXCEPTION_PRIV_INSTRUCTION:
     case EXCEPTION_STACK_OVERFLOW:
+    case 0xC0000374: // STATUS_HEAP_CORRUPTION
+    case 0xC0000409: // STATUS_STACK_BUFFER_OVERRUN / fail-fast
+    case 0xC0000602: // STATUS_FAIL_FAST_EXCEPTION
         return true;
     default:
         return false;
     }
+}
+
+inline void AcquireSymbolLock() {
+    while (InterlockedCompareExchange(&g_symbolLock, 1, 0) != 0) {
+        Sleep(1);
+    }
+}
+
+inline void ReleaseSymbolLock() {
+    InterlockedExchange(&g_symbolLock, 0);
+}
+
+inline bool EnsureSymbolsInitialized() {
+    if (InterlockedCompareExchange(&g_symbolsReady, 0, 0) != 0) {
+        return true;
+    }
+
+    AcquireSymbolLock();
+    if (InterlockedCompareExchange(&g_symbolsReady, 0, 0) == 0) {
+        SymSetOptions(
+            SYMOPT_DEFERRED_LOADS |
+            SYMOPT_LOAD_LINES |
+            SYMOPT_UNDNAME |
+            SYMOPT_FAIL_CRITICAL_ERRORS);
+        if (SymInitialize(GetCurrentProcess(), nullptr, TRUE)) {
+            InterlockedExchange(&g_symbolsReady, 1);
+        } else {
+            NightSharpDebug::Logf("[CrashReporter] SymInitialize failed gle=%lu",
+                                  GetLastError());
+        }
+    }
+    const bool ready = InterlockedCompareExchange(&g_symbolsReady, 0, 0) != 0;
+    ReleaseSymbolLock();
+    return ready;
 }
 
 inline void SanitizeForFileName(const char* text, char* out, size_t outSize) {
@@ -181,6 +220,112 @@ inline void LogModuleSnapshot() {
     if (count > 48) {
         NightSharpDebug::Logf("[CrashReporter] loaded modules truncated count=%d", count);
     }
+}
+
+inline void LogStackTrace(EXCEPTION_POINTERS* exceptionPointers, const char* stage) {
+#if defined(_M_X64)
+    if (!exceptionPointers || !exceptionPointers->ContextRecord) {
+        NightSharpDebug::Logf("[CrashStack] stage=%s no context record",
+                              stage ? stage : "?");
+        return;
+    }
+
+    if (!EnsureSymbolsInitialized()) {
+        NightSharpDebug::Logf("[CrashStack] stage=%s symbols unavailable",
+                              stage ? stage : "?");
+        return;
+    }
+
+    CONTEXT context = *exceptionPointers->ContextRecord;
+    STACKFRAME64 frame = {};
+    frame.AddrPC.Offset = context.Rip;
+    frame.AddrPC.Mode = AddrModeFlat;
+    frame.AddrFrame.Offset = context.Rbp;
+    frame.AddrFrame.Mode = AddrModeFlat;
+    frame.AddrStack.Offset = context.Rsp;
+    frame.AddrStack.Mode = AddrModeFlat;
+
+    HANDLE process = GetCurrentProcess();
+    HANDLE thread = GetCurrentThread();
+
+    NightSharpDebug::Logf("[CrashStack] stage=%s begin", stage ? stage : "?");
+
+    AcquireSymbolLock();
+    for (int i = 0; i < 48; ++i) {
+        const BOOL walked = StackWalk64(
+            IMAGE_FILE_MACHINE_AMD64,
+            process,
+            thread,
+            &frame,
+            &context,
+            nullptr,
+            SymFunctionTableAccess64,
+            SymGetModuleBase64,
+            nullptr);
+        if (!walked || frame.AddrPC.Offset == 0) {
+            break;
+        }
+
+        void* address = reinterpret_cast<void*>(frame.AddrPC.Offset);
+        char addressDesc[256] = {};
+        NightSharpDebug::DescribeAddress(address, addressDesc, sizeof(addressDesc));
+
+        char symbolStorage[sizeof(SYMBOL_INFO) + MAX_SYM_NAME] = {};
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolStorage);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = MAX_SYM_NAME;
+
+        DWORD64 displacement = 0;
+        char symbolText[512] = {};
+        if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
+            _snprintf_s(symbolText,
+                        sizeof(symbolText),
+                        _TRUNCATE,
+                        "%s+0x%llX",
+                        symbol->Name,
+                        static_cast<unsigned long long>(displacement));
+        } else {
+            _snprintf_s(symbolText,
+                        sizeof(symbolText),
+                        _TRUNCATE,
+                        "symerr=%lu",
+                        GetLastError());
+        }
+
+        IMAGEHLP_LINE64 line = {};
+        line.SizeOfStruct = sizeof(line);
+        DWORD lineDisplacement = 0;
+        char lineText[512] = {};
+        if (SymGetLineFromAddr64(process,
+                                 frame.AddrPC.Offset,
+                                 &lineDisplacement,
+                                 &line) &&
+            line.FileName) {
+            _snprintf_s(lineText,
+                        sizeof(lineText),
+                        _TRUNCATE,
+                        " %s:%lu+0x%lX",
+                        line.FileName,
+                        static_cast<unsigned long>(line.LineNumber),
+                        static_cast<unsigned long>(lineDisplacement));
+        } else {
+            lineText[0] = '\0';
+        }
+
+        NightSharpDebug::Logf("[CrashStack] #%02d %s %s%s",
+                              i,
+                              addressDesc,
+                              symbolText,
+                              lineText);
+    }
+    ReleaseSymbolLock();
+
+    NightSharpDebug::Logf("[CrashStack] stage=%s end", stage ? stage : "?");
+#else
+    (void)exceptionPointers;
+    NightSharpDebug::Logf("[CrashStack] stage=%s stack trace unsupported on this arch",
+                          stage ? stage : "?");
+#endif
 }
 
 inline void WriteTextFileLine(HANDLE file, const char* text) {
@@ -453,6 +598,7 @@ inline LONG LogAndDumpException(const char* stage, EXCEPTION_POINTERS* exception
 
     if (exceptionPointers && exceptionPointers->ExceptionRecord &&
         IsSeriousException(exceptionPointers->ExceptionRecord->ExceptionCode)) {
+        LogStackTrace(exceptionPointers, stage);
         LogModuleSnapshot();
         WriteMiniDump(exceptionPointers, stage);
     }

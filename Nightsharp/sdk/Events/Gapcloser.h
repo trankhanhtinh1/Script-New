@@ -32,7 +32,7 @@ using GapCloserHandler = void(*)(const GapCloserEventArgs&);
 
 namespace detail {
     inline constexpr int MaxActiveGapclosers = 64;
-    inline SDK::Events::detail::EventList<GapCloserEventArgs> GapCloserHandlers;
+    inline SDK::Events::detail::EventList<GapCloserEventArgs> GapCloserHandlers{ "GapCloser" };
     inline GapCloserEventArgs ActiveSpells[MaxActiveGapclosers] = {};
     inline int ActiveSpellCount = 0;
 

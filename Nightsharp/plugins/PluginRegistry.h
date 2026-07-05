@@ -9,6 +9,7 @@
 
 #include <Windows.h>
 #include <shlobj.h>
+#include "../CrashReporter.h"
 #include "../DebugLog.h"
 
 namespace PluginRegistry {
@@ -23,13 +24,9 @@ namespace PluginRegistry {
         PluginKind   Kind        = PluginKind::SDK;
         PluginCategory Category  = PluginCategory::Core;
         const char*  ChampionName = nullptr;
-        const char*  ConfigFileName = nullptr;
         bool         Loaded      = false;
-        bool         Enabled     = true;
         bool         AlwaysLoad  = true;
         bool         AlwaysLoadConfigured = false;
-        int          CrashCount  = 0;
-        const char*  LastRuntimeError = nullptr;
         void*        RuntimeUserData = nullptr;
         bool       (*RuntimeLoad)(void*) = nullptr;
         bool       (*RuntimeUnload)(void*) = nullptr;
@@ -57,7 +54,7 @@ namespace PluginRegistry {
         CreateDirectoryA(parentDir, nullptr);
 
         char dirPath[MAX_PATH] = {};
-        wsprintfA(dirPath, "%s\\Config", parentDir);
+        wsprintfA(dirPath, "%s\\config", parentDir);
         CreateDirectoryA(dirPath, nullptr);
 
         wsprintfA(outPath, "%s\\plugins.ini", dirPath);
@@ -173,8 +170,7 @@ namespace PluginRegistry {
     inline int Register(const char* name, const char* internalId,
                         PluginKind kind, bool autoLoad = true,
                         PluginCategory category = PluginCategory::Core,
-                        const char* championName = nullptr,
-                        const char* configFileName = nullptr)
+                        const char* championName = nullptr)
     {
         if (PluginCount >= MAX_PLUGINS) return -1;
         int idx = PluginCount++;
@@ -183,11 +179,9 @@ namespace PluginRegistry {
         Plugins[idx].Kind       = kind;
         Plugins[idx].Category   = category;
         Plugins[idx].ChampionName = championName;
-        Plugins[idx].ConfigFileName = configFileName;
         Plugins[idx].AlwaysLoad = autoLoad;
         Plugins[idx].AlwaysLoadConfigured = false;
         Plugins[idx].Loaded     = autoLoad;
-        Plugins[idx].Enabled    = true;
         NightSharpDebug::Logf("[PluginRegistry] Register idx=%d name=%s id=%s auto=%d",
                               idx,
                               name ? name : "",
@@ -243,7 +237,17 @@ namespace PluginRegistry {
             auto& p = Plugins[idx];
             bool ok = true;
             if (p.RuntimeLoad) {
-                ok = p.RuntimeLoad(p.RuntimeUserData);
+                __try {
+                    ok = p.RuntimeLoad(p.RuntimeUserData);
+                }
+                __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                              "PluginRegistry::LoadPlugin",
+                              GetExceptionInformation())) {
+                    NightSharpDebug::Logf("[PluginRegistry] RuntimeLoad crashed id=%s",
+                                          p.InternalId ? p.InternalId : "");
+                    ok = false;
+                    p.Loaded = false;
+                }
             }
             if (ok) {
                 p.Loaded = true;
@@ -256,7 +260,17 @@ namespace PluginRegistry {
             auto& p = Plugins[idx];
             bool ok = true;
             if (p.RuntimeUnload) {
-                ok = p.RuntimeUnload(p.RuntimeUserData);
+                __try {
+                    ok = p.RuntimeUnload(p.RuntimeUserData);
+                }
+                __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                              "PluginRegistry::UnloadPlugin",
+                              GetExceptionInformation())) {
+                    NightSharpDebug::Logf("[PluginRegistry] RuntimeUnload crashed id=%s",
+                                          p.InternalId ? p.InternalId : "");
+                    ok = false;
+                    p.Loaded = false;
+                }
             }
             if (ok) {
                 p.Loaded = false;
@@ -310,7 +324,16 @@ namespace PluginRegistry {
             return p.CanLoadCached;
         }
 
-        p.CanLoadCached = p.CanLoadFn(p.RuntimeUserData);
+        __try {
+            p.CanLoadCached = p.CanLoadFn(p.RuntimeUserData);
+        }
+        __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                      "PluginRegistry::CanPluginLoad",
+                      GetExceptionInformation())) {
+            NightSharpDebug::Logf("[PluginRegistry] CanLoad crashed id=%s",
+                                  p.InternalId ? p.InternalId : "");
+            p.CanLoadCached = false;
+        }
         p.CanLoadChecked = true;
         return p.CanLoadCached;
     }
@@ -322,7 +345,17 @@ namespace PluginRegistry {
 
         auto& p = Plugins[idx];
         if (p.RuntimeMenu) {
-            p.RuntimeMenu(p.RuntimeUserData);
+            __try {
+                p.RuntimeMenu(p.RuntimeUserData);
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "PluginRegistry::DrawPluginMenu",
+                          GetExceptionInformation())) {
+                NightSharpDebug::Logf("[PluginRegistry] RuntimeMenu crashed; disabling id=%s",
+                                      p.InternalId ? p.InternalId : "");
+                p.Loaded = false;
+                p.RuntimeMenu = nullptr;
+            }
         }
     }
 

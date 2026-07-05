@@ -33,6 +33,7 @@
 #include "UnitInfo.h"
 
 #include "../UI/Icons.h"
+#include "../Utils/AssetInstaller.h"
 #include "../Utils/Logging.h"
 #include "../../libs/nlohmann/json.hpp"
 
@@ -386,7 +387,15 @@ inline void Load(const std::string& dataFolder) {
 // SDK::UI::Icons::SetDevice() has been called (i.e. D3D11 device is ready).
 // Called from Overlay after device creation, not from Bootstrap::Init.
 inline void LoadIcons(const std::string& dataFolder) {
-    if (dataFolder.empty()) return;
+    const std::string embeddedImages = SDK::Utils::AssetInstaller::ImagesRoot();
+    if (!embeddedImages.empty()) {
+        SDK::UI::Icons::LoadIconsFromDirectory(embeddedImages.c_str());
+    }
+
+    if (dataFolder.empty()) {
+        Utils::Logging::Write()(LogLevel::Info, "GameData: icon loading complete");
+        return;
+    }
 
     const std::string iconsFolder     = dataFolder + "/icons";
     const std::string spellIcons      = dataFolder + "/icons_spells";

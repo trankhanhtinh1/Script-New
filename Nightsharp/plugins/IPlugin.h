@@ -28,7 +28,6 @@ namespace Plugins {
         virtual const char* GetAuthor() const { return "NightSharp"; }
         virtual PluginCategory GetCategory() const { return PluginCategory::Core; }
         virtual const char* GetChampionName() const { return nullptr; }
-        virtual const char* GetConfigFileName() const { return GetInternalId(); }
         virtual bool AutoLoadByDefault() const { return true; }
         virtual bool CanLoad() const { return true; }
 
@@ -38,23 +37,18 @@ namespace Plugins {
         virtual void OnUpdate() {}
         virtual void OnRender() {}
         virtual void OnMenu()   {}
-        virtual void OnRuntimeCleanup() {}
 
         // ── State ──
         bool IsLoaded()  const { return m_loaded; }
         bool IsEnabled() const { return m_enabled; }
         void SetEnabled(bool value) { m_enabled = value; }
         int  GetRegistryIndex() const { return m_registryIndex; }
-        int  GetCrashCount() const { return m_crashCount; }
-        const char* GetLastRuntimeError() const { return m_lastRuntimeError; }
 
     private:
         friend class PluginManager;
         bool m_loaded = false;
         bool m_enabled = true;
         int  m_registryIndex = -1;
-        int  m_crashCount = 0;
-        char m_lastRuntimeError[160] = {};
     };
 
 } // namespace Plugins
