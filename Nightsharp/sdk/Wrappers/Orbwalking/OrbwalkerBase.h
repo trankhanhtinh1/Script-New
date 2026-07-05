@@ -19,6 +19,8 @@
 #include <cmath>
 #include <cfloat>
 #include <cctype>
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -88,6 +90,7 @@ private:
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
     static void OnDrawStatic();
+    static void OnDebugDrawStatic();
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
@@ -95,6 +98,7 @@ private:
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
     void OnDraw();
+    void OnDebugDraw();
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
@@ -111,6 +115,8 @@ private:
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     void SnapshotAttackTimings(const AIHeroClient& player);
+    void CaptureLiveSpellDebug(const Events::ProcessSpellEventArgs& args, const char* source);
+    void DrawLiveAttackDebugOverlay();
 
     OrbwalkerMenu menu_;
     OrbwalkerRuntimeContext context_ = {};

@@ -11,6 +11,7 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
+    Drawing::AddOnAlwaysDraw(&OrbwalkerBase::OnDebugDrawStatic);
 }
 
 inline OrbwalkerBase::~OrbwalkerBase() {
@@ -86,6 +87,7 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
+    Drawing::RemoveOnAlwaysDraw(&OrbwalkerBase::OnDebugDrawStatic);
     if (OrbwalkingDetail::RuntimeInstance == this) {
         OrbwalkingDetail::RuntimeInstance = nullptr;
     }

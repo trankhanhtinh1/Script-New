@@ -39,6 +39,12 @@ inline void OrbwalkerBase::OnDrawStatic() {
     }
 }
 
+inline void OrbwalkerBase::OnDebugDrawStatic() {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnDebugDraw();
+    }
+}
+
 inline void OrbwalkerBase::OnGameUpdate() {
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
@@ -58,6 +64,8 @@ inline void OrbwalkerBase::OnGameUpdate() {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
+    CaptureLiveSpellDebug(args, "ProcessSpell");
+
     if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
         ResetAutoAttackTimer();
         return;
@@ -126,6 +134,8 @@ inline void OrbwalkerBase::OnProcessCastSpell(const Events::CastSpellEventArgs& 
 }
 
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
+    CaptureLiveSpellDebug(args, "DoCast");
+
     if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
         ResetAutoAttackTimer();
         return;
@@ -350,6 +360,197 @@ inline void OrbwalkerBase::OnDraw() {
                 1.5f,
                 32);
         }
+    }
+}
+
+inline void OrbwalkerBase::OnDebugDraw() {
+    DrawLiveAttackDebugOverlay();
+}
+
+inline void OrbwalkerBase::CaptureLiveSpellDebug(const Events::ProcessSpellEventArgs& args,
+                                                 const char* source) {
+    auto isDebugTextUsable = [](const char* value) -> bool {
+        if (!value || !value[0]) {
+            return false;
+        }
+
+        int length = 0;
+        int questionMarks = 0;
+        int lettersOrDigits = 0;
+        for (; value[length] && length < 95; ++length) {
+            const unsigned char ch = static_cast<unsigned char>(value[length]);
+            if (ch < 0x20 || ch > 0x7E) {
+                return false;
+            }
+            if (ch == '?') {
+                ++questionMarks;
+            }
+            if ((ch >= '0' && ch <= '9') ||
+                (ch >= 'A' && ch <= 'Z') ||
+                (ch >= 'a' && ch <= 'z')) {
+                ++lettersOrDigits;
+            }
+        }
+
+        return length >= 2 &&
+               length < 95 &&
+               lettersOrDigits > 0 &&
+               questionMarks * 2 < length;
+    };
+
+    const char* attackName = nullptr;
+    const char* nameCandidates[] = {
+        args.SpellName,
+        args.SpellSlotName,
+        args.ScriptName,
+        args.MissileName,
+        args.PayloadSpellName,
+        args.PayloadMissileName,
+    };
+    for (const char* candidate : nameCandidates) {
+        if (isDebugTextUsable(candidate)) {
+            attackName = candidate;
+            break;
+        }
+    }
+    if (!attackName && (args.IsAutoAttack || args.Slot == 64)) {
+        attackName = "BasicAttack";
+    }
+    if (!attackName) {
+        attackName = "<invalid>";
+    }
+
+    const char* senderName = isDebugTextUsable(args.Sender.CharacterName)
+        ? args.Sender.CharacterName
+        : (isDebugTextUsable(args.Sender.Name) ? args.Sender.Name : "<invalid>");
+
+    strncpy_s(
+        context_.lastProcessAttackName,
+        attackName,
+        _TRUNCATE);
+    strncpy_s(
+        context_.lastProcessAttackMissileName,
+        args.MissileName,
+        _TRUNCATE);
+    strncpy_s(
+        context_.lastProcessAttackScriptName,
+        args.ScriptName,
+        _TRUNCATE);
+    strncpy_s(
+        context_.lastProcessAttackSlotName,
+        args.SpellSlotName,
+        _TRUNCATE);
+    strncpy_s(
+        context_.lastProcessAttackSource,
+        source ? source : "",
+        _TRUNCATE);
+    strncpy_s(
+        context_.lastProcessAttackSenderName,
+        isDebugTextUsable(args.Sender.Name) ? args.Sender.Name : "",
+        _TRUNCATE);
+    strncpy_s(
+        context_.lastProcessAttackSenderCharacterName,
+        senderName,
+        _TRUNCATE);
+    context_.lastProcessAttackSlot = args.Slot;
+    context_.lastProcessAttackSenderValid = args.Sender.IsValid();
+    context_.lastProcessAttackIsLocal = Events::IsLocalPlayer(args.Sender);
+    context_.lastProcessAttackIsAuto = args.IsAutoAttack;
+    context_.lastProcessAttackNameTick = static_cast<int>(::GetTickCount());
+}
+
+inline void OrbwalkerBase::DrawLiveAttackDebugOverlay() {
+    if (!ImGui::GetCurrentContext()) {
+        return;
+    }
+
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+    if (!draw) {
+        return;
+    }
+
+    const int now = static_cast<int>(::GetTickCount());
+    const bool hasAttack = context_.lastProcessAttackNameTick > 0 &&
+        now - context_.lastProcessAttackNameTick >= 0;
+    const int attackAge = hasAttack ? now - context_.lastProcessAttackNameTick : 0;
+    const bool freshAttack = hasAttack && attackAge <= 4000;
+
+    char line[192] = {};
+    if (hasAttack) {
+        _snprintf_s(
+            line,
+            sizeof(line),
+            _TRUNCATE,
+            "%s: %s (%dms)",
+            context_.lastProcessAttackSource[0] ? context_.lastProcessAttackSource : "SpellEvent",
+            context_.lastProcessAttackName[0] ? context_.lastProcessAttackName : "<empty>",
+            attackAge);
+    } else {
+        _snprintf_s(
+            line,
+            sizeof(line),
+            _TRUNCATE,
+            "ProcessSpell attack: waiting...");
+    }
+
+    const ImVec2 pos(18.0f, 108.0f);
+    const ImVec2 boxMin(pos.x - 6.0f, pos.y - 5.0f);
+    const ImVec2 boxMax(pos.x + 520.0f, pos.y + 68.0f);
+    draw->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 125), 4.0f);
+    draw->AddRect(boxMin, boxMax, IM_COL32(255, 209, 102, freshAttack ? 210 : 95), 4.0f);
+    draw->AddText(ImVec2(pos.x + 1.0f, pos.y + 1.0f), IM_COL32(0, 0, 0, 220), line);
+    draw->AddText(pos, freshAttack ? IM_COL32(255, 209, 102, 255) : IM_COL32(230, 230, 230, 255), line);
+
+    char flagsLine[192] = {};
+    if (hasAttack) {
+        _snprintf_s(
+            flagsLine,
+            sizeof(flagsLine),
+            _TRUNCATE,
+            "slot=%d local=%d aa=%d senderValid=%d sender=%s",
+            context_.lastProcessAttackSlot,
+            context_.lastProcessAttackIsLocal ? 1 : 0,
+            context_.lastProcessAttackIsAuto ? 1 : 0,
+            context_.lastProcessAttackSenderValid ? 1 : 0,
+            context_.lastProcessAttackSenderCharacterName[0]
+                ? context_.lastProcessAttackSenderCharacterName
+                : "<empty>");
+    }
+
+    const char* secondLine = hasAttack ? flagsLine : nullptr;
+    char missileLine[192] = {};
+    if (hasAttack && context_.lastProcessAttackMissileName[0]) {
+        _snprintf_s(
+            missileLine,
+            sizeof(missileLine),
+            _TRUNCATE,
+            "Missile: %s",
+            context_.lastProcessAttackMissileName);
+    } else if (!hasAttack) {
+        secondLine = "waiting for local auto attack ProcessSpell";
+    }
+
+    if (secondLine && secondLine[0]) {
+        const ImVec2 linePos(18.0f, 123.0f);
+        draw->AddText(ImVec2(linePos.x + 1.0f, linePos.y + 1.0f), IM_COL32(0, 0, 0, 220), secondLine);
+        draw->AddText(linePos, IM_COL32(184, 231, 255, 255), secondLine);
+    }
+
+    if (hasAttack && missileLine[0]) {
+        const ImVec2 missilePos(18.0f, 138.0f);
+        draw->AddText(ImVec2(missilePos.x + 1.0f, missilePos.y + 1.0f), IM_COL32(0, 0, 0, 220), missileLine);
+        draw->AddText(missilePos, IM_COL32(184, 231, 255, 255), missileLine);
+    } else if (hasAttack && context_.lastProcessAttackScriptName[0]) {
+        char scriptLine[192] = {};
+        _snprintf_s(
+            scriptLine,
+            sizeof(scriptLine),
+            _TRUNCATE,
+            "Script: %s",
+            context_.lastProcessAttackScriptName);
+        const ImVec2 scriptPos(18.0f, 138.0f);
+        draw->AddText(ImVec2(scriptPos.x + 1.0f, scriptPos.y + 1.0f), IM_COL32(0, 0, 0, 220), scriptLine);
+        draw->AddText(scriptPos, IM_COL32(184, 231, 255, 255), scriptLine);
     }
 }
 

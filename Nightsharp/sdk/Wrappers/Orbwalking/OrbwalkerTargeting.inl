@@ -4,7 +4,7 @@
 
 namespace SDK::OrbwalkingDetail {
 
-inline constexpr float kLaneClearWaitTime = 1.4f;
+inline constexpr float kLaneClearWaitTime = 1.7f;
 
 inline bool IsValidAttackTarget(const AIHeroClient& player,
                                 const AttackableUnit& target,
@@ -19,9 +19,7 @@ inline bool IsValidAttackTarget(const AIHeroClient& player,
     if (!target.IsVisible() || !target.IsTargetable() || target.IsInvulnerable()) {
         return false;
     }
-    const Vector3 origin = player.ServerPosition().IsZero()
-        ? player.Position()
-        : player.ServerPosition();
+    const Vector3 origin = player.Position();
     return range >= FLT_MAX * 0.5f ||
            origin.DistanceSqr2D(target.Position()) <= range * range;
 }
