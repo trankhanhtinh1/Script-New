@@ -176,12 +176,20 @@ public:
             }
         }
 
-        FarmDebugBreadcrumb("before-structure-fallback", minions.size());
-        AttackableUnit structure = GetStructureTarget();
-        FarmDebugBreadcrumb("after-structure-fallback", minions.size(), structure);
-        if (structure.IsValid()) {
-            FarmDebugLogTargetDecision("return:structure-fallback", structure, minions.size(), waitForFarm, true);
-            return structure;
+        // Structures (turret/inhibitor/nexus) must NEVER be auto-attacked in
+        // Combo — holding the combo key under an enemy turret should target
+        // champions only, not the turret. EnsoulSharp NewOrbwalker only ever
+        // targets structures inside its `activeMode != Combo` block; this
+        // fallback mirrors that gate so structures are attackable with the farm
+        // keys (LaneClear / LastHit / Harass) only.
+        if (mode != OrbwalkingMode::Combo) {
+            FarmDebugBreadcrumb("before-structure-fallback", minions.size());
+            AttackableUnit structure = GetStructureTarget();
+            FarmDebugBreadcrumb("after-structure-fallback", minions.size(), structure);
+            if (structure.IsValid()) {
+                FarmDebugLogTargetDecision("return:structure-fallback", structure, minions.size(), waitForFarm, true);
+                return structure;
+            }
         }
 
         FarmDebugLogTargetDecision("return:none", {}, minions.size(), waitForFarm, true);
@@ -433,7 +441,7 @@ protected:
                     inspected,
                     minion.NetworkId());
             }
-            const float arrival = GetTimeToHit(minion) + static_cast<float>(Slider(farmMenu_, "FarmDelay", 30));
+            const float arrival = GetTimeToHit(minion);
             if (FarmDebugKeyMask() != 0) {
                 FarmDebugAppend(
                     "[FarmDebug] stage=last-hit-eval step=after-time-to-hit idx=%d net=%d arrival=%.1f",
@@ -450,8 +458,8 @@ protected:
             const float predicted = HealthPrediction::GetPrediction(
                 minion,
                 static_cast<int>(arrival),
-                0,
-                HealthPredictionType::Simulated);
+                Slider(farmMenu_, "FarmDelay", 30),
+                HealthPredictionType::Default);
             if (FarmDebugKeyMask() != 0) {
                 FarmDebugAppend(
                     "[FarmDebug] stage=last-hit-eval step=after-health-prediction idx=%d net=%d pred=%.1f",
@@ -473,7 +481,6 @@ protected:
                     minion.NetworkId(),
                     damage);
             }
-            const bool currentKillable = IsDrawKillableMinionThreshold(minion, damage);
             if (predicted < debugBestPrediction) {
                 debugBestPrediction = predicted;
                 debugBestHealth = minion.Health();
@@ -482,7 +489,20 @@ protected:
                 debugBestName = minion.CharacterName();
             }
 
-            if (predicted <= 0.0f && !currentKillable) {
+            // EnsoulSharp NewOrbwalker last-hit rule: decide on the PREDICTED
+            // health at the moment our auto attack lands, not the current health.
+            //   * MaxHealth <= 10 (plants/traps): only when Health <= 1.
+            //   * predicted <= 0: minion dies to other damage first -> notify
+            //     consumers (NonKillableMinion), then still last-hit to secure CS.
+            //   * predicted <= our AA damage: last hit it.
+            if (minion.MaxHealth() <= 10.0f) {
+                if (minion.Health() <= 1.0f) {
+                    return AttackableUnit(minion.Handle());
+                }
+                continue;
+            }
+
+            if (predicted <= 0.0f) {
                 ++nonKillable;
                 OrbwalkingActionArgs args(
                     OrbwalkingType::NonKillableMinion,
@@ -490,13 +510,12 @@ protected:
                     {},
                     "SDK");
                 OrbwalkingDetail::FireNonKillableMinion(args);
-                continue;
             }
 
-            if (currentKillable && predicted > 0.0f) {
+            if (predicted <= damage) {
                 if (FarmDebugKeyMask() != 0) {
                     FarmDebugAppend(
-                        "[FarmDebug] stage=last-hit-eval return=killable-current-threshold name=%s net=%d hp=%.1f pred=%.1f dmg=%.1f arrival=%.1f dist=%.1f",
+                        "[FarmDebug] stage=last-hit-eval return=killable name=%s net=%d hp=%.1f pred=%.1f dmg=%.1f arrival=%.1f dist=%.1f",
                         minion.CharacterName().c_str(),
                         minion.NetworkId(),
                         minion.Health(),
@@ -506,21 +525,6 @@ protected:
                         player.Distance(minion));
                 }
                 return AttackableUnit(minion.Handle());
-            }
-
-            if (!currentKillable && predicted > 0.0f && predicted <= damage) {
-                if (FarmDebugKeyMask() != 0) {
-                    FarmDebugAppend(
-                        "[FarmDebug] stage=last-hit-eval wait=current-threshold name=%s net=%d hp=%.1f pred=%.1f dmg=%.1f arrival=%.1f dist=%.1f",
-                        minion.CharacterName().c_str(),
-                        minion.NetworkId(),
-                        minion.Health(),
-                        predicted,
-                        damage,
-                        arrival,
-                        player.Distance(minion));
-                }
-                continue;
             }
         }
         if (FarmDebugKeyMask() != 0) {
@@ -992,27 +996,13 @@ protected:
                 return true;
             }
 
-            const bool hasAllyPressure =
-                HasAllyFarmPressureOnMinion(minion, nearbyAllyCount, missileCount);
-            if (!hasAllyPressure) {
-                continue;
-            }
-
-            if (missileCount >= 5) {
-                if (FarmDebugKeyMask() != 0) {
-                    FarmDebugAppend(
-                        "[FarmDebug] stage=should-wait return=true reason=ally-minion-missile-count name=%s net=%d hp=%.1f dmg=%.1f missiles=%d inspected=%d",
-                        minion.CharacterName().c_str(),
-                        minion.NetworkId(),
-                        minion.Health(),
-                        damage,
-                        missileCount,
-                        inspected);
-                }
-                return true;
-            }
-
-            const float prediction = GetLaneWaitPrediction(minion, time, farmDelay, hasAllyPressure);
+            // EnsoulSharp NewOrbwalker ShouldWait: the Simulated prediction below
+            // already folds in incoming ally/turret damage, so we wait based on it
+            // alone -- no separate ally-pressure detection gate (that heuristic
+            // could miss cases and let the orbwalker push farm it should leave for
+            // allied minions). Matches NewOrbwalker.cs ShouldWait exactly.
+            const float prediction = HealthPrediction::GetPrediction(
+                minion, static_cast<int>(time), farmDelay, HealthPredictionType::Simulated);
 
             if (prediction < bestPrediction) {
                 bestPrediction = prediction;
@@ -1022,6 +1012,13 @@ protected:
                 bestMissileCount = missileCount;
             }
 
+            // Pause (wait) ONLY when this minion is a real, imminent snipe:
+            //   0 < predicted <= our AA damage within the 2*attackDelay window.
+            //   * predicted <= 0  -> it dies to allied minions anyway; waiting just
+            //     wastes tempo, so we DON'T wait (push other minions instead).
+            //   * predicted > damage -> within the window it never drops into our
+            //     last-hit range (incoming damage too slow) -> DON'T wait.
+            // The 2*attackDelay horizon is exactly the "don't wait too long" bound.
             if (prediction > 0.0f && prediction <= damage) {
                 if (FarmDebugKeyMask() != 0) {
                     FarmDebugAppend(

@@ -269,8 +269,13 @@ inline bool IsValidAttackTarget(const AttackableUnit& unit,
     }
 
     const auto player = GameObjects::Player();
+    // EnsoulSharp measures range from source.ServerPosition to the target's
+    // ServerPosition (predicted server-side positions), not the visual Position.
+    // Using the player's ServerPosition as the origin is what lets attacks land
+    // at the true max range while kiting. Target side stays on Position() so we
+    // never read AiManager pathing on static structures.
     const Vector3 origin = from.IsZero()
-        ? (player.IsValid() ? player.Position() : Vector3())
+        ? (player.IsValid() ? player.ServerPosition() : Vector3())
         : from;
     if (range < FLT_MAX && origin.IsValid() && !origin.IsZero()) {
         const float rangeSqr = range * range;
@@ -2869,24 +2874,37 @@ protected:
         return std::max(0.0f, windup);
     }
 
+    // Exact port of EnsoulSharp AIBaseClientExtensions.GetRealAutoAttackRange:
+    //   if turret -> 900
+    //   range = sender.AttackRange + sender.BoundingRadius
+    //   if target valid & alive: (+ champion range buffs) + target.BoundingRadius
+    // The previous native formula used AttackRange + GetBoundingRadius(target)
+    // - 25 and OMITTED the player's own bounding radius, so auto attacks fired
+    // ~90 units short of the real max range. That was the "doesn't attack at max
+    // AA range" bug.
     float GetAutoAttackRange(const AttackableUnit& target) const {
         const auto player = GameObjects::Player();
         if (!player.IsValid()) {
             return 0.0f;
         }
 
-        constexpr float attackRangeSafety = 25.0f;
-        if (target.IsValid()) {
-            float range = player.AttackRange() + CoreControl::GetBoundingRadius(target.Address());
+        float range = player.AttackRange() + player.BoundingRadius();
+        if (target.IsValid() && !target.IsDead()) {
             if (player.CharacterName() == "Caitlyn") {
                 const AIBaseClient targetBase(target.Handle());
-                if (targetBase.HasBuff("caitlynyordletrapinternal")) {
-                    range += 650.0f;
+                if (targetBase.HasBuff("CaitlynWSnare") || targetBase.HasBuff("CaitlynEMissile")) {
+                    range = 1300.0f;
+                }
+            } else if (player.CharacterName() == "Aphelios") {
+                const AIBaseClient targetBase(target.Handle());
+                if (targetBase.HasBuff("aphelioscalibrumbonusrangedebuff") &&
+                    player.HasBuff("aphelioscalibrumbonusrangebuff")) {
+                    range = 1800.0f;
                 }
             }
-            return std::max(0.0f, range - attackRangeSafety);
+            range += target.BoundingRadius();
         }
-        return std::max(0.0f, player.AttackRange() - attackRangeSafety);
+        return range;
     }
 
     float GetAutoAttackDamage(const AttackableUnit& target) const {
