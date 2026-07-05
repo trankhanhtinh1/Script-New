@@ -22,6 +22,9 @@
     <Filter Include="Plugins\Champion">
       <UniqueIdentifier>{7C84AE7C-F330-46C6-A6F4-301F902D533D}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\7UPAIO">
+      <UniqueIdentifier>{8D9E0F1A-2345-6789-ABCD-EF0123456789}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Utility">
       <UniqueIdentifier>{07D04CDE-6255-4015-8E9C-942D0450FCE5}</UniqueIdentifier>
     </Filter>
@@ -85,6 +88,9 @@
     </ClInclude>
     <ClInclude Include="Plugins\Champion\*.h">
       <Filter>Plugins\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\*.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Utility\*.h">
       <Filter>Plugins\Utility</Filter>
