@@ -940,42 +940,76 @@ protected:
     }
 
     bool ComputeShouldWait(const std::vector<AIMinionClient>& minions) const {
-        const OrbwalkingMode mode = ActiveMode();
-        if (mode == OrbwalkingMode::Combo || mode == OrbwalkingMode::Flee ||
-            mode == OrbwalkingMode::None || ShouldSkipFarmForSupportMode()) {
-            return false;
-        }
-        if (mode == OrbwalkingMode::LaneClear && IsFastLaneClear()) {
-            return false;
-        }
-        if (!Bool(farmMenu_, "ShouldWait", true)) {
-            return false;
-        }
+        // Always-on [SW] trace (throttled): logs every state transition
+        // immediately and a summary line at most once per second, so the farm
+        // pause behaviour is visible in the debug log without any debug key.
+        static long s_calls = 0;
+        static int s_lastLogTick = 0;
+        static int s_lastResult = -1;
+        ++s_calls;
 
-        const auto player = GameObjects::Player();
-        if (!player.IsValid()) {
-            return false;
-        }
-
-        const int farmDelay = Slider(farmMenu_, "FarmDelay", 30);
-        const float time = GetAttackDelay() * 1000.0f * 2.0f;
         int inspected = 0;
         std::string bestName;
         float bestPrediction = FLT_MAX;
         float bestDamage = 0.0f;
         float bestHealth = 0.0f;
-        int bestMissileCount = 0;
+        std::size_t laneCount = 0;
+        float time = 0.0f;
+
+        const auto logResult = [&](bool result, const char* reason) -> bool {
+            const int now = Tick();
+            const bool transition = (s_lastResult != (result ? 1 : 0));
+            if (transition || now - s_lastLogTick >= 1000) {
+                s_lastLogTick = now;
+                s_lastResult = result ? 1 : 0;
+                NightSharpDebug::Logf(
+                    "[SW] %s reason=%s mode=%d calls=%ld lane=%zu inspected=%d best=%s hp=%.0f pred=%.0f dmg=%.0f time=%.0f active=%zu",
+                    result ? "WAIT" : "go",
+                    reason,
+                    static_cast<int>(ActiveMode()),
+                    s_calls,
+                    laneCount,
+                    inspected,
+                    bestName.empty() ? "-" : bestName.c_str(),
+                    bestHealth,
+                    bestPrediction == FLT_MAX ? -1.0f : bestPrediction,
+                    bestDamage,
+                    time,
+                    ::SDK::Prediction::Health::detail::ActiveAttacks.size());
+            }
+            return result;
+        };
+
+        const OrbwalkingMode mode = ActiveMode();
+        if (mode == OrbwalkingMode::Combo || mode == OrbwalkingMode::Flee ||
+            mode == OrbwalkingMode::None || ShouldSkipFarmForSupportMode()) {
+            return logResult(false, "mode-or-support");
+        }
+        if (mode == OrbwalkingMode::LaneClear && IsFastLaneClear()) {
+            return logResult(false, "fast-lane-clear");
+        }
+        if (!Bool(farmMenu_, "ShouldWait", true)) {
+            return logResult(false, "menu-off");
+        }
+
+        const auto player = GameObjects::Player();
+        if (!player.IsValid()) {
+            return logResult(false, "no-player");
+        }
+
+        const int farmDelay = Slider(farmMenu_, "FarmDelay", 30);
+        // EnsoulSharp OrbwalkerSDK.ShouldWait: time = min(50, ping) + (AttackDelay + AttackCastDelay) * 1000
+        time = static_cast<float>(std::min(50, Game::Ping())) +
+               (GetAttackDelay() + GetAttackCastDelay()) * 1000.0f;
 
         const auto laneMinions = GetLaneMinions(minions);
-        const auto nearbyAllies = GetNearbyAllyFarmMinions(laneMinions);
+        laneCount = laneMinions.size();
         for (const auto& minion : laneMinions) {
             if (!minion.IsValid() || minion.IsDead() || minion.IsJungle() ||
                 !OrbwalkingDetail::IsValidAttackTarget(minion, GetAutoAttackRange(minion) + 200.0f)) {
                 continue;
             }
 
-            const int missileCount = CountAllyMinionMissilesTo(minion);
-            const int nearbyAllyCount = CountNearbyAllyFarmMinionsTo(minion, nearbyAllies);
             ++inspected;
             const float damage = GetAutoAttackDamage(minion);
             if (damage <= 0.0f) {
@@ -983,24 +1017,15 @@ protected:
             }
 
             if (ShouldWaitForTurretFarm(minion)) {
-                if (FarmDebugKeyMask() != 0) {
-                    FarmDebugAppend(
-                        "[FarmDebug] stage=should-wait return=true reason=turret-farm name=%s net=%d hp=%.1f dmg=%.1f missiles=%d inspected=%d",
-                        minion.CharacterName().c_str(),
-                        minion.NetworkId(),
-                        minion.Health(),
-                        damage,
-                        missileCount,
-                        inspected);
-                }
-                return true;
+                bestName = minion.CharacterName();
+                bestHealth = minion.Health();
+                bestDamage = damage;
+                return logResult(true, "turret-farm");
             }
 
             // EnsoulSharp NewOrbwalker ShouldWait: the Simulated prediction below
             // already folds in incoming ally/turret damage, so we wait based on it
-            // alone -- no separate ally-pressure detection gate (that heuristic
-            // could miss cases and let the orbwalker push farm it should leave for
-            // allied minions). Matches NewOrbwalker.cs ShouldWait exactly.
+            // alone. Matches NewOrbwalker.cs ShouldWait exactly.
             const float prediction = HealthPrediction::GetPrediction(
                 minion, static_cast<int>(time), farmDelay, HealthPredictionType::Simulated);
 
@@ -1009,47 +1034,20 @@ protected:
                 bestDamage = damage;
                 bestHealth = minion.Health();
                 bestName = minion.CharacterName();
-                bestMissileCount = missileCount;
             }
 
-            // Pause (wait) ONLY when this minion is a real, imminent snipe:
-            //   0 < predicted <= our AA damage within the 2*attackDelay window.
-            //   * predicted <= 0  -> it dies to allied minions anyway; waiting just
-            //     wastes tempo, so we DON'T wait (push other minions instead).
-            //   * predicted > damage -> within the window it never drops into our
-            //     last-hit range (incoming damage too slow) -> DON'T wait.
-            // The 2*attackDelay horizon is exactly the "don't wait too long" bound.
-            if (prediction > 0.0f && prediction <= damage) {
-                if (FarmDebugKeyMask() != 0) {
-                    FarmDebugAppend(
-                        "[FarmDebug] stage=should-wait return=true reason=last-hit-prediction name=%s net=%d hp=%.1f pred=%.1f dmg=%.1f missiles=%d allies=%d time=%.1f farmDelay=%d inspected=%d",
-                        minion.CharacterName().c_str(),
-                        minion.NetworkId(),
-                        minion.Health(),
-                        prediction,
-                        damage,
-                        missileCount,
-                        nearbyAllyCount,
-                        time,
-                        farmDelay,
-                        inspected);
-                }
-                return true;
+            // EnsoulSharp OrbwalkerSDK.ShouldWait: wait when prediction < damage.
+            // The Simulated prediction already folds in incoming ally/turret
+            // damage, so we wait based on it alone. Matches EnsoulSharp exactly.
+            if (prediction < damage) {
+                bestPrediction = prediction;
+                bestDamage = damage;
+                bestHealth = minion.Health();
+                bestName = minion.CharacterName();
+                return logResult(true, "last-hit-window");
             }
         }
-        if (FarmDebugKeyMask() != 0) {
-            FarmDebugAppend(
-                "[FarmDebug] stage=should-wait return=false lane=%llu inspected=%d time=%.1f bestName=%s bestHp=%.1f bestPred=%.1f bestDmg=%.1f bestMissiles=%d",
-                static_cast<unsigned long long>(laneMinions.size()),
-                inspected,
-                time,
-                bestName.empty() ? "?" : bestName.c_str(),
-                bestHealth,
-                bestPrediction == FLT_MAX ? -1.0f : bestPrediction,
-                bestDamage,
-                bestMissileCount);
-        }
-        return false;
+        return logResult(false, "no-imminent-lasthit");
     }
 
     std::vector<AIMinionClient> GetNearbyAllyFarmMinions(

@@ -11,6 +11,7 @@
 #include "../menu/NightSharpMenu.h"
 #include "../Plugins/PluginBootstrap.h"
 #include "../Plugins/PluginManager.h"
+#include "../Core/CoreMap.h"
 #include "../Core/CoreRuntime.h"
 #include "../Core/CoreSkinChanger.h"
 #include "../Core/CoreZoomHack.h"
@@ -141,10 +142,44 @@ std::uint8_t ReadSelectedElementalTerrainSafe() {
     return terrainId;
 }
 
+std::uint32_t ReadMissionInfoMapIdSafe() {
+    std::uint32_t mapId = 0;
+    __try {
+        const uintptr_t missionInfo = ReadMissionInfoAddress();
+        if (Globals::IsValidPtr(missionInfo)) {
+            mapId = Globals::Read<std::uint32_t>(
+                missionInfo + Offset::MissionInfo::MapId);
+        }
+    }
+    __except (1) {
+        mapId = 0;
+    }
+    return mapId;
+}
+
+bool IsSummonersRiftMapSafe() {
+    const auto mapId = ReadMissionInfoMapIdSafe();
+    if (mapId != 0) {
+        return mapId == static_cast<std::uint32_t>(CoreMap::MapId::SummonersRift);
+    }
+
+    bool isSummonersRift = false;
+    __try {
+        isSummonersRift = CoreMap::GetMapId() == CoreMap::MapId::SummonersRift;
+    }
+    __except (1) {
+        isSummonersRift = false;
+    }
+    return isSummonersRift;
+}
+
 } // namespace
 
 void RenderDragonSoulName() {
     if (!ImGui::GetCurrentContext()) {
+        return;
+    }
+    if (!NightSharpMenu::showMenu || !IsSummonersRiftMapSafe()) {
         return;
     }
 
@@ -710,11 +745,18 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return IsScreenPointOverMenu(pt) ? HTCLIENT : HTTRANSPARENT;
     }
 
+    if (g_bMenuVisible &&
+        SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
+        return TRUE;
+    }
+
     if (g_bMenuVisible && !Config::OverlayInput::clickThrough) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }
     }
+
+    SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 
     switch (msg) {
     case WM_SIZE:

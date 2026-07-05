@@ -43,7 +43,6 @@ namespace Hooks {
     inline constexpr HookId ProcessWorldEvent = ::CoreHookTest::ProcessWorldEvent;
     inline constexpr HookId ProcessCastSpell = ::CoreHookTest::ProcessCastSpell;
     inline constexpr HookId OnUpdateChargeableSpell = ::CoreHookTest::OnUpdateChargeableSpell;
-    inline constexpr HookId OnBuffGain = ::CoreHookTest::OnBuffGain;
     inline constexpr HookId OnCreate = ::CoreHookTest::OnCreate;
     inline constexpr HookId OnDelete = ::CoreHookTest::OnDelete;
     inline constexpr HookId OnMissileCreate = ::CoreHookTest::OnMissileCreate;
@@ -587,6 +586,70 @@ namespace detail {
         return LooksLikeObject(object) ? ReadObject(object) : ObjectInfo{};
     }
 
+    inline ObjectInfo ResolveObjectByLocalId(uint32_t localId) {
+        if (localId == 0 || localId == 0xFFFFFFFFu) {
+            return {};
+        }
+
+        const uintptr_t strictObject = ::Core::ObjectManager::FindByIndex(localId);
+        if (LooksLikeObject(strictObject)) {
+            return ReadObject(strictObject);
+        }
+
+        const auto view = ::Core::ObjectManager::ReadObjectArrayView(
+            CoreRuntime::GetContext().objectManager);
+        const uint32_t slot = localId & 0xFFFFu;
+        if (!view.IsValid() || slot >= view.count) {
+            return {};
+        }
+
+        const uintptr_t candidate = Globals::Read<uintptr_t>(
+            view.items + static_cast<uintptr_t>(slot) * sizeof(uintptr_t));
+        if (!::Core::ObjectManager::IsLiveEntry(candidate) ||
+            !LooksLikeObject(candidate)) {
+            return {};
+        }
+
+        return ReadObject(candidate);
+    }
+
+    inline uint32_t ReadTargetIndexFromArray(
+        uintptr_t targetArrayPtr,
+        uint32_t targetArrayCount) {
+        if (!targetArrayPtr || targetArrayCount == 0 || targetArrayCount >= 64) {
+            return 0;
+        }
+
+        const uint32_t targetLocalId = Globals::Read<uint32_t>(targetArrayPtr);
+        return targetLocalId != 0 && targetLocalId != 0xFFFFFFFFu
+            ? targetLocalId
+            : 0;
+    }
+
+    inline void AssignTargetFromLocalId(
+        uint32_t targetLocalId,
+        ProcessSpellEventArgs& args) {
+        if (targetLocalId == 0 || targetLocalId == 0xFFFFFFFFu) {
+            return;
+        }
+
+        args.TargetIndex = static_cast<int>(targetLocalId);
+        args.Target = ResolveObjectByLocalId(targetLocalId);
+        args.TargetNetworkId = args.Target.IsValid() ? args.Target.NetworkId : 0;
+    }
+
+    inline void AssignTargetFromLocalId(
+        uint32_t targetLocalId,
+        ObjectEventArgs& args) {
+        if (targetLocalId == 0 || targetLocalId == 0xFFFFFFFFu) {
+            return;
+        }
+
+        args.TargetIndex = targetLocalId;
+        args.Target = ResolveObjectByLocalId(targetLocalId);
+        args.TargetNetworkId = args.Target.IsValid() ? args.Target.NetworkId : 0;
+    }
+
     struct BuffBridgeOwnerEntry {
         uintptr_t Bridge = 0;
         uintptr_t Owner = 0;
@@ -954,7 +1017,19 @@ namespace detail {
         Read(castInfo + Offset::SpellCastInfoEventLayout::SpellData, args.SpellInput);
         args.SpellData = args.SpellInput;
         Read(castInfo + Offset::SpellCastInfoEventLayout::SrcIndex, args.SourceIndex);
-        Read(castInfo + Offset::SpellCastInfoEventLayout::TargetIndex, args.TargetIndex);
+        // Target is in a vector-like array at +0x110 (ptr) / +0x118 (count).
+        // Each entry is 32 bytes; the first DWORD is the target local object id.
+        // Old code read a single DWORD at +0x9C which is actually a float
+        // field (DesignerCastTime), producing garbage target indices.
+        {
+            uintptr_t targetArrayPtr = 0;
+            uint32_t targetArrayCount = 0;
+            Read(castInfo + Offset::SpellCastInfoEventLayout::TargetArrayPtr, targetArrayPtr);
+            Read(castInfo + Offset::SpellCastInfoEventLayout::TargetArrayCount, targetArrayCount);
+            AssignTargetFromLocalId(
+                ReadTargetIndexFromArray(targetArrayPtr, targetArrayCount),
+                args);
+        }
         ReadVector3(
             castInfo + Offset::SpellCastInfoEventLayout::StartPos,
             args.StartPosition);
@@ -1019,15 +1094,9 @@ namespace detail {
             args.PayloadMissileName,
             static_cast<int>(sizeof(args.PayloadMissileName)));
 
-        if (args.TargetIndex > 0) {
-            args.Target = ResolveObjectByIndex(args.TargetIndex);
-            if (args.Target.IsValid()) {
-                args.TargetNetworkId = args.Target.NetworkId;
-            }
-        }
-        if (args.TargetNetworkId == 0 && args.TargetIndex >= 0) {
-            args.TargetNetworkId = static_cast<uint32_t>(args.TargetIndex);
-        }
+        // Target resolution is handled above via the target array at +0x110.
+        // The old code here read a garbage DWORD at +0x9C (actually a float field)
+        // and tried to resolve it as an object index, which always failed.
     }
 
     inline void ResolveSpellBookFields(ProcessSpellEventArgs& args) {
@@ -1199,9 +1268,21 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
             payload +
                 Offset::MissileEventLayout::CreatePacketCasterIndex,
             args.SourceIndex);
-        detail::Read(
-            payload + Offset::MissileEventLayout::TargetIndex,
-            args.TargetIndex);
+        // Target is in a vector-like array at +0x110 (ptr) / +0x118 (count).
+        // First DWORD of each 32-byte entry = target local object id.
+        {
+            uintptr_t targetArrayPtr = 0;
+            uint32_t targetArrayCount = 0;
+            detail::Read(
+                payload + Offset::MissileEventLayout::TargetArrayPtr,
+                targetArrayPtr);
+            detail::Read(
+                payload + Offset::MissileEventLayout::TargetArrayCount,
+                targetArrayCount);
+            detail::AssignTargetFromLocalId(
+                detail::ReadTargetIndexFromArray(targetArrayPtr, targetArrayCount),
+                args);
+        }
         detail::Read(
             payload + Offset::MissileEventLayout::CreatePacketMissileNetId,
             args.MissileNetworkId);
@@ -1210,9 +1291,21 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
         detail::Read(
             raw.Rcx + Offset::MissileClient::CasterIndex,
             args.SourceIndex);
-        detail::Read(
-            raw.Rcx + Offset::MissileClient::TargetIndex,
-            args.TargetIndex);
+        // Target is in a vector-like array at CastInfoBase+0x110 (ptr) / +0x118 (count).
+        // First DWORD of each 32-byte entry = target local object id.
+        {
+            uintptr_t targetArrayPtr = 0;
+            uint32_t targetArrayCount = 0;
+            detail::Read(
+                payload + Offset::MissileEventLayout::TargetArrayPtr,
+                targetArrayPtr);
+            detail::Read(
+                payload + Offset::MissileEventLayout::TargetArrayCount,
+                targetArrayCount);
+            detail::AssignTargetFromLocalId(
+                detail::ReadTargetIndexFromArray(targetArrayPtr, targetArrayCount),
+                args);
+        }
         detail::Read(
             raw.Rcx + Offset::MissileClient::ObjectNetId,
             args.MissileNetworkId);
@@ -1260,15 +1353,8 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     }
 
     if (args.TargetIndex != 0 && args.TargetIndex != 0xFFFFFFFFu) {
-        args.Target =
-            detail::ResolveObjectByIndex(static_cast<int>(args.TargetIndex));
-        if (!args.Target.IsValid()) {
-            args.Target =
-                detail::ResolveObjectByNetworkId(args.TargetIndex);
-        }
-        if (args.Target.IsValid()) {
-            args.TargetNetworkId = args.Target.NetworkId;
-        }
+        args.Target = detail::ResolveObjectByLocalId(args.TargetIndex);
+        args.TargetNetworkId = args.Target.IsValid() ? args.Target.NetworkId : 0;
     }
 
     if (!args.MissileName[0]) {
@@ -1825,7 +1911,6 @@ NS_CORE_EVENT_FORWARD(OnSurrender, OnSurrender)
 NS_CORE_EVENT_FORWARD(OnProcessWorldEvent, ProcessWorldEvent)
 NS_CORE_EVENT_FORWARD(OnProcessCastSpell, ProcessCastSpell)
 NS_CORE_EVENT_FORWARD(OnUpdateChargeableSpell, OnUpdateChargeableSpell)
-NS_CORE_EVENT_FORWARD(OnBuffGain, OnBuffGain)
 NS_CORE_EVENT_FORWARD(OnCreateObject, OnCreate)
 NS_CORE_EVENT_FORWARD(OnDeleteObject, OnDelete)
 NS_CORE_EVENT_FORWARD(OnCreate, OnCreate)

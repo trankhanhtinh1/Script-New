@@ -1693,7 +1693,7 @@ public:
     }
     int TargetIndex() const {
         const uintptr_t a = Address();
-        return a ? static_cast<int>(*reinterpret_cast<const uint32_t*>(a + Offset::MissileClient::TargetIndex)) : 0;
+        return a ? ReadTargetIndex(a) : 0;
     }
     int CasterNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(CasterIndex())); }
     int TargetNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(TargetIndex())); }
@@ -1721,6 +1721,22 @@ public:
     }
 
 private:
+    static int ReadTargetIndex(uintptr_t address) {
+        const uintptr_t targetArrayPtr =
+            Globals::Read<uintptr_t>(address + Offset::MissileClient::TargetArrayPtr);
+        const std::uint32_t targetArrayCount =
+            Globals::Read<std::uint32_t>(address + Offset::MissileClient::TargetArrayCount);
+        if (!targetArrayPtr || targetArrayCount == 0 || targetArrayCount >= 64) {
+            return 0;
+        }
+
+        const std::uint32_t targetLocalId =
+            Globals::Read<std::uint32_t>(targetArrayPtr);
+        return targetLocalId != 0 && targetLocalId != 0xFFFFFFFFu
+            ? static_cast<int>(targetLocalId)
+            : 0;
+    }
+
     static int ResolveNetworkIdFromIndex(std::uint32_t index) {
         if (index == 0 || index == 0xFFFFFFFFu) {
             return 0;

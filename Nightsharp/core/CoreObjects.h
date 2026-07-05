@@ -328,6 +328,25 @@ inline T ReadField(uintptr_t object, uintptr_t offset) {
     return Globals::Read<T>(object + offset);
 }
 
+inline std::uint32_t ReadTargetIndexFromArray(
+    uintptr_t targetArrayPtr,
+    std::uint32_t targetArrayCount) {
+    if (!targetArrayPtr || targetArrayCount == 0 || targetArrayCount >= 64) {
+        return 0;
+    }
+
+    const std::uint32_t targetLocalId = Globals::Read<std::uint32_t>(targetArrayPtr);
+    return targetLocalId != 0 && targetLocalId != 0xFFFFFFFFu ? targetLocalId : 0;
+}
+
+inline std::uint32_t ReadMissileTargetIndex(uintptr_t object) {
+    const uintptr_t targetArrayPtr =
+        ReadField<uintptr_t>(object, Offset::MissileClient::TargetArrayPtr);
+    const std::uint32_t targetArrayCount =
+        ReadField<std::uint32_t>(object, Offset::MissileClient::TargetArrayCount);
+    return ReadTargetIndexFromArray(targetArrayPtr, targetArrayCount);
+}
+
 inline uintptr_t RuntimeAddress(uintptr_t rva) {
     if (!Globals::base) {
         (void)Globals::Init();
@@ -676,9 +695,9 @@ inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
     out.missile.spellData = ReadField<uintptr_t>(object, Offset::MissileClient::SpellDataPtr);
     out.missile.castInfo = object + Offset::MissileClient::CastInfoBase;
     out.missile.casterIndex = ReadField<std::uint32_t>(object, Offset::MissileClient::CasterIndex);
-    out.missile.targetIndex = ReadField<std::uint32_t>(object, Offset::MissileClient::TargetIndex);
-    out.missile.casterNetworkId = out.missile.casterIndex;
-    out.missile.targetNetworkId = out.missile.targetIndex;
+    out.missile.targetIndex = ReadMissileTargetIndex(object);
+    out.missile.casterNetworkId = 0;
+    out.missile.targetNetworkId = 0;
     out.missile.missileNetworkId = ReadField<std::uint32_t>(object, Offset::MissileClient::MissileNetId);
     const std::uint32_t objectNetworkId = ReadField<std::uint32_t>(object, Offset::MissileClient::ObjectNetId);
     if (objectNetworkId != 0 && objectNetworkId != 0xFFFFFFFFu) {

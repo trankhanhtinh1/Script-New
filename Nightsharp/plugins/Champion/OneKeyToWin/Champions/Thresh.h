@@ -77,7 +77,7 @@ protected:
 
         // TODO(oktw-port): AntiGapcloser event not available (W/E/Q anti-gap reactions)
         // TODO(oktw-port): Interrupter2 event not available (E interrupt logic)
-        // TODO(oktw-port): OnBuffGain/OnBuffLose events not available (ThreshQ marked target tracking)
+        // TODO(oktw-port): OnBuffAdd/OnBuffLose events not available (ThreshQ marked target tracking)
         // TODO(oktw-port): TacticalMap.OnPing event not available (autoW5 jungler ping W)
         // TODO(oktw-port): Orbwalker.Attack toggle not available (AACombo E-only mode)
     }

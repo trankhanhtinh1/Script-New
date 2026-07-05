@@ -662,10 +662,20 @@ namespace SDK { namespace UI {
             if (Parent && Parent->IsMenu()) static_cast<Menu*>(Parent)->FireMenuValueChanged(this);
         }
 
+        void SetKey(int vkCode) {
+            if (vkCode <= 0 || vkCode == Key) return;
+            Key = vkCode;
+            WasDown = false;
+            FireValueChanged();
+            if (Parent && Parent->IsMenu()) static_cast<Menu*>(Parent)->FireMenuValueChanged(this);
+        }
+
         // Process a key event from the global WndProc. Returns true if handled.
         bool OnKey(int vkCode, bool down) {
             if (Interacting && down) {
-                Key = vkCode;
+                if (vkCode != VK_ESCAPE) {
+                    SetKey(vkCode);
+                }
                 Interacting = false;
                 return true;
             }
@@ -1083,24 +1093,122 @@ namespace SDK { namespace UI {
         }
 
         // Walk every MenuKeyBind in a subtree and let it process this key event.
-        void DispatchKey(int vkCode, bool down) {
-            for (int i = 0; i < Menus.size(); ++i) DispatchKeyInternal(Menus[i], vkCode, down);
+        bool DispatchKey(int vkCode, bool down) {
+            bool handled = false;
+            for (int i = 0; i < Menus.size(); ++i) {
+                handled = DispatchKeyInternal(Menus[i], vkCode, down) || handled;
+            }
+            return handled;
+        }
+
+        bool HasKeyBindCapture() const {
+            for (int i = 0; i < Menus.size(); ++i) {
+                if (HasKeyBindCaptureInternal(Menus[i])) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool TranslateInput(UINT msg, WPARAM wParam, LPARAM, int& vkCode, bool& down) const {
+            vkCode = 0;
+            down = false;
+
+            switch (msg) {
+            case WM_KEYDOWN:
+            case WM_SYSKEYDOWN:
+                vkCode = static_cast<int>(wParam);
+                down = true;
+                return true;
+            case WM_KEYUP:
+            case WM_SYSKEYUP:
+                vkCode = static_cast<int>(wParam);
+                down = false;
+                return true;
+            case WM_LBUTTONDOWN:
+                vkCode = VK_LBUTTON;
+                down = true;
+                return true;
+            case WM_LBUTTONUP:
+                vkCode = VK_LBUTTON;
+                down = false;
+                return true;
+            case WM_RBUTTONDOWN:
+                vkCode = VK_RBUTTON;
+                down = true;
+                return true;
+            case WM_RBUTTONUP:
+                vkCode = VK_RBUTTON;
+                down = false;
+                return true;
+            case WM_MBUTTONDOWN:
+                vkCode = VK_MBUTTON;
+                down = true;
+                return true;
+            case WM_MBUTTONUP:
+                vkCode = VK_MBUTTON;
+                down = false;
+                return true;
+            case WM_XBUTTONDOWN:
+                vkCode = HIWORD(static_cast<DWORD_PTR>(wParam)) == XBUTTON2
+                    ? VK_XBUTTON2
+                    : VK_XBUTTON1;
+                down = true;
+                return true;
+            case WM_XBUTTONUP:
+                vkCode = HIWORD(static_cast<DWORD_PTR>(wParam)) == XBUTTON2
+                    ? VK_XBUTTON2
+                    : VK_XBUTTON1;
+                down = false;
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        bool DispatchInput(UINT msg, WPARAM wParam, LPARAM lParam) {
+            int vkCode = 0;
+            bool down = false;
+            if (!TranslateInput(msg, wParam, lParam, vkCode, down)) {
+                return false;
+            }
+            return DispatchKey(vkCode, down);
+        }
+
+        bool DispatchCapturedInput(UINT msg, WPARAM wParam, LPARAM lParam) {
+            return HasKeyBindCapture() && DispatchInput(msg, wParam, lParam);
         }
 
     private:
         MenuManager() = default;
 
-        void DispatchKeyInternal(AMenuComponent* node, int vkCode, bool down) {
-            if (!node) return;
+        bool DispatchKeyInternal(AMenuComponent* node, int vkCode, bool down) {
+            if (!node) return false;
             if (MenuKeyBind* k = dynamic_cast<MenuKeyBind*>(node)) {
-                k->OnKey(vkCode, down);
-                return;
+                return k->OnKey(vkCode, down);
             }
+            bool handled = false;
             if (Menu* m = dynamic_cast<Menu*>(node)) {
                 for (int i = 0; i < m->Components.size(); ++i) {
-                    DispatchKeyInternal(m->Components[i], vkCode, down);
+                    handled = DispatchKeyInternal(m->Components[i], vkCode, down) || handled;
                 }
             }
+            return handled;
+        }
+
+        bool HasKeyBindCaptureInternal(const AMenuComponent* node) const {
+            if (!node) return false;
+            if (const MenuKeyBind* k = dynamic_cast<const MenuKeyBind*>(node)) {
+                return k->Interacting;
+            }
+            if (const Menu* m = dynamic_cast<const Menu*>(node)) {
+                for (int i = 0; i < m->Components.size(); ++i) {
+                    if (HasKeyBindCaptureInternal(m->Components[i])) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     };
 

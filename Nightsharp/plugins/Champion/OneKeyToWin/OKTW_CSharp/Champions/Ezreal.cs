@@ -87,10 +87,10 @@ namespace OneKeyToWin_AIO_Sebby.Champions
             Game.OnUpdate += Game_OnUpdate;
             Drawing.OnDraw += Drawing_OnDraw;
             SebbyLib.Orbwalking.AfterAttack += afterAttack;
-            Obj_AI_Base.OnBuffGain += Obj_AI_Base_OnBuffAdd;
+            Obj_AI_Base.OnBuffAdd += Obj_AI_Base_OnBuffAdd;
         }
 
-        private void Obj_AI_Base_OnBuffAdd(Obj_AI_Base sender, Obj_AI_BaseBuffGainEventArgs args)
+        private void Obj_AI_Base_OnBuffAdd(Obj_AI_Base sender, Obj_AI_BaseBuffAddEventArgs args)
         {
             if(sender.IsMe && Config.Item("autoEgrab", true).GetValue<bool>() && E.IsReady())
             {

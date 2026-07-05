@@ -71,7 +71,7 @@ namespace OneKeyToWin_AIO_Sebby.Champions
             AntiGapcloser.OnEnemyGapcloser += AntiGapcloser_OnEnemyGapcloser;
             Interrupter2.OnInterruptableTarget += Interrupter2_OnInterruptableTarget;
             Drawing.OnDraw += Drawing_OnDraw;
-            Obj_AI_Base.OnBuffGain += Obj_AI_Base_OnBuffAdd;
+            Obj_AI_Base.OnBuffAdd += Obj_AI_Base_OnBuffAdd;
             Obj_AI_Base.OnBuffLose += Obj_AI_Base_OnBuffLose;
             
             TacticalMap.OnPing += Game_OnPing;
@@ -107,7 +107,7 @@ namespace OneKeyToWin_AIO_Sebby.Champions
             }
         }
 
-        private void Obj_AI_Base_OnBuffAdd(Obj_AI_Base sender, Obj_AI_BaseBuffGainEventArgs args)
+        private void Obj_AI_Base_OnBuffAdd(Obj_AI_Base sender, Obj_AI_BaseBuffAddEventArgs args)
         {
             if (sender.IsEnemy && args.Buff.Name == "ThreshQ")
             {

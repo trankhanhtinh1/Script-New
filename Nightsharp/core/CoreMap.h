@@ -15,9 +15,24 @@ namespace CoreMap {
 
 enum class MapId : int {
     Unknown = 0,
+    SummonersRiftOriginalSummer = 1,
+    SummonersRiftOriginalAutumn = 2,
+    ProvingGrounds = 3,
+    TwistedTreelineOriginal = 4,
+    CrystalScar = 8,
     TwistedTreeline = 10,
     SummonersRift = 11,
-    HowlingAbyss = 12
+    HowlingAbyss = 12,
+    ButchersBridge = 14,
+    CosmicRuins = 16,
+    ValoranCityPark = 18,
+    Substructure43 = 19,
+    CrashSite = 20,
+    NexusBlitz = 21,
+    TeamfightTactics = 22,
+    Arena = 30,
+    Swarm = 33,
+    Bandlewood = 35
 };
 
 struct MapBounds {
@@ -335,12 +350,42 @@ inline Vec3 MinimapToWorld(const Vec2& minimap, float y = 0.0f) {
 
 inline MapId GetMapId() {
     switch (detail::ReadMissionInfoMapId()) {
+    case static_cast<std::uint32_t>(MapId::SummonersRiftOriginalSummer):
+        return MapId::SummonersRiftOriginalSummer;
+    case static_cast<std::uint32_t>(MapId::SummonersRiftOriginalAutumn):
+        return MapId::SummonersRiftOriginalAutumn;
+    case static_cast<std::uint32_t>(MapId::ProvingGrounds):
+        return MapId::ProvingGrounds;
+    case static_cast<std::uint32_t>(MapId::TwistedTreelineOriginal):
+        return MapId::TwistedTreelineOriginal;
+    case static_cast<std::uint32_t>(MapId::CrystalScar):
+        return MapId::CrystalScar;
     case static_cast<std::uint32_t>(MapId::SummonersRift):
         return MapId::SummonersRift;
     case static_cast<std::uint32_t>(MapId::HowlingAbyss):
         return MapId::HowlingAbyss;
     case static_cast<std::uint32_t>(MapId::TwistedTreeline):
         return MapId::TwistedTreeline;
+    case static_cast<std::uint32_t>(MapId::ButchersBridge):
+        return MapId::ButchersBridge;
+    case static_cast<std::uint32_t>(MapId::CosmicRuins):
+        return MapId::CosmicRuins;
+    case static_cast<std::uint32_t>(MapId::ValoranCityPark):
+        return MapId::ValoranCityPark;
+    case static_cast<std::uint32_t>(MapId::Substructure43):
+        return MapId::Substructure43;
+    case static_cast<std::uint32_t>(MapId::CrashSite):
+        return MapId::CrashSite;
+    case static_cast<std::uint32_t>(MapId::NexusBlitz):
+        return MapId::NexusBlitz;
+    case static_cast<std::uint32_t>(MapId::TeamfightTactics):
+        return MapId::TeamfightTactics;
+    case static_cast<std::uint32_t>(MapId::Arena):
+        return MapId::Arena;
+    case static_cast<std::uint32_t>(MapId::Swarm):
+        return MapId::Swarm;
+    case static_cast<std::uint32_t>(MapId::Bandlewood):
+        return MapId::Bandlewood;
     default:
         break;
     }

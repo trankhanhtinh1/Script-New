@@ -17,9 +17,24 @@ namespace CoreGame {
 
 enum class MapId : int {
     Unknown = 0,
+    SummonersRiftOriginalSummer = 1,
+    SummonersRiftOriginalAutumn = 2,
+    ProvingGrounds = 3,
+    TwistedTreelineOriginal = 4,
+    CrystalScar = 8,
     TwistedTreeline = 10,
     SummonersRift = 11,
     HowlingAbyss = 12,
+    ButchersBridge = 14,
+    CosmicRuins = 16,
+    ValoranCityPark = 18,
+    Substructure43 = 19,
+    CrashSite = 20,
+    NexusBlitz = 21,
+    TeamfightTactics = 22,
+    Arena = 30,
+    Swarm = 33,
+    Bandlewood = 35,
 };
 
 enum class PingCategory : int {
@@ -407,12 +422,42 @@ inline bool IsOpenShop() {
 
 inline MapId GetMapId() {
     switch (::CoreMap::GetMapId()) {
+    case ::CoreMap::MapId::SummonersRiftOriginalSummer:
+        return MapId::SummonersRiftOriginalSummer;
+    case ::CoreMap::MapId::SummonersRiftOriginalAutumn:
+        return MapId::SummonersRiftOriginalAutumn;
+    case ::CoreMap::MapId::ProvingGrounds:
+        return MapId::ProvingGrounds;
+    case ::CoreMap::MapId::TwistedTreelineOriginal:
+        return MapId::TwistedTreelineOriginal;
+    case ::CoreMap::MapId::CrystalScar:
+        return MapId::CrystalScar;
     case ::CoreMap::MapId::SummonersRift:
         return MapId::SummonersRift;
     case ::CoreMap::MapId::HowlingAbyss:
         return MapId::HowlingAbyss;
     case ::CoreMap::MapId::TwistedTreeline:
         return MapId::TwistedTreeline;
+    case ::CoreMap::MapId::ButchersBridge:
+        return MapId::ButchersBridge;
+    case ::CoreMap::MapId::CosmicRuins:
+        return MapId::CosmicRuins;
+    case ::CoreMap::MapId::ValoranCityPark:
+        return MapId::ValoranCityPark;
+    case ::CoreMap::MapId::Substructure43:
+        return MapId::Substructure43;
+    case ::CoreMap::MapId::CrashSite:
+        return MapId::CrashSite;
+    case ::CoreMap::MapId::NexusBlitz:
+        return MapId::NexusBlitz;
+    case ::CoreMap::MapId::TeamfightTactics:
+        return MapId::TeamfightTactics;
+    case ::CoreMap::MapId::Arena:
+        return MapId::Arena;
+    case ::CoreMap::MapId::Swarm:
+        return MapId::Swarm;
+    case ::CoreMap::MapId::Bandlewood:
+        return MapId::Bandlewood;
     default:
         return MapId::Unknown;
     }

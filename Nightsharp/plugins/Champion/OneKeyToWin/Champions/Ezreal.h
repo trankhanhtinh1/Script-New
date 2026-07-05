@@ -403,7 +403,7 @@ protected:
     // TODO(oktw-port): wire when SDK event exposed
     void OnBuffAdd(const AIHeroClient& /*sender*/, const std::string& /*buffName*/) {
         // ThreshQ / rocketgrab2 anti-grab E-dash
-        // TODO(oktw-port): wire when OnBuffGain event exposed
+        // TODO(oktw-port): wire when OnBuffAdd event exposed
     }
 
     // TODO(oktw-port): wire when SDK event exposed
