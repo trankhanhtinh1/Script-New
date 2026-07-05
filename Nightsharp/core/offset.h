@@ -18,6 +18,28 @@ namespace VTable {
     constexpr auto GameObjectBoundingRadius = 0x130;
 } // namespace VTable
 
+// Module-relative addresses of the C++ vtables for structure object types.
+// This is how the game itself distinguishes turrets / inhibitors / nexus:
+// every instance of a type shares one vtable at obj+0x0, and particle/effect
+// objects that merely contain "Turret"/"Nexus"/"Barracks" in their MODEL name
+// have a COMPLETELY DIFFERENT vtable. Mirrors how EnsoulSharp classifies via
+// runtime type. Confirmed against the game's own exact type-check functions in
+// IDA (each does `obj->vtable[1]() == &classDescriptor`):
+//   * IsBarracksDampenerClient = sub_2C51D0 → descriptor qword_1F32BA0,
+//     factory sub_E07A00 → ctor sub_E0C8D0 → vtable 0x1ABF6F8.
+// IMPORTANT (fixed Jul 2026): the inhibitor vtable is 0x1ABF6F8, NOT 0x1AC01B8.
+// 0x1AC01B8 is the sibling `Barracks` class (descriptor qword_1F32A80, ctor
+// sub_E0C300) — the MINION-SPAWN barracks that sits next to the nexus. Matching
+// it drew the "inhibitor" at the minion spawn point (near fountain) instead of
+// the destroyable crystal, which broke orbwalker targeting. Both classes share
+// GetName@0x68 and GetPosition@0x25C, so only the vtable RVA needed correcting.
+// NOTE: patch-specific — re-dump these RVAs when the client updates.
+namespace StructureVTable {
+    constexpr auto AITurretClient         = 0x19F6120;
+    constexpr auto BarracksDampenerClient = 0x1ABF6F8; // real inhibitor (was 0x1AC01B8 = Barracks spawner)
+    constexpr auto HQClient               = 0x1AC2130;
+} // namespace StructureVTable
+
     namespace ObjectManagerRuntime {
         constexpr auto ManagerListItems = 0x8;
         constexpr auto ManagerListSize = 0x10;

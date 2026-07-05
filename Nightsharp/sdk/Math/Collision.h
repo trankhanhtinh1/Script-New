@@ -645,7 +645,7 @@ inline void ProcessBuildings(std::vector<AIBaseClient>& result,
     const Vec2 position2D = position.To2D();
     const Vec2 from2D = from.To2D();
 
-    for (const auto& turret : ObjectManager::Get<AITurretClient>()) {
+    for (const auto& turret : GameObjects::Turrets()) {
         if (!IsValidCollisionTarget(turret, input, range)) {
             continue;
         }

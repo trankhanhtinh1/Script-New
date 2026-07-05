@@ -88,9 +88,16 @@ namespace detail {
             }
 
             LoadInvoked[i] = true;
+            LoadHandler handler = LoadHandlers[i];
             __try {
-                LoadHandlers[i](args);
-            } __except (1) {}
+                handler(args);
+            } __except (LogEventHandlerException(
+                             "Load",
+                             i,
+                             reinterpret_cast<const void*>(handler),
+                             GetExceptionInformation())) {
+                LoadHandlers[i] = nullptr;
+            }
         }
     }
 } // namespace detail

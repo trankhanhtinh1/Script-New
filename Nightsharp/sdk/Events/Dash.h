@@ -25,7 +25,7 @@ struct DashArgs {
 using DashHandler = void(*)(const DashArgs&);
 
 namespace detail {
-    inline SDK::Events::detail::EventList<DashArgs> DashHandlers;
+    inline SDK::Events::detail::EventList<DashArgs> DashHandlers{ "Dash" };
     inline DashArgs DetectedDashes[64] = {};
     inline int DetectedDashCount = 0;
 

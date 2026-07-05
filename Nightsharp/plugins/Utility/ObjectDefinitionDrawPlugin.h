@@ -31,8 +31,9 @@ public:
         missileRows_.clear();
         missileSources_.clear();
         lastRefreshTick_ = 0;
-        subscribedDelete_ =
-            SDK::Events::AddOnDeleteObject(&ObjectDefinitionDrawPlugin::OnDeleteObject);
+        // TEMP DIAGNOSTIC: OnDelete subscription disabled to rule out game-thread
+        // lifecycle events as the crash source (structure modes don't need it).
+        subscribedDelete_ = false;
         SyncMissileCreateSubscription();
         NightSharpDebug::Logf(
             "[ObjectDefinitionDraw] loaded deleteSubscribed=%d missileCreateSubscribed=%d",
@@ -87,18 +88,29 @@ public:
         const Vec3 playerPosition = hasPlayer ? player.Position() : Vec3{};
         const Vec2 rendererSize = SDK::Drawing::GetRendererSize();
 
+        static int s_rdbg = 0;
+        const bool dbg = (mode_ >= ModeTurrets && mode_ <= ModeNexus) && !rows_.empty() && s_rdbg < 3;
+        if (dbg) {
+            NightSharpDebug::Logf("[ORender] begin mode=%d rows=%zu frame=%d",
+                                  mode_, rows_.size(), s_rdbg);
+        }
+
         int drawn = 0;
+        int ri = -1;
         for (const auto& row : rows_) {
+            ++ri;
             if (drawn >= maxRows_) {
                 break;
             }
 
+            if (dbg) NightSharpDebug::Logf("[ORender] row %d addr=0x%p resolve", ri, reinterpret_cast<void*>(row.address));
             Vec3 position = {};
             float radius = 0.0f;
             if (!ResolveLiveRow(row, position, radius) ||
                 !InDrawDistance(position, playerPosition, hasPlayer)) {
                 continue;
             }
+            if (dbg) NightSharpDebug::Logf("[ORender] row %d resolved r=%.1f -> w2s", ri, radius);
 
             Vec2 screen = {};
             if (!SDK::Drawing::WorldToScreen(position, screen) ||
@@ -111,6 +123,7 @@ public:
             }
 
             if (drawRadius_ && radius > 1.0f) {
+                if (dbg) NightSharpDebug::Logf("[ORender] row %d -> DrawCircle3D", ri);
                 SDK::Drawing::DrawCircle(
                     position,
                     radius,
@@ -130,10 +143,12 @@ public:
             }
 
             if (drawPoint_) {
+                if (dbg) NightSharpDebug::Logf("[ORender] row %d -> DrawCircle2D", ri);
                 SDK::Drawing::DrawCircle(screen, 4.0f, 1.5f, row.color, 20);
             }
 
             if (drawLabels_) {
+                if (dbg) NightSharpDebug::Logf("[ORender] row %d -> DrawText name=%s", ri, row.name);
                 char label[192] = {};
                 std::snprintf(
                     label,
@@ -151,6 +166,10 @@ public:
             }
 
             ++drawn;
+        }
+        if (dbg) {
+            NightSharpDebug::Logf("[ORender] end drawn=%d", drawn);
+            ++s_rdbg;
         }
     }
 
@@ -696,18 +715,24 @@ private:
                 AddObjectRow(object, "AllyHero", 0xFF57D9FFu);
             }
             break;
-        case ModeTurrets:
-            for (const auto& object : SDK::GameObjects::Turrets()) {
+        case ModeTurrets: {
+            NightSharpDebug::Logf("[ODraw] turrets: calling ScanTurrets");
+            auto turrets = SDK::GameObjects::ScanTurrets();
+            NightSharpDebug::Logf("[ODraw] turrets: got %zu, adding rows", turrets.size());
+            for (const auto& object : turrets) {
+                NightSharpDebug::Logf("[ODraw] AddObjectRow addr=0x%p", reinterpret_cast<void*>(object.Address()));
                 AddObjectRow(object, "Turret", 0xFFFF625Eu);
             }
+            NightSharpDebug::Logf("[ODraw] turrets: rows done=%zu", rows_.size());
             break;
+        }
         case ModeInhibitors:
-            for (const auto& object : SDK::GameObjects::Inhibitors()) {
+            for (const auto& object : SDK::GameObjects::ScanInhibitors()) {
                 AddObjectRow(object, "Inhibitor", 0xFFFF8A3Du);
             }
             break;
         case ModeNexus:
-            for (const auto& object : SDK::GameObjects::Nexuses()) {
+            for (const auto& object : SDK::GameObjects::ScanNexuses()) {
                 AddObjectRow(object, "Nexus", 0xFFFF3D9Au);
             }
             break;

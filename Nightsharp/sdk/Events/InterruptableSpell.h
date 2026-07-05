@@ -29,7 +29,7 @@ using InterruptableTargetHandler = void(*)(const InterruptableTargetEventArgs&);
 
 namespace detail {
     inline constexpr int MaxCasting = 64;
-    inline SDK::Events::detail::EventList<InterruptableTargetEventArgs> InterruptableHandlers;
+    inline SDK::Events::detail::EventList<InterruptableTargetEventArgs> InterruptableHandlers{ "InterruptableTarget" };
     inline InterruptableTargetEventArgs Casting[MaxCasting] = {};
     inline int CastingCount = 0;
 

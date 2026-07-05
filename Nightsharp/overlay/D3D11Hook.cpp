@@ -62,6 +62,10 @@ static volatile LONG    g_hookCalls        = 0;
 static volatile LONG    g_menuReady        = 0;
 static volatile LONG    g_imguiContextReady = 0;
 static volatile LONG    g_imguiBackendReady = 0;
+static volatile LONG    g_zoomTickFaultLogged = 0;
+static volatile LONG    g_skinTickFaultLogged = 0;
+static volatile LONG    g_zoomRestoreFaultLogged = 0;
+static volatile LONG    g_skinRestoreFaultLogged = 0;
 // Set to 1 once PluginBootstrap::EnsureRegistered() has returned (success or crash).
 // Render() gates all SDK/plugin calls on this flag to prevent the bootstrap race.
 static volatile LONG    g_bootstrapDone    = 0;
@@ -600,17 +604,32 @@ static void RenderMenuSafe() {
     }
 }
 
+static LONG LogOnceAndContinue(const char* stage,
+                               volatile LONG* flag,
+                               EXCEPTION_POINTERS* exceptionPointers) {
+    if (flag && InterlockedCompareExchange(flag, 1, 0) == 0) {
+        NightSharpDebug::LogException(stage, exceptionPointers);
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 static void TickCoreMemoryHacks() {
     __try {
         CoreZoomHack::Tick(Config::ZoomHack::enabled, Config::ZoomHack::maxZoom);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreZoomHack::Tick",
+                  &g_zoomTickFaultLogged,
+                  GetExceptionInformation())) {
     }
 
     __try {
         CoreSkinChanger::Tick(Config::SkinChanger::enabled, Config::SkinChanger::skinId);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreSkinChanger::Tick",
+                  &g_skinTickFaultLogged,
+                  GetExceptionInformation())) {
     }
 }
 
@@ -618,13 +637,19 @@ static void RestoreCoreMemoryHacks() {
     __try {
         CoreSkinChanger::Tick(false, Config::SkinChanger::skinId);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreSkinChanger::Restore",
+                  &g_skinRestoreFaultLogged,
+                  GetExceptionInformation())) {
     }
 
     __try {
         CoreZoomHack::Tick(false, Config::ZoomHack::maxZoom);
     }
-    __except (1) {
+    __except (LogOnceAndContinue(
+                  "D3D11Hook::CoreZoomHack::Restore",
+                  &g_zoomRestoreFaultLogged,
+                  GetExceptionInformation())) {
     }
 }
 
@@ -655,8 +680,10 @@ static void Render() {
         !g_pRenderTargetView)
         return;
 
+    NightSharpDebug::SetPhase("d3d11hook-render-begin");
     NightSharpPerf::BeginFrame();
 
+    NightSharpDebug::SetPhase("d3d11hook-imgui-newframe");
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
@@ -667,55 +694,67 @@ static void Render() {
     if (g_bootstrapDone) {
         // Read game state once per frame
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-tickread");
             NightSharpPerf::ScopedTimer timer("CoreRuntime::TickRead");
             CoreRuntime::TickRead();
         }
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-memory-hacks");
             NightSharpPerf::ScopedTimer timer("CoreMemoryHacks::Tick");
             TickCoreMemoryHacks();
         }
 
         // Plugin update + render
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-plugin-update");
             NightSharpPerf::ScopedTimer timer("PluginManager::OnUpdate");
             Plugins::PluginManager::Get().OnUpdate();
         }
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-plugin-render");
             NightSharpPerf::ScopedTimer timer("PluginManager::OnRender");
             Plugins::PluginManager::Get().OnRender();
         }
 
         // SDK Drawing handlers (TargetSelector, Orbwalker, Core Render objects)
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-drawing-dispatch");
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchDraw");
             SDK::Drawing::DispatchDraw();
         }
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-endscene-dispatch");
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchEndScene");
             SDK::Drawing::DispatchEndScene();
         }
 
         // Menu + PermaShow render
         {
+            NightSharpDebug::SetPhase("d3d11hook-render-menu");
             NightSharpPerf::ScopedTimer timer("NightSharpMenu::Render");
             RenderMenuSafe();
         }
     }
 
+    NightSharpDebug::SetPhase("d3d11hook-render-status-overlays");
     RenderStatusOverlaysSafe(OverlayStatus::Mode::Internal);
 
+    NightSharpDebug::SetPhase("d3d11hook-imgui-render");
     ImGui::EndFrame();
     ImGui::Render();
 
+    NightSharpDebug::SetPhase("d3d11hook-dx11-submit");
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
     NightSharpPerf::DumpSections();
     NightSharpPerf::EndFrame();
+    NightSharpDebug::SetPhase("d3d11hook-render-idle");
 }
 
 static void PresentFrameSafe(IDXGISwapChain* pSwapChain) {
     __try {
+        NightSharpDebug::SetPhase("d3d11hook-present-frame");
         EnsureImGuiInitialized(pSwapChain);
         Render();
     }

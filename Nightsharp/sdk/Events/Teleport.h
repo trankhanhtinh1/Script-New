@@ -25,7 +25,7 @@ using TeleportHandler = void(*)(const TeleportEventArgs&);
 
 namespace detail {
     inline constexpr int ErrorBuffer = 100;
-    inline SDK::Events::detail::EventList<TeleportEventArgs> TeleportHandlers;
+    inline SDK::Events::detail::EventList<TeleportEventArgs> TeleportHandlers{ "Teleport" };
     inline TeleportEventArgs TeleportData[64] = {};
     inline int TeleportDataCount = 0;
 

@@ -1,11 +1,13 @@
 #pragma once
 
 #include "../../Core/CoreEvents.h"
+#include "../../CrashReporter.h"
 #include "../../FpsDropDebug.h"
 #include "../Data/Database.h"
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 namespace SDK::Events {
@@ -27,6 +29,26 @@ using PlayAnimationEventArgs = ::Core::Events::PlayAnimationEventArgs;
 using StopCastEventArgs = ::Core::Events::StopCastEventArgs;
 
 namespace detail {
+    inline LONG LogEventHandlerException(const char* eventName,
+                                         int index,
+                                         const void* handler,
+                                         EXCEPTION_POINTERS* exceptionPointers) {
+        char stage[160] = {};
+        _snprintf_s(stage,
+                    sizeof(stage),
+                    _TRUNCATE,
+                    "SDK::Events::%s/handler[%d]",
+                    eventName ? eventName : "?",
+                    index);
+        NightSharpDebug::Logf("[SDK::Events] handler crashed event=%s idx=%d fn=%p; disabling handler",
+                              eventName ? eventName : "?",
+                              index,
+                              handler);
+        return NightSharpDebug::CrashReporter::LogAndDumpException(
+            stage,
+            exceptionPointers);
+    }
+
     inline float GameTime() {
         const auto& ctx = CoreRuntime::GetContext();
         if ((ctx.statusMask & CoreRuntime::Status_GameTimeReady) != 0) {
@@ -87,11 +109,12 @@ namespace detail {
             return false;
         }
 
-        void Fire(const T& args) const {
+        void Fire(const T& args) {
             if (Count <= 0) {
                 return;
             }
             const auto perfStart = NightSharpPerf::Now();
+            bool compactHandlers = false;
             for (int i = 0; i < Count; ++i) {
                 Handler handler = Handlers[i];
                 if (!handler) {
@@ -100,12 +123,31 @@ namespace detail {
                 const auto handlerPerfStart = NightSharpPerf::Now();
                 __try {
                     handler(args);
-                } __except (1) {}
+                } __except (LogEventHandlerException(
+                                 Name,
+                                 i,
+                                 reinterpret_cast<const void*>(handler),
+                                 GetExceptionInformation())) {
+                    Handlers[i] = nullptr;
+                    compactHandlers = true;
+                }
                 NightSharpPerf::AddEventHandlerTiming(
                     Name,
                     i,
                     reinterpret_cast<const void*>(handler),
                     NightSharpPerf::MsSince(handlerPerfStart));
+            }
+            if (compactHandlers) {
+                int write = 0;
+                for (int read = 0; read < Count; ++read) {
+                    if (Handlers[read]) {
+                        Handlers[write++] = Handlers[read];
+                    }
+                }
+                for (int clear = write; clear < Count; ++clear) {
+                    Handlers[clear] = nullptr;
+                }
+                Count = write;
             }
             NightSharpPerf::AddEventTiming(
                 Name,

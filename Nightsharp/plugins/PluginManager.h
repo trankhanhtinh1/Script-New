@@ -160,6 +160,13 @@ namespace Plugins {
         void OnUpdate() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
+                    char phase[160] = {};
+                    _snprintf_s(phase,
+                                sizeof(phase),
+                                _TRUNCATE,
+                                "plugin-update/%s",
+                                plugin->GetInternalId());
+                    NightSharpDebug::SetPhase(phase);
                     const auto perfStart = NightSharpPerf::Now();
                     const auto sectionStart = NightSharpPerf::SectionNow();
                     __try {
@@ -184,11 +191,19 @@ namespace Plugins {
                         NightSharpPerf::SectionMsSince(sectionStart));
                 }
             }
+            NightSharpDebug::SetPhase("plugin-update-idle");
         }
 
         void OnRender() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
+                    char phase[160] = {};
+                    _snprintf_s(phase,
+                                sizeof(phase),
+                                _TRUNCATE,
+                                "plugin-render/%s",
+                                plugin->GetInternalId());
+                    NightSharpDebug::SetPhase(phase);
                     const auto perfStart = NightSharpPerf::Now();
                     const auto sectionStart = NightSharpPerf::SectionNow();
                     __try {
@@ -212,6 +227,7 @@ namespace Plugins {
                     // NightSharpPerf::RecordSection(...) 
                 }
             }
+            NightSharpDebug::SetPhase("plugin-render-idle");
         }
 
     private:
@@ -248,6 +264,13 @@ namespace Plugins {
                             _TRUNCATE,
                             "PluginManager::OnMenu/%s",
                             plugin->GetInternalId());
+                char phase[160] = {};
+                _snprintf_s(phase,
+                            sizeof(phase),
+                            _TRUNCATE,
+                            "plugin-menu/%s",
+                            plugin->GetInternalId());
+                NightSharpDebug::SetPhase(phase);
                 __try {
                     plugin->OnMenu();
                 }
@@ -265,6 +288,7 @@ namespace Plugins {
                     plugin->GetInternalId(),
                     plugin->GetName(),
                     NightSharpPerf::MsSince(perfStart));
+                NightSharpDebug::SetPhase("plugin-menu-idle");
             }
         }
 

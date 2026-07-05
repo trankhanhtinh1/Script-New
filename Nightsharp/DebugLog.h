@@ -194,6 +194,9 @@ inline const char* ExceptionName(DWORD code) {
     case EXCEPTION_NONCONTINUABLE_EXCEPTION: return "NONCONTINUABLE_EXCEPTION";
     case EXCEPTION_PRIV_INSTRUCTION: return "PRIV_INSTRUCTION";
     case EXCEPTION_STACK_OVERFLOW: return "STACK_OVERFLOW";
+    case 0xC0000374: return "HEAP_CORRUPTION";
+    case 0xC0000409: return "STACK_BUFFER_OVERRUN_OR_FAIL_FAST";
+    case 0xC0000602: return "FAIL_FAST_EXCEPTION";
     default: return "UNKNOWN";
     }
 }

@@ -26,7 +26,7 @@ using TurretHandler = void(*)(const TurretArgs&);
 
 namespace detail {
     inline constexpr int MaxTurrets = 64;
-    inline SDK::Events::detail::EventList<TurretArgs> TurretHandlers;
+    inline SDK::Events::detail::EventList<TurretArgs> TurretHandlers{ "TurretAttack" };
     inline TurretArgs Turrets[MaxTurrets] = {};
     inline int TurretCount = 0;
 
