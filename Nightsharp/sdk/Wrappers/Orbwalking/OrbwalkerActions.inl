@@ -195,7 +195,7 @@ inline void OrbwalkerBase::Orbwalk(const AttackableUnit& target, const Vector3& 
         return;
     }
 
-    if (target.IsValid() && CanAttack() && Attack(target)) {
+    if (target.IsValid() && Attack(target)) {
         return;
     }
 

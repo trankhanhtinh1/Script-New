@@ -649,7 +649,7 @@ private:
     bool MovementRandomize() const { return BoolValue(movementRandomize_, true); }
     int MovementExtraHold() const { return SliderValue(movementExtraHold_, 0); }
     int MovementMaximumDistance() const { return SliderValue(movementMaximumDistance_, 1500); }
-    int DelayMovement() const { return SliderValue(delayMovement_, 0); }
+    int DelayMovement() const { return SliderValue(delayMovement_, 60); }
     int DelayWindup() const { return SliderValue(delayWindup_, 80); }
     int DelayFarm() const { return SliderValue(delayFarm_, 30); }
     bool PrioritizeFarm() const { return BoolValue(prioritizeFarm_, true); }
@@ -1023,7 +1023,7 @@ private:
             minion,
             timeToHit,
             DelayFarm());
-        return predictedHealth > 0.0f && predictedHealth < damage;
+        return predictedHealth < damage;
     }
 
     SDK::AttackableUnit GetKillableMinion(

@@ -17,7 +17,10 @@ inline OrbwalkerBase::~OrbwalkerBase() {
 }
 
 inline AttackableUnit OrbwalkerBase::ForceTarget() const { return context_.forceTarget; }
-inline void OrbwalkerBase::ForceTarget(const AttackableUnit& target) { context_.forceTarget = target; }
+inline void OrbwalkerBase::ForceTarget(const AttackableUnit& target) {
+    context_.forceTarget = target;
+    context_.cachedTargetTick = -1;
+}
 inline AttackableUnit OrbwalkerBase::LastTarget() const { return context_.lastTarget; }
 inline OrbwalkingMode OrbwalkerBase::ActiveMode() const { return menu_.ActiveMode(); }
 inline int OrbwalkerBase::LastAutoAttackTick() const { return context_.lastAutoAttackTick; }

@@ -26,8 +26,8 @@ public:
     bool MovementRandomize() const { return BoolValue(movementRandomize_, true); }
     int MovementExtraHold() const { return SliderValue(movementExtraHold_, 0); }
     int MovementMaximumDistance() const { return SliderValue(movementMaximumDistance_, 1500); }
-    int DelayMovement() const { return SliderValue(delayMovement_, 0); }
-    int DelayWindup() const { return SliderValue(delayWindup_, 80); }
+    int DelayMovement() const { return SliderValue(delayMovement_, 60); }
+    int DelayWindup() const { return SliderValue(delayWindup_, 0); }
     int DelayFarm() const { return SliderValue(delayFarm_, 30); }
 
     bool PrioritizeFarm() const { return BoolValue(prioritizeFarm_, true); }
@@ -40,9 +40,6 @@ public:
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
     bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
-
-    bool MiscMissile() const { return BoolValue(miscMissile_, true); }
-    bool MiscAttackSpeed() const { return BoolValue(miscAttackSpeed_, true); }
 
     OrbwalkingMode ActiveMode() const {
         if (!Enabled() || Game::IsChatOpen() || Game::IsShopOpen()) {
@@ -102,8 +99,8 @@ private:
             movementMaximumDistance_ = advancedMenu_->Add(new MenuSlider("movementMaximumDistance", "Maximum Distance", 1500, 500, 1500));
 
             advancedMenu_->Add(new MenuSeparator("separatorDelay", "Delay"));
-            delayMovement_ = advancedMenu_->Add(new MenuSlider("delayMovement", "Movement", 0, 0, 500));
-            delayWindup_ = advancedMenu_->Add(new MenuSlider("delayWindup", "Windup", 80, 0, 200));
+            delayMovement_ = advancedMenu_->Add(new MenuSlider("delayMovement", "Movement", 60, 0, 500));
+            delayWindup_ = advancedMenu_->Add(new MenuSlider("delayWindup", "Windup", 0, 0, 200));
             delayFarm_ = advancedMenu_->Add(new MenuSlider("delayFarm", "Farm", 30, 0, 200));
 
             advancedMenu_->Add(new MenuSeparator("separatorPrioritization", "Prioritization"));
@@ -119,9 +116,6 @@ private:
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
             attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
 
-            advancedMenu_->Add(new MenuSeparator("separatorMisc", "Miscellaneous"));
-            miscMissile_ = advancedMenu_->Add(new MenuBool("miscMissile", "Use Missile Checks", true));
-            miscAttackSpeed_ = advancedMenu_->Add(new MenuBool("miscAttackSpeed", "Don't Kite if Attack Speed > 2.5", true));
         }
 
         menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
@@ -160,9 +154,6 @@ private:
     MenuBool* attackBarrels_ = nullptr;
     MenuBool* attackClones_ = nullptr;
     MenuBool* attackSpecialMinions_ = nullptr;
-
-    MenuBool* miscMissile_ = nullptr;
-    MenuBool* miscAttackSpeed_ = nullptr;
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;

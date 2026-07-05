@@ -8,6 +8,7 @@ struct OrbwalkerRuntimeContext {
     AttackableUnit forceTarget = {};
     AttackableUnit lastTarget = {};
     AttackableUnit laneClearMinion = {};
+    AttackableUnit cachedTarget = {};
     Vector3 orbwalkerPosition = {};
     Vector3 lastMoveOrderPosition = {};
 
@@ -25,6 +26,9 @@ struct OrbwalkerRuntimeContext {
     int allPauseTick = 0;
     int attackPauseTick = 0;
     int movePauseTick = 0;
+    int cachedTargetTick = -1;
+    int cachedTargetForceTargetNetworkId = 0;
+    int cachedShouldWaitTick = -1;
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
@@ -36,8 +40,10 @@ struct OrbwalkerRuntimeContext {
     bool attackCastComplete = false;
     bool lastAttackRequiresDoCastBeforeMove = false;
     bool lastAttackDoCastComplete = false;
+    bool cachedShouldWait = false;
     bool disposed = false;
     OrbwalkingMode activeMode = OrbwalkingMode::None;
+    OrbwalkingMode cachedTargetMode = OrbwalkingMode::None;
 };
 
 } // namespace SDK

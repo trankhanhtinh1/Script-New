@@ -47,7 +47,7 @@ inline void OrbwalkerBase::OnGameUpdate() {
     }
 
     const Vector3 position = context_.orbwalkerPosition.IsZero() ? Game::CursorPos() : context_.orbwalkerPosition;
-    const AttackableUnit target = GetTarget();
+    const AttackableUnit target = CanAttack() ? GetTarget() : AttackableUnit();
     Orbwalk(target, position);
 }
 
