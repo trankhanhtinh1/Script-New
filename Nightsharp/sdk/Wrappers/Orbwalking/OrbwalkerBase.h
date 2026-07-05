@@ -5,6 +5,7 @@
 #include "OrbwalkerMenu.h"
 
 #include "../../Core/Game.h"
+#include "../../Enumerations/SpellSlot.h"
 #include "../../Events/Events.h"
 #include "../../GameObjects/GameObjects.h"
 #include "../../Math/HealthPrediction.h"
@@ -83,17 +84,20 @@ private:
 
     static void OnGameUpdateStatic(const Events::GameUpdateEventArgs& args);
     static void OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args);
+    static void OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args);
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
     static void OnDrawStatic();
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
+    void OnProcessCastSpell(const Events::CastSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
     void OnDraw();
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
+    bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
     void ClearDoCastMoveGate();
     void ClearPendingAttackState();

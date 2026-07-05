@@ -7,6 +7,7 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     OrbwalkingDetail::RuntimeInstance = this;
     Events::AddOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::AddOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
+    Events::AddOnProcessCastSpell(&OrbwalkerBase::OnProcessCastSpellStatic);
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
@@ -62,9 +63,14 @@ inline void OrbwalkerBase::SetMovePauseTime(int time) { context_.movePauseTick =
 inline void OrbwalkerBase::SetMoveServerPauseTime(int time) { SetMovePauseTime(time - Game::Ping() / 2); }
 
 inline void OrbwalkerBase::ResetAutoAttackTimer() {
+    const int now = Tick();
     context_.lastAutoAttackTick = 0;
     context_.lastAttackOrderTick = 0;
     context_.lastAttackOrderNetworkId = 0;
+    context_.lastAttackConfirmTick = 0;
+    context_.lastAfterAttackStartTick = 0;
+    context_.lastAutoAttackResetTick = now;
+    context_.attackPauseTick = 0;
     ClearPendingAttackState();
     context_.hasConfirmedAttack = false;
     context_.attackCastComplete = false;
@@ -76,6 +82,7 @@ inline void OrbwalkerBase::Dispose() {
     }
     Events::RemoveOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::RemoveOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
+    Events::RemoveOnProcessCastSpell(&OrbwalkerBase::OnProcessCastSpellStatic);
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);

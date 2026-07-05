@@ -15,6 +15,12 @@ inline void OrbwalkerBase::OnProcessSpellStatic(const Events::ProcessSpellEventA
     }
 }
 
+inline void OrbwalkerBase::OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnProcessCastSpell(args);
+    }
+}
+
 inline void OrbwalkerBase::OnDoCastStatic(const Events::ProcessSpellEventArgs& args) {
     if (OrbwalkingDetail::RuntimeInstance) {
         OrbwalkingDetail::RuntimeInstance->OnDoCast(args);
@@ -52,8 +58,14 @@ inline void OrbwalkerBase::OnGameUpdate() {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
+    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
+        ResetAutoAttackTimer();
+        return;
+    }
+
     const bool isAttack = IsLocalAutoAttack(args);
     const bool isAttackReset = IsLocalAutoAttackReset(args);
+
     if (isAttackReset) {
         ResetAutoAttackTimer();
         return;
@@ -64,6 +76,13 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
 
     const int now = Tick();
+    if (!context_.pendingAttack &&
+        context_.lastAutoAttackResetTick > 0 &&
+        now - context_.lastAutoAttackResetTick >= 0 &&
+        now - context_.lastAutoAttackResetTick <= PendingAttackTimeoutMs()) {
+        return;
+    }
+
     const bool hadPendingAttack = context_.pendingAttack;
     const int attackStartTick = hadPendingAttack
         ? std::max(context_.pendingAttackTick + static_cast<int>(OneWayPingMs()), now)
@@ -86,6 +105,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     context_.pendingAttack = false;
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
+    context_.lastAutoAttackResetTick = 0;
     context_.hasConfirmedAttack = true;
     context_.attackCastComplete = false;
     SnapshotAttackTimings(GameObjects::Player());
@@ -99,7 +119,18 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     OrbwalkingDetail::FireOnAttack(attackArgs);
 }
 
+inline void OrbwalkerBase::OnProcessCastSpell(const Events::CastSpellEventArgs& args) {
+    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
+        ResetAutoAttackTimer();
+    }
+}
+
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
+    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
+        ResetAutoAttackTimer();
+        return;
+    }
+
     const bool isAttackReset = IsLocalAutoAttackReset(args);
     if (!IsLocalAutoAttack(args)) {
         if (isAttackReset) {
@@ -109,6 +140,13 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     }
 
     const int now = Tick();
+    if (!context_.pendingAttack &&
+        context_.lastAutoAttackResetTick > 0 &&
+        now - context_.lastAutoAttackResetTick >= 0 &&
+        now - context_.lastAutoAttackResetTick <= PendingAttackTimeoutMs()) {
+        return;
+    }
+
     SnapshotAttackTimings(GameObjects::Player());
     const int estimatedAttackStartTick = now - static_cast<int>(context_.attackWindupMs);
     const int attackStartTick = context_.pendingAttack
@@ -125,6 +163,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
     context_.lastAttackConfirmTick = now;
+    context_.lastAutoAttackResetTick = 0;
     context_.hasConfirmedAttack = true;
     context_.attackCastComplete = true;
     if (context_.lastAttackRequiresDoCastBeforeMove) {
@@ -214,7 +253,23 @@ inline bool OrbwalkerBase::IsLocalAutoAttackReset(const Events::ProcessSpellEven
     if (!Events::IsLocalPlayer(args.Sender)) {
         return false;
     }
-    return IsAutoAttackReset(args.SpellName);
+    return IsAutoAttackReset(args.SpellName) ||
+           IsLocalAutoAttackResetSlot(args.Sender, args.Slot);
+}
+
+inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender,
+                                                      int slot) const {
+    if (!Events::IsLocalPlayer(sender) ||
+        slot != static_cast<int>(SpellSlot::Q)) {
+        return false;
+    }
+
+    const auto player = GameObjects::Player();
+    if (player.IsValid()) {
+        return player.CharacterName() == "Rengar";
+    }
+
+    return std::string(sender.CharacterName) == "Rengar";
 }
 
 inline void OrbwalkerBase::OnDraw() {

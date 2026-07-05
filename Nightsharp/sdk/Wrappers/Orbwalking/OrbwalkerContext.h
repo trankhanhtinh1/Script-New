@@ -23,6 +23,7 @@ struct OrbwalkerRuntimeContext {
     int lastAttackConfirmTick = 0;
     int lastAfterAttackStartTick = 0;
     int lastAttackDoCastWaitTick = 0;
+    int lastAutoAttackResetTick = 0;
     int allPauseTick = 0;
     int attackPauseTick = 0;
     int movePauseTick = 0;
