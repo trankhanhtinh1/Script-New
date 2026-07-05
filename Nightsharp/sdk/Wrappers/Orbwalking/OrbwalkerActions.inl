@@ -102,7 +102,20 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     }
 
     const int now = Tick();
-    const int targetNetworkId = target.NetworkId();
+    OrbwalkingActionArgs beforeArgs(OrbwalkingType::BeforeAttack, target, target.Position(), "SDK");
+    OrbwalkingDetail::FireBeforeAttack(beforeArgs);
+    if (!beforeArgs.Process) {
+        return false;
+    }
+
+    const AttackableUnit attackTarget = beforeArgs.Target;
+    if (!OrbwalkingDetail::IsValidAttackTarget(
+            attackTarget,
+            Utils::AutoAttack::GetRealAutoAttackRange(attackTarget))) {
+        return false;
+    }
+
+    const int targetNetworkId = attackTarget.NetworkId();
     if (context_.lastAttackOrderTick > 0 &&
         context_.lastAttackOrderNetworkId == targetNetworkId &&
         now - context_.lastAttackOrderTick >= 0 &&
@@ -110,13 +123,7 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
 
-    OrbwalkingActionArgs beforeArgs(OrbwalkingType::BeforeAttack, target, {}, "SDK");
-    OrbwalkingDetail::FireBeforeAttack(beforeArgs);
-    if (!beforeArgs.Process) {
-        return false;
-    }
-
-    if (!CoreControl::IssueAttack(target.Address(), target.Position(), true)) {
+    if (!CoreControl::IssueAttack(attackTarget.Address(), attackTarget.Position(), true)) {
         context_.lastAttackOrderTick = 0;
         context_.lastAttackOrderNetworkId = 0;
         ClearPendingAttackState();
@@ -125,12 +132,12 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
 
     context_.lastAttackOrderTick = now;
     context_.lastAttackOrderNetworkId = targetNetworkId;
-    context_.lastTarget = target;
+    context_.lastTarget = attackTarget;
     context_.lastAutoAttackTick = now;
     context_.lastAttackConfirmTick = 0;
     context_.pendingAttack = true;
     context_.pendingAttackTick = now;
-    context_.pendingAttackTargetNetworkId = target.NetworkId();
+    context_.pendingAttackTargetNetworkId = targetNetworkId;
     context_.hasConfirmedAttack = false;
     context_.attackCastComplete = false;
     context_.lastAttackRequiresDoCastBeforeMove =
@@ -139,10 +146,6 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     context_.lastAttackDoCastWaitTick = context_.lastAttackRequiresDoCastBeforeMove ? now : 0;
     SnapshotAttackTimings(GameObjects::Player());
 
-    OrbwalkingActionArgs attackArgs(OrbwalkingType::OnAttack, target, {}, "SDK");
-    OrbwalkingDetail::FireOnAttack(attackArgs);
-    OrbwalkingActionArgs afterArgs(OrbwalkingType::AfterAttack, target, {}, "SDK");
-    OrbwalkingDetail::FireAfterAttack(afterArgs);
     return true;
 }
 

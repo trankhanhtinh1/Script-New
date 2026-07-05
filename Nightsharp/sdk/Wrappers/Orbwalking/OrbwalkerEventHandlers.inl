@@ -89,6 +89,14 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     context_.hasConfirmedAttack = true;
     context_.attackCastComplete = false;
     SnapshotAttackTimings(GameObjects::Player());
+
+    const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
+    OrbwalkingActionArgs attackArgs(
+        OrbwalkingType::OnAttack,
+        eventTarget,
+        eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+        "SDK");
+    OrbwalkingDetail::FireOnAttack(attackArgs);
 }
 
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
@@ -128,6 +136,18 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
         context_.lastAutoAttackTick = attackStartTick;
     } else if (context_.lastAutoAttackTick <= 0 || now - context_.lastAutoAttackTick > 300) {
         context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
+    }
+
+    if (context_.lastAutoAttackTick > 0 &&
+        context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
+        const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
+        OrbwalkingActionArgs afterArgs(
+            OrbwalkingType::AfterAttack,
+            eventTarget,
+            eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+            "SDK");
+        OrbwalkingDetail::FireAfterAttack(afterArgs);
+        context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
     }
 
     if (isAttackReset) {
