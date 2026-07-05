@@ -47,16 +47,18 @@ public:
             return 0.0f;
         }
 
-        float result = sender.AttackRange() + CoreControl::GetBoundingRadius(sender.Address());
-        if (target.IsValid()) {
-            result += CoreControl::GetBoundingRadius(target.Address());
-        }
-
-        if (sender.CharacterName() == "Caitlyn" && target.IsValid()) {
+        float result = sender.AttackRange() + sender.BoundingRadius();
+        if (target.IsValid() && !target.IsDead()) {
             const AIBaseClient targetBase(target.Handle());
-            if (targetBase.HasBuff("caitlynyordletrapinternal")) {
-                result += 650.0f;
+            if (sender.CharacterName() == "Caitlyn" &&
+                (targetBase.HasBuff("CaitlynWSnare") || targetBase.HasBuff("CaitlynEMissile"))) {
+                result = 1300.0f;
+            } else if (sender.CharacterName() == "Aphelios" &&
+                       targetBase.HasBuff("aphelioscalibrumbonusrangedebuff") &&
+                       sender.HasBuff("aphelioscalibrumbonusrangebuff")) {
+                result = 1800.0f;
             }
+            result += target.BoundingRadius();
         }
 
         return result;

@@ -21,6 +21,7 @@
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
 #include "Champion/XerathSemiPlugin.h"
+#include "Champion/7UPAIO/7UPAIO.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../DebugLog.h"
 
@@ -123,6 +124,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<EzrealMissileLifecyclePlugin>();
         PluginManager::Get().Register<JaxSemiPlugin>();
         PluginManager::Get().Register<XerathSemiPlugin>();
+        PluginManager::Get().Register<AIO7UPPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

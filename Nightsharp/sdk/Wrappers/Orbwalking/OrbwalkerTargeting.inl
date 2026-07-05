@@ -19,8 +19,11 @@ inline bool IsValidAttackTarget(const AIHeroClient& player,
     if (!target.IsVisible() || !target.IsTargetable() || target.IsInvulnerable()) {
         return false;
     }
+    const Vector3 origin = player.ServerPosition().IsZero()
+        ? player.Position()
+        : player.ServerPosition();
     return range >= FLT_MAX * 0.5f ||
-           player.Position().DistanceSqr2D(target.Position()) <= range * range;
+           origin.DistanceSqr2D(target.Position()) <= range * range;
 }
 
 inline bool IsValidAttackTarget(const AttackableUnit& target, float range = FLT_MAX) {

@@ -31,6 +31,12 @@
     <Filter Include="Plugins\Champion\7UPAIO">
       <UniqueIdentifier>{C9D52DAC-04E7-E0CA-3B8C-2A1E0C32D147}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\OneKeyToWin">
+      <UniqueIdentifier>{B5AFD60E-A465-B2FE-72A3-9FEB63B435F8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\Champion\OneKeyToWin\Champions">
+      <UniqueIdentifier>{8C2FE1E1-6F8E-81B8-5BD4-472230F53749}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Core">
       <UniqueIdentifier>{CFC8E72A-BC95-4186-5BDD-870D79F75629}</UniqueIdentifier>
     </Filter>
@@ -340,6 +346,144 @@
     </ClInclude>
     <ClInclude Include="Plugins\Champion\JaxSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Ahri.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Anivia.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Annie.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Ashe.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Blitzcrank.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Brand.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Braum.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Caitlyn.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Corki.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Darius.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Draven.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Ekko.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Evelynn.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Ezreal.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Graves.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Jayce.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Jhin.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Jinx.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Kalista.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Karthus.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Kayle.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Kindred.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\KogMaw.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Lucian.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Lux.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Malzahar.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\MissFortune.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Morgana.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Orianna.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Quinn.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Sivir.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Swain.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Syndra.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Teemo.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Thresh.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Tristana.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\TwistedFate.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Twitch.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Urgot.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Varus.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Vayne.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Velkoz.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Xerath.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Ziggs.h">
+      <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\OKTWBase.h">
+      <Filter>Plugins\Champion\OneKeyToWin</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\OneKeyToWin\OktwCommon.h">
+      <Filter>Plugins\Champion\OneKeyToWin</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
