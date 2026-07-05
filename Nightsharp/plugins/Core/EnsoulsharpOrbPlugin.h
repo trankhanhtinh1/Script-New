@@ -23,23 +23,42 @@ public:
 
     ~EnsoulsharpOrbWalker() override {
         Dispose();
+        DestroyMenu();
     }
 
-    void Enable() {
+    bool Enable() {
         if (eventsBound_) {
-            return;
+            return true;
         }
 
-        s_instance = this;
-        eventsBound_ =
-            (SDK::Events::hook.OnUpdate += &EnsoulsharpOrbWalker::OnGameUpdate) &&
-            (SDK::Events::hook.OnProcessSpell += &EnsoulsharpOrbWalker::OnProcessSpell) &&
-            (SDK::Events::hook.OnDoCast += &EnsoulsharpOrbWalker::OnDoCast) &&
-            (SDK::Events::hook.OnBuffAdd += &EnsoulsharpOrbWalker::OnBuffAdd) &&
-            (SDK::Events::hook.OnStopCast += &EnsoulsharpOrbWalker::OnStopCast) &&
-            (SDK::Drawing::OnDraw += &EnsoulsharpOrbWalker::OnDraw);
-
         disposed_ = false;
+        s_instance = this;
+        updateEventBound_ =
+            SDK::Events::hook.OnUpdate += &EnsoulsharpOrbWalker::OnGameUpdate;
+        processSpellEventBound_ =
+            SDK::Events::hook.OnProcessSpell += &EnsoulsharpOrbWalker::OnProcessSpell;
+        doCastEventBound_ =
+            SDK::Events::hook.OnDoCast += &EnsoulsharpOrbWalker::OnDoCast;
+        buffAddEventBound_ =
+            SDK::Events::hook.OnBuffAdd += &EnsoulsharpOrbWalker::OnBuffAdd;
+        stopCastEventBound_ =
+            SDK::Events::hook.OnStopCast += &EnsoulsharpOrbWalker::OnStopCast;
+        drawEventBound_ =
+            SDK::Drawing::OnDraw += &EnsoulsharpOrbWalker::OnDraw;
+
+        eventsBound_ =
+            updateEventBound_ &&
+            processSpellEventBound_ &&
+            doCastEventBound_ &&
+            buffAddEventBound_ &&
+            stopCastEventBound_ &&
+            drawEventBound_;
+        if (!eventsBound_) {
+            Dispose();
+            return false;
+        }
+
+        return true;
     }
 
     SDK::AttackableUnit ForceTarget() const override { return forceTarget_; }
@@ -326,15 +345,31 @@ public:
             return;
         }
 
-        if (eventsBound_) {
+        if (drawEventBound_) {
             SDK::Drawing::OnDraw -= &EnsoulsharpOrbWalker::OnDraw;
-            SDK::Events::hook.OnStopCast -= &EnsoulsharpOrbWalker::OnStopCast;
-            SDK::Events::hook.OnBuffAdd -= &EnsoulsharpOrbWalker::OnBuffAdd;
-            SDK::Events::hook.OnDoCast -= &EnsoulsharpOrbWalker::OnDoCast;
-            SDK::Events::hook.OnProcessSpell -= &EnsoulsharpOrbWalker::OnProcessSpell;
-            SDK::Events::hook.OnUpdate -= &EnsoulsharpOrbWalker::OnGameUpdate;
-            eventsBound_ = false;
+            drawEventBound_ = false;
         }
+        if (stopCastEventBound_) {
+            SDK::Events::hook.OnStopCast -= &EnsoulsharpOrbWalker::OnStopCast;
+            stopCastEventBound_ = false;
+        }
+        if (buffAddEventBound_) {
+            SDK::Events::hook.OnBuffAdd -= &EnsoulsharpOrbWalker::OnBuffAdd;
+            buffAddEventBound_ = false;
+        }
+        if (doCastEventBound_) {
+            SDK::Events::hook.OnDoCast -= &EnsoulsharpOrbWalker::OnDoCast;
+            doCastEventBound_ = false;
+        }
+        if (processSpellEventBound_) {
+            SDK::Events::hook.OnProcessSpell -= &EnsoulsharpOrbWalker::OnProcessSpell;
+            processSpellEventBound_ = false;
+        }
+        if (updateEventBound_) {
+            SDK::Events::hook.OnUpdate -= &EnsoulsharpOrbWalker::OnGameUpdate;
+            updateEventBound_ = false;
+        }
+        eventsBound_ = false;
 
         if (s_instance == this) {
             s_instance = nullptr;
@@ -349,6 +384,7 @@ private:
 
     static inline EnsoulsharpOrbWalker* s_instance = nullptr;
 
+    SDK::Menu* parentMenu_ = nullptr;
     SDK::Menu* menu_ = nullptr;
     SDK::Menu* drawingsMenu_ = nullptr;
     SDK::Menu* advancedMenu_ = nullptr;
@@ -398,17 +434,28 @@ private:
     bool missileLaunched_ = false;
     bool lastAttackInstantWindup_ = false;
     bool lastAttackInstantWindupCasted_ = false;
+
+
     bool eventsBound_ = false;
+    bool updateEventBound_ = false;
+    bool processSpellEventBound_ = false;
+    bool doCastEventBound_ = false;
+    bool buffAddEventBound_ = false;
+    bool stopCastEventBound_ = false;
+    bool drawEventBound_ = false;
     bool disposed_ = false;
+    bool ownsMenu_ = false;
 
     void BuildMenu(SDK::Menu* parentMenu) {
         if (!parentMenu) {
             return;
         }
 
+        parentMenu_ = parentMenu;
         menu_ = parentMenu->GetSubMenu("ensoulsharpOrb");
         if (!menu_) {
             menu_ = parentMenu->AddSubMenu(new SDK::Menu("ensoulsharpOrb", "EnsoulsharpOrb"));
+            ownsMenu_ = menu_ != nullptr;
         }
         if (!menu_) {
             return;
@@ -465,6 +512,56 @@ private:
         hybridKey_ = EnsureKeyBind(menu_, "hybridKey", "Hybrid", 'C');
         comboKey_ = EnsureKeyBind(menu_, "comboKey", "Combo", VK_SPACE);
         enabledOption_ = EnsureBool(menu_, "enabledOption", "Enabled", true);
+    }
+
+    void DestroyMenu() {
+        if (ownsMenu_ && parentMenu_ && menu_) {
+            SDK::Menu* pluginMenu = menu_;
+            for (int i = 0; i < parentMenu_->Components.size(); ++i) {
+                if (parentMenu_->Components[i] != pluginMenu) {
+                    continue;
+                }
+
+                // Detach only the plugin submenu; the SDK root/parent menu stays alive.
+                parentMenu_->Components.erase(i);
+                pluginMenu->Parent = nullptr;
+                delete pluginMenu;
+                break;
+            }
+        }
+
+        parentMenu_ = nullptr;
+        menu_ = nullptr;
+        drawingsMenu_ = nullptr;
+        advancedMenu_ = nullptr;
+        enabledOption_ = nullptr;
+        drawAARange_ = nullptr;
+        drawAARangeEnemy_ = nullptr;
+        drawExtraHoldPosition_ = nullptr;
+        drawKillableMinion_ = nullptr;
+        drawKillableMinionFade_ = nullptr;
+        movementRandomize_ = nullptr;
+        movementExtraHold_ = nullptr;
+        movementMaximumDistance_ = nullptr;
+        delayMovement_ = nullptr;
+        delayWindup_ = nullptr;
+        delayFarm_ = nullptr;
+        prioritizeFarm_ = nullptr;
+        prioritizeMinions_ = nullptr;
+        prioritizeSmallJungle_ = nullptr;
+        prioritizeWards_ = nullptr;
+        prioritizeSpecialMinions_ = nullptr;
+        attackWards_ = nullptr;
+        attackBarrels_ = nullptr;
+        attackClones_ = nullptr;
+        attackSpecialMinions_ = nullptr;
+        miscMissile_ = nullptr;
+        miscAttackSpeed_ = nullptr;
+        lastHitKey_ = nullptr;
+        laneClearKey_ = nullptr;
+        hybridKey_ = nullptr;
+        comboKey_ = nullptr;
+        ownsMenu_ = false;
     }
 
     static SDK::MenuBool* EnsureBool(
@@ -1552,6 +1649,12 @@ public:
                SDK::Orbwalker::GetOrbwalker(kSdkOrbwalkerName) != nullptr;
     }
 
+    bool LoadSucceeded() const override {
+        return m_orbwalker &&
+               SDK::Orbwalker::GetOrbwalker(kOrbwalkerName) == m_orbwalker.get() &&
+               SDK::Orbwalker::Implementation() == m_orbwalker.get();
+    }
+
     void OnLoad() override {
         m_previousOrbwalker = SDK::Orbwalker::CurrentOrbwalkerName();
 
@@ -1562,6 +1665,7 @@ public:
 
         auto existing = SDK::Orbwalker::GetOrbwalker(kOrbwalkerName);
         if (existing && existing != m_orbwalker.get()) {
+            ClearCurrentOrbwalkerIf(existing);
             SDK::OrbwalkingDetail::Implementations.erase(kOrbwalkerName);
             existing = nullptr;
         }
@@ -1569,27 +1673,43 @@ public:
         if (!existing &&
             !SDK::Orbwalker::AddOrbwalker(kOrbwalkerName, m_orbwalker.get())) {
             NightSharpDebug::Logf("[EnsoulsharpOrb] failed to register orbwalker");
+            m_orbwalker.reset();
             return;
         }
 
-        m_orbwalker->Enable();
-        SDK::Orbwalker::SetOrbwalker(kOrbwalkerName);
+        if (!m_orbwalker->Enable()) {
+            NightSharpDebug::Logf("[EnsoulsharpOrb] failed to bind events");
+            SDK::OrbwalkingDetail::Implementations.erase(kOrbwalkerName);
+            ClearCurrentOrbwalkerIf(m_orbwalker.get());
+            m_orbwalker.reset();
+            return;
+        }
+
+        if (!SDK::Orbwalker::SetOrbwalker(kOrbwalkerName)) {
+            NightSharpDebug::Logf("[EnsoulsharpOrb] failed to select orbwalker");
+            SDK::OrbwalkingDetail::Implementations.erase(kOrbwalkerName);
+            ClearCurrentOrbwalkerIf(m_orbwalker.get());
+            m_orbwalker.reset();
+            return;
+        }
+
         SDK::OrbwalkingDetail::RuntimeInstance = nullptr;
         NightSharpDebug::Logf("[EnsoulsharpOrb] loaded");
     }
 
     void OnUnload() override {
+        SDK::IOrbwalker* provider = m_orbwalker.get();
         const bool wasCurrent =
-            SDK::Orbwalker::CurrentOrbwalkerName() == kOrbwalkerName;
+            SDK::Orbwalker::CurrentOrbwalkerName() == kOrbwalkerName ||
+            SDK::Orbwalker::Implementation() == provider;
 
         if (wasCurrent) {
             RestorePreviousOrbwalker();
         }
 
         SDK::OrbwalkingDetail::Implementations.erase(kOrbwalkerName);
-        if (m_orbwalker) {
-            m_orbwalker->Dispose();
-        }
+        ClearCurrentOrbwalkerIf(provider);
+        m_orbwalker.reset();
 
         NightSharpDebug::Logf("[EnsoulsharpOrb] unloaded");
     }
@@ -1606,8 +1726,12 @@ private:
             return;
         }
 
-        SDK::Orbwalker::SetOrbwalker(kSdkOrbwalkerName);
-        SyncRuntimeToSdk();
+        if (SDK::Orbwalker::SetOrbwalker(kSdkOrbwalkerName)) {
+            SyncRuntimeToSdk();
+            return;
+        }
+
+        ClearCurrentOrbwalker();
     }
 
     static void SyncRuntimeToCurrent() {
@@ -1626,6 +1750,18 @@ private:
             return;
         }
         SDK::OrbwalkingDetail::RuntimeInstance = nullptr;
+    }
+
+    static void ClearCurrentOrbwalker() {
+        SDK::OrbwalkingDetail::Implementation = nullptr;
+        SDK::OrbwalkingDetail::SelectedImplementationName.clear();
+        SDK::OrbwalkingDetail::RuntimeInstance = nullptr;
+    }
+
+    static void ClearCurrentOrbwalkerIf(SDK::IOrbwalker* provider) {
+        if (provider && SDK::Orbwalker::Implementation() == provider) {
+            ClearCurrentOrbwalker();
+        }
     }
 
     std::unique_ptr<EnsoulsharpOrbWalker> m_orbwalker;

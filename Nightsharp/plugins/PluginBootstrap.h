@@ -145,8 +145,8 @@ namespace PluginBootstrap {
         }
         g_shutdown = true;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown begin");
-        ::SDK::SdkWrappers::Shutdown();
         PluginManager::Get().Shutdown();
+        ::SDK::SdkWrappers::Shutdown();
         PluginRegistry::Reset();
         g_registered = false;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown complete");
