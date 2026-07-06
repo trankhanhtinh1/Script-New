@@ -144,6 +144,59 @@ namespace SDK { namespace UI {
         return changed;
     }
 
+    inline float ClampFloat(float value, float minValue, float maxValue) {
+        if (maxValue < minValue) {
+            maxValue = minValue;
+        }
+        if (value < minValue) {
+            return minValue;
+        }
+        if (value > maxValue) {
+            return maxValue;
+        }
+        return value;
+    }
+
+    inline float MenuControlWidth(float preferredWidth) {
+        const float avail = ImGui::GetContentRegionAvail().x;
+        if (avail <= 0.0f) {
+            return preferredWidth;
+        }
+        if (avail < 120.0f) {
+            return avail;
+        }
+        return ClampFloat(preferredWidth, 120.0f, avail);
+    }
+
+    inline float BeginMenuValueRow(const char* label, float preferredControlWidth = 280.0f) {
+        ImGui::AlignTextToFramePadding();
+
+        const char* text = label ? label : "";
+        const float startX = ImGui::GetCursorPosX();
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float controlWidth = MenuControlWidth(preferredControlWidth);
+        const float spacing = ImGui::GetStyle().ItemSpacing.x;
+        const float labelLimit = avail - controlWidth - spacing;
+        const bool sameLine =
+            labelLimit >= 80.0f &&
+            ImGui::CalcTextSize(text).x <= labelLimit;
+
+        if (sameLine) {
+            ImGui::TextUnformatted(text);
+            ImGui::SameLine();
+        } else {
+            ImGui::PushTextWrapPos(startX + avail);
+            ImGui::TextUnformatted(text);
+            ImGui::PopTextWrapPos();
+        }
+
+        const float targetX = startX + avail - controlWidth;
+        if (targetX > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetX);
+        }
+        return controlWidth;
+    }
+
     // ---------- Tiny POD vector (no STL) ----------
     template <typename T>
     class TinyVec {
@@ -563,8 +616,9 @@ namespace SDK { namespace UI {
         void DrawImGui() override {
             ImGui::PushID(this);
             int v = Value;
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::SliderInt(DisplayName.c_str(), &v, MinValue, MaxValue)) Set(v);
+            const float width = BeginMenuValueRow(DisplayName.c_str(), 280.0f);
+            ImGui::SetNextItemWidth(width);
+            if (ImGui::SliderInt("##value", &v, MinValue, MaxValue, "%d")) Set(v);
             Interacting = ImGui::IsItemActive();
             DrawTooltipIfHovered();
             ImGui::PopID();
@@ -610,8 +664,9 @@ namespace SDK { namespace UI {
         void DrawImGui() override {
             ImGui::PushID(this);
             float v = Value;
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            if (ImGui::SliderFloat(DisplayName.c_str(), &v, MinValue, MaxValue)) Set(v);
+            const float width = BeginMenuValueRow(DisplayName.c_str(), 280.0f);
+            ImGui::SetNextItemWidth(width);
+            if (ImGui::SliderFloat("##value", &v, MinValue, MaxValue, "%.2f")) Set(v);
             Interacting = ImGui::IsItemActive();
             DrawTooltipIfHovered();
             ImGui::PopID();
@@ -731,25 +786,38 @@ namespace SDK { namespace UI {
         void DrawImGui() override {
             ImGui::PushID(this);
 
-            char label[160];
-            ::wsprintfA(label, "%s [%s] (%s)",
-                        DisplayName.c_str(),
-                        VkToText(Key),
-                        TypeToText(Type));
-            ImGui::TextUnformatted(label);
+            const float width = BeginMenuValueRow(DisplayName.c_str(), 300.0f);
+            const float keyWidth = width >= 260.0f ? 118.0f : 96.0f;
+            const float typeWidth = width >= 260.0f ? 72.0f : 58.0f;
+            const float activeWidth = width >= 260.0f ? 50.0f : 44.0f;
+
+            ImGui::BeginGroup();
+            ImGui::PushStyleColor(
+                ImGuiCol_Button,
+                Interacting ? ImVec4(0.20f, 0.39f, 0.72f, 0.95f)
+                            : ImVec4(0.10f, 0.17f, 0.28f, 0.78f));
+            ImGui::PushStyleColor(
+                ImGuiCol_ButtonHovered,
+                Interacting ? ImVec4(0.28f, 0.50f, 0.88f, 1.0f)
+                            : ImVec4(0.16f, 0.28f, 0.46f, 0.92f));
+            ImGui::PushStyleColor(
+                ImGuiCol_ButtonActive,
+                Interacting ? ImVec4(0.16f, 0.32f, 0.60f, 1.0f)
+                            : ImVec4(0.20f, 0.36f, 0.58f, 1.0f));
+            if (ImGui::Button(Interacting ? "Press key..." : VkToText(Key), ImVec2(keyWidth, 0.0f))) {
+                Interacting = true;
+            }
+            ImGui::PopStyleColor(3);
             DrawTooltipIfHovered();
 
-            ImGui::SameLine();
-            ImGui::PushStyleColor(ImGuiCol_Button,
-                Active ? ImVec4(0.18f, 0.55f, 0.28f, 0.95f)
-                       : ImVec4(0.30f, 0.30f, 0.40f, 0.85f));
-            if (ImGui::SmallButton(Active ? "ON" : "OFF")) SetActive(!Active);
-            ImGui::PopStyleColor();
+            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::Button(TypeToText(Type), ImVec2(typeWidth, 0.0f));
 
-            ImGui::SameLine();
-            if (ImGui::SmallButton(Interacting ? "Press key..." : "Bind")) {
-                Interacting = !Interacting;
+            ImGui::SameLine(0.0f, 6.0f);
+            if (DrawStateToggleButton("##active", Active ? "ON" : "OFF", Active, true, ImVec2(activeWidth, 0.0f))) {
+                SetActive(!Active);
             }
+            ImGui::EndGroup();
 
             ImGui::PopID();
         }
@@ -1039,18 +1107,23 @@ namespace SDK { namespace UI {
 
         void DrawImGui() override {
             ImGui::PushID(this);
-            ImGui::TextUnformatted(DisplayName.c_str());
-            DrawTooltipIfHovered();
-            ImGui::SameLine();
+            const float width = BeginMenuValueRow(DisplayName.c_str(), 320.0f);
+            const float checkboxWidth = 24.0f;
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
             bool b = Enabled;
             if (ImGui::Checkbox("##en", &b)) {
                 Enabled = b;
                 FireValueChanged();
                 if (Parent && Parent->IsMenu()) static_cast<Menu*>(Parent)->FireMenuValueChanged(this);
             }
-            ImGui::SameLine();
+            DrawTooltipIfHovered();
+            ImGui::SameLine(0.0f, spacing);
             int v = Value;
-            ImGui::SetNextItemWidth(-FLT_MIN);
+            float sliderWidth = width - checkboxWidth - spacing;
+            if (sliderWidth < 64.0f) {
+                sliderWidth = 64.0f;
+            }
+            ImGui::SetNextItemWidth(sliderWidth);
             if (ImGui::SliderInt("##sl", &v, MinValue, MaxValue)) {
                 if (v < MinValue) v = MinValue;
                 if (v > MaxValue) v = MaxValue;
@@ -1095,8 +1168,9 @@ namespace SDK { namespace UI {
         // Walk every MenuKeyBind in a subtree and let it process this key event.
         bool DispatchKey(int vkCode, bool down) {
             bool handled = false;
+            const bool captureOnly = HasKeyBindCapture();
             for (int i = 0; i < Menus.size(); ++i) {
-                handled = DispatchKeyInternal(Menus[i], vkCode, down) || handled;
+                handled = DispatchKeyInternal(Menus[i], vkCode, down, captureOnly) || handled;
             }
             return handled;
         }
@@ -1182,15 +1256,18 @@ namespace SDK { namespace UI {
     private:
         MenuManager() = default;
 
-        bool DispatchKeyInternal(AMenuComponent* node, int vkCode, bool down) {
+        bool DispatchKeyInternal(AMenuComponent* node, int vkCode, bool down, bool captureOnly) {
             if (!node) return false;
             if (MenuKeyBind* k = dynamic_cast<MenuKeyBind*>(node)) {
+                if (captureOnly && !k->Interacting) {
+                    return false;
+                }
                 return k->OnKey(vkCode, down);
             }
             bool handled = false;
             if (Menu* m = dynamic_cast<Menu*>(node)) {
                 for (int i = 0; i < m->Components.size(); ++i) {
-                    handled = DispatchKeyInternal(m->Components[i], vkCode, down) || handled;
+                    handled = DispatchKeyInternal(m->Components[i], vkCode, down, captureOnly) || handled;
                 }
             }
             return handled;

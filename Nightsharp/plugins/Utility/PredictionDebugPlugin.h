@@ -327,12 +327,12 @@ private:
     static const char* HitChanceName(SDK::HitChance hc) {
         switch (hc) {
         case SDK::HitChance::Immobile: return "Immobile";
-        case SDK::HitChance::Dashing: return "Dashing";
+        case SDK::HitChance::Dash: return "Dash";
         case SDK::HitChance::VeryHigh: return "VeryHigh";
         case SDK::HitChance::High: return "High";
         case SDK::HitChance::Medium: return "Medium";
         case SDK::HitChance::Low: return "Low";
-        case SDK::HitChance::Impossible: return "Impossible";
+        case SDK::HitChance::None: return "None";
         case SDK::HitChance::OutOfRange: return "OutOfRange";
         case SDK::HitChance::Collision: return "Collision";
         default: return "None";
@@ -342,7 +342,7 @@ private:
     static std::uint32_t HitChanceColor(SDK::HitChance hc) {
         switch (hc) {
         case SDK::HitChance::Immobile:
-        case SDK::HitChance::Dashing:
+        case SDK::HitChance::Dash:
         case SDK::HitChance::VeryHigh:
         case SDK::HitChance::High:
             return 0xFF66FF66u;

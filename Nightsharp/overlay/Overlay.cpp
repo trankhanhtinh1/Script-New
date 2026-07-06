@@ -19,6 +19,7 @@
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 #include "../SDK/Lifecycle.h"
+#include "../SDK/Core/Game.h"
 #include "../SDK/Data/DragonSoulData.h"
 #include "../SDK/UI/Drawing.h"
 #include "../SDK/UI/Icons.h"
@@ -244,6 +245,8 @@ IDCompositionVisual* g_pDcompVisual = nullptr;
 
 HWND g_hOverlay = nullptr;
 HWND g_hTargetWindow = nullptr;
+HWND g_hHookedGameWindow = nullptr;
+WNDPROC g_originalGameWndProc = nullptr;
 UINT g_ResizeW = 0;
 UINT g_ResizeH = 0;
 bool g_antiCaptureEnabled = false;
@@ -281,6 +284,14 @@ bool IsShutdownRequested() {
 }
 
 bool IsTargetForeground();
+LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+bool IsGameWndProcHooked() {
+    return g_hHookedGameWindow != nullptr &&
+           g_originalGameWndProc != nullptr &&
+           IsWindow(g_hHookedGameWindow) &&
+           GetWindowLongPtrW(g_hHookedGameWindow, GWLP_WNDPROC) ==
+               reinterpret_cast<LONG_PTR>(GameWndProcHook);
+}
 
 bool ReadLocalPlayerSafe(uintptr_t& outLocalPlayer) {
     outLocalPlayer = 0;
@@ -357,12 +368,13 @@ bool WaitForGameReady() {
             return false;
         }
         const bool targetForeground = IsTargetForeground();
-        if (targetForeground && (GetAsyncKeyState(VK_END) & 1)) {
+        const bool useHotkeyFallback = !IsGameWndProcHooked();
+        if (useHotkeyFallback && targetForeground && (GetAsyncKeyState(VK_END) & 1)) {
             NightSharpDebug::Logf("[Overlay] VK_END pressed while waiting for game readiness");
             OverlayManager::RequestShutdown();
             return false;
         }
-        if (targetForeground && (GetAsyncKeyState(VK_F8) & 1)) {
+        if (useHotkeyFallback && targetForeground && (GetAsyncKeyState(VK_F8) & 1)) {
             NightSharpDebug::Logf("[Overlay] VK_F8 pressed while waiting for game readiness");
             OverlayManager::RequestSwitch();
             return false;
@@ -773,6 +785,110 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 }
 
+LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto callOriginal = [&]() -> LRESULT {
+        return g_originalGameWndProc
+            ? CallWindowProcW(g_originalGameWndProc, hWnd, msg, wParam, lParam)
+            : DefWindowProcW(hWnd, msg, wParam, lParam);
+    };
+
+    if (IsShutdownRequested()) {
+        return callOriginal();
+    }
+
+    if (NightSharpMenu::showMenu &&
+        SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
+        return TRUE;
+    }
+
+    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+        if (wParam == VK_F1) {
+            if (InterlockedCompareExchange(&g_bMenuReady, 0, 0) == 0) {
+                return TRUE;
+            }
+            ToggleMenuVisible();
+            return TRUE;
+        }
+        if (wParam == VK_F8) {
+            NightSharpDebug::Logf("[Overlay] VK_F8 received in external game WndProc");
+            OverlayManager::RequestSwitch();
+            return TRUE;
+        }
+        if (wParam == VK_END) {
+            NightSharpDebug::Logf("[Overlay] VK_END received in external game WndProc");
+            OverlayManager::RequestShutdown();
+            return TRUE;
+        }
+    }
+
+    SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
+    SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
+
+    if (NightSharpMenu::showMenu &&
+        ImGui::GetCurrentContext() &&
+        ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
+        return TRUE;
+    }
+
+    return callOriginal();
+}
+
+bool HookGameWndProc(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd) || IsGameWndProcHooked()) {
+        return IsGameWndProcHooked();
+    }
+
+    LONG_PTR current = GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
+    if (!current || current == reinterpret_cast<LONG_PTR>(GameWndProcHook)) {
+        return false;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    LONG_PTR result = SetWindowLongPtrW(
+        hWnd,
+        GWLP_WNDPROC,
+        reinterpret_cast<LONG_PTR>(GameWndProcHook));
+    if (!result && GetLastError() != ERROR_SUCCESS) {
+        LogLastError("[Overlay] Failed to hook target WndProc");
+        return false;
+    }
+
+    g_hHookedGameWindow = hWnd;
+    g_originalGameWndProc = reinterpret_cast<WNDPROC>(current);
+    NightSharpDebug::Logf("[Overlay] Target WndProc hooked original=0x%p new=0x%p",
+                          reinterpret_cast<void*>(current),
+                          reinterpret_cast<void*>(GameWndProcHook));
+    return true;
+}
+
+void UnhookGameWndProc() {
+    if (!g_hHookedGameWindow || !g_originalGameWndProc) {
+        g_hHookedGameWindow = nullptr;
+        g_originalGameWndProc = nullptr;
+        return;
+    }
+
+    if (IsWindow(g_hHookedGameWindow)) {
+        const LONG_PTR current = GetWindowLongPtrW(g_hHookedGameWindow, GWLP_WNDPROC);
+        if (current != reinterpret_cast<LONG_PTR>(GameWndProcHook)) {
+            NightSharpDebug::Logf("[Overlay] Target WndProc was replaced before unhook current=0x%p",
+                                  reinterpret_cast<void*>(current));
+            g_hHookedGameWindow = nullptr;
+            g_originalGameWndProc = nullptr;
+            return;
+        }
+
+        SetWindowLongPtrW(
+            g_hHookedGameWindow,
+            GWLP_WNDPROC,
+            reinterpret_cast<LONG_PTR>(g_originalGameWndProc));
+        NightSharpDebug::Logf("[Overlay] Target WndProc unhooked");
+    }
+
+    g_hHookedGameWindow = nullptr;
+    g_originalGameWndProc = nullptr;
+}
+
 } // namespace
 
 void Overlay::Run() {
@@ -884,6 +1000,7 @@ void Overlay::Run() {
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
     SDK::UI::Icons::SetDevice(g_pd3dDevice, g_pd3dContext);
+    HookGameWndProc(g_hTargetWindow);
     SetOverlayShown(true);
     UpdateWindow(g_hOverlay);
     MoveOverlayToTarget();
@@ -960,16 +1077,18 @@ void Overlay::Run() {
             !SDK::Drawing::HasCaptureVisibleContent());
 
         if (overlayActive) {
-            if ((GetAsyncKeyState(VK_F1) & 1) &&
+            const bool useHotkeyFallback = !IsGameWndProcHooked();
+            if (useHotkeyFallback &&
+                (GetAsyncKeyState(VK_F1) & 1) &&
                 InterlockedCompareExchange(&g_bMenuReady, 0, 0) != 0) {
                 ToggleMenuVisible();
             }
-            if (GetAsyncKeyState(VK_F8) & 1) {
+            if (useHotkeyFallback && (GetAsyncKeyState(VK_F8) & 1)) {
                 NightSharpDebug::Logf("[Overlay] VK_F8 pressed in external frame loop");
                 OverlayManager::RequestSwitch();
                 break;
             }
-            if (GetAsyncKeyState(VK_END) & 1) {
+            if (useHotkeyFallback && (GetAsyncKeyState(VK_END) & 1)) {
                 NightSharpDebug::Logf("[Overlay] VK_END pressed in external frame loop");
                 OverlayManager::RequestShutdown();
                 break;
@@ -1066,6 +1185,8 @@ void Overlay::Run() {
         "[Overlay] external render loop exited localShutdown=%ld switch=%d",
         InterlockedCompareExchange(&g_bShutdown, 0, 0),
         OverlayManager::IsSwitchRequested() ? 1 : 0);
+
+    UnhookGameWndProc();
 
     NightSharpDebug::Phase("overlay-shutdown-plugins");
     RestoreCoreMemoryHacks();

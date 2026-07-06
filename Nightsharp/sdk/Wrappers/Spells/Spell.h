@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <limits>
 #include <string>
 #include <vector>
@@ -103,6 +104,13 @@ public:
     int ChargedMinRange = 0;
     std::string ChargedSpellName;
     int ChargeDuration = 0;
+    bool AddHitBox = true;
+    float MaxCollisionCount = 0.0f;
+    bool PredictionCloserPosition = false;
+    CollisionObjectsBridge CollisionObjects =
+        CollisionableObjects::Minions |
+        CollisionableObjects::Heroes |
+        CollisionableObjects::YasuoWall;
     bool Collision = false;
     DamageType DamageType = DamageType::Physical;
     float Delay = 0.0f;
@@ -394,6 +402,11 @@ public:
         input.Radius = Width;
         input.Delay = delayOverride > 0.0f ? delayOverride : Delay;
         input.Speed = Speed;
+        input.Range = CurrentRange();
+        input.Collision = Collision;
+        input.RangeCheckFrom = RangeCheckFrom;
+        input.MaxCollisionCount = MaxCollisionCount;
+        input.CollisionObjects = CollisionObjects;
 
         return Collision::GetCollision(positions, input);
     }
@@ -454,9 +467,14 @@ public:
 
     PredictionOutput GetPrediction(const AIBaseClient& unit,
                                    bool aoe = false,
-                                   float overrideRange = -1.0f,
-                                   CollisionableObjects collisionable =
-                                       CollisionableObjects::Heroes | CollisionableObjects::Minions) const {
+                                   float overrideRange = -1.0f) const {
+        return GetPrediction(unit, aoe, overrideRange, CollisionObjects);
+    }
+
+    PredictionOutput GetPrediction(const AIBaseClient& unit,
+                                   bool aoe,
+                                   float overrideRange,
+                                   CollisionObjectsBridge collisionable) const {
         const float range = overrideRange > 0.0f ? overrideRange : CurrentRange();
 
         PredictionInput input;
@@ -470,7 +488,10 @@ public:
         input.SetType(Type);
         input.Spell = const_cast<Spell*>(this);
         input.RangeCheckFrom = RangeCheckFrom;
-        input.AoE = aoe;
+        input.AoE = aoe || (Width > 85.0f && !Collision);
+        input.AddHitBox = AddHitBox;
+        input.ChoiceCloserPosition = PredictionCloserPosition;
+        input.MaxCollisionCount = MaxCollisionCount;
         input.CollisionObjects = collisionable;
 
         return Prediction::GetPrediction(input);
@@ -527,6 +548,21 @@ public:
 
     void SetMinimumManaPercentage(float percentage) {
         minManaPercent_ = percentage;
+    }
+
+    Spell& SetCollisionObjects(CollisionableObjects flags) {
+        CollisionObjects = flags;
+        return *this;
+    }
+
+    Spell& SetCollisionObjects(std::initializer_list<CollisionableObjects> objects) {
+        CollisionObjects = objects;
+        return *this;
+    }
+
+    Spell& SetCollisionObjects(const std::vector<CollisionableObjects>& objects) {
+        CollisionObjects = objects;
+        return *this;
     }
 
     Spell& SetSkillshot(float delay,

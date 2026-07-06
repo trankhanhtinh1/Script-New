@@ -756,11 +756,6 @@ namespace NightSharpMenu {
             return 0;
         }
 
-        auto& p = PluginRegistry::Plugins[pluginIdx];
-        if (p.RuntimeMenu) {
-            return 1;
-        }
-
         SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
         if (!menu) {
             return 1;
@@ -811,11 +806,6 @@ namespace NightSharpMenu {
             return "?";
         }
 
-        auto& p = PluginRegistry::Plugins[pluginIdx];
-        if (p.RuntimeMenu) {
-            return "Menu";
-        }
-
         if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
             return section->DisplayName.c_str();
         }
@@ -823,6 +813,11 @@ namespace NightSharpMenu {
         if (IsPluginLeafSection(pluginIdx, secondaryIdx)) {
             SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
             return CountRootSubMenus(root) > 0 ? "General" : "Menu";
+        }
+
+        auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (p.RuntimeMenu) {
+            return "Menu";
         }
 
         return "?";
@@ -859,30 +854,30 @@ namespace NightSharpMenu {
             return;
         }
 
+        SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
+        if (menu) {
+            if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
+                section->DrawChildren();
+                return;
+            }
+
+            if (IsPluginLeafSection(pluginIdx, secondaryIdx) || CountRootSubMenus(menu) <= 0) {
+                DrawRootLeafItems(menu);
+                return;
+            }
+
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No menu section selected.");
+            return;
+        }
+
         if (p.RuntimeMenu) {
             PluginRegistry::DrawPluginMenu(pluginIdx);
             return;
         }
 
-        SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
-        if (!menu) {
-            ImGui::Text("%s", p.Name ? p.Name : "Plugin");
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
-            return;
-        }
-
-        if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
-            section->DrawChildren();
-            return;
-        }
-
-        if (IsPluginLeafSection(pluginIdx, secondaryIdx) || CountRootSubMenus(menu) <= 0) {
-            DrawRootLeafItems(menu);
-            return;
-        }
-
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No menu section selected.");
+        ImGui::Text("%s", p.Name ? p.Name : "Plugin");
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
     }
 
     inline void Render() {

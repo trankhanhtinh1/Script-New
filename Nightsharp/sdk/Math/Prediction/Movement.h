@@ -29,6 +29,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -184,53 +185,85 @@ struct MovementCollisionInfo {
 inline MovementCollisionInfo VectorMovementCollision(
     const Vec2& pointStartA, const Vec2& pointEndA, float pointVelocityA,
     const Vec2& pointB, float pointVelocityB, float delay = 0.0f) {
+    const float x = pointStartA.x;
+    const float y = pointStartA.y;
+    const float x2 = pointEndA.x;
+    const float y2 = pointEndA.y;
+    const float x3 = pointB.x;
+    const float y3 = pointB.y;
 
-    std::vector<Vec2> pathA = { pointStartA, pointEndA };
+    const float dx = x2 - x;
+    const float dy = y2 - y;
+    const float distanceA = std::sqrt(dx * dx + dy * dy);
+    float collisionTime = std::numeric_limits<float>::quiet_NaN();
 
-    float speedA = pointVelocityA;
-    float speedB = pointVelocityB;
+    const float velocityAx = std::abs(distanceA) > FLT_EPSILON
+        ? pointVelocityA * dx / distanceA
+        : 0.0f;
+    const float velocityAy = std::abs(distanceA) > FLT_EPSILON
+        ? pointVelocityA * dy / distanceA
+        : 0.0f;
 
-    if (pathA.size() < 2) {
-        return { 0.0f, pointB };
-    }
+    const float relX = x3 - x;
+    const float relY = y3 - y;
+    const float relDistanceSqr = relX * relX + relY * relY;
 
-    float tT = delay;
-    float wayPointIndex = 0;
-    std::vector<float> segmentPositions = { 0.0f, 0.0f };
+    if (distanceA > 0.0f) {
+        if (std::abs(pointVelocityA - FLT_MAX) < FLT_EPSILON) {
+            const float time = distanceA / pointVelocityA;
+            collisionTime = pointVelocityB * time >= 0.0f
+                ? time
+                : std::numeric_limits<float>::quiet_NaN();
+        } else if (std::abs(pointVelocityB - FLT_MAX) < FLT_EPSILON) {
+            collisionTime = 0.0f;
+        } else {
+            const float a = velocityAx * velocityAx + velocityAy * velocityAy
+                - pointVelocityB * pointVelocityB;
+            const float b = -relX * velocityAx - relY * velocityAy;
 
-    for (std::size_t i = 0; i + 1 < pathA.size(); ++i) {
-        Vec2 a = pathA[i];
-        Vec2 b = pathA[i + 1];
-
-        float segmentDistance = a.Distance(b);
-        float timeToReachSegmentEnd = 0.0f;
-        if (segmentDistance > 0) {
-            segmentPositions[1] = segmentPositions[0] + segmentDistance;
-
-            timeToReachSegmentEnd = segmentDistance / speedA;
-            float segmentTime = 0.0f;
-
-            while (segmentTime < timeToReachSegmentEnd + 0.001f) {
-                float currentDistance = speedA * (tT - segmentTime) + segmentPositions[0];
-                Vec2 currentPosition = a + (b - a).Normalized() * (currentDistance - segmentPositions[0]);
-
-                float distanceToB = currentPosition.Distance(pointB);
-                float timeToReachB = distanceToB / speedB;
-
-                if (std::abs(timeToReachB - (tT - segmentTime)) < 0.001f) {
-                    return { tT - segmentTime, currentPosition };
+            if (std::abs(a) < FLT_EPSILON) {
+                if (std::abs(b) < FLT_EPSILON) {
+                    collisionTime = std::abs(relDistanceSqr) < FLT_EPSILON
+                        ? 0.0f
+                        : std::numeric_limits<float>::quiet_NaN();
+                } else {
+                    const float time = -relDistanceSqr / (2.0f * b);
+                    collisionTime = pointVelocityB * time >= 0.0f
+                        ? time
+                        : std::numeric_limits<float>::quiet_NaN();
                 }
+            } else {
+                const float discriminant = b * b - a * relDistanceSqr;
+                if (discriminant >= 0.0f) {
+                    const float sqrtDiscriminant = std::sqrt(discriminant);
+                    const float time1 = (-sqrtDiscriminant - b) / a;
+                    const float candidate1 = pointVelocityB * time1 >= 0.0f
+                        ? time1
+                        : std::numeric_limits<float>::quiet_NaN();
+                    const float time2 = (sqrtDiscriminant - b) / a;
+                    const float candidate2 = pointVelocityB * time2 >= 0.0f
+                        ? time2
+                        : std::numeric_limits<float>::quiet_NaN();
 
-                segmentTime += 0.01f;
+                    collisionTime = candidate1;
+                    if (!std::isnan(candidate2) && !std::isnan(collisionTime)) {
+                        if (collisionTime >= delay && candidate2 >= delay) {
+                            collisionTime = std::min(collisionTime, candidate2);
+                        } else if (candidate2 >= delay) {
+                            collisionTime = candidate2;
+                        }
+                    }
+                }
             }
         }
-
-        tT += timeToReachSegmentEnd;
-        segmentPositions[0] = segmentPositions[1];
-        wayPointIndex = static_cast<float>(i);
+    } else if (std::abs(distanceA) < FLT_EPSILON) {
+        collisionTime = 0.0f;
     }
 
-    return { -1.0f, {} };
+    const Vec2 collisionPosition = !std::isnan(collisionTime)
+        ? Vec2(x + velocityAx * collisionTime, y + velocityAy * collisionTime)
+        : Vec2();
+    return { collisionTime, collisionPosition };
 }
 
 } // namespace Vec2Ext
@@ -371,7 +404,10 @@ public:
             return _castPosition;
         }
         if (Input.Unit.IsValid()) {
-            return Input.Unit.Position();
+            const auto serverPosition = Input.Unit.ServerPosition();
+            return serverPosition.IsValid() && !serverPosition.IsZero()
+                ? serverPosition
+                : Input.Unit.Position();
         }
         return Vector3();
     }
@@ -386,7 +422,10 @@ public:
             return _unitPosition;
         }
         if (Input.Unit.IsValid()) {
-            return Input.Unit.Position();
+            const auto serverPosition = Input.Unit.ServerPosition();
+            return serverPosition.IsValid() && !serverPosition.IsZero()
+                ? serverPosition
+                : Input.Unit.Position();
         }
         return Vector3();
     }
@@ -478,13 +517,37 @@ inline HitChance GetHitchance(const AIBaseClient& unit) {
     return HitChance::VeryHigh;
 }
 
+inline float DistancePointSegmentSqr(const Vec2& point,
+                                     const Vec2& segmentStart,
+                                     const Vec2& segmentEnd,
+                                     bool onlyIfOnSegment = true) {
+    const auto projection = Vec2Ext::ProjectOn(point, segmentStart, segmentEnd);
+    if (onlyIfOnSegment && !projection.IsOnSegment) {
+        return FLT_MAX;
+    }
+    return point.DistanceSqr(onlyIfOnSegment
+        ? projection.SegmentPoint
+        : projection.LinePoint);
+}
+
 // ----------------------------------------------------------------------------
 // GetPositionOnPath (Movement.cs lines 213-319)
 // ----------------------------------------------------------------------------
-inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Vec2> path, float speed = -1.0f) {
-    speed = (std::abs(speed - (-1.0f)) < 0.0001f) ? input.Unit.MoveSpeed() : speed;
+inline PredictionOutput GetPositionOnPath(PredictionInput& input,
+                                          std::vector<Vec2> path,
+                                          float speed = -1.0f,
+                                          bool needToFixSpeed = false) {
+    Vector3 serverPos = input.Unit.ServerPosition();
+    if (!serverPos.IsValid() || serverPos.IsZero()) {
+        serverPos = input.Unit.Position();
+    }
 
-    Vector3 serverPos = input.Unit.Position();
+    if (needToFixSpeed &&
+        serverPos.To2D().DistanceSquared(input.ResolveFrom().To2D()) < 250.0f * 250.0f) {
+        speed *= 1.5f;
+    }
+
+    speed = (std::abs(speed - (-1.0f)) < 0.0001f) ? input.Unit.MoveSpeed() : speed;
 
     if (path.size() <= 1 || (input.Unit.Spellbook().IsWindingUp() && !SDK::Extensions::IsDashing(input.Unit))) {
         PredictionOutput output;
@@ -573,25 +636,7 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input, std::vector<Ve
                 if (pos.DistanceSquared(b) < 20.0f) {
                     break;
                 }
-                Vec2 p = pos + (direction * input.RealRadius());
-
-                // Line spell angle check (C# lines 286-297):
-                // When the angle between (From->p) and (a->b) is between 30 and 150,
-                // adjust cast position to the tangent point on the unit's hitbox circle.
-                if (IsLineSpellType(input.Type)) {
-                    float alpha = Vec2Ext::AngleBetween(
-                        (input.ResolveFrom().To2D() - p), (a - b));
-                    if (alpha > 30.0f && alpha < 180.0f - 30.0f) {
-                        float distFromToP = p.Distance(input.ResolveFrom().To2D());
-                        if (distFromToP > input.RealRadius()) {
-                            float beta = std::asin(input.RealRadius() / distFromToP);
-                            Vec2 dirFromToP = (p - input.ResolveFrom().To2D()).Normalized();
-                            Vec2 cp1 = input.ResolveFrom().To2D() + Vec2Ext::Rotated(dirFromToP, beta) * distFromToP;
-                            Vec2 cp2 = input.ResolveFrom().To2D() + Vec2Ext::Rotated(dirFromToP, -beta) * distFromToP;
-                            pos = cp1.DistanceSquared(pos) < cp2.DistanceSquared(pos) ? cp1 : cp2;
-                        }
-                    }
-                }
+                Vec2 p = pos - (direction * input.RealRadius());
 
                 PredictionOutput output;
                 output.Input = input;
@@ -661,37 +706,47 @@ inline PredictionOutput GetDashingPrediction(PredictionInput& input) {
     auto dashData = SDK::Extensions::GetDashInfo(input.Unit);
     input.Delay += 0.1f;
 
-    Vec2 startPos = input.Unit.Position().To2D();
+    Vec3 serverPosition = input.Unit.ServerPosition();
+    if (!serverPosition.IsValid() || serverPosition.IsZero()) {
+        serverPosition = input.Unit.Position();
+    }
+
+    Vec2 startPos = dashData.StartPos.IsValid() && !dashData.StartPos.IsZero()
+        ? dashData.StartPos.To2D()
+        : serverPosition.To2D();
     Vec2 endPos = dashData.PathCount > 0
         ? dashData.Path[dashData.PathCount - 1].To2D()
         : (dashData.EndPos.IsValid() ? dashData.EndPos.To2D() : startPos);
 
-    if (!dashData.IsBlink) {
-        // Mid-air prediction
-        std::vector<Vec2> dashPath = { startPos, endPos };
-        auto dashPred = GetPositionOnPath(input, dashPath, dashData.Speed);
-        if (dashPred.Hitchance >= HitChance::High) {
-            dashPred.SetCastPosition(dashPred.GetUnitPosition());
-            dashPred.Hitchance = HitChance::Dash;
-            return dashPred;
-        }
+    std::vector<Vec2> dashPath = { startPos, endPos };
+    auto dashPred = GetPositionOnPath(input, dashPath, dashData.Speed);
+    if (dashPred.Hitchance >= HitChance::High &&
+        DistancePointSegmentSqr(
+            dashPred.GetUnitPosition().To2D(),
+            serverPosition.To2D(),
+            endPos) < 200.0f * 200.0f) {
+        dashPred.SetCastPosition(dashPred.GetUnitPosition());
+        dashPred.Hitchance = HitChance::Dash;
+        return dashPred;
+    }
 
-        // End-of-dash prediction (C# line 152-165)
-        float pathLength = SDK::Utils::MathUtils::PathLength(dashPath);
-        if (pathLength > 200.0f) {
-            float timeToPoint = input.Delay
-                + (input.ResolveFrom().To2D().Distance(endPos) / input.Speed);
-            float timeForUnit = (input.Unit.Position().To2D().Distance(endPos) / dashData.Speed)
-                + (input.RealRadius() / input.Unit.MoveSpeed());
+    if (dashData.StartPos.Distance2D(dashData.EndPos) > 200.0f &&
+        dashData.Speed > 1.0f) {
+        const float timeToPoint =
+            (input.Delay * 0.5f) +
+            (input.ResolveFrom().To2D().Distance(endPos) / input.Speed) -
+            0.25f;
+        const float timeForUnit =
+            (input.Unit.Distance(Vec3::From2D(endPos)) / dashData.Speed) +
+            (input.RealRadius() / input.Unit.MoveSpeed());
 
-            if (timeToPoint <= timeForUnit) {
-                PredictionOutput output;
-                output.Input = input;
-                output.SetCastPosition(Vec3::From2D(endPos));
-                output.SetUnitPosition(Vec3::From2D(endPos));
-                output.Hitchance = HitChance::Dash;
-                return output;
-            }
+        if (timeToPoint <= timeForUnit) {
+            PredictionOutput output;
+            output.Input = input;
+            output.SetCastPosition(Vec3::From2D(endPos));
+            output.SetUnitPosition(Vec3::From2D(endPos));
+            output.Hitchance = HitChance::Dash;
+            return output;
         }
     }
 
@@ -704,14 +759,28 @@ inline PredictionOutput GetDashingPrediction(PredictionInput& input) {
 // GetImmobilePrediction (Movement.cs lines 184-202)
 // ----------------------------------------------------------------------------
 inline PredictionOutput GetImmobilePrediction(PredictionInput& input, double remainingImmobileT) {
-    Vector3 serverPos = input.Unit.Position();
+    Vector3 serverPos = input.Unit.ServerPosition();
+    if (!serverPos.IsValid() || serverPos.IsZero()) {
+        serverPos = input.Unit.Position();
+    }
     float timeToReach = input.Delay + (input.Unit.Distance(input.ResolveFrom()) / input.Speed);
 
     if ((double)timeToReach <= remainingImmobileT + (double)(input.RealRadius() / input.Unit.MoveSpeed())) {
         PredictionOutput output;
+        output.Input = input;
         output.SetCastPosition(serverPos);
         output.SetUnitPosition(serverPos);
         output.Hitchance = HitChance::Immobile;
+        return output;
+    }
+
+    if ((double)(timeToReach - 0.2f) <=
+        remainingImmobileT + (double)(input.RealRadius() / input.Unit.MoveSpeed())) {
+        PredictionOutput output;
+        output.Input = input;
+        output.SetCastPosition(serverPos);
+        output.SetUnitPosition(serverPos);
+        output.Hitchance = HitChance::VeryHigh;
         return output;
     }
 
@@ -719,7 +788,7 @@ inline PredictionOutput GetImmobilePrediction(PredictionInput& input, double rem
     output.Input = input;
     output.SetCastPosition(serverPos);
     output.SetUnitPosition(serverPos);
-    output.Hitchance = HitChance::High;
+    output.Hitchance = HitChance::Medium;
     return output;
 }
 
@@ -758,12 +827,6 @@ inline double UnitIsImmobileUntil(const AIBaseClient& unit) {
 // GetStandardPrediction (Movement.cs lines 431-448)
 // ----------------------------------------------------------------------------
 inline PredictionOutput GetStandardPrediction(PredictionInput& input) {
-    float speed = input.Unit.MoveSpeed();
-
-    if (input.Unit.Position().DistanceSqr2D(input.ResolveFrom()) < 200.0f * 200.0f) {
-        speed /= 1.5f;
-    }
-
     auto waypoints3D = input.Unit.GetWaypoints();
     std::vector<Vec2> path;
     path.reserve(waypoints3D.size());
@@ -771,7 +834,7 @@ inline PredictionOutput GetStandardPrediction(PredictionInput& input) {
         path.push_back(wp.To2D());
     }
 
-    auto result = GetPositionOnPath(input, path, speed);
+    auto result = GetPositionOnPath(input, path, input.Unit.MoveSpeed(), true);
 
     // C# has an empty if block: if (result.Hitchance >= HitChance.High && input.Unit is AIHeroClient) {}
     // This is a no-op, so we skip it.
@@ -850,9 +913,14 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
         }
     }
 
-    // Target too far away (DLL: RangeCheckFrom, not ResolveRangeCheckFrom)
+    Vector3 unitServerPosition = input.Unit.ServerPosition();
+    if (!unitServerPosition.IsValid() || unitServerPosition.IsZero()) {
+        unitServerPosition = input.Unit.Position();
+    }
+
+    // Target too far away (DLL: RangeCheckFrom + unit server position)
     if (std::abs(input.Range - FLT_MAX) > 0.0001f
-        && input.Unit.Position().DistanceSqr2D(input.ResolveRangeCheckFrom())
+        && unitServerPosition.DistanceSqr2D(input.ResolveRangeCheckFrom())
         > std::pow(input.Range * 1.5f, 2)) {
         PredictionOutput output;
         output.Input = input;
@@ -872,13 +940,13 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
     }
 
     if (!hasResult) {
-        result = GetAdvancedPrediction(input);
+        result = GetStandardPrediction(input);
     }
 
     // Range checks + cast position clamping (C# lines 381-408)
     if (std::abs(input.Range - FLT_MAX) > 0.0001f) {
         if (result.Hitchance >= HitChance::High
-            && input.ResolveRangeCheckFrom().DistanceSqr2D(input.Unit.Position())
+            && input.ResolveRangeCheckFrom().DistanceSqr2D(unitServerPosition)
             > std::pow(input.Range + (input.RealRadius() * 3.0f / 4.0f), 2)) {
             result.Hitchance = HitChance::Medium;
         }
@@ -889,41 +957,19 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
             result.Hitchance = HitChance::OutOfRange;
         }
 
-        // Clamp cast position to within range (C# lines 396-408)
-        if (input.ResolveRangeCheckFrom().DistanceSqr2D(result.GetCastPosition())
-            > std::pow(input.Range, 2)) {
-            if (result.Hitchance != HitChance::OutOfRange) {
-                Vec2 from2D = input.ResolveRangeCheckFrom().To2D();
-                Vec2 unitPos2D = result.GetUnitPosition().To2D();
-                Vec2 dir = (unitPos2D - from2D).Normalized();
-                if (dir.LengthSqr() > 0.001f) {
-                    Vec3 clamped = Vec3Ext::SetZ(Vec3::From2D(
-                        from2D + dir * input.Range));
-                    result.SetCastPosition(clamped);
-                }
-            } else {
-                result.Hitchance = HitChance::OutOfRange;
-            }
-        }
     }
 
-    // Collision check (C# lines 411-419):
-    //   positions = { UnitPosition, CastPosition, Unit.Position }
-    //   collision.RemoveAll(x => x.NetworkId == input.Unit.NetworkId)
-    //   result.Hitchance = collision.Count > 0 ? Collision : result.Hitchance
+    // Collision check: EnsoulSharp checks only CastPosition here and respects
+    // MaxCollisionCount. Broader collision probes belong in Collisions callers.
     if (checkCollision && input.Collision && result.Hitchance > HitChance::None) {
-        std::vector<Vector3> positions = {
-            result.GetUnitPosition(),
-            result.GetCastPosition(),
-            input.Unit.Position()
-        };
+        std::vector<Vector3> positions = { result.GetCastPosition() };
         auto collision = SDK::Collision::GetCollision(positions, input);
         collision.erase(
             std::remove_if(collision.begin(), collision.end(), [&](const AIBaseClient& object) {
                 return !object.IsValid() || object.NetworkId() == input.Unit.NetworkId();
             }),
             collision.end());
-        if (!collision.empty()) {
+        if (static_cast<float>(collision.size()) > input.MaxCollisionCount) {
             result.CollisionObjects = collision;
             result.SetOriginHitchance(result.Hitchance);
             result.Hitchance = HitChance::Collision;

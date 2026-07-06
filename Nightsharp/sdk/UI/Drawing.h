@@ -1184,6 +1184,7 @@ inline bool AddOnPostReset(DrawHandler handler) { return detail::PostResetHandle
 inline bool RemoveOnPostReset(DrawHandler handler) { return detail::PostResetHandlers.Remove(handler); }
 
 inline void DispatchDraw() {
+    detail::UpdateHotkey();
     if (IsEnabled()) {
         detail::DrawHandlers.Fire();
     }
@@ -1191,6 +1192,7 @@ inline void DispatchDraw() {
 }
 
 inline void DispatchEndScene() {
+    detail::UpdateHotkey();
     if (IsEnabled()) {
         detail::EndSceneHandlers.Fire();
     }
@@ -1205,6 +1207,7 @@ inline void Reset() {
     detail::EndSceneHandlers.Clear();
     detail::PreResetHandlers.Clear();
     detail::PostResetHandlers.Clear();
+    detail::F7WndProcInstalled = false;
     ClearCaptureVisibleContent();
 }
 
