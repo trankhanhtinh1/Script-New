@@ -11,8 +11,10 @@
 #include "../../IPlugin.h"
 #include "../../../SDK/SDK.h"
 
+#include <string>
+
 // === Champion includes (uncomment khi port xong) ===
-// #include "Ezreal.h"
+#include "Ezreal.h"
 // #include "Vayne.h"
 // #include "Caitlyn.h"
 // #include "Cassiopeia.h"
@@ -54,11 +56,15 @@ public:
     const char* GetInternalId() const override { return "champion.7upaio"; }
     const char* GetAuthor() const override { return "7UP"; }
     PluginCategory GetCategory() const override { return PluginCategory::Champion; }
+    const char* GetChampionName() const override { return CurrentSupportedChampionName(); }
     bool AutoLoadByDefault() const override { return true; }
-    bool CanLoad() const override { return true; }
+    bool CanLoad() const override { return IsCurrentChampionSupported(); }
 
     void OnLoad() override {
-        const std::string champ = ObjectManager::Player().CharacterName();
+        const std::string champ = CurrentChampionName();
+        if (!IsSupportedChampionName(champ.c_str())) {
+            return;
+        }
 
         // === Champion dispatch (port từ Program.cs switch) ===
         // Comment = chưa port. Uncomment khi port xong champion đó.
@@ -69,7 +75,7 @@ public:
         // else if (champ == "Cassiopeia") { Cassiopeia::OnGameLoad(); }
         // else if (champ == "Darius")     { Darius::OnGameLoad(); }
         // else if (champ == "Ekko")       { Ekko::OnGameLoad(); }
-        // else if (champ == "Ezreal")     { Ezreal::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Ezreal") == 0) { AIO7UP::Ezreal::OnGameLoad(); }
         // else if (champ == "Hecarim")    { Hecarim::OnGameLoad(); }
         // else if (champ == "Jax")        { Jax::OnGameLoad(); }
         // else if (champ == "Jayce")      { Jayce::OnGameLoad(); }
@@ -98,15 +104,40 @@ public:
         // else if (champ == "Xerath")     { Xerath::OnGameLoad(); }
         // else if (champ == "Zed")        { Zed::OnGameLoad(); }
         else {
-            // Program.cs default: "7UP AIO Does Not Support: [champion]"
-            const std::string msg =
-                "<font color='#b756c5' size='25'>7UP AIO Does Not Support: " +
-                champ + "</font>";
-            Game::Print(msg.c_str());
+            return;
         }
 
         // Program.cs line 129: TrollChat.OnGameLoad();
         // TODO: port TrollChat khi cần
+    }
+
+    void OnUnload() override {
+        AIO7UP::Ezreal::OnUnload();
+    }
+
+private:
+    static bool IsSupportedChampionName(const char* championName) {
+        return championName && championName[0] &&
+            _stricmp(championName, "Ezreal") == 0;
+    }
+
+    static std::string CurrentChampionName() {
+        const std::string& cached = SDK::GameObject::GetCachedChampionName();
+        if (!cached.empty()) {
+            return cached;
+        }
+
+        const auto player = ObjectManager::Player();
+        return player.IsValid() ? player.CharacterName() : std::string();
+    }
+
+    static bool IsCurrentChampionSupported() {
+        const std::string championName = CurrentChampionName();
+        return IsSupportedChampionName(championName.c_str());
+    }
+
+    static const char* CurrentSupportedChampionName() {
+        return IsCurrentChampionSupported() ? "Ezreal" : nullptr;
     }
 };
 

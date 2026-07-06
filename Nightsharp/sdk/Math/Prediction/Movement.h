@@ -560,21 +560,43 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input,
 
     float pLength = SDK::Utils::MathUtils::PathLength(path);
 
-    // Short path check for minions/jungle/dummies
-    bool isJungle = false;
-    if (input.Unit.IsMinion()) {
-        AIMinionClient minion(input.Unit.Address());
-        isJungle = minion.IsJungle();
-    }
-    if (path.size() == 2 && pLength < 5.0f
-        && (input.Unit.CharacterName() == "PracticeTool_TargetDummy"
-            || input.Unit.IsMinion() || isJungle)) {
+    const auto stationaryOutput = [&]() {
         PredictionOutput output;
         output.Input = input;
         output.SetUnitPosition(serverPos);
         output.SetCastPosition(serverPos);
         output.Hitchance = HitChance::VeryHigh;
         return output;
+    };
+
+    // Short path / stationary check. EnsoulSharp special-cases practice
+    // dummies/minions/jungle for path.Count == 2 && pathLength < 5. NightSharp
+    // can miss the dummy CharacterName when the object existed before injection,
+    // so also trust the movement/path state here.
+    bool isJungle = false;
+    if (input.Unit.IsMinion()) {
+        AIMinionClient minion(input.Unit.Address());
+        isJungle = minion.IsJungle();
+    }
+    std::string characterName = input.Unit.CharacterName();
+    if (characterName.empty()) {
+        char directName[96] = {};
+        if (::Core::Objects::ReadCharacterName(
+                input.Unit.Address(),
+                directName,
+                static_cast<int>(sizeof(directName)))) {
+            characterName = directName;
+        }
+    }
+    if ((path.size() == 2 && pLength < 5.0f) &&
+        (characterName == "PracticeTool_TargetDummy" ||
+         input.Unit.IsMinion() ||
+         isJungle ||
+         !input.Unit.IsMoving())) {
+        return stationaryOutput();
+    }
+    if (pLength < 1.0f || !input.Unit.IsMoving()) {
+        return stationaryOutput();
     }
 
     // Skillshots with only a delay (speed == MaxValue)
