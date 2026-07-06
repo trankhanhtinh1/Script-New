@@ -67,6 +67,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PreprocessorDefinitions>WIN32;_WINDOWS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)imgui;$(ProjectDir)overlay;$(ProjectDir)Core;$(ProjectDir)Plugins;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -86,6 +87,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <PreprocessorDefinitions>WIN32;_WINDOWS;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)imgui;$(ProjectDir)overlay;$(ProjectDir)Core;$(ProjectDir)Plugins;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -171,6 +173,9 @@
     <ClInclude Include="overlay\OverlayStatus.h" />
     <ClInclude Include="overlay\VmtHook.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h" />
+    <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h" />
+    <ClInclude Include="Plugins\Champion\7UPAIO\Katarina.h" />
+    <ClInclude Include="Plugins\Champion\7UPAIO\Samira.h" />
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h" />
     <ClInclude Include="Plugins\Champion\EzrealMissileLifecyclePlugin.h" />
     <ClInclude Include="Plugins\Champion\EzrealSemiPlugin.h" />

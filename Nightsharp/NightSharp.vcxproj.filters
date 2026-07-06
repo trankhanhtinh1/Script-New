@@ -335,6 +335,15 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Katarina.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Samira.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
