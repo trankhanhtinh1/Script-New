@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <string>
 
 namespace SDK {
 
@@ -172,7 +173,18 @@ private:
             return nullptr;
         }
 
-        const auto* champ = DamageData::FindChampion(source.CharacterName().c_str());
+        std::string characterName = source.CharacterName();
+        if (characterName.empty()) {
+            char directName[64] = {};
+            if (::Core::Objects::ReadCharacterName(
+                    source.Address(),
+                    directName,
+                    static_cast<int>(sizeof(directName)))) {
+                characterName = directName;
+            }
+        }
+
+        const auto* champ = DamageData::FindChampion(characterName.c_str());
         if (!champ) {
             return nullptr;
         }

@@ -236,7 +236,9 @@ public:
                 return CastStates::OutOfRange;
             }
 
-            LastCastAttemptT = Variables::TickCount();
+            if (!TryReserveCastRequest()) {
+                return CastStates::NotCasted;
+            }
             return player.Spellbook().CastSpell(Slot, unit)
                 ? CastStates::SuccessfullyCasted
                 : CastStates::NotCasted;
@@ -261,7 +263,9 @@ public:
             return CastStates::LowHitChance;
         }
 
-        LastCastAttemptT = Variables::TickCount();
+        if (!TryReserveCastRequest()) {
+            return CastStates::NotCasted;
+        }
         if (IsChargedSpell) {
             if (IsCharging()) {
                 ShootChargedSpell(Slot, prediction.GetCastPosition());
@@ -280,7 +284,9 @@ public:
             return false;
         }
 
-        LastCastAttemptT = Variables::TickCount();
+        if (!TryReserveCastRequest()) {
+            return false;
+        }
         return GameObjects::Player().Spellbook().CastSpell(Slot);
     }
 
@@ -293,7 +299,9 @@ public:
             return false;
         }
 
-        LastCastAttemptT = Variables::TickCount();
+        if (!TryReserveCastRequest()) {
+            return false;
+        }
         return GameObjects::Player().Spellbook().CastSpell(Slot, fromPosition, toPosition);
     }
 
@@ -306,7 +314,9 @@ public:
             return false;
         }
 
-        LastCastAttemptT = Variables::TickCount();
+        if (!TryReserveCastRequest()) {
+            return false;
+        }
         if (IsChargedSpell) {
             if (IsCharging()) {
                 ShootChargedSpell(Slot, position);
@@ -342,7 +352,9 @@ public:
             return false;
         }
 
-        LastCastAttemptT = Variables::TickCount();
+        if (!TryReserveCastRequest()) {
+            return false;
+        }
         return GameObjects::Player().Spellbook().CastSpell(Slot, unit);
     }
 
@@ -697,6 +709,40 @@ public:
     }
 
 private:
+    static constexpr int kCastRequestThrottleMs = 120;
+
+    static int CastThrottleSlotIndex(SpellSlot slot) {
+        const int value = static_cast<int>(slot);
+        if (value >= 0 && value <= 13) {
+            return value;
+        }
+        if (slot == SpellSlot::BasicAttack) {
+            return 14;
+        }
+        return 15;
+    }
+
+    static int& LastSlotCastRequestTick(SpellSlot slot) {
+        static int ticks[16] = {};
+        return ticks[CastThrottleSlotIndex(slot)];
+    }
+
+    bool TryReserveCastRequest() {
+        const int now = Variables::TickCount();
+        if (LastCastAttemptT != 0 && now - LastCastAttemptT < kCastRequestThrottleMs) {
+            return false;
+        }
+
+        int& slotTick = LastSlotCastRequestTick(Slot);
+        if (slotTick != 0 && now - slotTick < kCastRequestThrottleMs) {
+            return false;
+        }
+
+        LastCastAttemptT = now;
+        slotTick = now;
+        return true;
+    }
+
     static void ShootChargedSpell(SpellSlot slot, Vector3 position, bool releaseCast = true) {
         position.y = NavMesh::GetHeightForPosition(position.x, position.z);
         auto spellbook = GameObjects::Player().Spellbook();
