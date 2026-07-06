@@ -31,6 +31,9 @@ public:
     explicit OrbwalkerBase(Menu* parentMenu);
     ~OrbwalkerBase() override;
 
+    void DebugPrint(const char* text);
+    void ClearDebugConsole();
+
     AttackableUnit ForceTarget() const override;
     void ForceTarget(const AttackableUnit& target) override;
     AttackableUnit LastTarget() const override;
@@ -89,6 +92,7 @@ private:
     static void OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args);
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
+    static void OnMissileCreateStatic(const Events::ObjectEventArgs& args);
     static void OnDrawStatic();
     static void OnDebugDrawStatic();
 
@@ -97,11 +101,13 @@ private:
     void OnProcessCastSpell(const Events::CastSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
+    void OnMissileCreate(const Events::ObjectEventArgs& args);
     void OnDraw();
     void OnDebugDraw();
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
+    bool IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
     void ClearDoCastMoveGate();
     void ClearPendingAttackState();
@@ -115,7 +121,7 @@ private:
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     void SnapshotAttackTimings(const AIHeroClient& player);
-    void CaptureLiveSpellDebug(const Events::ProcessSpellEventArgs& args, const char* source);
+    void PushDebugConsoleLine(const char* text, int tick);
     void DrawLiveAttackDebugOverlay();
 
     OrbwalkerMenu menu_;

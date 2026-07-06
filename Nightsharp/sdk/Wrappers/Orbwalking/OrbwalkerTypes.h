@@ -9,6 +9,10 @@
 
 namespace SDK {
 
+static constexpr int kOrbwalkerDebugConsoleMaxLines = 64;
+static constexpr int kOrbwalkerDebugConsoleLineLength = 224;
+static constexpr int kOrbwalkerDebugConsoleDefaultVisibleLines = 10;
+
 enum class OrbwalkerModeFlag : std::int32_t {
     None = -1,
     Combo = 1,

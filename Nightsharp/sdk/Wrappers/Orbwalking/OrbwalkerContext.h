@@ -4,6 +4,11 @@
 
 namespace SDK {
 
+struct OrbwalkerDebugConsoleLine {
+    char text[kOrbwalkerDebugConsoleLineLength] = {};
+    int tick = 0;
+};
+
 struct OrbwalkerRuntimeContext {
     AttackableUnit forceTarget = {};
     AttackableUnit lastTarget = {};
@@ -30,18 +35,13 @@ struct OrbwalkerRuntimeContext {
     int cachedTargetTick = -1;
     int cachedTargetForceTargetNetworkId = 0;
     int cachedShouldWaitTick = -1;
-    int lastProcessAttackNameTick = 0;
-    int lastProcessAttackSlot = -1;
-    char lastProcessAttackName[96] = {};
-    char lastProcessAttackMissileName[96] = {};
-    char lastProcessAttackScriptName[96] = {};
-    char lastProcessAttackSlotName[96] = {};
-    char lastProcessAttackSource[24] = {};
-    char lastProcessAttackSenderName[96] = {};
-    char lastProcessAttackSenderCharacterName[96] = {};
+    OrbwalkerDebugConsoleLine debugConsoleLines[kOrbwalkerDebugConsoleMaxLines] = {};
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
+
+    int debugConsoleNextLine = 0;
+    int debugConsoleLineCount = 0;
 
     bool attackEnabled = true;
     bool moveEnabled = true;
@@ -52,9 +52,6 @@ struct OrbwalkerRuntimeContext {
     bool lastAttackDoCastComplete = false;
     bool cachedShouldWait = false;
     bool disposed = false;
-    bool lastProcessAttackSenderValid = false;
-    bool lastProcessAttackIsLocal = false;
-    bool lastProcessAttackIsAuto = false;
     OrbwalkingMode activeMode = OrbwalkingMode::None;
     OrbwalkingMode cachedTargetMode = OrbwalkingMode::None;
 };

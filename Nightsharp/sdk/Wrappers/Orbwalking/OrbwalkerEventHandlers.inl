@@ -33,6 +33,12 @@ inline void OrbwalkerBase::OnStopCastStatic(const Events::StopCastEventArgs& arg
     }
 }
 
+inline void OrbwalkerBase::OnMissileCreateStatic(const Events::ObjectEventArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnMissileCreate(args);
+    }
+}
+
 inline void OrbwalkerBase::OnDrawStatic() {
     if (OrbwalkingDetail::RuntimeInstance) {
         OrbwalkingDetail::RuntimeInstance->OnDraw();
@@ -64,8 +70,6 @@ inline void OrbwalkerBase::OnGameUpdate() {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
-    CaptureLiveSpellDebug(args, "ProcessSpell");
-
     if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
         ResetAutoAttackTimer();
         return;
@@ -134,8 +138,6 @@ inline void OrbwalkerBase::OnProcessCastSpell(const Events::CastSpellEventArgs& 
 }
 
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    CaptureLiveSpellDebug(args, "DoCast");
-
     if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
         ResetAutoAttackTimer();
         return;
@@ -252,6 +254,26 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
     context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs);
 }
 
+inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) {
+    if (!IsLocalAutoAttackMissile(args)) {
+        return;
+    }
+
+    char missileLine[kOrbwalkerDebugConsoleLineLength] = {};
+    _snprintf_s(
+        missileLine,
+        sizeof(missileLine),
+        _TRUNCATE,
+        "[AA missile] tick=%d spell=%s missile=%s missileNet=%u targetNet=%u sourceNet=%u",
+        Tick(),
+        args.SpellName[0] ? args.SpellName : "<empty>",
+        args.MissileName[0] ? args.MissileName : "<empty>",
+        args.MissileNetworkId,
+        args.TargetNetworkId,
+        args.SourceNetworkId);
+    DebugPrint(missileLine);
+}
+
 namespace OrbwalkingDetail {
 
 struct AutoAttackResetSlotEntry {
@@ -329,7 +351,7 @@ inline bool IsKnownAutoAttackResetSlot(const std::string& championName, int slot
 
     for (const auto& entry : entries) {
         if (slot == static_cast<int>(entry.Slot) &&
-            championName == entry.ChampionName) {
+            _stricmp(championName.c_str(), entry.ChampionName) == 0) {
             return true;
         }
     }
@@ -369,6 +391,14 @@ inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::Obje
     }
 
     return OrbwalkingDetail::IsKnownAutoAttackResetSlot(championName, slot);
+}
+
+inline bool OrbwalkerBase::IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const {
+    if (!Events::IsLocalPlayer(args.Source)) {
+        return false;
+    }
+
+    return IsAutoAttack(args.SpellName) || IsAutoAttack(args.MissileName);
 }
 
 inline void OrbwalkerBase::OnDraw() {
@@ -456,99 +486,74 @@ inline void OrbwalkerBase::OnDebugDraw() {
     DrawLiveAttackDebugOverlay();
 }
 
-inline void OrbwalkerBase::CaptureLiveSpellDebug(const Events::ProcessSpellEventArgs& args,
-                                                 const char* source) {
-    auto isDebugTextUsable = [](const char* value) -> bool {
-        if (!value || !value[0]) {
-            return false;
-        }
+inline void OrbwalkerBase::PushDebugConsoleLine(const char* text, int tick) {
+    const int index = context_.debugConsoleNextLine;
+    strncpy_s(
+        context_.debugConsoleLines[index].text,
+        text ? text : "",
+        _TRUNCATE);
+    context_.debugConsoleLines[index].tick = tick;
 
-        int length = 0;
-        int questionMarks = 0;
-        int lettersOrDigits = 0;
-        for (; value[length] && length < 95; ++length) {
-            const unsigned char ch = static_cast<unsigned char>(value[length]);
-            if (ch < 0x20 || ch > 0x7E) {
-                return false;
-            }
-            if (ch == '?') {
-                ++questionMarks;
-            }
-            if ((ch >= '0' && ch <= '9') ||
-                (ch >= 'A' && ch <= 'Z') ||
-                (ch >= 'a' && ch <= 'z')) {
-                ++lettersOrDigits;
-            }
-        }
+    context_.debugConsoleNextLine =
+        (context_.debugConsoleNextLine + 1) % kOrbwalkerDebugConsoleMaxLines;
+    if (context_.debugConsoleLineCount < kOrbwalkerDebugConsoleMaxLines) {
+        ++context_.debugConsoleLineCount;
+    }
+}
 
-        return length >= 2 &&
-               length < 95 &&
-               lettersOrDigits > 0 &&
-               questionMarks * 2 < length;
-    };
+inline void OrbwalkerBase::DebugPrint(const char* text) {
+    if (!text || !text[0]) {
+        return;
+    }
 
-    const char* attackName = nullptr;
-    const char* nameCandidates[] = {
-        args.SpellName,
-        args.SpellSlotName,
-        args.ScriptName,
-        args.MissileName,
-        args.PayloadSpellName,
-        args.PayloadMissileName,
-    };
-    for (const char* candidate : nameCandidates) {
-        if (isDebugTextUsable(candidate)) {
-            attackName = candidate;
+    const int now = static_cast<int>(::GetTickCount());
+    char line[kOrbwalkerDebugConsoleLineLength] = {};
+    int length = 0;
+
+    for (const char* cursor = text;; ++cursor) {
+        const char ch = *cursor;
+        if (ch == '\0') {
+            if (length > 0) {
+                line[length] = '\0';
+                PushDebugConsoleLine(line, now);
+            }
             break;
         }
-    }
-    if (!attackName && (args.IsAutoAttack || args.Slot == 64)) {
-        attackName = "BasicAttack";
-    }
-    if (!attackName) {
-        attackName = "<invalid>";
-    }
 
-    const char* senderName = isDebugTextUsable(args.Sender.CharacterName)
-        ? args.Sender.CharacterName
-        : (isDebugTextUsable(args.Sender.Name) ? args.Sender.Name : "<invalid>");
+        if (ch == '\r' || ch == '\n') {
+            line[length] = '\0';
+            PushDebugConsoleLine(line, now);
+            length = 0;
+            if (ch == '\r' && cursor[1] == '\n') {
+                ++cursor;
+            }
+            continue;
+        }
 
-    strncpy_s(
-        context_.lastProcessAttackName,
-        attackName,
-        _TRUNCATE);
-    strncpy_s(
-        context_.lastProcessAttackMissileName,
-        args.MissileName,
-        _TRUNCATE);
-    strncpy_s(
-        context_.lastProcessAttackScriptName,
-        args.ScriptName,
-        _TRUNCATE);
-    strncpy_s(
-        context_.lastProcessAttackSlotName,
-        args.SpellSlotName,
-        _TRUNCATE);
-    strncpy_s(
-        context_.lastProcessAttackSource,
-        source ? source : "",
-        _TRUNCATE);
-    strncpy_s(
-        context_.lastProcessAttackSenderName,
-        isDebugTextUsable(args.Sender.Name) ? args.Sender.Name : "",
-        _TRUNCATE);
-    strncpy_s(
-        context_.lastProcessAttackSenderCharacterName,
-        senderName,
-        _TRUNCATE);
-    context_.lastProcessAttackSlot = args.Slot;
-    context_.lastProcessAttackSenderValid = args.Sender.IsValid();
-    context_.lastProcessAttackIsLocal = Events::IsLocalPlayer(args.Sender);
-    context_.lastProcessAttackIsAuto = args.IsAutoAttack;
-    context_.lastProcessAttackNameTick = static_cast<int>(::GetTickCount());
+        const unsigned char value = static_cast<unsigned char>(ch);
+        line[length++] = (value >= 0x20 && value <= 0x7E) ? ch : '?';
+        if (length + 1 >= kOrbwalkerDebugConsoleLineLength) {
+            line[length] = '\0';
+            PushDebugConsoleLine(line, now);
+            length = 0;
+        }
+    }
+}
+
+inline void OrbwalkerBase::ClearDebugConsole() {
+    for (int i = 0; i < kOrbwalkerDebugConsoleMaxLines; ++i) {
+        context_.debugConsoleLines[i].text[0] = '\0';
+        context_.debugConsoleLines[i].tick = 0;
+    }
+    context_.debugConsoleNextLine = 0;
+    context_.debugConsoleLineCount = 0;
 }
 
 inline void OrbwalkerBase::DrawLiveAttackDebugOverlay() {
+    if (!menu_.DrawLiveDebugConsole()) {
+        return;
+    }
+
     if (!ImGui::GetCurrentContext()) {
         return;
     }
@@ -559,88 +564,76 @@ inline void OrbwalkerBase::DrawLiveAttackDebugOverlay() {
     }
 
     const int now = static_cast<int>(::GetTickCount());
-    const bool hasAttack = context_.lastProcessAttackNameTick > 0 &&
-        now - context_.lastProcessAttackNameTick >= 0;
-    const int attackAge = hasAttack ? now - context_.lastProcessAttackNameTick : 0;
-    const bool freshAttack = hasAttack && attackAge <= 4000;
-
-    char line[192] = {};
-    if (hasAttack) {
-        _snprintf_s(
-            line,
-            sizeof(line),
-            _TRUNCATE,
-            "%s: %s (%dms)",
-            context_.lastProcessAttackSource[0] ? context_.lastProcessAttackSource : "SpellEvent",
-            context_.lastProcessAttackName[0] ? context_.lastProcessAttackName : "<empty>",
-            attackAge);
-    } else {
-        _snprintf_s(
-            line,
-            sizeof(line),
-            _TRUNCATE,
-            "ProcessSpell attack: waiting...");
+    const int visibleLines = std::max(
+        kOrbwalkerDebugConsoleDefaultVisibleLines,
+        std::min(menu_.DrawLiveDebugConsoleLines(), 24));
+    const float fontSize = ImGui::GetFontSize();
+    const float lineHeight = std::max(15.0f, fontSize + 2.0f);
+    const float padding = 7.0f;
+    const float headerHeight = lineHeight + 2.0f;
+    float width = 720.0f;
+    const Vec2 rendererSize = Drawing::GetRendererSize();
+    if (rendererSize.x > 0.0f) {
+        width = std::min(width, std::max(360.0f, rendererSize.x - 36.0f));
     }
 
     const ImVec2 pos(18.0f, 108.0f);
-    const ImVec2 boxMin(pos.x - 6.0f, pos.y - 5.0f);
-    const ImVec2 boxMax(pos.x + 520.0f, pos.y + 68.0f);
-    draw->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 125), 4.0f);
-    draw->AddRect(boxMin, boxMax, IM_COL32(255, 209, 102, freshAttack ? 210 : 95), 4.0f);
-    draw->AddText(ImVec2(pos.x + 1.0f, pos.y + 1.0f), IM_COL32(0, 0, 0, 220), line);
-    draw->AddText(pos, freshAttack ? IM_COL32(255, 209, 102, 255) : IM_COL32(230, 230, 230, 255), line);
+    const ImVec2 boxMin(pos.x - padding, pos.y - padding);
+    const ImVec2 boxMax(
+        boxMin.x + width,
+        boxMin.y + padding * 2.0f + headerHeight + lineHeight * visibleLines);
 
-    char flagsLine[192] = {};
-    if (hasAttack) {
-        _snprintf_s(
-            flagsLine,
-            sizeof(flagsLine),
-            _TRUNCATE,
-            "slot=%d local=%d aa=%d senderValid=%d sender=%s",
-            context_.lastProcessAttackSlot,
-            context_.lastProcessAttackIsLocal ? 1 : 0,
-            context_.lastProcessAttackIsAuto ? 1 : 0,
-            context_.lastProcessAttackSenderValid ? 1 : 0,
-            context_.lastProcessAttackSenderCharacterName[0]
-                ? context_.lastProcessAttackSenderCharacterName
-                : "<empty>");
+    draw->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 145), 4.0f);
+    draw->AddRect(boxMin, boxMax, IM_COL32(255, 209, 102, 160), 4.0f);
+
+    char title[96] = {};
+    _snprintf_s(
+        title,
+        sizeof(title),
+        _TRUNCATE,
+        "Orbwalker Live Debug Console  %d/%d",
+        context_.debugConsoleLineCount,
+        kOrbwalkerDebugConsoleMaxLines);
+    draw->AddText(ImVec2(pos.x + 1.0f, pos.y + 1.0f), IM_COL32(0, 0, 0, 230), title);
+    draw->AddText(pos, IM_COL32(255, 209, 102, 255), title);
+
+    const int storedLines = context_.debugConsoleLineCount;
+    const int linesToDraw = std::min(storedLines, visibleLines);
+    const int emptyRows = visibleLines - linesToDraw;
+    const int oldestIndex =
+        (context_.debugConsoleNextLine - storedLines + kOrbwalkerDebugConsoleMaxLines) %
+        kOrbwalkerDebugConsoleMaxLines;
+    const int firstRelativeLine = storedLines - linesToDraw;
+
+    draw->PushClipRect(
+        ImVec2(boxMin.x + 4.0f, pos.y + headerHeight - 1.0f),
+        ImVec2(boxMax.x - 4.0f, boxMax.y - 4.0f),
+        true);
+
+    if (storedLines == 0) {
+        const ImVec2 waitingPos(pos.x, pos.y + headerHeight + lineHeight * (visibleLines - 1));
+        const char* waiting = "waiting for debug output...";
+        draw->AddText(ImVec2(waitingPos.x + 1.0f, waitingPos.y + 1.0f), IM_COL32(0, 0, 0, 220), waiting);
+        draw->AddText(waitingPos, IM_COL32(184, 231, 255, 230), waiting);
+        draw->PopClipRect();
+        return;
     }
 
-    const char* secondLine = hasAttack ? flagsLine : nullptr;
-    char missileLine[192] = {};
-    if (hasAttack && context_.lastProcessAttackMissileName[0]) {
-        _snprintf_s(
-            missileLine,
-            sizeof(missileLine),
-            _TRUNCATE,
-            "Missile: %s",
-            context_.lastProcessAttackMissileName);
-    } else if (!hasAttack) {
-        secondLine = "waiting for local auto attack ProcessSpell";
+    for (int row = emptyRows; row < visibleLines; ++row) {
+        const int relativeLine = firstRelativeLine + (row - emptyRows);
+        const int lineIndex =
+            (oldestIndex + relativeLine) % kOrbwalkerDebugConsoleMaxLines;
+        const OrbwalkerDebugConsoleLine& entry = context_.debugConsoleLines[lineIndex];
+        const int age = entry.tick > 0 ? now - entry.tick : 999999;
+        const ImU32 color = age >= 0 && age <= 4000
+            ? IM_COL32(255, 244, 204, 255)
+            : IM_COL32(210, 230, 238, 225);
+        const ImVec2 linePos(pos.x, pos.y + headerHeight + lineHeight * row);
+        draw->AddText(ImVec2(linePos.x + 1.0f, linePos.y + 1.0f), IM_COL32(0, 0, 0, 220), entry.text);
+        draw->AddText(linePos, color, entry.text);
     }
 
-    if (secondLine && secondLine[0]) {
-        const ImVec2 linePos(18.0f, 123.0f);
-        draw->AddText(ImVec2(linePos.x + 1.0f, linePos.y + 1.0f), IM_COL32(0, 0, 0, 220), secondLine);
-        draw->AddText(linePos, IM_COL32(184, 231, 255, 255), secondLine);
-    }
-
-    if (hasAttack && missileLine[0]) {
-        const ImVec2 missilePos(18.0f, 138.0f);
-        draw->AddText(ImVec2(missilePos.x + 1.0f, missilePos.y + 1.0f), IM_COL32(0, 0, 0, 220), missileLine);
-        draw->AddText(missilePos, IM_COL32(184, 231, 255, 255), missileLine);
-    } else if (hasAttack && context_.lastProcessAttackScriptName[0]) {
-        char scriptLine[192] = {};
-        _snprintf_s(
-            scriptLine,
-            sizeof(scriptLine),
-            _TRUNCATE,
-            "Script: %s",
-            context_.lastProcessAttackScriptName);
-        const ImVec2 scriptPos(18.0f, 138.0f);
-        draw->AddText(ImVec2(scriptPos.x + 1.0f, scriptPos.y + 1.0f), IM_COL32(0, 0, 0, 220), scriptLine);
-        draw->AddText(scriptPos, IM_COL32(184, 231, 255, 255), scriptLine);
-    }
+    draw->PopClipRect();
 }
 
 } // namespace SDK

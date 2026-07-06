@@ -6,6 +6,8 @@
 
 #include <Windows.h>
 
+#include <algorithm>
+
 namespace SDK {
 
 class OrbwalkerMenu {
@@ -22,6 +24,12 @@ public:
     bool DrawExtraHoldPosition() const { return BoolValue(drawExtraHoldPosition_, false); }
     bool DrawKillableMinion() const { return BoolValue(drawKillableMinion_, false); }
     bool DrawKillableMinionFade() const { return BoolValue(drawKillableMinionFade_, false); }
+    bool DrawLiveDebugConsole() const { return BoolValue(drawLiveDebugConsole_, true); }
+    int DrawLiveDebugConsoleLines() const {
+        return std::max(
+            kOrbwalkerDebugConsoleDefaultVisibleLines,
+            SliderValue(drawLiveDebugConsoleLines_, kOrbwalkerDebugConsoleDefaultVisibleLines));
+    }
 
     bool MovementRandomize() const { return BoolValue(movementRandomize_, true); }
     int MovementExtraHold() const { return SliderValue(movementExtraHold_, 0); }
@@ -89,6 +97,9 @@ private:
             drawExtraHoldPosition_ = drawingsMenu_->Add(new MenuBool("drawExtraHoldPosition", "Extra Hold Position", false));
             drawKillableMinion_ = drawingsMenu_->Add(new MenuBool("drawKillableMinion", "Killable Minions", false));
             drawKillableMinionFade_ = drawingsMenu_->Add(new MenuBool("drawKillableMinionFade", "Killable Minions Fade Effect", false));
+            drawLiveDebugConsole_ = drawingsMenu_->Add(new MenuBool("drawLiveDebugConsole", "Live Debug Console", true));
+            drawLiveDebugConsoleLines_ = drawingsMenu_->Add(
+                new MenuSlider("drawLiveDebugConsoleLines", "Live Debug Console Lines", 10, 10, 24));
         }
 
         advancedMenu_ = menu_->AddSubMenu(new Menu("advanced", "Advanced"));
@@ -136,6 +147,8 @@ private:
     MenuBool* drawExtraHoldPosition_ = nullptr;
     MenuBool* drawKillableMinion_ = nullptr;
     MenuBool* drawKillableMinionFade_ = nullptr;
+    MenuBool* drawLiveDebugConsole_ = nullptr;
+    MenuSlider* drawLiveDebugConsoleLines_ = nullptr;
 
     MenuBool* movementRandomize_ = nullptr;
     MenuSlider* movementExtraHold_ = nullptr;

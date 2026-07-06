@@ -241,14 +241,14 @@ inline float OrbwalkerBase::OneWayPingMs() const {
 }
 
 inline float OrbwalkerBase::ChampionExtraAttackDelayMs(const AIHeroClient& player) const {
-    if (player.CharacterName() == "Graves") {
+    if (_stricmp(player.CharacterName().c_str(), "Graves") == 0) {
         return (context_.attackDelayMs * 1.0740296828f) - 716.2381256175f - context_.attackDelayMs;
     }
     return 0.0f;
 }
 
 inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const {
-    return player.CharacterName() == "Rengar" &&
+    return _stricmp(player.CharacterName().c_str(), "Rengar") == 0 &&
            (player.HasBuff("RengarQ") ||
             player.HasBuff("RengarQEmp") ||
             player.HasBuff("rengarqbase") ||
@@ -256,11 +256,11 @@ inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& 
 }
 
 inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
-    if (player.CharacterName() == "Graves" &&
+    if (_stricmp(player.CharacterName().c_str(), "Graves") == 0 &&
         !player.HasBuff("gravesbasicattackammo1")) {
         return false;
     }
-    if (player.CharacterName() == "Jhin" &&
+    if (_stricmp(player.CharacterName().c_str(), "Jhin") == 0 &&
         player.HasBuff("JhinPassiveReload")) {
         return false;
     }

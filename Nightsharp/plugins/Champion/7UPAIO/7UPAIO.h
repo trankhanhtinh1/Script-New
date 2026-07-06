@@ -15,6 +15,7 @@
 
 // === Champion includes (uncomment khi port xong) ===
 #include "Ezreal.h"
+#include "Samira.h"
 // #include "Vayne.h"
 // #include "Caitlyn.h"
 // #include "Cassiopeia.h"
@@ -76,6 +77,7 @@ public:
         // else if (champ == "Darius")     { Darius::OnGameLoad(); }
         // else if (champ == "Ekko")       { Ekko::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Ezreal") == 0) { AIO7UP::Ezreal::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Samira") == 0) { AIO7UP::Samira::OnGameLoad(); }
         // else if (champ == "Hecarim")    { Hecarim::OnGameLoad(); }
         // else if (champ == "Jax")        { Jax::OnGameLoad(); }
         // else if (champ == "Jayce")      { Jayce::OnGameLoad(); }
@@ -113,12 +115,14 @@ public:
 
     void OnUnload() override {
         AIO7UP::Ezreal::OnUnload();
+        AIO7UP::Samira::OnUnload();
     }
 
 private:
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
-            _stricmp(championName, "Ezreal") == 0;
+            (_stricmp(championName, "Ezreal") == 0 ||
+             _stricmp(championName, "Samira") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -137,7 +141,14 @@ private:
     }
 
     static const char* CurrentSupportedChampionName() {
-        return IsCurrentChampionSupported() ? "Ezreal" : nullptr;
+        const std::string championName = CurrentChampionName();
+        if (_stricmp(championName.c_str(), "Ezreal") == 0) {
+            return "Ezreal";
+        }
+        if (_stricmp(championName.c_str(), "Samira") == 0) {
+            return "Samira";
+        }
+        return nullptr;
     }
 };
 
