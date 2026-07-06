@@ -91,6 +91,35 @@ namespace Plugins {
                 SyncRegistry(plugin);
                 return false;
             }
+            bool loadSucceeded = false;
+            __try {
+                loadSucceeded = plugin->LoadSucceeded();
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "PluginManager::Load/LoadSucceeded",
+                          GetExceptionInformation())) {
+                NightSharpDebug::Logf("[PluginManager] LoadSucceeded crashed name=%s id=%s",
+                                      plugin->GetName(),
+                                      plugin->GetInternalId());
+            }
+
+            if (!loadSucceeded) {
+                NightSharpDebug::Logf("[PluginManager] Load reported failure name=%s id=%s",
+                                      plugin->GetName(), plugin->GetInternalId());
+                __try {
+                    plugin->OnUnload();
+                }
+                __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                              "PluginManager::Load/OnUnloadAfterFailedLoad",
+                              GetExceptionInformation())) {
+                    NightSharpDebug::Logf("[PluginManager] Failed-load cleanup crashed name=%s id=%s",
+                                          plugin->GetName(),
+                                          plugin->GetInternalId());
+                }
+                plugin->m_loaded = false;
+                SyncRegistry(plugin);
+                return false;
+            }
             plugin->m_loaded = true;
             SyncRegistry(plugin);
             NightSharpDebug::Logf("[PluginManager] Load complete name=%s id=%s",
