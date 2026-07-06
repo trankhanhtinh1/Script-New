@@ -8,7 +8,6 @@
 #include "offset.h"
 #include "spoof/spoofcall.h"
 
-#include <Windows.h>
 #include <cmath>
 #include <cstdint>
 
@@ -46,7 +45,6 @@ enum class CastFailure : std::uint8_t {
     MissingChargeState,
     MissingMouseInput,
     PositionProjectionFailed,
-    Throttled,
     CanCastRejected,
     NativeException,
 };
@@ -101,8 +99,6 @@ inline constexpr std::int32_t kHudModeSmartCast = 2;
 inline constexpr std::int64_t kHudKeyPress = 1;
 inline constexpr std::int64_t kHudKeyRelease = 2;
 inline constexpr uintptr_t kHudChargeSpellInput = 0x38;
-inline constexpr DWORD kPerSlotCastThrottleMs = 60;
-inline DWORD g_lastCastAttemptTickBySlot[SlotSummonerF + 1] = {};
 
 inline const CastTrace& LastTrace() {
     return g_lastTrace;
@@ -137,7 +133,6 @@ inline const char* CastFailureName(CastFailure failure) {
     case CastFailure::MissingChargeState: return "missing-charge-state";
     case CastFailure::MissingMouseInput: return "missing-mouse-input";
     case CastFailure::PositionProjectionFailed: return "position-projection-failed";
-    case CastFailure::Throttled: return "throttled";
     case CastFailure::CanCastRejected: return "can-cast-rejected";
     case CastFailure::NativeException: return "native-exception";
     default: return "unknown";
@@ -258,23 +253,6 @@ private:
 
 inline bool IsSupportedSlot(std::uint8_t slot) {
     return slot <= SlotSummonerF;
-}
-
-inline bool TryReserveSlotCast(std::uint8_t slot) {
-    if (!IsSupportedSlot(slot)) {
-        Fail(CastFailure::InvalidSlot);
-        return false;
-    }
-
-    const DWORD now = GetTickCount();
-    DWORD& lastTick = g_lastCastAttemptTickBySlot[slot];
-    if (lastTick != 0 && now - lastTick < kPerSlotCastThrottleMs) {
-        Fail(CastFailure::Throttled);
-        return false;
-    }
-
-    lastTick = now;
-    return true;
 }
 
 inline void Fail(CastFailure failure) {
@@ -428,10 +406,6 @@ inline bool CastValidated(CastKind kind,
         !virtualCursor.Apply(g_lastTrace.endPosition)) {
         return false;
     }
-    if (!TryReserveSlotCast(slot)) {
-        virtualCursor.Restore();
-        return false;
-    }
 
     __try {
         g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
@@ -533,10 +507,6 @@ inline bool DispatchTargetViaHud(std::uint8_t slot, uintptr_t target) {
     if (!virtualCursor.Apply(g_lastTrace.endPosition)) {
         return false;
     }
-    if (!TryReserveSlotCast(slot)) {
-        virtualCursor.Restore();
-        return false;
-    }
 
     __try {
         g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
@@ -606,10 +576,6 @@ inline bool DispatchCharge(CastKind kind,
     bool bypassTouched = false;
     ScopedVirtualCursor virtualCursor;
     if (!virtualCursor.Apply(position)) {
-        return false;
-    }
-    if (!TryReserveSlotCast(slot)) {
-        virtualCursor.Restore();
         return false;
     }
 
