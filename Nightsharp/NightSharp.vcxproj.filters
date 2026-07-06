@@ -31,6 +31,9 @@
     <Filter Include="Plugins\Champion\7UPAIO">
       <UniqueIdentifier>{C9D52DAC-04E7-E0CA-3B8C-2A1E0C32D147}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\KuroAIO">
+      <UniqueIdentifier>{4F86AC91-64FA-47D5-9C3C-B3F76A6B6E35}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Champion\OneKeyToWin">
       <UniqueIdentifier>{B5AFD60E-A465-B2FE-72A3-9FEB63B435F8}</UniqueIdentifier>
     </Filter>
@@ -338,11 +341,14 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\7UPAIO\Katarina.h">
-      <Filter>Plugins\Champion\7UPAIO</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Katarina.h">
+      <Filter>Plugins\Champion\KuroAIO</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\7UPAIO\Samira.h">
-      <Filter>Plugins\Champion\7UPAIO</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\KuroAIO.h">
+      <Filter>Plugins\Champion\KuroAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Samira.h">
+      <Filter>Plugins\Champion\KuroAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h">
       <Filter>Plugins\Champion</Filter>

@@ -174,8 +174,9 @@
     <ClInclude Include="overlay\VmtHook.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h" />
-    <ClInclude Include="Plugins\Champion\7UPAIO\Katarina.h" />
-    <ClInclude Include="Plugins\Champion\7UPAIO\Samira.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Katarina.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\KuroAIO.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Samira.h" />
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h" />
     <ClInclude Include="Plugins\Champion\EzrealMissileLifecyclePlugin.h" />
     <ClInclude Include="Plugins\Champion\EzrealSemiPlugin.h" />

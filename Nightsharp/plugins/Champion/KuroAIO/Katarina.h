@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace Plugins::AIO7UP::Katarina {
+namespace Plugins::KuroAIO::Katarina {
 
 inline Menu* MenuRoot = nullptr;
 inline Menu* QMenu = nullptr;
@@ -144,10 +144,6 @@ static AIHeroClient GetTarget(float range) {
     return best;
 }
 
-static int Tick() {
-    return SDK::Variables::TickCount();
-}
-
 static bool HaveRBuff() {
     return Player().HasBuff("katarinarsound");
 }
@@ -161,11 +157,11 @@ static bool IsOwnDagger(const Dagger& dagger) {
 }
 
 static bool IsDaggerReady(const Dagger& dagger, int minAgeMs = 1000) {
-    return IsOwnDagger(dagger) && Tick() - dagger.CreateTick >= minAgeMs;
+    return IsOwnDagger(dagger) && SDK::Variables::TickCount() - dagger.CreateTick >= minAgeMs;
 }
 
 static void PruneDaggers() {
-    const int now = Tick();
+    const int now = SDK::Variables::TickCount();
     Daggers.erase(
         std::remove_if(
             Daggers.begin(),
@@ -197,42 +193,109 @@ static int CountOwnDaggersNear(const AIBaseClient& target, float range) {
     return count;
 }
 
+static int SpellRank(const Spell& spell, int maxRank) {
+    return std::clamp(spell.Level(), 0, maxRank);
+}
+
+static float TotalAttackDamage() {
+    const auto player = Player();
+    return player.IsValid() ? player.TotalAttackDamage() : 0.0f;
+}
+
+static float BonusAttackSpeed() {
+    const auto player = Player();
+    return player.IsValid() ? std::max(0.0f, player.AttackSpeedMod() - 1.0f) : 0.0f;
+}
+
 static float PassiveDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
         return 0.0f;
     }
 
+    // Voracity / Sinister Steel: 68-240 based on champion level
+    // +60% bonus AD +70/80/90/100% AP based on champion level.
     static constexpr float baseDamage[] = {
         0.0f, 68.0f, 72.0f, 77.0f, 82.0f, 89.0f, 96.0f, 103.0f, 112.0f,
         121.0f, 131.0f, 142.0f, 154.0f, 166.0f, 180.0f, 194.0f, 208.0f,
         225.0f, 240.0f
     };
     const int level = std::clamp(player.Level(), 1, 18);
-    float apRatio = 1.0f;
+    float apRatio = 1.00f;
     if (level < 6) {
-        apRatio = 0.55f;
-    } else if (level < 11) {
         apRatio = 0.70f;
+    } else if (level < 11) {
+        apRatio = 0.80f;
     } else if (level < 16) {
-        apRatio = 0.85f;
+        apRatio = 0.90f;
     }
 
     const float raw =
         baseDamage[level] +
         apRatio * player.AP() +
-        0.75f * player.BonusAttackDamage();
+        0.60f * player.BonusAttackDamage();
     return player.CalculateMagicDamage(target, raw);
 }
 
-static float RDamage(const AIBaseClient& target) {
-    if (!target.IsValid()) {
+static float QDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
         return 0.0f;
     }
-    float damage = R.GetDamage(target);
-    if (damage <= 0.0f) {
-        damage = Player().GetSpellDamage(target, SpellSlot::R);
+
+    static constexpr float baseDamage[] = { 0.0f, 80.0f, 115.0f, 150.0f, 185.0f, 220.0f };
+    const int rank = SpellRank(Q, 5);
+    if (rank <= 0) {
+        return 0.0f;
     }
+
+    return player.CalculateMagicDamage(target, baseDamage[rank] + 0.40f * player.AP());
+}
+
+static float EDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+
+    static constexpr float baseDamage[] = { 0.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f };
+    const int rank = SpellRank(E, 5);
+    if (rank <= 0) {
+        return 0.0f;
+    }
+
+    return player.CalculateMagicDamage(
+        target,
+        baseDamage[rank] + 0.40f * TotalAttackDamage() + 0.25f * player.AP());
+}
+
+static float RDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+
+    const int rank = SpellRank(R, 3);
+    if (rank <= 0) {
+        return 0.0f;
+    }
+
+    // Death Lotus full channel damage to one target.
+    // Magic: 375/562.5/750 +285% AP.
+    // Physical: 240% (+750% per 100% bonus AS) bonus AD.
+    // On-hit item damage is not added here because the local SDK does not expose
+    // a reliable generic on-hit damage evaluator in this file.
+    static constexpr float baseMagicDamage[] = { 0.0f, 375.0f, 562.5f, 750.0f };
+    const float magicDamage = player.CalculateMagicDamage(
+        target,
+        baseMagicDamage[rank] + 2.85f * player.AP());
+    const float physicalDamage = player.CalculatePhysicalDamage(
+        target,
+        (2.40f + 7.50f * BonusAttackSpeed()) * player.BonusAttackDamage());
+
+    const float damage = magicDamage + physicalDamage;
+
+    // Giữ nguyên hệ số khoảng cách của R theo yêu cầu.
     return target.DistanceToPlayer() <= 350.0f ? damage : damage * 0.60f;
 }
 
@@ -380,7 +443,7 @@ static bool TryEKillSteal() {
     }
 
     for (const auto& target : EnemyHeroes(E.Range)) {
-        const float damage = E.GetDamage(target) +
+        const float damage = EDamage(target) +
             (!HaveRBuff() ? Damage::GetAutoAttackDamage(Player(), target) : 0.0f);
         if (target.Health() <= damage && CastE(target.Position())) {
             return true;
@@ -421,7 +484,7 @@ static bool TryQKillSteal() {
     }
 
     for (const auto& target : EnemyHeroes(Q.Range)) {
-        if (target.Health() <= Q.GetDamage(target) && CastQ(target)) {
+        if (target.Health() <= QDamage(target) && CastQ(target)) {
             return true;
         }
     }
@@ -435,7 +498,7 @@ static bool TryEQKillSteal() {
 
     const auto target = GetTarget(E.Range + Q.Range);
     if (!ValidHeroTarget(target, E.Range + Q.Range) ||
-        target.Health() > Q.GetDamage(target)) {
+        target.Health() > QDamage(target)) {
         return false;
     }
 
@@ -584,7 +647,7 @@ static void LastHit() {
 
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (ValidTarget(minion, Q.Range) &&
-            minion.Health() <= Q.GetDamage(minion) &&
+            minion.Health() <= QDamage(minion) &&
             CastQ(minion)) {
             return;
         }
@@ -599,7 +662,7 @@ static void UpdateOrbwalkerState() {
 
     if (HaveRBuff()) {
         if (!UpdateR) {
-            LastR = Tick();
+            LastR = SDK::Variables::TickCount();
         }
         UpdateR = true;
         Orbwalker::AttackEnabled(false);
@@ -607,13 +670,13 @@ static void UpdateOrbwalkerState() {
 
         if (!Key(RMenu, "NeverCancelR") &&
             player.HealthPercent() <= 50.0f &&
-            Tick() - LastR > 500 &&
-            Tick() - LastR < 5000) {
+            SDK::Variables::TickCount() - LastR > 500 &&
+            SDK::Variables::TickCount() - LastR < 5000) {
             const auto target = BestDaggerTarget(E.Range + 400.0f);
             if (ValidHeroTarget(target, E.Range + 400.0f)) {
                 const float damage =
-                    (Q.IsReady() ? Q.GetDamage(target) : 0.0f) +
-                    (E.IsReady() ? E.GetDamage(target) : 0.0f) +
+                    (Q.IsReady() ? QDamage(target) : 0.0f) +
+                    (E.IsReady() ? EDamage(target) : 0.0f) +
                     PassiveDamage(target) *
                         static_cast<float>(CountOwnDaggersNear(target, 350.0f));
                 if (target.Health() <= damage) {
@@ -714,7 +777,7 @@ static void OnObjectCreate(const GameObject& object) {
         return;
     }
 
-    Daggers.push_back({ AIMinionClient(object.Handle()), object.Position(), Tick(), networkId });
+    Daggers.push_back({ AIMinionClient(object.Handle()), object.Position(), SDK::Variables::TickCount(), networkId });
 }
 
 static void OnObjectDelete(const GameObject& object) {
@@ -771,7 +834,7 @@ static void OnDraw() {
 }
 
 static void BuildMenu() {
-    MenuRoot = new Menu("champion.7upaio.katarina", "7UP - Katarina", true);
+    MenuRoot = new Menu("champion.kuroaio.katarina", "Kuro - Katarina", true);
     MenuRoot->Add(new MenuList(
         "KataComboMode",
         "Combo Mode",
@@ -807,6 +870,36 @@ static void BuildMenu() {
     MenuRoot->Attach();
 }
 
+static void RemoveMenu() {
+    if (!MenuRoot) {
+        return;
+    }
+
+    if (auto* item = MenuRoot->Get<MenuList>("KataComboMode")) {
+        item->RemovePermashow();
+    }
+    if (auto* item = MenuRoot->Get<MenuKeyBind>("Turret")) {
+        item->RemovePermashow();
+    }
+    if (auto* item = EMenu ? EMenu->Get<MenuKeyBind>("SaveEIfNoDaggers") : nullptr) {
+        item->RemovePermashow();
+    }
+    if (auto* item = RMenu ? RMenu->Get<MenuKeyBind>("RCombo") : nullptr) {
+        item->RemovePermashow();
+    }
+    if (auto* item = RMenu ? RMenu->Get<MenuKeyBind>("NeverCancelR") : nullptr) {
+        item->RemovePermashow();
+    }
+
+    MenuManager::Instance().Remove(MenuRoot);
+    MenuRoot = nullptr;
+    QMenu = nullptr;
+    WMenu = nullptr;
+    EMenu = nullptr;
+    RMenu = nullptr;
+    DrawMenu = nullptr;
+}
+
 static void OnGameLoad() {
     const auto player = Player();
     if (!player.IsValid() || Loaded) {
@@ -827,7 +920,7 @@ static void OnGameLoad() {
     Drawing::OnDraw += &OnDraw;
 
     Loaded = true;
-    Game::Print("<font color='#b756c5' size='20'>7UP - Katarina loaded</font>");
+    Game::Print("<font color='#b756c5' size='20'>Kuro - Katarina loaded</font>");
 }
 
 static void OnUnload() {
@@ -844,7 +937,8 @@ static void OnUnload() {
     Orbwalker::SetOrbwalkerPosition({});
 
     Daggers.clear();
+    RemoveMenu();
     Loaded = false;
 }
 
-} // namespace Plugins::AIO7UP::Katarina
+} // namespace Plugins::KuroAIO::Katarina

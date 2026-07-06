@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace Plugins::AIO7UP::Samira {
+namespace Plugins::KuroAIO::Samira {
 
 using SDK::Core::Utils::AutoAttack;
 
@@ -318,7 +318,7 @@ static void ApplyDefaultSettings() {
 }
 
 static void BuildMenu() {
-    MenuRoot = new Menu("champion.7upaio.samira", "7UP - Samira", true);
+    MenuRoot = new Menu("champion.kuroaio.samira", "Kuro - Samira", true);
 
     QMenu = MenuRoot->AddSubMenu(new Menu("Q Samira Settings", "Q Settings"));
     QMenu->Add(new MenuBool("QGunCombo", "Q Gun Combo"));
@@ -373,6 +373,7 @@ static void Check();
 static void Combo();
 static void HarassAndClear();
 static void JungleClear();
+static void RemoveMenu();
 static void OnUnload();
 
 static void OnGameLoad() {
@@ -398,7 +399,7 @@ static void OnGameLoad() {
     Drawing::OnDraw += &OnDraw;
 
     Loaded = true;
-    Game::Print("<font color='#b756c5' size='20'>7UP - Samira loaded</font>");
+    Game::Print("<font color='#b756c5' size='20'>Kuro - Samira loaded</font>");
 }
 
 static void OnBeforeAttack(OrbwalkingActionArgs&) {
@@ -829,6 +830,19 @@ static void OnDraw() {
         64);
 }
 
+static void RemoveMenu() {
+    if (MenuRoot) {
+        MenuManager::Instance().Remove(MenuRoot);
+    }
+    MenuRoot = nullptr;
+    QMenu = nullptr;
+    WMenu = nullptr;
+    EMenu = nullptr;
+    RMenu = nullptr;
+    MiscMenu = nullptr;
+    KeysMenu = nullptr;
+}
+
 static void OnUnload() {
     if (!Loaded) {
         return;
@@ -840,8 +854,9 @@ static void OnUnload() {
     Orbwalker::OnAttack -= &OnAttack;
     Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
+    RemoveMenu();
 
     Loaded = false;
 }
 
-} // namespace Plugins::AIO7UP::Samira
+} // namespace Plugins::KuroAIO::Samira

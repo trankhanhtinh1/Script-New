@@ -22,6 +22,7 @@
 #include "Champion/JaxSemiPlugin.h"
 #include "Champion/XerathSemiPlugin.h"
 #include "Champion/7UPAIO/7UPAIO.h"
+#include "Champion/KuroAIO/KuroAIO.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../DebugLog.h"
 
@@ -125,6 +126,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<JaxSemiPlugin>();
         PluginManager::Get().Register<XerathSemiPlugin>();
         PluginManager::Get().Register<AIO7UPPlugin>();
+        PluginManager::Get().Register<KuroAIOPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else
