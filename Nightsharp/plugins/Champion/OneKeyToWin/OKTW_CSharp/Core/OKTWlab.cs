@@ -29,7 +29,7 @@ using EloBuddy;
             Game.OnUpdate += Game_OnGameUpdate;
             Game.OnSendPacket += Game_OnSendPacket;
             Game.OnProcessPacket += Game_OnProcessPacket;
-            Obj_AI_Base.OnBuffGain += Obj_AI_Base_OnBuffAdd;
+            Obj_AI_Base.OnBuffAdd += Obj_AI_Base_OnBuffAdd;
             AIHeroClient.OnDamage += AIHeroClient_OnDamage;
         }
 
@@ -67,7 +67,7 @@ using EloBuddy;
 
         }
 
-        private void Obj_AI_Base_OnBuffAdd(Obj_AI_Base sender, Obj_AI_BaseBuffGainEventArgs args)
+        private void Obj_AI_Base_OnBuffAdd(Obj_AI_Base sender, Obj_AI_BaseBuffAddEventArgs args)
         {
            return;
             if (!sender.IsMe)

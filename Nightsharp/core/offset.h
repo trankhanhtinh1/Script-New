@@ -479,10 +479,9 @@ namespace SpellBookLayout {
         constexpr uintptr_t Hud_OnDisconnect        = 0x6D1200;
         constexpr uintptr_t ProcessCastSpell        = ControlRuntime::ProcessCastSpell;
         constexpr uintptr_t OnUpdateChargeableSpell = ControlRuntime::UpdateChargeableSpell;
-        constexpr uintptr_t OnBuffAdd               = 0x21DA30; //OnBuffGain
+        constexpr uintptr_t OnBuffAdd               = 0x21DA30;
         constexpr uintptr_t OnBuffRemove            = 0x21DB50; //OnBuffLose
         constexpr uintptr_t OnBuffUpdate            = 0x21D5B0;
-        constexpr uintptr_t OnBuffGain              = 0xC1F650;
         // AssignNetworkId: writes networkId to obj+0xCC, inserts into
         // ObjectManager tree, then calls post-init vfunc. Hook this instead
         // of the raw tree-insert so the object is fully ready when event fires.
@@ -774,19 +773,30 @@ namespace SpellBookLayout {
     } // namespace SpellDataResourceLayout
 
     // ── Extended SpellCastInfo layout (event-received version) ───────────
-    // IDA 13337 verification (Jun/2026): sub_959810 copies event CastInfo
+    // IDA 13337 verification (Jul/2026): sub_9594C0 copies event CastInfo
     // field-by-field into missile CastInfoBase (0x2C0). The position fields
     // (StartPos/EndPos/CastPos) use the SAME offsets as SpellCastInfoLayout
-    // and MissileClient::CastInfoBase. Verified via sub_9700D0 (OnMissileCreate).
-    // Other fields (Slot, IsSpell, etc.) differ from SpellCastInfoLayout.
+    // and MissileClient::CastInfoBase. Verified via sub_970190 (OnMissileCreate).
+    //
+    // CRITICAL FIX (Jul/2026): SrcIndex was 0x98 (wrong), actually 0xA0.
+    //   Confirmed by 7+ functions calling FindObject(CastInfo+0xA0).
+    // TargetIndex at 0x9C was wrong — 0x9C is a float field (DesignerCastTime).
+    //   The actual target is in a vector-like array:
+    //     +0x110 = pointer to target entry array (each entry 32 bytes)
+    //     +0x118 = entry count
+    //   First DWORD of each entry = target local object id/index.
+    //   Confirmed by sub_943390, OnSpellImpact (sub_9768E0).
+    // CastDelay was 0x118 (conflicts with TargetArrayCount), actually 0x13C.
+    //   Confirmed by sub_961900: *(float*)(CastInfo+0x13C) used as cast delay.
     namespace SpellCastInfoEventLayout {
         constexpr auto SpellData        = 0x0;
-        constexpr auto SrcIndex         = 0x98;
-        constexpr auto TargetIndex      = 0x9C;
+        constexpr auto SrcIndex         = 0xA0;
+        constexpr auto TargetArrayPtr   = 0x110;
+        constexpr auto TargetArrayCount = 0x118;
         constexpr auto StartPos         = 0xD0;
         constexpr auto EndPos           = 0xDC;
         constexpr auto CastPos          = 0xE8;
-        constexpr auto CastDelay        = 0x118;
+        constexpr auto CastDelay        = 0x13C;
         constexpr auto IsSpell          = 0x134;
         constexpr auto IsSpecialAttack  = 0x13E;
         constexpr auto IsAuto           = 0x141;
@@ -795,6 +805,7 @@ namespace SpellBookLayout {
         constexpr auto IsSpecialAttackAlt = 0x149;
         constexpr auto IsAutoAlt          = 0x14A;
         constexpr auto SlotAlt            = 0x154;
+        constexpr auto TargetArrayEntryStride = 32;
     } // namespace SpellCastInfoEventLayout
 
     // (EventSpellCastInfoLayout removed Apr 25/2026 - duplicate of SpellCastInfoEventLayout above; old schema)
@@ -1017,7 +1028,8 @@ namespace SpellBookLayout {
         constexpr auto SpellDataPtr  = CastInfoBase + 0x00;
         constexpr auto SpellName     = CastInfoBase + 0x20;
         constexpr auto MissileName   = CastInfoBase + 0x48;
-        constexpr auto TargetIndex   = CastInfoBase + 0x9C;
+        constexpr auto TargetArrayPtr   = CastInfoBase + 0x110;
+        constexpr auto TargetArrayCount = CastInfoBase + 0x118;
         constexpr auto CasterIndex   = CastInfoBase + 0xA0;
         constexpr auto MissileNetId  = CastInfoBase + 0xAC;
         constexpr auto ObjectNetId   = All::NetId;
@@ -1033,7 +1045,8 @@ namespace SpellBookLayout {
         constexpr auto Slot                      = 0x08;
         constexpr auto SpellName                 = 0x20;
         constexpr auto MissileName               = 0x48;
-        constexpr auto TargetIndex               = 0x9C;
+        constexpr auto TargetArrayPtr              = 0x110;
+        constexpr auto TargetArrayCount             = 0x118;
         constexpr auto CreatePacketCasterIndex   = 0xA0;
         constexpr auto CreatePacketMissileNetId  = 0xAC;
         constexpr auto StartPos                  = 0xD0;

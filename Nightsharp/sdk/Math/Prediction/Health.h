@@ -107,36 +107,128 @@ namespace detail {
 inline std::unordered_map<int, PredictedDamage> ActiveAttacks;
 inline bool Initialized = false;
 
+// ── Diagnostics (bounded) ────────────────────────────────────────────────────
+// ShouldWait / last-hit timing depends ENTIRELY on ActiveAttacks being fed by
+// the events below. These counters pinpoint which filter kills the feed when
+// farm pacing "has no pause": read the periodic [HPTrack] line in the debug log.
+struct TrackDiag {
+    long seen = 0;             // OnDoCast events that reached us
+    long rejSender = 0;        // sender invalid / not resolvable
+    long rejAllyOrType = 0;    // not ally, or not minion/turret
+    long rejDeadVisible = 0;   // sender dead/invisible/too far
+    long rejNotAuto = 0;       // not an auto attack
+    long rejNoTargetNet = 0;   // TargetNetworkId == 0
+    long rejTargetInvalid = 0; // target resolve failed / dead
+    long accepted = 0;         // inserted into ActiveAttacks
+    int  lastLogTick = 0;
+    int  detailLogs = 0;       // first few accepted/rejected logged in detail
+};
+inline TrackDiag Diag;
+
 // ── OnDoCast: register auto-attack damage ────────────────────────────────────
 inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    // Resolve sender from args.Sender
-    AIBaseClient sender;
-    if (args.Sender.IsValid()) {
-        sender = AIBaseClient(args.Sender.Ptr);
+    ++Diag.seen;
+
+    // Resolve sender from args.Sender.
+    //
+    // IMPORTANT: do NOT trust wrapper Type() here. AIBaseClient(address) stamps
+    // ObjectType::GameObject (the ctor default) into the handle, and Type()
+    // only infers when the stamp is Unknown — so Type() returned GameObject(11)
+    // for every minion/turret and this filter rejected 100% of ally attacks,
+    // leaving ActiveAttacks empty (=> no last-hit pause, broken ShouldWait).
+    // Classify by asking the game's typed managers directly instead.
+    if (!args.Sender.IsValid()) { ++Diag.rejSender; return; }
+    const uintptr_t senderPtr = args.Sender.Ptr;
+    const bool isMinion = ::Core::ObjectManager::ManagerContains(
+        ::Core::ObjectManager::ManagerKind::Minions, senderPtr);
+    const bool isTurret = !isMinion && ::Core::ObjectManager::ManagerContains(
+        ::Core::ObjectManager::ManagerKind::Turrets, senderPtr);
+
+    // Stamp the REAL type on the wrapper so downstream Type() checks work
+    // (turret damage override, GetAggroTurret/HasTurretAggro/HasMinionAggro).
+    AIBaseClient sender(
+        senderPtr,
+        isTurret ? ::Core::Objects::ObjectType::AITurretClient
+                 : ::Core::Objects::ObjectType::AIMinionClient);
+
+    if (!sender.IsValid()) { ++Diag.rejSender; return; }
+    if (!sender.IsAlly() || (!isMinion && !isTurret)) {
+        ++Diag.rejAllyOrType;
+        return;
     }
 
-    if (!sender.IsValid() || !sender.IsAlly()) return;
-    if (sender.Type() != ::Core::Objects::ObjectType::AIMinionClient
-        && sender.Type() != ::Core::Objects::ObjectType::AITurretClient) return;
-
-    // DLL: sender.IsValidTarget(3000f, checkTeam: false)
-    // IsValidTarget checks: IsValid, !IsDead, !IsZombie, IsVisible, distance <= range
-    if (sender.IsDead() || !sender.IsVisible()) return;
+    // DLL: sender.IsValidTarget(3000f, checkTeam: false). We keep dead+distance
+    // but deliberately DROP the IsVisible() check: the Visible byte (All::0x308)
+    // reads false for a large share of nearby ALLY minions on 26.x and was
+    // silently discarding their attacks (HPTrack rejDeadVis=364 in one lane
+    // phase) -> ActiveAttacks stayed empty -> no last-hit pause. Visibility is
+    // irrelevant for tracking our own minions' attacks anyway.
+    if (sender.IsDead()) { ++Diag.rejDeadVisible; return; }
     const auto player = SDK::ObjectManager::Player();
-    if (player.IsValid() && sender.Distance(player) > 3000.0f) return;
+    if (player.IsValid() && sender.Distance(player) > 3000.0f) { ++Diag.rejDeadVisible; return; }
 
-    // NightSharp: args.IsAutoAttack is set by DecodeDoCast
-    if (!args.IsAutoAttack) {
-        // Also check by spell name as fallback
-        std::string spellName(args.ScriptName);
-        if (!SDK::Utils::AutoAttack::IsAutoAttack(spellName)) return;
+    // Auto-attack gate: minions and turrets only ever "cast" their basic attack,
+    // so a DoCast from them IS an auto attack by definition. The castInfo IsAuto
+    // flag and resource ScriptName are unreliable for non-hero casters here
+    // (ScriptName decodes as 0xFF garbage) and rejected every ally minion attack
+    // (HPTrack rejAuto=238). EnsoulSharp's name check works only because its
+    // runtime resolves SData.Name; ours does not for these casters — so no
+    // flag/name gate for minion/turret senders.
+
+    // Resolve target. Same disease as the sender gate: routing through
+    // GetUnitByNetworkId<AIMinionClient> silently failed for every ally attack
+    // (HPTrack rejTgt=58, acc=0) because of the wrapper type-inference layer.
+    // The decoder already resolved the target object at event time — use its
+    // pointer directly and validate minion-ness via the game's minion manager.
+    uintptr_t targetPtr = args.Target.IsValid() ? args.Target.Ptr : 0;
+    if (!targetPtr && args.TargetNetworkId != 0) {
+        targetPtr = ::Core::ObjectManager::FindByNetworkId(args.TargetNetworkId);
     }
-
-    // Resolve target
-    if (args.TargetNetworkId == 0) return;
-    AIMinionClient target = SDK::ObjectManager::GetUnitByNetworkId<AIMinionClient>(
-        static_cast<int>(args.TargetNetworkId));
-    if (!target.IsValid() || target.IsDead()) return;
+    // Salvage by SLOT: TargetIndex is the local object id from CastInfo's target
+    // array. If strict index resolution failed, the low word is still the
+    // object-manager slot; the minion-manager membership check below keeps it safe.
+    const std::uint32_t targetLocalId = static_cast<std::uint32_t>(args.TargetIndex);
+    if (!targetPtr && targetLocalId != 0 && targetLocalId != 0xFFFFFFFFu) {
+        const auto view = ::Core::ObjectManager::ReadObjectArrayView(
+            CoreRuntime::GetContext().objectManager);
+        const std::uint32_t slot = targetLocalId & 0xFFFFu;
+        if (view.IsValid() && slot < view.count) {
+            const uintptr_t candidate = Globals::Read<uintptr_t>(
+                view.items + static_cast<uintptr_t>(slot) * sizeof(uintptr_t));
+            if (::Core::ObjectManager::IsLiveEntry(candidate)) {
+                targetPtr = candidate;
+            }
+        }
+    }
+    if (!targetPtr) {
+        ++Diag.rejNoTargetNet;
+        if (Diag.detailLogs < 12) {
+            ++Diag.detailLogs;
+            NightSharpDebug::Logf(
+                "[HPTrack] reject target-resolve tIdx=%d tNet=0x%X tPtr=0x%p sender=%s",
+                args.TargetIndex,
+                args.TargetNetworkId,
+                reinterpret_cast<void*>(args.Target.Ptr),
+                sender.CharacterName().c_str());
+        }
+        return;
+    }
+    if (!::Core::ObjectManager::ManagerContains(
+            ::Core::ObjectManager::ManagerKind::Minions, targetPtr)) {
+        ++Diag.rejTargetInvalid;
+        return;
+    }
+    AIMinionClient target(targetPtr); // ctor stamps ObjectType::AIMinionClient
+    if (!target.IsValid() || target.IsDead()) { ++Diag.rejTargetInvalid; return; }
+    ++Diag.accepted;
+    if (Diag.detailLogs < 6) {
+        ++Diag.detailLogs;
+        NightSharpDebug::Logf(
+            "[HPTrack] accept sender=%s -> target=%s net=%u",
+            sender.CharacterName().c_str(),
+            target.CharacterName().c_str(),
+            args.TargetNetworkId);
+    }
 
     PredictedDamage pd;
     pd.StartTick = SDK::Variables::TickCount() - SDK::Game::Ping() / 2;
@@ -210,6 +302,18 @@ inline void OnUpdate(const Events::GameUpdateEventArgs&) {
         } else {
             ++it;
         }
+    }
+
+    // Periodic tracking-health summary (every 5s). If `acc` stays 0 while lane
+    // minions are fighting, the feed is dead and the rej* counter that grows
+    // names the exact filter responsible — that is why farm has no wait-pause.
+    if (now - Diag.lastLogTick >= 5000) {
+        Diag.lastLogTick = now;
+        NightSharpDebug::Logf(
+            "[HPTrack] seen=%ld acc=%ld rejSender=%ld rejAllyType=%ld rejDeadVis=%ld rejAuto=%ld rejNet=%ld rejTgt=%ld active=%zu",
+            Diag.seen, Diag.accepted, Diag.rejSender, Diag.rejAllyOrType,
+            Diag.rejDeadVisible, Diag.rejNotAuto, Diag.rejNoTargetNet,
+            Diag.rejTargetInvalid, ActiveAttacks.size());
     }
 }
 

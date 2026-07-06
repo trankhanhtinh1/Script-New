@@ -576,7 +576,6 @@ namespace Hooks {
     constexpr uintptr_t OnBuffAdd               = ::Offset::Hooks::OnBuffAdd;
     constexpr uintptr_t OnBuffRemove            = ::Offset::Hooks::OnBuffRemove;
     constexpr uintptr_t OnBuffUpdate            = ::Offset::Hooks::OnBuffUpdate;
-    constexpr uintptr_t OnBuffGain              = ::Offset::Hooks::OnBuffGain;
     constexpr uintptr_t OnCreate                = ::Offset::Hooks::OnCreate;
     constexpr uintptr_t OnDelete                = ::Offset::Hooks::OnDelete;
     constexpr uintptr_t OnMissileCreate         = ::Offset::Hooks::OnMissileCreate;
@@ -624,7 +623,6 @@ enum HookId : int {
     ProcessWorldEvent,
     ProcessCastSpell,
     OnUpdateChargeableSpell,
-    OnBuffGain,
     OnCreate,
     OnDelete,
     OnMissileCreate,
@@ -663,7 +661,6 @@ inline constexpr HookSpec kHookSpecs[HookCount] = {
     { "ProcessWorldEvent",       Offsets::ProcessWorldEvent },
     { "ProcessCastSpell",        Offsets::ProcessCastSpell },
     { "OnUpdateChargeableSpell", Offsets::OnUpdateChargeableSpell },
-    { "OnBuffGain",              Offsets::OnBuffGain },
     { "OnCreate",                Offsets::OnCreate },
     { "OnDelete",                Offsets::OnDelete },
     { "OnMissileCreate",         Offsets::OnMissileCreate },
@@ -833,9 +830,6 @@ inline const char* InstallNote(HookId id) {
     if (id == OnBuffUpdate) {
         return "BuffCounterSet event bridge; stack/count refresh candidate";
     }
-    if (id == OnBuffGain) {
-        return "native AIBaseClient OnBuffGain/OnBuffAdd dispatcher";
-    }
     if (id == OnCreate) {
         return "AssignNetworkId; RCX object, RDX networkId. Call original first";
     }
@@ -890,7 +884,6 @@ inline bool IsEventGated(HookId id) {
         case OnBuffAdd:
         case OnBuffRemove:
         case OnBuffUpdate:
-        case OnBuffGain:
         case OnCreate:
         case OnDelete:
         case OnMissileCreate:
@@ -1281,7 +1274,6 @@ extern "C" __declspec(dllexport) inline const uintptr_t g_CoreHookTestRVAs[] = {
     CoreHookTest::Offsets::ProcessWorldEvent,
     CoreHookTest::Offsets::ProcessCastSpell,
     CoreHookTest::Offsets::OnUpdateChargeableSpell,
-    CoreHookTest::Offsets::OnBuffGain,
     CoreHookTest::Offsets::OnCreate,
     CoreHookTest::Offsets::OnDelete,
     CoreHookTest::Offsets::OnMissileCreate,

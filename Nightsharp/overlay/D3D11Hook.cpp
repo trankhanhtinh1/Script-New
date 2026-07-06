@@ -420,6 +420,11 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             : DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
+    if (NightSharpMenu::showMenu &&
+        SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
+        return TRUE;
+    }
+
     // Let ImGui process input first
     if (ImGui::GetCurrentContext() &&
         ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
@@ -450,11 +455,8 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     // Dispatch to SDK WndProc subscribers (cursor, target selector, chat, plugins, etc.)
     SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
 
-    // Dispatch key events to MenuKeyBind state machines (updates Active field)
-    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP) {
-        const bool down = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
-        SDK::UI::MenuManager::Instance().DispatchKey(static_cast<int>(wParam), down);
-    }
+    // Dispatch key/mouse events to MenuKeyBind state machines.
+    SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 
     // Forward to original game WndProc
     return g_originalWndProc

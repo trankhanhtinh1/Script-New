@@ -134,6 +134,9 @@ inline void Initialize() {
 }
 
 inline bool ContainsCollisionObject(const PredictionInput& input, CollisionableObjects object) {
+    if (object == CollisionableObjects::Building) {
+        return false;
+    }
     return input.CollisionObjects.contains(object);
 }
 
@@ -154,6 +157,13 @@ inline Vector3 ServerPositionOrPosition(const AIBaseClient& unit) {
     return serverPosition.IsValid() && !serverPosition.IsZero()
         ? serverPosition
         : unit.Position();
+}
+
+inline bool IsStructureObject(const GameObject& object) {
+    const auto type = object.Type();
+    return type == ::Core::Objects::ObjectType::AITurretClient ||
+           type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+           type == ::Core::Objects::ObjectType::HQClient;
 }
 
 inline bool ContainsAnyLower(const std::string& value,
@@ -196,6 +206,10 @@ inline bool IsCollisionMinionCandidate(const AIMinionClient& minion) {
         return false;
     }
 
+    if (IsStructureObject(minion)) {
+        return false;
+    }
+
     if (IsJungleCompanionObject(minion) || !minion.IsTargetable()) {
         return false;
     }
@@ -216,6 +230,10 @@ inline bool IsValidCollisionTarget(const GameObject& object,
                                    const PredictionInput& input,
                                    float range) {
     if (object.Compare(input.Unit)) {
+        return false;
+    }
+
+    if (IsStructureObject(object)) {
         return false;
     }
 
@@ -302,7 +320,7 @@ inline bool IsPointNearProjection(const Vec2& point,
 }
 
 inline void AddIfUnique(std::vector<AIBaseClient>& result, const GameObject& object) {
-    if (!object.IsValid()) {
+    if (!object.IsValid() || IsStructureObject(object)) {
         return;
     }
 
