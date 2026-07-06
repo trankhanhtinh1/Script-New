@@ -252,6 +252,92 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
     context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs);
 }
 
+namespace OrbwalkingDetail {
+
+struct AutoAttackResetSlotEntry {
+    const char* ChampionName;
+    SpellSlot Slot;
+};
+
+inline bool IsKnownAutoAttackResetSlot(const std::string& championName, int slot) {
+    if (championName.empty()) {
+        return false;
+    }
+
+    // Keep form/weapon-specific resets in the spell-name database so a shared
+    // slot does not reset the timer in the wrong stance/form.
+    static constexpr AutoAttackResetSlotEntry entries[] = {
+        { "Aatrox", SpellSlot::E },
+        { "Ashe", SpellSlot::Q },
+        { "Belveth", SpellSlot::Q },
+        { "Blitzcrank", SpellSlot::E },
+        { "Briar", SpellSlot::Q },
+        { "Briar", SpellSlot::W },
+        { "Camille", SpellSlot::Q },
+        { "Chogath", SpellSlot::E },
+        { "Darius", SpellSlot::W },
+        { "DrMundo", SpellSlot::E },
+        { "Ekko", SpellSlot::E },
+        { "Fiora", SpellSlot::E },
+        { "Fizz", SpellSlot::W },
+        { "Garen", SpellSlot::Q },
+        { "Graves", SpellSlot::E },
+        { "Gwen", SpellSlot::E },
+        { "Hecarim", SpellSlot::E },
+        { "Illaoi", SpellSlot::W },
+        { "Jax", SpellSlot::W },
+        { "Kassadin", SpellSlot::W },
+        { "Katarina", SpellSlot::E },
+        { "Kayle", SpellSlot::E },
+        { "Kindred", SpellSlot::Q },
+        { "Leona", SpellSlot::Q },
+        { "Lucian", SpellSlot::Q },
+        { "Lucian", SpellSlot::W },
+        { "Lucian", SpellSlot::E },
+        { "Lucian", SpellSlot::R },
+        { "Malphite", SpellSlot::W },
+        { "MasterYi", SpellSlot::W },
+        { "MonkeyKing", SpellSlot::Q },
+        { "Nasus", SpellSlot::Q },
+        { "Nautilus", SpellSlot::W },
+        { "Nilah", SpellSlot::E },
+        { "Olaf", SpellSlot::W },
+        { "Pantheon", SpellSlot::W },
+        { "Kaisa", SpellSlot::R },
+        { "Quinn", SpellSlot::E },
+        { "RekSai", SpellSlot::Q },
+        { "Rell", SpellSlot::W },
+        { "Renekton", SpellSlot::W },
+        { "Rengar", SpellSlot::Q },
+        { "Riven", SpellSlot::Q },
+        { "Sejuani", SpellSlot::E },
+        { "Sett", SpellSlot::Q },
+        { "Shyvana", SpellSlot::Q },
+        { "Sivir", SpellSlot::W },
+        { "Talon", SpellSlot::Q },
+        { "Trundle", SpellSlot::Q },
+        { "Vayne", SpellSlot::Q },
+        { "Vi", SpellSlot::E },
+        { "Viego", SpellSlot::W },
+        { "Volibear", SpellSlot::Q },
+        { "XinZhao", SpellSlot::Q },
+        { "Yorick", SpellSlot::Q },
+        { "Zac", SpellSlot::Q },
+        { "Zeri", SpellSlot::E },
+        { "Zoe", SpellSlot::R },
+    };
+
+    for (const auto& entry : entries) {
+        if (slot == static_cast<int>(entry.Slot) &&
+            championName == entry.ChampionName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace OrbwalkingDetail
+
 inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const {
     if (!Events::IsLocalPlayer(args.Sender)) {
         return false;
@@ -269,17 +355,20 @@ inline bool OrbwalkerBase::IsLocalAutoAttackReset(const Events::ProcessSpellEven
 
 inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender,
                                                       int slot) const {
-    if (!Events::IsLocalPlayer(sender) ||
-        slot != static_cast<int>(SpellSlot::Q)) {
+    if (!Events::IsLocalPlayer(sender)) {
         return false;
     }
 
+    std::string championName;
     const auto player = GameObjects::Player();
     if (player.IsValid()) {
-        return player.CharacterName() == "Rengar";
+        championName = player.CharacterName();
+    }
+    if (championName.empty()) {
+        championName = sender.CharacterName;
     }
 
-    return std::string(sender.CharacterName) == "Rengar";
+    return OrbwalkingDetail::IsKnownAutoAttackResetSlot(championName, slot);
 }
 
 inline void OrbwalkerBase::OnDraw() {
