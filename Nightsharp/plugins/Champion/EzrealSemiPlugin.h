@@ -262,13 +262,7 @@ private:
         input.RangeCheckFrom = m_q.RangeCheckFrom;
         input.AoE = false;
         input.MaxCollisionCount = 0.0f;
-        input.CollisionObjects = {
-            SDK::CollisionableObjects::Minions,
-            SDK::CollisionableObjects::Heroes,
-            SDK::CollisionableObjects::YasuoWall,
-            SDK::CollisionableObjects::SamiraWall,
-            SDK::CollisionableObjects::MelWall,
-        };
+        input.CollisionObjects = m_q.CollisionObjects;
         return input;
     }
 

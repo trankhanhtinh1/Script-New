@@ -56,7 +56,7 @@ inline std::vector<PossibleTarget> GetPossibleTargets(PredictionInput input) {
         // C#: Movement.GetPrediction(input, false, false)
         // C++ overload: (input, checkCollision, checkRange)
         const auto prediction = Movement::GetPrediction(input, false, false);
-        if (prediction.Hitchance >= HitChance::High) {
+        if (prediction.Hitchance >= HitChance::Medium) {
             result.push_back({ prediction.GetUnitPosition().To2D(), enemy });
         }
     }
@@ -121,6 +121,12 @@ inline PredictionOutput MakeOutput(const PredictionInput& input,
 namespace Circle {
 
 inline PredictionOutput GetCirclePrediction(PredictionInput input) {
+    if (!input.Unit.IsHero()) {
+        PredictionOutput output;
+        output.Input = input;
+        return output;
+    }
+
     // C#: Movement.GetPrediction(input, false, true)
     // C++ overload: (input, checkCollision, checkRange)
     const auto mainTargetPrediction = Movement::GetPrediction(input, false, true);
@@ -195,6 +201,12 @@ inline int GetHits(const Vec2& end, double range, float angle, const std::vector
 }
 
 inline PredictionOutput GetConePrediction(PredictionInput input) {
+    if (!input.Unit.IsHero()) {
+        PredictionOutput output;
+        output.Input = input;
+        return output;
+    }
+
     // C#: Movement.GetPrediction(input, false, true)
     const auto mainTargetPrediction = Movement::GetPrediction(input, false, true);
 
@@ -238,17 +250,17 @@ inline PredictionOutput GetConePrediction(PredictionInput input) {
         positionsList.push_back(t.Position);
 
     for (const auto& candidate : candidates) {
-        int hits = GetHits(candidate, input.Range, input.Radius, positionsList);
+        int hits = GetHits(candidate, input.Range, input.RealRadius(), positionsList);
         if (hits > bestHits) {
             bestHits = hits;
             bestCandidate = candidate;
         }
     }
 
-    if (bestHits > 1 && from2D.DistanceSqr(bestCandidate) > 50.0f * 50.0f) {
+    if (bestHits > 1 && bestCandidate.DistanceSqr(Vec2()) > 50.0f * 50.0f) {
         // Collect actual hit units
-        Vec2 edge1 = Vec2Ext::Rotated(bestCandidate, -input.Radius * 0.5f);
-        Vec2 edge2 = Vec2Ext::Rotated(edge1, input.Radius);
+        Vec2 edge1 = Vec2Ext::Rotated(bestCandidate, -input.RealRadius() * 0.5f);
+        Vec2 edge2 = Vec2Ext::Rotated(edge1, input.RealRadius());
         std::vector<AIHeroClient> hits;
         for (const auto& t : possibleTargets) {
             if (t.Position.DistanceSqr(Vec2()) < input.Range * input.Range
@@ -275,20 +287,15 @@ inline PredictionOutput GetConePrediction(PredictionInput input) {
 namespace Line {
 
 // GetCandidates — returns candidate end positions for line prediction
-inline std::vector<Vec2> GetCandidates(const Vec2& from, const Vec2& to,
-                                       float radius, float range) {
-    Vec2 middlePoint = (from + to) * 0.5f;
-    auto intersections = detail::CircleCircleIntersection(from, middlePoint,
-        radius, from.Distance(middlePoint));
-
-    if (intersections.size() > 1) {
-        Vec2 c1 = intersections[0];
-        Vec2 c2 = intersections[1];
-        c1 = from + (to - c1).Normalized() * range;
-        c2 = from + (to - c2).Normalized() * range;
-        return { c1, c2 };
-    }
-    return {};
+inline std::vector<Vec2> GetCandidates(const Vec2& from,
+                                       const Vec2& to,
+                                       float range,
+                                       const Vec2& endPosition) {
+    const Vec2 segmentEnd = from.Extend(endPosition, range);
+    const auto projection = Vec2Ext::ProjectOn(to, from, segmentEnd);
+    return projection.IsOnSegment
+        ? std::vector<Vec2>{ projection.SegmentPoint }
+        : std::vector<Vec2>{};
 }
 
 // GetHits — returns points within radius of line segment [start, end]
@@ -302,7 +309,27 @@ inline std::vector<Vec2> GetHits(const Vec2& start, const Vec2& end,
     return hits;
 }
 
+inline std::vector<detail::PossibleTarget> GetHitTargets(
+    const Vec2& start,
+    const Vec2& end,
+    double radius,
+    const std::vector<detail::PossibleTarget>& targets) {
+    std::vector<detail::PossibleTarget> hits;
+    for (const auto& target : targets) {
+        if (detail::DistanceSquaredToSegment(target.Position, start, end) <= radius * radius) {
+            hits.push_back(target);
+        }
+    }
+    return hits;
+}
+
 inline PredictionOutput GetLinePrediction(PredictionInput input) {
+    if (!input.Unit.IsHero()) {
+        PredictionOutput output;
+        output.Input = input;
+        return output;
+    }
+
     // C#: Movement.GetPrediction(input, false, true)
     const auto mainTargetPrediction = Movement::GetPrediction(input, false, true);
 
@@ -323,30 +350,32 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
     // Gather candidates from all targets
     std::vector<Vec2> candidates;
     for (const auto& target : possibleTargets) {
-        auto targetCandidates = GetCandidates(from2D, target.Position, input.Radius, input.Range);
+        auto targetCandidates = GetCandidates(
+            from2D,
+            target.Position,
+            input.Range,
+            possibleTargets[0].Position);
         candidates.insert(candidates.end(), targetCandidates.begin(), targetCandidates.end());
     }
 
     int bestHits = -1;
     Vec2 bestCandidate = {};
-    std::vector<Vec2> bestHitPoints;
+    std::vector<detail::PossibleTarget> bestHitTargets;
     std::vector<Vec2> positionsList;
     for (const auto& t : possibleTargets)
         positionsList.push_back(t.Position);
 
     for (const auto& candidate : candidates) {
         // Check that main target is hit with slightly larger radius
-        auto mainHit = GetHits(from2D, candidate,
-            input.Radius + (input.Unit.BoundingRadius() / 3.0f) - 10.0f,
-            { possibleTargets[0].Position });
+        auto mainHit = GetHits(from2D, candidate, input.RealRadius(), { possibleTargets[0].Position });
 
         if (mainHit.size() != 1) continue;
 
-        auto hits = GetHits(from2D, candidate, input.Radius, positionsList);
+        auto hits = GetHitTargets(from2D, candidate, input.RealRadius(), possibleTargets);
         if (static_cast<int>(hits.size()) >= bestHits) {
             bestHits = static_cast<int>(hits.size());
             bestCandidate = candidate;
-            bestHitPoints = hits;
+            bestHitTargets = hits;
         }
     }
 
@@ -355,21 +384,21 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
         float maxDistance = -1.0f;
         Vec2 p1 = {}, p2 = {};
 
-        for (size_t i = 0; i < bestHitPoints.size(); ++i) {
-            for (size_t j = 0; j < bestHitPoints.size(); ++j) {
-                auto proj1 = Vec2Ext::ProjectOn(positionsList[i], from2D, bestCandidate);
-                auto proj2 = Vec2Ext::ProjectOn(positionsList[j], from2D, bestCandidate);
+        for (size_t i = 0; i < bestHitTargets.size(); ++i) {
+            for (size_t j = 0; j < bestHitTargets.size(); ++j) {
+                auto proj1 = Vec2Ext::ProjectOn(bestHitTargets[i].Position, from2D, bestCandidate);
+                auto proj2 = Vec2Ext::ProjectOn(bestHitTargets[j].Position, from2D, bestCandidate);
 
-                float dist = bestHitPoints[i].DistanceSqr(proj1.LinePoint)
-                           + bestHitPoints[j].DistanceSqr(proj2.LinePoint);
+                float dist = bestHitTargets[i].Position.DistanceSqr(proj1.LinePoint)
+                           + bestHitTargets[j].Position.DistanceSqr(proj2.LinePoint);
 
                 if (dist >= maxDistance
-                    && Vec2Ext::AngleBetween(proj1.LinePoint - positionsList[i],
-                                             proj2.LinePoint - positionsList[j]) > 90.0f)
+                    && Vec2Ext::AngleBetween(proj1.LinePoint - bestHitTargets[i].Position,
+                                             proj2.LinePoint - bestHitTargets[j].Position) > 90.0f)
                 {
                     maxDistance = dist;
-                    p1 = positionsList[i];
-                    p2 = positionsList[j];
+                    p1 = bestHitTargets[i].Position;
+                    p2 = bestHitTargets[j].Position;
                 }
             }
         }
@@ -379,7 +408,7 @@ inline PredictionOutput GetLinePrediction(PredictionInput input) {
         // Collect actual hit units
         std::vector<AIHeroClient> hits;
         for (const auto& t : possibleTargets) {
-            if (detail::DistanceSquaredToSegment(t.Position, from2D, cast2D) <= input.Radius * input.Radius)
+            if (detail::DistanceSquaredToSegment(t.Position, from2D, cast2D) <= input.RealRadius() * input.RealRadius())
                 hits.push_back(t.Unit);
         }
 

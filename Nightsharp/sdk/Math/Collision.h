@@ -134,9 +134,6 @@ inline void Initialize() {
 }
 
 inline bool ContainsCollisionObject(const PredictionInput& input, CollisionableObjects object) {
-    if (object == CollisionableObjects::Building) {
-        return false;
-    }
     return input.CollisionObjects.contains(object);
 }
 
@@ -233,10 +230,6 @@ inline bool IsValidCollisionTarget(const GameObject& object,
         return false;
     }
 
-    if (IsStructureObject(object)) {
-        return false;
-    }
-
     if (Extensions::IsValidTarget(object, range, true, input.ResolveRangeCheckFrom())) {
         return true;
     }
@@ -320,7 +313,7 @@ inline bool IsPointNearProjection(const Vec2& point,
 }
 
 inline void AddIfUnique(std::vector<AIBaseClient>& result, const GameObject& object) {
-    if (!object.IsValid() || IsStructureObject(object)) {
+    if (!object.IsValid()) {
         return;
     }
 
