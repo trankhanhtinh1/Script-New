@@ -10,8 +10,8 @@
 
 #include <string>
 
-#include "Katarina.h"
-#include "Samira.h"
+#include "Champion/Katarina.h"
+#include "Champion/Samira.h"
 
 namespace Plugins {
 

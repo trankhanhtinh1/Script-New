@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../SDK/SDK.h"
+#include "../Helper/KuroAIOCommon.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -34,114 +34,9 @@ inline int LastBeforeAttack = 0;
 inline int LastOnAttack = 0;
 inline int LastAfterAttack = 0;
 
-static AIHeroClient Player() {
-    return ObjectManager::Player();
-}
-
-static bool Bool(Menu* menu, const char* key, bool fallback = true) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuBool>(key);
-    return item ? item->Value : fallback;
-}
-
-static int Slider(Menu* menu, const char* key, int fallback = 0) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuSlider>(key);
-    return item ? item->Value : fallback;
-}
-
-static bool Key(Menu* menu, const char* key, bool fallback = false) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuKeyBind>(key);
-    return item ? item->Active : fallback;
-}
-
-static void SetBool(Menu* menu, const char* key, bool value) {
-    if (auto* item = menu ? menu->Get<MenuBool>(key) : nullptr) {
-        item->Value = value;
-    }
-}
-
-static void SetSlider(Menu* menu, const char* key, int value) {
-    if (auto* item = menu ? menu->Get<MenuSlider>(key) : nullptr) {
-        item->Value = std::clamp(value, item->MinValue, item->MaxValue);
-    }
-}
-
-static void SetKey(Menu* menu, const char* key, bool value) {
-    if (auto* item = menu ? menu->Get<MenuKeyBind>(key) : nullptr) {
-        item->Active = value;
-    }
-}
-
-static bool Recent(int tick, int windowMs) {
-    const int now = SDK::Variables::TickCount();
-    return tick > 0 && now >= tick && now - tick <= windowMs;
-}
-
-static bool ValidUnit(const AttackableUnit& unit) {
-    return unit.IsValid() && !unit.IsDead() && unit.Health() > 0.0f;
-}
-
-static bool ValidTarget(const AIBaseClient& unit, float range = FLT_MAX) {
-    return ValidUnit(unit) && Extensions::IsValidTarget(unit, range, true);
-}
-
-static bool ValidHeroTarget(const AIHeroClient& hero, float range = FLT_MAX) {
-    return ValidUnit(hero) && Extensions::IsValidTarget(hero, range, true);
-}
-
-static bool IsComboMode() {
-    return Orbwalker::ActiveMode() == OrbwalkingMode::Combo;
-}
-
-static bool IsHarassMode() {
-    return Orbwalker::ActiveMode() == OrbwalkingMode::Harass;
-}
-
-static bool IsClearMode() {
-    return Orbwalker::ActiveMode() == OrbwalkingMode::LaneClear;
-}
-
-static bool IsLastHitMode() {
-    return Orbwalker::ActiveMode() == OrbwalkingMode::LastHit;
-}
-
 static float ManaPercent() {
     const auto player = Player();
     return player.IsValid() ? player.ManaPercent() : 0.0f;
-}
-
-static std::vector<AIHeroClient> EnemyHeroes(float range) {
-    std::vector<AIHeroClient> result;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (ValidHeroTarget(enemy, range)) {
-            result.push_back(enemy);
-        }
-    }
-
-    std::sort(result.begin(), result.end(), [](const AIHeroClient& a, const AIHeroClient& b) {
-        return a.Health() < b.Health();
-    });
-    return result;
-}
-
-static AIHeroClient GetTarget(float range) {
-    if (auto* selector = SDK::TargetSelector::Instance()) {
-        const auto selected = selector->GetTarget(range, DamageType::Physical);
-        if (ValidHeroTarget(selected, range)) {
-            return selected;
-        }
-    }
-
-    const auto enemies = EnemyHeroes(range);
-    return enemies.empty() ? AIHeroClient() : enemies.front();
 }
 
 static int CountEnemyHeroesNear(const Vector3& position, float range) {
@@ -279,7 +174,7 @@ static bool TryEKillSteal() {
         return false;
     }
 
-    for (const auto& target : EnemyHeroes(E.Range)) {
+    for (const auto& target : EnemyHeroesByHealth(E.Range)) {
         if (target.Health() <= GetEDmg(target) && AllowDashTo(target)) {
             if (CastE(target)) {
                 return true;
@@ -454,7 +349,7 @@ static bool TryTurboCombo() {
         return false;
     }
 
-    const auto target = GetTarget(E.Range);
+    const auto target = GetPhysicalTarget(E.Range);
     if (!ValidHeroTarget(target, E.Range)) {
         return false;
     }
@@ -512,7 +407,7 @@ static bool TryRCombo() {
     }
 
     if (Bool(RMenu, "AutoE") && E.IsReady()) {
-        for (const auto& target : EnemyHeroes(E.Range)) {
+        for (const auto& target : EnemyHeroesByHealth(E.Range)) {
             const Vector3 dashPos = DashPositionTo(target.Position());
             if (AllowDashTo(dashPos) &&
                 CountEnemyHeroesNear(dashPos, R.Range) > Slider(RMenu, "RCount", 1)) {
@@ -523,7 +418,7 @@ static bool TryRCombo() {
         }
     }
 
-    const auto target = GetTarget(R.Range);
+    const auto target = GetPhysicalTarget(R.Range);
     if (ValidHeroTarget(target, R.Range)) {
         return R.Cast();
     }
@@ -535,7 +430,7 @@ static bool TryEMinionGapClose() {
         return false;
     }
 
-    const auto target = GetTarget(E.Range + Q.Range);
+    const auto target = GetPhysicalTarget(E.Range + Q.Range);
     if (!ValidHeroTarget(target, E.Range + Q.Range)) {
         return false;
     }
@@ -581,7 +476,7 @@ static bool TryECombo() {
         return true;
     }
 
-    for (const auto& target : EnemyHeroes(E.Range)) {
+    for (const auto& target : EnemyHeroesByHealth(E.Range)) {
         if (!AllowDashTo(target)) {
             continue;
         }
@@ -611,7 +506,7 @@ static bool TryECombo() {
 
         if (Q.IsReady() && Bool(EMenu, "EQ") && CastE(target)) {
             SDK::Utils::DelayAction::Add(60, []() {
-                const auto nextTarget = GetTarget(Q.Range);
+                const auto nextTarget = GetPhysicalTarget(Q.Range);
                 if (ValidHeroTarget(nextTarget, Q.Range)) {
                     CastQOnTarget(nextTarget, true, true);
                 } else {
@@ -631,13 +526,13 @@ static bool TryWCombo() {
     }
 
     if (W.IsReady() && Bool(WMenu, "WCantAA") && !Orbwalker::CanAttack()) {
-        if (!EnemyHeroes(E.IsReady() ? E.Range : W.Range).empty()) {
+        if (!EnemyHeroesByHealth(E.IsReady() ? E.Range : W.Range).empty()) {
             return W.Cast();
         }
     }
 
     if (W.IsReady() && E.IsReady() && Bool(EMenu, "EW")) {
-        for (const auto& target : EnemyHeroes(E.Range)) {
+        for (const auto& target : EnemyHeroesByHealth(E.Range)) {
             if (target.HealthPercent() < 60.0f && AllowDashTo(target)) {
                 return W.Cast();
             }
@@ -652,7 +547,7 @@ static bool TryQCombo() {
         return false;
     }
 
-    const auto target = GetTarget(Q.Range);
+    const auto target = GetPhysicalTarget(Q.Range);
     if (!ValidHeroTarget(target, Q.Range)) {
         return false;
     }
@@ -699,7 +594,7 @@ static void HarassAndClear() {
     }
 
     if (IsHarassMode() && Key(KeysMenu, "QMixed")) {
-        const auto target = GetTarget(Q.Range);
+        const auto target = GetPhysicalTarget(Q.Range);
         if (ValidHeroTarget(target, Q.Range)) {
             (void)CastQOnTarget(target, true, true);
         }

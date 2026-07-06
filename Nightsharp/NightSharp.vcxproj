@@ -174,9 +174,13 @@
     <ClInclude Include="overlay\VmtHook.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h" />
-    <ClInclude Include="Plugins\Champion\KuroAIO\Katarina.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\KuroAIOCommon.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\KuroAIO.h" />
-    <ClInclude Include="Plugins\Champion\KuroAIO\Samira.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\MenuHelper.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\OrbwalkerModeHelper.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\TargetHelper.h" />
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h" />
     <ClInclude Include="Plugins\Champion\EzrealMissileLifecyclePlugin.h" />
     <ClInclude Include="Plugins\Champion\EzrealSemiPlugin.h" />

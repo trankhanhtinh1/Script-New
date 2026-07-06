@@ -1,11 +1,10 @@
 #pragma once
 
-#include "../../../SDK/SDK.h"
+#include "../Helper/KuroAIOCommon.h"
 
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
-#include <cstring>
 #include <string>
 #include <vector>
 
@@ -35,58 +34,6 @@ inline bool UpdateR = false;
 inline int LastR = 0;
 inline std::vector<Dagger> Daggers;
 
-static AIHeroClient Player() {
-    return ObjectManager::Player();
-}
-
-static bool Bool(Menu* menu, const char* key, bool fallback = true) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuBool>(key);
-    return item ? item->Value : fallback;
-}
-
-static int Slider(Menu* menu, const char* key, int fallback = 0) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuSlider>(key);
-    return item ? item->Value : fallback;
-}
-
-static int List(Menu* menu, const char* key, int fallback = 0) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuList>(key);
-    return item ? item->Index : fallback;
-}
-
-static bool Key(Menu* menu, const char* key, bool fallback = false) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuKeyBind>(key);
-    return item ? item->Active : fallback;
-}
-
-static bool EqualsIgnoreCase(const char* left, const char* right) {
-    return left && right && left[0] && right[0] && _stricmp(left, right) == 0;
-}
-
-static bool ValidUnit(const AttackableUnit& unit) {
-    return unit.IsValid() && !unit.IsDead() && unit.Health() > 0.0f;
-}
-
-static bool ValidTarget(const AIBaseClient& unit, float range = FLT_MAX) {
-    return ValidUnit(unit) && Extensions::IsValidTarget(unit, range, true);
-}
-
-static bool ValidHeroTarget(const AIHeroClient& hero, float range = FLT_MAX) {
-    return ValidUnit(hero) && Extensions::IsValidTarget(hero, range, true);
-}
-
 static std::string RuntimeName(const GameObject& object) {
     if (!object.IsValid()) {
         return {};
@@ -115,33 +62,6 @@ static bool IsHiddenMinion(const GameObject& object) {
     }
     const std::string name = RuntimeName(object);
     return EqualsIgnoreCase(name.c_str(), "HiddenMinion");
-}
-
-static std::vector<AIHeroClient> EnemyHeroes(float range) {
-    std::vector<AIHeroClient> result;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (ValidHeroTarget(enemy, range)) {
-            result.push_back(enemy);
-        }
-    }
-    return result;
-}
-
-static AIHeroClient GetTarget(float range) {
-    if (auto* selector = SDK::TargetSelector::Instance()) {
-        const auto selected = selector->GetTarget(range, DamageType::Magical);
-        if (ValidHeroTarget(selected, range)) {
-            return selected;
-        }
-    }
-
-    AIHeroClient best;
-    for (const auto& enemy : EnemyHeroes(range)) {
-        if (!best.IsValid() || enemy.Health() < best.Health()) {
-            best = enemy;
-        }
-    }
-    return best;
 }
 
 static bool HaveRBuff() {
@@ -405,7 +325,7 @@ static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
 
     AIHeroClient target = HasOwnDagger()
         ? BestDaggerTarget(E.Range + 400.0f)
-        : GetTarget(E.Range + 400.0f);
+        : GetMagicalTarget(E.Range + 400.0f);
     if (!ValidHeroTarget(target, E.Range + 400.0f)) {
         return false;
     }
@@ -496,7 +416,7 @@ static bool TryEQKillSteal() {
         return false;
     }
 
-    const auto target = GetTarget(E.Range + Q.Range);
+    const auto target = GetMagicalTarget(E.Range + Q.Range);
     if (!ValidHeroTarget(target, E.Range + Q.Range) ||
         target.Health() > QDamage(target)) {
         return false;
@@ -537,7 +457,7 @@ static bool TryCastW() {
         return false;
     }
 
-    const auto target = GetTarget(W.Range);
+    const auto target = GetMagicalTarget(W.Range);
     if (ValidHeroTarget(target, W.Range) &&
         target.DistanceToPlayer() <= static_cast<float>(Slider(WMenu, "WRange", 300))) {
         return W.Cast();
@@ -550,7 +470,7 @@ static bool TryCastR() {
         return false;
     }
 
-    const auto target = GetTarget(R.Range);
+    const auto target = GetMagicalTarget(R.Range);
     if (!ValidHeroTarget(target, R.Range)) {
         return false;
     }
@@ -581,7 +501,7 @@ static void EQ() {
 
     AIBaseClient qTarget = eTarget;
     if (!ValidTarget(qTarget, Q.Range)) {
-        qTarget = AIBaseClient(GetTarget(Q.Range).Handle());
+        qTarget = AIBaseClient(GetMagicalTarget(Q.Range).Handle());
     }
     if (CastQ(qTarget)) {
         return;
@@ -598,7 +518,7 @@ static void QE() {
         return;
     }
 
-    const auto qTarget = GetTarget(Q.Range);
+    const auto qTarget = GetMagicalTarget(Q.Range);
     if (CastQ(qTarget)) {
         return;
     }
@@ -636,7 +556,7 @@ static void Harass() {
         return;
     }
 
-    const auto target = GetTarget(Q.Range);
+    const auto target = GetMagicalTarget(Q.Range);
     (void)CastQ(target);
 }
 
@@ -716,7 +636,7 @@ static void UpdateOrbwalkerState() {
     }
 
     Orbwalker::AttackEnabled(false);
-    const auto target = GetTarget(W.Range);
+    const auto target = GetMagicalTarget(W.Range);
     if (Orbwalker::ActiveMode() == OrbwalkingMode::Combo &&
         ValidHeroTarget(target, W.Range) &&
         player.Distance(closeDagger->Position) < 100.0f) {

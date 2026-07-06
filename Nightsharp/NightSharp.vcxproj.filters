@@ -34,6 +34,12 @@
     <Filter Include="Plugins\Champion\KuroAIO">
       <UniqueIdentifier>{4F86AC91-64FA-47D5-9C3C-B3F76A6B6E35}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\KuroAIO\Champion">
+      <UniqueIdentifier>{1B7F0C89-8D85-4F4E-A026-C2C3EB5F70A2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\Champion\KuroAIO\Helper">
+      <UniqueIdentifier>{8238E4AF-58BB-46E0-A91E-02E053BA6A73}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Champion\OneKeyToWin">
       <UniqueIdentifier>{B5AFD60E-A465-B2FE-72A3-9FEB63B435F8}</UniqueIdentifier>
     </Filter>
@@ -341,14 +347,26 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Katarina.h">
-      <Filter>Plugins\Champion\KuroAIO</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\KuroAIOCommon.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\KuroAIO.h">
       <Filter>Plugins\Champion\KuroAIO</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Samira.h">
-      <Filter>Plugins\Champion\KuroAIO</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\MenuHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\OrbwalkerModeHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\TargetHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h">
       <Filter>Plugins\Champion</Filter>
