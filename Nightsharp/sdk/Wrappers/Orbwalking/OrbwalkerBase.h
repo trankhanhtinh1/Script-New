@@ -2780,7 +2780,7 @@ protected:
 
         keyMenu_ = rootMenu_->AddSubMenu(new Menu("Keys", "Keys"));
         keyMenu_->Add(new MenuKeyBind("Combo", "Combo", Keys::Space, KeyBindType::Press));
-        keyMenu_->Add(new MenuKeyBind("ComboWithMove", "Combo Without Move", Keys::N, KeyBindType::Press));
+        keyMenu_->Add(new MenuKeyBind("ComboWithMove", "Combo Without Move", Keys::N, KeyBindType::Toggle));
         keyMenu_->Add(new MenuKeyBind("Harass", "Harass", Keys::C, KeyBindType::Press));
         keyMenu_->Add(new MenuKeyBind("LaneClear", "LaneClear", Keys::V, KeyBindType::Press));
         keyMenu_->Add(new MenuKeyBind("FastLaneClear", "Fast LaneClear", Keys::LMB, KeyBindType::Press));

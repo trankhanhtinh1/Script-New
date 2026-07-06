@@ -33,6 +33,14 @@ public:
         FarmDebugLogTargetDecision("scan-complete", {}, minions.size(), false, false);
         const bool fastLaneClear = mode == OrbwalkingMode::LaneClear && IsFastLaneClear();
 
+        FarmDebugBreadcrumb("before-barrel", minions.size());
+        AttackableUnit barrel = GetBarrelTarget();
+        FarmDebugBreadcrumb("after-barrel", minions.size(), barrel);
+        if (barrel.IsValid()) {
+            FarmDebugLogTargetDecision("return:barrel", barrel, minions.size(), false, true);
+            return barrel;
+        }
+
         if (!fastLaneClear &&
             (mode == OrbwalkingMode::Harass || mode == OrbwalkingMode::LaneClear) &&
             !player.IsUnderEnemyTurret() &&
@@ -44,14 +52,6 @@ public:
                 FarmDebugLogTargetDecision("return:pre-farm-hero", heroTarget, minions.size(), false, true);
                 return heroTarget;
             }
-        }
-
-        FarmDebugBreadcrumb("before-barrel", minions.size());
-        AttackableUnit barrel = GetBarrelTarget();
-        FarmDebugBreadcrumb("after-barrel", minions.size(), barrel);
-        if (barrel.IsValid()) {
-            FarmDebugLogTargetDecision("return:barrel", barrel, minions.size(), false, true);
-            return barrel;
         }
 
         FarmDebugBreadcrumb("before-support-check", minions.size());
@@ -121,7 +121,17 @@ public:
             }
         }
 
-        if (mode != OrbwalkingMode::Combo &&
+        if (mode == OrbwalkingMode::Combo) {
+            FarmDebugBreadcrumb("before-combo-jungle-plant", minions.size());
+            AttackableUnit plant = GetJunglePlantTarget();
+            FarmDebugBreadcrumb("after-combo-jungle-plant", minions.size(), plant);
+            if (plant.IsValid()) {
+                FarmDebugLogTargetDecision("return:combo-jungle-plant", plant, minions.size(), waitForFarm, true);
+                return plant;
+            }
+        }
+
+        if (mode == OrbwalkingMode::LaneClear &&
             Bool(prioritizeMenu_, "SpecialMinion", false) &&
             !waitForFarm) {
             FarmDebugBreadcrumb("before-priority-special", minions.size());
@@ -166,7 +176,7 @@ public:
             }
         }
 
-        if (mode != OrbwalkingMode::Combo && !waitForFarm) {
+        if (mode == OrbwalkingMode::LaneClear && !waitForFarm) {
             FarmDebugBreadcrumb("before-special", minions.size());
             AttackableUnit special = GetSpecialMinion();
             FarmDebugBreadcrumb("after-special", minions.size(), special);
@@ -298,6 +308,14 @@ protected:
         return name == "jarvanivstandard";
     }
 
+    static bool IsGangplankBarrel(const AIMinionClient& minion) {
+        if (!minion.IsValid() || minion.IsDead()) {
+            return false;
+        }
+
+        return OrbwalkingDetail::ToLower(minion.CharacterName()).find("gangplankbarrel") != std::string::npos;
+    }
+
     AttackableUnit GetChampionTarget() const {
         auto* targetSelector = TargetSelector::Instance();
         if (!targetSelector) {
@@ -327,8 +345,7 @@ protected:
         }
 
         auto evaluate = [&](const AIMinionClient& minion) -> AttackableUnit {
-            const std::string name = OrbwalkingDetail::ToLower(minion.CharacterName());
-            if (name.find("gangplankbarrel") == std::string::npos ||
+            if (!IsGangplankBarrel(minion) ||
                 !OrbwalkingDetail::IsValidAttackTarget(minion, GetAutoAttackRange(minion))) {
                 return {};
             }
@@ -351,18 +368,26 @@ protected:
             return {};
         };
 
-        for (const auto& minion : GameObjects::EnemyMinions()) {
-            AttackableUnit result = evaluate(minion);
-            if (result.IsValid()) {
-                return result;
+        auto scan = [&](const std::vector<AIMinionClient>& list) -> AttackableUnit {
+            for (const auto& minion : list) {
+                AttackableUnit result = evaluate(minion);
+                if (result.IsValid()) {
+                    return result;
+                }
             }
-        }
-        for (const auto& minion : GameObjects::Jungle()) {
-            AttackableUnit result = evaluate(minion);
-            if (result.IsValid()) {
-                return result;
-            }
-        }
+            return {};
+        };
+
+        AttackableUnit result = scan(GameObjects::EnemyMinions());
+        if (result.IsValid()) return result;
+        result = scan(GameObjects::EnemySpecialMinions());
+        if (result.IsValid()) return result;
+        result = scan(GameObjects::EnemyIgnoredMinions());
+        if (result.IsValid()) return result;
+        result = scan(GameObjects::Jungle());
+        if (result.IsValid()) return result;
+        result = scan(ObjectManager::Get<AIMinionClient>());
+        if (result.IsValid()) return result;
         return {};
     }
 
@@ -613,6 +638,19 @@ protected:
             }
         }
 
+        return {};
+    }
+
+    AttackableUnit GetJunglePlantTarget() const {
+        if (!Bool(attackableMenu_, "JunglePlant", false)) {
+            return {};
+        }
+
+        for (const auto& plant : GameObjects::JunglePlants()) {
+            if (OrbwalkingDetail::IsValidAttackTarget(plant, GetAutoAttackRange(plant))) {
+                return AttackableUnit(plant.Handle());
+            }
+        }
         return {};
     }
 
