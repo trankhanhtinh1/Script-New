@@ -5,6 +5,7 @@
 #include "../../../Enumerations/SpellSlot.h"
 #include "../../../Enumerations/SpellTags.h"
 #include "../../../Enumerations/SpellType.h"
+#include "../../../Enums/BuffType.h"
 
 #include <cstdint>
 #include <limits>
@@ -13,11 +14,6 @@
 #include <vector>
 
 namespace SDK {
-
-// EnsoulSharp exposes BuffType from the core assembly. NightSharp does not
-// have a public SDK enum for it yet, so keep the database shape intact with
-// the native numeric value until the enum is ported.
-using BuffType = std::int32_t;
 
 struct SpellDatabaseEntry {
     int Angle = 45;

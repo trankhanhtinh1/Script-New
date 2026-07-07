@@ -15,6 +15,10 @@
 
 // === Champion includes (uncomment khi port xong) ===
 #include "Ezreal.h"
+#include "Jinx.h"
+#include "Kalista.h"
+#include "Viktor.h"
+#include "Xerath.h"
 // #include "Vayne.h"
 // #include "Caitlyn.h"
 // #include "Cassiopeia.h"
@@ -23,9 +27,7 @@
 // #include "Hecarim.h"
 // #include "Jax.h"
 // #include "Jayce.h"
-// #include "Jinx.h"
 // #include "KSante.h"
-// #include "Kalista.h"
 // #include "Fizz.h"
 // #include "Karthus.h"
 // #include "KogMaw.h"
@@ -79,9 +81,9 @@ public:
         // else if (champ == "Hecarim")    { Hecarim::OnGameLoad(); }
         // else if (champ == "Jax")        { Jax::OnGameLoad(); }
         // else if (champ == "Jayce")      { Jayce::OnGameLoad(); }
-        // else if (champ == "Jinx")       { Jinx::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Jinx") == 0) { AIO7UP::Jinx::OnGameLoad(); }
         // else if (champ == "KSante")     { KSante::OnGameLoad(); }
-        // else if (champ == "Kalista")    { Kalista::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Kalista") == 0) { AIO7UP::Kalista::OnGameLoad(); }
         // else if (champ == "Fizz")       { Fizz::OnGameLoad(); }
         // else if (champ == "Karthus")    { Karthus::OnGameLoad(); }
         // else if (champ == "KogMaw")     { KogMaw::OnGameLoad(); }
@@ -100,8 +102,8 @@ public:
         // else if (champ == "Sett")       { Sett::OnGameLoad(); }
         // else if (champ == "Shyvana")    { Shyvana::OnGameLoad(); }
         // else if (champ == "Sylas")      { Sylas::OnGameLoad(); }
-        // else if (champ == "Viktor")     { Viktor::OnGameLoad(); }
-        // else if (champ == "Xerath")     { Xerath::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Viktor") == 0) { AIO7UP::Viktor::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Xerath") == 0) { AIO7UP::Xerath::OnGameLoad(); }
         // else if (champ == "Zed")        { Zed::OnGameLoad(); }
         else {
             return;
@@ -113,12 +115,20 @@ public:
 
     void OnUnload() override {
         AIO7UP::Ezreal::OnUnload();
+        AIO7UP::Jinx::OnUnload();
+        AIO7UP::Kalista::OnUnload();
+        AIO7UP::Viktor::OnUnload();
+        AIO7UP::Xerath::OnUnload();
     }
 
 private:
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
-            _stricmp(championName, "Ezreal") == 0;
+            (_stricmp(championName, "Ezreal") == 0 ||
+             _stricmp(championName, "Jinx") == 0 ||
+             _stricmp(championName, "Kalista") == 0 ||
+             _stricmp(championName, "Viktor") == 0 ||
+             _stricmp(championName, "Xerath") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -137,7 +147,23 @@ private:
     }
 
     static const char* CurrentSupportedChampionName() {
-        return IsCurrentChampionSupported() ? "Ezreal" : nullptr;
+        const std::string championName = CurrentChampionName();
+        if (_stricmp(championName.c_str(), "Ezreal") == 0) {
+            return "Ezreal";
+        }
+        if (_stricmp(championName.c_str(), "Jinx") == 0) {
+            return "Jinx";
+        }
+        if (_stricmp(championName.c_str(), "Kalista") == 0) {
+            return "Kalista";
+        }
+        if (_stricmp(championName.c_str(), "Xerath") == 0) {
+            return "Xerath";
+        }
+        if (_stricmp(championName.c_str(), "Viktor") == 0) {
+            return "Viktor";
+        }
+        return nullptr;
     }
 };
 

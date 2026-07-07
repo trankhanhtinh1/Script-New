@@ -934,7 +934,13 @@ static void JungleClear() {
             mobs.begin(),
             mobs.end(),
             [](const AIMinionClient& mob) {
+                // Extensions::IsValidTarget only gates on IsVisible() for heroes,
+                // and GameObjects::Jungle() keeps camp objects in the object
+                // manager after you lose vision (stale last-known state). Without
+                // an explicit visibility gate JungleClear casts Q/W into the fog
+                // at the camp's last position. Require the mob to be visible.
                 return !ValidTarget(mob, Q.Range) ||
+                       !mob.IsVisible() ||
                        mob.IsPlant() ||
                        mob.IsPet() ||
                        mob.IsClone();

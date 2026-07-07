@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../Core/CoreBuffs.h"
 #include "../../Core/CoreEvents.h"
 #include "../../CrashReporter.h"
 #include "../../FpsDropDebug.h"
@@ -724,24 +725,36 @@ namespace detail {
     }
 
     inline void OnRawBuffAdd(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents() || !BuffAddHandlers.HasHandlers()) {
+        if (!CanDeliverRawEvents()) {
             return;
         }
-        PendingBuffAdds.Push(::Core::Events::DecodeBuffEvent(raw));
+        const BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        CoreBuffs::ApplyBuffAddEvent(args.Sender.Ptr, args.BuffName, args.Count, args.BuffAddress);
+        if (BuffAddHandlers.HasHandlers()) {
+            PendingBuffAdds.Push(args);
+        }
     }
 
     inline void OnRawBuffRemove(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents() || !BuffRemoveHandlers.HasHandlers()) {
+        if (!CanDeliverRawEvents()) {
             return;
         }
-        PendingBuffRemoves.Push(::Core::Events::DecodeBuffEvent(raw));
+        const BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        CoreBuffs::ApplyBuffRemoveEvent(args.Sender.Ptr, args.BuffName, args.BuffAddress);
+        if (BuffRemoveHandlers.HasHandlers()) {
+            PendingBuffRemoves.Push(args);
+        }
     }
 
     inline void OnRawBuffUpdate(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents() || !BuffUpdateHandlers.HasHandlers()) {
+        if (!CanDeliverRawEvents()) {
             return;
         }
-        PendingBuffUpdates.Push(::Core::Events::DecodeBuffEvent(raw));
+        const BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        CoreBuffs::ApplyBuffUpdateEvent(args.Sender.Ptr, args.BuffName, args.Count, args.BuffAddress);
+        if (BuffUpdateHandlers.HasHandlers()) {
+            PendingBuffUpdates.Push(args);
+        }
     }
 
     inline void OnRawNewPath(const CoreHookArgs& raw) {
@@ -925,19 +938,19 @@ namespace detail {
     }
 
     inline void ReleaseBuffAddRawIfUnused() {
-        if (!BuffAddHandlers.HasHandlers()) {
+        if (!BuffAddHandlers.HasHandlers() && !CoreBuffs::IsEventCacheEnabled()) {
             (void)ReleaseRawSubscribed(Hooks::OnBuffAdd, &OnRawBuffAdd, BuffAddRawSubscribed);
         }
     }
 
     inline void ReleaseBuffRemoveRawIfUnused() {
-        if (!BuffRemoveHandlers.HasHandlers()) {
+        if (!BuffRemoveHandlers.HasHandlers() && !CoreBuffs::IsEventCacheEnabled()) {
             (void)ReleaseRawSubscribed(Hooks::OnBuffRemove, &OnRawBuffRemove, BuffRemoveRawSubscribed);
         }
     }
 
     inline void ReleaseBuffUpdateRawIfUnused() {
-        if (!BuffUpdateHandlers.HasHandlers()) {
+        if (!BuffUpdateHandlers.HasHandlers() && !CoreBuffs::IsEventCacheEnabled()) {
             (void)ReleaseRawSubscribed(Hooks::OnBuffUpdate, &OnRawBuffUpdate, BuffUpdateRawSubscribed);
         }
     }
@@ -1051,6 +1064,15 @@ namespace detail {
         return EnsureGameUpdateRawSubscribed() &&
                EnsureRawSubscribed(Hooks::OnBuffUpdate, &OnRawBuffUpdate, BuffUpdateRawSubscribed);
     }
+
+    inline void EnsureBuffEventCacheSubscribed() {
+        const bool ok =
+            EnsureBuffAddRawSubscribed() &&
+            EnsureBuffRemoveRawSubscribed() &&
+            EnsureBuffUpdateRawSubscribed();
+        CoreBuffs::SetEventCacheEnabled(ok);
+    }
+
     inline bool EnsureNewPathRawSubscribed() {
         return EnsureGameUpdateRawSubscribed() &&
                EnsureRawSubscribed(Hooks::OnNewPath, &OnRawNewPath, NewPathRawSubscribed);
@@ -1117,16 +1139,20 @@ inline bool IsDeliveryEnabled() {
 inline void Initialize() {
     if (detail::Initialized) {
         ::Core::Events::Initialize();
+        detail::EnsureBuffEventCacheSubscribed();
         return;
     }
 
     detail::Initialized = true;
     ::Core::Events::Initialize();
+    detail::EnsureBuffEventCacheSubscribed();
     detail::EventTurretConstruct();
 }
 
 inline void Reset() {
     SetDeliveryEnabled(false);
+    CoreBuffs::SetEventCacheEnabled(false);
+    CoreBuffs::ClearEventCache();
     detail::CoreHookHandlers.Clear();
     detail::GameUpdateHandlers.Clear();
     detail::ObjectCreateHandlers.Clear();

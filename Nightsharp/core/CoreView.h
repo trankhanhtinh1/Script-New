@@ -8,6 +8,7 @@
 #include "../imgui/imgui.h"
 
 #include <Windows.h>
+#include <DirectXMath.h>
 #include <cmath>
 #include <cstdint>
 

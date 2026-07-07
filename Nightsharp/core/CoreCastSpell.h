@@ -8,6 +8,7 @@
 #include "offset.h"
 #include "spoof/spoofcall.h"
 
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 
@@ -24,6 +25,7 @@ enum class CastKind : std::uint8_t {
     Position,
     Target,
     Self,
+    Vector,
     ChargeBegin,
     ChargeRelease,
 };
@@ -47,6 +49,7 @@ enum class CastFailure : std::uint8_t {
     PositionProjectionFailed,
     CanCastRejected,
     NativeException,
+    Throttled,
 };
 
 struct CastTrace {
@@ -65,6 +68,7 @@ struct CastTrace {
     uintptr_t spellbook = 0;
     uintptr_t spellSlot = 0;
     uintptr_t spellInput = 0;
+    uintptr_t runtimeInput = 0;
     uintptr_t hud = 0;
     uintptr_t castContext = 0;
     uintptr_t canCastCheck = 0;
@@ -95,10 +99,25 @@ using FnHudSpellHandler = void(__fastcall*)(
     std::int32_t castMode,
     std::int64_t keyState);
 
+// Native two-position (vector) cast — sub_97A980. Reads x/z from each Vec3.
+struct NativeVec3Xyz { float x, y, z; };
+using FnCastSpellVector = void(__fastcall*)(
+    uintptr_t spellbook,
+    uintptr_t slotObject,
+    std::int32_t slot,
+    const NativeVec3Xyz* startPosition,
+    const NativeVec3Xyz* endPosition,
+    std::int32_t visionFlag);
+
 inline constexpr std::int32_t kHudModeSmartCast = 2;
 inline constexpr std::int64_t kHudKeyPress = 1;
 inline constexpr std::int64_t kHudKeyRelease = 2;
 inline constexpr uintptr_t kHudChargeSpellInput = 0x38;
+
+// Minimum interval between fire-casts of the same slot, so holding a combo key
+// (e.g. space) doesn't spam the native cast every frame. Charge begin/release
+// are exempt (they have their own state gating). Matches the SDK Spell wrapper.
+inline constexpr int kCastThrottleMs = 120;
 
 inline const CastTrace& LastTrace() {
     return g_lastTrace;
@@ -109,6 +128,7 @@ inline const char* CastKindName(CastKind kind) {
     case CastKind::Position: return "position";
     case CastKind::Target: return "target";
     case CastKind::Self: return "self";
+    case CastKind::Vector: return "vector";
     case CastKind::ChargeBegin: return "charge-begin";
     case CastKind::ChargeRelease: return "charge-release";
     default: return "unknown";
@@ -135,6 +155,7 @@ inline const char* CastFailureName(CastFailure failure) {
     case CastFailure::PositionProjectionFailed: return "position-projection-failed";
     case CastFailure::CanCastRejected: return "can-cast-rejected";
     case CastFailure::NativeException: return "native-exception";
+    case CastFailure::Throttled: return "throttled";
     default: return "unknown";
     }
 }
@@ -251,8 +272,112 @@ private:
     bool applied_ = false;
 };
 
+class ScopedRuntimeSpellInput {
+public:
+    bool Apply(uintptr_t input,
+               const Vec3& startPosition,
+               const Vec3& endPosition,
+               std::uint32_t targetNetworkId) {
+        if (!Globals::IsValidPtr(input)) {
+            Fail(CastFailure::MissingSpellInput);
+            return false;
+        }
+
+        address_ = input;
+        originalTargetNetworkId_ = Globals::Read<std::uint32_t>(
+            address_ + Offset::SpellInputLayout::InputTargetNetId);
+        originalStartPosition_ = Globals::Read<Vec3>(
+            address_ + Offset::SpellInputLayout::InputStartPos);
+        originalEndPosition_ = Globals::Read<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos);
+        originalEndPosition2_ = Globals::Read<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3));
+        originalEndPosition3_ = Globals::Read<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2);
+        applied_ = true;
+
+        bool ok = true;
+        ok &= Globals::Write<std::uint32_t>(
+            address_ + Offset::SpellInputLayout::InputTargetNetId,
+            targetNetworkId);
+        ok &= Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputStartPos,
+            startPosition);
+        ok &= Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos,
+            endPosition);
+        ok &= Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3),
+            endPosition);
+        ok &= Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2,
+            endPosition);
+
+        if (!ok) {
+            Restore();
+            Fail(CastFailure::MissingSpellInput);
+            return false;
+        }
+
+        return true;
+    }
+
+    void Restore() {
+        if (!applied_ || !Globals::IsValidPtr(address_)) {
+            return;
+        }
+
+        (void)Globals::Write<std::uint32_t>(
+            address_ + Offset::SpellInputLayout::InputTargetNetId,
+            originalTargetNetworkId_);
+        (void)Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputStartPos,
+            originalStartPosition_);
+        (void)Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos,
+            originalEndPosition_);
+        (void)Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3),
+            originalEndPosition2_);
+        (void)Globals::Write<Vec3>(
+            address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2,
+            originalEndPosition3_);
+        applied_ = false;
+    }
+
+private:
+    uintptr_t address_ = 0;
+    std::uint32_t originalTargetNetworkId_ = 0;
+    Vec3 originalStartPosition_ = {};
+    Vec3 originalEndPosition_ = {};
+    Vec3 originalEndPosition2_ = {};
+    Vec3 originalEndPosition3_ = {};
+    bool applied_ = false;
+};
+
 inline bool IsSupportedSlot(std::uint8_t slot) {
     return slot <= SlotSummonerF;
+}
+
+inline int NowMs() {
+    return static_cast<int>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+}
+
+// Per-slot fire-cast rate limiter (delay action). Reserve-style: returns false
+// if the same slot fired within kCastThrottleMs, otherwise records `now` and
+// returns true. Prevents cast spam when a combo key (space) is held down.
+inline bool ThrottleReserve(std::uint8_t slot) {
+    static int lastTick[8] = {};
+    const int idx = slot < 8 ? slot : 7;
+    const int now = NowMs();
+    if (lastTick[idx] != 0 && now - lastTick[idx] < kCastThrottleMs) {
+        return false;
+    }
+    lastTick[idx] = now;
+    return true;
 }
 
 inline void Fail(CastFailure failure) {
@@ -344,6 +469,44 @@ inline bool ResolveCommon(CastKind kind, std::uint8_t slot) {
     return true;
 }
 
+inline uintptr_t ResolveRuntimeSpellInput() {
+    const uintptr_t resolveOwnerSlot =
+        CoreRuntime::ResolveRva(Offset::ControlRuntime::FindOwnerSlot);
+    if (!Globals::IsValidPtr(resolveOwnerSlot)) {
+        Fail(CastFailure::MissingNativeFunction);
+        return 0;
+    }
+
+    uintptr_t runtimeSlot = 0;
+    __try {
+        using FnResolveOwnerSlot = uintptr_t(__fastcall*)(uintptr_t, uintptr_t);
+        runtimeSlot = spoof_call(
+            reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
+            reinterpret_cast<FnResolveOwnerSlot>(resolveOwnerSlot),
+            g_lastTrace.castContext,
+            g_lastTrace.spellInput);
+    }
+    __except (1) {
+        runtimeSlot = 0;
+    }
+
+    if (!Globals::IsValidPtr(runtimeSlot)) {
+        Fail(CastFailure::MissingSpellSlot);
+        return 0;
+    }
+
+    const uintptr_t runtimeInput = Globals::Read<uintptr_t>(
+        runtimeSlot + Offset::SpellSlotLayout::SlotSpellInfo);
+    g_lastTrace.runtimeInput = runtimeInput;
+    if (!Globals::IsValidPtr(runtimeInput) ||
+        runtimeInput == g_lastTrace.spellInput) {
+        Fail(CastFailure::MissingSpellInput);
+        return 0;
+    }
+
+    return runtimeInput;
+}
+
 inline void ClearBypassFlag(bool bypassTouched) {
     if (!bypassTouched) {
         return;
@@ -360,6 +523,11 @@ inline bool CastValidated(CastKind kind,
                           const Vec3& endPosition,
                           uintptr_t target) {
     if (!ResolveCommon(kind, slot)) {
+        return false;
+    }
+
+    if (!ThrottleReserve(slot)) {
+        Fail(CastFailure::Throttled);
         return false;
     }
 
@@ -449,8 +617,93 @@ inline bool CastValidated(CastKind kind,
     return true;
 }
 
+// Two-position (vector) cast — Viktor E. Calls the game's native
+// CastSpellVector (sub_97A980) directly with explicit world start/end coords.
+// This is the native entry EnsoulSharp's Spellbook.CastSpell(slot, start, end)
+// forwards to: it builds the opcode-271 cast packet itself and does NOT go
+// through CanCastCheck, so it isn't rejected like the old runtime-input path.
+// Coordinates are sent verbatim (no cursor raycast), so aim is exact.
+inline bool DispatchVector(std::uint8_t slot,
+                           const Vec3& startPosition,
+                           const Vec3& endPosition) {
+    if (!ResolveCommon(CastKind::Vector, slot)) {
+        return false;
+    }
+
+    if (!ThrottleReserve(slot)) {
+        Fail(CastFailure::Throttled);
+        return false;
+    }
+
+    if (!startPosition.IsValid() || !endPosition.IsValid() ||
+        startPosition.IsZero() || endPosition.IsZero()) {
+        Fail(CastFailure::InvalidPosition);
+        return false;
+    }
+
+    g_lastTrace.startPosition = startPosition;
+    g_lastTrace.endPosition = endPosition;
+
+    const uintptr_t castFn =
+        CoreRuntime::ResolveRva(Offset::ControlRuntime::CastSpellVector);
+    if (!Globals::IsValidPtr(castFn)) {
+        Fail(CastFailure::MissingNativeFunction);
+        return false;
+    }
+    g_lastTrace.castSpellSafe = castFn;
+
+    // Default fog/vision index the normal cast path passes when there is no
+    // special vision source (sub_97A0B0's `dword_1F18A30` fallback).
+    const std::int32_t visionFlag = Globals::Read<std::int32_t>(
+        CoreRuntime::ResolveRva(Offset::ControlRuntime::CastVisionIndexDefault));
+
+    const NativeVec3Xyz start{ startPosition.x, startPosition.y, startPosition.z };
+    const NativeVec3Xyz end{ endPosition.x, endPosition.y, endPosition.z };
+
+    bool nativeException = false;
+    bool bypassTouched = false;
+
+    __try {
+        g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
+        bypassTouched = true;
+
+        spoof_call(
+            reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
+            reinterpret_cast<FnCastSpellVector>(castFn),
+            g_lastTrace.spellbook,   // book (localPlayer + SpellBookOffset)
+            g_lastTrace.spellSlot,   // slotObj = GetSpellSlot(book, slot)
+            static_cast<std::int32_t>(slot),
+            &start,
+            &end,
+            visionFlag);
+
+        g_lastTrace.canCastAccepted = true;
+        g_lastTrace.nativeResult = 1;
+    }
+    __except (1) {
+        nativeException = true;
+    }
+
+    ClearBypassFlag(bypassTouched);
+
+    if (nativeException) {
+        Fail(CastFailure::NativeException);
+        return false;
+    }
+
+    g_lastTrace.failure = CastFailure::None;
+    g_lastTrace.success = true;
+    CoreValidation::MarkCastResult(true);
+    return true;
+}
+
 inline bool DispatchTargetViaHud(std::uint8_t slot, uintptr_t target) {
     if (!ResolveCommon(CastKind::Target, slot)) {
+        return false;
+    }
+
+    if (!ThrottleReserve(slot)) {
+        Fail(CastFailure::Throttled);
         return false;
     }
 
@@ -634,6 +887,12 @@ inline bool DispatchCharge(CastKind kind,
 // SpellInput fields are modified.
 inline bool CastPositionSpell(std::uint8_t slot, const Vec3& position) {
     return detail::CastValidated(CastKind::Position, slot, position, 0);
+}
+
+inline bool CastVectorSpell(std::uint8_t slot,
+                            const Vec3& startPosition,
+                            const Vec3& endPosition) {
+    return detail::DispatchVector(slot, startPosition, endPosition);
 }
 
 // Targeted casts mirror Smart Cast key press. BF1EF0 performs the actual

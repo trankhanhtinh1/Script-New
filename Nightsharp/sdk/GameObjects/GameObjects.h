@@ -232,7 +232,7 @@ namespace detail {
             return false;
         }
         return ContainsAny(name, {
-            "sru_baron", "sru_dragon", "sru_riftherald", "voidgrub",
+            "sru_baron", "sru_dragon", "sru_riftherald", "voidgrub", "sru_horde",
             "sru_atakhan", "atakhan", "sru_sentinel", "sru_blue",
             "sru_red", "sru_gromp", "sru_krug", "sru_murkwolf",
             "sru_razorbeak", "sru_crab", "sru_riftscuttler"

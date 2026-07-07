@@ -9,6 +9,7 @@
 #include "PluginManager.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
+#include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
@@ -21,6 +22,8 @@
 #include "Champion/JaxSemiPlugin.h"
 #include "Champion/XerathSemiPlugin.h"
 #include "Champion/7UPAIO/7UPAIO.h"
+#include "Champion/SharpShooterAIO/SharpShooterAIO.h"
+#include "EzEvade/EzEvadePlugin.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../DebugLog.h"
 
@@ -46,6 +49,7 @@ namespace PluginBootstrap {
     inline void ApplyDebugAutoLoadOverrides() {
         static constexpr const char* kDebugPluginIds[] = {
             "core.player_event_filter",
+            "core.player_buff_debug",
             "core.spell_tracking_debug",
             "utility.attack_range_draw_test",
             "utility.movement_state_draw",
@@ -103,6 +107,7 @@ namespace PluginBootstrap {
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
+        PluginManager::Get().Register<PlayerBuffDebugPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins complete");
 
@@ -120,6 +125,8 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<JaxSemiPlugin>();
         PluginManager::Get().Register<XerathSemiPlugin>();
         PluginManager::Get().Register<AIO7UPPlugin>();
+        PluginManager::Get().Register<SharpShooterAIOPlugin>();
+        PluginManager::Get().Register<EzEvadePlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

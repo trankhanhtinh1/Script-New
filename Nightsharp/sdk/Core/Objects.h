@@ -9,11 +9,15 @@
 #include "../../Core/CoreObjects.h"
 #include "../../Core/CoreRuneManager.h"
 #include "../../Core/CoreAIHeroClient.h"
+#include "../../Core/CoreView.h"
 #include "../../Core/Vector.h"
 #include "../Enumerations/JungleType.h"
 #include "../Enumerations/MinionTypes.h"
 #include "../Enumerations/SpellSlot.h"
 #include "../Enumerations/DamageType.h"
+#include "../Enums/BuffType.h"
+#include "../Enums/GameObjectOrder.h"
+#include "../Data/GameData.h"
 #include "../Data/RuneData.h"
 
 #include <algorithm>
@@ -782,6 +786,24 @@ public:
         return ObjectDetail::ReadVisibleFlag(a);
     }
 
+    // EnsoulSharp parity: GameObject.IsVisibleOnScreen.
+    // The native client stores a Riot-scrambled bool for this on the object,
+    // but that field is NOT reversed on the current x64 build — EnsoulSharp's
+    // native core (EnsoulSharp.Core.dll) is a 32-bit, encrypted module, so its
+    // field offset neither disassembles statically nor maps to the x64 layout.
+    // We reproduce the exact same result with the existing world-to-screen
+    // projection: a unit is "visible on screen" when its world position projects
+    // inside the current renderer viewport. This is a DRAW-ONLY gate (used by HP
+    // bar / overlay drawing); do NOT use it for gameplay/targeting decisions —
+    // it does not account for fog of war (use IsVisible() for that).
+    bool IsVisibleOnScreen() const {
+        const uintptr_t a = Address();
+        if (!a) return false;
+        Vec2 screen{};
+        return ::CoreView::WorldToScreen(Position(), screen) &&
+               ::CoreView::OnScreen(screen);
+    }
+
     bool IsTargetable() const {
         const uintptr_t a = Address();
         if (!a) return false;
@@ -827,6 +849,17 @@ public:
         if (sc && !sc->characterName.empty()) return sc->characterName;
         static const std::string kEmpty;
         return kEmpty;
+    }
+
+    float GetHpBarHeight() const {
+        const std::string& charName = CharacterName();
+        if (!charName.empty()) {
+            const auto* info = SDK::Data::GameData::GetUnitInfoByName(charName);
+            if (info && info->healthBarHeight > 0.0f) {
+                return info->healthBarHeight;
+            }
+        }
+        return 100.0f;
     }
 
     // Gap #2 fix: EnsoulSharp Compare is strict — only matches when both
@@ -1573,7 +1606,7 @@ public:
         // time in the Baron pit; treat them as Epic so jungle clear logic
         // can prioritise them differently from large camps.
         if (ObjectDetail::ContainsAny(name, {
-            "SRU_Voidgrub", "SRU_Voidgrubs",
+            "SRU_Voidgrub", "SRU_Voidgrubs", "SRU_Horde",
         })) {
             return JungleType::Epic;
         }

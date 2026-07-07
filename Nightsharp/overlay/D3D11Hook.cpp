@@ -455,6 +455,10 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     // Dispatch to SDK WndProc subscribers (cursor, target selector, chat, plugins, etc.)
     SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
 
+    // Block keybind activation while the chat box is open — typing must not
+    // toggle keybinds (Fly Hack / Auto W) or hold the combo key.
+    SDK::UI::g_KeybindInputBlocked = SDK::Game::IsChatOpen();
+
     // Dispatch key/mouse events to MenuKeyBind state machines.
     SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 

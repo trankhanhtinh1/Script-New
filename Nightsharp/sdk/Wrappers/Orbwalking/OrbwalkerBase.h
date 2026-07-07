@@ -522,16 +522,22 @@ public:
                 extraWindup);
         }
 
-        const float safetyBuffer = std::clamp(windup * 0.12f, 35.0f, 70.0f);
-        const float doCastFallbackBuffer = attackDamageIssued_ ? 0.0f : 60.0f;
+        // IMPORTANT: OnDoCast (attackDamageIssued_) fires at the cast START, not
+        // when the windup animation finishes and the projectile launches. Moving
+        // between those two moments STILL cancels the auto-attack. So we must NOT
+        // early-return on attackDamageIssued_ — we gate on the computed windup
+        // (AttackCastDelay) elapsing, which is the real point where the shot is
+        // guaranteed out. We keep the wait as tight as possible (windup + a small
+        // desync safety) so movement is responsive without cancelling the shot.
+        const float safetyBuffer = std::clamp(windup * 0.08f, 20.0f, 45.0f);
         const float readyAt = static_cast<float>(lastAutoAttackTick_) +
-            windup + extraWindup + safetyBuffer + doCastFallbackBuffer + static_cast<float>(rengarExtra);
+            windup + extraWindup + safetyBuffer + static_cast<float>(rengarExtra);
         const float serverNow = static_cast<float>(now) + (static_cast<float>(Game::Ping()) / 2.0f);
 
         const bool ready = serverNow >= readyAt;
         AADebugLogCanMove(
             ready,
-            ready ? (attackDamageIssued_ ? "windup-ready-docast" : "windup-ready-fallback") : "windup",
+            ready ? "windup-ready" : "windup",
             std::max(0.0f, readyAt - serverNow),
             windup,
             extraWindup,
@@ -772,6 +778,10 @@ public:
         const int now = Tick();
         const auto player = GameObjects::Player();
         const bool isFleeMode = (ActiveMode() == OrbwalkingMode::Flee);
+        // Gate the move for the duration of the attack windup (AttackCastDelay).
+        // OnDoCast/attackDamageIssued_ fires at cast START, before the windup
+        // finishes, so moving during this window still cancels the shot — we must
+        // wait out the windup itself, not just until the cast begins.
         const bool attackWindupGate =
             !isFleeMode &&
             player.IsValid() &&
