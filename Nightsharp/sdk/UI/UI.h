@@ -87,6 +87,12 @@ namespace SDK { namespace UI {
 
     using KeyBindType = ::SDK::KeyBindType;
 
+    // Set by the overlay WndProc (which can see Game::IsChatOpen()) right before
+    // it dispatches key input. While true (chat box open) key presses must NOT
+    // toggle/activate keybinds — the user is typing, not playing. Kept as a plain
+    // flag to avoid a UI->Game include dependency here.
+    inline bool g_KeybindInputBlocked = false;
+
     inline bool DrawStateToggleButton(const char* id,
                                       const char* label,
                                       bool active,
@@ -737,10 +743,18 @@ namespace SDK { namespace UI {
             if (vkCode != Key) return false;
             const bool firstDown = down && !WasDown;
             WasDown = down;
+
+            // While the chat box is open, ignore key input for activation so
+            // typing does not (a) toggle keybinds like Fly Hack / Auto W, or
+            // (b) hold a Press keybind (combo) active. A Press keybind can never
+            // be active while input is blocked, which also releases a key that
+            // was held before chat opened (fixes the stuck-combo auto-cast).
+            const bool inputBlocked = g_KeybindInputBlocked;
             if (Type == KeyBindType::Press) {
-                if (Active != down) SetActive(down);
+                const bool wantActive = down && !inputBlocked;
+                if (Active != wantActive) SetActive(wantActive);
             } else { // Toggle on key-down only
-                if (firstDown) SetActive(!Active);
+                if (firstDown && !inputBlocked) SetActive(!Active);
             }
             return false; // do not consume so the host can still see it
         }

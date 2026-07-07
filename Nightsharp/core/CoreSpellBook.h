@@ -280,9 +280,17 @@ inline bool CastSpell(uintptr_t owner, std::int32_t slot, const Vec3& position) 
 
 inline bool CastSpell(uintptr_t owner,
                       std::int32_t slot,
-                      const Vec3& /*startPosition*/,
+                      const Vec3& startPosition,
                       const Vec3& endPosition) {
-    return CastSpell(owner, slot, endPosition);
+    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+        return false;
+    }
+
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastVectorSpell(
+        static_cast<std::uint8_t>(slot),
+        startPosition,
+        endPosition);
 }
 
 inline bool CastSpellOnTarget(uintptr_t owner,

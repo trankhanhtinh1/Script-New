@@ -317,6 +317,21 @@ namespace ControlRuntime {
     // arg3 is the hotkey/cast mode (2 = Smart/Quick Cast).
     // arg4 is key state (1 = press, 2 = release).
     constexpr auto HudSpellHandler        = 0xBFEA60;
+    // ── Two-position (vector) cast — Viktor E / EnsoulSharp CastSpell(start,end) ─
+    // sub_97A980(book, slotObj, slot, Vector3f* start, Vector3f* end, visionIdx):
+    // sibling of the normal cast builder sub_97A0B0, but takes TWO explicit world
+    // positions and emits an opcode-271 cast packet directly, WITHOUT calling
+    // CanCastCheck — so it accepts vector spells the CastSpellSafe/HUD paths
+    // reject. Only x/z are serialized. Confirmed IDB 13337 via caller sub_9D70C0
+    // (book=player+0x3128, slotObj=GetSpellSlot(book,slot)) and the shared packet
+    // builder sub_9651F0. This is the native entry EnsoulSharp's managed
+    // Spellbook.CastSpell(slot, start, end) forwards to.
+    constexpr auto CastSpellVector        = 0x97A980;
+    // GetSpellSlot(book, slot) == *(book + 0xAE0 + slot*8). sub_969340.
+    constexpr auto GetSpellSlot           = 0x969340;
+    // Default fog/vision index the cast packet uses when there is no special
+    // vision source (sub_97A0B0 / CastSpellSafe fallback `dword_1F18A30`).
+    constexpr auto CastVisionIndexDefault = 0x1F18A30;
     constexpr auto SpellTypeClassify      = 0x916700; // sub_936DF0: spell-type byte +0x2F (1/6=targetable, 18=chargeable)
     constexpr auto GetSpellLevel          = 0x3A8B90; // sub_9342B0: spell level (used by GetOwnerSlotIndex to pick slot)
     // Cast packet opcode (chargeable/normal): 609 (0x261), vtable off_1A4BDF8

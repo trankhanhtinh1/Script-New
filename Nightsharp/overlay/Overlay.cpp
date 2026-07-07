@@ -768,6 +768,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
     }
 
+    SDK::UI::g_KeybindInputBlocked = SDK::Game::IsChatOpen();
     SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 
     switch (msg) {
@@ -822,6 +823,11 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
     }
 
     SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
+
+    // Block keybind activation while the chat box is open (typing must not
+    // toggle keybinds or hold the combo key).
+    SDK::UI::g_KeybindInputBlocked = SDK::Game::IsChatOpen();
+
     SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 
     if (NightSharpMenu::showMenu &&

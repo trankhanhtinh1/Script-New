@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreAiManager.h"
+#include "CoreBuffs.h"
 #include "CoreObjectManager.h"
 #include "CoreRuntime.h"
 #include "CoreSpellDataInst.h"
@@ -118,7 +119,11 @@ struct BuffEventArgs {
     ObjectInfo Sender = {};
     uintptr_t EventBridge = 0;
     uintptr_t OwnerComponent = 0;
+    uintptr_t BuffAddress = 0;
     int Count = 0;
+    int Type = -1;
+    float StartTime = 0.0f;
+    float EndTime = 0.0f;
     char BuffName[96] = {};
 };
 
@@ -691,6 +696,90 @@ namespace detail {
         return {};
     }
 
+    inline bool LooksLikeBuff(uintptr_t buffAddress) {
+        if (!IsValidAddress(buffAddress)) {
+            return false;
+        }
+
+        ::CoreBuffs::BuffRef buff{ buffAddress };
+        char name[96] = {};
+        if (buff.ReadName(name, static_cast<int>(sizeof(name))) &&
+            IsPlausibleIdentifier(name)) {
+            return true;
+        }
+        return false;
+    }
+
+    inline uintptr_t FirstObjectArg(const RawEventArgs& raw) {
+        const uintptr_t args[4] = {
+            raw.Rcx,
+            static_cast<uintptr_t>(raw.Rdx),
+            raw.R8,
+            raw.R9
+        };
+        for (const uintptr_t arg : args) {
+            if (LooksLikeObject(arg)) {
+                return arg;
+            }
+        }
+        return 0;
+    }
+
+    inline uintptr_t FirstBuffArg(const RawEventArgs& raw) {
+        const uintptr_t args[4] = {
+            raw.Rcx,
+            static_cast<uintptr_t>(raw.Rdx),
+            raw.R8,
+            raw.R9
+        };
+        for (const uintptr_t arg : args) {
+            if (!LooksLikeObject(arg) && LooksLikeBuff(arg)) {
+                return arg;
+            }
+        }
+        return 0;
+    }
+
+    inline void AssignBuffSnapshot(BuffEventArgs& args, uintptr_t buffAddress) {
+        if (!LooksLikeBuff(buffAddress)) {
+            return;
+        }
+
+        args.BuffAddress = buffAddress;
+        ::CoreBuffs::BuffRef buff{ buffAddress };
+        args.Type = buff.GetType();
+        args.StartTime = buff.GetStartTime();
+        args.EndTime = buff.GetEndTime();
+
+        char name[96] = {};
+        if (buff.ReadName(name, static_cast<int>(sizeof(name))) &&
+            IsPlausibleIdentifier(name)) {
+            CopyText(
+                args.BuffName,
+                static_cast<int>(sizeof(args.BuffName)),
+                name);
+        }
+    }
+
+    inline void AssignBuffSender(BuffEventArgs& args, const RawEventArgs& raw) {
+        if (args.Sender.IsValid()) {
+            return;
+        }
+
+        if (raw.Object.IsValid() && LooksLikeObject(raw.Object.Ptr)) {
+            args.Sender = raw.Object;
+            return;
+        }
+
+        const uintptr_t object = FirstObjectArg(raw);
+        if (LooksLikeObject(object)) {
+            args.Sender = ReadObject(object);
+            return;
+        }
+
+        args.Sender = ResolveBuffBridgeOwner(args.EventBridge);
+    }
+
     inline ObjectInfo ReadSpellbookOwner(uintptr_t spellbook) {
         uint32_t casterNetworkId = 0;
         Read(spellbook + Offset::SpellBookLayout::CasterNetId, casterNetworkId);
@@ -1198,13 +1287,24 @@ inline BuffEventArgs DecodeBuffEvent(const RawEventArgs& raw) {
     BuffEventArgs args{};
     args.Raw = raw;
     args.EventBridge = static_cast<uintptr_t>(raw.Rdx);
+    args.BuffAddress = detail::FirstBuffArg(raw);
 
     detail::CopyStringView(
         raw.R8,
         args.BuffName,
         static_cast<int>(sizeof(args.BuffName)));
+    if (args.BuffAddress) {
+        detail::AssignBuffSnapshot(args, args.BuffAddress);
+    }
 
     if (raw.Id == Hooks::OnBuffAdd || raw.Id == Hooks::OnBuffRemove) {
+        args.Count = raw.Id == Hooks::OnBuffRemove ? 0 : 1;
+        if (raw.Id == Hooks::OnBuffAdd && args.BuffAddress) {
+            const int stacks = ::CoreBuffs::BuffRef{ args.BuffAddress }.GetStacks();
+            if (stacks > 0) {
+                args.Count = stacks;
+            }
+        }
         args.OwnerComponent = raw.R9;
         if (raw.R9 > Offset::BuffEventLayout::OwnerComponent) {
             const uintptr_t owner =
@@ -1216,7 +1316,11 @@ inline BuffEventArgs DecodeBuffEvent(const RawEventArgs& raw) {
         }
     } else if (raw.Id == Hooks::OnBuffUpdate) {
         args.Count = static_cast<int>(raw.R9);
-        args.Sender = detail::ResolveBuffBridgeOwner(args.EventBridge);
+    }
+
+    detail::AssignBuffSender(args, raw);
+    if (args.Sender.IsValid()) {
+        detail::RememberBuffBridgeOwner(args.EventBridge, args.Sender.Ptr);
     }
 
     return args;

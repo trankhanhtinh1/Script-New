@@ -10,15 +10,22 @@
 // stack-counter buff has `endTime == 0` (permanent) and the old check
 // incorrectly filtered it out as expired.
 //
-// Active conditions (all three must hold):
+// Active conditions (all must hold):
 //   1. `entry` must still be inside `[EntriesStart, EntriesEnd)`
-//      during iteration — expired buffs are slid out of the range)
-//   2. `stacks > 0` (or `stacksAlt > 0` as fallback for single-instance buffs)
-//   3. `endTime == 0` (permanent buff) OR `endTime > gameTime`
+//      during iteration — empty pool slots have a null script + zero count.
+//   2. LIVE count `*(int*)(buff + 0x38)` > 0. The game zeroes this field the
+//      instant a buff is removed — INCLUDING abruptly-cancelled channel/toggle
+//      buffs (Xerath R LocusOfPower2, recall) that linger in the array with a
+//      stale future endTime. Verified in live memory: +0x38 goes 1 -> 0 on R
+//      cancel. Do NOT fall back to stacksAlt (+0x3C) for liveness — the game
+//      does NOT clear it on removal, which previously kept cancelled buffs
+//      "active" forever (Xerath could not cast after ending R). GetStacks()
+//      keeps the 0x3C fallback ONLY for stack-COUNT (damage) purposes.
+//   3. `endTime == 0` (permanent buff) OR `endTime > gameTime`.
 //
-// Channel buffs such as Recall can stay in BuffManager after cancel with
-// non-zero stacks and the original future endTime. Public HasBuff() therefore
-// also checks a live state source for those known cases.
+// Recall still also has a spell-state cross-check (IsSuppressedByLiveState) as
+// belt-and-suspenders, but the +0x38 live-count check above is what generally
+// catches abruptly-cancelled channel/toggle buffs.
 //
 // The buff manager layout is a contiguous array of 16-byte entries at
 // `BuffManagerRuntime::BuffManagerOffset` inside each AIBaseClient. Each
@@ -32,6 +39,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 
 #if defined(_WIN32)
 #include <windows.h>   // lstrcmpiA
@@ -87,11 +95,23 @@ namespace CoreBuffs {
         // conditions 2 and 3 here.
         bool IsActive(float gameTime) const {
             if (!IsValid()) return false;
-            if (GetStacks() <= 0) return false;
+
+            // Authoritative liveness: the game zeroes the buff's LIVE count
+            // (BuffStacks, +0x38) the instant the buff is removed/cancelled.
+            // Verified in live memory (CheatEngine, League 26.x): the
+            // XerathLocusOfPower2 R buff goes +0x38: 1 -> 0 on an abrupt R cancel
+            // while endTime (+0x1C) stays in the future and stacksAlt (+0x3C)
+            // stays 1. Use the RAW count here, NOT GetStacks(): GetStacks() falls
+            // back to stacksAlt (+0x3C), which the game does NOT clear on removal,
+            // so it would keep abruptly-cancelled channel/toggle buffs "active"
+            // forever (Xerath unable to cast after ending R; recall lingering).
+            if (Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacks) <= 0) {
+                return false;
+            }
 
             const float endTime = GetEndTime();
             if (endTime <= 0.0f) {
-                return true;   // permanent buff — always active when stacks > 0
+                return true;   // permanent buff — always active when live count > 0
             }
             return endTime > gameTime;
         }
@@ -150,6 +170,36 @@ namespace CoreBuffs {
             return ::Core::ObjectManager::FindByNetworkId(netId);
         }
     };
+
+    struct CachedBuffEntry {
+        uintptr_t object = 0;
+        uintptr_t address = 0;
+        int count = 0;
+        int type = -1;
+        float startTime = 0.0f;
+        float endTime = 0.0f;
+        char name[96] = {};
+        bool known = false;
+    };
+
+    inline constexpr int kMaxCachedBuffEntries = 1024;
+    inline CachedBuffEntry CachedBuffEntries[kMaxCachedBuffEntries] = {};
+    inline int CachedBuffCursor = 0;
+    inline bool EventCacheEnabled = false;
+
+#if defined(_WIN32)
+    inline SRWLOCK CachedBuffLock = SRWLOCK_INIT;
+
+    struct CachedBuffSharedLock {
+        CachedBuffSharedLock() { AcquireSRWLockShared(&CachedBuffLock); }
+        ~CachedBuffSharedLock() { ReleaseSRWLockShared(&CachedBuffLock); }
+    };
+
+    struct CachedBuffExclusiveLock {
+        CachedBuffExclusiveLock() { AcquireSRWLockExclusive(&CachedBuffLock); }
+        ~CachedBuffExclusiveLock() { ReleaseSRWLockExclusive(&CachedBuffLock); }
+    };
+#endif
 
     // ── Manager accessors ──
 
@@ -239,6 +289,225 @@ namespace CoreBuffs {
         return IsRecallBuffName(query) && IsRecallBuffName(buffName);
     }
 
+    inline void SetEventCacheEnabled(bool enabled) {
+        EventCacheEnabled = enabled;
+    }
+
+    inline bool IsEventCacheEnabled() {
+        return EventCacheEnabled;
+    }
+
+    inline void ClearEventCache() {
+#if defined(_WIN32)
+        CachedBuffExclusiveLock lock;
+#endif
+        for (auto& entry : CachedBuffEntries) {
+            entry = {};
+        }
+        CachedBuffCursor = 0;
+    }
+
+    inline bool IsCachedBuffActive(const CachedBuffEntry& entry, float gameTime) {
+        if (!entry.known || !entry.name[0]) {
+            return false;
+        }
+
+        // The event cache goes stale when a buff is removed without a matching
+        // OnBuffRemove hook — exactly what happens to abruptly-cancelled
+        // channel/toggle buffs (Xerath R LocusOfPower2, recall). The game itself
+        // zeroes the live count (buff+0x38) on removal, so re-derive liveness from
+        // live memory whenever we still hold the buff address. The name match
+        // guards against buff-slot reuse (the freed object recycled by another
+        // buff). This keeps the cache fast (it still supplies the address, so we
+        // skip the full BuffManager scan) while never reporting a removed buff.
+        if (Globals::IsValidPtr(entry.address)) {
+            BuffRef live{ entry.address };
+            char buf[96] = {};
+            if (live.ReadName(buf, static_cast<int>(sizeof(buf))) &&
+                NameMatchesQuery(buf, entry.name)) {
+                return live.IsActive(gameTime);
+            }
+        }
+
+        // Address unknown or reused: fall back to the cached snapshot.
+        if (entry.count <= 0) {
+            return false;
+        }
+        if (entry.endTime <= 0.0f) {
+            return true;
+        }
+        return entry.endTime > gameTime;
+    }
+
+    inline bool TryReadLiveBuffSnapshot(uintptr_t obj,
+                                        const char* name,
+                                        int eventCount,
+                                        CachedBuffEntry& out) {
+        if (!Globals::IsValidPtr(obj) || !name || !name[0]) {
+            return false;
+        }
+
+        uintptr_t buffs[256] = {};
+        const int count = Enumerate(obj, buffs, 256);
+        char buf[96] = {};
+        for (int i = 0; i < count; ++i) {
+            BuffRef buff{ buffs[i] };
+            if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) {
+                continue;
+            }
+            if (!NameMatchesQuery(buf, name)) {
+                continue;
+            }
+
+            out = {};
+            out.object = obj;
+            out.address = buff.address;
+            out.count = eventCount > 0 ? eventCount : buff.GetStacks();
+            out.type = buff.GetType();
+            out.startTime = buff.GetStartTime();
+            out.endTime = buff.GetEndTime();
+            out.known = true;
+            strncpy_s(out.name, sizeof(out.name), buf, _TRUNCATE);
+            return true;
+        }
+        return false;
+    }
+
+    inline bool TryReadBuffSnapshot(uintptr_t obj,
+                                    uintptr_t buffAddress,
+                                    const char* fallbackName,
+                                    int eventCount,
+                                    CachedBuffEntry& out) {
+        if (!Globals::IsValidPtr(obj) || !Globals::IsValidPtr(buffAddress)) {
+            return false;
+        }
+
+        BuffRef buff{ buffAddress };
+        char buf[96] = {};
+        if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) {
+            if (!fallbackName || !fallbackName[0]) {
+                return false;
+            }
+            strncpy_s(buf, sizeof(buf), fallbackName, _TRUNCATE);
+        }
+
+        out = {};
+        out.object = obj;
+        out.address = buff.address;
+        out.count = eventCount > 0 ? eventCount : buff.GetStacks();
+        out.type = buff.GetType();
+        out.startTime = buff.GetStartTime();
+        out.endTime = buff.GetEndTime();
+        out.known = true;
+        strncpy_s(out.name, sizeof(out.name), buf, _TRUNCATE);
+        return out.name[0] != 0;
+    }
+
+    inline int FindCachedBuffIndexLocked(uintptr_t obj, const char* name) {
+        if (!Globals::IsValidPtr(obj) || !name || !name[0]) {
+            return -1;
+        }
+
+        for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
+            const auto& entry = CachedBuffEntries[i];
+            if (!entry.known || entry.object != obj || !entry.name[0]) {
+                continue;
+            }
+            if (NameMatchesQuery(entry.name, name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    inline int FindFreeCachedBuffIndexLocked() {
+        for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
+            if (!CachedBuffEntries[i].known) {
+                return i;
+            }
+        }
+        return CachedBuffCursor++ % kMaxCachedBuffEntries;
+    }
+
+    inline bool TryGetCachedBuff(uintptr_t obj,
+                                 const char* name,
+                                 CachedBuffEntry& out);
+
+    inline void StoreCachedBuff(const CachedBuffEntry& value) {
+        if (!Globals::IsValidPtr(value.object) || !value.name[0]) {
+            return;
+        }
+
+#if defined(_WIN32)
+        CachedBuffExclusiveLock lock;
+#endif
+        int index = FindCachedBuffIndexLocked(value.object, value.name);
+        if (index < 0) {
+            index = FindFreeCachedBuffIndexLocked();
+        }
+        CachedBuffEntries[index] = value;
+        CachedBuffEntries[index].known = true;
+    }
+
+    inline void ApplyBuffEvent(uintptr_t obj,
+                               const char* name,
+                               int count,
+                               bool forceInactive,
+                               uintptr_t buffAddress = 0) {
+        if (!EventCacheEnabled || !Globals::IsValidPtr(obj) || !name || !name[0]) {
+            return;
+        }
+
+        CachedBuffEntry entry = {};
+        if (!forceInactive && count > 0 &&
+            TryReadBuffSnapshot(obj, buffAddress, name, count, entry)) {
+            StoreCachedBuff(entry);
+            return;
+        }
+
+        if (!forceInactive && count > 0 &&
+            TryReadLiveBuffSnapshot(obj, name, count, entry)) {
+            StoreCachedBuff(entry);
+            return;
+        }
+
+        entry.object = obj;
+        entry.count = forceInactive ? 0 : count;
+        entry.known = true;
+        strncpy_s(entry.name, sizeof(entry.name), name, _TRUNCATE);
+        StoreCachedBuff(entry);
+    }
+
+    inline void ApplyBuffAddEvent(uintptr_t obj, const char* name, int count = 1, uintptr_t buffAddress = 0) {
+        ApplyBuffEvent(obj, name, count > 0 ? count : 1, false, buffAddress);
+    }
+
+    inline void ApplyBuffRemoveEvent(uintptr_t obj, const char* name, uintptr_t buffAddress = 0) {
+        ApplyBuffEvent(obj, name, 0, true, buffAddress);
+    }
+
+    inline void ApplyBuffUpdateEvent(uintptr_t obj, const char* name, int count, uintptr_t buffAddress = 0) {
+        ApplyBuffEvent(obj, name, count, count <= 0, buffAddress);
+    }
+
+    inline bool TryGetCachedBuff(uintptr_t obj,
+                                 const char* name,
+                                 CachedBuffEntry& out) {
+        if (!EventCacheEnabled || !Globals::IsValidPtr(obj) || !name || !name[0]) {
+            return false;
+        }
+
+#if defined(_WIN32)
+        CachedBuffSharedLock lock;
+#endif
+        const int index = FindCachedBuffIndexLocked(obj, name);
+        if (index < 0) {
+            return false;
+        }
+        out = CachedBuffEntries[index];
+        return true;
+    }
+
     inline uintptr_t GetActiveSpellCast(uintptr_t obj) {
         if (!Globals::IsValidPtr(obj)) return 0;
         return Globals::Read<uintptr_t>(obj + Offset::SpellRuntime::ActiveSpellCast);
@@ -302,6 +571,12 @@ namespace CoreBuffs {
         if (!name || !name[0]) return false;
 
         const float gameTime = ResolveGameTime();
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            return IsCachedBuffActive(cached, gameTime) &&
+                   !IsSuppressedByLiveState(obj, cached.name);
+        }
+
         uintptr_t buffs[256] = {};
         const int count = Enumerate(obj, buffs, 256);
         char buf[96] = {};
@@ -318,6 +593,12 @@ namespace CoreBuffs {
     // Explicit active API for callers that already have a gameTime snapshot.
     inline bool HasActiveBuff(uintptr_t obj, const char* name, float gameTime) {
         if (!name || !name[0]) return false;
+
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            return IsCachedBuffActive(cached, gameTime) &&
+                   !IsSuppressedByLiveState(obj, cached.name);
+        }
 
         uintptr_t buffs[256] = {};
         const int count = Enumerate(obj, buffs, 256);
@@ -401,6 +682,17 @@ namespace CoreBuffs {
         if (!name || !name[0]) return {};
 
         const float gameTime = ResolveGameTime();
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            if (!IsCachedBuffActive(cached, gameTime) ||
+                IsSuppressedByLiveState(obj, cached.name)) {
+                return {};
+            }
+            if (Globals::IsValidPtr(cached.address)) {
+                return BuffRef{ cached.address };
+            }
+        }
+
         uintptr_t buffs[256] = {};
         const int count = Enumerate(obj, buffs, 256);
         char buf[96] = {};
@@ -418,6 +710,17 @@ namespace CoreBuffs {
     inline BuffRef FindActiveByName(uintptr_t obj, const char* name, float gameTime) {
         if (!name || !name[0]) return {};
 
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            if (!IsCachedBuffActive(cached, gameTime) ||
+                IsSuppressedByLiveState(obj, cached.name)) {
+                return {};
+            }
+            if (Globals::IsValidPtr(cached.address)) {
+                return BuffRef{ cached.address };
+            }
+        }
+
         uintptr_t buffs[256] = {};
         const int count = Enumerate(obj, buffs, 256);
         char buf[96] = {};
@@ -432,16 +735,45 @@ namespace CoreBuffs {
     }
 
     inline int GetBuffStacks(uintptr_t obj, const char* name) {
+        const float gameTime = ResolveGameTime();
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            return IsCachedBuffActive(cached, gameTime) &&
+                   !IsSuppressedByLiveState(obj, cached.name)
+                ? cached.count
+                : 0;
+        }
+
         const auto buff = FindByName(obj, name);
         return buff.IsValid() ? buff.GetStacks() : 0;
     }
 
     inline int GetActiveBuffStacks(uintptr_t obj, const char* name, float gameTime) {
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            return IsCachedBuffActive(cached, gameTime) &&
+                   !IsSuppressedByLiveState(obj, cached.name)
+                ? cached.count
+                : 0;
+        }
+
         const auto buff = FindActiveByName(obj, name, gameTime);
         return buff.IsValid() ? buff.GetStacks() : 0;
     }
 
     inline float GetBuffRemainingTime(uintptr_t obj, const char* name, float gameTime) {
+        CachedBuffEntry cached = {};
+        if (TryGetCachedBuff(obj, name, cached)) {
+            if (!IsCachedBuffActive(cached, gameTime) ||
+                IsSuppressedByLiveState(obj, cached.name)) {
+                return 0.0f;
+            }
+            if (cached.endTime <= 0.0f) {
+                return 0.0f;
+            }
+            return cached.endTime > gameTime ? (cached.endTime - gameTime) : 0.0f;
+        }
+
         const auto buff = FindActiveByName(obj, name, gameTime);
         return buff.IsValid() ? buff.GetRemainingTime(gameTime) : 0.0f;
     }
