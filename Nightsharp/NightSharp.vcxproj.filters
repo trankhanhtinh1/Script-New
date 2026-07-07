@@ -32,13 +32,16 @@
       <UniqueIdentifier>{C9D52DAC-04E7-E0CA-3B8C-2A1E0C32D147}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\Champion\KuroAIO">
-      <UniqueIdentifier>{4F86AC91-64FA-47D5-9C3C-B3F76A6B6E35}</UniqueIdentifier>
+      <UniqueIdentifier>{B398277C-4564-8535-5CD2-FD9DB919D4F7}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\Champion\KuroAIO\Champion">
-      <UniqueIdentifier>{1B7F0C89-8D85-4F4E-A026-C2C3EB5F70A2}</UniqueIdentifier>
+      <UniqueIdentifier>{70C028BE-9FEE-B21E-4EB3-DA3B0419D053}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\Champion\KuroAIO\Champion\Yasuo">
+      <UniqueIdentifier>{CB2EDF10-63CE-9BB9-133B-FD4128E4A742}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\Champion\KuroAIO\Helper">
-      <UniqueIdentifier>{8238E4AF-58BB-46E0-A91E-02E053BA6A73}</UniqueIdentifier>
+      <UniqueIdentifier>{5E20E521-B10C-D275-E4ED-55C70BBFB57F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\Champion\OneKeyToWin">
       <UniqueIdentifier>{B5AFD60E-A465-B2FE-72A3-9FEB63B435F8}</UniqueIdentifier>
@@ -347,27 +350,6 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
-      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\KuroAIOCommon.h">
-      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\KuroAIO.h">
-      <Filter>Plugins\Champion\KuroAIO</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\MenuHelper.h">
-      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\OrbwalkerModeHelper.h">
-      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h">
-      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\TargetHelper.h">
-      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
-    </ClInclude>
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
@@ -379,6 +361,33 @@
     </ClInclude>
     <ClInclude Include="Plugins\Champion\JaxSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Yasuo\Yasuo.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion\Yasuo</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Yasuo\YasuoHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion\Yasuo</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\KuroAIOCommon.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\MenuHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\OrbwalkerModeHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\TargetHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\KuroAIO.h">
+      <Filter>Plugins\Champion\KuroAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\OneKeyToWin\Champions\Ahri.h">
       <Filter>Plugins\Champion\OneKeyToWin\Champions</Filter>

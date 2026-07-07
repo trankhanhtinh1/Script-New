@@ -12,6 +12,7 @@
 
 #include "Champion/Katarina.h"
 #include "Champion/Samira.h"
+#include "Champion/Yasuo/Yasuo.h"
 
 namespace Plugins {
 
@@ -35,19 +36,23 @@ public:
             KuroAIO::Katarina::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Samira") == 0) {
             KuroAIO::Samira::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Yasuo") == 0) {
+            KuroAIO::Yasuo::OnGameLoad();
         }
     }
 
     void OnUnload() override {
         KuroAIO::Katarina::OnUnload();
         KuroAIO::Samira::OnUnload();
+        KuroAIO::Yasuo::OnUnload();
     }
 
 private:
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
             (_stricmp(championName, "Katarina") == 0 ||
-             _stricmp(championName, "Samira") == 0);
+             _stricmp(championName, "Samira") == 0 ||
+             _stricmp(championName, "Yasuo") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -72,6 +77,9 @@ private:
         }
         if (_stricmp(championName.c_str(), "Samira") == 0) {
             return "Samira";
+        }
+        if (_stricmp(championName.c_str(), "Yasuo") == 0) {
+            return "Yasuo";
         }
         return nullptr;
     }
