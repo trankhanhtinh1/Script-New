@@ -110,6 +110,42 @@ public:
         }
     }
 
+    /// True while the local player is still in the auto-attack windup.
+    /// Use this to avoid casting/moving before the attack has fired.
+    static bool IsAutoAttacking() {
+        return Current() && Current()->IsAutoAttacking();
+    }
+
+    /// True from attack order/attack confirm until the windup is done.
+    /// Same practical check as IsAutoAttacking(), but named for timing logic.
+    static bool IsWindingUp() {
+        return Current() && Current()->IsWindingUp();
+    }
+
+    /// True after the current auto attack has fired.
+    /// For ranged champions this means missile/do-cast was seen; for instant attacks, cast is complete.
+    static bool IsAttackCastComplete() {
+        return Current() && Current()->IsAttackCastComplete();
+    }
+
+    /// Milliseconds left before the current auto attack is considered fired/cancel-safe.
+    /// Returns 0 when no attack is currently winding up.
+    static int AttackCastDelayRemaining() {
+        return Current() ? Current()->AttackCastDelayRemaining() : 0;
+    }
+
+    /// Game tick when the next auto attack should be ready.
+    /// Includes attack pause/server pause and orbwalker safety delay; returns 0 if unavailable.
+    static int NextAttackReadyTick() {
+        return Current() ? Current()->NextAttackReadyTick() : 0;
+    }
+
+    /// Milliseconds until CanAttack() is expected to become true.
+    /// Returns 0 when the attack is ready or timing is unavailable.
+    static int AttackCooldownRemaining() {
+        return Current() ? Current()->AttackCooldownRemaining() : 0;
+    }
+
     static int LastMovementTick() {
         return Current() ? Current()->LastMovementTick() : 0;
     }

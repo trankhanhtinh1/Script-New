@@ -40,6 +40,12 @@ public:
     OrbwalkingMode ActiveMode() const override;
     int LastAutoAttackTick() const override;
     void LastAutoAttackTick(int value) override;
+    bool IsAutoAttacking() override;
+    bool IsWindingUp() override;
+    bool IsAttackCastComplete() override;
+    int AttackCastDelayRemaining() override;
+    int NextAttackReadyTick() override;
+    int AttackCooldownRemaining() override;
     int LastMovementTick() const override;
     void LastMovementTick(int value) override;
     bool AttackEnabled() const override;
@@ -121,6 +127,8 @@ private:
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     void SnapshotAttackTimings(const AIHeroClient& player);
+    int AttackCastReadyTick(const AIHeroClient& player);
+    int AttackReadyTick(const AIHeroClient& player);
     void PushDebugConsoleLine(const char* text, int tick);
     void DrawLiveAttackDebugOverlay();
 

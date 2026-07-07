@@ -74,6 +74,55 @@ public:
         lastAttackInstantWindupCasted_ = false;
     }
 
+    bool IsAutoAttacking() override {
+        return IsWindingUp();
+    }
+
+    bool IsWindingUp() override {
+        const auto player = SDK::GameObjects::Player();
+        if (!player.IsValid() || player.IsDead()) {
+            return false;
+        }
+        if (IsWaitingForAttackConfirm()) {
+            return true;
+        }
+        if (lastAutoAttackTick_ <= 0) {
+            return false;
+        }
+        if ((missileLaunched_ && !lastAttackInstantWindup_) ||
+            (lastAttackInstantWindup_ && lastAttackInstantWindupCasted_)) {
+            return false;
+        }
+        return Tick() < AttackCastReadyTick(player);
+    }
+
+    bool IsAttackCastComplete() override {
+        return lastAutoAttackTick_ > 0 &&
+               (missileLaunched_ ||
+                (lastAttackInstantWindup_ && lastAttackInstantWindupCasted_));
+    }
+
+    int AttackCastDelayRemaining() override {
+        const auto player = SDK::GameObjects::Player();
+        if (!player.IsValid() || player.IsDead() || !IsWindingUp()) {
+            return 0;
+        }
+        return std::max(0, AttackCastReadyTick(player) - Tick());
+    }
+
+    int NextAttackReadyTick() override {
+        const auto player = SDK::GameObjects::Player();
+        if (!attackState_ || !player.IsValid() || player.IsDead()) {
+            return 0;
+        }
+        return AttackReadyTick(player);
+    }
+
+    int AttackCooldownRemaining() override {
+        const int readyTick = NextAttackReadyTick();
+        return readyTick > 0 ? std::max(0, readyTick - Tick()) : 0;
+    }
+
     int LastMovementTick() const override { return lastMovementOrderTick_; }
     void LastMovementTick(int value) override { lastMovementOrderTick_ = value; }
 
@@ -681,6 +730,50 @@ private:
 
     static float AttackWindupMs(const SDK::AIBaseClient& unit) {
         return std::max(1.0f, CoreControl::GetAttackWindup(unit.Address()) * 1000.0f);
+    }
+
+    bool IsWaitingForAttackConfirm() const {
+        const int now = Tick();
+        return lastAutoAttackCommandTick_ > lastAutoAttackTick_ &&
+               now - lastAutoAttackCommandTick_ >= 0 &&
+               now - lastAutoAttackCommandTick_ <= 500 + SDK::Game::Ping();
+    }
+
+    int AttackCastReadyTick(const SDK::AIHeroClient& player) const {
+        if (IsWaitingForAttackConfirm()) {
+            return static_cast<int>(std::ceil(
+                static_cast<float>(lastAutoAttackCommandTick_) +
+                AttackWindupMs(player) +
+                static_cast<float>(DelayWindup())));
+        }
+        if (lastAutoAttackTick_ <= 0) {
+            return Tick();
+        }
+        return static_cast<int>(std::ceil(
+            static_cast<float>(lastAutoAttackTick_) +
+            AttackWindupMs(player) +
+            static_cast<float>(DelayWindup()) -
+            static_cast<float>(SDK::Game::Ping()) * 0.5f));
+    }
+
+    int AttackReadyTick(const SDK::AIHeroClient& player) const {
+        const int now = Tick();
+        int readyTick = std::max(blockOrdersUntilTick_, attackPauseUntilTick_);
+        if (lastAutoAttackTick_ > 0) {
+            float extraAttackDelay = 0.0f;
+            if (EqualsIgnoreCase(player.CharacterName(), "Graves")) {
+                const float attackDelay = AttackDelayMs(player);
+                extraAttackDelay =
+                    (attackDelay * 1.0740296828f) - 716.2381256175f - attackDelay;
+            }
+            readyTick = std::max(readyTick, static_cast<int>(std::ceil(
+                static_cast<float>(lastAutoAttackTick_) +
+                AttackDelayMs(player) +
+                extraAttackDelay -
+                static_cast<float>(SDK::Game::Ping()) * 0.5f -
+                25.0f)));
+        }
+        return std::max(now, readyTick);
     }
 
     static bool IsRengarInstantWindupAttack(const SDK::AIHeroClient& player) {

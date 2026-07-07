@@ -26,10 +26,9 @@ inline Spell E{ SpellSlot::E, 600.0f };
 inline Spell R{ SpellSlot::R, 600.0f };
 
 inline bool Loaded = false;
-inline int LastCasted = 0;
 inline int LastE = 0;
 inline int LastW = 0;
-inline int LastAttack = 0;
+inline int LastCastSpell = 0;
 inline int LastBeforeAttack = 0;
 inline int LastOnAttack = 0;
 inline int LastAfterAttack = 0;
@@ -244,7 +243,7 @@ static void BuildMenu() {
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Samira Settings", "Misc Settings"));
     MiscMenu->Add(new MenuBool("WaitForAA", "Waiting For AA"));
-    MiscMenu->Add(new MenuSlider("AATimer", "AA Timer", 1500, 0, 2500));
+    MiscMenu->Add(new MenuSlider("AATimer", "Max AA wait (ms)", 1500, 0, 2500));
     MiscMenu->Add(new MenuBool("PacketCast", "Packet Cast", false));
     MiscMenu->Add(new MenuBool("DrawQAARange", "Draw AA & Q Range", false));
 
@@ -303,21 +302,38 @@ static void OnBeforeAttack(OrbwalkingActionArgs&) {
 
 static void OnAttack(OrbwalkingActionArgs&) {
     LastOnAttack = SDK::Variables::TickCount();
-    LastAttack = LastOnAttack;
-    LastCasted = 0;
 }
 
 static void OnAfterAttack(OrbwalkingActionArgs&) {
     LastAfterAttack = SDK::Variables::TickCount();
-    LastCasted = 0;
 }
 
 static bool InAttackAction() {
-    return Recent(LastBeforeAttack, 180) || Recent(LastOnAttack, 180);
+    return Orbwalker::IsWindingUp() || Orbwalker::AttackCastDelayRemaining() > 0;
 }
 
 static bool AfterAttackRecently() {
     return Recent(LastAfterAttack, 450);
+}
+
+static bool ShouldWaitForAutoAttack() {
+
+    if (!Bool(MiscMenu, "WaitForAA", true)) {
+        return false;
+    }
+
+    if (Orbwalker::IsWindingUp()) {
+        return true;
+    }
+
+    const int time = Slider(MiscMenu, "AATimer", 1500);
+
+    if(LastCastSpell + time >= SDK::Variables::TickCount()){
+        return true;
+    }
+
+    const int waitMs = Orbwalker::AttackCooldownRemaining();
+    return waitMs > 0 && waitMs <= 400;
 }
 
 static void Check() {
@@ -331,10 +347,6 @@ static void Check() {
             ApplyDefaultSettings();
             reset->Value = false;
         }
-    }
-
-    if (AfterAttackRecently()) {
-        LastCasted = 0;
     }
 
     if (player.HasBuff("SamiraR") || (player.HasBuff("SamiraW") && LastE < LastW)) {
@@ -520,8 +532,7 @@ static bool TryECombo() {
 }
 
 static bool TryWCombo() {
-    const int now = SDK::Variables::TickCount();
-    if (LastCasted + Slider(MiscMenu, "AATimer", 1500) > now) {
+    if (ShouldWaitForAutoAttack()) {
         return false;
     }
 
@@ -542,8 +553,7 @@ static bool TryWCombo() {
 }
 
 static bool TryQCombo() {
-    if (!Q.IsReady() ||
-        LastCasted + Slider(MiscMenu, "AATimer", 1500) > SDK::Variables::TickCount()) {
+    if (!Q.IsReady() || ShouldWaitForAutoAttack()) {
         return false;
     }
 
@@ -659,21 +669,22 @@ static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
     const int slot = args.Slot;
     const int now = SDK::Variables::TickCount();
     if (Events::IsLocalPlayer(args.Sender)) {
-        if (slot >= static_cast<int>(SpellSlot::Q) && slot <= static_cast<int>(SpellSlot::R)) {
-            LastCasted = now;
-        }
         if (slot == static_cast<int>(SpellSlot::E)) {
+            LastCastSpell = now;
             LastE = now;
             Orbwalker::ResetAutoAttackTimer();
         }
         if (slot == static_cast<int>(SpellSlot::W)) {
+            LastCastSpell = now;
             LastW = now;
         }
         if ((args.IsAutoAttack || AutoAttack::IsAutoAttack(args.SpellName)) &&
             args.Target.IsValid() &&
             args.Target.Type == ::Core::Objects::ObjectType::AIHeroClient) {
-            LastCasted = 0;
-            LastAttack = now;
+            LastOnAttack = now;
+            LastCastSpell = 0;
+        }else{
+            LastCastSpell = now;
         }
         return;
     }

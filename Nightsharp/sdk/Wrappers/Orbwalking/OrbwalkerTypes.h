@@ -52,6 +52,18 @@ public:
     virtual OrbwalkingMode ActiveMode() const = 0;
     virtual int LastAutoAttackTick() const = 0;
     virtual void LastAutoAttackTick(int value) = 0;
+    /// True while the local player is still in the auto-attack windup.
+    virtual bool IsAutoAttacking() = 0;
+    /// True from attack order/attack confirm until the windup is done.
+    virtual bool IsWindingUp() = 0;
+    /// True after the current auto attack has fired.
+    virtual bool IsAttackCastComplete() = 0;
+    /// Milliseconds left before the current auto attack is considered fired/cancel-safe.
+    virtual int AttackCastDelayRemaining() = 0;
+    /// Game tick when the next auto attack should be ready.
+    virtual int NextAttackReadyTick() = 0;
+    /// Milliseconds until CanAttack() is expected to become true.
+    virtual int AttackCooldownRemaining() = 0;
     virtual int LastMovementTick() const = 0;
     virtual void LastMovementTick(int value) = 0;
     virtual bool AttackEnabled() const = 0;

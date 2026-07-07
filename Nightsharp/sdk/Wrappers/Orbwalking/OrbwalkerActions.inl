@@ -35,6 +35,57 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
 
 inline bool OrbwalkerBase::CanMove() { return CanMove(0.0f, false); }
 
+inline bool OrbwalkerBase::IsAutoAttacking() {
+    return IsWindingUp();
+}
+
+inline bool OrbwalkerBase::IsWindingUp() {
+    ExpirePendingAttack();
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || player.IsDead()) {
+        return false;
+    }
+    if (context_.pendingAttack) {
+        return true;
+    }
+    if (context_.lastAutoAttackTick <= 0 || context_.attackCastComplete) {
+        return false;
+    }
+    return Tick() < AttackCastReadyTick(player);
+}
+
+inline bool OrbwalkerBase::IsAttackCastComplete() {
+    ExpirePendingAttack();
+    return context_.lastAutoAttackTick > 0 && context_.attackCastComplete;
+}
+
+inline int OrbwalkerBase::AttackCastDelayRemaining() {
+    ExpirePendingAttack();
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || player.IsDead()) {
+        return 0;
+    }
+    if (!context_.pendingAttack &&
+        (context_.lastAutoAttackTick <= 0 || context_.attackCastComplete)) {
+        return 0;
+    }
+    return std::max(0, AttackCastReadyTick(player) - Tick());
+}
+
+inline int OrbwalkerBase::NextAttackReadyTick() {
+    ExpirePendingAttack();
+    const auto player = GameObjects::Player();
+    if (!context_.attackEnabled || !player.IsValid() || player.IsDead()) {
+        return 0;
+    }
+    return AttackReadyTick(player);
+}
+
+inline int OrbwalkerBase::AttackCooldownRemaining() {
+    const int readyTick = NextAttackReadyTick();
+    return readyTick > 0 ? std::max(0, readyTick - Tick()) : 0;
+}
+
 inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) {
     (void)disableMissileCheck;
     ExpirePendingAttack();
@@ -295,6 +346,35 @@ inline void OrbwalkerBase::SnapshotAttackTimings(const AIHeroClient& player) {
     // ponytail: CoreControl already owns timing fallback/caching; SDK just consumes ms values.
     context_.attackDelayMs = CoreControl::GetAttackDelayMs(player.Address());
     context_.attackWindupMs = CoreControl::GetAttackWindupMs(player.Address());
+}
+
+inline int OrbwalkerBase::AttackCastReadyTick(const AIHeroClient& player) {
+    SnapshotAttackTimings(player);
+    const int attackTick = context_.pendingAttack
+        ? context_.pendingAttackTick
+        : context_.lastAutoAttackTick;
+    if (attackTick <= 0) {
+        return Tick();
+    }
+    return static_cast<int>(std::ceil(
+        static_cast<float>(attackTick) + context_.attackWindupMs + MoveSafetyMs()));
+}
+
+inline int OrbwalkerBase::AttackReadyTick(const AIHeroClient& player) {
+    const int now = Tick();
+    int readyTick = std::max(context_.allPauseTick, context_.attackPauseTick);
+    const int attackTick = context_.pendingAttack
+        ? context_.pendingAttackTick
+        : context_.lastAutoAttackTick;
+    if (attackTick > 0) {
+        SnapshotAttackTimings(player);
+        readyTick = std::max(readyTick, static_cast<int>(std::ceil(
+            static_cast<float>(attackTick) +
+            context_.attackDelayMs +
+            ChampionExtraAttackDelayMs(player) +
+            AttackSafetyMs())));
+    }
+    return std::max(now, readyTick);
 }
 
 } // namespace SDK

@@ -44,15 +44,6 @@ static std::string RuntimeName(const GameObject& object) {
         return name;
     }
 
-    char direct[96] = {};
-    if (::Core::Objects::ReadName(object.Address(), direct, static_cast<int>(sizeof(direct))) &&
-        direct[0]) {
-        return direct;
-    }
-    if (::Core::Objects::ReadCharacterName(object.Address(), direct, static_cast<int>(sizeof(direct))) &&
-        direct[0]) {
-        return direct;
-    }
     return {};
 }
 
@@ -200,11 +191,6 @@ static float RDamage(const AIBaseClient& target) {
         return 0.0f;
     }
 
-    // Death Lotus full channel damage to one target.
-    // Magic: 375/562.5/750 +285% AP.
-    // Physical: 240% (+750% per 100% bonus AS) bonus AD.
-    // On-hit item damage is not added here because the local SDK does not expose
-    // a reliable generic on-hit damage evaluator in this file.
     static constexpr float baseMagicDamage[] = { 0.0f, 375.0f, 562.5f, 750.0f };
     const float magicDamage = player.CalculateMagicDamage(
         target,
@@ -635,6 +621,12 @@ static void UpdateOrbwalkerState() {
         return;
     }
 
+    if (Orbwalker::IsWindingUp()) {
+        Orbwalker::AttackEnabled(true);
+        Orbwalker::SetOrbwalkerPosition({});
+        return;
+    }
+
     Orbwalker::AttackEnabled(false);
     const auto target = GetMagicalTarget(W.Range);
     if (Orbwalker::ActiveMode() == OrbwalkingMode::Combo &&
@@ -666,6 +658,10 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 
     if (TryEKillSteal() || TryDaggerKillSteal() || TryQKillSteal() || TryEQKillSteal()) {
+        return;
+    }
+
+    if (Orbwalker::IsWindingUp()) {
         return;
     }
 

@@ -89,15 +89,15 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
         ::SDK::SdkWrappers::Initialize();
         PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
-        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);        
+        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 #else
         NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
 #endif
 
-        NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb begin");
-        PluginManager::Get().Register<EnsoulsharpOrbPlugin>();
-        NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb complete");
+        // NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb begin");
+        // PluginManager::Get().Register<EnsoulsharpOrbPlugin>();
+        // NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb complete");
 
         // ─── Core plugins ────────────────────────────────────────────────
 #if NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS
