@@ -327,6 +327,14 @@ public:
         return OrbwalkingDetail::BeforeMoveHandlers.Remove(handler);
     }
 
+    static bool AddOnNonKillableMinion(EventHandler handler) {
+        return OrbwalkingDetail::NonKillableMinionHandlers.Add(handler);
+    }
+
+    static bool RemoveOnNonKillableMinion(EventHandler handler) {
+        return OrbwalkingDetail::NonKillableMinionHandlers.Remove(handler);
+    }
+
     static OrbwalkingActionArgs FireBeforeAttack(const AttackableUnit& target,
                                                  const char* orbwalkerName = "SDK") {
         OrbwalkingActionArgs args(OrbwalkingType::BeforeAttack, target, {}, orbwalkerName);
@@ -353,10 +361,17 @@ public:
         return args;
     }
 
+    static void FireNonKillableMinion(const AttackableUnit& target,
+                                      const char* orbwalkerName = "SDK") {
+        OrbwalkingActionArgs args(OrbwalkingType::NonKillableMinion, target, {}, orbwalkerName);
+        OrbwalkingDetail::FireNonKillableMinion(args);
+    }
+
     inline static EventSlot OnBeforeAttack{ &AddOnBeforeAttack, &RemoveOnBeforeAttack };
     inline static EventSlot OnAttack{ &AddOnAttack, &RemoveOnAttack };
     inline static EventSlot OnAfterAttack{ &AddOnAfterAttack, &RemoveOnAfterAttack };
     inline static EventSlot OnBeforeMove{ &AddOnBeforeMove, &RemoveOnBeforeMove };
+    inline static EventSlot OnNonKillableMinion{ &AddOnNonKillableMinion, &RemoveOnNonKillableMinion };
 
 private:
     static IOrbwalker* Current() {

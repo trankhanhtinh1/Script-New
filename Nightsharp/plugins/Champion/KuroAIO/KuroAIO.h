@@ -19,11 +19,23 @@ namespace Plugins {
 class KuroAIOPlugin final : public IPlugin {
 public:
     const char* GetName() const override { return "KuroAIO"; }
-    const char* GetInternalId() const override { return "champion.kuroaio"; }
+    const char* GetInternalId() const override {
+        const std::string champ = CurrentChampionName();
+        if (_stricmp(champ.c_str(), "Katarina") == 0) {
+            return "champion.kuroaio.katarina";
+        }
+        if (_stricmp(champ.c_str(), "Samira") == 0) {
+            return "champion.kuroaio.samira";
+        }
+        if (_stricmp(champ.c_str(), "Yasuo") == 0) {
+            return "champion.kuroaio.yasuo";
+        }
+        return "champion.kuroaio";
+    }
     const char* GetAuthor() const override { return "Kuro"; }
     PluginCategory GetCategory() const override { return PluginCategory::Champion; }
     const char* GetChampionName() const override { return CurrentSupportedChampionName(); }
-    bool AutoLoadByDefault() const override { return false; }
+    bool AutoLoadByDefault() const override { return true; }
     bool CanLoad() const override { return IsCurrentChampionSupported(); }
 
     void OnLoad() override {

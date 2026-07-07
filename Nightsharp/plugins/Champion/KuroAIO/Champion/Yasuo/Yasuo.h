@@ -214,7 +214,7 @@ static bool TryR() {
 }
 
 static bool TryEQToTarget(const AIHeroClient& target) {
-    if (!Bool(EQMenu, "UseEQ") || !E.IsReady() || !Q.IsReady() ||
+    if (!Bool(EQMenu, "UseEQ") || !E.IsReady() || !Q.IsReady(500) ||
         !ValidHeroTarget(target, static_cast<float>(Slider(RangeMenu, "EGapRange", 925)))) {
         return false;
     }
@@ -236,9 +236,7 @@ static bool TryEQToTarget(const AIHeroClient& target) {
 
     if (CastE(dash)) {
         SDK::Utils::DelayAction::Add(45, []() {
-            if (Q.IsReady()) {
-                Q.Cast(Player().Position());
-            }
+            Q.Cast(Player().Position());
         });
         return true;
     }
@@ -246,6 +244,10 @@ static bool TryEQToTarget(const AIHeroClient& target) {
 }
 
 static bool TryEGapClose(const AIHeroClient& target) {
+
+    if (Orbwalker::IsAutoAttacking() || (Orbwalker::AttackCooldownRemaining() <= 250 && Orbwalker::GetTarget().IsValid()))
+        return false;
+
     const float gapRange = static_cast<float>(Slider(RangeMenu, "EGapRange", 925));
 
     if (!Bool(EMenu, "UseE") ||
@@ -288,7 +290,7 @@ static bool TryEGapClose(const AIHeroClient& target) {
 
     const float afterDistance = after.Distance2D(desired);
 
-    constexpr float minImproveDistance = 40.0f;
+    constexpr float minImproveDistance = 10.0f;
 
     if (afterDistance + minImproveDistance >= currentDistance) {
         return false;

@@ -64,6 +64,11 @@ public:
             : OrbwalkingMode::None;
     }
 
+    bool IsComboKeyPressed() const { return comboKey_ && comboKey_->Active; }
+    bool IsLaneClearKeyPressed() const { return laneClearKey_ && laneClearKey_->Active; }
+    bool IsLastHitKeyPressed() const { return lastHitKey_ && lastHitKey_->Active; }
+    bool IsHybridKeyPressed() const { return hybridKey_ && hybridKey_->Active; }
+
 private:
     static bool BoolValue(const MenuBool* value, bool fallback) {
         return value ? value->Value : fallback;
@@ -74,10 +79,7 @@ private:
     }
 
     static bool IsKeyActive(const MenuKeyBind* key, int fallbackKey) {
-        const int vk = key ? key->Key : fallbackKey;
-        return (key && key->Active) ||
-               ((::GetAsyncKeyState(vk) & 0x8000) != 0) ||
-               ((::GetAsyncKeyState(fallbackKey) & 0x8000) != 0);
+        return key && key->Active;
     }
 
     void Build() {

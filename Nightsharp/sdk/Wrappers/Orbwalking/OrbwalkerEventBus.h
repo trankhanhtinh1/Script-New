@@ -106,6 +106,7 @@ inline EventList<OrbwalkingActionArgs> BeforeAttackHandlers;
 inline EventList<OrbwalkingActionArgs> AttackHandlers;
 inline EventList<OrbwalkingActionArgs> AfterAttackHandlers;
 inline EventList<OrbwalkingActionArgs> BeforeMoveHandlers;
+inline EventList<OrbwalkingActionArgs> NonKillableMinionHandlers;
 inline OrbwalkerBase* RuntimeInstance = nullptr;
 inline IOrbwalker* Implementation = nullptr;
 inline std::unordered_map<std::string, IOrbwalker*> Implementations;
@@ -115,6 +116,7 @@ inline void FireBeforeAttack(OrbwalkingActionArgs& args) { BeforeAttackHandlers.
 inline void FireOnAttack(OrbwalkingActionArgs& args) { AttackHandlers.Fire(args); }
 inline void FireAfterAttack(OrbwalkingActionArgs& args) { AfterAttackHandlers.Fire(args); }
 inline void FireBeforeMove(OrbwalkingActionArgs& args) { BeforeMoveHandlers.Fire(args); }
+inline void FireNonKillableMinion(OrbwalkingActionArgs& args) { NonKillableMinionHandlers.Fire(args); }
 
 inline int RemoveHandlersFromModule(HMODULE module) {
     int removed = 0;
@@ -122,6 +124,7 @@ inline int RemoveHandlersFromModule(HMODULE module) {
     removed += AttackHandlers.RemoveHandlersInModule(module);
     removed += AfterAttackHandlers.RemoveHandlersInModule(module);
     removed += BeforeMoveHandlers.RemoveHandlersInModule(module);
+    removed += NonKillableMinionHandlers.RemoveHandlersInModule(module);
     return removed;
 }
 

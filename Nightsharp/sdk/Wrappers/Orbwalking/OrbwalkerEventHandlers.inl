@@ -59,6 +59,7 @@ inline void OrbwalkerBase::OnGameUpdate() {
     }
 
     context_.activeMode = ActiveMode();
+
     if (context_.activeMode == OrbwalkingMode::None) {
         ClearPendingAttackState();
         return;
@@ -255,23 +256,6 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
 }
 
 inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) {
-    if (!IsLocalAutoAttackMissile(args)) {
-        return;
-    }
-
-    char missileLine[kOrbwalkerDebugConsoleLineLength] = {};
-    _snprintf_s(
-        missileLine,
-        sizeof(missileLine),
-        _TRUNCATE,
-        "[AA missile] tick=%d spell=%s missile=%s missileNet=%u targetNet=%u sourceNet=%u",
-        Tick(),
-        args.SpellName[0] ? args.SpellName : "<empty>",
-        args.MissileName[0] ? args.MissileName : "<empty>",
-        args.MissileNetworkId,
-        args.TargetNetworkId,
-        args.SourceNetworkId);
-    DebugPrint(missileLine);
 }
 
 namespace OrbwalkingDetail {
