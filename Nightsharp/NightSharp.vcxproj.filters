@@ -49,8 +49,14 @@
     <Filter Include="Plugins\Champion\OneKeyToWin\Champions">
       <UniqueIdentifier>{8C2FE1E1-6F8E-81B8-5BD4-472230F53749}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\SharpShooterAIO">
+      <UniqueIdentifier>{3DA2BB15-D3D1-DE40-4EAD-11F675AC8606}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Core">
       <UniqueIdentifier>{CFC8E72A-BC95-4186-5BDD-870D79F75629}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\EzEvade">
+      <UniqueIdentifier>{A09C5CD7-04AE-F82F-9B86-7E0F523E36B4}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\Utility">
       <UniqueIdentifier>{250EA8A9-EF5D-1946-AE05-CEA506516D80}</UniqueIdentifier>
@@ -66,6 +72,9 @@
     </Filter>
     <Filter Include="SDK\Enumerations">
       <UniqueIdentifier>{74C7FE9A-895C-9276-0E3C-8734FB6B4B48}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="SDK\Enums">
+      <UniqueIdentifier>{DF54DEF8-5B6A-0ED8-4608-A6CDB6DBD202}</UniqueIdentifier>
     </Filter>
     <Filter Include="SDK\Events">
       <UniqueIdentifier>{64756406-1889-B489-C134-4F08FDB3BA8B}</UniqueIdentifier>
@@ -230,6 +239,9 @@
     <ClInclude Include="Core\CoreNavGrid.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Core\CoreNewCastSpell.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Core\CoreObjectManager.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -318,6 +330,9 @@
     <ClInclude Include="libs\nlohmann\json.hpp">
       <Filter>libs\nlohmann</Filter>
     </ClInclude>
+    <ClInclude Include="menu\ConfigStore.h">
+      <Filter>menu</Filter>
+    </ClInclude>
     <ClInclude Include="menu\MenuConfig.h">
       <Filter>menu</Filter>
     </ClInclude>
@@ -347,7 +362,19 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Common.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Jinx.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Viktor.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Xerath.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h">
@@ -527,6 +554,60 @@
     <ClInclude Include="Plugins\Champion\OneKeyToWin\OktwCommon.h">
       <Filter>Plugins\Champion\OneKeyToWin</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Ashe.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Caitlyn.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Corki.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Draven.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Graves.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Jinx.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Kalista.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\KogMaw.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Lucian.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\MissFortune.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\SharpShooterAIO.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Sivir.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Tristana.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Twitch.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Varus.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Vayne.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Zeri.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\XerathSemiCastNew.h">
+      <Filter>Plugins\Champion</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
@@ -536,11 +617,17 @@
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\PlayerBuffDebugPlugin.h">
+      <Filter>Plugins\Core</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\SpellTrackingDebugPlugin.h">
       <Filter>Plugins\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\EzEvadePlugin.h">
+      <Filter>Plugins\EzEvade</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\IPlugin.h">
       <Filter>Plugins</Filter>
@@ -573,6 +660,9 @@
       <Filter>Plugins\Utility</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Utility\VisibilityInvulnerabilityOffsetPlugin.h">
+      <Filter>Plugins\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Utility\YasuoWallDebugPlugin.h">
       <Filter>Plugins\Utility</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Bootstrap.h">
@@ -737,6 +827,15 @@
     <ClInclude Include="SDK\Enumerations\WindowsMessages.h">
       <Filter>SDK\Enumerations</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\Enums\BuffType.h">
+      <Filter>SDK\Enums</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Enums\GameObjectOrder.h">
+      <Filter>SDK\Enums</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Events\BuffTracker.h">
+      <Filter>SDK\Events</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\Events\Dash.h">
       <Filter>SDK\Events</Filter>
     </ClInclude>
@@ -760,6 +859,12 @@
     </ClInclude>
     <ClInclude Include="SDK\Events\Turret.h">
       <Filter>SDK\Events</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Extensions\AIBaseClientExtensions.h">
+      <Filter>SDK\Extensions</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Extensions\AIHeroClientExtensions.h">
+      <Filter>SDK\Extensions</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Extensions\Enumerable.h">
       <Filter>SDK\Extensions</Filter>
@@ -977,6 +1082,9 @@
     <ClInclude Include="SDK\Utils\Invulnerable.h">
       <Filter>SDK\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\Utils\Items.h">
+      <Filter>SDK\Utils</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\Utils\JsonFactory.h">
       <Filter>SDK\Utils</Filter>
     </ClInclude>
@@ -1049,6 +1157,9 @@
     <ClInclude Include="SDK\Wrappers\Orbwalking\OrbwalkerActions.inl">
       <Filter>SDK\Wrappers\Orbwalking</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\Wrappers\Orbwalking\OrbwalkerBase dev1.h">
+      <Filter>SDK\Wrappers\Orbwalking</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\Wrappers\Orbwalking\OrbwalkerBase.h">
       <Filter>SDK\Wrappers\Orbwalking</Filter>
     </ClInclude>
@@ -1074,6 +1185,9 @@
       <Filter>SDK\Wrappers\Orbwalking</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Wrappers\Orbwalking\OrbwalkerTypes.h">
+      <Filter>SDK\Wrappers\Orbwalking</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Wrappers\Orbwalking\OrbwalkerVisuals.inl">
       <Filter>SDK\Wrappers\Orbwalking</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Wrappers\SdkWrappersInit.h">

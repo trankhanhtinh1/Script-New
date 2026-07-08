@@ -109,7 +109,7 @@ private:
             showFakeClick_ = drawingsMenu_->Add(new MenuBool("ShowFakeClick", "Show Fake Click", false));
             showFakeCursor_ = drawingsMenu_->Add(new MenuBool("ShowFakeCursor", "Show Fake Cursor", false));
             fakeCursorSize_ = drawingsMenu_->Add(new MenuSlider("FakeCursorSize", "Fake Cursor Size", 22, 12, 42));
-            drawLiveDebugConsole_ = drawingsMenu_->Add(new MenuBool("drawLiveDebugConsole", "Live Debug Console", true));
+            drawLiveDebugConsole_ = drawingsMenu_->Add(new MenuBool("drawLiveDebugConsole", "Live Debug Console", false));
             drawLiveDebugConsoleLines_ = drawingsMenu_->Add(
                 new MenuSlider("drawLiveDebugConsoleLines", "Live Debug Console Lines", 10, 10, 24));
         }
