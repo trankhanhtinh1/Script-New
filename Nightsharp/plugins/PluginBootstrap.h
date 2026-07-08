@@ -9,6 +9,7 @@
 #include "PluginManager.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
+#include "Core/EnsoulsharpOrbPlugin.h"
 #include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
@@ -103,11 +104,15 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
         ::SDK::SdkWrappers::Initialize();
         PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
-        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);        
+        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 #else
         NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
 #endif
+
+        // NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb begin");
+        // PluginManager::Get().Register<EnsoulsharpOrbPlugin>();
+        // NightSharpDebug::Logf("[PluginBootstrap] Register EnsoulsharpOrb complete");
 
         // ─── Core plugins ────────────────────────────────────────────────
 #if NIGHTSHARP_ENABLE_LIFECYCLE_TEST_PLUGINS
@@ -173,8 +178,8 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown begin");
         // Best-effort final flush while menus/roots are still alive.
         ConfigStore::FlushAll();
-        ::SDK::SdkWrappers::Shutdown();
         PluginManager::Get().Shutdown();
+        ::SDK::SdkWrappers::Shutdown();
         PluginRegistry::Reset();
         g_registered = false;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown complete");

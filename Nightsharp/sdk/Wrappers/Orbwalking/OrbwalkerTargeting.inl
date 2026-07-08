@@ -553,7 +553,6 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             return cacheTarget(target);
         }
     }
-
     // Jungle camps are Neutral team, so the LaneClear last-hit loop below
     // deliberately skips them (canLaneClear rejects Neutral). The backup
     // OrbwalkerSelector selected jungle through a dedicated GetJungleTarget()

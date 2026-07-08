@@ -37,6 +37,7 @@ namespace Plugins {
         virtual void OnUpdate() {}
         virtual void OnRender() {}
         virtual void OnMenu()   {}
+        virtual bool LoadSucceeded() const { return true; }
 
         // ── State ──
         bool IsLoaded()  const { return m_loaded; }

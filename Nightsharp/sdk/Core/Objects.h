@@ -728,8 +728,17 @@ public:
     }
 
     // Returns the local player champion name cached at session start.
-    // Empty until WarmPlayerTeamCache() has successfully resolved.
+    // Falls back to one direct local-player read when cache is empty.
     static const std::string& GetCachedChampionName() {
+        if (s_cachedChampionName.empty()) {
+            const uintptr_t player = CoreRuntime::g_ctx.localPlayer;
+            char nameBuf[96] = {};
+            if (Globals::IsValidPtr(player) &&
+                ::Core::Objects::ReadCharacterName(player, nameBuf, static_cast<int>(sizeof(nameBuf))) &&
+                nameBuf[0]) {
+                s_cachedChampionName = nameBuf;
+            }
+        }
         return s_cachedChampionName;
     }
 
@@ -847,6 +856,22 @@ public:
     const std::string& CharacterName() const {
         auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index));
         if (sc && !sc->characterName.empty()) return sc->characterName;
+
+        const uintptr_t a = Address();
+        if (Globals::IsValidPtr(a) &&
+            Globals::IsValidPtr(CoreRuntime::g_ctx.localPlayer) &&
+            a == CoreRuntime::g_ctx.localPlayer) {
+            char charBuf[96] = {};
+            if (::Core::Objects::ReadCharacterName(
+                    a,
+                    charBuf,
+                    static_cast<int>(sizeof(charBuf))) &&
+                charBuf[0]) {
+                s_cachedChampionName = charBuf;
+                return s_cachedChampionName;
+            }
+        }
+
         static const std::string kEmpty;
         return kEmpty;
     }

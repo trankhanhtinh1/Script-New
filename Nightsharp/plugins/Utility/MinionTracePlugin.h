@@ -8,7 +8,6 @@
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
 #include "../../SDK/Extensions/Unit.h"
-#include "../../SDK/Wrappers/Orbwalking/OrbwalkerSelector.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -93,19 +92,6 @@ public:
     }
 
     void OnRender() override {
-        if (SDK::Variables::TickCount() - SDK::OrbwalkerDebug::s_lastUpdateTick < 500 &&
-            !SDK::OrbwalkerDebug::s_closestMinionPos.IsZero()) {
-            Vec2 screen = {};
-            if (SDK::Drawing::WorldToScreen(SDK::OrbwalkerDebug::s_closestMinionPos, screen)) {
-                (SDK::Drawing::DrawText)(
-                    screen.x - 120.0f,
-                    screen.y - 45.0f,
-                    0xFF00FFFFu,
-                    SDK::OrbwalkerDebug::s_rejectionReason
-                );
-            }
-        }
-
         if (!showWindow_) {
             return;
         }

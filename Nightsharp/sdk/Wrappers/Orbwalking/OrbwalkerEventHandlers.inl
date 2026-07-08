@@ -426,7 +426,6 @@ inline void OrbwalkerBase::OnDraw() {
                 64);
         }
     }
-
     DrawFakeVisuals();
 
     if (!menu_.DrawKillableMinion()) {

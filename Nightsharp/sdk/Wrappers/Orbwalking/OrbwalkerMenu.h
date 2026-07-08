@@ -85,7 +85,6 @@ private:
     static int ListValue(const MenuList* value, int fallback) {
         return value ? value->Index : fallback;
     }
-
     static bool IsKeyActive(const MenuKeyBind* key, int fallbackKey) {
         return key && key->Active;
     }
@@ -119,7 +118,6 @@ private:
         if (advancedMenu_) {
             advancedMenu_->Add(new MenuSeparator("separatorLogic", "Logic"));
             movementLogic_ = advancedMenu_->Add(new MenuList("movementLogic", "Movement Logic", { "Kuro", "TreTrau" }, 0));
-
             advancedMenu_->Add(new MenuSeparator("separatorMovement", "Movement"));
             movementRandomize_ = advancedMenu_->Add(new MenuBool("movementRandomize", "Randomize Location", true));
             movementExtraHold_ = advancedMenu_->Add(new MenuSlider("movementExtraHold", "Extra Hold Position", 0, 0, 250));
