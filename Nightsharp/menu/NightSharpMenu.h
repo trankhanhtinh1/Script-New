@@ -14,6 +14,7 @@
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/PermaShow.h"
 #include "MenuConfig.h"
+#include "ConfigStore.h"
 
 #include <cstdio>
 
@@ -243,13 +244,12 @@ namespace NightSharpMenu {
 
     inline void DrawLanguageSection() {
         DrawSectionTitle("Language");
-        static int lang = 0;
         const char* langs[] = { "EN", "CN", "VN" };
 
         for (int i = 0; i < 3; ++i) {
             ImGui::PushID(langs[i]);
-            if (DrawStateButton(langs[i], langs[i], lang == i, true, 56.0f)) {
-                lang = i;
+            if (DrawStateButton(langs[i], langs[i], Config::Language::index == i, true, 56.0f)) {
+                Config::Language::index = i;
             }
             ImGui::PopID();
             if (i < 2) {
@@ -263,6 +263,11 @@ namespace NightSharpMenu {
         DrawOnOffEditor("Skin Changer", Config::SkinChanger::enabled, "menu_skin");
         if (Config::SkinChanger::enabled) {
             ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "Skin ID: %d");
+            // Skin id is saved per champion (skins.ini). Show which champion this
+            // slider currently applies to so the per-champion behavior is clear.
+            const std::string& champ = ConfigStore::g_skinChampion;
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Skin luu rieng theo tuong: %s",
+                               champ.empty() ? "(chua vao game)" : champ.c_str());
         }
 
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
@@ -281,6 +286,10 @@ namespace NightSharpMenu {
     inline void DrawDebugSection() {
         DrawSectionTitle("Debug Info");
         ImGui::Text("NightSharp");
+        // Build stamp: confirms which compiled DLL is actually loaded in-game.
+        // If this timestamp is old after a rebuild, the injector is loading a
+        // stale NightSharp.dll (wrong path / wrong config), not the fresh build.
+        ImGui::TextColored(ImVec4(0.55f, 0.85f, 0.55f, 1.0f), "Build: %s %s", __DATE__, __TIME__);
         ImGui::Text("Overlay: D3D11 External");
         ImGui::Text("Menu: Old sidebar style");
         ImGui::Text("Input: %s", Config::OverlayInput::clickThrough ? "Click-through" : "Menu capture");
@@ -872,6 +881,10 @@ namespace NightSharpMenu {
     }
 
     inline void Render() {
+        // Persist any pending menu/core changes (debounced). Runs even while the
+        // menu is hidden so a change made just before hiding still flushes.
+        ConfigStore::Tick();
+
         DrawPermaShowOverlay();
 
         if (!showMenu) {

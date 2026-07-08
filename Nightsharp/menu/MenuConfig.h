@@ -20,6 +20,11 @@ namespace Config {
         inline bool clickThrough = true;
     }
 
+    namespace Language {
+        // 0 = EN, 1 = CN, 2 = VN. Persisted to core.ini via ConfigStore.
+        inline int index = 0;
+    }
+
     namespace PermaShow {
         // PermaShow is enabled by default; the panel itself stays empty
         // until plugins call MenuItem::AddPermashow().

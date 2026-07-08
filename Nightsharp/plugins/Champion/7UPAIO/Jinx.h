@@ -306,7 +306,7 @@ static void QLogic() {
         }
 
         const AIBaseClient orbBase(orbTarget.Handle());
-        if (ListIndex(QMenu, "Qchange", 1) == 0 && orbBase.IsHero()) {
+        if (orbBase.IsHero()) {
             FishBoneToMiniGun(orbBase);
             return;
         }
@@ -522,7 +522,6 @@ static void BuildMenu() {
     QMenu->Add(new MenuBool("Qharass", "Harass Q"));
     QMenu->Add(new MenuBool("farmQout", "Farm Q out range AA minion"));
     QMenu->Add(new MenuSlider("Qlaneclear", "Lane clear x minions", 2, 1, 10));
-    QMenu->Add(new MenuList("Qchange", "Q change mode FishBone -> MiniGun", { "Real Time", "Before AA" }, 1));
     QMenu->Add(new MenuSlider("Qaoe", "Force FishBone if can hit x target", 3, 0, 5));
     QMenu->Add(new MenuSlider("QmanaIgnore", "Ignore mana if can kill in x AA", 3, 0, 10));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -585,11 +584,6 @@ static void Orbwalker_OnAfterAttack(OrbwalkingActionArgs& args) {
     }
 
     const AIBaseClient target(args.Target.Handle());
-    if (target.IsHero() && ListIndex(QMenu, "Qchange", 1) == 1 && ValidTarget(target)) {
-        FishBoneToMiniGun(target);
-        return;
-    }
-
     if (ComboMode || !target.IsMinion()) {
         return;
     }

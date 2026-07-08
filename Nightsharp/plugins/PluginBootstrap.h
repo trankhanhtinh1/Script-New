@@ -17,14 +17,18 @@
 #include "Utility/NavGridDrawPlugin.h"
 #include "Utility/ObjectDefinitionDrawPlugin.h"
 #include "Utility/VisibilityInvulnerabilityOffsetPlugin.h"
+#include "Utility/YasuoWallDebugPlugin.h"
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
+#include "Champion/XerathSemiCastNew.h"
 #include "Champion/XerathSemiPlugin.h"
 #include "Champion/7UPAIO/7UPAIO.h"
+#include "Champion/KuroAIO/KuroAIO.h"
 #include "Champion/SharpShooterAIO/SharpShooterAIO.h"
 #include "EzEvade/EzEvadePlugin.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
+#include "../menu/ConfigStore.h"
 #include "../DebugLog.h"
 
 #ifndef NIGHTSHARP_ENABLE_SDK_WRAPPERS
@@ -46,6 +50,13 @@ namespace PluginBootstrap {
     inline bool g_registered = false;
     inline bool g_shutdown = false;
 
+    // Champion-name provider for ConfigStore's per-champion file naming.
+    // Returns the local player's champion (empty until resolved at session start).
+    inline const char* ChampionNameProvider() {
+        const std::string& name = ::SDK::GameObject::GetCachedChampionName();
+        return name.c_str();
+    }
+
     inline void ApplyDebugAutoLoadOverrides() {
         static constexpr const char* kDebugPluginIds[] = {
             "core.player_event_filter",
@@ -57,6 +68,7 @@ namespace PluginBootstrap {
             "champion.ezreal_cast_test",
             "champion.ezreal_q_missile_lifecycle",
             "champion.jax_cast_test",
+            "champion.xerath_semi_cast_new",
             "champion.xerath_cast_test",
             "core.object_delete_lifecycle_test",
             "utility.object_definition_draw",
@@ -117,14 +129,17 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<NavGridDrawPlugin>();
         PluginManager::Get().Register<ObjectDefinitionDrawPlugin>();
         PluginManager::Get().Register<VisibilityInvulnerabilityOffsetPlugin>();
+        PluginManager::Get().Register<YasuoWallDebugPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins begin");
         PluginManager::Get().Register<EzrealSemiPlugin>();
         PluginManager::Get().Register<EzrealMissileLifecyclePlugin>();
         PluginManager::Get().Register<JaxSemiPlugin>();
+        PluginManager::Get().Register<XerathSemiCastNew>();
         PluginManager::Get().Register<XerathSemiPlugin>();
         PluginManager::Get().Register<AIO7UPPlugin>();
+        PluginManager::Get().Register<KuroAIOPlugin>();
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
         PluginManager::Get().Register<EzEvadePlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
@@ -138,6 +153,13 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] LoadConfig complete");
         ApplyDebugAutoLoadOverrides();
 
+        // Install config persistence AFTER the registry is populated (so champion
+        // category lookup works) and BEFORE LoadAuto (so each plugin's menu gets
+        // its saved values applied the moment it attaches during OnLoad).
+        NightSharpDebug::Logf("[PluginBootstrap] ConfigStore init begin");
+        ConfigStore::Init(&ChampionNameProvider);
+        NightSharpDebug::Logf("[PluginBootstrap] ConfigStore init complete");
+
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto begin");
         PluginManager::Get().LoadAuto();
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto complete");
@@ -149,6 +171,8 @@ namespace PluginBootstrap {
         }
         g_shutdown = true;
         NightSharpDebug::Logf("[PluginBootstrap] Shutdown begin");
+        // Best-effort final flush while menus/roots are still alive.
+        ConfigStore::FlushAll();
         ::SDK::SdkWrappers::Shutdown();
         PluginManager::Get().Shutdown();
         PluginRegistry::Reset();

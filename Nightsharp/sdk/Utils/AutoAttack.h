@@ -47,16 +47,18 @@ public:
             return 0.0f;
         }
 
-        float result = sender.AttackRange() + CoreControl::GetBoundingRadius(sender.Address());
-        if (target.IsValid()) {
-            result += CoreControl::GetBoundingRadius(target.Address());
-        }
-
-        if (sender.CharacterName() == "Caitlyn" && target.IsValid()) {
+        float result = sender.AttackRange() + sender.BoundingRadius();
+        if (target.IsValid() && !target.IsDead()) {
             const AIBaseClient targetBase(target.Handle());
-            if (targetBase.HasBuff("caitlynyordletrapinternal")) {
-                result += 650.0f;
+            if (sender.CharacterName() == "Caitlyn" &&
+                (targetBase.HasBuff("CaitlynWSnare") || targetBase.HasBuff("CaitlynEMissile"))) {
+                result = 1300.0f;
+            } else if (sender.CharacterName() == "Aphelios" &&
+                       targetBase.HasBuff("aphelioscalibrumbonusrangedebuff") &&
+                       sender.HasBuff("aphelioscalibrumbonusrangebuff")) {
+                result = 1800.0f;
             }
+            result += target.BoundingRadius();
         }
 
         return result;
@@ -64,8 +66,8 @@ public:
 
     static float GetTimeToHit(const AttackableUnit& target) {
         const auto player = SDK::ObjectManager::Player();
-        const float attackCastDelay = CoreControl::GetAttackWindup(player.Address());
-        float time = (attackCastDelay * 1000.0f) - 100.0f + (SDK::Game::Ping() / 2.0f);
+        const float attackCastDelay = CoreControl::GetAttackWindupMs(player.Address());
+        float time = attackCastDelay - 100.0f + (SDK::Game::Ping() / 2.0f);
 
         const float missileSpeed = GetProjectileSpeed(player);
         if (std::fabs(missileSpeed - std::numeric_limits<float>::max()) > FLT_EPSILON && target.IsValid()) {
@@ -93,7 +95,9 @@ public:
 
     static bool IsAutoAttackReset(std::string name) {
         ToLower(name);
-        return Contains(AttackResets(), name);
+        return Contains(AttackResets(), name) ||
+               name.find("attackreset") != std::string::npos ||
+               name.find("takedown") != std::string::npos;
     }
 
 private:
@@ -114,16 +118,71 @@ private:
 
     static const char* const* AttackResets() {
         static const char* values[] = {
-            "powerfist","camilleq","camilleq2","vorpalspikes",
-            "dariusnoxiantacticsonh","masochism","ekkoe","fiorae",
-            "fizzw","garenq","gravesmove","hecarimramp",
-            "illaoiw","jaxempowertwo","jaycehypercharge","netherblade",
-            "kaylee","kindredq","leonashieldofdaybreak","luciane",
-            "meditate","monkeykingdoubleattack","mordekaisermaceofspades","nasusq",
-            "nautiluspiercinggaze","takedown","reksaiq","renektonpreexecute",
-            "rengarq","riventricleave","shyvanadoubleattack","shyvanadoubleattackdragon",
-            "sivirw","talonqattack","trundletrollsmash","vaynetumble",
-            "vie","volibearq","xinzhaoq","yorickq",
+            "aatroxe","aatroxumbral_dash","aatroxumbraldash",
+            "asheq","rangersfocus",
+            "belvethq","belvethvoidsurge",
+            "powerfist","blitzcranke",
+            "briarq","briarw","briarsnackattack",
+            "camilleq","camilleq2",
+            "vorpalspikes","chogathe",
+            "dariusnoxiantacticsonh","dariusw",
+            "drmundoe","masochism",
+            "ekkoe",
+            "elisespiderw",
+            "fiorae",
+            "fizzw",
+            "garenq",
+            "gangplankqwrapper",
+            "gravesmove","gravesautoattackrecoilcastedummy",
+            "gwene","gwenskipnslash",
+            "hecarimramp","hecarime",
+            "illaoiw",
+            "jaxempowertwo",
+            "jaycehypercharge",
+            "kaisar","kaisakillerinstinct",
+            "katarinae","katarinashunpo",
+            "ksantepassive","ntofostrikes",
+            "netherblade","kassadinw",
+            "kaylee",
+            "kindredq",
+            "leonashieldofdaybreakattack","leonashieldofdaybreak",
+            "lucianq","lucianw","luciane","lucianr",
+            "malphitew","malphitethunderclap",
+            "maokaipassive","maokai_passive","maokaisapmagic",
+            "meditate","masteryiw",
+            "monkeykingdoubleattack",
+            "mordekaisermaceofspades",
+            "nasusq",
+            "nautilusw","nautiluspiercinggaze",
+            "nidaleetakedown","nidaleecougarq","takedown",
+            "nilahe",
+            "olafw","olaffrenziedstrikes","olaftoughitout",
+            "pantheonw","pantheonw1","pantheonempoweredw",
+            "quinne","quinnvault",
+            "reksaiq",
+            "rellw","rellw_dismount","rellferromancymountup",
+            "renektonpreexecute",
+            "rengarq","rengarqemp",
+            "riventricleave",
+            "samirap","samiradaredevilimpulse",
+            "sejuanie","sejuaninorthernwinds",
+            "settq",
+            "shyvanadoubleattack","shyvanadoubleattackdragon",
+            "sivirw",
+            "sonapassive","sona_passive_charged","sonapowerchord",
+            "talonqattack","talonnoxiandiplomacy",
+            "trundletrollsmash",
+            "bluecardlock","goldcardlock","redcardlock","pickacardrecast",
+            "vaynetumble",
+            "vie","viegow","viegospectralmaw",
+            "volibearq",
+            "xinzhaoq","xinzhaocombotarget",
+            "yorickq","yorickspectral",
+            "zacq","zacstretchingstrikes",
+            "zerie","zerisparksurge",
+            "zoer","zoeportaljump",
+            "apheliosinfernumq",
+            "hextechrocketbelt","itemhextechrocketbelt","rocketbelt",
             "itemtitanichydracleave",
             nullptr
         };
@@ -132,7 +191,13 @@ private:
 
     static const char* const* Attacks() {
         static const char* values[] = {
-            "caitlynheadshotmissile","kennenmegaproc","masteryidoublestrike",
+            "aphelioscalibrumattackmis","aphelioscrescendumattackmis",
+            "aphelioscrescendumattackmisin","aphelioscrescendumattackmisout",
+            "apheliosgravitumattackmis","apheliosinfernumattackmis",
+            "apheliosseverumattackmis",
+            "caitlynheadshotmissile","caitlynpassivemissile",
+            "itemtitanichydracleave","itemtiamatcleave",
+            "kennenmegaproc","masteryidoublestrike",
             "quinnwenhanced","renektonexecute","renektonsuperexecute",
             "trundleq","viktorqbuff",
             "xinzhaoqthrust1","xinzhaoqthrust2","xinzhaoqthrust3",
@@ -148,7 +213,7 @@ private:
             "azirbasicattacksoldier",
             "dravenattackp_r","dravenattackp_l","dravenattackp_rc","dravenattackp_rq","dravenattackp_lc","dravenattackp_lq",
             "elisespiderlingbasicattack",
-            "gravesbasicattackspread","gravesautoattackrecoil",
+            "gravesbasicattackspread","gravesautoattackrecoil","gravesautoattackrecoilcastedummy",
             "heimertyellowbasicattack","heimertyellowbasicattack2","heimertbluebasicattack","heimerdingerwattack2","heimerdingerwattack2ult",
             "ivernminionbasicattack","ivernminionbasicattack2",
             "kindredwolfbasicattack",

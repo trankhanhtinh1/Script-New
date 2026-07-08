@@ -2,6 +2,9 @@
 
 #include "OrbwalkerSelector.h"
 
+#include <cstdio>
+#include <string>
+
 namespace SDK {
 
 class Orbwalker {
@@ -105,6 +108,42 @@ public:
         if (Current()) {
             Current()->LastAutoAttackTick(value);
         }
+    }
+
+    /// True while the local player is still in the auto-attack windup.
+    /// Use this to avoid casting/moving before the attack has fired.
+    static bool IsAutoAttacking() {
+        return Current() && Current()->IsAutoAttacking();
+    }
+
+    /// True from attack order/attack confirm until the windup is done.
+    /// Same practical check as IsAutoAttacking(), but named for timing logic.
+    static bool IsWindingUp() {
+        return Current() && Current()->IsWindingUp();
+    }
+
+    /// True after the current auto attack has fired.
+    /// For ranged champions this means missile/do-cast was seen; for instant attacks, cast is complete.
+    static bool IsAttackCastComplete() {
+        return Current() && Current()->IsAttackCastComplete();
+    }
+
+    /// Milliseconds left before the current auto attack is considered fired/cancel-safe.
+    /// Returns 0 when no attack is currently winding up.
+    static int AttackCastDelayRemaining() {
+        return Current() ? Current()->AttackCastDelayRemaining() : 0;
+    }
+
+    /// Game tick when the next auto attack should be ready.
+    /// Includes attack pause/server pause and orbwalker safety delay; returns 0 if unavailable.
+    static int NextAttackReadyTick() {
+        return Current() ? Current()->NextAttackReadyTick() : 0;
+    }
+
+    /// Milliseconds until CanAttack() is expected to become true.
+    /// Returns 0 when the attack is ready or timing is unavailable.
+    static int AttackCooldownRemaining() {
+        return Current() ? Current()->AttackCooldownRemaining() : 0;
     }
 
     static int LastMovementTick() {
@@ -215,6 +254,10 @@ public:
         }
     }
 
+    static bool ShouldWait() {
+        return Current() && Current()->ShouldWait();
+    }
+
     static void ResetAutoAttackTimer() {
         if (Current()) {
             Current()->ResetAutoAttackTimer();
@@ -227,6 +270,29 @@ public:
 
     static bool IsAutoAttackReset(const std::string& spellName) {
         return OrbwalkerBase::IsAutoAttackReset(spellName);
+    }
+
+    static void DebugPrint(const char* text) {
+        if (OrbwalkingDetail::RuntimeInstance) {
+            OrbwalkingDetail::RuntimeInstance->DebugPrint(text);
+        }
+    }
+
+    static void DebugPrint(const std::string& text) {
+        DebugPrint(text.c_str());
+    }
+
+    template <typename... Args>
+    static void DebugPrint(const char* fmt, Args... args) {
+        char buffer[224] = {};
+        _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt ? fmt : "", args...);
+        DebugPrint(buffer);
+    }
+
+    static void DebugClear() {
+        if (OrbwalkingDetail::RuntimeInstance) {
+            OrbwalkingDetail::RuntimeInstance->ClearDebugConsole();
+        }
     }
 
     static bool AddOnBeforeAttack(EventHandler handler) {

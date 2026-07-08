@@ -16,7 +16,7 @@
 // === Champion includes (uncomment khi port xong) ===
 #include "Ezreal.h"
 #include "Jinx.h"
-#include "Kalista.h"
+// #include "Kalista.h" // disabled: Kalista.h is currently empty / pending re-port cleanup
 #include "Viktor.h"
 #include "Xerath.h"
 // #include "Vayne.h"
@@ -83,7 +83,7 @@ public:
         // else if (champ == "Jayce")      { Jayce::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Jinx") == 0) { AIO7UP::Jinx::OnGameLoad(); }
         // else if (champ == "KSante")     { KSante::OnGameLoad(); }
-        else if (_stricmp(champ.c_str(), "Kalista") == 0) { AIO7UP::Kalista::OnGameLoad(); }
+        // else if (_stricmp(champ.c_str(), "Kalista") == 0) { AIO7UP::Kalista::OnGameLoad(); }
         // else if (champ == "Fizz")       { Fizz::OnGameLoad(); }
         // else if (champ == "Karthus")    { Karthus::OnGameLoad(); }
         // else if (champ == "KogMaw")     { KogMaw::OnGameLoad(); }
@@ -116,7 +116,7 @@ public:
     void OnUnload() override {
         AIO7UP::Ezreal::OnUnload();
         AIO7UP::Jinx::OnUnload();
-        AIO7UP::Kalista::OnUnload();
+        // AIO7UP::Kalista::OnUnload();
         AIO7UP::Viktor::OnUnload();
         AIO7UP::Xerath::OnUnload();
     }
@@ -126,7 +126,7 @@ private:
         return championName && championName[0] &&
             (_stricmp(championName, "Ezreal") == 0 ||
              _stricmp(championName, "Jinx") == 0 ||
-             _stricmp(championName, "Kalista") == 0 ||
+             // _stricmp(championName, "Kalista") == 0 ||
              _stricmp(championName, "Viktor") == 0 ||
              _stricmp(championName, "Xerath") == 0);
     }
@@ -153,9 +153,6 @@ private:
         }
         if (_stricmp(championName.c_str(), "Jinx") == 0) {
             return "Jinx";
-        }
-        if (_stricmp(championName.c_str(), "Kalista") == 0) {
-            return "Kalista";
         }
         if (_stricmp(championName.c_str(), "Xerath") == 0) {
             return "Xerath";

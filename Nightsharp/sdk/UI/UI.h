@@ -93,6 +93,15 @@ namespace SDK { namespace UI {
     // flag to avoid a UI->Game include dependency here.
     inline bool g_KeybindInputBlocked = false;
 
+    // Config-persistence hooks (installed by ConfigStore). Kept as plain function
+    // pointers so the UI layer has zero dependency on the config layer.
+    //   g_MenuValueChangedHook — fired whenever any MenuItem value changes, so the
+    //       config store can debounce-save the owning root menu.
+    //   g_MenuAttachedHook     — fired when a root Menu attaches to MenuManager, so
+    //       the config store can apply previously-saved values to the fresh menu.
+    inline void (*g_MenuValueChangedHook)(MenuItem*) = nullptr;
+    inline void (*g_MenuAttachedHook)(Menu*)        = nullptr;
+
     inline bool DrawStateToggleButton(const char* id,
                                       const char* label,
                                       bool active,
@@ -373,6 +382,7 @@ namespace SDK { namespace UI {
 
         void FireValueChanged() {
             if (ValueChanged) ValueChanged(this, ValueChangedUd);
+            if (g_MenuValueChangedHook) g_MenuValueChangedHook(this);
         }
 
         void DrawTooltipIfHovered() const {
@@ -1373,6 +1383,7 @@ namespace SDK { namespace UI {
     inline Menu* Menu::Attach() {
         if (Parent != nullptr || !Root) return this; // EnsoulSharp throws; we just no-op
         MenuManager::Instance().Add(this);
+        if (g_MenuAttachedHook) g_MenuAttachedHook(this);
         return this;
     }
 

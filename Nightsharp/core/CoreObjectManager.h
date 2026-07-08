@@ -500,7 +500,8 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
         resolved = ObjectType::Obj_SpawnPoint;
     } else if (Core::Objects::ContainsInsensitive(name, "effect") ||
                Core::Objects::ContainsInsensitive(name, "emitter") ||
-               Core::Objects::ContainsInsensitive(name, "particle")) {
+               Core::Objects::ContainsInsensitive(name, "particle") ||
+               Core::Objects::ContainsInsensitive(name, "windwall")) {
         resolved = ObjectType::EffectEmitter;
     }
 
