@@ -111,22 +111,6 @@ static bool CastQOnTarget(const AIHeroClient& target,
                           bool allowGun,
                           bool allowBlade,
                           HitChance hitChance = HitChance::High) {
-    const bool space = (::GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
-    if (space) {
-        static int lastTick = 0;
-        const int now = ::GetTickCount();
-        if (now - lastTick > 500) {
-            lastTick = now;
-            if (!Q.IsReady() || !ValidHeroTarget(target, Q.Range)) {
-                char buf[256];
-                _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                    "[SamiraCastQ] FailPre: QReady=%d ValidTarget=%d",
-                    Q.IsReady() ? 1 : 0, ValidHeroTarget(target, Q.Range) ? 1 : 0);
-                Orbwalker::DebugPrint(buf);
-            }
-        }
-    }
-
     if (!Q.IsReady() || !ValidHeroTarget(target, Q.Range)) {
         return false;
     }
@@ -141,32 +125,11 @@ static bool CastQOnTarget(const AIHeroClient& target,
     const float closeRange = Q.Range / 3.0f;
     const bool close = player.Distance(castPosition) <= closeRange;
 
-    if (space) {
-        static int lastTick = 0;
-        const int now = ::GetTickCount();
-        if (now - lastTick > 500) {
-            lastTick = now;
-            char buf[256];
-            _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                "[SamiraCastQ] Close=%d PredHitchance=%d CollideEmpty=%d",
-                close ? 1 : 0, (int)pred.Hitchance, pred.CollisionObjects.empty() ? 1 : 0);
-            Orbwalker::DebugPrint(buf);
-        }
-    }
-
     if (close && allowBlade) {
         bool res = Q.Cast(target) == CastStates::SuccessfullyCasted;
         const bool targetCastSuccess = res;
         if (!res) {
             res = CastPosition(Q, castPosition);
-        }
-        if (space) {
-            char buf[256];
-            _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                "[SamiraCastQ] Blade: TargetCast=%d | PosCast=%d | NativeFail=%s",
-                targetCastSuccess ? 1 : 0, res ? 1 : 0,
-                ::CoreCastSpell::CastFailureName(::CoreCastSpell::g_lastTrace.failure));
-            Orbwalker::DebugPrint(buf);
         }
         return res;
     }
@@ -179,29 +142,10 @@ static bool CastQOnTarget(const AIHeroClient& target,
         if (!res) {
             res = CastPosition(Q, castPosition);
         }
-        if (space) {
-            char buf[256];
-            _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                "[SamiraCastQ] Gun: TargetCast=%d | PosCast=%d | NativeFail=%s",
-                targetCastSuccess ? 1 : 0, res ? 1 : 0,
-                ::CoreCastSpell::CastFailureName(::CoreCastSpell::g_lastTrace.failure));
-            Orbwalker::DebugPrint(buf);
-        }
+
         return res;
     }
 
-    if (space) {
-        static int lastTick = 0;
-        const int now = ::GetTickCount();
-        if (now - lastTick > 500) {
-            lastTick = now;
-            char buf[256];
-            _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                "[SamiraCastQ] NoCast: close=%d allowBlade=%d allowGun=%d",
-                close ? 1 : 0, allowBlade ? 1 : 0, allowGun ? 1 : 0);
-            Orbwalker::DebugPrint(buf);
-        }
-    }
     return false;
 }
 
@@ -377,7 +321,7 @@ static void OnAfterAttack(OrbwalkingActionArgs&) {
 }
 
 static bool InAttackAction() {
-    return Orbwalker::IsWindingUp() || Orbwalker::AttackCastDelayRemaining() > 0;
+    return Orbwalker::IsAutoAttacking();
 }
 
 static bool AfterAttackRecently() {
@@ -396,7 +340,7 @@ static bool ShouldWaitForAutoAttack() {
 
     const int time = Slider(MiscMenu, "AATimer", 1500);
 
-    if(LastCastSpell + time >= SDK::Variables::TickCount()){
+    if (LastCastSpell + time >= SDK::Variables::TickCount()) {
         return true;
     }
 
@@ -424,7 +368,7 @@ static void Check() {
 }
 
 static bool TryTurboCombo() {
-    if (!Key(KeysMenu, "TurboFast") || !Q.IsReady() || !W.IsReady() || !E.IsReady()) {
+    if (!Key(KeysMenu, "TurboFast") || !Q.IsReady() || (!W.IsReady() && !R.IsReady() && !Player().HasBuff("SamiraR")) || !E.IsReady()) {
         return false;
     }
 
@@ -433,45 +377,38 @@ static bool TryTurboCombo() {
         return false;
     }
 
-    if (AfterAttackRecently()) {
-        W.Cast();
-        if (AllowDashTo(target) && CastE(target)) {
-            if (target.DistanceToPlayer() <= 300.0f) {
-                CastPosition(Q, target.Position());
-            } else {
-                CastQOnTarget(target, true, true);
-            }
-            return true;
+    // WEQ Combo if enemy in W range
+    bool enemyInW = false;
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (ValidHeroTarget(enemy, W.Range)) {
+            enemyInW = true;
+            break;
         }
     }
 
-    if (R.IsReady() && Bool(RMenu, "RCombo")) {
-        if (R.Cast()) {
-            W.Cast();
-            if (AllowDashTo(target)) {
-                CastE(target);
-            }
-            Q.Cast();
-            return true;
-        }
-    }
+    if (LastCastSpell == 0 || enemyInW || Orbwalker::AttackCooldownRemaining() > 500) {
+        if (AllowDashTo(target)) {
 
-    if (Bool(EMenu, "ECombo") && AllowDashTo(target)) {
-        if (target.DistanceToPlayer() <= 300.0f) {
-            CastPosition(Q, target.Position());
+            if (R.IsReady() && Bool(RMenu, "RCombo")){
+                R.Cast();
+
+                if (CastE(target)) {
+                    return Q.Cast(target.Position());;
+                }
+
+                return false;
+            }
+
+            if (W.IsReady()) {
+                return W.Cast();
+            }
+
             if (CastE(target)) {
-                SDK::Utils::DelayAction::Add(300, []() {
-                    W.Cast();
-                });
-                return true;
-            }
-        } else {
-            (void)CastQOnTarget(target, true, true);
-            if (W.Cast() && CastE(target)) {
-                return true;
+                return Q.Cast(target.Position());;
             }
         }
     }
+
     return false;
 }
 
@@ -544,7 +481,6 @@ static bool TryEMinionGapClose() {
 
     return best.IsValid() && CastE(best);
 }
-
 static bool TryECombo() {
     const auto player = Player();
     if (!player.IsValid() || !E.IsReady() || !Bool(EMenu, "ECombo")) {
@@ -573,6 +509,7 @@ static bool TryECombo() {
             const Vector3 dashPos = DashPositionTo(target.Position());
             if (CountEnemyHeroesNear(dashPos, R.Range) > player.CountEnemyHeroesInRange(R.Range) &&
                 CastE(target)) {
+
                 return true;
             }
         }
@@ -584,14 +521,7 @@ static bool TryECombo() {
         }
 
         if (Q.IsReady() && Bool(EMenu, "EQ") && CastE(target)) {
-            SDK::Utils::DelayAction::Add(60, []() {
-                const auto nextTarget = GetPhysicalTarget(Q.Range);
-                if (ValidHeroTarget(nextTarget, Q.Range)) {
-                    CastQOnTarget(nextTarget, true, true);
-                } else {
-                    Q.Cast(Game::CursorPos());
-                }
-            });
+            Q.Cast(target.Position());
             return true;
         }
     }
@@ -620,24 +550,6 @@ static bool TryWCombo() {
 }
 
 static bool TryQCombo() {
-    const bool space = (::GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
-    if (space) {
-        static int lastTick = 0;
-        const int now = ::GetTickCount();
-        if (now - lastTick > 500) {
-            lastTick = now;
-            const bool qReady = Q.IsReady();
-            const bool waitForAA = ShouldWaitForAutoAttack();
-            const auto target = GetPhysicalTarget(Q.Range);
-            const bool validTarget = target.IsValid();
-            const float dist = validTarget ? Player().Distance(target) : -1.0f;
-            char buf[256];
-            _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                "[SamiraTryQ] QReady=%d WaitForAA=%d TargetValid=%d Dist=%.1f",
-                qReady ? 1 : 0, waitForAA ? 1 : 0, validTarget ? 1 : 0, dist);
-            Orbwalker::DebugPrint(buf);
-        }
-    }
 
     if (!Q.IsReady() || ShouldWaitForAutoAttack()) {
         return false;
@@ -645,27 +557,13 @@ static bool TryQCombo() {
 
     const auto target = GetPhysicalTarget(Q.Range);
     if (!ValidHeroTarget(target, Q.Range)) {
-        if (space) {
-            static int lastTick2 = 0;
-            const int now = ::GetTickCount();
-            if (now - lastTick2 > 500) {
-                lastTick2 = now;
-                Orbwalker::DebugPrint("[SamiraTryQ] Fail: target is not valid hero target");
-            }
-        }
         return false;
     }
 
-    if (Player().IsDashing() || LastE + 700 > SDK::Variables::TickCount()) {
-        if (space) {
-            Orbwalker::DebugPrint("[SamiraTryQ] Dash/ECombo casting...");
-        }
-        return Bool(EMenu, "EQ") && CastQOnTarget(target, true, true);
+    if (Player().IsDashing() || LastE + 700 > SDK::Variables::TickCount()) {   
+        return Bool(EMenu, "EQ") && Q.Cast(target.Position());
     }
 
-    if (space) {
-        Orbwalker::DebugPrint("[SamiraTryQ] Normal casting CastQOnTarget...");
-    }
     return CastQOnTarget(
         target,
         Bool(QMenu, "QGunCombo"),
@@ -674,23 +572,6 @@ static bool TryQCombo() {
 
 static void Combo() {
     const auto player = Player();
-    const bool space = (::GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
-    if (space) {
-        static int lastTick = 0;
-        const int now = ::GetTickCount();
-        if (now - lastTick > 500) {
-            lastTick = now;
-            const bool valid = player.IsValid();
-            const bool dead = valid ? player.IsDead() : false;
-            const bool attacking = InAttackAction();
-            const bool comboMode = IsComboMode();
-            char buf[256];
-            _snprintf_s(buf, sizeof(buf), _TRUNCATE,
-                "[SamiraCombo] Valid=%d Dead=%d InAttack=%d ComboMode=%d",
-                valid ? 1 : 0, dead ? 1 : 0, attacking ? 1 : 0, comboMode ? 1 : 0);
-            Orbwalker::DebugPrint(buf);
-        }
-    }
 
     if (!player.IsValid() || player.IsDead() || InAttackAction() || !IsComboMode()) {
         return;

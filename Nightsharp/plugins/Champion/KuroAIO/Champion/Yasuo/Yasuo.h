@@ -151,7 +151,15 @@ static bool TryR() {
             continue;
         }
 
-        if (E.IsReady() && Q.IsReady(500)) {
+        if (Q.IsReady(500)) {
+
+            if (Player().IsDashing()) {
+                if (Q.Cast(Player().Position())) {
+                    R.Cast(castPosition);
+                    return true;
+                }
+            }
+
             auto tryCastEQR = [&](const AIBaseClient& unit) -> bool {
                 if (ValidTarget(unit, E.Range) && CanE(unit)) {
                     if (E.CastOnUnit(unit)) {
@@ -164,33 +172,35 @@ static bool TryR() {
                 }
                 return false;
             };
-
-            bool casted = false;
-            if (!casted) {
-                for (const auto& minion : GameObjects::EnemyMinions()) {
-                    if (tryCastEQR(minion)) {
+                
+            if (E.IsReady()) {
+                bool casted = false;
+                if (!casted) {
+                    for (const auto& minion : GameObjects::EnemyMinions()) {
+                        if (tryCastEQR(minion)) {
+                            casted = true;
+                            break;
+                        }
+                    }
+                }
+                if (!casted) {
+                    for (const auto& monster : GameObjects::Jungle()) {
+                        if (tryCastEQR(monster)) {
+                            casted = true;
+                            break;
+                        }
+                    }
+                }
+                for (const auto& hero : GameObjects::EnemyHeroes()) {
+                    if (tryCastEQR(hero)) {
                         casted = true;
                         break;
                     }
                 }
-            }
-            if (!casted) {
-                for (const auto& monster : GameObjects::Jungle()) {
-                    if (tryCastEQR(monster)) {
-                        casted = true;
-                        break;
-                    }
+                if (casted) {
+                    return true;
                 }
-            }
-            for (const auto& hero : GameObjects::EnemyHeroes()) {
-                if (tryCastEQR(hero)) {
-                    casted = true;
-                    break;
-                }
-            }
-            if (casted) {
-                return true;
-            }
+            }          
         }
 
         const float remaining = AirborneRemaining(target);
@@ -464,7 +474,7 @@ static void BuildMenu() {
     RMenu = MenuRoot->AddSubMenu(new Menu("YasuoR", "R Settings"));
     RMenu->Add(new MenuBool("RCombo", "R Combo"));
     RMenu->Add(new MenuSlider("RHealth", "R if Target Health % <=", 100, 1, 100));
-    RMenu->Add(new MenuSlider("RDelay", "R Delay (ms)", 0, 0, 600));
+    RMenu->Add(new MenuSlider("RDelay", "R Delay (ms)", 150, 0, 600));
 
     ClearMenu = MenuRoot->AddSubMenu(new Menu("YasuoClear", "Clear Settings"));
     ClearMenu->Add(new MenuBool("QClear", "Q Clear"));
