@@ -92,13 +92,45 @@ public:
             : 0.0f;
         EvadeHelper helper(effectiveSettings);
 
+        const int now = SDK::Variables::TickCount();
+        const float delayMs = settings.ExtraDelay +
+            static_cast<float>(SDK::Game::Ping()) +
+            std::max(0.0f, effectiveSettings.CurrentWindupDelay);
+
         if (!helper.IsEndangered(player, heroPos, boundingRadius, skillshots)) {
             m_hasLastPosition = false;
+            const auto path = player.Path();
+            if (!path.empty()) {
+                const Vec2 movePos = path.back().To2D();
+                const float speed = std::max(50.0f, player.MoveSpeed());
+                if (helper.CheckMovePath(movePos, delayMs, heroPos, boundingRadius, skillshots, speed)) {
+                    if (m_isMovementBlocking && m_blockedMovePos.DistanceSqr(movePos) < 2500.0f && now - m_blockedMoveTick < 100) {
+                        DisableOrbwalkerMove();
+                        return true;
+                    }
+                    Vec2 best;
+                    if (helper.FindBestPositionForPath(player, heroPos, boundingRadius, movePos, skillshots, best)) {
+                        DisableOrbwalkerMove();
+                        const float planeY = player.ServerPosition().y;
+                        CoreControl::IssueMove(Vec3::From2D(best, planeY), true);
+                        m_lastPosition = best;
+                        m_hasLastPosition = true;
+                        lastDodgeTick = now;
+                        m_isMovementBlocking = true;
+                        m_blockedMovePos = movePos;
+                        m_blockedMoveTick = now;
+                        SetLastEvent(lastEvent, lastEventSize, "movement block");
+                        return true;
+                    }
+                }
+            }
+            m_isMovementBlocking = false;
             RestoreOrbwalkerMove();
             return false;
         }
 
-        const int now = SDK::Variables::TickCount();
+        m_isMovementBlocking = false;
+
         if (settings.DodgeInterval > 0 && now - lastDodgeTick < settings.DodgeInterval) {
             return false;
         }
@@ -152,6 +184,9 @@ private:
     int m_lastWindupEndTick = 0;
     Vec2 m_lastPosition;
     bool m_hasLastPosition = false;
+    bool m_isMovementBlocking = false;
+    Vec2 m_blockedMovePos = {};
+    int m_blockedMoveTick = 0;
 
     static void SetLastEvent(char* lastEvent, std::size_t lastEventSize, const char* text) {
         if (!lastEvent || lastEventSize == 0) {

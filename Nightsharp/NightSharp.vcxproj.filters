@@ -776,12 +776,6 @@
     <ClInclude Include="Plugins\KuroEvade\Native\KuroEvadeNative.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\KuroEvade\Native\MathUtils.h">
-      <Filter>Plugins\KuroEvade\Native</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\KuroEvade\Native\MathUtilsCPA.h">
-      <Filter>Plugins\KuroEvade\Native</Filter>
-    </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\MenuCache.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>

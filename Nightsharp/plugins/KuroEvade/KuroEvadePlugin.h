@@ -37,7 +37,9 @@ public:
         });
         m_detector.Clear();
 
-        SDK::Events::AddOnProcessSpell(&KuroEvadePlugin::OnProcessSpellStatic);
+        SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnProcessSpell, &KuroEvadePlugin::OnRawProcessSpellImmediateStatic);
+        SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
+        SDK::Events::AddOnCoreHook(SDK::Events::Hooks::ProcessCastSpell, &KuroEvadePlugin::OnRawProcessCastSpellImmediateStatic);
         SDK::Events::AddOnCreateObject(&KuroEvadePlugin::OnObjectCreateStatic);
         SDK::Events::AddOnDeleteObject(&KuroEvadePlugin::OnObjectDeleteStatic);
         SDK::Events::AddOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
@@ -55,7 +57,9 @@ public:
         SDK::Events::RemoveOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
         SDK::Events::RemoveOnDeleteObject(&KuroEvadePlugin::OnObjectDeleteStatic);
         SDK::Events::RemoveOnCreateObject(&KuroEvadePlugin::OnObjectCreateStatic);
-        SDK::Events::RemoveOnProcessSpell(&KuroEvadePlugin::OnProcessSpellStatic);
+        SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::ProcessCastSpell, &KuroEvadePlugin::OnRawProcessCastSpellImmediateStatic);
+        SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
+        SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnProcessSpell, &KuroEvadePlugin::OnRawProcessSpellImmediateStatic);
 
         m_detector.SetSpellEnabledPredicate({});
         m_detector.Clear();
@@ -164,11 +168,33 @@ private:
     KuroEvade::SpellDetector m_detector;
     KuroEvade::Evade m_evade;
 
-    static void OnProcessSpellStatic(const SDK::Events::ProcessSpellEventArgs& args) {
-        if (s_instance) {
-            s_instance->m_evade.OnProcessSpell(args);
-            s_instance->m_detector.OnProcessSpell(args);
+    static inline uintptr_t s_lastImmediateProcessCastInfo = 0;
+    static inline int s_lastImmediateProcessTick = 0;
+
+    static void OnRawProcessSpellImmediateStatic(const SDK::Events::CoreHookArgs& raw) {
+        if (!s_instance || raw.Id != SDK::Events::Hooks::OnProcessSpell) return;
+        auto decoded = ::Core::Events::DecodeProcessSpell(raw);
+        s_lastImmediateProcessCastInfo = decoded.CastInfo;
+        s_lastImmediateProcessTick = SDK::Variables::TickCount();
+        s_instance->m_evade.OnProcessSpell(decoded);
+        s_instance->m_detector.OnProcessSpell(decoded);
+    }
+
+    static void OnRawDoCastImmediateStatic(const SDK::Events::CoreHookArgs& raw) {
+        if (!s_instance || raw.Id != SDK::Events::Hooks::OnDoCast) return;
+        auto decoded = ::Core::Events::DecodeDoCast(raw);
+        if (decoded.CastInfo && decoded.CastInfo == s_lastImmediateProcessCastInfo &&
+            SDK::Variables::TickCount() - s_lastImmediateProcessTick <= 50) {
+            return;
         }
+        s_instance->m_evade.OnProcessSpell(decoded);
+        s_instance->m_detector.OnProcessSpell(decoded);
+    }
+
+    static void OnRawProcessCastSpellImmediateStatic(const SDK::Events::CoreHookArgs& raw) {
+        if (!s_instance || raw.Id != SDK::Events::Hooks::ProcessCastSpell) return;
+        auto decoded = ::Core::Events::DecodeProcessCastSpell(raw);
+        s_instance->m_detector.OnProcessCastSpell(decoded);
     }
 
     static void OnMissileCreateStatic(const SDK::Events::ObjectEventArgs& args) {

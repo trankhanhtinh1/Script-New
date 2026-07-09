@@ -184,6 +184,113 @@ public:
         return InPolygon(spell, pos, radius);
     }
 
+    bool CheckMoveToDirection(const Vec2& from, const Vec2& to, float boundingRadius,
+                              const SkillshotList& skillshots) const {
+        const float dist = from.Distance(to);
+        if (dist < 1.0f) {
+            return false;
+        }
+        const int steps = std::max(2, static_cast<int>(dist / 50.0f));
+        for (int i = 1; i <= steps; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(steps);
+            const Vec2 point = from + (to - from) * t;
+            for (const auto& spell : skillshots) {
+                if (spell && ShouldConsiderSpell(*spell) && InSkillShot(*spell, point, boundingRadius)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool CheckMovePath(const Vec2& movePos, float delayMs,
+                       const Vec2& heroPos, float boundingRadius,
+                       const SkillshotList& skillshots, float moveSpeed) const {
+        if (CheckMoveToDirection(heroPos, movePos, boundingRadius, skillshots)) {
+            return true;
+        }
+        for (const auto& s : skillshots) {
+            if (s && ShouldConsiderSpell(*s)) {
+                if (InSkillShot(*s, movePos, boundingRadius) ||
+                    PredictSpellCollision(*s, movePos, moveSpeed, delayMs, heroPos, boundingRadius, 0.0f)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool FindBestPositionForPath(const SDK::AIHeroClient& player, const Vec2& heroPos,
+                                 float boundingRadius, const Vec2& targetPos,
+                                 const SkillshotList& skillshots, Vec2& out) const {
+        const float speed = std::max(50.0f, player.MoveSpeed());
+        const float delayMs = m_settings.ExtraDelay +
+            static_cast<float>(SDK::Game::Ping()) +
+            std::max(0.0f, m_settings.CurrentWindupDelay);
+        const float extraDist = m_settings.ExtraDist;
+        const float planeY = player.ServerPosition().y;
+        const bool fastSort = UseFastSort(LowestHitTime(heroPos, boundingRadius, skillshots));
+        const int maxPosToCheck = m_settings.HigherPrecision ? 150 : 50;
+        const int posRadius = m_settings.HigherPrecision ? 25 : 50;
+
+        std::vector<Vec2> positions;
+        positions.reserve(static_cast<std::size_t>(maxPosToCheck) + 40);
+        if (m_settings.KurokamiPosition) {
+            AddKurokamiPositions(heroPos, boundingRadius, skillshots, positions);
+        }
+        AddFastestPositions(heroPos, boundingRadius, skillshots, positions);
+
+        int posChecked = 0;
+        int radiusIndex = 0;
+
+        while (posChecked < maxPosToCheck) {
+            radiusIndex++;
+            const int curRadius = radiusIndex * (2 * posRadius);
+            const int circleChecks = std::max(1,
+                static_cast<int>(std::ceil((2.0 * kPi * curRadius) / (2.0 * posRadius))));
+
+            for (int i = 1; i < circleChecks && posChecked < maxPosToCheck; ++i) {
+                posChecked++;
+                const double rad = (2.0 * kPi / (circleChecks - 1)) * i;
+                positions.emplace_back(
+                    std::floor(heroPos.x + curRadius * static_cast<float>(std::cos(rad))),
+                    std::floor(heroPos.y + curRadius * static_cast<float>(std::sin(rad))));
+            }
+        }
+
+        std::vector<PositionInfo> scored;
+        scored.reserve(positions.size());
+        for (const Vec2& position : positions) {
+            scored.push_back(ScorePosition(position, speed, delayMs, extraDist,
+                                           heroPos, boundingRadius, planeY, targetPos, skillshots));
+        }
+
+        std::sort(scored.begin(), scored.end(), [&](const PositionInfo& a, const PositionInfo& b) {
+            return Better(a, b, fastSort);
+        });
+
+        for (const PositionInfo& info : scored) {
+            if (info.dangerous) {
+                continue;
+            }
+
+            Vec2 target = info.position;
+            if ((fastSort || info.hasExtraDistance) && m_settings.ExtraEvadeDistance > 0.0f) {
+                target = GetExtendedSafePosition(heroPos, info.position, m_settings.ExtraEvadeDistance,
+                                                 speed, delayMs, extraDist, boundingRadius,
+                                                 planeY, targetPos, skillshots);
+            }
+
+            const PositionInfo finalInfo = ScorePosition(target, speed, delayMs, extraDist,
+                                                         heroPos, boundingRadius, planeY, targetPos, skillshots);
+            if (!finalInfo.dangerous) {
+                out = target;
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     static constexpr double kPi = 3.14159265358979323846;
     const EvadeSettings& m_settings;

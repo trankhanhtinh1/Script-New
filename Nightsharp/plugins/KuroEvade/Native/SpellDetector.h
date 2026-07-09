@@ -174,6 +174,44 @@ public:
         CreateSpellData(caster, args.StartPosition, args.EndPosition, specialResult.Data, SDK::SkillshotDetectionType::ProcessSpell);
     }
 
+    void OnProcessCastSpell(const SDK::Events::CastSpellEventArgs& args) {
+        if (!args.Sender.IsValid()) {
+            return;
+        }
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid() || args.Sender.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
+            return;
+        }
+        const auto caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            static_cast<int>(args.Sender.NetworkId));
+        if (caster.IsValid() && caster.IsAlly()) {
+            return;
+        }
+        const auto* data = FindByChampionAndSlot(args.Sender.CharacterName, args.Slot);
+        if (!data && caster.IsValid()) {
+            data = FindByChampionAndSlot(caster.CharacterName().c_str(), args.Slot);
+        }
+        if (!data || !IsSpellEnabled(*data)) {
+            return;
+        }
+        Vec2 startPos = args.StartPosition.To2D();
+        if (startPos.IsZero() && caster.IsValid()) {
+            startPos = caster.Position().To2D();
+        }
+        if (startPos.IsZero()) {
+            return;
+        }
+        Vec2 endPos = args.EndPosition.To2D();
+        if (endPos.IsZero()) {
+            return;
+        }
+        CreateSpellData(caster,
+                        Vec3::From2D(startPos, args.StartPosition.y),
+                        Vec3::From2D(endPos, args.EndPosition.y),
+                        *data,
+                        SDK::SkillshotDetectionType::ProcessSpell);
+    }
+
     void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
         const char* missileName = args.MissileName[0] ? args.MissileName : args.SpellName;
         const auto* data = FindByMissileName(missileName);
@@ -622,6 +660,29 @@ private:
         for (const auto& entry : SpellDatabase::Spells()) {
             if (SameText(entry.sdk.SpellName, name) ||
                 ContainsText(entry.sdk.ExtraSpellNames, name)) {
+                return &entry;
+            }
+        }
+        return nullptr;
+    }
+
+    static const Generated::SpellDataEntry* FindByChampionAndSlot(const char* champ, int slot) {
+        if (!champ || !champ[0] || slot < 0) {
+            return nullptr;
+        }
+        SDK::SpellSlot targetSlot = SDK::SpellSlot::Unknown;
+        switch (slot) {
+            case 0: targetSlot = SDK::SpellSlot::Q; break;
+            case 1: targetSlot = SDK::SpellSlot::W; break;
+            case 2: targetSlot = SDK::SpellSlot::E; break;
+            case 3: targetSlot = SDK::SpellSlot::R; break;
+        }
+        if (targetSlot == SDK::SpellSlot::Unknown) {
+            return nullptr;
+        }
+        for (const auto& entry : SpellDatabase::Spells()) {
+            if (ContainsInsensitive(entry.sdk.ChampionName.c_str(), champ) &&
+                entry.sdk.Slot == targetSlot) {
                 return &entry;
             }
         }
