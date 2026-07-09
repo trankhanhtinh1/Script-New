@@ -9,18 +9,19 @@
 
 #include <string>
 
-namespace Plugins::KuroEvade::ZD {
+namespace Plugins::KuroEvade {
 
-// ── SpellSlot enum (shared with EvadeSpellData.h) ───────────────────────────
-// Redefined here for standalone compilation.
-enum class WindupSpellSlot {
+enum class KuroWindupSpellSlot {
     Q = 0,
     W = 1,
     E = 2,
     R = 3,
 };
 
-// ── WindupSpellData struct (1-1 mapping from C# SpellData) ───────────────────
+namespace InternalDatabase {
+
+using WindupSpellSlot = KuroWindupSpellSlot;
+
 struct WindupSpellData {
     std::string charName;
     std::string name;
@@ -31,4 +32,5 @@ struct WindupSpellData {
     WindupSpellData() = default;
 };
 
-} // namespace Plugins::KuroEvade::ZD
+} // namespace InternalDatabase
+} // namespace Plugins::KuroEvade

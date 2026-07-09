@@ -13,10 +13,9 @@
 #include <vector>
 #include <functional>
 
-namespace Plugins::KuroEvade::ZD {
+namespace Plugins::KuroEvade {
 
-// ── SpellSlot enum (matches LeagueSharp/EnsoulSharp) ────────────────────────
-enum class EvadeSpellSlot {
+enum class KuroEvadeSpellSlot {
     Q = 0,
     W = 1,
     E = 2,
@@ -24,15 +23,13 @@ enum class EvadeSpellSlot {
     Recall = 4,
 };
 
-// ── Cast type: how the evade spell is targeted ───────────────────────────────
-enum class EvadeCastType {
+enum class KuroEvadeCastType {
     Position,
     Target,
     Self,
 };
 
-// ── Valid target types for CastType::Target spells ───────────────────────────
-enum class EvadeSpellTargets {
+enum class KuroEvadeSpellTargets {
     AllyMinions,
     EnemyMinions,
     AllyChampions,
@@ -40,8 +37,7 @@ enum class EvadeSpellTargets {
     Targetables,
 };
 
-// ── Evade category ───────────────────────────────────────────────────────────
-enum class EvadeType {
+enum class KuroEvadeType {
     Blink,
     Dash,
     Invulnerability,
@@ -51,7 +47,13 @@ enum class EvadeType {
     WindWall,
 };
 
-// ── EvadeSpellData struct (1-1 mapping from C#) ──────────────────────────────
+namespace InternalDatabase {
+
+using EvadeSpellSlot = KuroEvadeSpellSlot;
+using EvadeCastType = KuroEvadeCastType;
+using EvadeSpellTargets = KuroEvadeSpellTargets;
+using EvadeType = KuroEvadeType;
+
 struct EvadeSpellData {
     std::string charName;
     EvadeSpellSlot spellKey = EvadeSpellSlot::Q;
@@ -84,7 +86,8 @@ struct EvadeSpellData {
           evadeType(evadeType), dangerlevel(dangerlevel) {}
 };
 
-} // namespace Plugins::KuroEvade::ZD
+} // namespace InternalDatabase
+} // namespace Plugins::KuroEvade
 
 // ============================================================================
 // KuroEvade Compatibility Wrapper

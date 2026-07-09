@@ -11,7 +11,7 @@
 
 #include "EvadeSpellData.h"
 
-namespace Plugins::KuroEvade::ZD {
+namespace Plugins::KuroEvade::InternalDatabase {
 
 class EvadeSpellDatabase {
 public:
@@ -2231,7 +2231,7 @@ public:
 
 inline std::vector<EvadeSpellData> EvadeSpellDatabase::Spells;
 
-} // namespace Plugins::KuroEvade::ZD
+} // namespace Plugins::KuroEvade::InternalDatabase
 
 // ============================================================================
 // KuroEvade Compatibility Wrapper
@@ -2248,11 +2248,11 @@ struct EvadeSpellDatabase final {
         static std::vector<EvadeSpellData> combinedSpells;
         static bool initialized = false;
         if (!initialized) {
-            if (::Plugins::KuroEvade::ZD::EvadeSpellDatabase::Spells.empty()) {
-                ::Plugins::KuroEvade::ZD::EvadeSpellDatabase::Initialize();
+            if (::Plugins::KuroEvade::InternalDatabase::EvadeSpellDatabase::Spells.empty()) {
+                ::Plugins::KuroEvade::InternalDatabase::EvadeSpellDatabase::Initialize();
             }
 
-            for (const auto& zd : ::Plugins::KuroEvade::ZD::EvadeSpellDatabase::Spells) {
+            for (const auto& zd : ::Plugins::KuroEvade::InternalDatabase::EvadeSpellDatabase::Spells) {
                 EvadeSpellData e = {};
                 e.ChampionName = zd.charName;
                 e.Name = zd.name;
@@ -2271,35 +2271,35 @@ struct EvadeSpellDatabase final {
                 e.ItemId = zd.itemID;
 
                 switch (zd.castType) {
-                    case ::Plugins::KuroEvade::ZD::EvadeCastType::Position: e.CastTypeValue = CastType::Position; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeCastType::Target: e.CastTypeValue = CastType::Target; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeCastType::Self: e.CastTypeValue = CastType::Self; break;
+                    case ::Plugins::KuroEvade::KuroEvadeCastType::Position: e.CastTypeValue = CastType::Position; break;
+                    case ::Plugins::KuroEvade::KuroEvadeCastType::Target: e.CastTypeValue = CastType::Target; break;
+                    case ::Plugins::KuroEvade::KuroEvadeCastType::Self: e.CastTypeValue = CastType::Self; break;
                 }
 
                 switch (zd.evadeType) {
-                    case ::Plugins::KuroEvade::ZD::EvadeType::Blink: e.EvadeTypeValue = EvadeType::Blink; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeType::Dash: e.EvadeTypeValue = EvadeType::Dash; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeType::Invulnerability: e.EvadeTypeValue = EvadeType::Invulnerability; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeType::MovementSpeedBuff: e.EvadeTypeValue = EvadeType::MovementSpeedBuff; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeType::SpellShield: e.EvadeTypeValue = EvadeType::SpellShield; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeType::WindWall: e.EvadeTypeValue = EvadeType::WindWall; break;
+                    case ::Plugins::KuroEvade::KuroEvadeType::Blink: e.EvadeTypeValue = EvadeType::Blink; break;
+                    case ::Plugins::KuroEvade::KuroEvadeType::Dash: e.EvadeTypeValue = EvadeType::Dash; break;
+                    case ::Plugins::KuroEvade::KuroEvadeType::Invulnerability: e.EvadeTypeValue = EvadeType::Invulnerability; break;
+                    case ::Plugins::KuroEvade::KuroEvadeType::MovementSpeedBuff: e.EvadeTypeValue = EvadeType::MovementSpeedBuff; break;
+                    case ::Plugins::KuroEvade::KuroEvadeType::SpellShield: e.EvadeTypeValue = EvadeType::SpellShield; break;
+                    case ::Plugins::KuroEvade::KuroEvadeType::WindWall: e.EvadeTypeValue = EvadeType::WindWall; break;
                     default: e.EvadeTypeValue = EvadeType::Dash; break;
                 }
 
                 switch (zd.spellKey) {
-                    case ::Plugins::KuroEvade::ZD::EvadeSpellSlot::Q: e.Slot = SDK::SpellSlot::Q; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeSpellSlot::W: e.Slot = SDK::SpellSlot::W; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeSpellSlot::E: e.Slot = SDK::SpellSlot::E; break;
-                    case ::Plugins::KuroEvade::ZD::EvadeSpellSlot::R: e.Slot = SDK::SpellSlot::R; break;
+                    case ::Plugins::KuroEvade::KuroEvadeSpellSlot::Q: e.Slot = SDK::SpellSlot::Q; break;
+                    case ::Plugins::KuroEvade::KuroEvadeSpellSlot::W: e.Slot = SDK::SpellSlot::W; break;
+                    case ::Plugins::KuroEvade::KuroEvadeSpellSlot::E: e.Slot = SDK::SpellSlot::E; break;
+                    case ::Plugins::KuroEvade::KuroEvadeSpellSlot::R: e.Slot = SDK::SpellSlot::R; break;
                     default: e.Slot = SDK::SpellSlot::Unknown; break;
                 }
 
                 for (const auto& target : zd.spellTargets) {
                     switch (target) {
-                        case ::Plugins::KuroEvade::ZD::EvadeSpellTargets::AllyMinions: e.ValidTargets.push_back(SpellTargets::AllyMinions); break;
-                        case ::Plugins::KuroEvade::ZD::EvadeSpellTargets::EnemyMinions: e.ValidTargets.push_back(SpellTargets::EnemyMinions); break;
-                        case ::Plugins::KuroEvade::ZD::EvadeSpellTargets::AllyChampions: e.ValidTargets.push_back(SpellTargets::AllyChampions); break;
-                        case ::Plugins::KuroEvade::ZD::EvadeSpellTargets::EnemyChampions: e.ValidTargets.push_back(SpellTargets::EnemyChampions); break;
+                        case ::Plugins::KuroEvade::KuroEvadeSpellTargets::AllyMinions: e.ValidTargets.push_back(SpellTargets::AllyMinions); break;
+                        case ::Plugins::KuroEvade::KuroEvadeSpellTargets::EnemyMinions: e.ValidTargets.push_back(SpellTargets::EnemyMinions); break;
+                        case ::Plugins::KuroEvade::KuroEvadeSpellTargets::AllyChampions: e.ValidTargets.push_back(SpellTargets::AllyChampions); break;
+                        case ::Plugins::KuroEvade::KuroEvadeSpellTargets::EnemyChampions: e.ValidTargets.push_back(SpellTargets::EnemyChampions); break;
                     }
                 }
 

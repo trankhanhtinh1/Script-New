@@ -2,9 +2,9 @@
 #include <string>
 #include <vector>
 
-namespace Plugins::KuroEvade::ZD {
+namespace Plugins::KuroEvade {
 
-enum class ZDSpellSlot {
+enum class KuroSpellSlot {
     Q = 0,
     W,
     E,
@@ -12,21 +12,21 @@ enum class ZDSpellSlot {
     Unknown
 };
 
-enum class ZDSpellType {
+enum class KuroSpellType {
     Line,
     Circular,
     Cone,
     Arc
 };
 
-enum class ZDCollisionObjectType {
+enum class KuroCollisionObjectType {
     EnemyChampions,
     EnemyMinions,
     EnemyYasuoWall,
     Terrain
 };
 
-enum class CCType {
+enum class KuroCCType {
     None,
     Slow,
     Stun,
@@ -42,6 +42,13 @@ enum class CCType {
     Taunt,
     Sleep
 };
+
+namespace InternalDatabase {
+
+using ZDSpellSlot = KuroSpellSlot;
+using ZDSpellType = KuroSpellType;
+using ZDCollisionObjectType = KuroCollisionObjectType;
+using CCType = KuroCCType;
 
 struct SpellData {
     std::string charName;
@@ -77,14 +84,12 @@ struct SpellData {
     std::string trapBaseName;
 };
 
-} // namespace Plugins::KuroEvade::ZD
+} // namespace InternalDatabase
 
 // ============================================================================
 // KuroEvade Compatibility Wrapper
 // ============================================================================
 #include "../../../SDK/SDK.h"
-
-namespace Plugins::KuroEvade {
 
 struct SpellDataEntry {
     SDK::SpellDatabaseEntry sdk;

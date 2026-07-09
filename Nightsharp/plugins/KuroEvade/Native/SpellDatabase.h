@@ -1,7 +1,7 @@
 #pragma once
 #include "SpellData.h"
 
-namespace Plugins::KuroEvade::ZD { class SpellDatabase {
+namespace Plugins::KuroEvade::InternalDatabase { class SpellDatabase {
 public:
     static std::vector<SpellData> Spells;
 
@@ -3463,7 +3463,7 @@ public:
 };
 
 inline std::vector<SpellData> SpellDatabase::Spells;
-} // namespace Plugins::KuroEvade::ZD
+} // namespace Plugins::KuroEvade::InternalDatabase
 
 // ============================================================================
 // KuroEvade Compatibility Wrapper
@@ -3479,11 +3479,11 @@ inline const std::vector<SpellDataEntry>& Spells() {
     static std::vector<SpellDataEntry> combinedData;
     static bool initialized = false;
     if (!initialized) {
-        if (::Plugins::KuroEvade::ZD::SpellDatabase::Spells.empty()) {
-            ::Plugins::KuroEvade::ZD::SpellDatabase::Initialize();
+        if (::Plugins::KuroEvade::InternalDatabase::SpellDatabase::Spells.empty()) {
+            ::Plugins::KuroEvade::InternalDatabase::SpellDatabase::Initialize();
         }
 
-        for (const auto& zd : ::Plugins::KuroEvade::ZD::SpellDatabase::Spells) {
+        for (const auto& zd : ::Plugins::KuroEvade::InternalDatabase::SpellDatabase::Spells) {
             SpellDataEntry e = {};
             e.sdk.ChampionName = zd.charName;
             e.sdk.SpellName = zd.spellName;
@@ -3503,32 +3503,32 @@ inline const std::vector<SpellDataEntry>& Spells() {
             e.IsSpecialIgnore = zd.noProcess;
 
             switch (zd.spellKey) {
-                case ::Plugins::KuroEvade::ZD::ZDSpellSlot::Q: e.sdk.Slot = SDK::SpellSlot::Q; break;
-                case ::Plugins::KuroEvade::ZD::ZDSpellSlot::W: e.sdk.Slot = SDK::SpellSlot::W; break;
-                case ::Plugins::KuroEvade::ZD::ZDSpellSlot::E: e.sdk.Slot = SDK::SpellSlot::E; break;
-                case ::Plugins::KuroEvade::ZD::ZDSpellSlot::R: e.sdk.Slot = SDK::SpellSlot::R; break;
+                case ::Plugins::KuroEvade::KuroSpellSlot::Q: e.sdk.Slot = SDK::SpellSlot::Q; break;
+                case ::Plugins::KuroEvade::KuroSpellSlot::W: e.sdk.Slot = SDK::SpellSlot::W; break;
+                case ::Plugins::KuroEvade::KuroSpellSlot::E: e.sdk.Slot = SDK::SpellSlot::E; break;
+                case ::Plugins::KuroEvade::KuroSpellSlot::R: e.sdk.Slot = SDK::SpellSlot::R; break;
                 default: e.sdk.Slot = SDK::SpellSlot::Unknown; break;
             }
 
             switch (zd.spellType) {
-                case ::Plugins::KuroEvade::ZD::ZDSpellType::Line: e.sdk.SpellType = SDK::SpellType::SkillshotLine; break;
-                case ::Plugins::KuroEvade::ZD::ZDSpellType::Circular: e.sdk.SpellType = SDK::SpellType::SkillshotCircle; break;
-                case ::Plugins::KuroEvade::ZD::ZDSpellType::Cone: e.sdk.SpellType = SDK::SpellType::SkillshotCone; break;
-                case ::Plugins::KuroEvade::ZD::ZDSpellType::Arc: e.sdk.SpellType = SDK::SpellType::SkillshotMissileArc; break;
+                case ::Plugins::KuroEvade::KuroSpellType::Line: e.sdk.SpellType = SDK::SpellType::SkillshotLine; break;
+                case ::Plugins::KuroEvade::KuroSpellType::Circular: e.sdk.SpellType = SDK::SpellType::SkillshotCircle; break;
+                case ::Plugins::KuroEvade::KuroSpellType::Cone: e.sdk.SpellType = SDK::SpellType::SkillshotCone; break;
+                case ::Plugins::KuroEvade::KuroSpellType::Arc: e.sdk.SpellType = SDK::SpellType::SkillshotMissileArc; break;
             }
 
             for (const auto& obj : zd.collisionObjects) {
                 switch (obj) {
-                    case ::Plugins::KuroEvade::ZD::ZDCollisionObjectType::EnemyChampions:
+                    case ::Plugins::KuroEvade::KuroCollisionObjectType::EnemyChampions:
                         e.sdk.CollisionObjects.push_back(SDK::CollisionableObjects::Heroes);
                         break;
-                    case ::Plugins::KuroEvade::ZD::ZDCollisionObjectType::EnemyMinions:
+                    case ::Plugins::KuroEvade::KuroCollisionObjectType::EnemyMinions:
                         e.sdk.CollisionObjects.push_back(SDK::CollisionableObjects::Minions);
                         break;
-                    case ::Plugins::KuroEvade::ZD::ZDCollisionObjectType::EnemyYasuoWall:
+                    case ::Plugins::KuroEvade::KuroCollisionObjectType::EnemyYasuoWall:
                         e.sdk.CollisionObjects.push_back(SDK::CollisionableObjects::YasuoWall);
                         break;
-                    case ::Plugins::KuroEvade::ZD::ZDCollisionObjectType::Terrain:
+                    case ::Plugins::KuroEvade::KuroCollisionObjectType::Terrain:
                         e.sdk.CollisionObjects.push_back(SDK::CollisionableObjects::Walls);
                         break;
                 }

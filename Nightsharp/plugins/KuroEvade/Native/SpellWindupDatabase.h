@@ -2,7 +2,7 @@
 #include "WindupSpellData.h"
 #include <vector>
 
-namespace Plugins::KuroEvade::ZD {
+namespace Plugins::KuroEvade::InternalDatabase {
 
 class SpellWindupDatabase {
 public:
@@ -652,7 +652,7 @@ public:
 
 inline std::vector<WindupSpellData> SpellWindupDatabase::Spells;
 
-} // namespace Plugins::KuroEvade::ZD
+} // namespace Plugins::KuroEvade::InternalDatabase
 
 // ============================================================================
 // KuroEvade Compatibility Wrapper
@@ -672,20 +672,20 @@ struct SpellWindupDatabase final {
         static std::vector<Entry> combinedWindups;
         static bool initialized = false;
         if (!initialized) {
-            if (::Plugins::KuroEvade::ZD::SpellWindupDatabase::Spells.empty()) {
-                ::Plugins::KuroEvade::ZD::SpellWindupDatabase::Initialize();
+            if (::Plugins::KuroEvade::InternalDatabase::SpellWindupDatabase::Spells.empty()) {
+                ::Plugins::KuroEvade::InternalDatabase::SpellWindupDatabase::Initialize();
             }
 
-            for (const auto& zd : ::Plugins::KuroEvade::ZD::SpellWindupDatabase::Spells) {
+            for (const auto& zd : ::Plugins::KuroEvade::InternalDatabase::SpellWindupDatabase::Spells) {
                 Entry e = {};
                 e.ChampionName = zd.charName;
                 e.SpellName = zd.spellName;
 
                 switch (zd.spellKey) {
-                    case ::Plugins::KuroEvade::ZD::WindupSpellSlot::Q: e.Slot = SDK::SpellSlot::Q; break;
-                    case ::Plugins::KuroEvade::ZD::WindupSpellSlot::W: e.Slot = SDK::SpellSlot::W; break;
-                    case ::Plugins::KuroEvade::ZD::WindupSpellSlot::E: e.Slot = SDK::SpellSlot::E; break;
-                    case ::Plugins::KuroEvade::ZD::WindupSpellSlot::R: e.Slot = SDK::SpellSlot::R; break;
+                    case ::Plugins::KuroEvade::KuroWindupSpellSlot::Q: e.Slot = SDK::SpellSlot::Q; break;
+                    case ::Plugins::KuroEvade::KuroWindupSpellSlot::W: e.Slot = SDK::SpellSlot::W; break;
+                    case ::Plugins::KuroEvade::KuroWindupSpellSlot::E: e.Slot = SDK::SpellSlot::E; break;
+                    case ::Plugins::KuroEvade::KuroWindupSpellSlot::R: e.Slot = SDK::SpellSlot::R; break;
                 }
 
                 combinedWindups.push_back(e);
