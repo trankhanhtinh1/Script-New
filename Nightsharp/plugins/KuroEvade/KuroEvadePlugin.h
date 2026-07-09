@@ -60,6 +60,7 @@ public:
         m_detector.SetSpellEnabledPredicate({});
         m_detector.Clear();
         DestroyMenu();
+        KuroEvade::Evade::RestoreOrbwalkerMove();
         if (s_instance == this) {
             s_instance = nullptr;
         }

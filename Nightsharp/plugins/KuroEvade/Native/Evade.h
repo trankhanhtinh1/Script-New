@@ -35,6 +35,22 @@ public:
             static_cast<int>(remainingMs) - SDK::Game::Ping() / 2;
     }
 
+    static inline bool s_orbwalkerWasMoveEnabled = true;
+    static inline bool s_orbwalkerDisabled = false;
+
+    static void DisableOrbwalkerMove() {
+        if (s_orbwalkerDisabled) return;
+        s_orbwalkerWasMoveEnabled = SDK::Orbwalker::MoveEnabled();
+        SDK::Orbwalker::MoveEnabled(false);
+        s_orbwalkerDisabled = true;
+    }
+
+    static void RestoreOrbwalkerMove() {
+        if (!s_orbwalkerDisabled) return;
+        SDK::Orbwalker::MoveEnabled(s_orbwalkerWasMoveEnabled);
+        s_orbwalkerDisabled = false;
+    }
+
     bool Tick(const EvadeSettings& settings,
               SpellDetector::SkillshotList& skillshots,
               int& lastDodgeTick,
@@ -43,23 +59,28 @@ public:
               std::size_t lastEventSize) {
         if (!settings.Enabled || !settings.DodgeKeyActive) {
             m_hasLastPosition = false;
+            RestoreOrbwalkerMove();
             return false;
         }
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid() || player.IsDead()) {
+            RestoreOrbwalkerMove();
             return false;
         }
 
         if (player.IsDashing() || player.IsInvulnerable() || player.Spellbook().IsChanneling()) {
+            RestoreOrbwalkerMove();
             return false;
         }
 
         if (player.HealthPercent() > settings.DodgeHp) {
+            RestoreOrbwalkerMove();
             return false;
         }
 
         if (skillshots.empty()) {
+            RestoreOrbwalkerMove();
             return false;
         }
 
@@ -73,6 +94,7 @@ public:
 
         if (!helper.IsEndangered(player, heroPos, boundingRadius, skillshots)) {
             m_hasLastPosition = false;
+            RestoreOrbwalkerMove();
             return false;
         }
 
@@ -88,6 +110,7 @@ public:
             if (effectiveSettings.UseEvadeSpells &&
                 EvadeSpell::TryUseBest(effectiveSettings, player, best, true, currentDanger, lowestHitTime,
                                        skillshots, evadeSpellConfig, lastEvent, lastEventSize)) {
+                DisableOrbwalkerMove();
                 lastDodgeTick = now;
                 return true;
             }
@@ -97,10 +120,12 @@ public:
                 const auto path = player.Path();
                 if (!path.empty() &&
                     path.back().To2D().Distance(best) < 5.0f) {
+                    DisableOrbwalkerMove();
                     return true;
                 }
             }
 
+            DisableOrbwalkerMove();
             const float planeY = player.ServerPosition().y;
             CoreControl::IssueMove(Vec3::From2D(best, planeY), true);
             m_lastPosition = best;
@@ -113,11 +138,13 @@ public:
         if (effectiveSettings.UseEvadeSpells &&
             EvadeSpell::TryUseBest(effectiveSettings, player, heroPos, false, currentDanger, lowestHitTime,
                                    skillshots, evadeSpellConfig, lastEvent, lastEventSize)) {
+            DisableOrbwalkerMove();
             lastDodgeTick = now;
             return true;
         }
 
         SetLastEvent(lastEvent, lastEventSize, "no safe position");
+        RestoreOrbwalkerMove();
         return false;
     }
 
