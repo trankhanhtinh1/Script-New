@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include "../SectionProfiler.h"
 
 #ifndef NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS
 #define NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS 0
@@ -766,7 +765,7 @@ inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
 
 namespace detail {
     // Separate function to avoid C2712 (MSVC cannot mix __try with C++ objects
-    // requiring unwinding — the NS_PROFILE SectionProbe in ReadSnapshot conflicts).
+    // requiring unwinding — ReadSnapshot's local objects conflict).
     inline void ReadSnapshotBulk(ObjectSnapshot& snapshot, uintptr_t object, ObjectType type) {
         __try {
             snapshot.handle.index = *reinterpret_cast<const std::uint32_t*>(object + Offset::All::Index);
@@ -844,7 +843,6 @@ namespace detail {
 }
 
 inline ObjectSnapshot ReadSnapshot(uintptr_t object, ObjectType type = ObjectType::Unknown) {
-    NS_PROFILE("core.ReadSnapshot");
     ObjectSnapshot snapshot{};
     if (!Globals::IsValidPtr(object)) return snapshot;
 

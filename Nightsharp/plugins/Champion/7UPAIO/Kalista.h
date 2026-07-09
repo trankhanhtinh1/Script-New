@@ -47,6 +47,7 @@ inline DWORD LastLogicETick = 0;
 inline DWORD LastRLogicTick = 0;
 inline DWORD LastKillstealTick = 0;
 inline DWORD LastClearTick = 0;
+inline DWORD LastUpdateTick = 0;
 
 inline bool OwnsForcedTarget = false;
 inline AttackableUnit LastForcedTarget{};
@@ -431,34 +432,24 @@ static AttackableUnit SelectOrbwalkerForcedTarget() {
     }
 
     const float aaRange = AutoAttack::GetRealAutoAttackRange(player);
-    const Vector3 cursor = Game::CursorPos();
     AttackableUnit best;
-    float bestCursorDistance = FLT_MAX;
+    float bestPlayerDistance = FLT_MAX;
     int bestPriority = -1;
-    static constexpr float kForceTargetCursorRadius = 160.0f;
 
     auto consider = [&](const AIBaseClient& unit, int priority) {
         if (!ValidTarget(unit, aaRange) || !AutoAttack::InAutoAttackRange(unit)) {
             return;
         }
 
-        const float cursorDistance = unit.Distance(cursor);
-        if (cursorDistance > kForceTargetCursorRadius) {
-            return;
-        }
-
+        const float playerDistance = unit.DistanceToPlayer();
         if (!best.IsValid() ||
-            cursorDistance < bestCursorDistance - 1.0f ||
-            (std::fabs(cursorDistance - bestCursorDistance) <= 1.0f && priority > bestPriority)) {
+            priority > bestPriority ||
+            (priority == bestPriority && playerDistance < bestPlayerDistance)) {
             best = AttackableUnit(unit.Handle());
-            bestCursorDistance = cursorDistance;
+            bestPlayerDistance = playerDistance;
             bestPriority = priority;
         }
     };
-
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        consider(enemy, 3000);
-    }
 
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (minion.IsJungle() || minion.IsPlant() || minion.IsPet() || minion.IsClone()) {
@@ -544,17 +535,22 @@ static double GetEDamage(const AIBaseClient& target) {
         eAdditionalBaseDamage[level] +
         eAdditionalAdRatio[level] * player.AD() +
         0.5f * player.AP();
-    const float raw = normal + additional * static_cast<float>(stacks - 1);
+    float raw = normal + additional * static_cast<float>(stacks - 1);
 
-    // NO epic-monster halving. The season-5-era C# source halved Rend vs
-    // Legendary monsters (`total /= 2` when `(GetJungleType() & Legendary) != 0`,
-    // which covers Baron/Dragon/Herald/Voidgrubs), but that reduction was REMOVED
-    // from live League: verified in-game that Rend deals FULL damage to Baron and
-    // Dragon — keeping the /2 made the estimate fall short (hụt), so E never
-    // secured the objective. CDragon `EpicMonsterDamageMod = 0.5` is a leftover
-    // DataValue that is NOT referenced by KalistaExpunge mSpellCalculations
-    // (unused stub), so we do not apply it. If a future patch re-wires it, restore
-    // `raw *= 0.5f` for JungleType::Legendary/Epic here.
+    // C# Kalista.cs GetEDamage/EDamage (1-1):
+    //   if (target is AIMinionClient minion &&
+    //       (minion.GetJungleType() & JungleType.Legendary) != 0) total /= 2;
+    // Chia đôi raw TRƯỚC khi tính giáp, gate bằng bitwise & Legendary
+    // (Legendary=8, Epic=24 chứa bit 8 → Baron/Dragon/Herald/Voidgrub...),
+    // rồi CalculateDamage physical bình thường — giữ nguyên hệt bản C#.
+    if (target.IsMinion()) {
+        const AIMinionClient minion(target.Handle());
+        if (minion.IsValid() &&
+            (minion.GetJungleType() & JungleType::Legendary) != JungleType::Unknown) {
+            raw *= 0.5f;   // C#: total /= 2
+        }
+    }
+
     const double finalDamage = player.CalculatePhysicalDamage(target, std::max(0.0f, raw));
 
     if (DebugRendEnabled()) {
@@ -756,7 +752,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("useE", "Use E"));
     ComboMenu->Add(new MenuBool("disE1", "Block on Debuff"));
     ComboMenu->Add(new MenuBool("disE2", "Limit usage"));
-    ComboMenu->Add(new MenuBool("orbminion", "Orbwalker Minion"));
+    ComboMenu->Add(new MenuBool("orbminion", "Orbwalker Minion", true));
 
     Eset = MenuRoot->AddSubMenu(new Menu("Eset", "Eset"));
     Eset->Add(new MenuList("EMode", "Use E Mode", { "Only Combo", "Always", "Disable" }, 1));
@@ -1472,6 +1468,10 @@ static void Killsteal() {
 
 static void Game_OnUpdate(const GameUpdateEventArgs& args) {
     (void)args;
+    if (!ShouldRunNow(LastUpdateTick, 40)) {
+        return;
+    }
+
     const auto player = Player();
     if (!player.IsValid()) {
         ClearForcedTarget();

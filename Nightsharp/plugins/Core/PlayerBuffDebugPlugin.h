@@ -120,9 +120,7 @@ private:
         bool previousLive = false;
         int sdkCount = 0;
         int liveStacks = 0;
-        int eventCount = -1;
         int previousSdkCount = 0;
-        int previousEventCount = -1;
         int type = -1;
         int lastEventTick = 0;
         float startTime = 0.0f;
@@ -320,7 +318,6 @@ private:
                 entry.previousHasBuff = entry.hasBuff;
                 entry.previousLive = entry.live;
                 entry.previousSdkCount = entry.sdkCount;
-                entry.previousEventCount = entry.eventCount;
                 entry.liveSeenThisRefresh = false;
                 entry.live = false;
                 entry.liveStacks = 0;
@@ -373,8 +370,7 @@ private:
                 !entry.initialized ||
                 entry.previousHasBuff != entry.hasBuff ||
                 entry.previousLive != entry.live ||
-                entry.previousSdkCount != entry.sdkCount ||
-                entry.previousEventCount != entry.eventCount;
+                entry.previousSdkCount != entry.sdkCount;
             if (changed) {
                 entry.initialized = true;
                 entry.lastChangeTime = gameTime;
@@ -414,7 +410,6 @@ private:
         UnsuppressRawLocked(args.BuffName);
 
         Entry& entry = EnsureEntryLocked(args.BuffName);
-        entry.eventCount = args.Count;
         entry.lastEventTick = SDK::Game::TickCount();
         entry.lastChangeTime = gameTime;
         CopyText(entry.lastEvent,
@@ -450,14 +445,13 @@ private:
     static void LogEntry(const char* source, const Entry& entry) {
         NightSharpDebug::Logf(
             "[PlayerBuffDebug] %s name=%s has=%d sdkCount=%d live=%d "
-            "liveStacks=%d eventCount=%d type=%d buff=0x%llX event=%s",
+            "liveStacks=%d type=%d buff=0x%llX event=%s",
             source ? source : "?",
             entry.name,
             entry.hasBuff ? 1 : 0,
             entry.sdkCount,
             entry.live ? 1 : 0,
             entry.liveStacks,
-            entry.eventCount,
             entry.type,
             static_cast<unsigned long long>(entry.address),
             entry.lastEvent[0] ? entry.lastEvent : "-");
@@ -471,7 +465,7 @@ private:
 
         if (!ImGui::BeginTable(
                 "PlayerBuffDebugTable",
-                11,
+                10,
                 ImGuiTableFlags_Borders |
                     ImGuiTableFlags_RowBg |
                     ImGuiTableFlags_ScrollY |
@@ -486,7 +480,6 @@ private:
         ImGui::TableSetupColumn("RawLive");
         ImGui::TableSetupColumn("RawStacks");
         ImGui::TableSetupColumn("Event");
-        ImGui::TableSetupColumn("EvtCnt");
         ImGui::TableSetupColumn("Type");
         ImGui::TableSetupColumn("Remain");
         ImGui::TableSetupColumn("Age");
@@ -520,14 +513,12 @@ private:
             ImGui::TableSetColumnIndex(5);
             ImGui::TextUnformatted(entry.lastEvent[0] ? entry.lastEvent : "-");
             ImGui::TableSetColumnIndex(6);
-            ImGui::Text("%d", entry.eventCount);
-            ImGui::TableSetColumnIndex(7);
             ImGui::Text("%d", entry.type);
-            ImGui::TableSetColumnIndex(8);
+            ImGui::TableSetColumnIndex(7);
             ImGui::Text("%.2f", RemainingTime(entry, gameTime));
-            ImGui::TableSetColumnIndex(9);
+            ImGui::TableSetColumnIndex(8);
             ImGui::Text("%dms", ageMs);
-            ImGui::TableSetColumnIndex(10);
+            ImGui::TableSetColumnIndex(9);
             ImGui::Text("0x%llX", static_cast<unsigned long long>(entry.address));
         }
 

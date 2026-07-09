@@ -13,6 +13,7 @@
 #include "../Plugins/PluginRegistry.h"
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/PermaShow.h"
+#include "../FpsDropDebug.h"
 #include "MenuConfig.h"
 #include "ConfigStore.h"
 
@@ -283,6 +284,29 @@ namespace NightSharpMenu {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click-through always on: clicks pass through the overlay.");
     }
 
+    // Performance profiler panel, embedded in the Debug Info section.
+    // ON/OFF drives NightSharpPerf::Enabled (the master switch that gates all
+    // frame/plugin/event timing collection — zero overhead while OFF). When ON,
+    // a sub-panel shows the live stats plus a toggle to append them to a txt log.
+    inline void DrawProfilerSection() {
+        ImGui::Separator();
+        DrawSectionTitle("Performance Profiler");
+
+        DrawOnOffEditor("Profiler", NightSharpPerf::Enabled, "perf_profiler");
+        if (!NightSharpPerf::Enabled) {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
+                               "Bat de do frame/plugin/event timing. Tat = 0 overhead.");
+            return;
+        }
+
+        DrawOnOffEditor("Ghi log ra file (.txt)", NightSharpPerf::LogEnabled, "perf_log");
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
+                           "Log: C:\\Users\\Public\\nightsharp_fps_drop_debug.txt");
+
+        ImGui::Separator();
+        NightSharpPerf::DrawStatsBody();
+    }
+
     inline void DrawDebugSection() {
         DrawSectionTitle("Debug Info");
         ImGui::Text("NightSharp");
@@ -298,6 +322,8 @@ namespace NightSharpMenu {
         if (ImGui::GetIO().Framerate > 0.0f) {
             ImGui::Text("Frame: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
         }
+
+        DrawProfilerSection();
     }
 
     inline PluginRegistry::PluginCategory FilterCategoryFromIndex(int filterIdx) {

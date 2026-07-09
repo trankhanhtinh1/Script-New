@@ -753,7 +753,6 @@ static void Render() {
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-    NightSharpPerf::DumpSections();
     NightSharpPerf::EndFrame();
     NightSharpDebug::SetPhase("d3d11hook-render-idle");
 }

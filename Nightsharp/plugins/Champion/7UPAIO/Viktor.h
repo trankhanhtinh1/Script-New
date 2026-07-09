@@ -31,6 +31,7 @@ inline bool Loaded = false;
 inline DWORD LastUpdateTick = 0;
 inline DWORD LastClearTick = 0;
 inline DWORD LastRFollowTick = 0;
+inline DWORD LastAutoWTick = 0;
 
 static constexpr float kEMaxRange = 1225.0f;
 static constexpr float kELength = 700.0f;
@@ -629,6 +630,9 @@ static void Flee() {
 
 static void AutoW() {
     if (!W.IsReady() || !Bool(MiscMenu, "autoW")) {
+        return;
+    }
+    if (!ShouldRunNow(LastAutoWTick, 120)) {
         return;
     }
 

@@ -34,6 +34,8 @@ inline int WallCastT = 0;
 inline Vec2 YasuoWallCastedPos;
 inline uintptr_t YasuoWall = 0;
 inline bool Loaded = false;
+inline DWORD LastUpdateTick = 0;
+inline DWORD LastBackgroundTick = 0;
 
 static AIHeroClient Player() { return ObjectManager::Player(); }
 
@@ -53,6 +55,16 @@ static bool Key(Menu* menu, const char* key, bool fallback = false) {
     if (!menu) return fallback;
     const auto* item = menu->Get<MenuKeyBind>(key);
     return item ? item->Active : fallback;
+}
+
+static bool ShouldRunNow(DWORD& lastTick, DWORD intervalMs) {
+    const DWORD now = GetTickCount();
+    if (lastTick != 0 && now - lastTick < intervalMs) {
+        return false;
+    }
+
+    lastTick = now;
+    return true;
 }
 
 static void RemoveKeyPermashow(Menu* menu, const char* key) {
@@ -250,6 +262,10 @@ static void Gapcloser_OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventAr
 
 // === Game_OnUpdate ===
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
+    if (!ShouldRunNow(LastUpdateTick, 40)) {
+        return;
+    }
+
     const auto player = Player();
     if (!player.IsValid() || player.IsDead() || player.IsRecalling()) return;
     if (Game::IsChatOpen() || Game::IsShopOpen()) return;
@@ -270,8 +286,10 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         break;
     }
 
-    KillSteal();
-    AutoR();
+    if (ShouldRunNow(LastBackgroundTick, 90)) {
+        KillSteal();
+        AutoR();
+    }
     SemiAutomatic();
 }
 
@@ -415,7 +433,14 @@ static double EDamage(const AIBaseClient& target) {
 static void KillSteal() {
     const auto player = Player();
     if (!player.IsValid()) return;
-    if (player.HasBuff("XerathLocusOfPower2")) return;
+    if (player.HasBuff("XerathLocusOfPower2") || Q.IsCharging()) return;
+
+    const bool ksQ = Bool(KillStealMenu, "KsQ") && Q.IsReady();
+    const bool ksW = Bool(KillStealMenu, "KsW") && W.IsReady();
+    const bool ksE = Bool(KillStealMenu, "KsE") && E.IsReady();
+    if (!ksQ && !ksW && !ksE) {
+        return;
+    }
 
     for (const auto& target : GameObjects::EnemyHeroes()) {
         if (!ValidHeroTarget(target)) continue;
@@ -423,7 +448,7 @@ static void KillSteal() {
             target.HasBuff("kindredrnodeathbuff") || target.HasBuff("UndyingRage") ||
             target.HasBuff("ChronoShift")) continue;
 
-        if (Bool(KillStealMenu, "KsQ") && Q.IsReady() && !Q.IsCharging() &&
+        if (ksQ &&
             ValidHeroTarget(target, static_cast<float>(Q.ChargedMaxRange))) {
             if (target.Health() + target.AllShield() <= QDamage(target)) {
                 const auto pred = Q.GetPrediction(target);
@@ -433,8 +458,7 @@ static void KillSteal() {
             }
         }
 
-        if (Bool(KillStealMenu, "KsW") && W.IsReady() &&
-            ValidHeroTarget(target, W.Range)) {
+        if (ksW && ValidHeroTarget(target, W.Range)) {
             if (target.Health() + target.AllShield() <= WDamage(target)) {
                 const auto pred = W.GetPrediction(target);
                 if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
@@ -443,8 +467,7 @@ static void KillSteal() {
             }
         }
 
-        if (Bool(KillStealMenu, "KsE") && E.IsReady() &&
-            ValidHeroTarget(target, 500.0f)) {
+        if (ksE && ValidHeroTarget(target, 500.0f)) {
             if (target.Health() + target.AllShield() <= EDamage(target)) {
                 E.Cast();
             }

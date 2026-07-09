@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
-#include "../../../SectionProfiler.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -44,6 +43,8 @@ inline int TickTock = 0;
 inline Vector3 RPos = {};
 inline int ShadowDelay = 0;
 inline constexpr int DelayW = 500;
+inline DWORD LastUpdateTick = 0;
+inline DWORD LastKillStealTick = 0;
 
 inline constexpr int kItemTiamat = 3077;
 inline constexpr int kItemRavenousHydra = 3074;
@@ -166,6 +167,16 @@ static bool Key(Menu* menu, const char* key, bool fallback = false) {
     }
     const auto* item = menu->Get<MenuKeyBind>(key);
     return item ? item->Active : fallback;
+}
+
+static bool ShouldRunNow(DWORD& lastTick, DWORD intervalMs) {
+    const DWORD now = GetTickCount();
+    if (lastTick != 0 && now - lastTick < intervalMs) {
+        return false;
+    }
+
+    lastTick = now;
+    return true;
 }
 
 static void RemoveKeyPermashow(Menu* menu, const char* key) {
@@ -642,13 +653,17 @@ static void EnsureShadowCache() {
     if (t_ShadowTick == tick && t_ShadowRPos == RPos) {
         return;
     }
-    NS_PROFILE("zed.ShadowScan");
     t_ShadowTick = tick;
     t_ShadowRPos = RPos;
 
     AIMinionClient w{};
     AIMinionClient r{};
-    for (const auto& minion : GameObjects::AllyMinions()) {
+    // Match the C# original: scan the RAW minion object list
+    // (ObjectManager.Get<AIMinionClient>()), NOT GameObjects::AllyMinions().
+    // The Zed shadow ("Shadow") is not a lane minion, so AllyMinions() (which
+    // holds lane minions only) never contains it — using it left WShadow()/
+    // RShadow() permanently invalid and broke E / W-recast / KS on shadows.
+    for (const auto& minion : SDK::ObjectManager::Get<AIMinionClient>()) {
         if (!minion.IsVisible() || !minion.IsAlly()) {
             continue;
         }
@@ -783,7 +798,7 @@ static void BuildMenu() {
     DrawingsMenu->Add(new MenuBool("DrawR", "Draw R"));
     DrawingsMenu->Add(new MenuBool("DrawHP", "Draw HP bar"));
     DrawingsMenu->Add(new MenuBool("shadowd", "Shadow Position"));
-    DrawingsMenu->Add(new MenuBool("damagetest", "Damage Text"));
+    DrawingsMenu->Add(new MenuBool("damagetest", "Damage Text", false));
     DrawingsMenu->Add(new MenuBool("CircleLag", "Lag Free Circles"));
     DrawingsMenu->Add(new MenuSlider("CircleQuality", "Circles Quality", 100, 10, 100));
     DrawingsMenu->Add(new MenuSlider("CircleThickness", "Circles Thickness", 1, 1, 10));
@@ -866,9 +881,50 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     }
 }
 
+// TEMP PROBE (remove after FPS profiling) — self-contained; appends any
+// sub-call > 1ms to nightsharp_fps_drop_debug.txt (same file as slow-handler).
+struct ZedProbe {
+    const char* n;
+    LARGE_INTEGER s;
+    explicit ZedProbe(const char* name) : n(name) { QueryPerformanceCounter(&s); }
+    ~ZedProbe() {
+        LARGE_INTEGER e{}, f{};
+        QueryPerformanceCounter(&e);
+        QueryPerformanceFrequency(&f);
+        const double ms = static_cast<double>(e.QuadPart - s.QuadPart) * 1000.0 /
+                          static_cast<double>(f.QuadPart);
+        if (ms > 1.0) {
+            char b[160] = {};
+            const int len = std::snprintf(b, sizeof(b), "[ZedProbe] %-14s %.2fms\r\n", n, ms);
+            HANDLE h = CreateFileA("C:\\Users\\Public\\nightsharp_fps_drop_debug.txt",
+                                   FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+                                   OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h != INVALID_HANDLE_VALUE) {
+                DWORD w = 0;
+                WriteFile(h, b, static_cast<DWORD>(len), &w, nullptr);
+                CloseHandle(h);
+            }
+        }
+    }
+};
+
 static void OnGameUpdate(const GameUpdateEventArgs&) {
+    if (!ShouldRunNow(LastUpdateTick, 40)) {
+        return;
+    }
+
+    const auto player = Player();
+    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) {
+        return;
+    }
+    if (Game::IsChatOpen() || Game::IsShopOpen()) {
+        return;
+    }
+
     if (Key(ComboMenu, "ActiveCombo")) {
-        Combo(GetEnemy());
+        AIHeroClient e; { ZedProbe p("GetEnemy"); e = GetEnemy(); }
+        ZedProbe p("Combo");
+        Combo(e);
     }
     if (Key(ComboMenu, "TheLine")) {
         TheLine(GetEnemy());
@@ -886,6 +942,7 @@ static void OnGameUpdate(const GameUpdateEventArgs&) {
         LastHit();
     }
     if (Bool(MiscMenu, "AutoE")) {
+        ZedProbe p("AutoE-CastE");
         CastE();
     }
     if (SDK::Variables::TickCount() >= ClockOn && CountDanger > CountUlts) {
@@ -893,9 +950,12 @@ static void OnGameUpdate(const GameUpdateEventArgs&) {
         CountUlts = CountUlts + 1;
     }
 
+    ZedProbe pKS("rest(RPos+KS)");
     const auto& lastCast = SDK::LastCast::LastCastPacketSent();
     if (lastCast.Slot == SpellSlot::R) {
-        for (const auto& minion : GameObjects::AllyMinions()) {
+        // C# original scans ObjectManager.Get<AIMinionClient>() (raw list); the
+        // shadow is not a lane minion so AllyMinions() would never find it.
+        for (const auto& minion : SDK::ObjectManager::Get<AIMinionClient>()) {
             if (minion.IsVisible() && minion.IsAlly() &&
                 EqualsIgnoreCase(RuntimeName(minion).c_str(), "Shadow")) {
                 RPos = minion.Position();
@@ -908,7 +968,6 @@ static void OnGameUpdate(const GameUpdateEventArgs&) {
 }
 
 static float ComboDamage(const AIBaseClient& enemy) {
-    NS_PROFILE("zed.ComboDamage");
     const auto player = Player();
     if (!enemy.IsValid()) {
         return 0.0f;
@@ -941,7 +1000,6 @@ static float ComboDamage(const AIBaseClient& enemy) {
 }
 
 static void Combo(AIHeroClient t) {
-    NS_PROFILE("zed.Combo");
     const auto player = Player();
     auto target = t;
     if (!target.IsValid()) {
@@ -1040,7 +1098,6 @@ static void _CastQ(AIHeroClient target) {
 }
 
 static void Harass(AIHeroClient t) {
-    NS_PROFILE("zed.Harass");
     const auto player = Player();
     auto target = t;
     if (!target.IsValid()) {
@@ -1205,7 +1262,6 @@ static void JungleClear() {
 }
 
 static void UseItemes(AIHeroClient target) {
-    NS_PROFILE("zed.UseItemes");
     const auto player = Player();
     const bool iBilge = Bool(OffensiveMenu, "Bilge");
     const bool iBilgeEnemyhp = target.Health() <= target.MaxHealth() *
@@ -1290,17 +1346,18 @@ static void CastQ(AIBaseClient target) {
 }
 
 static void CastE() {
-    NS_PROFILE("zed.CastE");
     const auto player = Player();
     if (!E.IsReady()) {
         return;
     }
     const auto wShadow = WShadow();
+    const auto rShadow = RShadow();
     int count = 0;
     for (const auto& hero : GameObjects::EnemyHeroes()) {
         if (ValidHeroTarget(hero) &&
             (hero.Distance(player.Position()) <= E.Range ||
-             (wShadow.IsValid() && hero.Distance(wShadow.Position()) <= E.Range))) {
+             (wShadow.IsValid() && hero.Distance(wShadow.Position()) <= E.Range) ||
+             (rShadow.IsValid() && hero.Distance(rShadow.Position()) <= E.Range))) {
             ++count;
         }
     }
@@ -1310,74 +1367,85 @@ static void CastE() {
 }
 
 static void KillSteal() {
-    NS_PROFILE("zed.KillSteal");
-    const auto player = Player();
-    const auto target = GetTarget(2000.0f, DamageType::Magical);
-    if (!target.IsValid()) {
+    if (!ShouldRunNow(LastKillStealTick, 90)) {
         return;
     }
-    const double igniteDmg = IgniteDamage(target);
-    if (ValidHeroTarget(target) && Bool(MiscMenu, "UseIgnitekill") &&
-        Ignite.Slot != SpellSlot::Unknown && Ignite.IsReady()) {
+
+    const auto player = Player();
+    if (!player.IsValid() || player.IsDead()) {
+        return;
+    }
+
+    const bool useIgnite = Bool(MiscMenu, "UseIgnitekill") &&
+        Ignite.Slot != SpellSlot::Unknown && Ignite.IsReady();
+    const bool useQ = Bool(MiscMenu, "UseQM") && Q.IsReady();
+    const bool useE = Bool(MiscMenu, "UseEM") && E.IsReady();
+    if (!useIgnite && !useQ && !useE) {
+        return;
+    }
+
+    const auto target = GetTarget(2000.0f, DamageType::Magical);
+    if (!ValidHeroTarget(target)) {
+        return;
+    }
+    if (useIgnite) {
+        const double igniteDmg = IgniteDamage(target);
         if (igniteDmg > target.Health() && player.Distance(target.Position()) <= 600.0f) {
             CastUnit(Ignite, target, "ks-ignite");
         }
     }
-    if (ValidHeroTarget(target) && Q.IsReady() && Bool(MiscMenu, "UseQM") &&
-        (QDamage(target) > target.Health() ||
-         CanCollectorExecuteAfterDamage(target, QDamage(target)))) {
-        if (player.Distance(target.Position()) <= Q.Range) {
-            CastUnit(Q, target, "ks-Q-player");
-        } else {
-            const auto wShadow = WShadow();
-            if (wShadow.IsValid() && wShadow.Distance(target.Position()) <= Q.Range) {
-                Q.UpdateSourcePosition(wShadow.Position(), wShadow.Position());
-                CastUnit(Q, target, "ks-Q-WShadow");
+    if (useQ) {
+        const double qDamage = QDamage(target);
+        if (qDamage > target.Health() ||
+            CanCollectorExecuteAfterDamage(target, qDamage)) {
+            if (player.Distance(target.Position()) <= Q.Range) {
+                CastUnit(Q, target, "ks-Q-player");
             } else {
-                const auto rShadow = RShadow();
-                if (rShadow.IsValid() && rShadow.Distance(target.Position()) <= Q.Range) {
-                    Q.UpdateSourcePosition(rShadow.Position(), rShadow.Position());
-                    CastUnit(Q, target, "ks-Q-RShadow");
+                const auto wShadow = WShadow();
+                if (wShadow.IsValid() && wShadow.Distance(target.Position()) <= Q.Range) {
+                    Q.UpdateSourcePosition(wShadow.Position(), wShadow.Position());
+                    CastUnit(Q, target, "ks-Q-WShadow");
+                } else {
+                    const auto rShadow = RShadow();
+                    if (rShadow.IsValid() && rShadow.Distance(target.Position()) <= Q.Range) {
+                        Q.UpdateSourcePosition(rShadow.Position(), rShadow.Position());
+                        CastUnit(Q, target, "ks-Q-RShadow");
+                    }
                 }
             }
         }
     }
 
-    if (ValidHeroTarget(target) && Q.IsReady() && Bool(MiscMenu, "UseQM") &&
-        (QDamage(target) > target.Health() ||
-         CanCollectorExecuteAfterDamage(target, QDamage(target)))) {
-        if (player.Distance(target.Position()) <= Q.Range) {
-            CastUnit(Q, target, "ks-Q-player-2");
-        } else {
-            const auto wShadow = WShadow();
-            if (wShadow.IsValid() && wShadow.Distance(target.Position()) <= Q.Range) {
-                Q.UpdateSourcePosition(wShadow.Position(), wShadow.Position());
-                CastUnit(Q, target, "ks-Q-WShadow-2");
-            }
-        }
-    }
-
-    if (E.IsReady() && Bool(MiscMenu, "UseEM")) {
-        const auto t = GetTarget(E.Range, DamageType::Magical);
-        if (!t.IsValid()) {
-            return;
-        }
+    if (useE) {
         const auto wShadow = WShadow();
-        if ((EDamage(t) > t.Health() ||
-             CanCollectorExecuteAfterDamage(t, EDamage(t))) &&
-            (player.Distance(t.Position()) <= E.Range ||
-             (wShadow.IsValid() && wShadow.Distance(t.Position()) <= E.Range))) {
-            CastSelf(E, "ks-E");
+        const auto rShadow = RShadow();
+        for (const auto& t : GameObjects::EnemyHeroes()) {
+            if (!ValidHeroTarget(t)) {
+                continue;
+            }
+            const bool inERange =
+                player.Distance(t.Position()) <= E.Range ||
+                (wShadow.IsValid() && wShadow.Distance(t.Position()) <= E.Range) ||
+                (rShadow.IsValid() && rShadow.Distance(t.Position()) <= E.Range);
+            if (!inERange) {
+                continue;
+            }
+
+            const double eDamage = EDamage(t);
+            if (eDamage > t.Health() || CanCollectorExecuteAfterDamage(t, eDamage)) {
+                CastSelf(E, "ks-E");
+                return;
+            }
         }
     }
 }
 
 static void OnDraw() {
-    const auto rShadow = RShadow();
-    if (rShadow.IsValid()) {
-        Drawing::DrawCircle(rShadow.Position(), rShadow.BoundingRadius() * 2.0f, 0xFF0000FFu, 1.5f, 48);
-    }
     if (Bool(DrawingsMenu, "shadowd")) {
+        const auto rShadow = RShadow();
+        if (rShadow.IsValid()) {
+            Drawing::DrawCircle(rShadow.Position(), rShadow.BoundingRadius() * 2.0f, 0xFF0000FFu, 1.5f, 48);
+        }
         const auto wShadow = WShadow();
         if (wShadow.IsValid()) {
             if (GetShadowStage() == ShadowCastStage::Cooldown) {
@@ -1398,9 +1466,10 @@ static void OnDraw() {
                 continue;
             }
             const Vec2 textPos(worldToScreen.x + 50.0f, worldToScreen.y - 40.0f);
-            if (ComboDamage(enemyVisible) > enemyVisible.Health()) {
+            const float comboDamage = ComboDamage(enemyVisible);
+            if (comboDamage > enemyVisible.Health()) {
                 Drawing::DrawText(textPos, "Combo=Rekt", 0xFFFF0000u);
-            } else if (ComboDamage(enemyVisible) +
+            } else if (comboDamage +
                        Damage::GetAutoAttackDamage(Player(), enemyVisible) * 2.0 >
                        enemyVisible.Health()) {
                 Drawing::DrawText(textPos, "Combo + 2 AA = Rekt", 0xFFFFA500u);

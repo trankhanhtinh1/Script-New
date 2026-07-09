@@ -168,7 +168,6 @@ namespace Plugins {
                                 plugin->GetInternalId());
                     NightSharpDebug::SetPhase(phase);
                     const auto perfStart = NightSharpPerf::Now();
-                    const auto sectionStart = NightSharpPerf::SectionNow();
                     __try {
                         plugin->OnUpdate();
                     }
@@ -186,9 +185,6 @@ namespace Plugins {
                         plugin->GetInternalId(),
                         plugin->GetName(),
                         NightSharpPerf::MsSince(perfStart));
-                    NightSharpPerf::RecordSection(
-                        plugin->GetInternalId(),
-                        NightSharpPerf::SectionMsSince(sectionStart));
                 }
             }
             NightSharpDebug::SetPhase("plugin-update-idle");
@@ -205,7 +201,6 @@ namespace Plugins {
                                 plugin->GetInternalId());
                     NightSharpDebug::SetPhase(phase);
                     const auto perfStart = NightSharpPerf::Now();
-                    const auto sectionStart = NightSharpPerf::SectionNow();
                     __try {
                         plugin->OnRender();
                     }
@@ -223,8 +218,6 @@ namespace Plugins {
                         plugin->GetInternalId(),
                         plugin->GetName(),
                         NightSharpPerf::MsSince(perfStart));
-                    // Optional: could add another section prefix for render
-                    // NightSharpPerf::RecordSection(...) 
                 }
             }
             NightSharpDebug::SetPhase("plugin-render-idle");
