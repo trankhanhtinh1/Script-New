@@ -9,7 +9,6 @@
 #include "PluginManager.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
-#include "Core/EnsoulsharpOrbPlugin.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
 #include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"

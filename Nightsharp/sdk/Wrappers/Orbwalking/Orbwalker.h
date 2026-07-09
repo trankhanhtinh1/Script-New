@@ -306,7 +306,7 @@ public:
 
     template <typename... Args>
     static void DebugPrint(const char* fmt, Args... args) {
-        char buffer[kOrbwalkerDebugConsoleLineLength] = {};
+        char buffer[224] = {};
         _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt ? fmt : "", args...);
         DebugPrint(buffer);
     }
