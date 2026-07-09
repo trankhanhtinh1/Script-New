@@ -1,8 +1,6 @@
 #pragma once
 
 #include "EvadeSettings.h"
-#include "MathUtils.h"
-#include "MathUtilsCPA.h"
 #include "PositionInfo.h"
 
 #include "../../../Core/CoreNavGrid.h"
@@ -165,7 +163,7 @@ public:
         if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(&spell)) {
             const float speed = std::max(1.0f, static_cast<float>(spell.SData.MissileSpeed));
             const Vec2 head = missile->GetMissilePosition(0);
-            const float dist = MathUtilsCPA::Dist(head, pos);
+            const float dist = head.Distance(pos);
             return (dist / speed) * 1000.0f;
         }
 
@@ -177,12 +175,11 @@ public:
         const float spellRadius = static_cast<float>(spell.SData.Radius);
 
         if (SDK::IsLineSpellType(type)) {
-            bool onSeg = false;
-            const Vec2 proj = MathUtilsCPA::ProjectOn(pos, spell.StartPosition, spell.EndPosition, onSeg);
-            return onSeg && MathUtilsCPA::Dist(proj, pos) <= spellRadius + radius;
+            const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(pos, spell.StartPosition, spell.EndPosition);
+            return proj.IsOnSegment && proj.SegmentPoint.Distance(pos) <= spellRadius + radius;
         }
         if (SDK::IsCircleSpellType(type)) {
-            return MathUtilsCPA::Dist(pos, spell.EndPosition) <= spellRadius + radius;
+            return pos.Distance(spell.EndPosition) <= spellRadius + radius;
         }
         return InPolygon(spell, pos, radius);
     }
@@ -235,14 +232,14 @@ private:
 
             Vec2 cHero;
             Vec2 cSpell;
-            const float cpa = MathUtilsCPA::CpaPointsEx(
+            const float cpa = CpaPointsEx(
                 heroPos, walkDir * speed, spellPos, spellVel, cHero, cSpell);
 
-            bool heroOn = false;
-            bool spellOn = false;
             const Vec2 extendedPos = pos + walkDir * boundingRadius;
-            MathUtilsCPA::ProjectOn(cHero, heroPos, extendedPos, heroOn);
-            MathUtilsCPA::ProjectOn(cSpell, spellPos, spellEnd, spellOn);
+            const auto projHero = SDK::Prediction::Vec2Ext::ProjectOn(cHero, heroPos, extendedPos);
+            const auto projSpell = SDK::Prediction::Vec2Ext::ProjectOn(cSpell, spellPos, spellEnd);
+            const bool heroOn = projHero.IsOnSegment;
+            const bool spellOn = projSpell.IsOnSegment;
 
             const float checkDist = boundingRadius + spellRadius + extraDist;
             if (spellOn && heroOn) {
@@ -255,10 +252,10 @@ private:
             const int now = SDK::Variables::TickCount();
             const float hitTime = std::max(0.0f,
                 static_cast<float>(spell.StartTime + spell.SData.Delay - now) - delayMs);
-            const float walkRange = MathUtilsCPA::Dist(heroPos, pos);
+            const float walkRange = heroPos.Distance(pos);
             const float predictedRange = speed * (hitTime / 1000.0f);
             const Vec2 tHeroPos = heroPos + walkDir * std::min(predictedRange, walkRange);
-            return std::max(0.0f, MathUtilsCPA::Dist(tHeroPos, spell.EndPosition) - (spellRadius + extraDist));
+            return std::max(0.0f, tHeroPos.Distance(spell.EndPosition) - (spellRadius + extraDist));
         }
 
         return 1.0f;
@@ -294,7 +291,7 @@ private:
     }
 
     float PositionValue(const Vec2& pos, const Vec2& mousePos, float boundingRadius) const {
-        float value = MathUtilsCPA::Dist(pos, mousePos);
+        float value = pos.Distance(mousePos);
 
         if (m_settings.PreventTower) {
             const float turretRange = 875.0f + boundingRadius;
@@ -405,10 +402,9 @@ private:
                 if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(s.get())) {
                     current = missile->GetMissilePosition(0);
                 }
-                bool onSegment = false;
-                const Vec2 projection = MathUtilsCPA::ProjectOn(heroPos, current, s->EndPosition, onSegment);
-                if (onSegment) {
-                    out.push_back(projection.Extend(heroPos, radius));
+                const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(heroPos, current, s->EndPosition);
+                if (proj.IsOnSegment) {
+                    out.push_back(proj.SegmentPoint.Extend(heroPos, radius));
                 }
             } else if (SDK::IsCircleSpellType(s->SData.SpellType)) {
                 out.push_back(s->EndPosition.Extend(heroPos, radius));
@@ -429,17 +425,17 @@ private:
                 if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(s.get())) {
                     current = missile->GetMissilePosition(0);
                 }
-                bool onSegment = false;
-                const Vec2 projection = MathUtilsCPA::ProjectOn(heroPos, current, s->EndPosition, onSegment);
-                if (!onSegment) {
+                const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(heroPos, current, s->EndPosition);
+                if (!proj.IsOnSegment) {
                     continue;
                 }
+                const Vec2 projection = proj.SegmentPoint;
 
                 Vec2 direction = s->Direction;
                 if (direction.IsZero()) {
                     direction = (s->EndPosition - current).Normalized();
                 }
-                const Vec2 side = MathUtils::Rotated(direction, 0.5f * static_cast<float>(kPi)).Normalized() *
+                const Vec2 side = SDK::Prediction::Vec2Ext::Rotated(direction, 0.5f * static_cast<float>(kPi)).Normalized() *
                     (static_cast<float>(s->SData.Radius) + boundingRadius + m_settings.ExtraSpellRadius + 50.0f);
                 if (!side.IsZero()) {
                     out.push_back(projection + side);
@@ -518,6 +514,26 @@ private:
             return !a.hasExtraDistance;
         }
         return a.distToMouse < b.distToMouse;
+    }
+
+private:
+    static float CpaTime(const Vec2& p1, const Vec2& v1, const Vec2& p2, const Vec2& v2) {
+        const Vec2 dv = v1 - v2;
+        const float dv2 = dv.Dot(dv);
+        if (dv2 < 0.00000001f) {
+            return 0.0f;
+        }
+        const Vec2 w0 = p1 - p2;
+        return -w0.Dot(dv) / dv2;
+    }
+
+    static float CpaPointsEx(const Vec2& p1, const Vec2& v1,
+                             const Vec2& p2, const Vec2& v2,
+                             Vec2& out1, Vec2& out2) {
+        const float ctime = std::max(0.0f, CpaTime(p1, v1, p2, v2));
+        out1 = p1 + v1 * ctime;
+        out2 = p2 + v2 * ctime;
+        return out1.Distance(out2);
     }
 };
 

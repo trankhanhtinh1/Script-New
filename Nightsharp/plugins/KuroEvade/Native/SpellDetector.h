@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MathUtils.h"
+
 #include "SpecialSpells/SpecialSpellProcessor.h"
 #include "SpellDatabase.h"
 
@@ -162,7 +162,7 @@ public:
 
             const int half = (specialResult.Data.MultipleNumber - 1) / 2;
             for (int i = -half; i <= half; ++i) {
-                const Vec2 direction = MathUtils::Rotated(baseDirection, specialResult.Data.MultipleAngle * static_cast<float>(i));
+                const Vec2 direction = SDK::Prediction::Vec2Ext::Rotated(baseDirection, specialResult.Data.MultipleAngle * static_cast<float>(i));
                 const Vector3 end = Vec3::From2D(
                     args.StartPosition.To2D() + direction * static_cast<float>(specialResult.Data.sdk.Range),
                     args.EndPosition.y);
@@ -423,10 +423,9 @@ private:
         const float radius =
             static_cast<float>(skillshot.SData.Radius) + std::max(0.0f, extraRadius);
         if (SDK::IsLineSpellType(skillshot.SData.SpellType)) {
-            bool onSegment = false;
-            const Vec2 projected = MathUtilsCPA::ProjectOn(
-                position, skillshot.StartPosition, skillshot.EndPosition, onSegment);
-            return onSegment && projected.Distance(position) <= radius;
+            const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(
+                position, skillshot.StartPosition, skillshot.EndPosition);
+            return proj.IsOnSegment && proj.SegmentPoint.Distance(position) <= radius;
         }
         if (SDK::IsCircleSpellType(skillshot.SData.SpellType)) {
             return skillshot.EndPosition.Distance(position) <= radius;
@@ -525,14 +524,14 @@ private:
             }
 
             const Vec2 unitPosition = unit.ServerPosition().To2D();
-            bool onSegment = false;
-            const Vec2 projection = MathUtilsCPA::ProjectOn(
-                unitPosition, current, originalEnd, onSegment);
-            if (!onSegment ||
-                projection.Distance(unitPosition) >
+            const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(
+                unitPosition, current, originalEnd);
+            if (!proj.IsOnSegment ||
+                proj.SegmentPoint.Distance(unitPosition) >
                     static_cast<float>(skillshot->SData.Radius) + unit.BoundingRadius()) {
                 return;
             }
+            const Vec2 projection = proj.SegmentPoint;
 
             const float distance = current.Distance(projection);
             if (distance < closestDistance) {
@@ -782,7 +781,7 @@ private:
                 end = start + direction * range;
             }
             if (data.IsPerpendicular && data.SecondaryRadius > 0) {
-                const Vec2 perpendicular = MathUtils::Rotated(direction, 1.57079632679f).Normalized();
+                const Vec2 perpendicular = SDK::Prediction::Vec2Ext::Rotated(direction, 1.57079632679f).Normalized();
                 start = end - perpendicular * static_cast<float>(data.SecondaryRadius);
                 end = end + perpendicular * static_cast<float>(data.SecondaryRadius);
                 direction = (end - start).Normalized();

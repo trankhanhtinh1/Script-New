@@ -23,8 +23,7 @@
 #include "EvadeUtils.h"
 #include "HeroInfo.h"
 #include "SpellData.h"
-#include "MathUtils.h"
-#include "MathUtilsCPA.h"
+
 #include "MenuCache.h"
 #include "MoveSpeedAmount.h"
 #include "ObjectCache.h"

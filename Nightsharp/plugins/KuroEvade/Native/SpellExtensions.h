@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EvadeHelper.h"
-#include "MathUtilsCPA.h"
+
 #include "Spell.h"
 
 #include "../../../SDK/SDK.h"
@@ -49,8 +49,8 @@ struct SpellExtensions final {
                 start = missile->GetMissilePosition(0);
             }
         }
-        bool onSegment = false;
-        return MathUtilsCPA::ProjectOn(pos, start, spell.EndPosition, onSegment);
+        const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(pos, start, spell.EndPosition);
+        return proj.SegmentPoint;
     }
 
     static bool CanHeroEvade(const SDK::Skillshot& spell,
@@ -62,9 +62,9 @@ struct SpellExtensions final {
         const float radius = static_cast<float>(spell.SData.Radius);
 
         if (SDK::IsLineSpellType(spell.SData.SpellType)) {
-            bool onSegment = false;
-            const Vec2 segmentPoint = MathUtilsCPA::ProjectOn(
-                heroPos, spell.StartPosition, spell.EndPosition, onSegment);
+            const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(
+                heroPos, spell.StartPosition, spell.EndPosition);
+            const Vec2 segmentPoint = proj.SegmentPoint;
             evadeTime = 1000.0f *
                 (radius - heroPos.Distance(segmentPoint) + hero.BoundingRadius()) / moveSpeed;
             spellHitTime = EvadeHelper::SpellHitTime(spell, segmentPoint);

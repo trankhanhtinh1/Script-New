@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../SpellData.h"
-#include "../MathUtils.h"
 
 #include "../../../../SDK/SDK.h"
 

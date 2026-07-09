@@ -52,8 +52,14 @@
     <Filter Include="Plugins\Champion\SharpShooterAIO">
       <UniqueIdentifier>{3DA2BB15-D3D1-DE40-4EAD-11F675AC8606}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\ziblldev9898">
+      <UniqueIdentifier>{B2A43C37-5526-E2BA-A005-69B26346B1B2}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Core">
       <UniqueIdentifier>{CFC8E72A-BC95-4186-5BDD-870D79F75629}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\Core\OrbwalkerKuro">
+      <UniqueIdentifier>{5806612D-F755-EF07-9329-C1DC3708712F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\EzEvade">
       <UniqueIdentifier>{A09C5CD7-04AE-F82F-9B86-7E0F523E36B4}</UniqueIdentifier>
@@ -72,6 +78,9 @@
     </Filter>
     <Filter Include="Plugins\Utility">
       <UniqueIdentifier>{250EA8A9-EF5D-1946-AE05-CEA506516D80}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDEvade">
+      <UniqueIdentifier>{F7A041B1-3273-0C47-BA23-181DA02B6A3E}</UniqueIdentifier>
     </Filter>
     <Filter Include="SDK">
       <UniqueIdentifier>{E6959F98-715F-22EE-9380-5276E036B646}</UniqueIdentifier>
@@ -157,6 +166,9 @@
     <Filter Include="SDK\Wrappers\TargetSelector\Modes\Weights">
       <UniqueIdentifier>{BFBEA2E8-01B1-6D9F-4572-83A1E83F02A8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{4FAE6411-AFAD-7C68-CE48-488842120F74}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Third_Party">
       <UniqueIdentifier>{B84401D1-F983-022A-98D3-AF26F3CA93C6}</UniqueIdentifier>
     </Filter>
@@ -195,6 +207,9 @@
     </ClCompile>
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp">
       <Filter>SDK\Data</Filter>
+    </ClCompile>
+    <ClCompile Include="tests\polygon_guard_test.cpp">
+      <Filter>tests</Filter>
     </ClCompile>
     <ClCompile Include="Third_Party\clipper\clipper.cpp">
       <Filter>Third_Party\clipper</Filter>
@@ -383,10 +398,16 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\Jinx.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Kalista.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\7UPAIO\Viktor.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\7UPAIO\Xerath.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\Zed.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\CastSpellTestSupport.h">
@@ -396,6 +417,9 @@
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\EzrealSemiPlugin.h">
+      <Filter>Plugins\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\JaxSemiCastNew.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\JaxSemiPlugin.h">
@@ -623,11 +647,56 @@
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Locke.h">
+      <Filter>Plugins\Champion\ziblldev9898</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h">
+      <Filter>Plugins\Champion\ziblldev9898</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h">
       <Filter>Plugins\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\Orbwalker.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerActions.inl">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerBase.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerContext.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerEventBus.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerEventHandlers.inl">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerKuroPlugin.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerLifecycle.inl">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerMenu.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerSelector.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTargeting.inl">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTypes.h">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerVisuals.inl">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\PlayerBuffDebugPlugin.h">
       <Filter>Plugins\Core</Filter>
@@ -689,9 +758,6 @@
     <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpellData.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpellDatabase.generated.h">
-      <Filter>Plugins\KuroEvade\Native</Filter>
-    </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpellDatabase.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
@@ -705,9 +771,6 @@
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\HeroInfo.h">
-      <Filter>Plugins\KuroEvade\Native</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\KuroEvade\Native\KuroEvadeDatabase.generated.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\KuroEvadeNative.h">
@@ -854,13 +917,13 @@
     <ClInclude Include="Plugins\KuroEvade\Native\SpellTester.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\KuroEvade\Native\SpellWindupDatabase.generated.h">
-      <Filter>Plugins\KuroEvade\Native</Filter>
-    </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\SpellWindupDatabase.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\UseSpellFunc.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\WindupSpellData.h">
       <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\PluginBootstrap.h">
@@ -895,6 +958,45 @@
     </ClInclude>
     <ClInclude Include="Plugins\Utility\YasuoWallDebugPlugin.h">
       <Filter>Plugins\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeCommand.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeHelper.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpellData.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpellDatabase.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpellManager.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\PositionInfo.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Situation.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\SpellData.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\SpellDatabase.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\SpellDetector.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\SpellWindupDatabase.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\WindupSpellData.h">
+      <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\ZDEvade.h">
+      <Filter>Plugins\ZDEvade</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Bootstrap.h">
       <Filter>SDK</Filter>
