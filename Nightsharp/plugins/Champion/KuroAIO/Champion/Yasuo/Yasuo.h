@@ -31,10 +31,14 @@ inline SpellSlot FlashSlot = SpellSlot::Unknown;
 inline bool Loaded = false;
 inline int LastE = 0;
 inline int LastQ = 0;
+inline int LastDashQ = 0;
 inline int LastEQFlash = 0;
+inline bool EObjectsReady = false;
+inline std::vector<AIBaseClient> EObjectsCache{};
 
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
 static void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
+static void OnDash(const Events::Dash::DashArgs& args);
 static void OnDraw();
 static void OnUnload();
 
@@ -74,6 +78,179 @@ static bool CastE(const AIBaseClient& target) {
         return true;
     }
     return false;
+}
+
+static void UpdateEObjectsCache() {
+    EObjectsCache.clear();
+
+    for (const auto& minion : GameObjects::EnemyMinions()) {
+        if (ValidTarget(minion, E.Range) && CanE(minion)) {
+            EObjectsCache.push_back(AIBaseClient(minion.Handle()));
+        }
+    }
+    for (const auto& monster : GameObjects::Jungle()) {
+        if (ValidTarget(monster, E.Range) && CanE(monster)) {
+            EObjectsCache.push_back(AIBaseClient(monster.Handle()));
+        }
+    }
+    for (const auto& hero : GameObjects::EnemyHeroes()) {
+        if (ValidTarget(hero, E.Range) && CanE(hero)) {
+            EObjectsCache.push_back(AIBaseClient(hero.Handle()));
+        }
+    }
+
+    EObjectsReady = !EObjectsCache.empty();
+}
+
+static bool HasEObjectNear(const Vector3& position, float range, bool includeHeroes = true) {
+    if (position.IsZero()) {
+        return false;
+    }
+
+    const float rangeSqr = range * range;
+    const auto check = [&](const AIBaseClient& unit) {
+        return ValidTarget(unit) &&
+               (includeHeroes || !unit.IsHero()) &&
+               unit.Position().DistanceSqr2D(position) <= rangeSqr;
+    };
+
+    for (const auto& unit : EObjectsCache) {
+        if (check(unit)) {
+            return true;
+        }
+    }
+
+    if (!EObjectsReady) {
+        for (const auto& minion : GameObjects::EnemyMinions()) {
+            if (check(minion)) {
+                return true;
+            }
+        }
+        for (const auto& monster : GameObjects::Jungle()) {
+            if (check(monster)) {
+                return true;
+            }
+        }
+        if (includeHeroes) {
+            for (const auto& hero : GameObjects::EnemyHeroes()) {
+                if (check(hero)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+static AIBaseClient BestCursorDashObject(const Vector3& cursor, float cursorRange) {
+    if (!EObjectsReady || cursor.IsZero()) {
+        return {};
+    }
+
+    const bool allowTower = AllowTurret();
+    const float rangeSqr = cursorRange * cursorRange;
+    AIBaseClient best;
+    float bestCursorDistance = FLT_MAX;
+
+    for (const auto& unit : EObjectsCache) {
+        if (!ValidTarget(unit, E.Range) || !CanE(unit)) {
+            continue;
+        }
+
+        const float cursorDistance = unit.Position().DistanceSqr2D(cursor);
+        if (cursorDistance > rangeSqr || cursorDistance >= bestCursorDistance) {
+            continue;
+        }
+
+        if (!AllowDashTo(PosAfterE(unit), allowTower)) {
+            continue;
+        }
+
+        best = unit;
+        bestCursorDistance = cursorDistance;
+    }
+
+    return best;
+}
+
+static AIBaseClient BestCachedDashObjectNear(const Vector3& desired,
+                                             float desiredRange,
+                                             bool preferFarthest,
+                                             bool allowTower,
+                                             bool includeHeroes = true) {
+    const auto player = Player();
+    if (!player.IsValid() || desired.IsZero()) {
+        return {};
+    }
+
+    if (!EObjectsReady) {
+        return BestDashObjectNear(
+            desired,
+            E.Range,
+            desiredRange,
+            preferFarthest,
+            allowTower,
+            includeHeroes);
+    }
+
+    AIBaseClient best;
+
+    auto consider = [&](const AIBaseClient& unit) {
+        if (!ValidTarget(unit, E.Range) || !CanE(unit)) {
+            return;
+        }
+
+        if (!includeHeroes && unit.IsHero()) {
+            return;
+        }
+
+        const Vector3 after = PosAfterE(unit);
+        if (!AllowDashTo(after, allowTower)) {
+            return;
+        }
+
+        const float afterDistance = after.Distance2D(desired);
+        if (afterDistance > desiredRange && afterDistance >= player.Position().Distance2D(desired)) {
+            return;
+        }
+
+        if (!best.IsValid()) {
+            best = unit;
+            return;
+        }
+
+        const bool unitIsHero = unit.IsHero();
+        const bool bestIsHero = best.IsHero();
+        if (unitIsHero != bestIsHero) {
+            if (!unitIsHero) {
+                best = unit;
+            }
+            return;
+        }
+
+        const float unitDist = std::max(50.0f, afterDistance);
+        const float bestDist = std::max(50.0f, PosAfterE(best).Distance2D(desired));
+        if (std::abs(unitDist - bestDist) > 0.001f) {
+            if (unitDist < bestDist) {
+                best = unit;
+            }
+            return;
+        }
+
+        const float unitPlayerDist = unit.DistanceToPlayer();
+        const float bestPlayerDist = best.DistanceToPlayer();
+        if ((preferFarthest && unitPlayerDist > bestPlayerDist) ||
+            (!preferFarthest && unitPlayerDist < bestPlayerDist)) {
+            best = unit;
+        }
+    };
+
+    for (const auto& unit : EObjectsCache) {
+        consider(unit);
+    }
+
+    return best;
 }
 
 static bool CastQOnTarget(const AIBaseClient& target,
@@ -132,6 +309,111 @@ static bool CastQDuringDash() {
     return false;
 }
 
+static bool CastEQCircleQ() {
+    const auto player = Player();
+    if (!player.IsValid() || !Q.IsReady()) {
+        return false;
+    }
+
+    if (Q.Cast(player.Position())) {
+        LastQ = SDK::Variables::TickCount();
+        return true;
+    }
+    return false;
+}
+
+static AIBaseClient BestEQRDashObject(const AIHeroClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !ValidHeroTarget(target) || !E.IsReady()) {
+        return {};
+    }
+
+    const bool allowTower = AllowTurret();
+    const Vector3 desired = target.Position();
+    const float maxAfterDistance =
+        static_cast<float>(Slider(RangeMenu, "EQRange", 240)) + target.BoundingRadius();
+
+    AIBaseClient best;
+    float bestAfterDistance = FLT_MAX;
+    float bestPlayerDistance = FLT_MAX;
+
+    auto consider = [&](const AIBaseClient& unit) {
+        if (!ValidTarget(unit, E.Range) || !CanE(unit)) {
+            return;
+        }
+
+        const Vector3 after = PosAfterE(unit);
+        if (!AllowDashTo(after, allowTower)) {
+            return;
+        }
+
+        const float afterDistance = after.Distance2D(desired);
+        if (afterDistance > maxAfterDistance) {
+            return;
+        }
+
+        const float playerDistance = unit.DistanceToPlayer();
+        if (!best.IsValid() ||
+            afterDistance < bestAfterDistance - 0.001f ||
+            (std::abs(afterDistance - bestAfterDistance) <= 0.001f &&
+             playerDistance < bestPlayerDistance)) {
+            best = unit;
+            bestAfterDistance = afterDistance;
+            bestPlayerDistance = playerDistance;
+        }
+    };
+
+    if (EObjectsReady) {
+        for (const auto& unit : EObjectsCache) {
+            consider(unit);
+        }
+    } else {
+        for (const auto& minion : GameObjects::EnemyMinions()) {
+            consider(minion);
+        }
+        for (const auto& monster : GameObjects::Jungle()) {
+            consider(monster);
+        }
+        for (const auto& hero : GameObjects::EnemyHeroes()) {
+            consider(hero);
+        }
+    }
+
+    return best;
+}
+
+static bool TryEQR(const AIHeroClient& target, const Vector3& castPosition) {
+    const auto player = Player();
+    if (!player.IsValid() ||
+        !Bool(RMenu, "REQR", true) ||
+        !ValidHeroTarget(target, R.Range) ||
+        !Q.IsReady()) {
+        return false;
+    }
+
+    if (player.IsDashing()) {
+        if (CastEQCircleQ()) {
+            return R.Cast(castPosition);
+        }
+        return false;
+    }
+
+    if (!E.IsReady()) {
+        return false;
+    }
+
+    const auto dash = BestEQRDashObject(target);
+    if (!dash.IsValid() || !CastE(dash)) {
+        return false;
+    }
+
+    if (CastEQCircleQ()) {
+        return R.Cast(castPosition);
+    }
+
+    return false;
+}
+
 static bool TryR() {
     if (!R.IsReady() || !Bool(RMenu, "RCombo")) {
         return false;
@@ -151,56 +433,8 @@ static bool TryR() {
             continue;
         }
 
-        if (Q.IsReady(500)) {
-
-            if (Player().IsDashing()) {
-                if (Q.Cast(Player().Position())) {
-                    R.Cast(castPosition);
-                    return true;
-                }
-            }
-
-            auto tryCastEQR = [&](const AIBaseClient& unit) -> bool {
-                if (ValidTarget(unit, E.Range) && CanE(unit)) {
-                    if (E.CastOnUnit(unit)) {
-                        if (Q.Cast(Player().Position())) {
-                            if (R.Cast(castPosition)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-                return false;
-            };
-                
-            if (E.IsReady()) {
-                bool casted = false;
-                if (!casted) {
-                    for (const auto& minion : GameObjects::EnemyMinions()) {
-                        if (tryCastEQR(minion)) {
-                            casted = true;
-                            break;
-                        }
-                    }
-                }
-                if (!casted) {
-                    for (const auto& monster : GameObjects::Jungle()) {
-                        if (tryCastEQR(monster)) {
-                            casted = true;
-                            break;
-                        }
-                    }
-                }
-                for (const auto& hero : GameObjects::EnemyHeroes()) {
-                    if (tryCastEQR(hero)) {
-                        casted = true;
-                        break;
-                    }
-                }
-                if (casted) {
-                    return true;
-                }
-            }          
+        if (TryEQR(target, castPosition)) {
+            return true;
         }
 
         const float remaining = AirborneRemaining(target);
@@ -233,9 +467,8 @@ static bool TryEQToTarget(const AIHeroClient& target) {
     const float bonus = static_cast<float>(Slider(EQMenu, "EBonus", 65));
     const bool preferFarthest = List(EMenu, "EMode", 0) == 1;
     const Vector3 desired = PredictedPosition(CurrentQ(), target);
-    AIBaseClient dash = BestDashObjectNear(
+    AIBaseClient dash = BestCachedDashObjectNear(
         desired,
-        E.Range,
         eqRange + bonus + target.BoundingRadius(),
         preferFarthest,
         AllowTurret());
@@ -281,9 +514,8 @@ static bool TryEGapClose(const AIHeroClient& target) {
 
     const float currentDistance = player.Position().Distance2D(desired);
 
-    AIBaseClient dash = BestDashObjectNear(
+    AIBaseClient dash = BestCachedDashObjectNear(
         desired,
-        E.Range,
         Q.Range,
         preferFarthest,
         allowTower
@@ -364,9 +596,8 @@ static bool TryEQFlash(bool requireKey) {
             return false;
         }
 
-        AIBaseClient dash = BestDashObjectNear(
+        AIBaseClient dash = BestCachedDashObjectNear(
             flashPosition,
-            E.Range,
             Flash.Range + 170.0f,
             false,
             AllowTurret());
@@ -431,6 +662,7 @@ static void ApplyDefaultSettings() {
     SetBool(EMenu, "UseE", true);
     SetBool(EQMenu, "UseEQ", true);
     SetBool(RMenu, "RCombo", true);
+    SetBool(RMenu, "REQR", true);
     SetSlider(RMenu, "RHealth", 100);
     SetSlider(RMenu, "RDelay", 0);
     SetBool(ClearMenu, "QClear", true);
@@ -473,6 +705,7 @@ static void BuildMenu() {
 
     RMenu = MenuRoot->AddSubMenu(new Menu("YasuoR", "R Settings"));
     RMenu->Add(new MenuBool("RCombo", "R Combo"));
+    RMenu->Add(new MenuBool("REQR", "Use EQR Before R"));
     RMenu->Add(new MenuSlider("RHealth", "R if Target Health % <=", 100, 1, 100));
     RMenu->Add(new MenuSlider("RDelay", "R Delay (ms)", 150, 0, 600));
 
@@ -532,6 +765,11 @@ static void Combo() {
     const float range = std::max(R.Range, static_cast<float>(Slider(RangeMenu, "EGapRange", 925)));
     const auto target = GetPhysicalTarget(range);
     if (!ValidHeroTarget(target, range)) {
+        return;
+    }
+
+    if (!HaveQ3() &&
+        CastQOnTarget(target, Bool(QMenu, "UseQ"), Bool(QMenu, "UseQ3"), HitChance::Medium)) {
         return;
     }
 
@@ -622,9 +860,16 @@ static void Flee() {
         return;
     }
 
+    const auto cursorDash = BestCursorDashObject(cursor, 160.0f);
+    if (cursorDash.IsValid()) {
+        (void)CastE(cursorDash);
+        return;
+    }
+
     AIBaseClient best;
     float bestDistance = player.Position().Distance2D(cursor);
-    for (const auto& unit : GameObjects::Enemy()) {
+    const auto& units = EObjectsReady ? EObjectsCache : GameObjects::Enemy();
+    for (const auto& unit : units) {
         if (!ValidTarget(unit, E.Range) || !CanE(unit)) {
             continue;
         }
@@ -661,11 +906,12 @@ static void AutoStack() {
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
     const auto player = Player();
-    if (!player.IsValid() || player.IsDead() || Game::IsChatOpen()) {
+    if (!player.IsValid() || player.IsDead() || player.IsRecalling() || Game::IsChatOpen()) {
         return;
     }
 
     CheckMenu();
+    UpdateEObjectsCache();
     if (Key(KeyMenu, "EQFlash")) {
         (void)TryEQFlash(true);
     }
@@ -694,6 +940,51 @@ static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
     }
 
     (void)TryWBlock(args);
+}
+
+static bool ShouldQOnDashEnd(const Vector3& endPosition) {
+    if (endPosition.IsZero() || !Q.IsReady()) {
+        return false;
+    }
+
+    const float eqRange = static_cast<float>(Slider(RangeMenu, "EQRange", 240));
+    if (IsComboMode() || IsHarassMode()) {
+        if (CountEnemyHeroesNear(endPosition, eqRange + 35.0f) > 0) {
+            return true;
+        }
+
+        if ((HaveQ1() || HaveQ2()) &&
+            Key(KeyMenu, "AutoStack") &&
+            HasEObjectNear(endPosition, eqRange, false)) {
+            return true;
+        }
+    }
+
+    return IsClearMode() &&
+           Bool(ClearMenu, "QClear") &&
+           HasEObjectNear(endPosition, eqRange, false);
+}
+
+static void OnDash(const Events::Dash::DashArgs& args) {
+    const auto player = Player();
+    if (!player.IsValid() ||
+        !args.IsDash ||
+        args.NetworkId != static_cast<std::uint32_t>(player.NetworkId())) {
+        return;
+    }
+
+    const int now = SDK::Variables::TickCount();
+    if (now - LastDashQ < 250 || !ShouldQOnDashEnd(args.EndPos)) {
+        return;
+    }
+
+    LastDashQ = now;
+    SDK::Utils::DelayAction::Add(10, []() {
+        const auto player = Player();
+        if (player.IsValid() && player.IsDashing()) {
+            (void)CastEQCircleQ();
+        }
+    });
 }
 
 static void OnDraw() {
@@ -780,6 +1071,7 @@ static void OnGameLoad() {
 
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Events::hook.OnProcessSpell += &OnProcessSpell;
+    Events::hook.OnDash += &OnDash;
     Drawing::OnDraw += &OnDraw;
 
     Loaded = true;
@@ -793,10 +1085,13 @@ static void OnUnload() {
 
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
     Events::hook.OnProcessSpell -= &OnProcessSpell;
+    Events::hook.OnDash -= &OnDash;
     Drawing::OnDraw -= &OnDraw;
     Orbwalker::AttackEnabled(true);
     Orbwalker::MoveEnabled(true);
     Orbwalker::SetOrbwalkerPosition({});
+    EObjectsCache.clear();
+    EObjectsReady = false;
     RemoveMenu();
     Loaded = false;
 }

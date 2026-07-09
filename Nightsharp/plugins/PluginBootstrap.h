@@ -28,6 +28,7 @@
 #include "Champion/KuroAIO/KuroAIO.h"
 #include "Champion/SharpShooterAIO/SharpShooterAIO.h"
 #include "EzEvade/EzEvadePlugin.h"
+#include "KuroEvade/KuroEvadePlugin.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
 #include "../DebugLog.h"
@@ -147,6 +148,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<KuroAIOPlugin>();
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
         PluginManager::Get().Register<EzEvadePlugin>();
+        PluginManager::Get().Register<KuroEvadePlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

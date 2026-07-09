@@ -58,6 +58,18 @@
     <Filter Include="Plugins\EzEvade">
       <UniqueIdentifier>{A09C5CD7-04AE-F82F-9B86-7E0F523E36B4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\KuroEvade">
+      <UniqueIdentifier>{A82A7D67-6215-3F63-95C9-449C4BD4C61B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\KuroEvade\Native">
+      <UniqueIdentifier>{CDC25D27-A8B9-9684-1B5C-0A640558A8A4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\KuroEvade\Native\Draw">
+      <UniqueIdentifier>{D2FB4080-17B1-4473-7C95-B82CDDD7C121}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\KuroEvade\Native\SpecialSpells">
+      <UniqueIdentifier>{68CA55F2-5233-94F0-A34C-6250F25DFC44}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Utility">
       <UniqueIdentifier>{250EA8A9-EF5D-1946-AE05-CEA506516D80}</UniqueIdentifier>
     </Filter>
@@ -631,6 +643,225 @@
     </ClInclude>
     <ClInclude Include="Plugins\IPlugin.h">
       <Filter>Plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\KuroEvadePlugin.h">
+      <Filter>Plugins\KuroEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\CastType.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\ChampionPlugin.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Draw\RenderCircle.h">
+      <Filter>Plugins\KuroEvade\Native\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Draw\RenderLine.h">
+      <Filter>Plugins\KuroEvade\Native\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Draw\RenderObject.h">
+      <Filter>Plugins\KuroEvade\Native\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Draw\RenderObjects.h">
+      <Filter>Plugins\KuroEvade\Native\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Draw\RenderText.h">
+      <Filter>Plugins\KuroEvade\Native\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Evade.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeCommand.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeHelper.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeOrderCommand.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeSettings.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpell.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpellData.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpellDatabase.generated.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeSpellDatabase.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeTester.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeType.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\EvadeUtils.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\HeroInfo.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\KuroEvadeDatabase.generated.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\KuroEvadeNative.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\MathUtils.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\MathUtilsCPA.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\MenuCache.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\MoveSpeedAmount.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\ObjectCache.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Position.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\PositionInfo.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\PositionInfoExtensions.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Program.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Situation.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpellEventArgs.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\AllChampions.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Braum.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Draven.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Ekko.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Heimerdinger.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Irelia.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Jinx.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Lucian.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Malphite.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Maokai.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Mordekaiser.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Nami.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Pyke.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Seraphine.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Sion.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\SpecialSpellCommon.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\SpecialSpellProcessor.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Sylas.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Syndra.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Taric.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Velkoz.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Warwick.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Yuumi.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Zac.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Zed.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Ziggs.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Zilean.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Spell.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellData.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellDatabase.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellDetector.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellDrawer.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellExtensions.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellMenuKey.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellTargets.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellTester.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellWindupDatabase.generated.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpellWindupDatabase.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\UseSpellFunc.h">
+      <Filter>Plugins\KuroEvade\Native</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\PluginBootstrap.h">
       <Filter>Plugins</Filter>

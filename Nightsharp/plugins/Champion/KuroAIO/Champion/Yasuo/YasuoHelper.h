@@ -13,6 +13,14 @@ inline bool IsYasuoQ3Name(const std::string& name) {
     return !name.empty() && _stricmp(name.c_str(), "YasuoQ3Wrapper") == 0;
 }
 
+inline bool IsYasuoQ2Name(const std::string& name) {
+    return !name.empty() && _stricmp(name.c_str(), "YasuoQ2Wrapper") == 0;
+}
+
+inline bool IsYasuoQ1Name(const std::string& name) {
+    return !name.empty() && _stricmp(name.c_str(), "YasuoQ1Wrapper") == 0;
+}
+
 inline std::string QSpellName() {
     const auto player = Player();
     if (!player.IsValid()) {
@@ -21,6 +29,15 @@ inline std::string QSpellName() {
 
     const auto q = player.Spellbook().GetSpell(SpellSlot::Q);
     return q.IsValid() ? q.Name() : std::string();
+}
+
+inline bool HaveQ2() {
+    return IsYasuoQ2Name(QSpellName());
+}
+
+inline bool HaveQ1() {
+    const std::string name = QSpellName();
+    return IsYasuoQ1Name(name) || (!IsYasuoQ2Name(name) && !IsYasuoQ3Name(name));
 }
 
 inline bool HaveQ3() {

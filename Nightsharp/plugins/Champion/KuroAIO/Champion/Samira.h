@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -107,6 +108,19 @@ static bool CastUnit(Spell& spell, const AIBaseClient& target) {
            spell.Cast(target) == CastStates::SuccessfullyCasted;
 }
 
+static bool SameSpellName(const char* value, const char* expected) {
+    return value && expected && _stricmp(value, expected) == 0;
+}
+
+static Vector3 PredictedUnitPosition(const AIBaseClient& target, float delaySeconds) {
+    if (!target.IsValid()) {
+        return {};
+    }
+
+    const Vector3 position = SDK::Prediction::GetPrediction(target, delaySeconds).GetUnitPosition();
+    return position.IsZero() ? target.Position() : position;
+}
+
 static bool CastQOnTarget(const AIHeroClient& target,
                           bool allowGun,
                           bool allowBlade,
@@ -127,7 +141,6 @@ static bool CastQOnTarget(const AIHeroClient& target,
 
     if (close && allowBlade) {
         bool res = Q.Cast(target) == CastStates::SuccessfullyCasted;
-        const bool targetCastSuccess = res;
         if (!res) {
             res = CastPosition(Q, castPosition);
         }
@@ -138,7 +151,6 @@ static bool CastQOnTarget(const AIHeroClient& target,
         static_cast<int>(pred.Hitchance) >= static_cast<int>(hitChance) &&
         pred.CollisionObjects.empty()) {
         bool res = Q.Cast(target) == CastStates::SuccessfullyCasted;
-        const bool targetCastSuccess = res;
         if (!res) {
             res = CastPosition(Q, castPosition);
         }
@@ -177,6 +189,41 @@ static float GetEDmg(const AIBaseClient& target) {
 
 static bool CastE(const AIBaseClient& target) {
     return CastUnit(E, target);
+}
+
+static bool CastEThenR(const AIBaseClient& target) {
+    if (!E.IsReady() || !R.IsReady() || !AllowDashTo(target)) {
+        return false;
+    }
+
+    return CastE(target) && R.Cast();
+}
+
+static AIBaseClient BestDashObjectToward(const Vector3& desiredPosition, float searchRange) {
+    const auto player = Player();
+    AIBaseClient best;
+    if (!player.IsValid() || desiredPosition.IsZero()) {
+        return best;
+    }
+
+    float bestDistance = player.Distance(desiredPosition);
+    for (const auto& unit : GameObjects::Enemy()) {
+        if (!ValidTarget(unit, searchRange) || (!unit.IsHero() && !unit.IsMinion())) {
+            continue;
+        }
+
+        const Vector3 dashPos = DashPositionTo(unit.Position());
+        if (!AllowDashTo(dashPos)) {
+            continue;
+        }
+
+        const float distance = dashPos.Distance(desiredPosition);
+        if (distance < bestDistance) {
+            best = unit;
+            bestDistance = distance;
+        }
+    }
+    return best;
 }
 
 static bool TryEKillSteal() {
@@ -276,6 +323,7 @@ static void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
 static void OnDraw();
 static void Check();
 static void Combo();
+static bool TryQCombo();
 static void HarassAndClear();
 static void JungleClear();
 static void RemoveMenu();
@@ -318,6 +366,10 @@ static void OnAttack(OrbwalkingActionArgs&) {
 static void OnAfterAttack(OrbwalkingActionArgs&) {
     LastAfterAttack = SDK::Variables::TickCount();
     LastCastSpell = 0;
+
+    if (IsComboMode()) {
+        (void)TryQCombo();
+    }
 }
 
 static bool InAttackAction() {
@@ -392,15 +444,11 @@ static bool TryTurboCombo() {
             if (R.IsReady() && Bool(RMenu, "RCombo")){
                 R.Cast();
 
-                if (CastE(target)) {
-                    return Q.Cast(target.Position());;
-                }
-
-                return false;
+                return CastE(target) && Q.Cast(target.Position());
             }
 
             if (W.IsReady()) {
-                return W.Cast();
+                W.Cast();
             }
 
             if (CastE(target)) {
@@ -423,11 +471,12 @@ static bool TryRCombo() {
     }
 
     if (Bool(RMenu, "AutoE") && E.IsReady()) {
+        const int currentCount = player.CountEnemyHeroesInRange(R.Range);
         for (const auto& target : EnemyHeroesByHealth(E.Range)) {
             const Vector3 dashPos = DashPositionTo(target.Position());
-            if (AllowDashTo(dashPos) &&
-                CountEnemyHeroesNear(dashPos, R.Range) > Slider(RMenu, "RCount", 1)) {
-                if (CastE(target) && R.Cast()) {
+            const int dashCount = CountEnemyHeroesNear(dashPos, R.Range);
+            if (AllowDashTo(dashPos) && dashCount >= Slider(RMenu, "RCount", 1) && dashCount > currentCount) {
+                if (CastEThenR(target)) {
                     return true;
                 }
             }
@@ -436,6 +485,15 @@ static bool TryRCombo() {
 
     const auto target = GetPhysicalTarget(R.Range);
     if (ValidHeroTarget(target, R.Range)) {
+        const Vector3 predictedPos = PredictedUnitPosition(target, 1.0f);
+        if (Bool(RMenu, "AutoE") &&
+            E.IsReady() &&
+            !predictedPos.IsZero() &&
+            player.Distance(predictedPos) > R.Range &&
+            CastEThenR(target)) {
+            return true;
+        }
+
         return R.Cast();
     }
     return false;
@@ -491,13 +549,22 @@ static bool TryECombo() {
         return true;
     }
 
+    if (player.HasBuff("SamiraR") && Bool(RMenu, "AutoE")) {
+        const auto target = GetPhysicalTarget(R.Range + 300.0f);
+        if (ValidHeroTarget(target, R.Range + 300.0f)) {
+            const auto dashTarget = BestDashObjectToward(PredictedUnitPosition(target, 0.25f), E.Range);
+            if (dashTarget.IsValid() && CastE(dashTarget)) {
+                return true;
+            }
+        }
+    }
+
     for (const auto& target : EnemyHeroesByHealth(E.Range)) {
         if (!AllowDashTo(target)) {
             continue;
         }
 
-        const auto pred = Q.GetPrediction(target);
-        if (player.Distance(pred.GetUnitPosition()) > E.Range && CastE(target)) {
+        if (player.Distance(PredictedUnitPosition(target, 0.25f)) > E.Range && CastE(target)) {
             return true;
         }
 
@@ -705,8 +772,19 @@ static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
     if (!targetsPlayer ||
         !W.IsReady() ||
         !Bool(WMenu, "WBlock") ||
-        (Bool(WMenu, "WonlyBlockIncombo", false) && !IsComboMode()) ||
-        InAttackAction()) {
+        (Bool(WMenu, "WonlyBlockIncombo", false) && !IsComboMode())) {
+        return;
+    }
+
+    if (IsComboMode() &&
+        (SameSpellName(args.SpellName, "BlindingDart") ||
+         SameSpellName(args.ScriptName, "BlindingDart") ||
+         SameSpellName(args.PayloadSpellName, "BlindingDart"))) {
+        (void)W.Cast();
+        return;
+    }
+
+    if (InAttackAction()) {
         return;
     }
 
