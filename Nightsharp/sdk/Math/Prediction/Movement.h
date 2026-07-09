@@ -1100,8 +1100,9 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
     }
 
     // ── Yasuo Wind Wall ──────────────────────────────────────────────
-    // C# source: checks particle emitters matching "Yasuo_.+_w_windwall_enemy_\d"
-    // Wall width = 250 + 50 * level (from particle name suffix)
+    // C# EnsoulSharp.SDK.Collisions: checks EffectEmitter matching
+    // "Yasuo_.+_w_windwall" regex. Wall width = 250 + 50 * level.
+    // Direction = Vector2(Orientation.M11, Orientation.M13) = Vec2(m[0][0], m[0][2]).
     if (SDK::HasFlag(flags, CollisionableObjects::YasuoWall)) {
         bool hasYasuo = false;
         for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
@@ -1116,32 +1117,40 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
             for (const auto& emitter : SDK::ObjectManager::Get<EffectEmitter>()) {
                 if (!emitter.IsValid()) continue;
                 const std::string name = emitter.Name();
-                // Match "Yasuo_.+_w_windwall_enemy_\d" (case-insensitive)
-                if (name.find("Yasuo") != std::string::npos
-                    && name.find("_w_windwall") != std::string::npos
-                    && name.find("enemy") != std::string::npos)
-                {
-                    // Extract level from last 2 chars
-                    int level = 1;
-                    if (name.size() >= 2) {
-                        auto c = name.back();
-                        if (c >= '1' && c <= '9') level = c - '0';
-                    }
-                    float wallWidth = 250.0f + 50.0f * static_cast<float>(level);
-                    Vec2 wallPos = emitter.Position().To2D();
-                    Vec2 wallDir = emitter.Direction().To2D();
-                    if (wallDir.LengthSqr() < 0.001f) continue;
-                    Vec2 perp(-wallDir.y, wallDir.x);
-                    perp = perp.Normalized();
-                    Vec2 wallStart = wallPos + perp * (wallWidth * 0.5f);
-                    Vec2 wallEnd = wallPos - perp * (wallWidth * 0.5f);
+                if (name.find("Yasuo") == std::string::npos
+                    || name.find("_w_windwall") == std::string::npos)
+                    continue;
 
-                    // Check if skillshot path intersects wall segment
-                    auto inter = Vec2Ext::Intersection(from2D, to2D, wallStart, wallEnd);
-                    if (inter.Valid) {
-                        result.push_back(SDK::GameObjects::Player());
+                // Level from name suffix (windwall2→2, windwall5→5, else→1)
+                int level = 1;
+                for (int i = 2; i <= 5; ++i) {
+                    char suffix[16];
+                    std::snprintf(suffix, sizeof(suffix), "windwall%d", i);
+                    if (name.find(suffix) != std::string::npos) {
+                        level = i;
                         break;
                     }
+                }
+
+                const float wallWidth = 250.0f + 50.0f * static_cast<float>(level);
+                const Vec2 wallPos = emitter.Position().To2D();
+
+                // C#: Vector2(emitter.Orientation.M11, emitter.Orientation.M13)
+                const auto mat = emitter.Orientation();
+                Vec2 wallDir(mat.m[0][0], mat.m[0][2]);
+                if (wallDir.LengthSqr() < 0.001f) {
+                    wallDir = emitter.Direction().To2D();
+                    if (wallDir.LengthSqr() < 0.001f) continue;
+                    wallDir = Vec2(-wallDir.y, wallDir.x);
+                }
+                wallDir = wallDir.Normalized();
+
+                const Vec2 wallStart = wallPos + wallDir * (wallWidth * 0.5f);
+                const Vec2 wallEnd = wallStart - wallDir * wallWidth;
+                auto inter = Vec2Ext::Intersection(wallStart, wallEnd, to2D, from2D);
+                if (inter.Valid) {
+                    result.push_back(SDK::GameObjects::Player());
+                    break;
                 }
             }
         }

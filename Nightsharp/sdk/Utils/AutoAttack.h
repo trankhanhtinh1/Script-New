@@ -28,6 +28,14 @@ public:
             return std::numeric_limits<float>::max();
         }
 
+        if (name == "Kalista") {
+            return 2600.0f;
+        }
+
+        if (!SDK::Data::GameData::IsLoaded()) {
+            return 2000.0f;
+        }
+
         const auto* info = SDK::Data::GameData::GetUnitInfoByName(name);
         return info && info->basicAttackMissileSpeed > 0.0f
             ? info->basicAttackMissileSpeed

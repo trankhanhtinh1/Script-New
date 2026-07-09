@@ -1,8 +1,9 @@
 #pragma once
 
-#include "Common.h"
+#include "../../../SDK/SDK.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
@@ -11,53 +12,100 @@
 
 namespace Plugins::AIO7UP::Xerath {
 
-using namespace Common;
+using SDK::Core::Utils::AutoAttack;
 
 inline Menu* MenuRoot = nullptr;
 inline Menu* ComboMenu = nullptr;
 inline Menu* HarassMenu = nullptr;
 inline Menu* LaneClearMenu = nullptr;
 inline Menu* JungleClearMenu = nullptr;
-inline Menu* MiscMenu = nullptr;
+inline Menu* Misc = nullptr;
 inline Menu* KillStealMenu = nullptr;
-inline Menu* UltiMenu = nullptr;
-inline Menu* SemiMenu = nullptr;
-inline Menu* DrawMenu = nullptr;
+inline Menu* Ulti = nullptr;
+inline Menu* Semi = nullptr;
+inline Menu* Draw = nullptr;
 
-inline Spell Q{ SpellSlot::Q, 1550.0f };
+inline Spell Q{ SpellSlot::Q, 750.0f };
 inline Spell W{ SpellSlot::W, 950.0f };
 inline Spell E{ SpellSlot::E, 1050.0f };
 inline Spell R{ SpellSlot::R, 4990.0f };
 
+inline int WallCastT = 0;
+inline Vec2 YasuoWallCastedPos;
+inline uintptr_t YasuoWall = 0;
 inline bool Loaded = false;
-inline DWORD LastUpdateTick = 0;
+
+static AIHeroClient Player() { return ObjectManager::Player(); }
+
+static bool Bool(Menu* menu, const char* key, bool fallback = true) {
+    if (!menu) return fallback;
+    const auto* item = menu->Get<MenuBool>(key);
+    return item ? item->Value : fallback;
+}
+
+static int Slider(Menu* menu, const char* key, int fallback = 0) {
+    if (!menu) return fallback;
+    const auto* item = menu->Get<MenuSlider>(key);
+    return item ? item->Value : fallback;
+}
+
+static bool Key(Menu* menu, const char* key, bool fallback = false) {
+    if (!menu) return fallback;
+    const auto* item = menu->Get<MenuKeyBind>(key);
+    return item ? item->Active : fallback;
+}
+
+static void RemoveKeyPermashow(Menu* menu, const char* key) {
+    if (auto* item = menu ? menu->Get<MenuKeyBind>(key) : nullptr) {
+        item->RemovePermashow();
+    }
+}
+
+static bool ValidUnit(const AttackableUnit& unit) {
+    return unit.IsValid() && !unit.IsDead() && unit.Health() > 0.0f;
+}
+
+static bool ValidTarget(const AIBaseClient& unit, float range = FLT_MAX) {
+    return ValidUnit(unit) && Extensions::IsValidTarget(unit, range, true);
+}
+
+static bool ValidHeroTarget(const AIHeroClient& hero, float range = FLT_MAX) {
+    return ValidUnit(hero) && Extensions::IsValidTarget(hero, range, true);
+}
+
+static bool HitchanceAtLeast(HitChance actual, HitChance needed) {
+    return static_cast<int>(actual) >= static_cast<int>(needed);
+}
+
+static AIHeroClient GetTarget(float range, DamageType damageType) {
+    auto* selector = SDK::TargetSelector::Instance();
+    return selector ? selector->GetTarget(range, damageType) : AIHeroClient();
+}
 
 static HitChance QHitchance() {
-    return Bool(MiscMenu, "qslowcast") ? HitChance::VeryHigh : HitChance::High;
+    return Bool(Misc, "qslowcast") ? HitChance::VeryHigh : HitChance::High;
 }
 
 static HitChance RHitchance() {
-    return Bool(MiscMenu, "rslowcast") ? HitChance::VeryHigh : HitChance::High;
+    return Bool(Misc, "rslowcast") ? HitChance::VeryHigh : HitChance::High;
 }
 
-static void BuildMenu();
+// Forward declarations (theo thu tu C#)
+static void OnInterrupterSpell(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args);
+static void OnProcessSpellCast(const SDK::Events::ProcessSpellEventArgs& args);
+static void Gapcloser_OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args);
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
-static void OnGapcloser(const GapCloserEventArgs& args);
-static void OnInterruptableSpell(const Events::InterruptableSpell::InterruptableTargetEventArgs& args);
-static void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
-static void OnUnload();
-
 static void Combo();
+static void AutoR();
+static void SemiAutomatic();
+static double QDamage(const AIBaseClient& target);
+static double WDamage(const AIBaseClient& target);
+static double EDamage(const AIBaseClient& target);
+static void KillSteal();
 static void Harass();
 static void LaneClear();
 static void JungleClear();
-static void KillSteal();
-static void AutoR();
-static void SemiAutomatic();
-
-static float QDamage(const AIBaseClient& target);
-static float WDamage(const AIBaseClient& target);
-static float EDamage(const AIBaseClient& target);
+static void OnUnload();
 
 static void BuildMenu() {
     MenuRoot = new Menu("champion.7upaio", "7UP - Xerath", true);
@@ -84,523 +132,128 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuBool("QJungle", "Use Q JungleClear"));
     JungleClearMenu->Add(new MenuBool("WJungle", "Use W JungleClear"));
     JungleClearMenu->Add(new MenuBool("EJungle", "Use E JungleClear"));
-    JungleClearMenu->Add(new MenuSlider("ManaJG", "Min Mana JungleClear [Q]", 40, 0, 100));
+    JungleClearMenu->Add(new MenuSlider("ManaLC", "Min Mana JungleClear [Q]", 40, 0, 100));
 
-    MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
-    MiscMenu->Add(new MenuBool("qslowcast", "Slow Q Cast (high hitchance)"));
-    MiscMenu->Add(new MenuBool("rslowcast", "Slow R Cast (high hitchance)"));
-    MiscMenu->Add(new MenuBool("eantigapcloser", "Use E AntiGapcloser"));
-    MiscMenu->Add(new MenuBool("einterrupt", "Use E Interrupt Spell"));
+    Misc = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    Misc->Add(new MenuBool("qslowcast", "Slow Q Cast(high hitchance)"));
+    Misc->Add(new MenuBool("rslowcast", "Slow R Cast(high hitchance)"));
+    Misc->Add(new MenuBool("eantigapcloser", "Use E AntiGapcloser"));
+    Misc->Add(new MenuBool("einterrupt", "Use E Interrupt Spell"));
 
     KillStealMenu = MenuRoot->AddSubMenu(new Menu("KillSteal Settings", "KillSteal"));
     KillStealMenu->Add(new MenuBool("KsQ", "Use Q KillSteal"));
     KillStealMenu->Add(new MenuBool("KsW", "Use W KillSteal"));
     KillStealMenu->Add(new MenuBool("KsE", "Use E KillSteal"));
 
-    UltiMenu = MenuRoot->AddSubMenu(new Menu("RSetting", "R Settings"));
-    UltiMenu->Add(new MenuKeyBind("RKey", "R Key", SDK::Keys::T, KeyBindType::Press));
-    UltiMenu->Add(new MenuBool("NearMouse", "Near Mouse"));
-    UltiMenu->Add(new MenuSlider("MouseZone", "Mouse Zone", 600, 0, 1200));
+    Ulti = MenuRoot->AddSubMenu(new Menu("RSetting", "R Settings"));
+    Ulti->Add(new MenuKeyBind("RKey", "R Key", SDK::Keys::T, KeyBindType::Press))->Permashow();
+    Ulti->Add(new MenuBool("NearMouse", "Near Mouse"));
+    Ulti->Add(new MenuSlider("MouseZone", "Mouse Zone", 600, 0, 1200));
 
-    SemiMenu = MenuRoot->AddSubMenu(new Menu("Semi", "Semi Key"));
-    SemiMenu->Add(new MenuKeyBind("WKey", "Semi W Key", SDK::Keys::W, KeyBindType::Press));
-    SemiMenu->Add(new MenuKeyBind("EKey", "Semi E Key", SDK::Keys::E, KeyBindType::Press));
+    Semi = MenuRoot->AddSubMenu(new Menu("Semi", "Semi Key"));
+    Semi->Add(new MenuKeyBind("WKey", "Semi W Key", SDK::Keys::W, KeyBindType::Press))->Permashow();
+    Semi->Add(new MenuKeyBind("EKey", "Semi E Key", SDK::Keys::E, KeyBindType::Press))->Permashow();
 
-    DrawMenu = MenuRoot->AddSubMenu(new Menu("Drawing", "Drawings"));
-    DrawMenu->Add(new MenuBool("drawQ", "Draw Q"));
-    DrawMenu->Add(new MenuBool("drawW", "Draw W"));
-    DrawMenu->Add(new MenuBool("drawE", "Draw E"));
-    DrawMenu->Add(new MenuBool("drawR", "Draw R"));
-    DrawMenu->Add(new MenuBool("RMouse", "Draw R Mouse"));
+    Draw = MenuRoot->AddSubMenu(new Menu("draw", "Drawings"));
+    Draw->Add(new MenuBool("drawQ", "Draw Q"));
+    Draw->Add(new MenuBool("drawW", "Draw W"));
+    Draw->Add(new MenuBool("drawE", "Draw E"));
+    Draw->Add(new MenuBool("drawR", "Draw R"));
+    Draw->Add(new MenuBool("RMouse", "Draw R Mouse"));
 
     MenuRoot->Attach();
 }
 
-static float QDamage(const AIBaseClient& target) {
+static void OnGameLoad() {
     const auto player = Player();
-    if (!player.IsValid() || !target.IsValid()) {
-        return 0.0f;
-    }
-    static const float baseDamage[] = { 0, 70, 110, 150, 190, 230 };
-    const int level = Q.Level();
-    if (level < 0 || level > 5) return 0.0f;
-    const float raw = baseDamage[level] + 0.848f * player.AP();
-    return player.CalculateMagicDamage(target, raw);
+    if (!player.IsValid()) return;
+    if (Loaded) return;
+
+    Q = Spell(SpellSlot::Q, 750.0f);
+    Q.SetSkillshot(0.55f, 65.0f, FLT_MAX, false, SpellType::Line);
+    Q.SetCharged("XerathArcanopulseChargeUp", "XerathArcanopulseChargeUp", 750, 1550, 1.5f);
+
+    W = Spell(SpellSlot::W, 950.0f);
+    W.SetSkillshot(0.65f, 110.0f, FLT_MAX, false, SpellType::Circle);
+
+    E = Spell(SpellSlot::E, 1050.0f);
+    E.SetSkillshot(0.25f, 55.0f, 1400.0f, true, SpellType::Line);
+
+    R = Spell(SpellSlot::R, 4990.0f);
+    R.SetSkillshot(0.70f, 110.0f, FLT_MAX, false, SpellType::Circle);
+
+    BuildMenu();
+
+    Events::hook.OnGameUpdate += &Game_OnUpdate;
+    Events::hook.OnGapCloser += &Gapcloser_OnGapcloser;
+    Events::hook.OnInterruptableSpell += &OnInterrupterSpell;
+    Events::hook.OnProcessSpell += &OnProcessSpellCast;
+
+    Loaded = true;
+    Game::Print("<font color='#b756c5' size='20'>7UP - Xerath loaded</font>");
 }
 
-static float WDamage(const AIBaseClient& target) {
+// === OnInterrupterSpell ===
+static void OnInterrupterSpell(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
     const auto player = Player();
-    if (!player.IsValid() || !target.IsValid()) {
-        return 0.0f;
-    }
-    static const float baseDamage[] = { 0, 60, 95, 130, 165, 200 };
-    const int level = W.Level();
-    if (level < 0 || level > 5) return 0.0f;
-    const float raw = baseDamage[level] + 0.58f * player.AP();
-    return player.CalculateMagicDamage(target, raw);
-}
+    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) return;
+    if (Game::IsChatOpen() || Game::IsShopOpen()) return;
 
-static float EDamage(const AIBaseClient& target) {
-    const auto player = Player();
-    if (!player.IsValid() || !target.IsValid()) {
-        return 0.0f;
-    }
-    static const float baseDamage[] = { 0, 80, 110, 140, 170, 200 };
-    const int level = E.Level();
-    if (level < 0 || level > 5) return 0.0f;
-    const float raw = baseDamage[level] + 0.448f * player.AP();
-    return player.CalculateMagicDamage(target, raw);
-}
-
-static void Combo() {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return;
-    }
-
-    if (!Q.IsCharging()) {
-        if (!player.HasBuff("XerathLocusOfPower2")) {
-            if (Bool(ComboMenu, "ComboW") && W.IsReady()) {
-                const auto target = GetTarget(W.Range, DamageType::Magical);
-                if (ValidHeroTarget(target, W.Range)) {
-                    const auto pred = W.GetPrediction(target);
-                    if (HitchanceAtLeast(pred.Hitchance, HitChance::VeryHigh)) {
-                        CastPosition(W, pred.GetCastPosition(), target);
-                    }
-                }
-            }
-
-            if (Bool(ComboMenu, "ComboE") && E.IsReady()) {
-                const auto target = GetTarget(E.Range, DamageType::Magical);
-                if (ValidHeroTarget(target, E.Range)) {
-                    const auto pred = E.GetPrediction(target);
-                    if (HitchanceAtLeast(pred.Hitchance, HitChance::VeryHigh)) {
-                        CastPosition(E, pred.GetCastPosition(), target);
-                    }
-                }
-            }
-
-            if (Bool(ComboMenu, "ComboQ") && Q.IsReady()) {
-                const auto target = GetTarget(static_cast<float>(Q.ChargedMaxRange), DamageType::Magical);
-                if (ValidHeroTarget(target, static_cast<float>(Q.ChargedMaxRange))) {
-                    if (!W.IsReady() || target.DistanceToPlayer() > 850.0f) {
-                        const auto pred = Q.GetPrediction(target);
-                        if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                            Q.StartCharging();
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        if (Bool(ComboMenu, "ComboQ") && Q.IsReady() && Q.IsCharging()) {
-            const auto target = GetTarget(Q.Range, DamageType::Magical);
-            if (ValidHeroTarget(target, Q.Range)) {
-                const auto pred = Q.GetPrediction(target);
-                if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
-                    Q.ShootChargedSpell(pred.GetCastPosition());
-                }
-            }
-        }
-    }
-}
-
-static void Harass() {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return;
-    }
-
-    if (!Q.IsCharging()) {
-        if (!player.HasBuff("XerathLocusOfPower2") &&
-            player.ManaPercent() >= static_cast<float>(Slider(HarassMenu, "Mana", 50))) {
-            if (Bool(HarassMenu, "HarassW") && W.IsReady()) {
-                const auto target = GetTarget(W.Range, DamageType::Magical);
-                if (ValidHeroTarget(target, W.Range)) {
-                    const auto pred = W.GetPrediction(target);
-                    if (HitchanceAtLeast(pred.Hitchance, HitChance::VeryHigh)) {
-                        CastPosition(W, pred.GetCastPosition(), target);
-                        return;
-                    }
-                }
-            }
-
-            if (Bool(HarassMenu, "HarassE") && E.IsReady()) {
-                const auto target = GetTarget(E.Range, DamageType::Magical);
-                if (ValidHeroTarget(target, E.Range)) {
-                    const auto pred = E.GetPrediction(target);
-                    if (HitchanceAtLeast(pred.Hitchance, HitChance::VeryHigh)) {
-                        CastPosition(E, pred.GetCastPosition(), target);
-                        return;
-                    }
-                }
-            }
-
-            if (Bool(HarassMenu, "HarassQ") && Q.IsReady()) {
-                const auto target = GetTarget(static_cast<float>(Q.ChargedMaxRange), DamageType::Magical);
-                if (ValidHeroTarget(target, static_cast<float>(Q.ChargedMaxRange))) {
-                    if (!W.IsReady() || target.DistanceToPlayer() > 850.0f) {
-                        const auto pred = Q.GetPrediction(target);
-                        if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                            Q.StartCharging();
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        if (Bool(HarassMenu, "HarassQ") && Q.IsReady() && Q.IsCharging()) {
-            const auto target = GetTarget(Q.Range, DamageType::Magical);
-            if (ValidHeroTarget(target, Q.Range)) {
-                const auto pred = Q.GetPrediction(target);
-                if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
-                    Q.ShootChargedSpell(pred.GetCastPosition());
-                }
-            }
-        }
-    }
-}
-
-static void LaneClear() {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return;
-    }
-
-    if (!Q.IsCharging()) {
-        if (!player.HasBuff("XerathLocusOfPower2") &&
-            player.ManaPercent() >= static_cast<float>(Slider(LaneClearMenu, "ManaLC", 60))) {
-            if (Bool(LaneClearMenu, "LaneW") && W.IsReady()) {
-                std::vector<AIBaseClient> minions;
-                for (const auto& minion : GameObjects::EnemyMinions()) {
-                    if (ValidTarget(minion, W.Range) && minion.IsMinion()) {
-                        minions.emplace_back(minion.Handle());
-                    }
-                }
-
-                if (!minions.empty()) {
-                    const auto farmLoc = W.GetCircularFarmLocation(minions);
-                    if (farmLoc.Position.IsValid() &&
-                        farmLoc.MinionsHit >= Slider(LaneClearMenu, "MinW", 3)) {
-                        W.Cast(farmLoc.Position);
-                        return;
-                    }
-                }
-            }
-
-            if (Bool(LaneClearMenu, "LaneQ") && Q.IsReady()) {
-                std::vector<AIBaseClient> minions;
-                for (const auto& minion : GameObjects::EnemyMinions()) {
-                    if (ValidTarget(minion, static_cast<float>(Q.ChargedMaxRange)) && minion.IsMinion()) {
-                        minions.emplace_back(minion.Handle());
-                    }
-                }
-
-                if (!minions.empty()) {
-                    const auto farmLoc = Q.GetLineFarmLocation(minions);
-                    if (farmLoc.Position.IsValid() &&
-                        farmLoc.MinionsHit >= Slider(LaneClearMenu, "MinQ", 3)) {
-                        Q.StartCharging();
-                    }
-                }
-            }
-        }
-    } else {
-        if (Bool(LaneClearMenu, "LaneQ") && Q.IsReady() && Q.IsCharging()) {
-            std::vector<AIBaseClient> minions;
-            for (const auto& minion : GameObjects::EnemyMinions()) {
-                if (ValidTarget(minion, Q.Range) && minion.IsMinion()) {
-                    minions.emplace_back(minion.Handle());
-                }
-            }
-
-            if (!minions.empty()) {
-                const auto farmLoc = Q.GetLineFarmLocation(minions);
-                if (farmLoc.Position.IsValid() &&
-                    farmLoc.MinionsHit >= Slider(LaneClearMenu, "MinQ", 3)) {
-                    Q.ShootChargedSpell(farmLoc.Position);
-                }
-            }
-        }
-    }
-}
-
-static void JungleClear() {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return;
-    }
-
-    if (!Q.IsCharging()) {
-        if (!player.HasBuff("XerathLocusOfPower2") &&
-            player.ManaPercent() >= static_cast<float>(Slider(JungleClearMenu, "ManaJG", 40))) {
-            if (Bool(JungleClearMenu, "WJungle") && W.IsReady()) {
-                AIMinionClient bestMob;
-                float bestMaxHealth = 0.0f;
-                for (const auto& mob : GameObjects::Jungle()) {
-                    if (!ValidTarget(mob, W.Range) || mob.GetJungleType() == JungleType::Unknown) {
-                        continue;
-                    }
-                    if (mob.MaxHealth() > bestMaxHealth) {
-                        bestMob = mob;
-                        bestMaxHealth = mob.MaxHealth();
-                    }
-                }
-
-                if (bestMob.IsValid() && ValidTarget(bestMob, W.Range)) {
-                    const auto pred = W.GetPrediction(bestMob);
-                    if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                        CastPosition(W, pred.GetCastPosition(), bestMob);
-                        return;
-                    }
-                }
-            }
-
-            if (Bool(JungleClearMenu, "EJungle") && E.IsReady()) {
-                AIMinionClient bestMob;
-                float bestMaxHealth = 0.0f;
-                for (const auto& mob : GameObjects::Jungle()) {
-                    if (!ValidTarget(mob, E.Range) || mob.GetJungleType() == JungleType::Unknown) {
-                        continue;
-                    }
-                    if (mob.MaxHealth() > bestMaxHealth) {
-                        bestMob = mob;
-                        bestMaxHealth = mob.MaxHealth();
-                    }
-                }
-
-                if (bestMob.IsValid() && ValidTarget(bestMob, E.Range)) {
-                    const auto pred = E.GetPrediction(bestMob);
-                    if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                        CastPosition(E, pred.GetCastPosition(), bestMob);
-                        return;
-                    }
-                }
-            }
-
-            if (Bool(JungleClearMenu, "QJungle") && Q.IsReady()) {
-                AIMinionClient bestMob;
-                float bestMaxHealth = 0.0f;
-                for (const auto& mob : GameObjects::Jungle()) {
-                    if (!ValidTarget(mob, static_cast<float>(Q.ChargedMaxRange)) || mob.GetJungleType() == JungleType::Unknown) {
-                        continue;
-                    }
-                    if (mob.MaxHealth() > bestMaxHealth) {
-                        bestMob = mob;
-                        bestMaxHealth = mob.MaxHealth();
-                    }
-                }
-
-                if (bestMob.IsValid() && ValidTarget(bestMob, static_cast<float>(Q.ChargedMaxRange))) {
-                    Q.StartCharging();
-                }
-            }
-        }
-    } else {
-        if (Bool(JungleClearMenu, "QJungle") && Q.IsReady() && Q.IsCharging()) {
-            AIMinionClient bestMob;
-            float bestMaxHealth = 0.0f;
-            for (const auto& mob : GameObjects::Jungle()) {
-                if (!ValidTarget(mob, static_cast<float>(Q.ChargedMaxRange)) || mob.GetJungleType() == JungleType::Unknown) {
-                    continue;
-                }
-                if (mob.MaxHealth() > bestMaxHealth) {
-                    bestMob = mob;
-                    bestMaxHealth = mob.MaxHealth();
-                }
-            }
-
-            if (bestMob.IsValid() && ValidTarget(bestMob, Q.Range)) {
-                const auto pred = Q.GetPrediction(bestMob);
-                if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                    Q.ShootChargedSpell(pred.GetCastPosition());
-                }
-            }
-        }
-    }
-}
-
-static void KillSteal() {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return;
-    }
-
-    if (player.HasBuff("XerathLocusOfPower2") || Q.IsCharging()) {
-        return;
-    }
-
-    const bool ksQ = Bool(KillStealMenu, "KsQ");
-    const bool ksW = Bool(KillStealMenu, "KsW");
-    const bool ksE = Bool(KillStealMenu, "KsE");
-
-    for (const auto& target : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(target, W.Range) ||
-            target.HasBuff("JudicatorIntervention") ||
-            target.HasBuff("kindredrnodeathbuff") ||
-            target.HasBuff("Undying Rage") ||
-            target.HasBuff("UndyingRage")) {
-            continue;
-        }
-
-        if (ksQ && Q.IsReady() && target.DistanceToPlayer() > 150.0f) {
-            if (target.Health() + target.AllShield() <= QDamage(target)) {
-                const auto target1 = GetTarget(static_cast<float>(Q.ChargedMaxRange), DamageType::Magical);
-                if (ValidHeroTarget(target1, static_cast<float>(Q.ChargedMaxRange))) {
-                    if (!W.IsReady() || target1.DistanceToPlayer() > 850.0f) {
-                        const auto pred = Q.GetPrediction(target1);
-                        if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                            Q.StartCharging();
-                        }
-                    }
-                } else {
-                    const auto target2 = GetTarget(Q.Range, DamageType::Magical);
-                    if (ValidHeroTarget(target2, Q.Range)) {
-                        const auto pred = Q.GetPrediction(target2);
-                        if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
-                            Q.ShootChargedSpell(pred.GetCastPosition());
-                        }
-                    }
-                }
-            }
-        }
-
-        if (ksW && W.IsReady()) {
-            if (target.Health() + target.AllShield() <= WDamage(target)) {
-                CastPosition(W, target.Position(), target);
-            }
-        }
-
-        if (ksE && E.IsReady() && target.DistanceToPlayer() <= 500.0f) {
-            if (target.Health() + target.AllShield() <= EDamage(target)) {
-                E.Cast();
-            }
-        }
-    }
-}
-
-static void AutoR() {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return;
-    }
-
-    if (!player.HasBuff("XerathLocusOfPower2") || Q.IsCharging()) {
-        return;
-    }
-
-    auto target = GetTarget(R.Range, DamageType::Magical);
-
-    if (Bool(UltiMenu, "NearMouse") && Slider(UltiMenu, "MouseZone", 0) > 0) {
-        const float mouseZone = static_cast<float>(Slider(UltiMenu, "MouseZone", 600));
-        AIHeroClient best;
-        float bestDist = mouseZone;
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (!ValidHeroTarget(enemy, R.Range)) {
-                continue;
-            }
-            const float dist = enemy.Position().Distance2D(Game::CursorPos());
-            if (dist <= bestDist) {
-                best = enemy;
-                bestDist = dist;
-            }
-        }
-        if (best.IsValid()) {
-            target = best;
-        }
-    }
-
-    if (ValidHeroTarget(target, R.Range)) {
-        if (Key(UltiMenu, "RKey")) {
-            const auto pred = R.GetPrediction(target);
-            if (HitchanceAtLeast(pred.Hitchance, RHitchance())) {
-                CastPosition(R, pred.GetCastPosition(), target);
-            }
-        }
-    }
-}
-
-static void SemiAutomatic() {
-    if (Key(SemiMenu, "WKey") && W.IsReady()) {
-        const auto target = GetTarget(W.Range, DamageType::Magical);
-        if (ValidHeroTarget(target, W.Range)) {
-            CastPosition(W, target.Position(), target);
-        }
-    }
-
-    if (Key(SemiMenu, "EKey") && E.IsReady()) {
-        const auto target = GetTarget(E.Range, DamageType::Magical);
-        if (ValidHeroTarget(target, E.Range)) {
-            CastPosition(E, target.Position(), target);
-        }
-    }
-}
-
-static void OnGapcloser(const GapCloserEventArgs& args) {
-    const auto player = Player();
-    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) {
-        return;
-    }
-
-    if (Game::IsChatOpen() || Game::IsShopOpen()) {
-        return;
-    }
-
-    if (Bool(MiscMenu, "eantigapcloser") && E.IsReady()) {
-        const Vector3 endPos = args.End;
-        if (Extensions::DistanceToPlayer(endPos) < 250.0f) {
-            const auto sender = AIHeroClient(args.Sender);
-            if (ValidHeroTarget(sender, E.Range)) {
-                const auto pred = E.GetPrediction(sender);
-                if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                    CastPosition(E, pred.GetCastPosition(), sender);
-                }
-            }
-        }
-    }
-}
-
-static void OnInterruptableSpell(const Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    const auto player = Player();
-    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) {
-        return;
-    }
-
-    if (Game::IsChatOpen() || Game::IsShopOpen()) {
-        return;
-    }
-
-    if (Bool(MiscMenu, "einterrupt") && E.IsReady() &&
-        args.DangerLevel >= DangerLevel::Medium) {
+    if (Bool(Misc, "eantigapcloser") && E.IsReady() &&
+        static_cast<int>(args.DangerLevel) >= static_cast<int>(SDK::DangerLevel::Medium)) {
         const auto sender = AIHeroClient(args.Sender);
-        if (ValidHeroTarget(sender, E.Range)) {
+        if (sender.IsValid() && sender.DistanceToPlayer() < E.Range) {
             const auto pred = E.GetPrediction(sender);
             if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                CastPosition(E, pred.GetCastPosition(), sender);
+                E.Cast(pred.GetCastPosition());
             }
         }
     }
 }
 
-static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
-    // TODO SDK: The C# code tracks YasuoWall position via OnProcessSpellCast.
-    // The NightSharp SDK has OnProcessSpell event but the args structure
-    // differs slightly. The Yasuo wall tracking is a minor feature and
-    // can be added later if needed.
-    (void)args;
+// === OnProcessSpellCast ===
+static void OnProcessSpellCast(const SDK::Events::ProcessSpellEventArgs& args) {
+    if (Events::IsLocalPlayer(args.Sender)) {
+        const std::string name(args.SpellName);
+        if (name == "SyndraQ")
+            Q.LastCastAttemptT = static_cast<int>(GetTickCount());
+        if (name == "SyndraW" || name == "syndrawcast")
+            W.LastCastAttemptT = static_cast<int>(GetTickCount());
+        if (name == "SyndraE" || name == "syndrae5")
+            E.LastCastAttemptT = static_cast<int>(GetTickCount());
+    }
+
+    if (args.Sender.IsValid() &&
+        args.Sender.Team == static_cast<uint32_t>(Player().Team()) &&
+        std::string(args.SpellName) == "YasuoWMovingWall") {
+        WallCastT = static_cast<int>(GetTickCount());
+        YasuoWallCastedPos = Vec2(args.Sender.Position.x, args.Sender.Position.z);
+    }
 }
 
-static void Game_OnUpdate(const GameUpdateEventArgs&) {
-    if (!ShouldRunNow(LastUpdateTick, 40)) {
-        return;
-    }
-
+// === Gapcloser_OnGapcloser ===
+static void Gapcloser_OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     const auto player = Player();
-    const bool qCharging = Q.IsCharging();
-    if (!player.IsValid() || player.IsDead() || player.IsRecalling() ||
-        Game::IsChatOpen() || (player.Spellbook().IsWindingUp() && !qCharging)) {
-        return;
+    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) return;
+    if (Game::IsChatOpen() || Game::IsShopOpen()) return;
+
+    if (Bool(Misc, "eantigapcloser") && E.IsReady()) {
+        const auto sender = AIHeroClient(args.Sender);
+        if (sender.IsValid() && args.End.Distance2D(player.Position()) < 250.0f) {
+            const auto pred = E.GetPrediction(sender);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                E.Cast(pred.GetCastPosition());
+            }
+        }
     }
+}
+
+// === Game_OnUpdate ===
+static void Game_OnUpdate(const GameUpdateEventArgs&) {
+    const auto player = Player();
+    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) return;
+    if (Game::IsChatOpen() || Game::IsShopOpen()) return;
+    if (player.Spellbook().IsWindingUp()) return;
 
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
@@ -622,46 +275,327 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     SemiAutomatic();
 }
 
-static void OnGameLoad() {
+// === Combo ===
+static void Combo() {
     const auto player = Player();
-    if (!player.IsValid() || Loaded) {
-        return;
+    if (!player.IsValid()) return;
+
+    if (!Q.IsCharging()) {
+        if (!player.HasBuff("XerathLocusOfPower2")) {
+            if (Bool(ComboMenu, "ComboW") && W.IsReady()) {
+                const auto target = GetTarget(W.Range, DamageType::Magical);
+                if (ValidHeroTarget(target, W.Range)) {
+                    const auto pred = W.GetPrediction(target);
+                    if (HitchanceAtLeast(pred.Hitchance, HitChance::VeryHigh)) {
+                        W.Cast(pred.GetCastPosition());
+                    }
+                }
+            }
+
+            if (Bool(ComboMenu, "ComboE") && E.IsReady()) {
+                const auto target = GetTarget(E.Range, DamageType::Magical);
+                if (ValidHeroTarget(target, E.Range)) {
+                    const auto pred = E.GetPrediction(target);
+                    if (HitchanceAtLeast(pred.Hitchance, HitChance::VeryHigh)) {
+                        E.Cast(pred.GetCastPosition());
+                    }
+                }
+            }
+
+            if (Bool(ComboMenu, "ComboQ") && Q.IsReady()) {
+                const auto target = GetTarget(static_cast<float>(Q.ChargedMaxRange), DamageType::Magical);
+                if (ValidHeroTarget(target, static_cast<float>(Q.ChargedMaxRange))) {
+                    if (!W.IsReady() || target.DistanceToPlayer() > 850.0f) {
+                        const auto pred = Q.GetPrediction(target);
+                        if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                            Q.StartCharging(pred.GetCastPosition());
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        if (Bool(ComboMenu, "ComboQ") && Q.IsReady() && Q.IsCharging()) {
+            const auto target = GetTarget(Q.Range, DamageType::Magical);
+            if (ValidHeroTarget(target, Q.Range)) {
+                const auto pred = Q.GetPrediction(target);
+                if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
+                    Q.ShootChargedSpell(pred.GetCastPosition());
+                }
+            }
+        }
     }
-
-    Q = Spell(SpellSlot::Q, 1550.0f);
-    Q.SetSkillshot(0.55f, 65.0f, FLT_MAX, false, SpellType::Line);
-    Q.SetCharged("XerathArcanopulseChargeUp", "XerathArcanopulseChargeUp", 750, 1550, 1.5f);
-
-    W = Spell(SpellSlot::W, 950.0f);
-    W.SetSkillshot(0.65f, 110.0f, FLT_MAX, false, SpellType::Circle);
-
-    E = Spell(SpellSlot::E, 1050.0f);
-    E.SetSkillshot(0.25f, 55.0f, 1400.0f, true, SpellType::Line);
-
-    R = Spell(SpellSlot::R, 4990.0f);
-    R.SetSkillshot(0.70f, 110.0f, FLT_MAX, false, SpellType::Circle);
-
-    BuildMenu();
-
-    Events::hook.OnGameUpdate += &Game_OnUpdate;
-    Events::hook.OnGapCloser += &OnGapcloser;
-    Events::hook.OnInterruptableSpell += &OnInterruptableSpell;
-    Events::hook.OnProcessSpell += &OnProcessSpell;
-
-    Loaded = true;
-    Game::Print("<font color='#b756c5' size='20'>7UP - Xerath loaded</font>");
 }
 
-static void OnUnload() {
-    if (!Loaded) {
-        return;
+// === AutoR ===
+static void AutoR() {
+    const auto player = Player();
+    if (!player.IsValid()) return;
+
+    if (!player.HasBuff("XerathLocusOfPower2") || Q.IsCharging()) return;
+
+    AIHeroClient target;
+
+    if (Bool(Ulti, "NearMouse") && Slider(Ulti, "MouseZone", 600) > 0) {
+        const float mouseZone = static_cast<float>(Slider(Ulti, "MouseZone", 600));
+        auto* selector = SDK::TargetSelector::Instance();
+        if (selector) {
+            const auto targets = selector->GetTargets(R.Range, DamageType::Magical);
+            for (const auto& t : targets) {
+                if (t.Position().Distance(Game::CursorPos()) <= mouseZone) {
+                    target = t;
+                    break;
+                }
+            }
+        }
+    } else {
+        target = GetTarget(R.Range, DamageType::Magical);
     }
 
-    Events::hook.OnGameUpdate -= &Game_OnUpdate;
-    Events::hook.OnGapCloser -= &OnGapcloser;
-    Events::hook.OnInterruptableSpell -= &OnInterruptableSpell;
-    Events::hook.OnProcessSpell -= &OnProcessSpell;
+    if (ValidHeroTarget(target, R.Range)) {
+        if (Key(Ulti, "RKey")) {
+            const auto pred = R.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, RHitchance())) {
+                R.Cast(pred.GetCastPosition());
+            }
+        }
+    }
+}
 
+// === SemiAutomatic ===
+static void SemiAutomatic() {
+    if (Key(Semi, "WKey") && W.IsReady()) {
+        const auto target = GetTarget(W.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, W.Range)) {
+            W.Cast(target);
+        }
+    }
+
+    if (Key(Semi, "EKey") && E.IsReady()) {
+        const auto target = GetTarget(E.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, E.Range)) {
+            E.Cast(target);
+        }
+    }
+}
+
+// === QDamage ===
+// C# uses DamageType.Physical (original bug kept 1-1)
+static double QDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) return 0.0;
+    static constexpr float qBase[] = { 0.0f, 70.0f, 110.0f, 150.0f, 190.0f, 230.0f };
+    const int level = std::clamp(Q.Level(), 1, 5);
+    const float raw = qBase[level] + 0.848f * player.AP();
+    return player.CalculatePhysicalDamage(target, raw);
+}
+
+// === WDamage ===
+static double WDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) return 0.0;
+    static constexpr float wBase[] = { 0.0f, 60.0f, 95.0f, 130.0f, 165.0f, 200.0f };
+    const int level = std::clamp(W.Level(), 1, 5);
+    const float raw = wBase[level] + 0.58f * player.AP();
+    return player.CalculatePhysicalDamage(target, raw);
+}
+
+// === EDamage ===
+// C# bug: uses R.Level instead of E.Level — kept 1-1
+static double EDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) return 0.0;
+    static constexpr float eBase[] = { 0.0f, 80.0f, 110.0f, 140.0f, 170.0f, 200.0f };
+    const int level = std::clamp(R.Level(), 1, 5);
+    const float raw = eBase[level] + 0.448f * player.AP();
+    return player.CalculatePhysicalDamage(target, raw);
+}
+
+// === KillSteal ===
+static void KillSteal() {
+    const auto player = Player();
+    if (!player.IsValid()) return;
+    if (player.HasBuff("XerathLocusOfPower2")) return;
+
+    for (const auto& target : GameObjects::EnemyHeroes()) {
+        if (!ValidHeroTarget(target)) continue;
+        if (target.HasBuff("JudicatorIntervention") || target.HasBuff("FioraW") ||
+            target.HasBuff("kindredrnodeathbuff") || target.HasBuff("UndyingRage") ||
+            target.HasBuff("ChronoShift")) continue;
+
+        if (Bool(KillStealMenu, "KsQ") && Q.IsReady() && !Q.IsCharging() &&
+            ValidHeroTarget(target, static_cast<float>(Q.ChargedMaxRange))) {
+            if (target.Health() + target.AllShield() <= QDamage(target)) {
+                const auto pred = Q.GetPrediction(target);
+                if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                    Q.StartCharging(pred.GetCastPosition());
+                }
+            }
+        }
+
+        if (Bool(KillStealMenu, "KsW") && W.IsReady() &&
+            ValidHeroTarget(target, W.Range)) {
+            if (target.Health() + target.AllShield() <= WDamage(target)) {
+                const auto pred = W.GetPrediction(target);
+                if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                    W.Cast(pred.GetCastPosition());
+                }
+            }
+        }
+
+        if (Bool(KillStealMenu, "KsE") && E.IsReady() &&
+            ValidHeroTarget(target, 500.0f)) {
+            if (target.Health() + target.AllShield() <= EDamage(target)) {
+                E.Cast();
+            }
+        }
+    }
+}
+
+// === Harass ===
+static void Harass() {
+    const auto player = Player();
+    if (!player.IsValid()) return;
+    if (player.ManaPercent() < static_cast<float>(Slider(HarassMenu, "Mana", 50))) return;
+
+    if (Bool(HarassMenu, "HarassQ") && Q.IsReady() && !Q.IsCharging()) {
+        const auto target = GetTarget(static_cast<float>(Q.ChargedMaxRange), DamageType::Magical);
+        if (ValidHeroTarget(target, static_cast<float>(Q.ChargedMaxRange))) {
+            const auto pred = Q.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                Q.StartCharging(pred.GetCastPosition());
+            }
+        }
+    }
+
+    if (Q.IsCharging()) {
+        const auto target = GetTarget(Q.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, Q.Range)) {
+            const auto pred = Q.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
+                Q.ShootChargedSpell(pred.GetCastPosition());
+            }
+        }
+    }
+
+    if (Bool(HarassMenu, "HarassW") && W.IsReady()) {
+        const auto target = GetTarget(W.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, W.Range)) {
+            const auto pred = W.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                W.Cast(pred.GetCastPosition());
+            }
+        }
+    }
+
+    if (Bool(HarassMenu, "HarassE") && E.IsReady()) {
+        const auto target = GetTarget(E.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, E.Range)) {
+            const auto pred = E.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                E.Cast(pred.GetCastPosition());
+            }
+        }
+    }
+}
+
+// === LaneClear ===
+static void LaneClear() {
+    const auto player = Player();
+    if (!player.IsValid()) return;
+    if (player.ManaPercent() < static_cast<float>(Slider(LaneClearMenu, "ManaLC", 60))) return;
+
+    if (Bool(LaneClearMenu, "LaneW") && W.IsReady()) {
+        std::vector<AIBaseClient> minions;
+        for (const auto& m : GameObjects::EnemyMinions()) {
+            if (ValidTarget(m, W.Range) && m.IsMinion()) {
+                minions.emplace_back(m.Handle());
+            }
+        }
+        if (!minions.empty()) {
+            const auto wFarmLocation = W.GetCircularFarmLocation(minions);
+            if (wFarmLocation.MinionsHit >= Slider(LaneClearMenu, "MinW", 3)) {
+                W.Cast(Vector3(wFarmLocation.Position.x, 0.0f, wFarmLocation.Position.y));
+            }
+        }
+    }
+
+    if (Bool(LaneClearMenu, "LaneQ") && Q.IsReady() && !Q.IsCharging()) {
+        std::vector<AIBaseClient> minions;
+        for (const auto& m : GameObjects::EnemyMinions()) {
+            if (ValidTarget(m, static_cast<float>(Q.ChargedMaxRange)) && m.IsMinion()) {
+                minions.emplace_back(m.Handle());
+            }
+        }
+        if (!minions.empty()) {
+            const auto qFarmLocation = Q.GetLineFarmLocation(minions);
+            if (qFarmLocation.MinionsHit >= Slider(LaneClearMenu, "MinQ", 3)) {
+                Q.StartCharging(Vector3(qFarmLocation.Position.x, 0.0f, qFarmLocation.Position.y));
+            }
+        }
+    }
+
+    if (Q.IsCharging()) {
+        std::vector<AIBaseClient> minions;
+        for (const auto& m : GameObjects::EnemyMinions()) {
+            if (ValidTarget(m, Q.Range) && m.IsMinion()) {
+                minions.emplace_back(m.Handle());
+            }
+        }
+        if (!minions.empty()) {
+            const auto qFarmLocation = Q.GetLineFarmLocation(minions);
+            if (qFarmLocation.MinionsHit >= Slider(LaneClearMenu, "MinQ", 3)) {
+                Q.ShootChargedSpell(Vector3(qFarmLocation.Position.x, 0.0f, qFarmLocation.Position.y));
+            }
+        }
+    }
+}
+
+// === JungleClear ===
+static void JungleClear() {
+    const auto player = Player();
+    if (!player.IsValid()) return;
+
+    AIMinionClient bestMob;
+    float bestMaxHealth = 0.0f;
+    for (const auto& m : GameObjects::Jungle()) {
+        if (!ValidTarget(m, W.Range)) continue;
+        if (m.GetJungleType() == JungleType::Unknown) continue;
+        if (m.MaxHealth() > bestMaxHealth) {
+            bestMaxHealth = m.MaxHealth();
+            bestMob = m;
+        }
+    }
+
+    if (!bestMob.IsValid()) return;
+
+    if (Bool(JungleClearMenu, "QJungle") && Q.IsReady() && !Q.IsCharging() &&
+        player.ManaPercent() >= static_cast<float>(Slider(JungleClearMenu, "ManaLC", 40))) {
+        Q.StartCharging(bestMob.Position());
+    }
+
+    if (Q.IsCharging() && Bool(JungleClearMenu, "QJungle")) {
+        Q.ShootChargedSpell(bestMob.Position());
+    }
+
+    if (Bool(JungleClearMenu, "WJungle") && W.IsReady()) {
+        W.Cast(bestMob.Position());
+    }
+
+    if (Bool(JungleClearMenu, "EJungle") && E.IsReady()) {
+        E.Cast(bestMob.Position());
+    }
+}
+
+// === OnUnload ===
+static void OnUnload() {
+    Events::hook.OnGameUpdate -= &Game_OnUpdate;
+    Events::hook.OnGapCloser -= &Gapcloser_OnGapcloser;
+    Events::hook.OnInterruptableSpell -= &OnInterrupterSpell;
+    Events::hook.OnProcessSpell -= &OnProcessSpellCast;
+    RemoveKeyPermashow(Ulti, "RKey");
+    RemoveKeyPermashow(Semi, "WKey");
+    RemoveKeyPermashow(Semi, "EKey");
     Loaded = false;
 }
 

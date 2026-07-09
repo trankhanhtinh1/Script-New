@@ -78,6 +78,28 @@ public:
         return it != OrbwalkingDetail::Implementations.end() ? it->second : nullptr;
     }
 
+    // Unregister an implementation. If it was the selected one, selection
+    // falls back to the SDK implementation (or none when SDK is gone too).
+    static bool RemoveOrbwalker(const std::string& name) {
+        auto it = OrbwalkingDetail::Implementations.find(name);
+        if (it == OrbwalkingDetail::Implementations.end()) {
+            return false;
+        }
+        IOrbwalker* removed = it->second;
+        OrbwalkingDetail::Implementations.erase(it);
+        if (OrbwalkingDetail::Implementation == removed) {
+            auto sdkIt = OrbwalkingDetail::Implementations.find("SDK");
+            if (sdkIt != OrbwalkingDetail::Implementations.end()) {
+                OrbwalkingDetail::Implementation = sdkIt->second;
+                OrbwalkingDetail::SelectedImplementationName = "SDK";
+            } else {
+                OrbwalkingDetail::Implementation = nullptr;
+                OrbwalkingDetail::SelectedImplementationName.clear();
+            }
+        }
+        return true;
+    }
+
     static const std::string& CurrentOrbwalkerName() {
         return OrbwalkingDetail::SelectedImplementationName;
     }
@@ -273,8 +295,8 @@ public:
     }
 
     static void DebugPrint(const char* text) {
-        if (OrbwalkingDetail::RuntimeInstance) {
-            OrbwalkingDetail::RuntimeInstance->DebugPrint(text);
+        if (Current()) {
+            Current()->DebugPrint(text);
         }
     }
 
@@ -290,8 +312,8 @@ public:
     }
 
     static void DebugClear() {
-        if (OrbwalkingDetail::RuntimeInstance) {
-            OrbwalkingDetail::RuntimeInstance->ClearDebugConsole();
+        if (Current()) {
+            Current()->ClearDebugConsole();
         }
     }
 

@@ -43,6 +43,10 @@ namespace StructureVTable {
     namespace ObjectManagerRuntime {
         constexpr auto ManagerListItems = 0x8;
         constexpr auto ManagerListSize = 0x10;
+        // ReClass live 2026-07-08: MissileManager list entries are intrusive
+        // nodes; node+0x28 is the MissileClient object. Hero/minion/turret
+        // managers still store object pointers directly.
+        constexpr auto MissileManagerNodeObject = 0x28;
         // NetworkId red-black tree (MSVC std::map style), verified
         // on IDA 13337 in sub_560700 (insertion) and sub_2F6930 (destructor
         // unregister) — both walk the tree headed at `manager + 0x38`.
@@ -389,7 +393,11 @@ namespace BuffDataLayout {
     constexpr auto BuffEndTime = 0x1C;
     // Stack array (StlVector of StlSharedPtr<BuffScriptInstance>).
     // Each entry is 16 bytes: {BuffScriptInstance*, refcount*}.
-    // IDA 13337: sub_91BC60 reads buff+0x30 as begin, buff+0x38 as count.
+    // IDA 13337: sub_91BD20 (HasBuff-by-hash iterator, reached from HasBuff
+    // wrapper 0x2844A0 via vfunc +0x7A0) reads buff+0x30 as stack-array begin
+    // and buff+0x38 as the LIVE stack count (end = begin + 0x10*count); the
+    // `cmp [buff+0x38], 0 / jle` there is the liveness gate. (Older notes cited
+    // sub_91BC60, which actually falls inside the unrelated decoder sub_91BAC0.)
     constexpr auto BuffStackArrayBegin = 0x30;
     constexpr auto BuffStackCount = 0x38;
     constexpr auto BuffStacks = 0x38;
@@ -398,8 +406,9 @@ namespace BuffDataLayout {
 
 // BuffScriptInstance is obtained by dereferencing the first 8 bytes of each
 // 16-byte entry in the stack array at BuffDataLayout::BuffStackArrayBegin.
-// IDA 13337: sub_91BC60 compares BuffScriptInstance+0x4 with the source
-// object's network ID, confirming +0x4 is the caster's network ID.
+// IDA 13337: sub_91BD20 compares BuffScriptInstance+0x4 with the source
+// object's network ID (mov rdx,[rcx]; cmp [rdx+4], eax), confirming +0x4 is
+// the caster's network ID.
 namespace BuffScriptInstanceLayout {
     constexpr auto CasterNetworkId = 0x4;
     constexpr auto EntryStride = 0x10;  // 16 bytes per stack entry
@@ -957,6 +966,17 @@ namespace SpellBookLayout {
         constexpr auto ItemList            = 0x4E08;  // = InventoryComponent
     } // namespace All
 
+    // EffectEmitter InstanceProxy layout.
+    // IDA 13337:
+    //   sub_A22420 (GetFXParticleEmitter dispatcher) case 8 → lea rax, [rcx+258h]
+    //   EnsoulSharp: InstanceProxy* ptr = *(uint*)GetFXParticleEmitter(obj)
+    //     = *(uintptr_t*)(obj + 0x258)
+    //   sub_307D60 (InstanceProxy::GetOrientation) → lea rax, [rcx+108h]; retn
+    //     where rcx = InstanceProxy, +0x108 = D3DMATRIX (16 floats)
+    namespace EffectEmitterLayout {
+        constexpr auto ProxyOrientation = 0x108;
+    } // namespace EffectEmitterLayout
+
     namespace AttackableUnit {
         constexpr auto HP              = 0x1080;
         constexpr auto MaxHP           = 0x10A8;
@@ -1041,6 +1061,12 @@ namespace SpellBookLayout {
         // missile tracking / evade.
         constexpr auto CastInfoBase  = 0x2C0;
         constexpr auto SpellDataPtr  = CastInfoBase + 0x00;
+        // ReClass live 2026-07-08: SpellDataPtr points to a heap spell-data
+        // object whose compact strings at +0x28/+0x60 expose names such as
+        // SRU_ChaosMinionRangedBasicAttack. The old payload string fields
+        // below are retained only as fallbacks.
+        constexpr auto SpellDataSpellName   = 0x28;
+        constexpr auto SpellDataMissileName = 0x60;
         constexpr auto SpellName     = CastInfoBase + 0x20;
         constexpr auto MissileName   = CastInfoBase + 0x48;
         constexpr auto TargetArrayPtr   = CastInfoBase + 0x110;

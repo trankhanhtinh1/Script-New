@@ -9,6 +9,7 @@
 #include "PluginManager.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
+#include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
 #include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
@@ -102,8 +103,14 @@ namespace PluginBootstrap {
         // Initialize default SDK Wrappers.
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
         ::SDK::SdkWrappers::Initialize();
-        PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
-        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);        
+        const int orbwalkerRegistryIdx = PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        // Load/Unload trên row "Orbwalker" giờ thật sự bật/tắt orbwalker SDK;
+        // OrbwalkerKuroPlugin cũng dùng chính runtime này để override nó.
+        PluginRegistry::BindRuntime(orbwalkerRegistryIdx,
+                                    nullptr,
+                                    &::SDK::SdkWrappers::ResumeSdkOrbwalkerRuntime,
+                                    &::SDK::SdkWrappers::SuspendSdkOrbwalkerRuntime);
+        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 #else
         NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
@@ -118,6 +125,7 @@ namespace PluginBootstrap {
 
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
+        PluginManager::Get().Register<OrbwalkerKuroPlugin>();
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
         PluginManager::Get().Register<PlayerBuffDebugPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include "../SectionProfiler.h"
@@ -691,6 +692,18 @@ inline void ReadMinion(ObjectSnapshot& out, uintptr_t object) {
     out.jungleType = ReadNativeJungleType(object);
 }
 
+inline bool ReadMissileSpellDataName(uintptr_t spellData,
+                                     uintptr_t offset,
+                                     char* out,
+                                     int outCount) {
+    if (!out || outCount <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    return Globals::IsValidPtr(spellData) &&
+           Globals::ReadRuntimeStringField(spellData + offset, out, outCount);
+}
+
 inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
     out.missile.spellData = ReadField<uintptr_t>(object, Offset::MissileClient::SpellDataPtr);
     out.missile.castInfo = object + Offset::MissileClient::CastInfoBase;
@@ -706,14 +719,33 @@ inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
     out.missile.startPosition = ReadField<Vec3>(object, Offset::MissileClient::StartPos);
     out.missile.endPosition = ReadField<Vec3>(object, Offset::MissileClient::EndPos);
     out.missile.castEndPosition = ReadField<Vec3>(object, Offset::MissileClient::CastEndPos);
-    Globals::ReadRuntimeStringField(
-        object + Offset::MissileClient::SpellName,
-        out.missile.spellName,
-        static_cast<int>(sizeof(out.missile.spellName)));
-    Globals::ReadRuntimeStringField(
-        object + Offset::MissileClient::MissileName,
-        out.missile.missileName,
-        static_cast<int>(sizeof(out.missile.missileName)));
+    if (!ReadMissileSpellDataName(
+            out.missile.spellData,
+            Offset::MissileClient::SpellDataSpellName,
+            out.missile.spellName,
+            static_cast<int>(sizeof(out.missile.spellName)))) {
+        Globals::ReadRuntimeStringField(
+            object + Offset::MissileClient::SpellName,
+            out.missile.spellName,
+            static_cast<int>(sizeof(out.missile.spellName)));
+    }
+    if (!ReadMissileSpellDataName(
+            out.missile.spellData,
+            Offset::MissileClient::SpellDataMissileName,
+            out.missile.missileName,
+            static_cast<int>(sizeof(out.missile.missileName)))) {
+        Globals::ReadRuntimeStringField(
+            object + Offset::MissileClient::MissileName,
+            out.missile.missileName,
+            static_cast<int>(sizeof(out.missile.missileName)));
+    }
+    if (!out.missile.missileName[0] && out.missile.spellName[0]) {
+        strncpy_s(
+            out.missile.missileName,
+            static_cast<std::size_t>(sizeof(out.missile.missileName)),
+            out.missile.spellName,
+            _TRUNCATE);
+    }
 }
 
 namespace detail {

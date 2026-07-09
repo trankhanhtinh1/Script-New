@@ -1734,14 +1734,36 @@ public:
         const uintptr_t a = Address();
         if (!a) return {};
         char buf[96] = {};
-        Globals::ReadRuntimeStringField(a + Offset::MissileClient::SpellName, buf, static_cast<int>(sizeof(buf)));
+        const uintptr_t spellData =
+            Globals::Read<uintptr_t>(a + Offset::MissileClient::SpellDataPtr);
+        if (!Globals::IsValidPtr(spellData) ||
+            !Globals::ReadRuntimeStringField(
+                spellData + Offset::MissileClient::SpellDataSpellName,
+                buf,
+                static_cast<int>(sizeof(buf)))) {
+            Globals::ReadRuntimeStringField(
+                a + Offset::MissileClient::SpellName,
+                buf,
+                static_cast<int>(sizeof(buf)));
+        }
         return buf;
     }
     std::string MissileName() const {
         const uintptr_t a = Address();
         if (!a) return {};
         char buf[96] = {};
-        Globals::ReadRuntimeStringField(a + Offset::MissileClient::MissileName, buf, static_cast<int>(sizeof(buf)));
+        const uintptr_t spellData =
+            Globals::Read<uintptr_t>(a + Offset::MissileClient::SpellDataPtr);
+        if (!Globals::IsValidPtr(spellData) ||
+            !Globals::ReadRuntimeStringField(
+                spellData + Offset::MissileClient::SpellDataMissileName,
+                buf,
+                static_cast<int>(sizeof(buf)))) {
+            Globals::ReadRuntimeStringField(
+                a + Offset::MissileClient::MissileName,
+                buf,
+                static_cast<int>(sizeof(buf)));
+        }
         return buf;
     }
     Vector3 StartPosition() const {
@@ -1882,6 +1904,54 @@ public:
     explicit EffectEmitter(::Core::Objects::ObjectHandle handle)
         : GameObject(handle) {
         handle_.type = ::Core::Objects::ObjectType::EffectEmitter;
+    }
+
+    struct D3DMatrix {
+        float m[4][4];
+    };
+
+    uintptr_t ResolveProxy() const {
+        const uintptr_t a = Address();
+        if (!a) return 0;
+
+        __try {
+            const auto proxy = *reinterpret_cast<const uintptr_t*>(
+                a + Offset::All::EffectEmitterHandle);
+            if (proxy) return proxy;
+        } __except (1) {}
+        return 0;
+    }
+
+    D3DMatrix Orientation() const {
+        D3DMatrix result = {};
+        const uintptr_t proxy = ResolveProxy();
+        if (!proxy) return result;
+
+        __try {
+            const auto* mat = reinterpret_cast<const float*>(
+                proxy + Offset::EffectEmitterLayout::ProxyOrientation);
+            for (int i = 0; i < 16; ++i)
+                reinterpret_cast<float*>(&result)[i] = mat[i];
+        } __except (1) {}
+        return result;
+    }
+
+    Vector3 Direction() const {
+        const auto mat = Orientation();
+        if (mat.m[0][0] == 0.0f && mat.m[0][2] == 0.0f &&
+            mat.m[2][0] == 0.0f && mat.m[2][2] == 0.0f)
+            return Vector3();
+
+        const float dx = mat.m[2][0] - mat.m[0][0];
+        const float dz = mat.m[2][2] - mat.m[0][2];
+        if (dx == 0.0f && dz == 0.0f)
+            return Vector3();
+
+        const float len = std::sqrt(dx * dx + dz * dz);
+        if (len < 0.001f)
+            return Vector3();
+
+        return Vector3(dx / len, 0.0f, dz / len);
     }
 };
 

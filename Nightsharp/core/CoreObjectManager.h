@@ -141,6 +141,30 @@ inline bool IsLiveEntry(uintptr_t entry) {
     return Globals::IsValidPtr(entry) && ((entry & 1u) == 0);
 }
 
+inline bool LooksLikeGameObject(uintptr_t object) {
+    if (!IsLiveEntry(object)) {
+        return false;
+    }
+
+    const uintptr_t vtable = Globals::Read<uintptr_t>(object);
+    if (!Globals::IsValidPtr(vtable)) {
+        return false;
+    }
+
+    const uintptr_t firstVirtual = Globals::Read<uintptr_t>(vtable);
+    return Globals::IsExecutablePtr(firstVirtual, 8);
+}
+
+inline uintptr_t ResolveMissileManagerEntry(uintptr_t entry) {
+    if (LooksLikeGameObject(entry)) {
+        return entry;
+    }
+
+    const uintptr_t object = Globals::Read<uintptr_t>(
+        entry + Offset::ObjectManagerRuntime::MissileManagerNodeObject);
+    return LooksLikeGameObject(object) ? object : 0;
+}
+
 inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
     if (!out || maxOut <= 0) {
         return 0;
@@ -159,6 +183,32 @@ inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
         }
 
         out[written++] = entry;
+    }
+    return written;
+}
+
+inline int EnumerateMissileManagerList(uintptr_t manager, uintptr_t* out, int maxOut) {
+    if (!out || maxOut <= 0) {
+        return 0;
+    }
+
+    const ManagerView view = ReadManagerListView(manager);
+    if (!view.IsValid()) {
+        return 0;
+    }
+
+    int written = 0;
+    for (std::uint32_t i = 0; i < view.count && written < maxOut; ++i) {
+        const uintptr_t entry = Globals::Read<uintptr_t>(
+            view.items + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
+        if (!IsLiveEntry(entry)) {
+            continue;
+        }
+
+        const uintptr_t object = ResolveMissileManagerEntry(entry);
+        if (object) {
+            out[written++] = object;
+        }
     }
     return written;
 }
@@ -193,6 +243,9 @@ inline int Enumerate(ManagerKind kind, uintptr_t* out, int maxOut) {
     const uintptr_t manager = GetManagerAddress(kind);
     if (kind == ManagerKind::Objects) {
         return EnumerateObjectArray(manager, out, maxOut);
+    }
+    if (kind == ManagerKind::Missiles) {
+        return EnumerateMissileManagerList(manager, out, maxOut);
     }
     return EnumerateManagerList(manager, out, maxOut);
 }

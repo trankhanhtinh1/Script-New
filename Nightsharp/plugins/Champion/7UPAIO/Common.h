@@ -62,6 +62,12 @@ inline bool Key(Menu* menu, const char* key, bool fallback = false) {
     return item ? item->Active : fallback;
 }
 
+inline void RemoveKeyPermashow(Menu* menu, const char* key) {
+    if (auto* item = menu ? menu->Get<MenuKeyBind>(key) : nullptr) {
+        item->RemovePermashow();
+    }
+}
+
 inline int ListIndex(Menu* menu, const char* key, int fallback = 0) {
     if (!menu) {
         return fallback;

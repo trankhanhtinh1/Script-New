@@ -534,7 +534,7 @@ static void BuildMenu() {
     QMenu->Add(new MenuSlider("QmanaLC", "Q lane clear mana", 80, 0, 100));
 
     WMenu = MenuRoot->AddSubMenu(new Menu("WMenu", "WMenu"));
-    WMenu->Add(new MenuKeyBind("useW", "Semi cast W key", SDK::Keys::S, KeyBindType::Press));
+    WMenu->Add(new MenuKeyBind("useW", "Semi cast W key", SDK::Keys::S, KeyBindType::Press))->Permashow();
     WMenu->Add(new MenuBool("Wcombo", "Combo W"));
     WMenu->Add(new MenuBool("Wharass", "W harass"));
     WMenu->Add(new MenuBool("Wks", "W KS"));
@@ -552,7 +552,7 @@ static void BuildMenu() {
     EMenu = MenuRoot->AddSubMenu(new Menu("EMenu", "EMenu"));
     EMenu->Add(new MenuBool("Ecombo", "Combo E"));
     EMenu->Add(new MenuBool("AutoEWhenEnemyCastAAM", "Use Auto E When Melee Enemy Cast AA On Me"));
-    EMenu->Add(new MenuKeyBind("useE", "Semi cast E key", SDK::Keys::G, KeyBindType::Press));
+    EMenu->Add(new MenuKeyBind("useE", "Semi cast E key", SDK::Keys::G, KeyBindType::Press))->Permashow();
     EMenu->Add(new MenuBool("Etel", "E on enemy teleport"));
     EMenu->Add(new MenuBool("Ecc", "E on CC"));
     EMenu->Add(new MenuBool("Espell", "E on special spell detection", false));
@@ -561,7 +561,7 @@ static void BuildMenu() {
 
     RMenu = MenuRoot->AddSubMenu(new Menu("RMenu", "RMenu"));
     RMenu->Add(new MenuBool("Rks", "R KS"));
-    RMenu->Add(new MenuKeyBind("useR", "Semi-manual cast R key", SDK::Keys::T, KeyBindType::Press));
+    RMenu->Add(new MenuKeyBind("useR", "Semi-manual cast R key", SDK::Keys::T, KeyBindType::Press))->Permashow();
     RMenu->Add(new MenuBool("ComboRTeam", "Use R|Team Fight"));
     RMenu->Add(new MenuBool("ComboRSolo", "Use R|Solo Mode"));
     RMenu->Add(new MenuSlider("rMenuMin", "Use R| Min Range >= x", 1000, 500, 2500));
@@ -751,6 +751,9 @@ static void OnUnload() {
     Events::hook.OnDoCast -= &OnDoCast;
     Events::hook.OnGapCloser -= &OnGapcloser;
     Events::hook.OnTeleport -= &OnTeleport;
+    RemoveKeyPermashow(WMenu, "useW");
+    RemoveKeyPermashow(EMenu, "useE");
+    RemoveKeyPermashow(RMenu, "useR");
 
     Loaded = false;
 }

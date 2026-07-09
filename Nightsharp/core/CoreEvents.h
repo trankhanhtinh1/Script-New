@@ -299,13 +299,19 @@ namespace detail {
             const char* src = reinterpret_cast<const char*>(address);
             for (; i + 1 < outCount; ++i) {
                 const char ch = src[i];
-                out[i] = ch;
                 if (ch == 0) {
+                    out[i] = 0;
                     return i > 0;
                 }
+                const unsigned char uch = static_cast<unsigned char>(ch);
+                if (uch < 0x20 || uch > 0x7E) {
+                    out[0] = 0;
+                    return false;
+                }
+                out[i] = ch;
             }
-            out[i] = 0;
-            return i > 0;
+            out[0] = 0;
+            return false;
         } __except (1) {
             out[0] = 0;
             return false;
@@ -383,6 +389,10 @@ namespace detail {
         out[0] = 0;
         if (!address) {
             return false;
+        }
+
+        if (Globals::ReadRuntimeStringField(address, out, outCount)) {
+            return true;
         }
 
         if (CopyStlString(address, out, outCount) || CopyRiotString(address, out, outCount)) {
@@ -1427,14 +1437,26 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     }
 
     if (payload) {
-        detail::CopyRuntimeStringField(
-            payload + Offset::MissileEventLayout::SpellName,
-            args.SpellName,
-            static_cast<int>(sizeof(args.SpellName)));
-        detail::CopyRuntimeStringField(
-            payload + Offset::MissileEventLayout::MissileName,
-            args.MissileName,
-            static_cast<int>(sizeof(args.MissileName)));
+        uintptr_t spellData = 0;
+        detail::Read(payload + Offset::MissileEventLayout::SpellData, spellData);
+        if (!detail::CopyRuntimeStringField(
+                spellData + Offset::MissileClient::SpellDataSpellName,
+                args.SpellName,
+                static_cast<int>(sizeof(args.SpellName)))) {
+            detail::CopyRuntimeStringField(
+                payload + Offset::MissileEventLayout::SpellName,
+                args.SpellName,
+                static_cast<int>(sizeof(args.SpellName)));
+        }
+        if (!detail::CopyRuntimeStringField(
+                spellData + Offset::MissileClient::SpellDataMissileName,
+                args.MissileName,
+                static_cast<int>(sizeof(args.MissileName)))) {
+            detail::CopyRuntimeStringField(
+                payload + Offset::MissileEventLayout::MissileName,
+                args.MissileName,
+                static_cast<int>(sizeof(args.MissileName)));
+        }
         detail::ReadVector3(
             payload + Offset::MissileEventLayout::StartPos,
             args.StartPosition);

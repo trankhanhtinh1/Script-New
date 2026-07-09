@@ -33,4 +33,27 @@ inline void Shutdown() {
     g_initialized = false;
 }
 
+// Runtime Load/Unload cho registry row "orbwalker" (Plugin Manager):
+// Unload = suspend bản SDK (unhook event + ẩn menu), Load = resume.
+// Resume bị từ chối khi một orbwalker khác (vd. OrbwalkerKuro) đang override,
+// để không bao giờ có hai orbwalker cùng chạy.
+inline bool ResumeSdkOrbwalkerRuntime(void*) {
+    if (Orbwalker::CurrentOrbwalkerName() != "SDK") {
+        return false;
+    }
+    if (IOrbwalker* impl = Orbwalker::GetOrbwalker("SDK")) {
+        impl->Resume();
+        return true;
+    }
+    return false;
+}
+
+inline bool SuspendSdkOrbwalkerRuntime(void*) {
+    if (IOrbwalker* impl = Orbwalker::GetOrbwalker("SDK")) {
+        impl->Suspend();
+        return true;
+    }
+    return false;
+}
+
 } // namespace SDK::SdkWrappers

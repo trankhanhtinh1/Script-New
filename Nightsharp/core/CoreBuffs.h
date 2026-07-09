@@ -734,14 +734,43 @@ namespace CoreBuffs {
         return {};
     }
 
+    // The event cache stores the stack count captured at the last buff EVENT
+    // (add/update). For buffs whose count changes WITHOUT a matching update
+    // event — Kalista spears (kalistaexpungemarker), Dead Man's Plate momentum,
+    // Kai'Sa/Kindred markers, etc. — that snapshot goes stale (typically frozen
+    // at the add-time value of 1), which corrupts damage calculations that scale
+    // with stacks. Verified live (ReClass, League 26.x): a dummy carrying 5 rend
+    // spears has the LIVE count at buff+0x38 == 5 while the cached event count
+    // was still 1. IsCachedBuffActive already re-derives LIVENESS from live
+    // memory whenever we still hold the buff address; do the same for the COUNT
+    // so callers always see the true stack value. Falls back to a live by-name
+    // scan, then finally the cached snapshot, so it is never worse than before.
+    inline int ResolveLiveStacks(uintptr_t obj, const CachedBuffEntry& entry, float gameTime) {
+        if (Globals::IsValidPtr(entry.address)) {
+            BuffRef live{ entry.address };
+            char buf[96] = {};
+            if (live.ReadName(buf, static_cast<int>(sizeof(buf))) &&
+                NameMatchesQuery(buf, entry.name)) {
+                return live.GetStacks();
+            }
+        }
+
+        const auto buff = FindActiveByName(obj, entry.name, gameTime);
+        if (buff.IsValid()) {
+            return buff.GetStacks();
+        }
+        return entry.count;
+    }
+
     inline int GetBuffStacks(uintptr_t obj, const char* name) {
         const float gameTime = ResolveGameTime();
         CachedBuffEntry cached = {};
         if (TryGetCachedBuff(obj, name, cached)) {
-            return IsCachedBuffActive(cached, gameTime) &&
-                   !IsSuppressedByLiveState(obj, cached.name)
-                ? cached.count
-                : 0;
+            if (!IsCachedBuffActive(cached, gameTime) ||
+                IsSuppressedByLiveState(obj, cached.name)) {
+                return 0;
+            }
+            return ResolveLiveStacks(obj, cached, gameTime);
         }
 
         const auto buff = FindByName(obj, name);
@@ -751,10 +780,11 @@ namespace CoreBuffs {
     inline int GetActiveBuffStacks(uintptr_t obj, const char* name, float gameTime) {
         CachedBuffEntry cached = {};
         if (TryGetCachedBuff(obj, name, cached)) {
-            return IsCachedBuffActive(cached, gameTime) &&
-                   !IsSuppressedByLiveState(obj, cached.name)
-                ? cached.count
-                : 0;
+            if (!IsCachedBuffActive(cached, gameTime) ||
+                IsSuppressedByLiveState(obj, cached.name)) {
+                return 0;
+            }
+            return ResolveLiveStacks(obj, cached, gameTime);
         }
 
         const auto buff = FindActiveByName(obj, name, gameTime);

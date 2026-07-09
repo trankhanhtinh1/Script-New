@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="NightSharp icon">
+  <defs>
+    <linearGradient id="ns-metal" x1="166" y1="98" x2="796" y2="850" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.38" stop-color="#d7d7d7"/>
+      <stop offset="0.62" stop-color="#8c8f92"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="ns-white" x1="246" y1="256" x2="762" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#f2f2f2"/>
+      <stop offset="0.72" stop-color="#bfc2c5"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="ns-green" x1="266" y1="734" x2="824" y2="296" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#16813e"/>
+      <stop offset="0.48" stop-color="#23c95f"/>
+      <stop offset="1" stop-color="#72ff9c"/>
+    </linearGradient>
+    <filter id="ns-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.58"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#ns-shadow)">
+    <path d="M407 76C251 154 144 320 144 509c0 218 144 391 350 449-118-118-179-279-164-448 16-178 121-331 282-416-72-9-141-6-205-18Z" fill="url(#ns-metal)"/>
+    <path d="M451 157c-98 76-160 203-163 341-3 130 39 250 118 344-115-74-186-200-183-338 3-156 90-285 228-347Z" fill="#111312"/>
+    <path d="M229 506c3-121 59-226 150-299-61 82-96 187-100 299-4 125 32 241 99 333-94-78-152-198-149-333Z" fill="#f6f6f6" opacity="0.2"/>
+  </g>
+
+  <g filter="url(#ns-shadow)">
+    <text x="514" y="647"
+          text-anchor="middle"
+          font-family="Arial Black, Segoe UI Black, Impact, sans-serif"
+          font-size="424"
+          font-style="italic"
+          font-weight="900"
+          letter-spacing="-42"
+          fill="url(#ns-white)"
+          stroke="#2c2f31"
+          stroke-width="13">NS</text>
+    <path d="M259 748 823 287" fill="none" stroke="#07140d" stroke-width="30" stroke-linecap="square"/>
+    <path d="M274 728 807 307" fill="none" stroke="url(#ns-green)" stroke-width="18" stroke-linecap="square"/>
+  </g>
+</svg>
