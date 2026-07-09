@@ -1,13 +1,13 @@
 #pragma once
 
-#include "KuroEvadeDatabase.generated.h"
+#include "SpellData.h"
 
 namespace Plugins::KuroEvade {
 
 struct SpecialSpellEventArgs {
     bool NoProcess = false;
     bool HasSpellDataOverride = false;
-    Generated::SpellDataEntry SpellData;
+    SpellDataEntry SpellData;
 };
 
 } // namespace Plugins::KuroEvade

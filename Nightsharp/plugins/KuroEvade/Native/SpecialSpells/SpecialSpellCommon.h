@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../KuroEvadeDatabase.generated.h"
+#include "../SpellData.h"
 #include "../MathUtils.h"
 
 #include "../../../../SDK/SDK.h"
@@ -17,23 +17,23 @@ namespace Plugins::KuroEvade::SpecialSpells {
 struct ExtraSpellCast {
     Vector3 Start;
     Vector3 End;
-    Generated::SpellDataEntry Data;
+    SpellDataEntry Data;
     int OverrideStartTick = 0;
 };
 
 struct ProcessResult {
-    Generated::SpellDataEntry Data;
+    SpellDataEntry Data;
     bool NoProcess = false;
     std::vector<ExtraSpellCast> ExtraSpells;
     std::vector<std::string> RemoveSpellNames;
 };
 
-using SpellLookupFn = const Generated::SpellDataEntry* (*)(const char*);
+using SpellLookupFn = const SpellDataEntry* (*)(const char*);
 
 struct CastContext {
     const SDK::AIBaseClient& Caster;
     const SDK::Events::ProcessSpellEventArgs& Args;
-    const Generated::SpellDataEntry& Source;
+    const SpellDataEntry& Source;
     SpellLookupFn Lookup = nullptr;
     Vector3 Start3;
     Vector3 End3;
@@ -42,7 +42,7 @@ struct CastContext {
     Vec2 Direction;
 };
 
-inline bool EqualsSpell(const Generated::SpellDataEntry& data, const char* name) {
+inline bool EqualsSpell(const SpellDataEntry& data, const char* name) {
     return name && _stricmp(data.sdk.SpellName.c_str(), name) == 0;
 }
 
@@ -58,11 +58,8 @@ inline std::string ToLower(std::string value) {
 }
 
 inline bool NameContains(const char* name, const char* needle) {
-    if (!name || !needle) {
-        return false;
-    }
-
-    return ToLower(name).find(ToLower(needle)) != std::string::npos;
+    if (!name || !needle) return false;
+    return strstr(ToLower(name).c_str(), ToLower(needle).c_str()) != nullptr;
 }
 
 inline Vector3 From2D(const Vec2& value, float y) {
@@ -90,7 +87,7 @@ inline Vec2 SafeDirection(const Vec2& start, const Vec2& end, const SDK::AIBaseC
 
 inline CastContext MakeCastContext(const SDK::AIBaseClient& caster,
                                    const SDK::Events::ProcessSpellEventArgs& args,
-                                   const Generated::SpellDataEntry& source,
+                                   const SpellDataEntry& source,
                                    SpellLookupFn lookup) {
     CastContext context{ caster, args, source, lookup };
     context.Start3 = args.StartPosition;
@@ -104,7 +101,7 @@ inline CastContext MakeCastContext(const SDK::AIBaseClient& caster,
 inline void AddExtra(ProcessResult& result,
                      const Vector3& start,
                      const Vector3& end,
-                     const Generated::SpellDataEntry& data,
+                     const SpellDataEntry& data,
                      int overrideStartTick = 0) {
     result.ExtraSpells.push_back({ start, end, data, overrideStartTick });
 }

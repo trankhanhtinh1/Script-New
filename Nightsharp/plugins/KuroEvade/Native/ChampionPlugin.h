@@ -1,6 +1,6 @@
 #pragma once
 
-#include "KuroEvadeDatabase.generated.h"
+#include "SpellData.h"
 
 #include "../../../SDK/SDK.h"
 

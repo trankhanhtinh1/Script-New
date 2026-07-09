@@ -66,18 +66,6 @@ inline void OrbwalkerBase::SetMoveServerPauseTime(int time) { SetMovePauseTime(t
 
 inline void OrbwalkerBase::ResetAutoAttackTimer() {
     const int now = Tick();
-    char resetLine[kOrbwalkerDebugConsoleLineLength] = {};
-    _snprintf_s(
-        resetLine,
-        sizeof(resetLine),
-        _TRUNCATE,
-        "[AA reset] tick=%d lastAA=%d pending=%d confirmed=%d castComplete=%d",
-        now,
-        context_.lastAutoAttackTick,
-        context_.pendingAttack ? 1 : 0,
-        context_.hasConfirmedAttack ? 1 : 0,
-        context_.attackCastComplete ? 1 : 0);
-    DebugPrint(resetLine);
 
     context_.lastAutoAttackTick = 0;
     context_.lastAttackOrderTick = 0;

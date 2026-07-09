@@ -22,7 +22,7 @@
 #include "EvadeType.h"
 #include "EvadeUtils.h"
 #include "HeroInfo.h"
-#include "KuroEvadeDatabase.generated.h"
+#include "SpellData.h"
 #include "MathUtils.h"
 #include "MathUtilsCPA.h"
 #include "MenuCache.h"

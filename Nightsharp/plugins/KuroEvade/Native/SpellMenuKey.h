@@ -1,6 +1,6 @@
 #pragma once
 
-#include "KuroEvadeDatabase.generated.h"
+#include "SpellData.h"
 
 #include "../../../SDK/SDK.h"
 
@@ -40,7 +40,7 @@ inline std::string DisplayName(const SDK::SpellDatabaseEntry& data) {
     return data.ChampionName.empty() ? std::string("UnknownSpell") : data.ChampionName + "Spell";
 }
 
-inline std::string DisplayName(const Generated::SpellDataEntry& data) {
+inline std::string DisplayName(const SpellDataEntry& data) {
     return data.DisplayName.empty() ? DisplayName(data.sdk) : data.DisplayName;
 }
 
@@ -48,7 +48,7 @@ inline std::string Key(const SDK::SpellDatabaseEntry& data) {
     return Lower(data.ChampionName + "|" + DisplayName(data) + "|" + data.MissileSpellName);
 }
 
-inline std::string Key(const Generated::SpellDataEntry& data) {
+inline std::string Key(const SpellDataEntry& data) {
     return Key(data.sdk);
 }
 
