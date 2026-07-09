@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <vector>
-#include "../SectionProfiler.h"
 
 namespace CoreAiManager {
 
@@ -174,7 +173,6 @@ namespace detail {
 }
 
 inline uintptr_t ResolveManager(uintptr_t object) {
-    NS_PROFILE("ai.ResolveManager");
     if (!Globals::IsValidPtr(object)) {
         return 0;
     }
@@ -250,7 +248,6 @@ inline Vec3 GetPathStart(uintptr_t object) {
 }
 
 inline Vec3 GetServerPosition(uintptr_t object) {
-    NS_PROFILE("ai.GetServerPosition");
     auto& cache = detail::GetFrameEntry(object);
     if (cache.serverPositionCached) {
         return cache.serverPosition;
@@ -275,7 +272,6 @@ inline Vec3 GetMoveVector(uintptr_t object) {
 }
 
 inline int CopyWaypoints(uintptr_t object, Vec3* out, int maxOut) {
-    NS_PROFILE("ai.CopyWaypoints");
     if (!out || maxOut <= 0) {
         return 0;
     }
@@ -418,7 +414,6 @@ inline float GetDashDuration(uintptr_t object) {
 }
 
 inline int CopyPath(uintptr_t object, Vec3* out, int maxOut) {
-    NS_PROFILE("ai.CopyPath");
     if (!out || maxOut <= 0 || !Globals::IsValidPtr(object)) {
         return 0;
     }

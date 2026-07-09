@@ -54,6 +54,21 @@ namespace detail {
     inline SpellInfo*& UnknownSpellSlot() { static SpellInfo* s = nullptr; return s; }
     inline ItemInfo*&  UnknownItemSlot()  { static ItemInfo*  i = nullptr; return i; }
 
+    inline UnitInfo* EnsureUnknownUnit() {
+        if (!UnknownUnitSlot()) UnknownUnitSlot() = new UnitInfo();
+        return UnknownUnitSlot();
+    }
+
+    inline SpellInfo* EnsureUnknownSpell() {
+        if (!UnknownSpellSlot()) UnknownSpellSlot() = new SpellInfo();
+        return UnknownSpellSlot();
+    }
+
+    inline ItemInfo* EnsureUnknownItem() {
+        if (!UnknownItemSlot()) UnknownItemSlot() = new ItemInfo();
+        return UnknownItemSlot();
+    }
+
     inline std::map<std::string, UnitInfo*>&  UnitsMap()  { static std::map<std::string, UnitInfo*>  m; return m; }
     inline std::map<std::string, SpellInfo*>& SpellsMap() { static std::map<std::string, SpellInfo*> m; return m; }
     inline std::map<int, ItemInfo*>&          ItemsMap()  { static std::map<int, ItemInfo*>          m; return m; }
@@ -358,9 +373,9 @@ inline void Load(const std::string& dataFolder) {
 
     // Make sure the unknown sentinels exist before any Get*ByName call could
     // possibly run (e.g. plugins firing off OnLoad concurrently).
-    if (!detail::UnknownUnitSlot())  detail::UnknownUnitSlot()  = new UnitInfo();
-    if (!detail::UnknownSpellSlot()) detail::UnknownSpellSlot() = new SpellInfo();
-    if (!detail::UnknownItemSlot())  detail::UnknownItemSlot()  = new ItemInfo();
+    detail::EnsureUnknownUnit();
+    detail::EnsureUnknownSpell();
+    detail::EnsureUnknownItem();
 
     Utils::Logging::Write()(LogLevel::Info,
         "GameData: loading from '%s'", dataFolder.c_str());
@@ -423,26 +438,36 @@ inline bool IsLoaded() { return detail::Initialized(); }
 // ────── Lookups (LView API parity) ──────────────────────────────────────
 
 inline UnitInfo* GetUnitInfoByName(const std::string& name) {
+    if (name.empty() || !detail::Initialized()) {
+        return detail::EnsureUnknownUnit();
+    }
+
     auto& units = detail::UnitsMap();
     const auto key = detail::ToLower(name);
     const auto it = units.find(key);
     if (it != units.end()) return it->second;
 
-    if (!detail::UnknownUnitSlot()) detail::UnknownUnitSlot() = new UnitInfo();
-    return detail::UnknownUnitSlot();
+    return detail::EnsureUnknownUnit();
 }
 
 inline SpellInfo* GetSpellInfoByName(const std::string& name) {
+    if (name.empty() || !detail::Initialized()) {
+        return detail::EnsureUnknownSpell();
+    }
+
     auto& spells = detail::SpellsMap();
     const auto key = detail::ToLower(name);
     const auto it = spells.find(key);
     if (it != spells.end()) return it->second;
 
-    if (!detail::UnknownSpellSlot()) detail::UnknownSpellSlot() = new SpellInfo();
-    return detail::UnknownSpellSlot();
+    return detail::EnsureUnknownSpell();
 }
 
 inline ItemInfo* GetItemInfoById(int id) {
+    if (!detail::Initialized()) {
+        return detail::EnsureUnknownItem();
+    }
+
     auto& items = detail::ItemsMap();
     const auto it = items.find(id);
     if (it != items.end()) return it->second;
@@ -451,8 +476,7 @@ inline ItemInfo* GetItemInfoById(int id) {
         return generated;
     }
 
-    if (!detail::UnknownItemSlot()) detail::UnknownItemSlot() = new ItemInfo();
-    return detail::UnknownItemSlot();
+    return detail::EnsureUnknownItem();
 }
 
 inline const ItemDatabase::ItemDataEntry* GetItemDataById(int id) {
@@ -478,7 +502,7 @@ inline ImTextureID GetSpellIcon(const std::string& spellNameOrIcon) {
     const std::string lower = detail::ToLower(spellNameOrIcon);
 
     // Step 1 - SpellInfo lookup (spell name → icon field from JSON).
-    {
+    if (detail::Initialized()) {
         auto& spells = detail::SpellsMap();
         const auto it = spells.find(lower);
         if (it != spells.end() && it->second && !it->second->icon.empty()) {
@@ -542,17 +566,19 @@ inline ImTextureID GetChampionSquareWithFallback(const std::string& runtimeName)
 // ────── Cleanup ─────────────────────────────────────────────────────────
 
 inline void Reset() {
-    auto& units  = detail::UnitsMap();
-    auto& spells = detail::SpellsMap();
-    auto& items  = detail::ItemsMap();
+    if (detail::Initialized()) {
+        auto& units  = detail::UnitsMap();
+        auto& spells = detail::SpellsMap();
+        auto& items  = detail::ItemsMap();
 
-    for (auto& kv : units)  delete kv.second;
-    for (auto& kv : spells) delete kv.second;
-    for (auto& kv : items)  delete kv.second;
+        for (auto& kv : units)  delete kv.second;
+        for (auto& kv : spells) delete kv.second;
+        for (auto& kv : items)  delete kv.second;
 
-    units.clear();
-    spells.clear();
-    items.clear();
+        units.clear();
+        spells.clear();
+        items.clear();
+    }
 
     if (detail::UnknownUnitSlot())  { delete detail::UnknownUnitSlot();  detail::UnknownUnitSlot()  = nullptr; }
     if (detail::UnknownSpellSlot()) { delete detail::UnknownSpellSlot(); detail::UnknownSpellSlot() = nullptr; }

@@ -31,6 +31,7 @@ inline bool Loaded = false;
 inline DWORD LastUpdateTick = 0;
 inline DWORD LastClearTick = 0;
 inline DWORD LastRFollowTick = 0;
+inline DWORD LastAutoWTick = 0;
 
 static constexpr float kEMaxRange = 1225.0f;
 static constexpr float kELength = 700.0f;
@@ -73,14 +74,14 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("comboUseE", "Use E"));
     ComboMenu->Add(new MenuBool("comboUseR", "Use R"));
     ComboMenu->Add(new MenuBool("qAuto", "Dont autoattack without passive", false));
-    ComboMenu->Add(new MenuKeyBind("comboActive", "Combo active", SDK::Keys::Space, KeyBindType::Press));
+    ComboMenu->Add(new MenuKeyBind("comboActive", "Combo active", SDK::Keys::Space, KeyBindType::Press))->Permashow();
 
     RMenu = MenuRoot->AddSubMenu(new Menu("Rconfig", "R config"));
     RMenu->Add(new MenuList("HitR", "Auto R if: ", { "1 target", "2 targets", "3 targets", "4 targets", "5 targets" }, 3));
     RMenu->Add(new MenuBool("AutoFollowR", "Auto Follow R"));
     RMenu->Add(new MenuSlider("rTicks", "Ultimate ticks to count", 2, 1, 14));
     ROneTargetMenu = RMenu->AddSubMenu(new Menu("Ronetarget", "R one target"));
-    ROneTargetMenu->Add(new MenuKeyBind("forceR", "Force R on target", SDK::Keys::T, KeyBindType::Press));
+    ROneTargetMenu->Add(new MenuKeyBind("forceR", "Force R on target", SDK::Keys::T, KeyBindType::Press))->Permashow();
     ROneTargetMenu->Add(new MenuBool("rLastHit", "1 target ulti"));
     for (const auto& hero : GameObjects::EnemyHeroes()) {
         const std::string key = "RU" + hero.CharacterName();
@@ -96,21 +97,21 @@ static void BuildMenu() {
     HarassMenu->Add(new MenuBool("harassUseE", "Use E"));
     HarassMenu->Add(new MenuSlider("harassMana", "Mana usage in percent (%)", 30, 0, 100));
     HarassMenu->Add(new MenuSlider("eDistance", "Harass range with E", static_cast<int>(kEMaxRange), static_cast<int>(kERange), static_cast<int>(kEMaxRange)));
-    HarassMenu->Add(new MenuKeyBind("harassActive", "Harass active", SDK::Keys::C, KeyBindType::Press));
+    HarassMenu->Add(new MenuKeyBind("harassActive", "Harass active", SDK::Keys::C, KeyBindType::Press))->Permashow();
 
     WaveMenu = MenuRoot->AddSubMenu(new Menu("WaveClear", "WaveClear"));
     WaveMenu->Add(new MenuBool("waveUseQ", "Use Q"));
     WaveMenu->Add(new MenuBool("waveUseE", "Use E"));
     WaveMenu->Add(new MenuSlider("waveNumE", "Minions to hit with E", 2, 1, 10));
     WaveMenu->Add(new MenuSlider("waveMana", "Mana usage in percent (%)", 30, 0, 100));
-    WaveMenu->Add(new MenuKeyBind("waveActive", "WaveClear active", SDK::Keys::V, KeyBindType::Press));
-    WaveMenu->Add(new MenuKeyBind("jungleActive", "JungleClear active", SDK::Keys::G, KeyBindType::Press));
+    WaveMenu->Add(new MenuKeyBind("waveActive", "WaveClear active", SDK::Keys::V, KeyBindType::Press))->Permashow();
+    WaveMenu->Add(new MenuKeyBind("jungleActive", "JungleClear active", SDK::Keys::G, KeyBindType::Press))->Permashow();
 
     LastHitMenu = MenuRoot->AddSubMenu(new Menu("LastHit", "LastHit"));
-    LastHitMenu->Add(new MenuKeyBind("waveUseQLH", "Use Q", SDK::Keys::A, KeyBindType::Press));
+    LastHitMenu->Add(new MenuKeyBind("waveUseQLH", "Use Q", SDK::Keys::A, KeyBindType::Press))->Permashow();
 
     FleeMenu = MenuRoot->AddSubMenu(new Menu("Flee", "Flee"));
-    FleeMenu->Add(new MenuKeyBind("FleeActive", "Flee mode", SDK::Keys::Z, KeyBindType::Press));
+    FleeMenu->Add(new MenuKeyBind("FleeActive", "Flee mode", SDK::Keys::Z, KeyBindType::Press))->Permashow();
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc", "Misc"));
     MiscMenu->Add(new MenuBool("rInterrupt", "Use R to interrupt dangerous spells"));
@@ -631,6 +632,9 @@ static void AutoW() {
     if (!W.IsReady() || !Bool(MiscMenu, "autoW")) {
         return;
     }
+    if (!ShouldRunNow(LastAutoWTick, 120)) {
+        return;
+    }
 
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!ValidHeroTarget(enemy, W.Range)) {
@@ -781,6 +785,13 @@ static void OnUnload() {
     Events::hook.OnGapCloser -= &OnGapcloser;
     Orbwalker::OnBeforeAttack -= &OnBeforeAttack;
     Orbwalker::OnNonKillableMinion -= &OnNonKillableMinion;
+    RemoveKeyPermashow(ComboMenu, "comboActive");
+    RemoveKeyPermashow(ROneTargetMenu, "forceR");
+    RemoveKeyPermashow(HarassMenu, "harassActive");
+    RemoveKeyPermashow(WaveMenu, "waveActive");
+    RemoveKeyPermashow(WaveMenu, "jungleActive");
+    RemoveKeyPermashow(LastHitMenu, "waveUseQLH");
+    RemoveKeyPermashow(FleeMenu, "FleeActive");
 
     Loaded = false;
 }

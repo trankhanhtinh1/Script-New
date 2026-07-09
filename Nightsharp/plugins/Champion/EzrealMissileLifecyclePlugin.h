@@ -328,7 +328,8 @@ private:
     }
 
     static bool IsKnownQMissileName(const char* value) {
-        return IsKnownQName(value);
+        return EqualsInsensitive(value, kSpell.MissileName) ||
+               EqualsInsensitive(value, "EzrealMysticShotPulseMissile");
     }
 
     static bool IsKnownQProcessName(const char* value) {
@@ -583,9 +584,7 @@ private:
         }
         ReleaseSRWLockExclusive(&self->m_stateLock);
 
-        const bool nameMatch =
-            IsKnownQMissileName(args.SpellName) ||
-            IsKnownQMissileName(args.MissileName);
+        const bool nameMatch = IsKnownQMissileName(args.MissileName);
         if (!nameMatch) {
             if (foundPending) {
                 AcquireSRWLockExclusive(&self->m_stateLock);

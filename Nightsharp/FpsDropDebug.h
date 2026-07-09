@@ -1,7 +1,6 @@
 #pragma once
 
 #include "imgui/imgui.h"
-#include "SectionProfiler.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -378,24 +377,10 @@ inline void EndFrame() {
     }
 }
 
-inline void RenderOverlay() {
-    if (!Enabled || !OverlayVisible || !ImGui::GetCurrentContext()) {
-        return;
-    }
-
-    ImGui::SetNextWindowBgAlpha(0.62f);
-    ImGui::SetNextWindowPos(ImVec2(18.0f, 310.0f), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin(
-            "NightSharp FPS Drop Debug",
-            nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize |
-                ImGuiWindowFlags_NoCollapse |
-                ImGuiWindowFlags_NoSavedSettings)) {
-        ImGui::End();
-        return;
-    }
-
-    ImGui::Text("F10 overlay | F11 log %s", LogEnabled ? "ON" : "OFF");
+// Renders the collected timing stats with ImGui. Assumes an ImGui window is
+// already active — used both by the floating RenderOverlay and by the in-menu
+// profiler panel (NightSharpMenu Debug Info section).
+inline void DrawStatsBody() {
     ImGui::Text(
         "frame %.2f ms  max %.2f  slow %d/%d",
         LastFrameMs,
@@ -455,6 +440,27 @@ inline void RenderOverlay() {
             sample.RenderMs,
             sample.MenuMs);
     }
+}
+
+inline void RenderOverlay() {
+    if (!Enabled || !OverlayVisible || !ImGui::GetCurrentContext()) {
+        return;
+    }
+
+    ImGui::SetNextWindowBgAlpha(0.62f);
+    ImGui::SetNextWindowPos(ImVec2(18.0f, 310.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin(
+            "NightSharp FPS Drop Debug",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize |
+                ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Text("F10 overlay | log %s (menu)", LogEnabled ? "ON" : "OFF");
+    DrawStatsBody();
 
     ImGui::End();
 }
@@ -476,11 +482,6 @@ private:
     LARGE_INTEGER start_ = {};
 };
 
-// SectionProfiler (SectionStat / FindOrAddSection / RecordSection / DumpSections /
-// ResetSections / SectionProbe / NS_PROFILE) lives in SectionProfiler.h, included
-// at the top of this file. FpsDropDebug.h just layers the ImGui overlay and
-// WndProc hotkey wiring on top of those shared globals.
-
 } // namespace NightSharpPerf
 
 // WndProc-based hotkey handler (declared here after NightSharpPerf types to avoid circular include with Events.h)
@@ -499,23 +500,8 @@ inline void ToggleHotkeysWndProc(SDK::Game::WndEventArgs& args) {
             }
             LastToggleTick = now;
         }
-        if (args.WParam == VK_F11 && now - LastToggleTick >= 150) {
-            Enabled = true;
-            LogEnabled = !LogEnabled;
-            SectionLogEnabled = LogEnabled;
-            LastToggleTick = now;
-        }
-        // F12: manual one-shot section dump + toggle continuous section profiling.
-        if (args.WParam == VK_F12 && now - LastToggleTick >= 150) {
-            Enabled = true;
-            SectionsActive = !SectionsActive;
-            if (SectionsActive) {
-                ResetSections();
-            } else {
-                DumpSections();
-            }
-            LastToggleTick = now;
-        }
+        // F11 log toggle removed — driven by the menu checkbox
+        // "Ghi log ra file (.txt)" (NightSharpPerf::LogEnabled) instead.
     }
 }
 

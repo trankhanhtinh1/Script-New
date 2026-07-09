@@ -5,8 +5,11 @@
 #include "DamagePassives.h"
 #include "DamageLibrary.h"
 
+#include <Windows.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <vector>
 
 namespace SDK::Damage {
 
@@ -86,12 +89,9 @@ namespace SDK::Damage {
         return DamagePassives::GetPassiveDamage(source, target);
     }
 
-    // Matching EnsoulSharp: GetAutoAttackDamage considers passives + override
-    inline float GetAutoAttackDamage(const AIHeroClient& source,
-                                     const AIBaseClient& target,
-                                     bool includePassives = true) {
-        if (!source.IsValid() || !target.IsValid()) return 0.0f;
-
+    inline float ComputeAutoAttackDamage(const AIHeroClient& source,
+                                         const AIBaseClient& target,
+                                         bool includePassives) {
         float damage = 0.0f;
 
         if (includePassives) {
@@ -113,6 +113,51 @@ namespace SDK::Damage {
         }
 
         return DamageMastery::Apply(source, target, DamageType::Physical, damage);
+    }
+
+    // Matching EnsoulSharp: GetAutoAttackDamage considers passives + override.
+    //
+    // Per-frame memo. `includePassives` runs GetPassiveDamageDetails = ~10
+    // source-side HasBuff name-scans (each enumerates the whole buff array on a
+    // miss, e.g. sheen/lichbane/InfinityEdge the player doesn't own) + ~20
+    // HasItem lookups. The TargetSelector damage-based modes (LessAttacksToKill /
+    // LessCastsToKill / Weight Killable+LessAttack) call this INSIDE the
+    // std::sort comparator, so a single OrderChampions pass evaluates it
+    // O(n log n) times over the SAME (player, hero) pairs — the dominant cost of
+    // one GetTargets call (the orbwalker's per-tick target scan) and of champion
+    // combo damage. EnsoulSharp read these as cached properties; the port did
+    // not. Cache per (source, target, includePassives) for the current
+    // GetTickCount window (~15 ms) — attack damage barely changes within that,
+    // so no meaningful freshness loss. thread_local so game/render threads never
+    // share the cache.
+    inline float GetAutoAttackDamage(const AIHeroClient& source,
+                                     const AIBaseClient& target,
+                                     bool includePassives = true) {
+        if (!source.IsValid() || !target.IsValid()) return 0.0f;
+
+        struct Memo {
+            uintptr_t src = 0;
+            uintptr_t tgt = 0;
+            bool passives = false;
+            DWORD tick = 0;
+            float damage = 0.0f;
+        };
+        static thread_local std::vector<Memo> memo;
+        const DWORD now = ::GetTickCount();
+        const uintptr_t src = source.Address();
+        const uintptr_t tgt = target.Address();
+        for (auto& m : memo) {
+            if (m.src == src && m.tgt == tgt && m.passives == includePassives) {
+                if (m.tick != now) {
+                    m.tick = now;
+                    m.damage = ComputeAutoAttackDamage(source, target, includePassives);
+                }
+                return m.damage;
+            }
+        }
+        const float damage = ComputeAutoAttackDamage(source, target, includePassives);
+        memo.push_back({ src, tgt, includePassives, now, damage });
+        return damage;
     }
 
 } // namespace SDK::Damage

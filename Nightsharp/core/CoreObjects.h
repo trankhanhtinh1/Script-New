@@ -8,9 +8,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include "../SectionProfiler.h"
 
 #ifndef NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS
 #define NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS 0
@@ -691,6 +691,34 @@ inline void ReadMinion(ObjectSnapshot& out, uintptr_t object) {
     out.jungleType = ReadNativeJungleType(object);
 }
 
+inline bool ReadMissileSpellDataName(uintptr_t spellData,
+                                     uintptr_t offset,
+                                     char* out,
+                                     int outCount) {
+    if (!out || outCount <= 0) {
+        return false;
+    }
+    out[0] = 0;
+    if (!Globals::IsValidPtr(spellData) ||
+        !Globals::ReadRuntimeStringField(spellData + offset, out, outCount)) {
+        return false;
+    }
+
+    int length = 0;
+    for (; out[length] && length < outCount; ++length) {
+        const unsigned char ch = static_cast<unsigned char>(out[length]);
+        if (ch < 0x20 || ch > 0x7E) {
+            out[0] = 0;
+            return false;
+        }
+    }
+    if (length < 2 || length >= outCount) {
+        out[0] = 0;
+        return false;
+    }
+    return true;
+}
+
 inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
     out.missile.spellData = ReadField<uintptr_t>(object, Offset::MissileClient::SpellDataPtr);
     out.missile.castInfo = object + Offset::MissileClient::CastInfoBase;
@@ -706,19 +734,38 @@ inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
     out.missile.startPosition = ReadField<Vec3>(object, Offset::MissileClient::StartPos);
     out.missile.endPosition = ReadField<Vec3>(object, Offset::MissileClient::EndPos);
     out.missile.castEndPosition = ReadField<Vec3>(object, Offset::MissileClient::CastEndPos);
-    Globals::ReadRuntimeStringField(
-        object + Offset::MissileClient::SpellName,
-        out.missile.spellName,
-        static_cast<int>(sizeof(out.missile.spellName)));
-    Globals::ReadRuntimeStringField(
-        object + Offset::MissileClient::MissileName,
-        out.missile.missileName,
-        static_cast<int>(sizeof(out.missile.missileName)));
+    if (!ReadMissileSpellDataName(
+            out.missile.spellData,
+            Offset::MissileClient::SpellDataSpellName,
+            out.missile.spellName,
+            static_cast<int>(sizeof(out.missile.spellName)))) {
+        Globals::ReadRuntimeStringField(
+            object + Offset::MissileClient::SpellName,
+            out.missile.spellName,
+            static_cast<int>(sizeof(out.missile.spellName)));
+    }
+    if (!ReadMissileSpellDataName(
+            out.missile.spellData,
+            Offset::MissileClient::SpellDataMissileName,
+            out.missile.missileName,
+            static_cast<int>(sizeof(out.missile.missileName)))) {
+        Globals::ReadRuntimeStringField(
+            object + Offset::MissileClient::MissileName,
+            out.missile.missileName,
+            static_cast<int>(sizeof(out.missile.missileName)));
+    }
+    if (!out.missile.missileName[0] && out.missile.spellName[0]) {
+        strncpy_s(
+            out.missile.missileName,
+            static_cast<std::size_t>(sizeof(out.missile.missileName)),
+            out.missile.spellName,
+            _TRUNCATE);
+    }
 }
 
 namespace detail {
     // Separate function to avoid C2712 (MSVC cannot mix __try with C++ objects
-    // requiring unwinding — the NS_PROFILE SectionProbe in ReadSnapshot conflicts).
+    // requiring unwinding — ReadSnapshot's local objects conflict).
     inline void ReadSnapshotBulk(ObjectSnapshot& snapshot, uintptr_t object, ObjectType type) {
         __try {
             snapshot.handle.index = *reinterpret_cast<const std::uint32_t*>(object + Offset::All::Index);
@@ -796,7 +843,6 @@ namespace detail {
 }
 
 inline ObjectSnapshot ReadSnapshot(uintptr_t object, ObjectType type = ObjectType::Unknown) {
-    NS_PROFILE("core.ReadSnapshot");
     ObjectSnapshot snapshot{};
     if (!Globals::IsValidPtr(object)) return snapshot;
 

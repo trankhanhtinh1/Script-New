@@ -379,6 +379,15 @@ inline bool ReadName(const SpellSlotRef& ref, char* out, int maxOut) {
     }
     out[0] = 0;
 
+    const uintptr_t input = SpellInput(ref);
+    if (Globals::IsValidPtr(input) &&
+        Globals::ReadRuntimeStringField(
+            input + Offset::SpellInputLayout::SpellNameKey,
+            out,
+            maxOut)) {
+        return true;
+    }
+
     const uintptr_t data = SpellData(ref);
     if (Globals::IsValidPtr(data) &&
         Globals::ReadRuntimeStringField(
@@ -397,7 +406,6 @@ inline bool ReadName(const SpellSlotRef& ref, char* out, int maxOut) {
         return true;
     }
 
-    const uintptr_t input = SpellInput(ref);
     return Globals::IsValidPtr(input) &&
            Globals::ReadRuntimeStringField(
                input + Offset::SpellInputLayout::SpellNameKey,

@@ -64,6 +64,12 @@ static bool Key(Menu* menu, const char* key, bool fallback = false) {
     return item ? item->Active : fallback;
 }
 
+static void RemoveKeyPermashow(Menu* menu, const char* key) {
+    if (auto* item = menu ? menu->Get<MenuKeyBind>(key) : nullptr) {
+        item->RemovePermashow();
+    }
+}
+
 static bool ShouldRunNow(DWORD& lastTick, DWORD intervalMs) {
     const DWORD now = GetTickCount();
     if (lastTick != 0 && now - lastTick < intervalMs) {
@@ -431,7 +437,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("ComboECheck", "Use E |Safe Check"));
     ComboMenu->Add(new MenuBool("ComboEWall", "Use E |Wall Check"));
     ComboMenu->Add(new MenuBool("useR", "Use R"));
-    ComboMenu->Add(new MenuKeyBind("SemiR", "Semi R", SDK::Keys::T, KeyBindType::Press));
+    ComboMenu->Add(new MenuKeyBind("SemiR", "Semi R", SDK::Keys::T, KeyBindType::Press))->Permashow();
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
     HarassMenu->Add(new MenuBool("useQ", "Use Q"));
@@ -1033,9 +1039,11 @@ static double EzrealQManualDamage(const AIBaseClient& target) {
     }
 
     static constexpr float qBase[] = { 0.0f, 20.0f, 45.0f, 70.0f, 95.0f, 120.0f };
+    static constexpr float qTotalAdRatio = 1.2999999523162842f;
+    static constexpr float qApRatio = 0.15000000596046448f;
     const int level = std::clamp(Q.Level(), 1, 5);
-    const float raw = qBase[level] + 1.3f * player.AD() + 0.15f * player.AP();
-    return player.CalculatePhysicalDamage(target, raw);
+    const float raw = qBase[level] + qTotalAdRatio * player.AD() + qApRatio * player.AP();
+    return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
 }
 
 static double QDamage(const AIBaseClient& target) {
@@ -1125,6 +1133,7 @@ static void OnUnload() {
     Orbwalker::OnAfterAttack -= &Orbwalker_OnAfterAttack;
     Events::hook.OnGapCloser -= &Gapcloser_OnGapcloser;
     Events::hook.OnBuffAdd -= &OnBuffAdd;
+    RemoveKeyPermashow(ComboMenu, "SemiR");
 
     Loaded = false;
 }

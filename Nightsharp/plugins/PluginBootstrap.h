@@ -10,6 +10,7 @@
 
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/EnsoulsharpOrbPlugin.h"
+#include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
 #include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
@@ -27,8 +28,10 @@
 #include "Champion/7UPAIO/7UPAIO.h"
 #include "Champion/KuroAIO/KuroAIO.h"
 #include "Champion/SharpShooterAIO/SharpShooterAIO.h"
+#include "Champion/ziblldev9898/ziblldev9898.h"
 #include "EzEvade/EzEvadePlugin.h"
 #include "KuroEvade/KuroEvadePlugin.h"
+#include "ZDEvade/ZDEvade.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
 #include "../DebugLog.h"
@@ -104,7 +107,13 @@ namespace PluginBootstrap {
         // Initialize default SDK Wrappers.
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
         ::SDK::SdkWrappers::Initialize();
-        PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        const int orbwalkerRegistryIdx = PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        // Load/Unload trên row "Orbwalker" giờ thật sự bật/tắt orbwalker SDK;
+        // OrbwalkerKuroPlugin cũng dùng chính runtime này để override nó.
+        PluginRegistry::BindRuntime(orbwalkerRegistryIdx,
+                                    nullptr,
+                                    &::SDK::SdkWrappers::ResumeSdkOrbwalkerRuntime,
+                                    &::SDK::SdkWrappers::SuspendSdkOrbwalkerRuntime);
         PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 #else
@@ -124,6 +133,7 @@ namespace PluginBootstrap {
 
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
+        PluginManager::Get().Register<OrbwalkerKuroPlugin>();
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
         PluginManager::Get().Register<PlayerBuffDebugPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();
@@ -147,8 +157,10 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<AIO7UPPlugin>();
         PluginManager::Get().Register<KuroAIOPlugin>();
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
+        PluginManager::Get().Register<Ziblldev9898Plugin>();
         PluginManager::Get().Register<EzEvadePlugin>();
         PluginManager::Get().Register<KuroEvadePlugin>();
+        PluginManager::Get().Register<ZDEvadePlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

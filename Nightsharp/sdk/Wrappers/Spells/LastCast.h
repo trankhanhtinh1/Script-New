@@ -6,6 +6,7 @@
 #include "../../Events/Events.h"
 
 #include <cstdint>
+#include <new>
 #include <unordered_map>
 
 namespace SDK {
@@ -14,6 +15,11 @@ class LastCast {
 public:
     static void Initialize() {
         if (Initialized()) {
+            return;
+        }
+
+        auto* spells = CastedSpells();
+        if (!spells) {
             return;
         }
 
@@ -29,15 +35,21 @@ public:
 
         Events::RemoveOnProcessCastSpell(&OnCastSpell);
         Events::RemoveOnDoCast(&AIHeroClient_OnDoCast);
-        CastedSpells().clear();
+        if (auto* spells = CastedSpells()) {
+            spells->clear();
+        }
         LastCastPacketSentStorage() = LastCastPacketSentEntry();
         Initialized() = false;
     }
 
     static LastCastedSpellEntry GetLastCastedSpell(const AIHeroClient& target) {
         Initialize();
-        const auto it = CastedSpells().find(static_cast<std::uint32_t>(target.NetworkId()));
-        return it != CastedSpells().end() ? it->second : LastCastedSpellEntry();
+        auto* spells = CastedSpells();
+        if (!spells) {
+            return LastCastedSpellEntry();
+        }
+        const auto it = spells->find(static_cast<std::uint32_t>(target.NetworkId()));
+        return it != spells->end() ? it->second : LastCastedSpellEntry();
     }
 
     static const LastCastPacketSentEntry& LastCastPacketSent() {
@@ -51,9 +63,13 @@ private:
         return initialized;
     }
 
-    static std::unordered_map<std::uint32_t, LastCastedSpellEntry>& CastedSpells() {
-        static std::unordered_map<std::uint32_t, LastCastedSpellEntry> castedSpells;
+    static std::unordered_map<std::uint32_t, LastCastedSpellEntry>*& CastedSpellsStorage() {
+        static auto* castedSpells = new(std::nothrow) std::unordered_map<std::uint32_t, LastCastedSpellEntry>();
         return castedSpells;
+    }
+
+    static std::unordered_map<std::uint32_t, LastCastedSpellEntry>* CastedSpells() {
+        return CastedSpellsStorage();
     }
 
     static LastCastPacketSentEntry& LastCastPacketSentStorage() {
@@ -72,7 +88,15 @@ private:
             return;
         }
 
-        CastedSpells()[args.Sender.NetworkId] = LastCastedSpellEntry(args);
+        auto* spells = CastedSpells();
+        if (!spells) {
+            return;
+        }
+
+        auto [it, inserted] = spells->try_emplace(args.Sender.NetworkId, LastCastedSpellEntry(args));
+        if (!inserted) {
+            it->second = LastCastedSpellEntry(args);
+        }
     }
 
     static void OnCastSpell(const Events::CastSpellEventArgs& args) {

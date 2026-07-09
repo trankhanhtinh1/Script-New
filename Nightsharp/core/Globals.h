@@ -226,6 +226,67 @@ namespace Globals {
         return ReadRiotString(nameAddr, out, maxOut);
     }
 
+    inline bool IsRuntimeStringChar(unsigned char ch) {
+        return ch >= 0x20 && ch <= 0x7E;
+    }
+
+    inline bool CopyRuntimeChars(uintptr_t src, size_t len, char* out, int maxOut) {
+        if (!out || maxOut <= 1 || len == 0 || len >= static_cast<size_t>(maxOut) ||
+            !IsValidPtr(src)) {
+            if (out && maxOut > 0) {
+                out[0] = 0;
+            }
+            return false;
+        }
+
+        __try {
+            for (size_t i = 0; i < len; ++i) {
+                const unsigned char ch =
+                    *reinterpret_cast<const unsigned char*>(src + i);
+                if (!IsRuntimeStringChar(ch)) {
+                    out[0] = 0;
+                    return false;
+                }
+                out[i] = static_cast<char>(ch);
+            }
+            out[len] = 0;
+            return true;
+        }
+        __except (1) {
+            out[0] = 0;
+            return false;
+        }
+    }
+
+    inline bool ReadCompactString(uintptr_t nameAddr, char* out, int maxOut) {
+        if (!out || maxOut <= 1) {
+            if (out && maxOut > 0) {
+                out[0] = 0;
+            }
+            return false;
+        }
+
+        if (!IsValidPtr(nameAddr)) {
+            out[0] = 0;
+            return false;
+        }
+
+        __try {
+            const uintptr_t ptr = *reinterpret_cast<const uintptr_t*>(nameAddr);
+            const int len = *reinterpret_cast<const int*>(nameAddr + 0x8);
+            const int capacity = *reinterpret_cast<const int*>(nameAddr + 0xC);
+            if (len <= 0 || len >= maxOut || capacity < len || capacity > 0x10000) {
+                out[0] = 0;
+                return false;
+            }
+            return CopyRuntimeChars(ptr, static_cast<size_t>(len), out, maxOut);
+        }
+        __except (1) {
+            out[0] = 0;
+            return false;
+        }
+    }
+
     inline bool ReadCString(uintptr_t strAddr, char* out, int maxOut) {
         if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
@@ -242,17 +303,22 @@ namespace Globals {
         __try {
             int count = 0;
             for (; count < (maxOut - 1); ++count) {
-                const char ch = *(reinterpret_cast<const char*>(strAddr) + count);
+                const unsigned char ch =
+                    *(reinterpret_cast<const unsigned char*>(strAddr) + count);
                 if (ch == 0) {
                     out[count] = 0;
                     return count > 0;
                 }
 
-                out[count] = ch;
+                if (!IsRuntimeStringChar(ch)) {
+                    out[0] = 0;
+                    return false;
+                }
+                out[count] = static_cast<char>(ch);
             }
 
-            out[maxOut - 1] = 0;
-            return true;
+            out[0] = 0;
+            return false;
         }
         __except (1) {
             out[0] = 0;
@@ -267,6 +333,10 @@ namespace Globals {
         out[0] = 0;
 
         if (ReadGameString(fieldAddr, out, maxOut)) {
+            return true;
+        }
+
+        if (ReadCompactString(fieldAddr, out, maxOut)) {
             return true;
         }
 

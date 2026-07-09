@@ -142,7 +142,7 @@ inline T GetUnitByNetworkId(int networkId) {
 }
 
 template <typename T>
-inline std::vector<T> Get() {
+inline std::vector<T> GetUncached() {
     if constexpr (std::is_same_v<T, AIHeroClient> ||
                   std::is_same_v<T, AIMinionClient> ||
                   std::is_same_v<T, AITurretClient> ||
@@ -151,6 +151,35 @@ inline std::vector<T> Get() {
     } else {
         return detail::EnumerateAllObjects<T>();
     }
+}
+
+// Per-thread, per-frame memo over the raw manager enumeration.
+//
+// Each GetUncached<T>() does a FULL native manager scan (EnumerateX into an
+// 8K/16K stack buffer) + per-object type inference + a heap vector allocation.
+// The prediction, collision, target-selection and champion combo paths all call
+// Get<T>() many times inside a single game frame (e.g. every skillshot
+// GetPrediction() runs collision which re-scans Get<AIMinionClient>() /
+// Get<AIHeroClient>()), so under a held combo this repeats the same full scan
+// dozens of times per frame — the dominant, uncached FPS cost.
+//
+// Keying on the game-simulation time (fixed within a frame, advances at the
+// frame boundary — the exact semantics the working Zed shadow cache relies on)
+// collapses all calls in one frame to a single scan while staying frame-fresh:
+// objects created/destroyed this frame are picked up next frame, matching
+// EnsoulSharp's per-frame object snapshot. thread_local so the game thread
+// (OnGameUpdate) and render thread (OnDraw) keep independent caches with no lock
+// and no data race. Still returns a copy, so callers may freely sort/mutate it.
+template <typename T>
+inline std::vector<T> Get() {
+    thread_local int s_frame = -1;   // game time is always >= 0, so -1 never aliases
+    thread_local std::vector<T> s_cache;
+    const int frame = static_cast<int>(CoreBuffs::ResolveGameTime() * 1000.0f);
+    if (s_frame != frame) {
+        s_frame = frame;
+        s_cache = GetUncached<T>();
+    }
+    return s_cache;
 }
 
 } // namespace SDK::ObjectManager

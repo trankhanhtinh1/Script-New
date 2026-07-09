@@ -6,8 +6,10 @@
 #include "../GameObjects/ObjectManager.h"
 #include "Logging.h"
 
+#include <Windows.h>
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -47,6 +49,78 @@ public:
             return false;
         }
 
+        // Per-frame memo. ComputeCheck runs up to ~18 HasBuff name-scans plus a
+        // ToLower(CharacterName) allocation per hero. Target selection re-checks
+        // the same hero many times per frame (every GetTargets call across the
+        // orbwalker + each champion spell in a combo tick), so this uncached scan
+        // is a major hold-combo FPS cost — EnsoulSharp cached the invuln result,
+        // the naive port did not. Only the default damage<0 query (target
+        // selection) is memoized; the rare damage-threshold variant is always
+        // computed live. Cached per (hero, damageType, ignoreShields) for the
+        // current GetTickCount window (~15 ms) — invulnerability state changes on
+        // game ticks, slower than that window, so there is no freshness loss.
+        // thread_local so the game/render threads never share the cache.
+        if (damage < 0.0f) {
+            struct Memo {
+                uintptr_t addr = 0;
+                uint32_t paramKey = 0;
+                DWORD tick = 0;
+                bool result = false;
+            };
+            static thread_local std::vector<Memo> memo;
+            const DWORD now = ::GetTickCount();
+            const uintptr_t addr = hero.Address();
+            const uint32_t paramKey =
+                (static_cast<uint32_t>(damageType) << 1) | (ignoreShields ? 1u : 0u);
+            for (auto& m : memo) {
+                if (m.addr == addr && m.paramKey == paramKey) {
+                    if (m.tick != now) {
+                        m.tick = now;
+                        m.result = ComputeCheck(hero, damageType, ignoreShields, damage);
+                    }
+                    return m.result;
+                }
+            }
+            const bool result = ComputeCheck(hero, damageType, ignoreShields, damage);
+            memo.push_back({ addr, paramKey, now, result });
+            return result;
+        }
+
+        return ComputeCheck(hero, damageType, ignoreShields, damage);
+    }
+
+    static void Deregister(const InvulnerableEntry& entry) {
+        auto& entries = Entries();
+        entries.erase(
+            std::remove_if(entries.begin(), entries.end(), [&](const InvulnerableEntry& current) {
+                return EqualsInsensitive(current.BuffName, entry.BuffName);
+            }),
+            entries.end());
+    }
+
+    static InvulnerableEntry* GetItem(const std::string& buffName) {
+        auto& entries = Entries();
+        const auto it = std::find_if(entries.begin(), entries.end(), [&](const InvulnerableEntry& entry) {
+            return EqualsInsensitive(entry.BuffName, buffName);
+        });
+        return it != entries.end() ? &(*it) : nullptr;
+    }
+
+    static void Register(const InvulnerableEntry& entry) {
+        if (entry.BuffName.empty() || GetItem(entry.BuffName)) {
+            return;
+        }
+        EntriesStorage().push_back(entry);
+    }
+
+private:
+    // The actual invulnerability scan (uncached). Callers go through Check(),
+    // which memoizes the default target-selection query per frame. Assumes the
+    // caller has already validated `hero`.
+    static bool ComputeCheck(const AIHeroClient& hero,
+                             DamageType damageType,
+                             bool ignoreShields,
+                             float damage) {
         constexpr int kBuffTypeInvulnerability = 18; // EnsoulSharp.BuffType.Invulnerability.
         if (CoreBuffs::HasBuffType(hero.Address(), kBuffTypeInvulnerability) || hero.IsInvulnerable()) {
             return true;
@@ -81,31 +155,6 @@ public:
         return false;
     }
 
-    static void Deregister(const InvulnerableEntry& entry) {
-        auto& entries = Entries();
-        entries.erase(
-            std::remove_if(entries.begin(), entries.end(), [&](const InvulnerableEntry& current) {
-                return EqualsInsensitive(current.BuffName, entry.BuffName);
-            }),
-            entries.end());
-    }
-
-    static InvulnerableEntry* GetItem(const std::string& buffName) {
-        auto& entries = Entries();
-        const auto it = std::find_if(entries.begin(), entries.end(), [&](const InvulnerableEntry& entry) {
-            return EqualsInsensitive(entry.BuffName, buffName);
-        });
-        return it != entries.end() ? &(*it) : nullptr;
-    }
-
-    static void Register(const InvulnerableEntry& entry) {
-        if (entry.BuffName.empty() || GetItem(entry.BuffName)) {
-            return;
-        }
-        EntriesStorage().push_back(entry);
-    }
-
-private:
     static std::vector<InvulnerableEntry>& EntriesStorage() {
         static std::vector<InvulnerableEntry> entries;
         return entries;

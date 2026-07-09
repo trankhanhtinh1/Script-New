@@ -564,16 +564,19 @@ inline bool SegmentIntersectsWindwall(const Vector3& start,
         const int level = GetWindWallLevel(emitter);
         const float wallWidth = widthBase + 50.0f * static_cast<float>(level) + extraRadius;
 
-        Vec2 wallDir = emitter.Direction().To2D();
+        // C# EnsoulSharp.SDK: Vector2(emitter.Orientation.M11, emitter.Orientation.M13)
+        // = Vector2(m[0][0], m[0][2]) — the wall's span direction directly.
+        const auto mat = emitter.Orientation();
+        Vec2 wallDir(mat.m[0][0], mat.m[0][2]);
         if (wallDir.LengthSqr() < 0.001f) {
-            // Fallback for builds where EffectEmitter.Direction is not filled:
-            // use a stable horizontal segment centered on the particle.
-            wallDir = Vec2(1.0f, 0.0f);
+            wallDir = emitter.Direction().To2D();
+            if (wallDir.LengthSqr() < 0.001f) {
+                wallDir = Vec2(1.0f, 0.0f);
+            } else {
+                wallDir = Vec2(-wallDir.y, wallDir.x).Normalized();
+            }
         } else {
-            // The legacy NightSharp code used the perpendicular of Direction
-            // for windwall span. Keep that behavior because EffectEmitter does
-            // not expose the DLL's Orientation.M11/M13 matrix.
-            wallDir = Vec2(-wallDir.y, wallDir.x).Normalized();
+            wallDir = wallDir.Normalized();
         }
 
         const Vec2 wallCenter = emitter.Position().To2D();

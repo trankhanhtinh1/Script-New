@@ -411,6 +411,37 @@ namespace detail {
         return nullptr;
     }
 
+    inline bool EqualsIgnoreCase(const std::string& left, const char* right) {
+        return right && SDK::Data::detail::EqualsIgnoreCase(left, right);
+    }
+
+    inline bool IsSpellNameAlias(const SDK::Data::SpellData& data,
+                                 const char* value) {
+        if (EqualsIgnoreCase(data.spellName, value)) {
+            return true;
+        }
+        for (const auto& extra : data.extraSpellNames) {
+            if (EqualsIgnoreCase(extra, value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline const std::string& PreferredMissileName(
+        const SDK::Data::SpellData& data) {
+        if (!data.missileName.empty()) {
+            return data.missileName;
+        }
+        if (!data.missileSpellName.empty()) {
+            return data.missileSpellName;
+        }
+        if (!data.extraMissileNames.empty()) {
+            return data.extraMissileNames.front();
+        }
+        return data.spellName;
+    }
+
     inline void CanonicalizeMissileNames(ObjectEventArgs& args) {
         const auto* data = ResolveMissileSpellData(args);
         if (!data || data->spellName.empty()) {
@@ -431,11 +462,14 @@ namespace detail {
                 static_cast<int>(sizeof(args.SpellName)),
                 fallback.c_str());
         }
-        if (!IsPlausibleIdentifier(args.MissileName)) {
+        const std::string& missileFallback = PreferredMissileName(*data);
+        if (!missileFallback.empty() &&
+            (!IsPlausibleIdentifier(args.MissileName) ||
+             IsSpellNameAlias(*data, args.MissileName))) {
             CopyText(
                 args.MissileName,
                 static_cast<int>(sizeof(args.MissileName)),
-                data->spellName.c_str());
+                missileFallback.c_str());
         }
     }
 
