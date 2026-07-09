@@ -27,7 +27,9 @@
 #include "Champion/7UPAIO/7UPAIO.h"
 #include "Champion/KuroAIO/KuroAIO.h"
 #include "Champion/SharpShooterAIO/SharpShooterAIO.h"
+#include "Champion/ziblldev9898/ziblldev9898.h"
 #include "EzEvade/EzEvadePlugin.h"
+#include "ZDEvade/ZDEvade.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
 #include "../DebugLog.h"
@@ -149,7 +151,9 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<AIO7UPPlugin>();
         PluginManager::Get().Register<KuroAIOPlugin>();
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
+        PluginManager::Get().Register<Ziblldev9898Plugin>();
         PluginManager::Get().Register<EzEvadePlugin>();
+        PluginManager::Get().Register<ZDEvadePlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

@@ -23,6 +23,7 @@
 // ============================================================================
 
 #include "../../../Core/Vector.h"
+#include "../../../Core/Globals.h"
 #include "../../Core/Objects.h"
 
 #include <cmath>
@@ -48,17 +49,32 @@ namespace SDK {
                 : X(xValue), Y(yValue) {}
         };
 
-        // Returns:
-        //   +1 : strictly inside polygon
-        //    0 : on polygon edge
-        //   -1 : outside polygon
-        // Same return contract as Clipper's PointInPolygon.
-        inline int PointInPolygon(const IntPoint& pt, const std::vector<IntPoint>& path) {
-            int result = 0;
-            const std::size_t cnt = path.size();
-            if (cnt < 3) {
-                return 0;
+        inline constexpr std::size_t kMaxPointInPolygonPoints = 8192;
+
+        inline bool IsReadablePathStorage(const std::vector<IntPoint>& path, std::size_t count) {
+            if (count < 3 || count > kMaxPointInPolygonPoints) {
+                return false;
             }
+
+            const IntPoint* data = path.data();
+            if (!data) {
+                return false;
+            }
+
+            constexpr std::size_t pointSize = sizeof(IntPoint);
+            if (count > (static_cast<std::size_t>(-1) / pointSize)) {
+                return false;
+            }
+
+            return Globals::IsReadablePtr(
+                reinterpret_cast<uintptr_t>(data),
+                count * pointSize);
+        }
+
+        inline int PointInPolygonUnchecked(const IntPoint& pt,
+                                           const std::vector<IntPoint>& path,
+                                           std::size_t cnt) {
+            int result = 0;
 
             IntPoint ip = path[0];
             for (std::size_t i = 1; i <= cnt; ++i) {
@@ -103,6 +119,25 @@ namespace SDK {
                 ip = ipNext;
             }
             return result;
+        }
+
+        // Returns:
+        //   +1 : strictly inside polygon
+        //    0 : on polygon edge
+        //   -1 : outside polygon
+        // Same return contract as Clipper's PointInPolygon.
+        inline int PointInPolygon(const IntPoint& pt, const std::vector<IntPoint>& path) {
+            const std::size_t cnt = path.size();
+            if (!IsReadablePathStorage(path, cnt)) {
+                return 0;
+            }
+
+            __try {
+                return PointInPolygonUnchecked(pt, path, cnt);
+            }
+            __except (1) {
+                return 0;
+            }
         }
 
     } // namespace Clipper

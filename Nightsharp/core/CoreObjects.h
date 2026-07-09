@@ -700,8 +700,24 @@ inline bool ReadMissileSpellDataName(uintptr_t spellData,
         return false;
     }
     out[0] = 0;
-    return Globals::IsValidPtr(spellData) &&
-           Globals::ReadRuntimeStringField(spellData + offset, out, outCount);
+    if (!Globals::IsValidPtr(spellData) ||
+        !Globals::ReadRuntimeStringField(spellData + offset, out, outCount)) {
+        return false;
+    }
+
+    int length = 0;
+    for (; out[length] && length < outCount; ++length) {
+        const unsigned char ch = static_cast<unsigned char>(out[length]);
+        if (ch < 0x20 || ch > 0x7E) {
+            out[0] = 0;
+            return false;
+        }
+    }
+    if (length < 2 || length >= outCount) {
+        out[0] = 0;
+        return false;
+    }
+    return true;
 }
 
 inline void ReadMissile(ObjectSnapshot& out, uintptr_t object) {
