@@ -23,6 +23,7 @@ struct EvadeSettings {
     bool ClickOnlyOnce = true;
 
     int EvadeMode = 2;
+    int CandidateBudget = 0;
     int SpellActivationTime = 400;
     float ExtraDelay = 30.0f;
     float ExtraDist = 10.0f;

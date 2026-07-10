@@ -265,6 +265,7 @@
     <ClInclude Include="Plugins\Champion\ziblldev9898\Locke.h" />
     <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h" />
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h" />
+    <ClInclude Include="Plugins\Core\KuroCombatCoordinator.h" />
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\Orbwalker.h" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerActions.inl" />

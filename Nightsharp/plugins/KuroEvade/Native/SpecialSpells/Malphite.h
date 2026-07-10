@@ -6,7 +6,8 @@ namespace Plugins::KuroEvade::SpecialSpells {
 
 struct Malphite {
     static bool ProcessCast(const CastContext& context, ProcessResult& result) {
-        if (!EqualsSpell(context.Source, "UFSlash")) {
+        if (!EqualsSpell(context.Source, "UFSlash") &&
+            !EqualsSpell(context.Source, "MalphiteR")) {
             return false;
         }
 

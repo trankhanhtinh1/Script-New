@@ -11,6 +11,7 @@ struct Lucian {
         }
 
         result.Data.sdk.Delay = std::max(250, 400 - (std::max(1, context.Caster.Level()) - 1) * 10);
+        result.Data.sdk.Range = 900;
         return true;
     }
 };

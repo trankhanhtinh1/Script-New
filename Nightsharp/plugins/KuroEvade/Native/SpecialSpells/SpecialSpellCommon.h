@@ -124,6 +124,22 @@ inline bool ProjectOnSegment(const Vec2& point,
 inline void RefreshLineGeometry(SDK::Skillshot& skillshot) {
     skillshot.Direction = (skillshot.EndPosition - skillshot.StartPosition).Normalized();
 
+    if (auto* missileLine = dynamic_cast<SDK::SkillshotMissileLine*>(&skillshot)) {
+        if (!missileLine->Rectangle) {
+            missileLine->Rectangle = std::make_unique<SDK::RectanglePoly>(
+                skillshot.StartPosition,
+                skillshot.EndPosition,
+                static_cast<float>(skillshot.SData.Radius));
+        }
+
+        missileLine->Rectangle->Start = missileLine->GetMissilePosition(0);
+        missileLine->Rectangle->End = skillshot.EndPosition;
+        missileLine->Rectangle->Width = static_cast<float>(skillshot.SData.Radius);
+        missileLine->Rectangle->UpdatePolygon();
+        missileLine->Path = missileLine->Rectangle->ToClipperPath();
+        return;
+    }
+
     auto* line = dynamic_cast<SDK::SkillshotLine*>(&skillshot);
     if (!line) {
         return;
@@ -145,6 +161,20 @@ inline void RefreshLineGeometry(SDK::Skillshot& skillshot) {
 inline void RefreshSkillshotGeometry(SDK::Skillshot& skillshot) {
     skillshot.Direction = (skillshot.EndPosition - skillshot.StartPosition).Normalized();
 
+    if (auto* missileCircle = dynamic_cast<SDK::SkillshotMissileCircle*>(&skillshot)) {
+        if (!missileCircle->Circle) {
+            missileCircle->Circle = std::make_unique<SDK::CirclePoly>(
+                skillshot.EndPosition,
+                static_cast<float>(skillshot.SData.Radius),
+                20);
+        }
+        missileCircle->Circle->Center = skillshot.EndPosition;
+        missileCircle->Circle->Radius = static_cast<float>(skillshot.SData.Radius);
+        missileCircle->Circle->UpdatePolygon();
+        missileCircle->Path = missileCircle->Circle->ToClipperPath();
+        return;
+    }
+
     if (auto* circle = dynamic_cast<SDK::SkillshotCircle*>(&skillshot)) {
         if (!circle->Circle) {
             circle->Circle = std::make_unique<SDK::CirclePoly>(
@@ -156,6 +186,25 @@ inline void RefreshSkillshotGeometry(SDK::Skillshot& skillshot) {
         circle->Circle->Radius = static_cast<float>(skillshot.SData.Radius);
         circle->Circle->UpdatePolygon();
         circle->Path = circle->Circle->ToClipperPath();
+        return;
+    }
+
+    if (auto* missileCone = dynamic_cast<SDK::SkillshotMissileCone*>(&skillshot)) {
+        if (!missileCone->Sector) {
+            missileCone->Sector = std::make_unique<SDK::SectorPoly>(
+                skillshot.StartPosition,
+                skillshot.EndPosition,
+                static_cast<float>(skillshot.SData.Angle) * 3.14159265358979323846f / 180.0f,
+                static_cast<float>(skillshot.SData.Range),
+                20);
+        }
+        missileCone->Sector->Center = skillshot.StartPosition;
+        missileCone->Sector->Direction = skillshot.Direction;
+        missileCone->Sector->Angle =
+            static_cast<float>(skillshot.SData.Angle) * 3.14159265358979323846f / 180.0f;
+        missileCone->Sector->Radius = static_cast<float>(skillshot.SData.Range);
+        missileCone->Sector->UpdatePolygon();
+        missileCone->Path = missileCone->Sector->ToClipperPath();
         return;
     }
 

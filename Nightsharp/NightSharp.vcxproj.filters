@@ -656,6 +656,9 @@
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroCombatCoordinator.h">
+      <Filter>Plugins\Core</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>

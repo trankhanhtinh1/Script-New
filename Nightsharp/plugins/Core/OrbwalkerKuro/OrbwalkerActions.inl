@@ -4,12 +4,30 @@ namespace OrbwalkerKuro {
 
 using namespace ::SDK;
 
+inline bool OrbwalkerBase::EvadeOwnsActions(int now) const {
+    return menu_.CoordinateKuroEvade() &&
+        Plugins::KuroCombatCoordination::Coordinator::EvadeOwnsActions(now);
+}
+
+inline bool OrbwalkerBase::EvadeBlocksMovement(int now) const {
+    return menu_.CoordinateKuroEvade() &&
+        Plugins::KuroCombatCoordination::Coordinator::BlocksMovement(
+            now, menu_.EvadeHandoffGrace());
+}
+
+inline bool OrbwalkerBase::EvadeBlocksAttack(int now) const {
+    return menu_.CoordinateKuroEvade() &&
+        Plugins::KuroCombatCoordination::Coordinator::BlocksNewAttacks(
+            now, menu_.EvadeHandoffGrace());
+}
+
 inline bool OrbwalkerBase::CanAttack() { return CanAttack(0.0f); }
 
 inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     ExpirePendingAttack();
     const int now = Tick();
-    if (!context_.attackEnabled || now < context_.allPauseTick || now < context_.attackPauseTick) {
+    if (EvadeBlocksAttack(now) || !context_.attackEnabled ||
+        now < context_.allPauseTick || now < context_.attackPauseTick) {
         return false;
     }
     if (context_.pendingAttack) {
@@ -92,7 +110,8 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     (void)disableMissileCheck;
     ExpirePendingAttack();
     const int now = Tick();
-    if (!context_.moveEnabled || now < context_.allPauseTick || now < context_.movePauseTick) {
+    if (EvadeBlocksMovement(now) || !context_.moveEnabled ||
+        now < context_.allPauseTick || now < context_.movePauseTick) {
         return false;
     }
 
@@ -218,11 +237,11 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
 }
 
 inline void OrbwalkerBase::Move(const Vector3& position) {
-    if (!context_.moveEnabled) {
+    const int now = Tick();
+    if (!context_.moveEnabled || EvadeBlocksMovement(now)) {
         return;
     }
 
-    const int now = Tick();
     if (context_.lastMoveOrderTick > 0 &&
         now - context_.lastMoveOrderTick >= 0 &&
         now - context_.lastMoveOrderTick < kMoveDelayMs) {

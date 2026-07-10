@@ -7,7 +7,9 @@
 #include "../../../SDK/SDK.h"
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -20,6 +22,20 @@ public:
 
     explicit EvadeHelper(const EvadeSettings& settings)
         : m_settings(settings) {
+        if (m_settings.PreventEnemy) {
+            for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
+                if (enemy.IsValid() && !enemy.IsDead() && enemy.IsVisible()) {
+                    m_enemyPositions.push_back(enemy.ServerPosition().To2D());
+                }
+            }
+        }
+        if (m_settings.PreventTower) {
+            for (const auto& turret : SDK::GameObjects::EnemyTurrets()) {
+                if (turret.IsValid() && !turret.IsDead()) {
+                    m_turretPositions.push_back(turret.Position().To2D());
+                }
+            }
+        }
     }
 
     bool IsEndangered(const SDK::AIHeroClient& /*player*/, const Vec2& heroPos,
@@ -47,7 +63,7 @@ public:
 
     bool FindBestPosition(const SDK::AIHeroClient& player, const Vec2& heroPos,
                           float boundingRadius, const SkillshotList& skillshots,
-                          Vec2& out) const {
+                          Vec2& out, bool allowDangerousFallback = false) const {
         const float speed = std::max(50.0f, player.MoveSpeed());
         const float delayMs = m_settings.ExtraDelay +
             static_cast<float>(SDK::Game::Ping()) +
@@ -56,33 +72,22 @@ public:
         const Vec2 mousePos = SDK::Game::CursorPos().To2D();
         const float planeY = player.ServerPosition().y;
         const bool fastSort = UseFastSort(LowestHitTime(heroPos, boundingRadius, skillshots));
-        const int maxPosToCheck = m_settings.HigherPrecision ? 150 : 50;
-        const int posRadius = m_settings.HigherPrecision ? 25 : 50;
+        const int maxPosToCheck = m_settings.CandidateBudget > 0
+            ? std::clamp(m_settings.CandidateBudget, 16, 200)
+            : (m_settings.HigherPrecision ? 150 : 50);
+        const int posRadius = maxPosToCheck <= 32
+            ? 60
+            : (m_settings.HigherPrecision ? 25 : 50);
 
         std::vector<Vec2> positions;
         positions.reserve(static_cast<std::size_t>(maxPosToCheck) + 40);
+        AddGradientPositions(heroPos, boundingRadius, skillshots, positions);
         if (m_settings.KurokamiPosition) {
             AddKurokamiPositions(heroPos, boundingRadius, skillshots, positions);
         }
         AddFastestPositions(heroPos, boundingRadius, skillshots, positions);
-
-        int posChecked = 0;
-        int radiusIndex = 0;
-
-        while (posChecked < maxPosToCheck) {
-            radiusIndex++;
-            const int curRadius = radiusIndex * (2 * posRadius);
-            const int circleChecks = std::max(1,
-                static_cast<int>(std::ceil((2.0 * kPi * curRadius) / (2.0 * posRadius))));
-
-            for (int i = 1; i < circleChecks && posChecked < maxPosToCheck; ++i) {
-                posChecked++;
-                const double rad = (2.0 * kPi / (circleChecks - 1)) * i;
-                positions.emplace_back(
-                    std::floor(heroPos.x + curRadius * static_cast<float>(std::cos(rad))),
-                    std::floor(heroPos.y + curRadius * static_cast<float>(std::sin(rad))));
-            }
-        }
+        AddWallDetourPositions(heroPos, mousePos, planeY, boundingRadius, positions);
+        AddRadialPositions(heroPos, maxPosToCheck, posRadius, positions);
 
         std::vector<PositionInfo> scored;
         scored.reserve(positions.size());
@@ -114,6 +119,15 @@ public:
                 return true;
             }
         }
+
+        if (allowDangerousFallback) {
+            for (const PositionInfo& info : scored) {
+                if (!info.wall) {
+                    out = info.position;
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
@@ -122,9 +136,8 @@ public:
     }
 
     bool ShouldConsiderSpell(const SDK::Skillshot& spell) const {
-        if (spell.HasExpired()) {
-            return false;
-        }
+        // SpellDetector owns lifetime.  The only expired objects it deliberately
+        // keeps are persistent trap zones, which must remain dodgeable.
         if (m_settings.DodgeDangerousOnly && DangerValue(spell) < 3) {
             return false;
         }
@@ -158,16 +171,87 @@ public:
         return lowest;
     }
 
+    bool WillBeHitBefore(const Vec2& heroPos, float boundingRadius,
+                         const SkillshotList& skillshots, float waitMs) const {
+        if (waitMs <= 0.0f) {
+            return false;
+        }
+        const float checkRadius = boundingRadius + m_settings.ExtraSpellRadius;
+        for (const auto& s : skillshots) {
+            if (!s || !ShouldConsiderSpell(*s) ||
+                !InSkillShot(*s, heroPos, checkRadius)) {
+                continue;
+            }
+            if (SpellHitTime(*s, heroPos) <= waitMs) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool IsMovingLineSpell(const SDK::Skillshot& spell) {
+        return SDK::IsLineSpellType(spell.SData.SpellType) &&
+               spell.SData.MissileSpeed > 0 &&
+               spell.SData.MissileSpeed != INT_MAX;
+    }
+
+    static bool IsMovingCircleSpell(const SDK::Skillshot& spell) {
+        return SDK::IsCircleSpellType(spell.SData.SpellType) &&
+               spell.SData.MissileSpeed > 0 &&
+               spell.SData.MissileSpeed != INT_MAX;
+    }
+
+    static Vec2 CurrentLineStart(const SDK::Skillshot& spell, int afterTime = 0) {
+        if (IsMovingLineSpell(spell)) {
+            if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(&spell)) {
+                return ClampToTravelSegment(
+                    missile->GetMissilePosition(afterTime),
+                    spell.StartPosition,
+                    spell.EndPosition);
+            }
+        }
+        return spell.StartPosition;
+    }
+
     static float SpellHitTime(const SDK::Skillshot& spell, const Vec2& pos) {
         const int now = SDK::Variables::TickCount();
-        if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(&spell)) {
+        if (IsMovingLineSpell(spell)) {
             const float speed = std::max(1.0f, static_cast<float>(spell.SData.MissileSpeed));
-            const Vec2 head = missile->GetMissilePosition(0);
-            const float dist = head.Distance(pos);
-            return (dist / speed) * 1000.0f;
+            const int latency = SDK::Game::Ping();
+            const Vec2 head = CurrentLineStart(spell, latency);
+            Vec2 direction = spell.Direction;
+            if (direction.IsZero()) {
+                direction = (spell.EndPosition - spell.StartPosition).Normalized();
+            }
+            const float longitudinal = std::max(0.0f, (pos - head).Dot(direction));
+            const float launchRemaining = std::max(
+                0.0f,
+                static_cast<float>(spell.StartTime + spell.SData.Delay - now - latency));
+            return launchRemaining + (longitudinal / speed) * 1000.0f;
         }
 
-        return static_cast<float>(spell.StartTime + spell.SData.Delay - now);
+        if (IsMovingCircleSpell(spell)) {
+            const int latency = SDK::Game::Ping();
+            const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(&spell);
+            const Vec2 head = missile
+                ? ClampToTravelSegment(missile->GetMissilePosition(latency),
+                                       spell.StartPosition, spell.EndPosition)
+                : spell.StartPosition;
+            Vec2 direction = spell.Direction;
+            if (direction.IsZero()) {
+                direction = (spell.EndPosition - spell.StartPosition).Normalized();
+            }
+            const float remaining = std::max(
+                0.0f, (spell.EndPosition - head).Dot(direction));
+            const float launchRemaining = std::max(
+                0.0f,
+                static_cast<float>(spell.StartTime + spell.SData.Delay - now - latency));
+            return launchRemaining + 1000.0f * remaining /
+                std::max(1.0f, static_cast<float>(spell.SData.MissileSpeed));
+        }
+
+        return std::max(0.0f, static_cast<float>(
+            spell.StartTime + spell.SData.Delay - now - SDK::Game::Ping()));
     }
 
     static bool InSkillShot(const SDK::Skillshot& spell, const Vec2& pos, float radius) {
@@ -175,7 +259,7 @@ public:
         const float spellRadius = static_cast<float>(spell.SData.Radius);
 
         if (SDK::IsLineSpellType(type)) {
-            const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(pos, spell.StartPosition, spell.EndPosition);
+            const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(pos, CurrentLineStart(spell), spell.EndPosition);
             return proj.IsOnSegment && proj.SegmentPoint.Distance(pos) <= spellRadius + radius;
         }
         if (SDK::IsCircleSpellType(type)) {
@@ -185,20 +269,71 @@ public:
     }
 
     bool CheckMoveToDirection(const Vec2& from, const Vec2& to, float boundingRadius,
-                              const SkillshotList& skillshots) const {
+                              const SkillshotList& skillshots, float moveSpeed,
+                              float delayMs) const {
         const float dist = from.Distance(to);
         if (dist < 1.0f) {
             return false;
         }
-        const int steps = std::max(2, static_cast<int>(dist / 50.0f));
-        for (int i = 1; i <= steps; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(steps);
-            const Vec2 point = from + (to - from) * t;
-            for (const auto& spell : skillshots) {
-                if (spell && ShouldConsiderSpell(*spell) && InSkillShot(*spell, point, boundingRadius)) {
-                    return true;
-                }
+        for (const auto& spell : skillshots) {
+            if (spell && ShouldConsiderSpell(*spell) &&
+                PathCollidesWithSpell(*spell, from, to, boundingRadius,
+                                      moveSpeed, delayMs, m_settings.ExtraSpellRadius)) {
+                return true;
             }
+        }
+        return false;
+    }
+
+    bool CheckMovePath(const std::vector<Vec3>& path, float delayMs,
+                       const Vec2& heroPos, float boundingRadius,
+                       const SkillshotList& skillshots, float moveSpeed) const {
+        Vec2 segmentStart = heroPos;
+        float segmentDelayMs = std::max(0.0f, delayMs);
+        const float speed = std::max(50.0f, moveSpeed);
+
+        for (const Vec3& waypoint3 : path) {
+            const Vec2 waypoint = waypoint3.To2D();
+            const float length = segmentStart.Distance(waypoint);
+            if (length < 1.0f) {
+                continue;
+            }
+            if (CheckMoveToDirection(segmentStart, waypoint, boundingRadius,
+                                     skillshots, speed, segmentDelayMs)) {
+                return true;
+            }
+            segmentDelayMs += 1000.0f * length / speed;
+            segmentStart = waypoint;
+        }
+        return false;
+    }
+
+    bool SkillshotAffectsPath(const SDK::Skillshot& spell,
+                              const std::vector<Vec3>& path,
+                              float delayMs,
+                              const Vec2& heroPos,
+                              float boundingRadius,
+                              float moveSpeed) const {
+        if (!ShouldConsiderSpell(spell)) {
+            return false;
+        }
+
+        Vec2 segmentStart = heroPos;
+        float segmentDelayMs = std::max(0.0f, delayMs);
+        const float speed = std::max(50.0f, moveSpeed);
+        for (const Vec3& waypoint3 : path) {
+            const Vec2 waypoint = waypoint3.To2D();
+            const float length = segmentStart.Distance(waypoint);
+            if (length < 1.0f) {
+                continue;
+            }
+            if (PathCollidesWithSpell(
+                    spell, segmentStart, waypoint, boundingRadius,
+                    speed, segmentDelayMs, m_settings.ExtraSpellRadius)) {
+                return true;
+            }
+            segmentDelayMs += 1000.0f * length / speed;
+            segmentStart = waypoint;
         }
         return false;
     }
@@ -206,16 +341,9 @@ public:
     bool CheckMovePath(const Vec2& movePos, float delayMs,
                        const Vec2& heroPos, float boundingRadius,
                        const SkillshotList& skillshots, float moveSpeed) const {
-        if (CheckMoveToDirection(heroPos, movePos, boundingRadius, skillshots)) {
+        if (CheckMoveToDirection(heroPos, movePos, boundingRadius,
+                                 skillshots, moveSpeed, delayMs)) {
             return true;
-        }
-        for (const auto& s : skillshots) {
-            if (s && ShouldConsiderSpell(*s)) {
-                if (InSkillShot(*s, movePos, boundingRadius) ||
-                    PredictSpellCollision(*s, movePos, moveSpeed, delayMs, heroPos, boundingRadius, 0.0f)) {
-                    return true;
-                }
-            }
         }
         return false;
     }
@@ -230,33 +358,22 @@ public:
         const float extraDist = m_settings.ExtraDist;
         const float planeY = player.ServerPosition().y;
         const bool fastSort = UseFastSort(LowestHitTime(heroPos, boundingRadius, skillshots));
-        const int maxPosToCheck = m_settings.HigherPrecision ? 150 : 50;
-        const int posRadius = m_settings.HigherPrecision ? 25 : 50;
+        const int maxPosToCheck = m_settings.CandidateBudget > 0
+            ? std::clamp(m_settings.CandidateBudget, 16, 200)
+            : (m_settings.HigherPrecision ? 150 : 50);
+        const int posRadius = maxPosToCheck <= 32
+            ? 60
+            : (m_settings.HigherPrecision ? 25 : 50);
 
         std::vector<Vec2> positions;
         positions.reserve(static_cast<std::size_t>(maxPosToCheck) + 40);
+        AddGradientPositions(heroPos, boundingRadius, skillshots, positions);
         if (m_settings.KurokamiPosition) {
             AddKurokamiPositions(heroPos, boundingRadius, skillshots, positions);
         }
         AddFastestPositions(heroPos, boundingRadius, skillshots, positions);
-
-        int posChecked = 0;
-        int radiusIndex = 0;
-
-        while (posChecked < maxPosToCheck) {
-            radiusIndex++;
-            const int curRadius = radiusIndex * (2 * posRadius);
-            const int circleChecks = std::max(1,
-                static_cast<int>(std::ceil((2.0 * kPi * curRadius) / (2.0 * posRadius))));
-
-            for (int i = 1; i < circleChecks && posChecked < maxPosToCheck; ++i) {
-                posChecked++;
-                const double rad = (2.0 * kPi / (circleChecks - 1)) * i;
-                positions.emplace_back(
-                    std::floor(heroPos.x + curRadius * static_cast<float>(std::cos(rad))),
-                    std::floor(heroPos.y + curRadius * static_cast<float>(std::sin(rad))));
-            }
-        }
+        AddWallDetourPositions(heroPos, targetPos, planeY, boundingRadius, positions);
+        AddRadialPositions(heroPos, maxPosToCheck, posRadius, positions);
 
         std::vector<PositionInfo> scored;
         scored.reserve(positions.size());
@@ -294,6 +411,8 @@ public:
 private:
     static constexpr double kPi = 3.14159265358979323846;
     const EvadeSettings& m_settings;
+    std::vector<Vec2> m_enemyPositions;
+    std::vector<Vec2> m_turretPositions;
 
     static bool InPolygon(const SDK::Skillshot& spell, const Vec2& pos, float radius) {
         if (spell.Path.empty()) {
@@ -319,53 +438,298 @@ private:
         return false;
     }
 
+    static float PointSegmentDistance(const Vec2& point, const Vec2& start, const Vec2& end) {
+        const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(point, start, end);
+        return point.Distance(proj.SegmentPoint);
+    }
+
+    static float Cross(const Vec2& a, const Vec2& b, const Vec2& c) {
+        return (b - a).Cross(c - a);
+    }
+
+    static bool OnSegment(const Vec2& a, const Vec2& b, const Vec2& p) {
+        constexpr float eps = 0.001f;
+        return std::min(a.x, b.x) - eps <= p.x && p.x <= std::max(a.x, b.x) + eps &&
+               std::min(a.y, b.y) - eps <= p.y && p.y <= std::max(a.y, b.y) + eps &&
+               std::fabs(Cross(a, b, p)) <= eps;
+    }
+
+    static bool SegmentsIntersect(const Vec2& a, const Vec2& b,
+                                  const Vec2& c, const Vec2& d) {
+        const float c1 = Cross(a, b, c);
+        const float c2 = Cross(a, b, d);
+        const float c3 = Cross(c, d, a);
+        const float c4 = Cross(c, d, b);
+        if (((c1 > 0.0f && c2 < 0.0f) || (c1 < 0.0f && c2 > 0.0f)) &&
+            ((c3 > 0.0f && c4 < 0.0f) || (c3 < 0.0f && c4 > 0.0f))) {
+            return true;
+        }
+        return OnSegment(a, b, c) || OnSegment(a, b, d) ||
+               OnSegment(c, d, a) || OnSegment(c, d, b);
+    }
+
+    static float SegmentDistance(const Vec2& a, const Vec2& b,
+                                 const Vec2& c, const Vec2& d) {
+        if (SegmentsIntersect(a, b, c, d)) {
+            return 0.0f;
+        }
+        return std::min(
+            std::min(PointSegmentDistance(a, c, d), PointSegmentDistance(b, c, d)),
+            std::min(PointSegmentDistance(c, a, b), PointSegmentDistance(d, a, b)));
+    }
+
+    static Vec2 ClampToTravelSegment(const Vec2& point,
+                                     const Vec2& start,
+                                     const Vec2& end) {
+        const Vec2 delta = end - start;
+        const float lengthSqr = delta.LengthSqr();
+        if (lengthSqr <= 0.0001f) {
+            return start;
+        }
+        const float t = std::clamp((point - start).Dot(delta) / lengthSqr, 0.0f, 1.0f);
+        return start + delta * t;
+    }
+
+    static Vec2 HeroPositionAt(const Vec2& from,
+                               const Vec2& to,
+                               float speed,
+                               float delaySeconds,
+                               float timeSeconds) {
+        if (timeSeconds <= delaySeconds) {
+            return from;
+        }
+        const Vec2 delta = to - from;
+        const float distance = delta.Length();
+        if (distance <= 0.0001f) {
+            return from;
+        }
+        const float travelled = speed * (timeSeconds - delaySeconds);
+        if (travelled >= distance) {
+            return to;
+        }
+        return from + delta * (travelled / distance);
+    }
+
+    static float MinRelativeDistanceSqr(const Vec2& heroStart,
+                                        const Vec2& heroVelocity,
+                                        const Vec2& spellStart,
+                                        const Vec2& spellVelocity,
+                                        float durationSeconds) {
+        const Vec2 relativeStart = heroStart - spellStart;
+        const Vec2 relativeVelocity = heroVelocity - spellVelocity;
+        const float velocitySqr = relativeVelocity.LengthSqr();
+        float time = 0.0f;
+        if (velocitySqr > 0.00000001f) {
+            // d/dt |r + vt|^2 = 2(r + vt).v = 0.
+            time = std::clamp(
+                -relativeStart.Dot(relativeVelocity) / velocitySqr,
+                0.0f,
+                std::max(0.0f, durationSeconds));
+        }
+        return (relativeStart + relativeVelocity * time).LengthSqr();
+    }
+
+    static float PointPolygonDistance(const SDK::Skillshot& spell, const Vec2& point) {
+        if (spell.Path.empty()) {
+            return FLT_MAX;
+        }
+        if (SDK::Clipper::PointInPolygon(
+                SDK::Clipper::IntPoint(point.x, point.y), spell.Path) == 1) {
+            return 0.0f;
+        }
+
+        float best = FLT_MAX;
+        for (std::size_t i = 0; i < spell.Path.size(); ++i) {
+            const auto& a = spell.Path[i];
+            const auto& b = spell.Path[(i + 1) % spell.Path.size()];
+            best = std::min(best, PointSegmentDistance(
+                point,
+                Vec2(static_cast<float>(a.X), static_cast<float>(a.Y)),
+                Vec2(static_cast<float>(b.X), static_cast<float>(b.Y))));
+        }
+        return best;
+    }
+
+    static float SegmentPolygonDistance(const SDK::Skillshot& spell,
+                                        const Vec2& from,
+                                        const Vec2& to) {
+        if (spell.Path.empty()) {
+            return FLT_MAX;
+        }
+        if (PointPolygonDistance(spell, from) == 0.0f ||
+            PointPolygonDistance(spell, to) == 0.0f) {
+            return 0.0f;
+        }
+
+        float best = FLT_MAX;
+        for (std::size_t i = 0; i < spell.Path.size(); ++i) {
+            const auto& a = spell.Path[i];
+            const auto& b = spell.Path[(i + 1) % spell.Path.size()];
+            best = std::min(best, SegmentDistance(
+                from, to,
+                Vec2(static_cast<float>(a.X), static_cast<float>(a.Y)),
+                Vec2(static_cast<float>(b.X), static_cast<float>(b.Y))));
+        }
+        return best;
+    }
+
+    static float MovingLineClearance(const SDK::Skillshot& spell,
+                                     const Vec2& from,
+                                     const Vec2& to,
+                                     float heroSpeed,
+                                     float delayMs,
+                                     float checkRadius) {
+        Vec2 direction = spell.Direction;
+        if (direction.IsZero()) {
+            direction = (spell.EndPosition - spell.StartPosition).Normalized();
+        }
+        if (direction.IsZero()) {
+            return FLT_MAX;
+        }
+
+        const float missileSpeed = std::max(
+            1.0f, static_cast<float>(spell.SData.MissileSpeed));
+        const int now = SDK::Variables::TickCount();
+        const float launchSeconds = std::max(
+            0.0f,
+            static_cast<float>(spell.StartTime + spell.SData.Delay - now) / 1000.0f);
+        const Vec2 missileAtActiveStart = launchSeconds > 0.0f
+            ? spell.StartPosition
+            : CurrentLineStart(spell);
+        const float remainingDistance = std::max(
+            0.0f, (spell.EndPosition - missileAtActiveStart).Dot(direction));
+        if (remainingDistance <= 0.01f) {
+            return FLT_MAX;
+        }
+
+        const float activeStart = launchSeconds;
+        const float activeEnd = activeStart + remainingDistance / missileSpeed;
+        const float heroDelay = std::max(0.0f, delayMs) / 1000.0f;
+        const float walkDistance = from.Distance(to);
+        const float heroArrival = heroDelay + walkDistance / std::max(50.0f, heroSpeed);
+
+        std::array<float, 4> breakpoints = {
+            activeStart,
+            activeEnd,
+            std::clamp(heroDelay, activeStart, activeEnd),
+            std::clamp(heroArrival, activeStart, activeEnd),
+        };
+        std::sort(breakpoints.begin(), breakpoints.end());
+
+        float minDistanceSqr = FLT_MAX;
+        const Vec2 heroDirection = (to - from).Normalized();
+        const Vec2 missileVelocity = direction * missileSpeed;
+        for (std::size_t i = 0; i + 1 < breakpoints.size(); ++i) {
+            const float begin = breakpoints[i];
+            const float end = breakpoints[i + 1];
+            if (end < begin) {
+                continue;
+            }
+
+            const float midpoint = (begin + end) * 0.5f;
+            const Vec2 heroVelocity =
+                midpoint > heroDelay && midpoint < heroArrival
+                    ? heroDirection * heroSpeed
+                    : Vec2();
+            const Vec2 heroStart = HeroPositionAt(
+                from, to, heroSpeed, heroDelay, begin);
+            const Vec2 missileStart = missileAtActiveStart +
+                missileVelocity * (begin - activeStart);
+            minDistanceSqr = std::min(
+                minDistanceSqr,
+                MinRelativeDistanceSqr(heroStart, heroVelocity,
+                                       missileStart, missileVelocity,
+                                       end - begin));
+        }
+
+        return std::sqrt(std::max(0.0f, minDistanceSqr)) - checkRadius;
+    }
+
+    static float TimedGeometryClearance(const SDK::Skillshot& spell,
+                                        const Vec2& from,
+                                        const Vec2& to,
+                                        float heroSpeed,
+                                        float delayMs,
+                                        float boundingRadius,
+                                        float extraDist) {
+        const float heroDelay = std::max(0.0f, delayMs) / 1000.0f;
+        const bool persistent = spell.HasExpired();
+
+        if (persistent) {
+            if (SDK::IsLineSpellType(spell.SData.SpellType)) {
+                return SegmentDistance(from, to, spell.StartPosition, spell.EndPosition) -
+                    (static_cast<float>(spell.SData.Radius) + boundingRadius + extraDist);
+            }
+            if (SDK::IsCircleSpellType(spell.SData.SpellType)) {
+                return PointSegmentDistance(spell.EndPosition, from, to) -
+                    (static_cast<float>(spell.SData.Radius) + boundingRadius + extraDist);
+            }
+            return SegmentPolygonDistance(spell, from, to) - boundingRadius - extraDist;
+        }
+
+        float impactSeconds = std::max(
+            0.0f,
+            static_cast<float>(spell.StartTime + spell.SData.Delay -
+                               SDK::Variables::TickCount()) / 1000.0f);
+        if (IsMovingCircleSpell(spell)) {
+            Vec2 direction = spell.Direction;
+            if (direction.IsZero()) {
+                direction = (spell.EndPosition - spell.StartPosition).Normalized();
+            }
+            const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(&spell);
+            const Vec2 missilePosition = impactSeconds > 0.0f || !missile
+                ? spell.StartPosition
+                : ClampToTravelSegment(missile->GetMissilePosition(0),
+                                       spell.StartPosition, spell.EndPosition);
+            const float remaining = std::max(
+                0.0f, (spell.EndPosition - missilePosition).Dot(direction));
+            impactSeconds += remaining /
+                std::max(1.0f, static_cast<float>(spell.SData.MissileSpeed));
+        }
+
+        const Vec2 heroAtImpact = HeroPositionAt(
+            from, to, std::max(50.0f, heroSpeed), heroDelay, impactSeconds);
+        if (SDK::IsLineSpellType(spell.SData.SpellType)) {
+            return PointSegmentDistance(
+                heroAtImpact, spell.StartPosition, spell.EndPosition) -
+                (static_cast<float>(spell.SData.Radius) + boundingRadius + extraDist);
+        }
+        if (SDK::IsCircleSpellType(spell.SData.SpellType)) {
+            return heroAtImpact.Distance(spell.EndPosition) -
+                (static_cast<float>(spell.SData.Radius) + boundingRadius + extraDist);
+        }
+        return PointPolygonDistance(spell, heroAtImpact) - boundingRadius - extraDist;
+    }
+
+    bool PathCollidesWithSpell(const SDK::Skillshot& spell,
+                               const Vec2& from,
+                               const Vec2& to,
+                               float boundingRadius,
+                               float moveSpeed,
+                               float delayMs,
+                               float extraRadius) const {
+        return GetClosestDistanceApproach(
+            spell, to, std::max(50.0f, moveSpeed), delayMs,
+            from, boundingRadius, extraRadius) <= 0.0f;
+    }
+
     float GetClosestDistanceApproach(const SDK::Skillshot& spell,
                                      const Vec2& pos, float speed, float delayMs,
                                      const Vec2& heroPos, float boundingRadius,
                                      float extraDist) const {
-        const Vec2 walkDir = (pos - heroPos).Normalized();
         const SDK::SpellType type = spell.SData.SpellType;
-        const float spellRadius = static_cast<float>(spell.SData.Radius);
 
-        if (SDK::IsLineSpellType(type)) {
-            const float missileSpeed = std::max(1.0f, static_cast<float>(spell.SData.MissileSpeed));
-
-            Vec2 spellPos = spell.StartPosition;
-            if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(&spell)) {
-                spellPos = missile->GetMissilePosition(static_cast<int>(delayMs));
-            }
-            const Vec2 spellEnd = spell.EndPosition;
-            const Vec2 spellVel = spell.Direction * missileSpeed;
-
-            Vec2 cHero;
-            Vec2 cSpell;
-            const float cpa = CpaPointsEx(
-                heroPos, walkDir * speed, spellPos, spellVel, cHero, cSpell);
-
-            const Vec2 extendedPos = pos + walkDir * boundingRadius;
-            const auto projHero = SDK::Prediction::Vec2Ext::ProjectOn(cHero, heroPos, extendedPos);
-            const auto projSpell = SDK::Prediction::Vec2Ext::ProjectOn(cSpell, spellPos, spellEnd);
-            const bool heroOn = projHero.IsOnSegment;
-            const bool spellOn = projSpell.IsOnSegment;
-
-            const float checkDist = boundingRadius + spellRadius + extraDist;
-            if (spellOn && heroOn) {
-                return std::max(0.0f, cpa - checkDist);
-            }
-            return checkDist;
+        float clearance = FLT_MAX;
+        if (SDK::IsLineSpellType(type) && IsMovingLineSpell(spell)) {
+            clearance = MovingLineClearance(
+                spell, heroPos, pos, std::max(50.0f, speed), delayMs,
+                static_cast<float>(spell.SData.Radius) + boundingRadius + extraDist);
+        } else {
+            clearance = TimedGeometryClearance(
+                spell, heroPos, pos, std::max(50.0f, speed), delayMs,
+                boundingRadius, extraDist);
         }
-
-        if (SDK::IsCircleSpellType(type)) {
-            const int now = SDK::Variables::TickCount();
-            const float hitTime = std::max(0.0f,
-                static_cast<float>(spell.StartTime + spell.SData.Delay - now) - delayMs);
-            const float walkRange = heroPos.Distance(pos);
-            const float predictedRange = speed * (hitTime / 1000.0f);
-            const Vec2 tHeroPos = heroPos + walkDir * std::min(predictedRange, walkRange);
-            return std::max(0.0f, tHeroPos.Distance(spell.EndPosition) - (spellRadius + extraDist));
-        }
-
-        return 1.0f;
+        return std::max(0.0f, clearance);
     }
 
     bool PredictSpellCollision(const SDK::Skillshot& spell, const Vec2& pos, float speed,
@@ -377,22 +741,16 @@ private:
 
     float DistanceToEnemyTurret(const Vec2& pos) const {
         float best = FLT_MAX;
-        for (const auto& turret : SDK::GameObjects::EnemyTurrets()) {
-            if (!turret.IsValid() || turret.IsDead()) {
-                continue;
-            }
-            best = std::min(best, turret.Position().To2D().Distance(pos));
+        for (const Vec2& turretPosition : m_turretPositions) {
+            best = std::min(best, turretPosition.Distance(pos));
         }
         return best;
     }
 
     float DistanceToEnemyChampion(const Vec2& pos) const {
         float best = FLT_MAX;
-        for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
-            if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) {
-                continue;
-            }
-            best = std::min(best, enemy.ServerPosition().To2D().Distance(pos));
+        for (const Vec2& enemyPosition : m_enemyPositions) {
+            best = std::min(best, enemyPosition.Distance(pos));
         }
         return best;
     }
@@ -418,10 +776,13 @@ private:
         return value;
     }
 
-    bool WallBlocks(const Vec2& heroPos, const Vec2& pos, float planeY) const {
+    bool WallBlocks(const Vec2& heroPos, const Vec2& pos,
+                    float planeY, float boundingRadius) const {
         const Vec3 dest = Vec3::From2D(pos, planeY);
         const Vec3 from = Vec3::From2D(heroPos, planeY);
-        if (!CoreNavGrid::IsWalkable(dest)) {
+        const float radius = std::clamp(boundingRadius, 0.0f, 65.0f);
+        if (!CoreNavGrid::IsWalkable(dest) ||
+            CoreNavGrid::IsWallOfType(dest, CoreNavGrid::Collision_Wall, radius)) {
             return true;
         }
         return CoreNavGrid::IsWallBetween(from, dest);
@@ -443,8 +804,7 @@ private:
         PositionInfo info;
         info.position = pos;
         info.distToMouse = PositionValue(pos, mousePos, boundingRadius);
-        info.distToEnemy = DistanceToEnemyChampion(pos);
-        info.wall = WallBlocks(heroPos, pos, planeY);
+        info.wall = WallBlocks(heroPos, pos, planeY, boundingRadius);
 
         for (const auto& s : skillshots) {
             if (!s || !ShouldConsiderSpell(*s)) {
@@ -456,18 +816,18 @@ private:
                 extraDist + m_settings.ExtraSpellRadius);
             info.closestDistance = std::min(info.closestDistance, cpa);
 
-            if (InSkillShot(*s, pos, std::max(0.0f, boundingRadius - 8.0f) + m_settings.ExtraSpellRadius) ||
-                PredictSpellCollision(*s, pos, speed, delayMs, heroPos, boundingRadius,
-                                      extraDist + m_settings.ExtraSpellRadius)) {
+            if (cpa <= 0.0f) {
                 info.dangerLevel = std::max(info.dangerLevel, danger);
                 info.dangerCount += danger;
+            }
+            if (m_settings.ExtraAvoidDistance > 0.0f &&
+                cpa < m_settings.ExtraAvoidDistance) {
+                info.hasExtraDistance = true;
             }
         }
 
         info.rejectPosition = m_settings.RejectMinDistance > 0.0f &&
             info.closestDistance < m_settings.RejectMinDistance;
-        info.hasExtraDistance = m_settings.ExtraAvoidDistance > 0.0f &&
-            CheckDangerousPosition(pos, boundingRadius + m_settings.ExtraAvoidDistance, skillshots);
         info.dangerous = info.dangerCount > 0 || info.wall;
         return info;
     }
@@ -494,6 +854,143 @@ private:
         return result;
     }
 
+    static const std::array<Vec2, 64>& UnitDirections() {
+        static const std::array<Vec2, 64> directions = [] {
+            std::array<Vec2, 64> result = {};
+            for (std::size_t i = 0; i < result.size(); ++i) {
+                const float angle = static_cast<float>(
+                    2.0 * kPi * static_cast<double>(i) /
+                    static_cast<double>(result.size()));
+                result[i] = Vec2(std::cos(angle), std::sin(angle));
+            }
+            return result;
+        }();
+        return directions;
+    }
+
+    static void AddRadialPositions(const Vec2& heroPos,
+                                   int maxPositions,
+                                   int positionRadius,
+                                   std::vector<Vec2>& out) {
+        const auto& directions = UnitDirections();
+        int added = 0;
+        int radiusIndex = 0;
+        while (added < maxPositions) {
+            ++radiusIndex;
+            const int radius = radiusIndex * 2 * positionRadius;
+            const int checks = std::clamp(
+                static_cast<int>(std::ceil(
+                    (2.0 * kPi * static_cast<double>(radius)) /
+                    (2.0 * static_cast<double>(positionRadius)))),
+                4,
+                static_cast<int>(directions.size()));
+            for (int i = 0; i < checks && added < maxPositions; ++i, ++added) {
+                const std::size_t directionIndex =
+                    static_cast<std::size_t>(i) * directions.size() /
+                    static_cast<std::size_t>(checks);
+                const Vec2 candidate = heroPos +
+                    directions[directionIndex] * static_cast<float>(radius);
+                out.emplace_back(std::floor(candidate.x), std::floor(candidate.y));
+            }
+        }
+    }
+
+    void AddGradientPositions(const Vec2& heroPos,
+                              float boundingRadius,
+                              const SkillshotList& skillshots,
+                              std::vector<Vec2>& out) const {
+        Vec2 gradient;
+        const Vec2 preferred = (SDK::Game::CursorPos().To2D() - heroPos).Normalized();
+
+        for (const auto& spell : skillshots) {
+            if (!spell || !ShouldConsiderSpell(*spell) ||
+                !InSkillShot(*spell, heroPos,
+                             boundingRadius + m_settings.ExtraSpellRadius)) {
+                continue;
+            }
+
+            Vec2 outward;
+            if (SDK::IsLineSpellType(spell->SData.SpellType)) {
+                const Vec2 start = CurrentLineStart(*spell);
+                const auto projection = SDK::Prediction::Vec2Ext::ProjectOn(
+                    heroPos, start, spell->EndPosition);
+                outward = (heroPos - projection.SegmentPoint).Normalized();
+                if (outward.IsZero()) {
+                    Vec2 direction = spell->Direction;
+                    if (direction.IsZero()) {
+                        direction = (spell->EndPosition - start).Normalized();
+                    }
+                    outward = Vec2(-direction.y, direction.x);
+                    if (!preferred.IsZero() && outward.Dot(preferred) < 0.0f) {
+                        outward = outward * -1.0f;
+                    }
+                }
+            } else {
+                outward = (heroPos - spell->EndPosition).Normalized();
+            }
+            if (outward.IsZero()) {
+                continue;
+            }
+
+            const float weight = static_cast<float>(DangerValue(*spell));
+            gradient = gradient + outward * weight;
+            const float nearDistance =
+                static_cast<float>(spell->SData.Radius) + boundingRadius + 35.0f;
+            out.push_back(heroPos + outward * nearDistance);
+            out.push_back(heroPos + outward * (nearDistance + 100.0f));
+        }
+
+        gradient = gradient.Normalized();
+        if (gradient.IsZero()) {
+            return;
+        }
+
+        constexpr float angles[] = { 0.0f, -0.45f, 0.45f, -0.85f, 0.85f };
+        constexpr float distances[] = { 140.0f, 240.0f, 360.0f };
+        for (float angle : angles) {
+            const Vec2 direction = SDK::Prediction::Vec2Ext::Rotated(
+                gradient, angle).Normalized();
+            for (float distance : distances) {
+                out.push_back(heroPos + direction * distance);
+            }
+        }
+    }
+
+    void AddWallDetourPositions(const Vec2& heroPos,
+                                const Vec2& desiredPosition,
+                                float planeY,
+                                float boundingRadius,
+                                std::vector<Vec2>& out) const {
+        const Vec3 from = Vec3::From2D(heroPos, planeY);
+        const Vec3 desired = Vec3::From2D(desiredPosition, planeY);
+        if (!CoreNavGrid::IsWallBetween(from, desired)) {
+            return;
+        }
+
+        Vec3 hitPoint3;
+        if (!CoreNavGrid::FindWallCollision(from, desired, hitPoint3, 15.0f)) {
+            return;
+        }
+        const Vec2 direction = (desiredPosition - heroPos).Normalized();
+        if (direction.IsZero()) {
+            return;
+        }
+        const Vec2 side(-direction.y, direction.x);
+        const Vec2 nearSide = hitPoint3.To2D() -
+            direction * (boundingRadius + 55.0f);
+        constexpr float offsets[] = { 90.0f, 150.0f, 230.0f, 330.0f, 450.0f };
+        for (float offset : offsets) {
+            const Vec2 left = nearSide + side * offset;
+            const Vec2 right = nearSide - side * offset;
+            if (!WallBlocks(heroPos, left, planeY, boundingRadius)) {
+                out.push_back(left);
+            }
+            if (!WallBlocks(heroPos, right, planeY, boundingRadius)) {
+                out.push_back(right);
+            }
+        }
+    }
+
     void AddFastestPositions(const Vec2& heroPos, float boundingRadius,
                              const SkillshotList& skillshots, std::vector<Vec2>& out) const {
         for (const auto& s : skillshots) {
@@ -505,10 +1002,7 @@ private:
             const float radius = static_cast<float>(s->SData.Radius) +
                 boundingRadius + m_settings.ExtraSpellRadius + 15.0f;
             if (SDK::IsLineSpellType(s->SData.SpellType)) {
-                Vec2 current = s->StartPosition;
-                if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(s.get())) {
-                    current = missile->GetMissilePosition(0);
-                }
+                Vec2 current = CurrentLineStart(*s);
                 const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(heroPos, current, s->EndPosition);
                 if (proj.IsOnSegment) {
                     out.push_back(proj.SegmentPoint.Extend(heroPos, radius));
@@ -528,10 +1022,7 @@ private:
             }
 
             if (SDK::IsLineSpellType(s->SData.SpellType)) {
-                Vec2 current = s->StartPosition;
-                if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(s.get())) {
-                    current = missile->GetMissilePosition(0);
-                }
+                Vec2 current = CurrentLineStart(*s);
                 const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(heroPos, current, s->EndPosition);
                 if (!proj.IsOnSegment) {
                     continue;
@@ -621,26 +1112,6 @@ private:
             return !a.hasExtraDistance;
         }
         return a.distToMouse < b.distToMouse;
-    }
-
-private:
-    static float CpaTime(const Vec2& p1, const Vec2& v1, const Vec2& p2, const Vec2& v2) {
-        const Vec2 dv = v1 - v2;
-        const float dv2 = dv.Dot(dv);
-        if (dv2 < 0.00000001f) {
-            return 0.0f;
-        }
-        const Vec2 w0 = p1 - p2;
-        return -w0.Dot(dv) / dv2;
-    }
-
-    static float CpaPointsEx(const Vec2& p1, const Vec2& v1,
-                             const Vec2& p2, const Vec2& v2,
-                             Vec2& out1, Vec2& out2) {
-        const float ctime = std::max(0.0f, CpaTime(p1, v1, p2, v2));
-        out1 = p1 + v1 * ctime;
-        out2 = p2 + v2 * ctime;
-        return out1.Distance(out2);
     }
 };
 

@@ -4,11 +4,14 @@
 #include "SpecialSpells/SpecialSpellProcessor.h"
 #include "SpellDatabase.h"
 
+#include "../../../Core/CoreNavGrid.h"
 #include "../../../SDK/SDK.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -44,6 +47,7 @@ public:
         m_skillshots.clear();
         m_traps.clear();
         m_originalEnds.clear();
+        m_skillshotData.clear();
         m_lastCollisionTick = 0;
         SpecialSpells::ClearState();
     }
@@ -58,7 +62,7 @@ public:
                 }
                 return !skillshot ||
                        !SpecialSpells::UpdateSkillshot(*skillshot) ||
-                       (!IsPersistentTrap(skillshot) && skillshot->HasExpired());
+                       IsExpired(skillshot);
             }),
             m_skillshots.end());
         SpecialSpells::EndUpdate();
@@ -109,19 +113,13 @@ public:
     }
 
     void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
-        const auto* data = FindBySpellName(args.SpellName);
-        if (!data) {
-            data = FindBySpellName(args.ScriptName);
-        }
-        if (!data) {
-            data = FindBySpellName(args.PayloadSpellName);
-        }
-        if (!data || data->UsePacket || !IsSpellEnabled(*data)) {
+        SDK::AIBaseClient caster = MakeCaster(args.Sender);
+        if (!caster.IsValid() || caster.IsAlly()) {
             return;
         }
 
-        SDK::AIBaseClient caster = MakeCaster(args.Sender);
-        if (!caster.IsValid() || caster.IsAlly()) {
+        const auto* data = FindProcessSpellData(args, caster);
+        if (!data || data->UsePacket || !IsSpellEnabled(*data)) {
             return;
         }
         auto specialResult = SpecialSpells::ProcessCast(
@@ -154,24 +152,38 @@ public:
             return;
         }
 
+        const auto player = SDK::ObjectManager::Player();
+        const Vec2 resolvedStart = ResolveStartPosition(caster, args.StartPosition.To2D());
+        if (resolvedStart.IsZero()) {
+            return;
+        }
+        const Vec2 resolvedEnd = ResolveEndPosition(
+            specialResult.Data,
+            caster,
+            resolvedStart,
+            args.EndPosition.To2D(),
+            args.CastPosition.To2D(),
+            player.IsValid() ? player.ServerPosition().To2D() : Vec2());
+        const Vector3 startWorld = Vec3::From2D(resolvedStart, args.StartPosition.y);
+        const Vector3 endWorld = Vec3::From2D(resolvedEnd, args.EndPosition.y);
+
         if (specialResult.Data.MultipleNumber != -1 && specialResult.Data.MultipleNumber > 1) {
-            Vec2 baseDirection = (args.EndPosition.To2D() - args.StartPosition.To2D()).Normalized();
-            if (baseDirection.IsZero()) {
-                baseDirection = caster.Direction().To2D().Normalized();
-            }
+            Vec2 baseDirection = ResolveDirection(caster, resolvedStart, resolvedEnd, player);
 
             const int half = (specialResult.Data.MultipleNumber - 1) / 2;
             for (int i = -half; i <= half; ++i) {
                 const Vec2 direction = SDK::Prediction::Vec2Ext::Rotated(baseDirection, specialResult.Data.MultipleAngle * static_cast<float>(i));
                 const Vector3 end = Vec3::From2D(
-                    args.StartPosition.To2D() + direction * static_cast<float>(specialResult.Data.sdk.Range),
+                    resolvedStart + direction * static_cast<float>(specialResult.Data.sdk.Range),
                     args.EndPosition.y);
-                CreateSpellData(caster, args.StartPosition, end, specialResult.Data, SDK::SkillshotDetectionType::ProcessSpell);
+                CreateSpellData(caster, startWorld, end, specialResult.Data,
+                                SDK::SkillshotDetectionType::ProcessSpell,
+                                SDK::MissileClient(), 0, true);
             }
             return;
         }
 
-        CreateSpellData(caster, args.StartPosition, args.EndPosition, specialResult.Data, SDK::SkillshotDetectionType::ProcessSpell);
+        CreateSpellData(caster, startWorld, endWorld, specialResult.Data, SDK::SkillshotDetectionType::ProcessSpell);
     }
 
     void OnProcessCastSpell(const SDK::Events::CastSpellEventArgs& args) {
@@ -187,9 +199,9 @@ public:
         if (caster.IsValid() && caster.IsAlly()) {
             return;
         }
-        const auto* data = FindByChampionAndSlot(args.Sender.CharacterName, args.Slot);
+        const auto* data = FindUniqueByChampionAndSlot(args.Sender.CharacterName, args.Slot);
         if (!data && caster.IsValid()) {
-            data = FindByChampionAndSlot(caster.CharacterName().c_str(), args.Slot);
+            data = FindUniqueByChampionAndSlot(caster.CharacterName().c_str(), args.Slot);
         }
         if (!data || !IsSpellEnabled(*data)) {
             return;
@@ -201,7 +213,13 @@ public:
         if (startPos.IsZero()) {
             return;
         }
-        Vec2 endPos = args.EndPosition.To2D();
+        Vec2 endPos = ResolveEndPosition(
+            *data,
+            caster,
+            startPos,
+            args.EndPosition.To2D(),
+            Vec2(),
+            player.ServerPosition().To2D());
         if (endPos.IsZero()) {
             return;
         }
@@ -213,17 +231,22 @@ public:
     }
 
     void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
-        const char* missileName = args.MissileName[0] ? args.MissileName : args.SpellName;
+        SDK::MissileClient missile(args.Sender.Ptr);
+        if (!missile.IsValid()) {
+            return;
+        }
+
+        const char* eventName = args.MissileName[0] ? args.MissileName : args.SpellName;
+        const std::string runtimeName = missile.SpellName();
+        const char* missileName = eventName[0] ? eventName : runtimeName.c_str();
         const auto* data = FindByMissileName(missileName);
         if (!data && args.SpellName[0]) {
             data = FindBySpellName(args.SpellName);
         }
-        if (!data || !IsSpellEnabled(*data)) {
-            return;
+        if (!data && !runtimeName.empty()) {
+            data = FindByMissileName(runtimeName.c_str());
         }
-
-        SDK::MissileClient missile(args.Sender.Ptr);
-        if (!missile.IsValid()) {
+        if (!data || !IsSpellEnabled(*data)) {
             return;
         }
 
@@ -350,12 +373,74 @@ private:
     SpellEnabledPredicate m_spellEnabledPredicate;
     std::unordered_map<int, SkillshotPtr> m_traps;
     std::unordered_map<const SDK::Skillshot*, Vec2> m_originalEnds;
+    std::unordered_map<const SDK::Skillshot*, Generated::SpellDataEntry> m_skillshotData;
     int m_lastCollisionTick = 0;
     bool m_checkCollisions = false;
     bool m_dodgeFow = true;
 
     bool IsSpellEnabled(const Generated::SpellDataEntry& data) const {
         return !m_spellEnabledPredicate || m_spellEnabledPredicate(data);
+    }
+
+    static bool IsFiniteMissileSpeed(const SDK::SpellDatabaseEntry& data) {
+        return data.MissileSpeed > 0 && data.MissileSpeed != INT_MAX;
+    }
+
+    static bool UsesSourceObject(const SDK::SpellDatabaseEntry& data) {
+        return !data.FromObject.empty() || !data.FromObjects.empty();
+    }
+
+    static Vec2 ResolveStartPosition(const SDK::AIBaseClient& caster, const Vec2& rawStart) {
+        if (!rawStart.IsZero()) {
+            return rawStart;
+        }
+        if (caster.IsValid()) {
+            return caster.Position().To2D();
+        }
+        return {};
+    }
+
+    static Vec2 ResolveDirection(const SDK::AIBaseClient& caster,
+                                 const Vec2& start,
+                                 const Vec2& end,
+                                 const SDK::AIHeroClient& player = SDK::AIHeroClient()) {
+        Vec2 direction = (end - start).Normalized();
+        if (direction.IsZero() && player.IsValid()) {
+            direction = (player.ServerPosition().To2D() - start).Normalized();
+        }
+        if (direction.IsZero() && caster.IsValid()) {
+            direction = caster.Direction().To2D().Normalized();
+        }
+        if (direction.IsZero()) {
+            direction = Vec2(1.0f, 0.0f);
+        }
+        return direction;
+    }
+
+    static Vec2 ResolveEndPosition(const Generated::SpellDataEntry& data,
+                                   const SDK::AIBaseClient& caster,
+                                   const Vec2& start,
+                                   const Vec2& primaryEnd,
+                                   const Vec2& secondaryEnd,
+                                   const Vec2& heroPos) {
+        Vec2 end = primaryEnd;
+        if (end.IsZero()) {
+            end = secondaryEnd;
+        }
+
+        const bool missingOrTooClose = end.IsZero() || end.DistanceSqr(start) < 25.0f;
+        if (missingOrTooClose && !heroPos.IsZero()) {
+            end = heroPos;
+        }
+
+        if (SDK::IsLineSpellType(data.sdk.SpellType) &&
+            (!data.UseEndPosition || missingOrTooClose)) {
+            const SDK::AIHeroClient player = SDK::ObjectManager::Player();
+            const Vec2 direction = ResolveDirection(caster, start, end, player);
+            return start + direction * static_cast<float>(std::max(1, data.sdk.Range));
+        }
+
+        return end;
     }
 
     static bool SameText(const std::string& lhs, const char* rhs) {
@@ -394,6 +479,50 @@ private:
         return haystack.find(needle) != std::string::npos;
     }
 
+    static bool IsBasicAttackName(const char* name) {
+        return ContainsInsensitive(name, "basicattack");
+    }
+
+    static const Generated::SpellDataEntry* FindProcessSpellData(
+        const SDK::Events::ProcessSpellEventArgs& args,
+        const SDK::AIBaseClient& caster) {
+        const char* names[] = {
+            args.SpellName,
+            args.PayloadSpellName,
+            args.ScriptName,
+            args.SpellSlotName,
+            args.MissileName,
+            args.PayloadMissileName,
+        };
+
+        bool sawBasicAttackName = false;
+        bool sawNonBasicName = false;
+        for (const char* name : names) {
+            if (!name || !name[0]) {
+                continue;
+            }
+            if (IsBasicAttackName(name)) {
+                sawBasicAttackName = true;
+                continue;
+            }
+            sawNonBasicName = true;
+            if (const auto* data = FindBySpellName(name)) {
+                return data;
+            }
+            if (const auto* data = FindByMissileName(name)) {
+                return data;
+            }
+        }
+
+        if (args.IsAutoAttack || (sawBasicAttackName && !sawNonBasicName) ||
+            args.Slot < 0 || args.Slot > 3) {
+            return nullptr;
+        }
+        return caster.IsValid()
+            ? FindUniqueByChampionAndSlot(caster.CharacterName().c_str(), args.Slot)
+            : nullptr;
+    }
+
     static bool MatchesRegexInsensitive(const std::string& text, const std::string& pattern) {
         if (text.empty() || pattern.empty()) {
             return false;
@@ -425,7 +554,12 @@ private:
         return nullptr;
     }
 
-    static const Generated::SpellDataEntry* FindSkillshotData(const SDK::Skillshot& skillshot) {
+    const Generated::SpellDataEntry* FindSkillshotData(const SDK::Skillshot& skillshot) const {
+        const auto cached = m_skillshotData.find(&skillshot);
+        if (cached != m_skillshotData.end()) {
+            return &cached->second;
+        }
+
         const std::string casterName = skillshot.Caster.IsValid()
             ? skillshot.Caster.CharacterName()
             : std::string();
@@ -441,6 +575,35 @@ private:
             return &entry;
         }
         return nullptr;
+    }
+
+    bool IsExpired(const SkillshotPtr& skillshot) const {
+        if (!skillshot) {
+            return true;
+        }
+        if (IsPersistentTrap(skillshot)) {
+            return false;
+        }
+        if (!skillshot->HasExpired()) {
+            return false;
+        }
+
+        const auto* data = FindSkillshotData(*skillshot);
+        const float extraEndTime = data ? std::max(0.0f, data->ExtraEndTime) : 0.0f;
+        if (extraEndTime <= 0.0f) {
+            return true;
+        }
+
+        int baseEndTick = skillshot->StartTime + 5000;
+        if (skillshot->SData.MissileAccel == 0) {
+            const float speed = std::max(
+                1.0f, static_cast<float>(skillshot->SData.MissileSpeed));
+            baseEndTick = skillshot->StartTime + skillshot->SData.Delay +
+                static_cast<int>(1000.0f *
+                    skillshot->StartPosition.Distance(skillshot->EndPosition) / speed);
+        }
+        return SDK::Variables::TickCount() >
+            baseEndTick + static_cast<int>(extraEndTime);
     }
 
     bool IsPersistentTrap(const SkillshotPtr& skillshot) const {
@@ -554,6 +717,22 @@ private:
         Vec2 collidingUnitPosition;
         std::unordered_set<int> visited;
 
+        if (HasCollisionType(data->sdk, SDK::CollisionableObjects::Walls)) {
+            Vec3 wallHit;
+            const float planeY = skillshot->Caster.IsValid()
+                ? skillshot->Caster.Position().y
+                : SDK::ObjectManager::Player().Position().y;
+            if (CoreNavGrid::FindWallCollision(
+                    Vec3::From2D(current, planeY),
+                    Vec3::From2D(originalEnd, planeY),
+                    wallHit,
+                    15.0f)) {
+                collisionPosition = wallHit.To2D();
+                collidingUnitPosition = collisionPosition;
+                closestDistance = current.Distance(collisionPosition);
+            }
+        }
+
         const auto consider = [&](const SDK::AIBaseClient& unit) {
             if (!unit.IsValid() || unit.IsDead() || unit.NetworkId() == 0 ||
                 unit.NetworkId() == SDK::ObjectManager::Player().NetworkId() ||
@@ -641,6 +820,13 @@ private:
                 ++it;
             }
         }
+        for (auto it = m_skillshotData.begin(); it != m_skillshotData.end();) {
+            if (active.find(it->first) == active.end()) {
+                it = m_skillshotData.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     static const Generated::SpellDataEntry* FindBySpellName(const char* name) {
@@ -689,6 +875,36 @@ private:
         return nullptr;
     }
 
+    static const Generated::SpellDataEntry* FindUniqueByChampionAndSlot(const char* champ, int slot) {
+        if (!champ || !champ[0] || slot < 0 || slot > 3) {
+            return nullptr;
+        }
+
+        SDK::SpellSlot targetSlot = SDK::SpellSlot::Unknown;
+        switch (slot) {
+        case 0: targetSlot = SDK::SpellSlot::Q; break;
+        case 1: targetSlot = SDK::SpellSlot::W; break;
+        case 2: targetSlot = SDK::SpellSlot::E; break;
+        case 3: targetSlot = SDK::SpellSlot::R; break;
+        }
+
+        const Generated::SpellDataEntry* match = nullptr;
+        for (const auto& entry : SpellDatabase::Spells()) {
+            if (_stricmp(entry.sdk.ChampionName.c_str(), champ) != 0 ||
+                entry.sdk.Slot != targetSlot) {
+                continue;
+            }
+            if (match) {
+                // Slot-only packets cannot distinguish transformations,
+                // returns, or multi-stage spells.  Waiting for an exact name
+                // avoids creating a ghost skillshot with the wrong geometry.
+                return nullptr;
+            }
+            match = &entry;
+        }
+        return match;
+    }
+
     static const Generated::SpellDataEntry* FindByMissileName(const char* name) {
         if (!name || !name[0]) {
             return nullptr;
@@ -724,6 +940,7 @@ private:
         case SDK::SpellType::SkillshotMissileCone:
             return std::make_shared<SDK::SkillshotMissileCone>(entry);
         case SDK::SpellType::SkillshotMissileLine:
+            return std::make_shared<SDK::SkillshotMissileLine>(entry);
         case SDK::SpellType::SkillshotLine:
             return std::make_shared<SDK::SkillshotLine>(entry);
         case SDK::SpellType::SkillshotCircle:
@@ -749,27 +966,63 @@ private:
                 continue;
             }
 
-            if (SDK::Skillshot::AngleBetween(skillshot->Direction, detected->Direction) < 10.0f) {
-                if (skillshot->DetectionType == SDK::SkillshotDetectionType::MissileCreate) {
-                    auto oldMissile = std::dynamic_pointer_cast<SDK::SkillshotMissile>(detected);
-                    auto newMissile = std::dynamic_pointer_cast<SDK::SkillshotMissile>(skillshot);
-                    if (oldMissile && newMissile) {
-                        oldMissile->Missile = newMissile->Missile;
-                    }
+            const float angle = SDK::Skillshot::AngleBetween(
+                skillshot->Direction, detected->Direction);
+            const int startDelta = std::abs(skillshot->StartTime - detected->StartTime);
+            const float startDistanceSqr =
+                skillshot->StartPosition.DistanceSqr(detected->StartPosition);
+
+            if (skillshot->DetectionType == SDK::SkillshotDetectionType::MissileCreate) {
+                auto oldMissile = std::dynamic_pointer_cast<SDK::SkillshotMissile>(detected);
+                auto newMissile = std::dynamic_pointer_cast<SDK::SkillshotMissile>(skillshot);
+                if (!oldMissile || !newMissile || angle >= 12.0f ||
+                    startDelta > 350 || startDistanceSqr > 122500.0f) {
+                    continue;
                 }
+
+                const int oldMissileId = oldMissile->Missile.IsValid()
+                    ? oldMissile->Missile.NetworkId()
+                    : 0;
+                const int newMissileId = newMissile->Missile.IsValid()
+                    ? newMissile->Missile.NetworkId()
+                    : 0;
+                if (oldMissileId != 0 && newMissileId != 0 &&
+                    oldMissileId != newMissileId) {
+                    continue;
+                }
+
+                oldMissile->SData = newMissile->SData;
+                oldMissile->Missile = newMissile->Missile;
+                oldMissile->StartPosition = newMissile->StartPosition;
+                oldMissile->EndPosition = newMissile->EndPosition;
+                oldMissile->Direction = newMissile->Direction;
+                oldMissile->StartTime = newMissile->StartTime;
+                oldMissile->DetectionType = SDK::SkillshotDetectionType::MissileCreate;
+                m_originalEnds[oldMissile.get()] = oldMissile->EndPosition;
+                SpecialSpells::RefreshSkillshotGeometry(*oldMissile);
+                return true;
+            }
+
+            // ProcessSpell/DoCast/ProcessCast can all report the same cast.
+            // Keep that de-duplication window deliberately short so a real
+            // rapid recast in the same direction is never swallowed.
+            if (angle < 2.0f && startDelta <= 160 && startDistanceSqr <= 10000.0f) {
                 return true;
             }
         }
         return false;
     }
 
-    void AddSkillshot(const SkillshotPtr& skillshot, bool allowDuplicate = false) {
+    void AddSkillshot(const SkillshotPtr& skillshot,
+                      const Generated::SpellDataEntry& data,
+                      bool allowDuplicate = false) {
         if (!skillshot || (!allowDuplicate && AlreadyDetected(skillshot))) {
             return;
         }
 
         m_skillshots.push_back(skillshot);
         m_originalEnds[skillshot.get()] = skillshot->EndPosition;
+        m_skillshotData[skillshot.get()] = data;
     }
 
     void RemoveDetectedSpell(int casterNetworkId, const char* spellName) {
@@ -800,29 +1053,36 @@ private:
         }
 
         const float range = static_cast<float>(std::max(1, data.sdk.Range));
-        if (!data.HasTrap && player.Position().Distance(startWorld) > range + 1000.0f) {
+        Vec2 start = ResolveStartPosition(caster, startWorld.To2D());
+        if (start.IsZero()) {
             return {};
         }
 
-        Vec2 start = startWorld.To2D();
+        if (!data.HasTrap &&
+            player.Position().Distance(Vec3::From2D(start, startWorld.y)) > range + 1000.0f) {
+            return {};
+        }
+
         Vec2 end = endWorld.To2D();
+        if (!data.HasTrap && (end.IsZero() || end.DistanceSqr(start) < 25.0f)) {
+            end = ResolveEndPosition(data, caster, start, end, Vec2(), player.ServerPosition().To2D());
+        }
         const bool stationaryCircle =
-            data.sdk.SpellType == SDK::SpellType::SkillshotCircle &&
+            SDK::IsCircleSpellType(data.sdk.SpellType) &&
             start.DistanceSqr(end) <= 1.0f;
-        Vec2 direction = (end - start).Normalized();
+        Vec2 direction = ResolveDirection(caster, start, end, player);
         if (direction.IsZero()) {
             if (!stationaryCircle) {
-                direction = player.Direction().To2D().Normalized();
-                if (direction.IsZero()) {
-                    direction = Vec2(1.0f, 0.0f);
-                }
                 end = start + direction * range;
             } else {
                 direction = Vec2(1.0f, 0.0f);
             }
         }
 
-        if (!stationaryCircle && (start.Distance(end) > range || data.sdk.FixedRange)) {
+        if (!stationaryCircle &&
+            (data.sdk.FixedRange ||
+             (SDK::IsLineSpellType(data.sdk.SpellType) && !data.UseEndPosition) ||
+             start.Distance(end) > range)) {
             end = start + direction * range;
         }
 
@@ -857,6 +1117,13 @@ private:
         }
 
         SDK::SpellDatabaseEntry sdkEntry = data.sdk;
+        if (sdkEntry.SpellType == SDK::SpellType::SkillshotLine &&
+            IsFiniteMissileSpeed(sdkEntry)) {
+            sdkEntry.SpellType = SDK::SpellType::SkillshotMissileLine;
+        } else if (sdkEntry.SpellType == SDK::SpellType::SkillshotCircle &&
+                   IsFiniteMissileSpeed(sdkEntry)) {
+            sdkEntry.SpellType = SDK::SpellType::SkillshotMissileCircle;
+        }
         sdkEntry.AvoidMaxRangeReduction = true;
         sdkEntry.FixedRange = false;
         sdkEntry.ExtraRange = 0;
@@ -881,7 +1148,22 @@ private:
         }
 
         if (skillshot->Process()) {
-            AddSkillshot(skillshot, allowDuplicate);
+            if (UsesSourceObject(data.sdk) && !skillshot->StartPosition.IsZero()) {
+                start = skillshot->StartPosition;
+                direction = ResolveDirection(caster, start, end, player);
+                if (!stationaryCircle) {
+                    if (data.sdk.FixedRange ||
+                        (SDK::IsLineSpellType(data.sdk.SpellType) && !data.UseEndPosition) ||
+                        start.Distance(end) > range) {
+                        end = start + direction * range;
+                    }
+                }
+            }
+            skillshot->StartPosition = start;
+            skillshot->EndPosition = end;
+            skillshot->Direction = (end - start).Normalized();
+            SpecialSpells::RefreshSkillshotGeometry(*skillshot);
+            AddSkillshot(skillshot, data, allowDuplicate);
             return skillshot;
         }
         return {};

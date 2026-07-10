@@ -3,6 +3,7 @@
 #include "OrbwalkerContext.h"
 #include "OrbwalkerEventBus.h"
 #include "OrbwalkerMenu.h"
+#include "../KuroCombatCoordinator.h"
 
 #include "../../../sdk/Core/Game.h"
 #include "../../../sdk/Core/Hud.h"
@@ -129,6 +130,9 @@ private:
     float ChampionExtraAttackDelayMs(const AIHeroClient& player) const;
     bool ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const;
     bool ChampionCanAttack(const AIHeroClient& player) const;
+    bool EvadeOwnsActions(int now) const;
+    bool EvadeBlocksMovement(int now) const;
+    bool EvadeBlocksAttack(int now) const;
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     void SnapshotAttackTimings(const AIHeroClient& player);

@@ -6,7 +6,9 @@ namespace Plugins::KuroEvade::SpecialSpells {
 
 struct Braum {
     static bool ProcessCast(const CastContext& context, ProcessResult& result) {
-        if (!EqualsSpell(context.Source, "BraumRWrapper") || !context.Lookup) {
+        if ((!EqualsSpell(context.Source, "BraumRWrapper") &&
+             !EqualsSpell(context.Source, "BraumR")) ||
+            !context.Lookup) {
             return false;
         }
 

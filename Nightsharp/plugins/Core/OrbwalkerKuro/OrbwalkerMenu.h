@@ -43,6 +43,8 @@ public:
     int DelayWindup() const { return SliderValue(delayWindup_, 0); }
     int DelayFarm() const { return SliderValue(delayFarm_, 30); }
     bool UseTreTrauLogic() const { return ListValue(movementLogic_, 0) == 1; }
+    bool CoordinateKuroEvade() const { return BoolValue(coordinateKuroEvade_, true); }
+    int EvadeHandoffGrace() const { return SliderValue(evadeHandoffGrace_, 55); }
 
     bool PrioritizeFarm() const { return BoolValue(prioritizeFarm_, true); }
     bool PrioritizeMinions() const { return BoolValue(prioritizeMinions_, false); }
@@ -122,6 +124,12 @@ private:
             advancedMenu_->Add(new MenuSeparator("separatorLogic", "Logic"));
             movementLogic_ = advancedMenu_->Add(new MenuList("movementLogic", "Movement Logic", { "Kuro", "TreTrau" }, 0));
 
+            advancedMenu_->Add(new MenuSeparator("separatorEvade", "KuroEvade Coordination"));
+            coordinateKuroEvade_ = advancedMenu_->Add(new MenuBool(
+                "coordinateKuroEvade", "Let KuroEvade Own Actions While Dodging", true));
+            evadeHandoffGrace_ = advancedMenu_->Add(new MenuSlider(
+                "evadeHandoffGrace", "Movement Handoff Grace (ms)", 55, 0, 150));
+
             advancedMenu_->Add(new MenuSeparator("separatorMovement", "Movement"));
             movementRandomize_ = advancedMenu_->Add(new MenuBool("movementRandomize", "Randomize Location", true));
             movementExtraHold_ = advancedMenu_->Add(new MenuSlider("movementExtraHold", "Extra Hold Position", 0, 0, 250));
@@ -172,6 +180,8 @@ private:
     MenuSlider* drawLiveDebugConsoleLines_ = nullptr;
 
     MenuList* movementLogic_ = nullptr;
+    MenuBool* coordinateKuroEvade_ = nullptr;
+    MenuSlider* evadeHandoffGrace_ = nullptr;
     MenuBool* movementRandomize_ = nullptr;
     MenuSlider* movementExtraHold_ = nullptr;
     MenuSlider* movementMaximumDistance_ = nullptr;

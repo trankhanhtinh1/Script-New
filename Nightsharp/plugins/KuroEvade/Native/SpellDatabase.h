@@ -1,6 +1,8 @@
 #pragma once
 #include "SpellData.h"
 
+#include <cmath>
+
 namespace Plugins::KuroEvade::InternalDatabase { class SpellDatabase {
 public:
     static std::vector<SpellData> Spells;
@@ -3497,10 +3499,20 @@ inline const std::vector<SpellDataEntry>& Spells() {
             e.sdk.Width = static_cast<int>(zd.radius);
             e.sdk.MissileSpeed = (zd.projectileSpeed > 0.0f) ? static_cast<int>(zd.projectileSpeed) : 2147483647;
             e.sdk.FixedRange = zd.fixedRange;
+            e.sdk.ExtraSpellNames = zd.extraSpellNames;
+            e.sdk.ExtraMissileNames = zd.extraMissileNames;
+            if (zd.angle > 0.0f) {
+                e.sdk.Angle = static_cast<int>(std::lround(zd.angle));
+                e.sdk.ArcAngle = static_cast<int>(std::lround(zd.angle));
+            }
+            e.UseEndPosition = zd.useEndPosition;
             e.DisplayName = zd.name;
             e.HasTrap = zd.hasTrap;
             e.TrapBaseName = zd.trapBaseName;
             e.IsSpecialIgnore = zd.noProcess;
+            e.DisabledByDefault = zd.defaultOff;
+            e.SecondaryRadius = static_cast<int>(std::lround(zd.secondaryRadius));
+            e.ExtraEndTime = static_cast<float>(zd.extraEndTime);
 
             switch (zd.spellKey) {
                 case ::Plugins::KuroEvade::KuroSpellSlot::Q: e.sdk.Slot = SDK::SpellSlot::Q; break;
@@ -3514,7 +3526,10 @@ inline const std::vector<SpellDataEntry>& Spells() {
                 case ::Plugins::KuroEvade::KuroSpellType::Line: e.sdk.SpellType = SDK::SpellType::SkillshotLine; break;
                 case ::Plugins::KuroEvade::KuroSpellType::Circular: e.sdk.SpellType = SDK::SpellType::SkillshotCircle; break;
                 case ::Plugins::KuroEvade::KuroSpellType::Cone: e.sdk.SpellType = SDK::SpellType::SkillshotCone; break;
-                case ::Plugins::KuroEvade::KuroSpellType::Arc: e.sdk.SpellType = SDK::SpellType::SkillshotMissileArc; break;
+                // The imported Arc entry has no usable ArcPoly radius/angle.
+                // A moving chord is conservative but, unlike a zero-angle arc,
+                // remains visible and participates in collision checks.
+                case ::Plugins::KuroEvade::KuroSpellType::Arc: e.sdk.SpellType = SDK::SpellType::SkillshotMissileLine; break;
             }
 
             for (const auto& obj : zd.collisionObjects) {

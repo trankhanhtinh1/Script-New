@@ -103,6 +103,7 @@ struct SpellDataEntry {
     bool IsSpecialIgnore = false;
     bool NoTarget = false;
     bool UsePacket = false;
+    bool UseEndPosition = false;
     bool HasTrap = false;
     std::string TrapBaseName;
     std::string TrapTroyName;

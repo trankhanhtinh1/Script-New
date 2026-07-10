@@ -35,7 +35,7 @@ struct RenderLine final : RenderObject {
         Vec2 endScreen;
         const bool hasStart = SDK::Drawing::WorldToScreen(Vec3::From2D(start, height), startScreen);
         const bool hasEnd = SDK::Drawing::WorldToScreen(Vec3::From2D(end, height), endScreen);
-        if (hasStart || hasEnd) {
+        if (hasStart && hasEnd) {
             SDK::Drawing::DrawLine(startScreen.x, startScreen.y,
                                    endScreen.x, endScreen.y,
                                    static_cast<float>(width), color, true);
