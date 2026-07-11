@@ -450,29 +450,38 @@ inline PredictionOutput GetAoEPrediction(const PredictionInput& input, const AIB
 // ============================================================================
 namespace SDK::Cluster {
 
-inline PredictionOutput GetAoEPrediction(const PredictionInput& input) {
-    return Prediction::Cluster::GetAoEPrediction(input);
+inline PredictionOutput GetAoEPrediction(PredictionInput input) {
+    input.AoE = true;
+    return Prediction::GetPrediction(input);
 }
 
-inline PredictionOutput GetAoEPrediction(const PredictionInput& input, const AIBaseClient& target) {
-    return Prediction::Cluster::GetAoEPrediction(input, target);
+inline PredictionOutput GetAoEPrediction(PredictionInput input, const AIBaseClient& target) {
+    input.Unit = target;
+    input.AoE = true;
+    return Prediction::GetPrediction(input);
 }
 
 namespace Circle {
     inline PredictionOutput GetCirclePrediction(PredictionInput input) {
-        return Prediction::Cluster::Circle::GetCirclePrediction(input);
+        input.AoE = true;
+        input.Type = SpellType::Circle;
+        return Prediction::GetPrediction(input);
     }
 }
 
 namespace Cone {
     inline PredictionOutput GetConePrediction(PredictionInput input) {
-        return Prediction::Cluster::Cone::GetConePrediction(input);
+        input.AoE = true;
+        input.Type = SpellType::Cone;
+        return Prediction::GetPrediction(input);
     }
 }
 
 namespace Line {
     inline PredictionOutput GetLinePrediction(PredictionInput input) {
-        return Prediction::Cluster::Line::GetLinePrediction(input);
+        input.AoE = true;
+        input.Type = SpellType::Line;
+        return Prediction::GetPrediction(input);
     }
 }
 
@@ -484,24 +493,33 @@ namespace Line {
 // ============================================================================
 namespace SDK::AoEPrediction {
 
-inline PredictionOutput GetPrediction(const PredictionInput& input) {
-    return Prediction::Cluster::GetAoEPrediction(input);
+inline PredictionOutput GetPrediction(PredictionInput input) {
+    input.AoE = true;
+    return Prediction::GetPrediction(input);
 }
 
-inline PredictionOutput GetPrediction(const PredictionInput& input, const AIBaseClient& target) {
-    return Prediction::Cluster::GetAoEPrediction(input, target);
+inline PredictionOutput GetPrediction(PredictionInput input, const AIBaseClient& target) {
+    input.Unit = target;
+    input.AoE = true;
+    return Prediction::GetPrediction(input);
 }
 
 inline PredictionOutput GetCirclePrediction(PredictionInput input) {
-    return Prediction::Cluster::Circle::GetCirclePrediction(input);
+    input.AoE = true;
+    input.Type = SpellType::Circle;
+    return Prediction::GetPrediction(input);
 }
 
 inline PredictionOutput GetConePrediction(PredictionInput input) {
-    return Prediction::Cluster::Cone::GetConePrediction(input);
+    input.AoE = true;
+    input.Type = SpellType::Cone;
+    return Prediction::GetPrediction(input);
 }
 
 inline PredictionOutput GetLinePrediction(PredictionInput input) {
-    return Prediction::Cluster::Line::GetLinePrediction(input);
+    input.AoE = true;
+    input.Type = SpellType::Line;
+    return Prediction::GetPrediction(input);
 }
 
 } // namespace SDK::AoEPrediction

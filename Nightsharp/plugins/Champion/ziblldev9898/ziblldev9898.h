@@ -11,6 +11,7 @@
 #include "../../../SDK/SDK.h"
 
 #include "Locke.h"
+#include "Ezreal.h"
 
 #include <string>
 
@@ -18,7 +19,7 @@ namespace Plugins {
 
 class Ziblldev9898Plugin final : public IPlugin {
 public:
-    const char* GetName() const override { return "Ziblldev9898 - Locke"; }
+    const char* GetName() const override { return "Ziblldev9898"; }
     const char* GetInternalId() const override { return "champion.ziblldev9898"; }
     const char* GetAuthor() const override { return "ziblldev9898"; }
     PluginCategory GetCategory() const override { return PluginCategory::Champion; }
@@ -30,17 +31,21 @@ public:
         const std::string champ = CurrentChampionName();
         if (_stricmp(champ.c_str(), "Locke") == 0) {
             ziblldev9898::Locke::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Ezreal") == 0) {
+            ziblldev9898::Ezreal::OnGameLoad();
         }
     }
 
     void OnUnload() override {
         ziblldev9898::Locke::OnUnload();
+        ziblldev9898::Ezreal::OnUnload();
     }
 
 private:
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
-               _stricmp(championName, "Locke") == 0;
+               (_stricmp(championName, "Locke") == 0 ||
+                _stricmp(championName, "Ezreal") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -58,7 +63,10 @@ private:
     }
 
     static const char* CurrentSupportedChampionName() {
-        return IsCurrentChampionSupported() ? "Locke" : nullptr;
+        const std::string champion = CurrentChampionName();
+        if (_stricmp(champion.c_str(), "Locke") == 0) return "Locke";
+        if (_stricmp(champion.c_str(), "Ezreal") == 0) return "Ezreal";
+        return nullptr;
     }
 };
 

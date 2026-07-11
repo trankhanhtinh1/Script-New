@@ -623,11 +623,16 @@ public:
             spell.name = "Yordle Snap Trap";
             spell.radius = 75.0f;
             spell.range = 800.0f;
-            spell.spellDelay = 250;
+            spell.spellDelay = 1000;
             spell.spellKey = ZDSpellSlot::W;
             spell.spellName = "CaitlynW";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::Snare;
+            spell.extraSpellNames = { "CaitlynYordleTrap", "CaitlynYordleSnapTrap" };
+            spell.hasTrap = true;
+            spell.trapBaseName = "CaitlynTrap";
+            spell.trapRadius = 75.0f;
+            spell.trapActivationDelay = 1000;
             Spells.push_back(spell);
         }
         {
@@ -1073,18 +1078,35 @@ public:
             SpellData spell;
             spell.charName = "Galio";
             spell.dangerlevel = 2;
-            spell.missileName = "GalioQMissile";
-            spell.name = "Winds of War";
+            spell.name = "Winds of War (Tornado)";
             spell.projectileSpeed = 1400.0f;
-            spell.radius = 60.0f;
+            spell.radius = 150.0f;
             spell.range = 825.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "GalioQ";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::Slow;
+            spell.extraEndTime = 2000;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Galio";
+            spell.dangerlevel = 2;
+            spell.missileName = "GalioQMissile";
+            spell.name = "Winds of War (Windblast)";
+            spell.projectileSpeed = 1400.0f;
+            spell.radius = 60.0f;
+            spell.range = 1200.0f;
+            spell.spellDelay = 0;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "GalioQWindblast";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
             spell.extraMissileNames = { "GalioQMissileR" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.useEndPosition = true;
             Spells.push_back(spell);
         }
         {
@@ -1547,11 +1569,16 @@ public:
             spell.name = "Flame Chompers!";
             spell.radius = 315.0f;
             spell.range = 925.0f;
-            spell.spellDelay = 250;
+            spell.spellDelay = 1150;
             spell.spellKey = ZDSpellSlot::E;
             spell.spellName = "JinxE";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::Snare;
+            spell.hasTrap = true;
+            spell.trapBaseName = "JinxMine";
+            spell.extraTrapNames = { "JinxEMine" };
+            spell.trapRadius = 100.0f;
+            spell.trapActivationDelay = 500;
             Spells.push_back(spell);
         }
         {
@@ -3564,14 +3591,21 @@ public:
             SpellData spell;
             spell.charName = "Teemo";
             spell.dangerlevel = 3;
+            spell.missileName = "TeemoRCast";
             spell.name = "Noxious Trap";
-            spell.radius = 135.0f;
-            spell.range = 600.0f;
-            spell.spellDelay = 250;
+            spell.projectileSpeed = 1000.0f;
+            spell.radius = 160.0f;
+            spell.range = 900.0f;
+            spell.spellDelay = 1250;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "TeemoR";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::Slow;
+            spell.hasTrap = true;
+            spell.trapBaseName = "TeemoMushroom";
+            spell.extraTrapNames = { "TeemoRTrap", "NoxiousTrap" };
+            spell.trapRadius = 160.0f;
+            spell.trapActivationDelay = 1000;
             Spells.push_back(spell);
         }
 

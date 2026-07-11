@@ -36,10 +36,11 @@ public:
         ResetMovementState();
     }
 
-    void StopUnsafeMovement() {
+    bool StopUnsafeMovement() {
         const int now = SDK::Variables::TickCount();
-        if (lastStopTick > 0 && now - lastStopTick < 50) return;
-        if (CoreControl::StopMoving(true)) lastStopTick = now;
+        if (lastStopTick > 0 && now - lastStopTick < 180) return false;
+        lastStopTick = now;
+        return CoreControl::StopMoving(true);
     }
 
     bool MoveTo(const SDK::AIHeroClient& player,

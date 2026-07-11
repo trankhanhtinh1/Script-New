@@ -50,8 +50,8 @@ struct ThreatRule {
 using ThreatRuleMap = std::unordered_map<std::string, ThreatRule>;
 
 struct EvadeSettings {
-    float endpointBuffer = 24.0f;
-    float pathBuffer = 8.0f;
+    float endpointBuffer = 32.0f;
+    float pathBuffer = 12.0f;
     float releaseBuffer = 48.0f;
     float pathStep = 22.0f;
     float temporalStepMs = 18.0f;
@@ -59,7 +59,7 @@ struct EvadeSettings {
     float maxSearchRadius = 760.0f;
     float inputDelayMs = 55.0f;
     float minimumTimeMarginMs = 25.0f;
-    float preferredClearance = 18.0f;
+    float preferredClearance = 24.0f;
     float maxThreatHorizonMs = 1800.0f;
     int maxCandidates = 480;
 };

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,8 @@ public:
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnDoCast, &OnRawDoCast);
         SDK::Events::AddOnMissileCreate(&OnMissileCreate);
         SDK::Events::AddOnMissileDelete(&OnMissileDelete);
+        SDK::Events::AddOnCreateObject(&OnObjectCreate);
+        SDK::Events::AddOnDeleteObject(&OnObjectDelete);
         SDK::Events::AddOnGameUpdate(&OnGameUpdate);
     }
 
@@ -35,6 +38,8 @@ public:
         if (!initialized) return;
         initialized = false;
         SDK::Events::RemoveOnGameUpdate(&OnGameUpdate);
+        SDK::Events::RemoveOnDeleteObject(&OnObjectDelete);
+        SDK::Events::RemoveOnCreateObject(&OnObjectCreate);
         SDK::Events::RemoveOnMissileDelete(&OnMissileDelete);
         SDK::Events::RemoveOnMissileCreate(&OnMissileCreate);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnDoCast, &OnRawDoCast);
@@ -310,6 +315,10 @@ private:
         for (auto& existing : threats) {
             if (existing.expired || existing.casterNetworkId != candidate.casterNetworkId) continue;
             if (existing.SpellName() != candidate.SpellName()) continue;
+            if (candidate.sourceObjectNetworkId != 0 || existing.sourceObjectNetworkId != 0) {
+                if (candidate.sourceObjectNetworkId == existing.sourceObjectNetworkId) return &existing;
+                continue;
+            }
             if (std::abs(candidate.startTick - existing.startTick) > 120) continue;
             const float directionDot = DirectionDot(existing.direction, candidate.direction);
             if (candidate.castIdentity != 0 && existing.castIdentity != 0) {
@@ -329,7 +338,7 @@ private:
         int changedId = -1;
         AcquireSRWLockExclusive(&storeLock);
         if (Threat* existing = FindDuplicateLocked(candidate)) {
-            if (!existing->missileBound) {
+            if (!existing->missileBound && !existing->objectBound) {
                 const int originalId = existing->id;
                 const int originalStart = existing->startTick;
                 const int originalRevision = existing->revision;
@@ -385,6 +394,81 @@ private:
             threat.slot = static_cast<int>(data->spellKey);
             AddOrUpdateThreat(threat);
         }
+    }
+
+    static ::Core::Events::ObjectInfo HydrateLifecycleObject(
+        const ::Core::Events::ObjectInfo& identity) {
+        ::Core::Events::ObjectInfo object = identity;
+        if (!object.Ptr) return object;
+        object.NetworkId = object.NetworkId != 0
+            ? object.NetworkId
+            : ::Core::Objects::ReadNetworkId(object.Ptr);
+        object.Index = object.Index != 0
+            ? object.Index
+            : ::Core::Objects::ReadIndex(object.Ptr);
+        object.Team = ::Core::Objects::ReadTeamValue(object.Ptr);
+        object.Position = ::Core::Objects::ReadPosition(object.Ptr);
+        ::Core::Objects::ReadCharacterName(
+            object.Ptr,
+            object.CharacterName,
+            static_cast<int>(sizeof(object.CharacterName)));
+        ::Core::Objects::ReadName(
+            object.Ptr,
+            object.Name,
+            static_cast<int>(sizeof(object.Name)));
+        return object;
+    }
+
+    static const SpellData* MatchTrapObject(const ::Core::Events::ObjectInfo& object) {
+        const char* names[] = { object.CharacterName, object.Name };
+        for (const char* name : names) {
+            const SpellData* data = ThreatDatabase::FindTrap(name);
+            if (data) return data;
+        }
+        return nullptr;
+    }
+
+    static void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
+        if (!initialized || !args.Sender.IsValid()) return;
+        const ::Core::Events::ObjectInfo object = HydrateLifecycleObject(args.Sender);
+        if (IsAlliedSender(object)) return;
+        const SpellData* data = MatchTrapObject(object);
+        if (!data) return;
+        const Vec2 position = object.Position.To2D();
+        if (!HasUsablePosition(position) || object.NetworkId == 0) return;
+
+        const int now = SDK::Variables::TickCount();
+        Threat threat;
+        threat.data = data;
+        threat.startPos = position;
+        threat.endPos = position;
+        threat.direction = Vec2(1.0f, 0.0f);
+        threat.startTick = now;
+        threat.launchTick = now;
+        threat.endTick = std::numeric_limits<int>::max() - 1000;
+        threat.castIdentity = object.Ptr;
+        threat.casterNetworkId = object.NetworkId;
+        threat.sourceObjectNetworkId = object.NetworkId;
+        threat.slot = static_cast<int>(data->spellKey);
+        threat.radiusOverride = data->trapRadius > 0.0f ? data->trapRadius : data->radius;
+        threat.delayOverride = std::max(0, data->trapActivationDelay);
+        threat.objectBound = true;
+        AddOrUpdateThreat(threat);
+    }
+
+    static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        if (!initialized || args.Sender.NetworkId == 0) return;
+        int changedId = -1;
+        AcquireSRWLockExclusive(&storeLock);
+        for (auto& threat : threats) {
+            if (threat.objectBound &&
+                threat.sourceObjectNetworkId == args.Sender.NetworkId) {
+                threat.expired = true;
+                changedId = threat.id;
+            }
+        }
+        ReleaseSRWLockExclusive(&storeLock);
+        if (changedId >= 0) MarkChanged(changedId);
     }
 
     static void OnRawProcessSpell(const SDK::Events::CoreHookArgs& raw) {

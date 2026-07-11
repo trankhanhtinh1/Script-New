@@ -23,16 +23,23 @@ struct Threat {
     std::uintptr_t castIdentity = 0;
     std::uint32_t casterNetworkId = 0;
     std::uint32_t missileNetworkId = 0;
+    std::uint32_t sourceObjectNetworkId = 0;
     int slot = -1;
     Vec2 observedHead = {};
     int observedTick = 0;
     float observedSpeed = 0.0f;
     float positionUncertainty = 0.0f;
+    float radiusOverride = -1.0f;
+    int delayOverride = -1;
     bool missileBound = false;
+    bool objectBound = false;
     bool expired = false;
 
     bool HasData() const { return data != nullptr; }
-    float Radius() const { return data ? std::max(0.0f, data->radius) : 0.0f; }
+    float Radius() const {
+        if (radiusOverride >= 0.0f) return radiusOverride;
+        return data ? std::max(0.0f, data->radius) : 0.0f;
+    }
     float InnerRadius() const {
         return data ? std::clamp(data->innerRadius, 0.0f, Radius()) : 0.0f;
     }
@@ -53,7 +60,10 @@ struct Threat {
             : data ? data->dangerlevel : 1);
     }
     ZDSpellType Type() const { return data ? data->spellType : ZDSpellType::Line; }
-    int Delay() const { return data ? std::max(0, data->spellDelay) : 0; }
+    int Delay() const {
+        if (delayOverride >= 0) return delayOverride;
+        return data ? std::max(0, data->spellDelay) : 0;
+    }
     int ExtraEndTime() const { return data ? std::max(0, data->extraEndTime) : 0; }
     float Angle() const { return data ? data->angle : 0.0f; }
     bool DefaultOff() const { return data && data->defaultOff; }
@@ -63,7 +73,7 @@ struct Threat {
     }
 
     bool HasTravelSpeed() const {
-        return data && std::isfinite(data->projectileSpeed) &&
+        return !objectBound && data && std::isfinite(data->projectileSpeed) &&
                data->projectileSpeed > 1.0f &&
                data->projectileSpeed < 100000.0f;
     }
@@ -93,6 +103,7 @@ struct Threat {
     }
 
     bool IsExpiredAt(int tick) const {
+        if (objectBound) return expired;
         return expired || tick > endTick + 250;
     }
 };

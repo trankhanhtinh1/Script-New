@@ -124,10 +124,6 @@
     <ClInclude Include="Third_Party\**\*.hpp" />
     <ClInclude Include="menu\*.h" />
     <ClInclude Include="crt_shim.h" />
-    <ClInclude Include="Core\CoreBuffs.h" />
-    <ClInclude Include="Core\CoreBypass.h" />
-    <ClInclude Include="Core\Corehook.h" />
-    <ClInclude Include="Core\offset.h" />
     <ClInclude Include="Core\spoof\spoofcall.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />

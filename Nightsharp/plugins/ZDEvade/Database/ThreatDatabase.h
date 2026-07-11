@@ -43,6 +43,17 @@ public:
         return nullptr;
     }
 
+    static const SpellData* FindTrap(const char* name) {
+        if (!name || !name[0]) return nullptr;
+        for (const auto& s : SpellDatabase::Spells) {
+            if (!s.hasTrap) continue;
+            if (MatchName(s.trapBaseName, name)) return &s;
+            for (const auto& extra : s.extraTrapNames)
+                if (MatchName(extra, name)) return &s;
+        }
+        return nullptr;
+    }
+
     static const SpellData* FindCast(const char* spellSlotName, const char* championName) {
         if (!spellSlotName || !spellSlotName[0]) return nullptr;
         for (const auto& s : SpellDatabase::Spells) {

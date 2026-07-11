@@ -38,6 +38,8 @@ public:
         lastPlan = {};
         lastThreatSerial = -1;
         lastPlanTick = 0;
+        safeSinceTick = 0;
+        unsafePathStopped = false;
     }
 
     void Update(const EvadeRuntimeConfig& config) {
@@ -58,13 +60,19 @@ public:
             now);
         const Vec2 heroPos = player.ServerPosition().To2D();
         const float heroRadius = std::max(10.0f, player.BoundingRadius());
+        const bool controlWasActive = command.ControlActive() ||
+            state != EvadeControllerState::Idle;
+        EvadeRuntimeConfig evadeConfig = config;
+        evadeConfig.planner.endpointBuffer = std::max(
+            config.planner.endpointBuffer,
+            config.planner.releaseBuffer + 8.0f);
         const bool endangered = EvadeGeometry::HeroThreatenedNow(
             threats,
             heroPos,
             heroRadius,
-            state == EvadeControllerState::Idle
-                ? config.planner.pathBuffer
-                : std::min(config.planner.releaseBuffer, config.planner.endpointBuffer),
+            controlWasActive
+                ? std::max(config.planner.pathBuffer, config.planner.releaseBuffer)
+                : config.planner.pathBuffer,
             now,
             config.planner.maxThreatHorizonMs);
         bool unsafeCurrentPath = false;
@@ -82,7 +90,7 @@ public:
                     std::max(50.0f, player.MoveSpeed()),
                     heroRadius,
                     now,
-                    config.planner,
+                    controlWasActive ? evadeConfig.planner : config.planner,
                     threats);
                 unsafeCurrentPath = intendedPath.valid && intendedPath.walkable &&
                     (!intendedPath.pathSafe || !intendedPath.endpointSafe);
@@ -90,11 +98,33 @@ public:
         }
 
         if (!endangered) {
-            HandleRelease();
-            if (unsafeCurrentPath) command.StopUnsafeMovement();
+            if (spellHoldUntilTick > now) {
+                command.BeginControl();
+                safeSinceTick = 0;
+                return;
+            }
+            if (controlWasActive) {
+                if (safeSinceTick == 0) safeSinceTick = now;
+                if (now - safeSinceTick < 75) {
+                    state = EvadeControllerState::Release;
+                    return;
+                }
+                HandleRelease();
+            } else {
+                safeSinceTick = 0;
+            }
+            if (unsafeCurrentPath) {
+                if (!unsafePathStopped)
+                    unsafePathStopped = command.StopUnsafeMovement();
+            } else {
+                unsafePathStopped = false;
+            }
             return;
         }
-        state = state == EvadeControllerState::Idle
+        safeSinceTick = 0;
+        unsafePathStopped = false;
+        state = state == EvadeControllerState::Idle ||
+                state == EvadeControllerState::Release
             ? EvadeControllerState::Assessing
             : state;
         if (spellHoldUntilTick > now) {
@@ -109,44 +139,40 @@ public:
         const bool lockedValid = ValidateLocked(
             player,
             threats,
-            config,
+            evadeConfig,
             now,
             &currentLocked);
-        int planInterval = state == EvadeControllerState::FallbackEvade
-            ? config.fallbackReplanIntervalMs
-            : config.replanIntervalMs;
-        if (state == EvadeControllerState::StrictEvade && lockedValid)
-            planInterval = std::clamp(planInterval * 3, 120, 240);
-        if (state == EvadeControllerState::FallbackEvade &&
-            lastPlan.selected.firstCollisionTimeMs != FLT_MAX && lastPlanTick > 0) {
-            const float remaining = lastPlan.selected.firstCollisionTimeMs -
-                static_cast<float>(now - lastPlanTick);
-            planInterval = std::min(
-                planInterval,
-                std::max(20, static_cast<int>(std::round(remaining * 0.2f))));
+        if (lockedValid && state == EvadeControllerState::FallbackEvade &&
+            currentLocked.strictSafe) {
+            locked = currentLocked;
+            state = EvadeControllerState::StrictEvade;
         }
+        const bool periodicFallbackReplan =
+            state == EvadeControllerState::FallbackEvade &&
+            lastPlanTick > 0 &&
+            now - lastPlanTick >= std::max(90, evadeConfig.fallbackReplanIntervalMs);
         const bool shouldReplan = !lockedValid || serial != lastThreatSerial ||
-            lastPlanTick == 0 || now - lastPlanTick >= std::max(20, planInterval);
+            lastPlanTick == 0 || periodicFallbackReplan;
 
         if (shouldReplan) {
             const EvadeControllerState previousState = state;
             state = EvadeControllerState::Assessing;
-            PlannerResult plan = config.walkingEnabled
-                ? EvadePlanner::FindBest(player, threats, config.planner)
+            PlannerResult plan = evadeConfig.walkingEnabled
+                ? EvadePlanner::FindBest(player, threats, evadeConfig.planner)
                 : PlannerResult{};
             lastPlan = plan;
             lastPlanTick = now;
             lastThreatSerial = serial;
-            const bool weakWalkingPlan = !config.walkingEnabled || !plan.found || !plan.strictSafe ||
-                plan.selected.timeMarginMs < config.evadeSpellMarginThresholdMs ||
+            const bool weakWalkingPlan = !evadeConfig.walkingEnabled || !plan.found || !plan.strictSafe ||
+                plan.selected.timeMarginMs < evadeConfig.evadeSpellMarginThresholdMs ||
                 plan.selected.minimumClearance <
-                    std::max(0.0f, config.planner.preferredClearance * 0.5f);
-            if (config.evadeSpellsEnabled && weakWalkingPlan) {
+                    std::max(0.0f, evadeConfig.planner.preferredClearance * 0.5f);
+            if (evadeConfig.evadeSpellsEnabled && weakWalkingPlan) {
                 const EvadeSpellCastResult spell = spellEngine.TryUse(
                     player,
                     threats,
-                    config.planner,
-                    config.evadeSpellMinimumDanger);
+                    evadeConfig.planner,
+                    evadeConfig.evadeSpellMinimumDanger);
                 if (spell.casted) {
                     command.BeginControl();
                     locked = spell.destination;
@@ -160,43 +186,58 @@ public:
                     return;
                 }
             }
-            if (plan.found && (plan.strictSafe || config.leastDangerFallback)) {
+            if (plan.found && (plan.strictSafe || evadeConfig.leastDangerFallback)) {
                 const float requiredGain = std::max(
                     8.0f,
-                    config.planner.preferredClearance * 0.5f);
+                    evadeConfig.planner.preferredClearance * 0.5f);
                 const bool materiallySafer = plan.strictSafe && lockedValid &&
                     plan.selected.minimumClearance >= currentLocked.minimumClearance + requiredGain;
                 const bool avoidsTurret = plan.strictSafe && lockedValid &&
                     plan.selected.turretPenalty + 20.0f < currentLocked.turretPenalty;
                 const bool keepStrictLock = previousState == EvadeControllerState::StrictEvade &&
                     lockedValid && plan.strictSafe && !materiallySafer && !avoidsTurret;
-                if (keepStrictLock) {
+                const bool keepFallbackLock = previousState == EvadeControllerState::FallbackEvade &&
+                    lockedValid && !plan.strictSafe &&
+                    !FallbackMateriallyBetter(plan.selected, currentLocked);
+                if (keepStrictLock || keepFallbackLock) {
                     locked = currentLocked;
                     lastPlan.found = true;
-                    lastPlan.strictSafe = true;
+                    lastPlan.strictSafe = locked.strictSafe;
                     lastPlan.selected = locked;
-                    state = EvadeControllerState::StrictEvade;
+                    state = locked.strictSafe
+                        ? EvadeControllerState::StrictEvade
+                        : EvadeControllerState::FallbackEvade;
                 } else {
                     locked = plan.selected;
                     state = plan.strictSafe
                         ? EvadeControllerState::StrictEvade
                         : EvadeControllerState::FallbackEvade;
                 }
+            } else if (lockedValid) {
+                locked = currentLocked;
+                lastPlan.found = true;
+                lastPlan.strictSafe = locked.strictSafe;
+                lastPlan.selected = locked;
+                state = locked.strictSafe
+                    ? EvadeControllerState::StrictEvade
+                    : EvadeControllerState::FallbackEvade;
             } else {
                 locked = {};
                 state = EvadeControllerState::FallbackEvade;
             }
         }
 
-        if (config.walkingEnabled && locked.valid && locked.walkable) {
+        if (evadeConfig.walkingEnabled && locked.valid && locked.walkable) {
             if (!command.MoveTo(
                     player,
                     locked.position,
-                    config.moveIntervalMs,
-                    config.moveRefreshMs)) {
+                    evadeConfig.moveIntervalMs,
+                    evadeConfig.moveRefreshMs)) {
                 locked.valid = false;
                 lastPlanTick = 0;
             }
+        } else if (evadeConfig.walkingEnabled && player.HasPath()) {
+            command.StopUnsafeMovement();
         }
     }
 
@@ -249,6 +290,8 @@ private:
     int lastThreatSerial = -1;
     int lastPlanTick = 0;
     int spellHoldUntilTick = 0;
+    int safeSinceTick = 0;
+    bool unsafePathStopped = false;
 
     static std::vector<Threat> FilterThreats(const std::vector<Threat>& input,
                                              int minimumDanger,
@@ -331,15 +374,37 @@ private:
         current.turretPenalty = locked.turretPenalty;
         if (evaluationOut) *evaluationOut = current;
         if (!current.valid || !current.walkable) return false;
-        if (state == EvadeControllerState::StrictEvade) return current.strictSafe;
+        if (state == EvadeControllerState::StrictEvade) {
+            if (current.strictSafe) return true;
+            return current.endpointSafe && !current.reenteredDanger &&
+                current.exitDistance + 4.0f < current.travelDistance &&
+                current.firstCollisionTimeMs <= config.planner.inputDelayMs + 35.0f;
+        }
         if (state == EvadeControllerState::FallbackEvade) {
-            if (current.strictSafe) return false;
+            if (current.strictSafe) return true;
             if (current.endpointDanger > locked.endpointDanger) return false;
             if (current.maxDanger > locked.maxDanger) return false;
             if (current.dangerExposureMs > locked.dangerExposureMs + 35.0f) return false;
             return true;
         }
         return false;
+    }
+
+    static bool FallbackMateriallyBetter(const CandidateEvaluation& candidate,
+                                         const CandidateEvaluation& current) {
+        if (candidate.strictSafe != current.strictSafe) return candidate.strictSafe;
+        if (candidate.endpointDanger != current.endpointDanger)
+            return candidate.endpointDanger < current.endpointDanger;
+        if (candidate.maxDanger != current.maxDanger)
+            return candidate.maxDanger < current.maxDanger;
+        if (candidate.collisionCount != current.collisionCount)
+            return candidate.collisionCount < current.collisionCount;
+        if (candidate.dangerExposureMs + 70.0f < current.dangerExposureMs) return true;
+        if (candidate.firstCollisionTimeMs != FLT_MAX &&
+            current.firstCollisionTimeMs != FLT_MAX &&
+            candidate.firstCollisionTimeMs > current.firstCollisionTimeMs + 90.0f) return true;
+        return candidate.minimumClearance > current.minimumClearance + 18.0f &&
+            candidate.travelDistance <= current.travelDistance + 70.0f;
     }
 
     void HandleRelease() {
@@ -349,6 +414,8 @@ private:
         locked = {};
         lastPlan = {};
         spellHoldUntilTick = 0;
+        safeSinceTick = 0;
+        unsafePathStopped = false;
         lastThreatSerial = ThreatDetector::ChangeSerial();
     }
 };

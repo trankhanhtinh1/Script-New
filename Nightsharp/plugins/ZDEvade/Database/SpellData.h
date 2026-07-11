@@ -79,6 +79,9 @@ struct SpellData {
 
     bool hasTrap = false;
     std::string trapBaseName;
+    std::vector<std::string> extraTrapNames;
+    float trapRadius = 0.0f;
+    int trapActivationDelay = 0;
 
     SpellData() = default;
 };

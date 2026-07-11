@@ -227,18 +227,18 @@ private:
         config.evadeSpellMarginThresholdMs = static_cast<float>(
             m_evadeSpellMarginMenu ? m_evadeSpellMarginMenu->Value : 45);
         config.threatRules = &m_threatRules;
-        config.moveIntervalMs = m_moveIntervalMenu ? m_moveIntervalMenu->Value : 75;
-        config.moveRefreshMs = m_moveRefreshMenu ? m_moveRefreshMenu->Value : 260;
-        config.replanIntervalMs = m_replanIntervalMenu ? m_replanIntervalMenu->Value : 70;
+        config.moveIntervalMs = m_moveIntervalMenu ? m_moveIntervalMenu->Value : 85;
+        config.moveRefreshMs = m_moveRefreshMenu ? m_moveRefreshMenu->Value : 320;
+        config.replanIntervalMs = m_replanIntervalMenu ? m_replanIntervalMenu->Value : 90;
         config.fallbackReplanIntervalMs = std::max(25, config.replanIntervalMs / 2);
-        config.planner.endpointBuffer = static_cast<float>(m_endpointBufferMenu ? m_endpointBufferMenu->Value : 24);
-        config.planner.pathBuffer = static_cast<float>(m_pathBufferMenu ? m_pathBufferMenu->Value : 8);
+        config.planner.endpointBuffer = static_cast<float>(m_endpointBufferMenu ? m_endpointBufferMenu->Value : 32);
+        config.planner.pathBuffer = static_cast<float>(m_pathBufferMenu ? m_pathBufferMenu->Value : 12);
         config.planner.releaseBuffer = static_cast<float>(m_releaseBufferMenu ? m_releaseBufferMenu->Value : 48);
         config.planner.inputDelayMs = static_cast<float>(m_inputDelayMenu ? m_inputDelayMenu->Value : 55) +
             static_cast<float>(std::max(0, SDK::Game::Ping())) * 0.5f;
         config.planner.minimumTimeMarginMs = static_cast<float>(m_minMarginMenu ? m_minMarginMenu->Value : 25);
         config.planner.preferredClearance = static_cast<float>(
-            m_preferredClearanceMenu ? m_preferredClearanceMenu->Value : 18);
+            m_preferredClearanceMenu ? m_preferredClearanceMenu->Value : 24);
         config.planner.maxSearchRadius = static_cast<float>(m_searchRadiusMenu ? m_searchRadiusMenu->Value : 760);
         return config;
     }
@@ -279,19 +279,19 @@ private:
         CreateSpellMenus();
 
         auto* safety = m_menu->AddSubMenu(new Menu("safety", "Safety and Timing"));
-        m_endpointBufferMenu = safety->Add(new MenuSlider("endpointBuffer", "Endpoint Buffer", 24, 0, 120));
-        m_pathBufferMenu = safety->Add(new MenuSlider("pathBuffer", "Path Buffer", 8, 0, 100));
+        m_endpointBufferMenu = safety->Add(new MenuSlider("endpointBuffer", "Endpoint Buffer", 32, 0, 120));
+        m_pathBufferMenu = safety->Add(new MenuSlider("pathBuffer", "Path Buffer", 12, 0, 100));
         m_releaseBufferMenu = safety->Add(new MenuSlider("releaseBuffer", "Release Buffer", 48, 0, 140));
         m_inputDelayMenu = safety->Add(new MenuSlider("inputDelay", "Extra Input Delay", 55, 0, 200));
         m_minMarginMenu = safety->Add(new MenuSlider("minimumMargin", "Minimum Time Margin", 25, 0, 250));
         m_preferredClearanceMenu = safety->Add(new MenuSlider(
-            "preferredClearance", "Preferred Clearance", 18, 0, 100));
+            "preferredClearance", "Preferred Clearance", 24, 0, 100));
         m_searchRadiusMenu = safety->Add(new MenuSlider("searchRadius", "Maximum Search Radius", 760, 300, 1200));
 
         auto* control = m_menu->AddSubMenu(new Menu("control", "Control"));
-        m_moveIntervalMenu = control->Add(new MenuSlider("moveInterval", "Move Interval", 75, 25, 250));
-        m_moveRefreshMenu = control->Add(new MenuSlider("moveRefresh", "Move Refresh", 260, 100, 600));
-        m_replanIntervalMenu = control->Add(new MenuSlider("replanInterval", "Replan Interval", 70, 20, 250));
+        m_moveIntervalMenu = control->Add(new MenuSlider("moveInterval", "Move Interval", 85, 25, 250));
+        m_moveRefreshMenu = control->Add(new MenuSlider("moveRefresh", "Move Refresh", 320, 100, 600));
+        m_replanIntervalMenu = control->Add(new MenuSlider("replanInterval", "Replan Interval", 90, 20, 250));
 
         auto* draw = m_menu->AddSubMenu(new Menu("draw", "Draw"));
         m_drawSpellsMenu = draw->Add(new MenuBool("drawSpells", "Draw Skillshots", true));

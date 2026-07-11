@@ -30,6 +30,7 @@
 #include "Champion/SharpShooterAIO/SharpShooterAIO.h"
 #include "Champion/ziblldev9898/ziblldev9898.h"
 #include "ZDEvade/ZDEvade.h"
+#include "ZDPrediction/ZDPrediction.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
 #include "../DebugLog.h"
@@ -113,6 +114,11 @@ namespace PluginBootstrap {
                                     &::SDK::SdkWrappers::ResumeSdkOrbwalkerRuntime,
                                     &::SDK::SdkWrappers::SuspendSdkOrbwalkerRuntime);
         PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        const int predictionRegistryIdx = PluginRegistry::Register("Prediction", "prediction", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        PluginRegistry::BindRuntime(predictionRegistryIdx,
+                                    nullptr,
+                                    &::SDK::Prediction::ResumeSdkPredictionRuntime,
+                                    &::SDK::Prediction::SuspendSdkPredictionRuntime);
         NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers complete");
 #else
         NightSharpDebug::Logf("[PluginBootstrap] SDK Wrappers disabled for FPS test");
@@ -154,6 +160,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
         PluginManager::Get().Register<Ziblldev9898Plugin>();
         PluginManager::Get().Register<ZDEvadePlugin>();
+        PluginManager::Get().Register<ZDPredictionPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

@@ -32,7 +32,9 @@ public:
     }
 
     static bool ThreatActiveAt(const Threat& threat, int tick) {
-        if (threat.expired || tick > threat.endTick + 100) return false;
+        if (threat.expired) return false;
+        if (threat.objectBound) return tick >= threat.startTick + threat.Delay();
+        if (tick > threat.endTick + 100) return false;
         if ((threat.Type() == ZDSpellType::Line || threat.Type() == ZDSpellType::Arc) &&
             threat.HasTravelSpeed()) {
             return tick >= TravelStartTick(threat);
@@ -796,7 +798,10 @@ private:
         int activeStartTick = threat.startTick + threat.Delay() - 120;
         int activeEndTick = threat.startTick + threat.Delay() +
             std::max(100, threat.ExtraEndTime());
-        if (threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()) {
+        if (threat.objectBound) {
+            activeStartTick = threat.startTick + threat.Delay();
+            activeEndTick = threat.endTick;
+        } else if (threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()) {
             const int impact = ImpactTickAt(threat, threat.endPos);
             activeStartTick = impact - 120;
             activeEndTick = impact + std::max(100, threat.ExtraEndTime());
