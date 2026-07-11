@@ -641,7 +641,7 @@ private:
 
         auto* drawing = m_menu->AddSubMenu(new Menu("drawing", "Smart Drawing"));
         m_fillSkillshotsMenu = drawing->Add(new MenuBool(
-            "fillSkillshots", "Filled ImGui Skillshots", true));
+            "fillSkillshots", "Filled Skillshots", true));
         m_drawIrrelevantMenu = drawing->Add(new MenuBool(
             "drawIrrelevant", "Show Irrelevant Skillshots", true));
         m_drawEvadeRouteMenu = drawing->Add(new MenuBool(
@@ -682,7 +682,7 @@ private:
         auto* misc = m_menu->AddSubMenu(new Menu("misc", "Misc Settings"));
         m_higherPrecisionMenu = misc->Add(new MenuBool("higherPrecision", "Enhanced Dodge Precision", false));
         m_calculateWindupMenu = misc->Add(new MenuBool("calculateWindup", "Calculate Windup Delay", true));
-        m_checkCollisionMenu = misc->Add(new MenuBool("checkCollision", "Check Spell Collision", false));
+        m_checkCollisionMenu = misc->Add(new MenuBool("checkCollision", "Check Spell Collision", true));
         m_clickRemoveMenu = misc->Add(new MenuBool(
             "clickRemove", "Allow Left Click Removal", true));
         m_preventTowerMenu = misc->Add(new MenuBool("preventTower", "Prevent Dodging Under Tower", false));
@@ -690,7 +690,7 @@ private:
 
         auto* buffers = m_menu->AddSubMenu(new Menu("buffers", "Extra Buffers"));
         m_extraDelayMenu = buffers->Add(new MenuSlider(
-            "extraDelay", "Extra Ping Buffer (ms)", 30, 0, 200));
+            "extraDelay", "Extra Ping Buffer (ms)", 0, 0, 200));
         m_extraDistMenu = buffers->Add(new MenuSlider(
             "extraDist", "Extra CPA Distance", 10, 0, 150));
         m_extraSpellRadiusMenu = buffers->Add(new MenuSlider(
@@ -706,7 +706,7 @@ private:
         m_spellActivationMenu = fast->Add(new MenuSlider(
             "spellActivationTime", "Spell Activation Time", 400, 0, 1000));
         m_fastActivationMenu = fast->Add(new MenuSlider(
-            "fastActivation", "FastEvade Activation Time", 65, 0, 500));
+            "fastActivation", "FastEvade Activation Time", 0, 0, 500));
         m_rejectMinDistanceMenu = fast->Add(new MenuSlider(
             "rejectMinDistance", "Collision Distance Buffer", 10, 0, 100));
 

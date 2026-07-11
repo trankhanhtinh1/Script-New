@@ -535,7 +535,12 @@ static bool InitImGui(IDXGISwapChain* swapChain) {
     io.IniFilename = nullptr;
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    io.Fonts->AddFontDefault();
+    ImFontConfig menuFontConfig;
+    menuFontConfig.OversampleH = 3;
+    menuFontConfig.OversampleV = 2;
+    menuFontConfig.PixelSnapH = true;
+    menuFontConfig.RasterizerMultiply = 1.1f;
+    io.Fonts->AddFontDefault(&menuFontConfig);
 
     g_pSwapChain = swapChain;
     HRESULT hr = g_pSwapChain->GetDevice(

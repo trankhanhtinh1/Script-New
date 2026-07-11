@@ -108,28 +108,92 @@ namespace SDK { namespace UI {
                                       bool positive,
                                       const ImVec2& size) {
         ImVec4 activeBase = positive
-            ? ImVec4(0.18f, 0.55f, 0.28f, 0.98f)
-            : ImVec4(0.65f, 0.22f, 0.24f, 0.98f);
+            ? ImVec4(0.12f, 0.47f, 0.43f, 1.0f)
+            : ImVec4(0.61f, 0.20f, 0.27f, 1.0f);
         ImVec4 activeHover = positive
-            ? ImVec4(0.22f, 0.64f, 0.32f, 1.0f)
-            : ImVec4(0.75f, 0.27f, 0.29f, 1.0f);
+            ? ImVec4(0.16f, 0.60f, 0.54f, 1.0f)
+            : ImVec4(0.74f, 0.27f, 0.35f, 1.0f);
         ImVec4 activePress = positive
-            ? ImVec4(0.15f, 0.48f, 0.24f, 1.0f)
-            : ImVec4(0.58f, 0.18f, 0.20f, 1.0f);
-        ImVec4 inactiveBase = ImVec4(0.14f, 0.16f, 0.24f, 0.95f);
-        ImVec4 inactiveHover = ImVec4(0.20f, 0.24f, 0.34f, 0.98f);
-        ImVec4 inactivePress = ImVec4(0.24f, 0.28f, 0.40f, 1.0f);
-
+            ? ImVec4(0.09f, 0.38f, 0.35f, 1.0f)
+            : ImVec4(0.50f, 0.16f, 0.22f, 1.0f);
+        ImVec4 inactiveBase = ImVec4(0.10f, 0.14f, 0.20f, 1.0f);
+        ImVec4 inactiveHover = ImVec4(0.16f, 0.22f, 0.31f, 1.0f);
+        ImVec4 inactivePress = ImVec4(0.20f, 0.27f, 0.38f, 1.0f);
         ImGui::PushStyleColor(ImGuiCol_Button, active ? activeBase : inactiveBase);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? activeHover : inactiveHover);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePress : inactivePress);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
         bool clicked = ImGui::Button(label, size);
         ImGui::PopStyleVar(2);
         ImGui::PopStyleColor(4);
         return clicked;
+    }
+
+    inline bool DrawMenuActionButton(const char* label, const ImVec2& size, bool emphasized = false) {
+        const ImVec4 base = emphasized
+            ? ImVec4(0.13f, 0.38f, 0.57f, 1.0f)
+            : ImVec4(0.11f, 0.18f, 0.28f, 1.0f);
+        const ImVec4 hovered = emphasized
+            ? ImVec4(0.18f, 0.49f, 0.71f, 1.0f)
+            : ImVec4(0.17f, 0.28f, 0.42f, 1.0f);
+        const ImVec4 pressed = emphasized
+            ? ImVec4(0.10f, 0.30f, 0.47f, 1.0f)
+            : ImVec4(0.13f, 0.22f, 0.33f, 1.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, base);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hovered);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, pressed);
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        const bool clicked = ImGui::Button(label, size);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+        return clicked;
+    }
+
+    inline void DrawMenuTag(const char* label, const ImVec2& size) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.08f, 0.12f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.08f, 0.12f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.08f, 0.12f, 0.18f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.67f, 0.76f, 0.88f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        ImGui::Button(label, size);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(5);
+    }
+
+    inline bool DrawMenuArrowButton(const char* id, ImGuiDir direction) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.11f, 0.18f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.17f, 0.28f, 0.42f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.13f, 0.22f, 0.33f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+        const bool clicked = ImGui::ArrowButton(id, direction);
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+        return clicked;
+    }
+
+    inline void PushFlatSliderStyle() {
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.07f, 0.11f, 0.17f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.10f, 0.17f, 0.26f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.12f, 0.22f, 0.33f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.23f, 0.73f, 0.65f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.35f, 0.88f, 0.77f, 1.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    }
+
+    inline void PopFlatSliderStyle() {
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(5);
     }
 
     inline bool DrawOnOffEditor(const char* label, bool& value, const char* idSuffix = nullptr) {
@@ -633,10 +697,12 @@ namespace SDK { namespace UI {
             ImGui::PushID(this);
             int v = Value;
             const float width = BeginMenuValueRow(DisplayName.c_str(), 280.0f);
+            PushFlatSliderStyle();
             ImGui::SetNextItemWidth(width);
             if (ImGui::SliderInt("##value", &v, MinValue, MaxValue, "%d")) Set(v);
             Interacting = ImGui::IsItemActive();
             DrawTooltipIfHovered();
+            PopFlatSliderStyle();
             ImGui::PopID();
         }
     };
@@ -681,10 +747,12 @@ namespace SDK { namespace UI {
             ImGui::PushID(this);
             float v = Value;
             const float width = BeginMenuValueRow(DisplayName.c_str(), 280.0f);
+            PushFlatSliderStyle();
             ImGui::SetNextItemWidth(width);
             if (ImGui::SliderFloat("##value", &v, MinValue, MaxValue, "%.2f")) Set(v);
             Interacting = ImGui::IsItemActive();
             DrawTooltipIfHovered();
+            PopFlatSliderStyle();
             ImGui::PopID();
         }
     };
@@ -811,33 +879,22 @@ namespace SDK { namespace UI {
             ImGui::PushID(this);
 
             const float width = BeginMenuValueRow(DisplayName.c_str(), 300.0f);
-            const float keyWidth = width >= 260.0f ? 118.0f : 96.0f;
+            const float gap = 6.0f;
             const float typeWidth = width >= 260.0f ? 72.0f : 58.0f;
-            const float activeWidth = width >= 260.0f ? 50.0f : 44.0f;
+            const float activeWidth = width >= 260.0f ? 54.0f : 44.0f;
+            const float keyWidth = width - typeWidth - activeWidth - gap * 2.0f;
 
             ImGui::BeginGroup();
-            ImGui::PushStyleColor(
-                ImGuiCol_Button,
-                Interacting ? ImVec4(0.20f, 0.39f, 0.72f, 0.95f)
-                            : ImVec4(0.10f, 0.17f, 0.28f, 0.78f));
-            ImGui::PushStyleColor(
-                ImGuiCol_ButtonHovered,
-                Interacting ? ImVec4(0.28f, 0.50f, 0.88f, 1.0f)
-                            : ImVec4(0.16f, 0.28f, 0.46f, 0.92f));
-            ImGui::PushStyleColor(
-                ImGuiCol_ButtonActive,
-                Interacting ? ImVec4(0.16f, 0.32f, 0.60f, 1.0f)
-                            : ImVec4(0.20f, 0.36f, 0.58f, 1.0f));
-            if (ImGui::Button(Interacting ? "Press key..." : VkToText(Key), ImVec2(keyWidth, 0.0f))) {
+            if (DrawMenuActionButton(Interacting ? "PRESS A KEY" : VkToText(Key),
+                                     ImVec2(keyWidth, 0.0f), Interacting)) {
                 Interacting = true;
             }
-            ImGui::PopStyleColor(3);
             DrawTooltipIfHovered();
 
-            ImGui::SameLine(0.0f, 6.0f);
-            ImGui::Button(TypeToText(Type), ImVec2(typeWidth, 0.0f));
+            ImGui::SameLine(0.0f, gap);
+            DrawMenuTag(TypeToText(Type), ImVec2(typeWidth, 0.0f));
 
-            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::SameLine(0.0f, gap);
             if (DrawStateToggleButton("##active", Active ? "ON" : "OFF", Active, true, ImVec2(activeWidth, 0.0f))) {
                 SetActive(!Active);
             }
@@ -909,12 +966,10 @@ namespace SDK { namespace UI {
 
         void DrawImGui() override {
             ImGui::PushID(this);
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(DisplayName.c_str());
-            ImGui::SameLine();
+            const float controlWidth = BeginMenuValueRow(DisplayName.c_str(), 212.0f);
 
             if (Options.empty()) {
-                ImGui::TextDisabled("-");
+                DrawMenuTag("-", ImVec2(controlWidth, 0.0f));
                 DrawTooltipIfHovered();
                 ImGui::PopID();
                 return;
@@ -927,27 +982,20 @@ namespace SDK { namespace UI {
                 Index = Options.size() - 1;
             }
 
-            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+            const float gap = 6.0f;
+            const float arrowWidth = ImGui::GetFrameHeight();
+            const float selectedWidth = controlWidth - arrowWidth * 2.0f - gap * 2.0f;
 
-            const float rightStart = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 212.0f;
-            if (rightStart > ImGui::GetCursorPosX()) {
-                ImGui::SetCursorPosX(rightStart);
-            }
-
-            if (ImGui::ArrowButton("##prev", ImGuiDir_Left)) {
+            if (DrawMenuArrowButton("##prev", ImGuiDir_Left)) {
                 Set((Index - 1 + Options.size()) % Options.size());
             }
-            ImGui::SameLine(0.0f, 6.0f);
-            ImGui::Button(SelectedValue(), ImVec2(160.0f, 0.0f));
-            ImGui::SameLine(0.0f, 6.0f);
-            if (ImGui::ArrowButton("##next", ImGuiDir_Right)) {
+            ImGui::SameLine(0.0f, gap);
+            DrawMenuTag(SelectedValue(), ImVec2(selectedWidth, 0.0f));
+            ImGui::SameLine(0.0f, gap);
+            if (DrawMenuArrowButton("##next", ImGuiDir_Right)) {
                 Set((Index + 1) % Options.size());
             }
 
-            ImGui::PopStyleVar(2);
-            ImGui::PopStyleColor();
             DrawTooltipIfHovered();
             ImGui::PopID();
         }
@@ -985,10 +1033,9 @@ namespace SDK { namespace UI {
 
         void DrawImGui() override {
             ImGui::PushID(this);
-            ImGui::TextUnformatted(DisplayName.c_str());
+            const float width = BeginMenuValueRow(DisplayName.c_str(), 136.0f);
             DrawTooltipIfHovered();
-            ImGui::SameLine();
-            if (ImGui::SmallButton(ButtonText.c_str())) {
+            if (DrawMenuActionButton(ButtonText.c_str(), ImVec2(width, 0.0f))) {
                 if (Callback) Callback();
                 else if (Action) Action(this, ActionUd);
                 FireValueChanged();
@@ -1039,8 +1086,8 @@ namespace SDK { namespace UI {
         void DrawImGui() override {
             ImGui::PushID(this);
             ImVec4 c = ImGui::ColorConvertU32ToFloat4(Value);
-            ImGui::TextUnformatted(DisplayName.c_str());
-            ImGui::SameLine();
+            const float width = BeginMenuValueRow(DisplayName.c_str(), 136.0f);
+            ImGui::SetNextItemWidth(width);
             if (ImGui::ColorEdit4("##cl", &c.x,
                 ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar)) {
                 Set(ImGui::ColorConvertFloat4ToU32(c));
@@ -1063,7 +1110,8 @@ namespace SDK { namespace UI {
 
         void DrawImGui() override {
             if (!DisplayName.empty()) {
-                ImGui::TextColored(ImVec4(0.55f, 0.78f, 1.0f, 1.0f), "%s", DisplayName.c_str());
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.35f, 0.88f, 0.77f, 1.0f), "%s", DisplayName.c_str());
                 DrawTooltipIfHovered();
             }
             ImGui::Separator();
@@ -1132,10 +1180,11 @@ namespace SDK { namespace UI {
         void DrawImGui() override {
             ImGui::PushID(this);
             const float width = BeginMenuValueRow(DisplayName.c_str(), 320.0f);
-            const float checkboxWidth = 24.0f;
+            const float toggleWidth = 48.0f;
             const float spacing = ImGui::GetStyle().ItemSpacing.x;
             bool b = Enabled;
-            if (ImGui::Checkbox("##en", &b)) {
+            if (DrawStateToggleButton("##en", b ? "ON" : "OFF", b, true, ImVec2(toggleWidth, 0.0f))) {
+                b = !b;
                 Enabled = b;
                 FireValueChanged();
                 if (Parent && Parent->IsMenu()) static_cast<Menu*>(Parent)->FireMenuValueChanged(this);
@@ -1143,10 +1192,11 @@ namespace SDK { namespace UI {
             DrawTooltipIfHovered();
             ImGui::SameLine(0.0f, spacing);
             int v = Value;
-            float sliderWidth = width - checkboxWidth - spacing;
+            float sliderWidth = width - toggleWidth - spacing;
             if (sliderWidth < 64.0f) {
                 sliderWidth = 64.0f;
             }
+            PushFlatSliderStyle();
             ImGui::SetNextItemWidth(sliderWidth);
             if (ImGui::SliderInt("##sl", &v, MinValue, MaxValue)) {
                 if (v < MinValue) v = MinValue;
@@ -1157,6 +1207,7 @@ namespace SDK { namespace UI {
                     if (Parent && Parent->IsMenu()) static_cast<Menu*>(Parent)->FireMenuValueChanged(this);
                 }
             }
+            PopFlatSliderStyle();
             ImGui::PopID();
         }
     };
