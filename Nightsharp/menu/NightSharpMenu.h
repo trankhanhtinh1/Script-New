@@ -491,24 +491,36 @@ namespace NightSharpMenu {
             return;
         }
 
-        const ImVec2 valueSize = ImGui::CalcTextSize(value);
-        const float valueX = x + width - padding - valueSize.x;
-
+        // Draw the label on the far left
         dl->AddText(ImVec2(x + padding, currentY), color, label);
 
         if (hasState) {
-            const float boxRight = valueX - 8.0f;
-            const float boxLeft = boxRight - indicatorWidth;
+            // Far-right aligned box width (75 pixels fits "False" beautifully)
+            const float boxWidth = 75.0f;
+            const float boxRight = x + width - padding;
+            const float boxLeft = boxRight - boxWidth;
+
             if (boxLeft > x + padding) {
+                // Background color box: green for true, red for false
                 dl->AddRectFilled(
                     ImVec2(boxLeft, currentY + 1.0f),
-                    ImVec2(boxRight, currentY + lineHeight - 3.0f),
-                    stateOn ? IM_COL32(0, 110, 50, 180) : IM_COL32(120, 35, 35, 180),
-                    2.0f);
+                    ImVec2(boxRight, currentY + lineHeight - 2.0f),
+                    stateOn ? IM_COL32(0, 140, 60, 255) : IM_COL32(170, 40, 40, 255),
+                    3.0f);
+
+                // Draw status text inside the box (centered, white text color for high contrast)
+                const ImVec2 valSize = ImGui::CalcTextSize(value);
+                const float textX = boxLeft + (boxWidth - valSize.x) * 0.5f;
+                const float textY = currentY + (lineHeight - valSize.y) * 0.5f;
+                dl->AddText(ImVec2(textX, textY - 1.0f), IM_COL32(255, 255, 255, 255), value);
             }
+        } else {
+            // Draw regular values (numeric/text/sliders) right-aligned on the far right
+            const ImVec2 valueSize = ImGui::CalcTextSize(value);
+            const float valueX = x + width - padding - valueSize.x;
+            dl->AddText(ImVec2(valueX, currentY), color, value);
         }
 
-        dl->AddText(ImVec2(valueX, currentY), color, value);
         currentY += lineHeight;
     }
 

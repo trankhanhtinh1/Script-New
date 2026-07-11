@@ -20,6 +20,7 @@
 #include "Utility/ObjectDefinitionDrawPlugin.h"
 #include "Utility/VisibilityInvulnerabilityOffsetPlugin.h"
 #include "Utility/YasuoWallDebugPlugin.h"
+#include "Utility/DeveloperToolsPlugin.h"
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
@@ -147,6 +148,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<ObjectDefinitionDrawPlugin>();
         PluginManager::Get().Register<VisibilityInvulnerabilityOffsetPlugin>();
         PluginManager::Get().Register<YasuoWallDebugPlugin>();
+        PluginManager::Get().Register<DeveloperToolsPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins begin");

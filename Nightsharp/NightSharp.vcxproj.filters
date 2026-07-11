@@ -972,6 +972,9 @@
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h">
       <Filter>Plugins\Utility</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Utility\DeveloperToolsPlugin.h">
+      <Filter>Plugins\Utility</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Utility\IsDeadDebugPlugin.h">
       <Filter>Plugins\Utility</Filter>
     </ClInclude>

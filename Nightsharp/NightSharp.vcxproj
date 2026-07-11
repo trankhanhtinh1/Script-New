@@ -365,6 +365,7 @@
     <ClInclude Include="Plugins\PluginManager.h" />
     <ClInclude Include="Plugins\PluginRegistry.h" />
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperToolsPlugin.h" />
     <ClInclude Include="Plugins\Utility\IsDeadDebugPlugin.h" />
     <ClInclude Include="Plugins\Utility\MinionTracePlugin.h" />
     <ClInclude Include="Plugins\Utility\MovementStateDrawPlugin.h" />

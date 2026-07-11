@@ -23,7 +23,7 @@ inline Spell E{ SpellSlot::E, 775.0f };
 inline Spell R{ SpellSlot::R, 550.0f };
 
 struct Dagger {
-    AIMinionClient Unit;
+    GameObject Unit;
     Vector3 Position;
     int CreateTick = 0;
     int NetworkId = 0;
@@ -34,43 +34,50 @@ inline bool UpdateR = false;
 inline int LastR = 0;
 inline std::vector<Dagger> Daggers;
 
-static std::string RuntimeName(const GameObject& object) {
+static std::string GetObjectName(const GameObject& object) {
     if (!object.IsValid()) {
         return {};
     }
+    char nameBuf[96] = {};
+    if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+        return nameBuf;
+    }
+    return {};
+}
 
+static std::string GetObjectCharacterName(const GameObject& object) {
+    if (!object.IsValid()) {
+        return {};
+    }
     std::string name = object.CharacterName();
     if (!name.empty()) {
         return name;
     }
-
+    char nameBuf[96] = {};
+    if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+        return nameBuf;
+    }
     return {};
 }
 
+static std::string RuntimeName(const GameObject& object) {
+    return GetObjectCharacterName(object);
+}
+
 static bool IsHiddenMinion(const GameObject& object) {
-    if (!object.IsValid() || !object.IsMinion()) {
+    if (!object.IsValid()) {
         return false;
     }
-    const std::string name = RuntimeName(object);
-    if (EqualsIgnoreCase(name.c_str(), "HiddenMinion") ||
-        EqualsIgnoreCase(name.c_str(), "KatarinaDagger")) {
-        return true;
-    }
-    std::string lowerName = name;
-    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
-    return lowerName.find("katarinadagger") != std::string::npos || lowerName.find("katarina_dagger") != std::string::npos;
+    const std::string name = GetObjectName(object);
+    return EqualsIgnoreCase(name.c_str(), "Katarina_Base_W_Indicator_Ally");
 }
 
 static bool HaveRBuff() {
-    return Player().HasBuff("katarinarsound");
+    return Player().HasBuff("KatarinaRSound");
 }
 
 static bool IsOwnDagger(const Dagger& dagger) {
-    const auto player = Player();
-    return player.IsValid() &&
-           dagger.Unit.IsValid() &&
-           !dagger.Unit.IsDead() &&
-           dagger.Unit.Team() == player.Team();
+    return dagger.Unit.IsValid();
 }
 
 static bool IsDaggerReady(const Dagger& dagger, int minAgeMs = 1000) {
@@ -86,7 +93,6 @@ static void PruneDaggers() {
             [now](const Dagger& dagger) {
                 return now - dagger.CreateTick >= 5000 ||
                        !dagger.Unit.IsValid() ||
-                       dagger.Unit.IsDead() ||
                        dagger.Position.IsZero();
             }),
         Daggers.end());
@@ -689,7 +695,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 static void OnObjectCreate(const GameObject& object) {
     if (object.IsValid()) {
         Orbwalker::DebugPrint("[Create] Name: %s | CharName: %s | Minion: %d",
-                              object.Name().c_str(), object.CharacterName().c_str(), object.IsMinion() ? 1 : 0);
+                              GetObjectName(object).c_str(), GetObjectCharacterName(object).c_str(), object.IsMinion() ? 1 : 0);
     }
 
     if (!IsHiddenMinion(object)) {
@@ -704,13 +710,13 @@ static void OnObjectCreate(const GameObject& object) {
         return;
     }
 
-    Daggers.push_back({ AIMinionClient(object.Handle()), object.Position(), SDK::Variables::TickCount(), networkId });
+    Daggers.push_back({ object, object.Position(), SDK::Variables::TickCount(), networkId });
 }
 
 static void OnObjectDelete(const GameObject& object) {
     if (object.IsValid()) {
         Orbwalker::DebugPrint("[Delete] Name: %s | CharName: %s | Minion: %d",
-                              object.Name().c_str(), object.CharacterName().c_str(), object.IsMinion() ? 1 : 0);
+                              GetObjectName(object).c_str(), GetObjectCharacterName(object).c_str(), object.IsMinion() ? 1 : 0);
     }
 
     if (!IsHiddenMinion(object)) {
@@ -739,15 +745,8 @@ static void OnDraw() {
             if (!IsOwnDagger(dagger)) {
                 continue;
             }
-
             Drawing::DrawCircle(dagger.Position, 340.0f, 0xFFFFD700u, 1.5f, 64);
             Drawing::DrawCircle(dagger.Position, 150.0f, 0xFF7FFF00u, 1.5f, 64);
-            if (IsDaggerReady(dagger)) {
-                Vector2 screen;
-                if (Drawing::WorldToScreen(dagger.Position, screen)) {
-                    Drawing::DrawText(screen.x, screen.y - 50.0f, 0xFFFFFF00u, "Ready");
-                }
-            }
         }
     }
 

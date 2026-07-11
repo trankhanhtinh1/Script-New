@@ -462,6 +462,9 @@ namespace ConfigStore {
             Config::OverlayInput::clickThrough  = B("Overlay", "clickThrough", Config::OverlayInput::clickThrough);
             Config::PermaShow::enabled          = B("PermaShow", "enabled", Config::PermaShow::enabled);
             Config::PermaShow::width            = I("PermaShow", "width", Config::PermaShow::width);
+            if (Config::PermaShow::width < 500) {
+                Config::PermaShow::width = 500;
+            }
             Config::PermaShow::indicatorWidth   = I("PermaShow", "indicatorWidth", Config::PermaShow::indicatorWidth);
             Config::PermaShow::x                = I("PermaShow", "x", Config::PermaShow::x);
             Config::PermaShow::y                = I("PermaShow", "y", Config::PermaShow::y);

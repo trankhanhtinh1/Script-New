@@ -31,7 +31,7 @@ namespace Config {
         inline bool enabled = true;
 
         // Geometry — width/height defaults match the EnsoulSharp box.
-        inline int width = 250;
+        inline int width = 500;
         inline int indicatorWidth = 45;
 
         // Default panel position. Dragging the panel can still change this at runtime.
