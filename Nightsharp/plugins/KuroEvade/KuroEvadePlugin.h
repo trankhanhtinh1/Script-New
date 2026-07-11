@@ -8,6 +8,7 @@
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
 #include "../../SDK/UI/IMenu/Menu.h"
+#include "../../menu/ConfigStore.h"
 
 #include "Native/KuroEvadeNative.h"
 
@@ -29,6 +30,19 @@ public:
     const char* GetAuthor() const override { return "Kuro"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
     bool AutoLoadByDefault() const override { return true; }
+
+    std::string GetHeroCharacterName(const SDK::AIHeroClient& hero) const {
+        if (!hero.IsValid()) return "";
+        std::string name = hero.CharacterName();
+        if (!name.empty()) {
+            return name;
+        }
+        char nameBuf[96] = {};
+        if (::Core::Objects::ReadCharacterName(hero.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+            return nameBuf;
+        }
+        return "";
+    }
 
     void OnLoad() override {
         s_instance = this;
@@ -67,7 +81,10 @@ public:
         m_detector.Clear();
         m_spellVisuals.clear();
         m_evadeIntervening = false;
-        m_enemySpellsLoaded = false;
+        m_loadedChampions.clear();
+        m_debugSeparator = nullptr;
+        m_diagnosticsMenu = nullptr;
+        m_lastDiagnosticsUpdateTick = 0;
         DestroyMenu();
         KuroEvade::Evade::RestoreOrbwalkerMove();
         KuroCombatCoordination::Coordinator::Reset();
@@ -199,7 +216,10 @@ private:
     KuroEvade::Evade m_evade;
     KuroEvade::SpellDrawer::VisualMap m_spellVisuals;
     bool m_evadeIntervening = false;
-    bool m_enemySpellsLoaded = false;
+    std::unordered_set<std::string> m_loadedChampions;
+    MenuSeparator* m_debugSeparator = nullptr;
+    Menu* m_diagnosticsMenu = nullptr;
+    int m_lastDiagnosticsUpdateTick = 0;
     bool m_visualInterventionState = false;
     int m_lastVisualUpdateTick = 0;
 
@@ -564,10 +584,93 @@ private:
     }
 
     void Tick() {
-        if (!m_enemySpellsLoaded && !SDK::GameObjects::EnemyHeroes().empty()) {
+        bool needRebuild = false;
+
+        const auto player = SDK::ObjectManager::Player();
+        if (player.IsValid()) {
+            const std::string selfName = GetHeroCharacterName(player);
+            if (!selfName.empty()) {
+                const std::string selfKey = KuroEvade::SpellMenuKey::Lower(selfName);
+                if (m_loadedChampions.find("self_" + selfKey) == m_loadedChampions.end()) {
+                    m_loadedChampions.insert("self_" + selfKey);
+                    needRebuild = true;
+                }
+            }
+        }
+
+        for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
+            if (!enemy.IsValid()) {
+                continue;
+            }
+            const std::string enemyName = GetHeroCharacterName(enemy);
+            if (!enemyName.empty()) {
+                const std::string enemyKey = KuroEvade::SpellMenuKey::Lower(enemyName);
+                if (m_loadedChampions.find("enemy_" + enemyKey) == m_loadedChampions.end()) {
+                    m_loadedChampions.insert("enemy_" + enemyKey);
+                    needRebuild = true;
+                }
+            }
+        }
+
+        if (needRebuild) {
             RebuildSpellsMenu();
             RebuildEvadeSpellsMenu();
-            m_enemySpellsLoaded = true;
+            ::ConfigStore::ApplyLoaded(m_menu);
+        }
+
+        if (m_debugSeparator) {
+            char debugText[256];
+            _snprintf_s(debugText, sizeof(debugText), _TRUNCATE,
+                "Debug: Enemies found: %d | Loaded: %d | Time: %.2f",
+                (int)SDK::GameObjects::EnemyHeroes().size(),
+                (int)m_loadedChampions.size(),
+                SDK::Game::Time());
+            m_debugSeparator->DisplayName = debugText;
+        }
+
+        if (m_diagnosticsMenu && static_cast<int>(GetTickCount() - m_lastDiagnosticsUpdateTick) > 1000) {
+            m_lastDiagnosticsUpdateTick = GetTickCount();
+
+            for (int i = 0; i < m_diagnosticsMenu->Components.size(); ++i) {
+                delete m_diagnosticsMenu->Components[i];
+            }
+            m_diagnosticsMenu->Components.clear();
+
+            char summaryText[128];
+            _snprintf_s(summaryText, sizeof(summaryText), _TRUNCATE,
+                "Summary: Enemies found: %d | Loaded Set: %d",
+                (int)SDK::GameObjects::EnemyHeroes().size(),
+                (int)m_loadedChampions.size());
+            m_diagnosticsMenu->Add(new MenuSeparator("summary", summaryText));
+
+            auto heroes = SDK::ObjectManager::Get<AIHeroClient>();
+            char heroText[256];
+            for (size_t idx = 0; idx < heroes.size(); ++idx) {
+                const auto& hero = heroes[idx];
+                if (!hero.IsValid()) {
+                    _snprintf_s(heroText, sizeof(heroText), _TRUNCATE,
+                        "Hero %d: Invalid Address (%p)",
+                        (int)idx, (void*)hero.Address());
+                } else {
+                    const std::string name = GetHeroCharacterName(hero);
+                    const int team = static_cast<int>(hero.Team());
+                    const int myTeam = static_cast<int>(SDK::ObjectManager::Player().Team());
+                    const bool isPlayer = (hero.Address() == SDK::ObjectManager::Player().Address());
+                    const bool isEnemy = (team != myTeam && team != 0 && team != 300);
+
+                    _snprintf_s(heroText, sizeof(heroText), _TRUNCATE,
+                        "Hero %d: %s | Team: %d | Player: %s | Enemy: %s | HP: %.0f",
+                        (int)idx,
+                        name.empty() ? "<empty_name>" : name.c_str(),
+                        team,
+                        isPlayer ? "Yes" : "No",
+                        isEnemy ? "Yes" : "No",
+                        hero.Health());
+                }
+                char nameKey[64];
+                _snprintf_s(nameKey, sizeof(nameKey), _TRUNCATE, "hero_%d", (int)idx);
+                m_diagnosticsMenu->Add(new MenuSeparator(nameKey, heroText));
+            }
         }
 
         const auto settings = SettingsSnapshot();
@@ -575,7 +678,6 @@ private:
         m_detector.SetFowEnabled(settings.DodgeFow);
         m_detector.Update();
         RemoveDisabledSkillshots();
-        const auto player = SDK::ObjectManager::Player();
         const std::vector<Vec3> observedPath = player.IsValid()
             ? player.Path()
             : std::vector<Vec3>();
@@ -627,6 +729,9 @@ private:
     void CreateMenu() {
         DestroyMenu();
         m_menu = new Menu(GetInternalId(), GetName(), true);
+
+        m_debugSeparator = m_menu->Add(new MenuSeparator("kuro_debug", "Debug Info Loading..."));
+        m_diagnosticsMenu = m_menu->AddSubMenu(new Menu("diagnostics", "KuroEvade Diagnostics"));
 
         auto* main = m_menu->AddSubMenu(new Menu("main", "Main"));
         m_enabledMenu = main->Add(new MenuBool("enabled", "Enable KuroEvade", true));
@@ -755,7 +860,7 @@ private:
                 continue;
             }
 
-            const std::string championName = enemy.CharacterName();
+            const std::string championName = GetHeroCharacterName(enemy);
             if (championName.empty()) {
                 continue;
             }
@@ -826,7 +931,7 @@ private:
             return;
         }
 
-        const std::string championName = player.CharacterName();
+        const std::string championName = GetHeroCharacterName(player);
         auto* championMenu = m_evadeSpellsMenu->AddSubMenu(new Menu(
             KuroEvade::SpellMenuKey::Sanitize("self_" + championName).c_str(),
             championName.empty() ? "My Champion" : championName.c_str()));
@@ -891,7 +996,7 @@ private:
                 continue;
             }
 
-            const std::string championName = enemy.CharacterName();
+            const std::string championName = GetHeroCharacterName(enemy);
             if (championName.empty()) {
                 continue;
             }
@@ -927,7 +1032,7 @@ private:
             return;
         }
 
-        const std::string championName = player.CharacterName();
+        const std::string championName = GetHeroCharacterName(player);
         auto* championMenu = m_evadeSpellsMenu->AddSubMenu(new Menu(
             KuroEvade::SpellMenuKey::Sanitize("self_" + championName).c_str(),
             championName.empty() ? "My Champion" : championName.c_str()));

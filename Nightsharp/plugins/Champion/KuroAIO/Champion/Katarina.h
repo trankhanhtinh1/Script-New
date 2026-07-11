@@ -52,7 +52,13 @@ static bool IsHiddenMinion(const GameObject& object) {
         return false;
     }
     const std::string name = RuntimeName(object);
-    return EqualsIgnoreCase(name.c_str(), "HiddenMinion");
+    if (EqualsIgnoreCase(name.c_str(), "HiddenMinion") ||
+        EqualsIgnoreCase(name.c_str(), "KatarinaDagger")) {
+        return true;
+    }
+    std::string lowerName = name;
+    std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
+    return lowerName.find("katarinadagger") != std::string::npos || lowerName.find("katarina_dagger") != std::string::npos;
 }
 
 static bool HaveRBuff() {
@@ -681,6 +687,11 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 }
 
 static void OnObjectCreate(const GameObject& object) {
+    if (object.IsValid()) {
+        Orbwalker::DebugPrint("[Create] Name: %s | CharName: %s | Minion: %d",
+                              object.Name().c_str(), object.CharacterName().c_str(), object.IsMinion() ? 1 : 0);
+    }
+
     if (!IsHiddenMinion(object)) {
         return;
     }
@@ -697,6 +708,11 @@ static void OnObjectCreate(const GameObject& object) {
 }
 
 static void OnObjectDelete(const GameObject& object) {
+    if (object.IsValid()) {
+        Orbwalker::DebugPrint("[Delete] Name: %s | CharName: %s | Minion: %d",
+                              object.Name().c_str(), object.CharacterName().c_str(), object.IsMinion() ? 1 : 0);
+    }
+
     if (!IsHiddenMinion(object)) {
         return;
     }

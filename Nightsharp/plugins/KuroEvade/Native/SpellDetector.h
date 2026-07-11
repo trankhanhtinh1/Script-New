@@ -114,6 +114,11 @@ public:
 
     void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         SDK::AIBaseClient caster = MakeCaster(args.Sender);
+        if (caster.IsValid() && caster.IsHero() && !args.IsAutoAttack) {
+            SDK::Orbwalker::DebugPrint("[SpellDetector] Caster: %s | Spell: %s | Slot: %d",
+                                       GetCasterName(caster).c_str(), args.SpellName, args.Slot);
+        }
+
         if (!caster.IsValid() || caster.IsAlly()) {
             return;
         }
@@ -190,18 +195,23 @@ public:
         if (!args.Sender.IsValid()) {
             return;
         }
+        const auto caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            static_cast<int>(args.Sender.NetworkId));
+        if (caster.IsValid() && caster.IsHero()) {
+            SDK::Orbwalker::DebugPrint("[SpellDetector][CastSpell] Caster: %s | Slot: %d",
+                                       GetCasterName(caster).c_str(), args.Slot);
+        }
+
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid() || args.Sender.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
             return;
         }
-        const auto caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
-            static_cast<int>(args.Sender.NetworkId));
         if (caster.IsValid() && caster.IsAlly()) {
             return;
         }
         const auto* data = FindUniqueByChampionAndSlot(args.Sender.CharacterName, args.Slot);
         if (!data && caster.IsValid()) {
-            data = FindUniqueByChampionAndSlot(caster.CharacterName().c_str(), args.Slot);
+            data = FindUniqueByChampionAndSlot(GetCasterName(caster).c_str(), args.Slot);
         }
         if (!data || !IsSpellEnabled(*data)) {
             return;
@@ -239,6 +249,22 @@ public:
         const char* eventName = args.MissileName[0] ? args.MissileName : args.SpellName;
         const std::string runtimeName = missile.SpellName();
         const char* missileName = eventName[0] ? eventName : runtimeName.c_str();
+
+        if (IsBasicAttackName(missileName) ||
+            IsBasicAttackName(args.SpellName) ||
+            IsBasicAttackName(runtimeName.c_str())) {
+            return;
+        }
+
+        SDK::AIBaseClient caster = MakeCaster(args.Source);
+        if (!caster.IsValid() && missile.CasterNetworkId() != 0) {
+            caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(missile.CasterNetworkId());
+        }
+        if (caster.IsValid() && caster.IsHero()) {
+            SDK::Orbwalker::DebugPrint("[SpellDetector][Missile] Caster: %s | Missile: %s | Spell: %s",
+                                       GetCasterName(caster).c_str(), missileName, args.SpellName);
+        }
+
         const auto* data = FindByMissileName(missileName);
         if (!data && args.SpellName[0]) {
             data = FindBySpellName(args.SpellName);
@@ -250,10 +276,7 @@ public:
             return;
         }
 
-        SDK::AIBaseClient caster = MakeCaster(args.Source);
-        if (!caster.IsValid() && missile.CasterNetworkId() != 0) {
-            caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(missile.CasterNetworkId());
-        }
+
         if (!caster.IsValid() || caster.IsAlly()) {
             return;
         }
@@ -305,6 +328,11 @@ public:
         }
 
         SDK::GameObject object(args.Sender.Ptr, args.Sender.Type);
+        if (object.IsValid() && !object.IsAlly()) {
+            SDK::Orbwalker::DebugPrint("[SpellDetector][Object] Name: %s | CharName: %s",
+                                       object.Name().c_str(), GetObjectName(object).c_str());
+        }
+
         if (!object.IsValid() || object.IsAlly()) {
             return;
         }
@@ -317,7 +345,7 @@ public:
         }
 
         const std::string objectName = object.Name();
-        const std::string characterName = object.CharacterName();
+        const std::string characterName = GetObjectName(object);
         const auto* data = FindTrapData(objectName, characterName);
         if (!data || !IsSpellEnabled(*data)) {
             return;
@@ -326,7 +354,7 @@ public:
         SDK::AIBaseClient caster;
         for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
             if (enemy.IsValid() &&
-                _stricmp(enemy.CharacterName().c_str(), data->sdk.ChampionName.c_str()) == 0) {
+                _stricmp(GetCasterName(enemy).c_str(), data->sdk.ChampionName.c_str()) == 0) {
                 caster = SDK::AIBaseClient(enemy.Handle());
                 break;
             }
@@ -424,6 +452,11 @@ private:
                                    const Vec2& secondaryEnd,
                                    const Vec2& heroPos) {
         Vec2 end = primaryEnd;
+        if (SDK::IsCircleSpellType(data.sdk.SpellType)) {
+            if (!secondaryEnd.IsZero()) {
+                end = secondaryEnd;
+            }
+        }
         if (end.IsZero()) {
             end = secondaryEnd;
         }
@@ -476,6 +509,32 @@ private:
         return haystack.find(needle) != std::string::npos;
     }
 
+    static std::string GetCasterName(const SDK::AIBaseClient& caster) {
+        if (!caster.IsValid()) return "";
+        std::string name = caster.CharacterName();
+        if (!name.empty()) {
+            return name;
+        }
+        char nameBuf[96] = {};
+        if (::Core::Objects::ReadCharacterName(caster.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+            return nameBuf;
+        }
+        return "";
+    }
+
+    static std::string GetObjectName(const SDK::GameObject& object) {
+        if (!object.IsValid()) return "";
+        std::string name = object.CharacterName();
+        if (!name.empty()) {
+            return name;
+        }
+        char nameBuf[96] = {};
+        if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+            return nameBuf;
+        }
+        return "";
+    }
+
     static bool IsBasicAttackName(const char* name) {
         return ContainsInsensitive(name, "basicattack") || ContainsInsensitive(name, "attack");
     }
@@ -520,7 +579,7 @@ private:
             return nullptr;
         }
         return caster.IsValid()
-            ? FindUniqueByChampionAndSlot(caster.CharacterName().c_str(), args.Slot)
+            ? FindUniqueByChampionAndSlot(GetCasterName(caster).c_str(), args.Slot)
             : nullptr;
     }
 
@@ -562,7 +621,7 @@ private:
         }
 
         const std::string casterName = skillshot.Caster.IsValid()
-            ? skillshot.Caster.CharacterName()
+            ? GetCasterName(skillshot.Caster)
             : std::string();
         for (const auto& entry : SpellDatabase::Spells()) {
             if (!SameText(entry.sdk.SpellName, skillshot.SData.SpellName)) {
@@ -1165,6 +1224,9 @@ private:
             skillshot->Direction = (end - start).Normalized();
             SpecialSpells::RefreshSkillshotGeometry(*skillshot);
             AddSkillshot(skillshot, data, allowDuplicate);
+            SDK::Orbwalker::DebugPrint("[SpellDetector][Detected] Spell: %s | Caster: %s | Type: %d | Range: %.1f",
+                                       data.sdk.SpellName.c_str(), GetCasterName(caster).c_str(),
+                                       static_cast<int>(detectionType), range);
             return skillshot;
         }
         return {};

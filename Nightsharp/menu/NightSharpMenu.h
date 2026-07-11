@@ -984,9 +984,9 @@ namespace NightSharpMenu {
             return;
         }
 
-        ImVec2 primaryPos(menuPosX, menuPosY);
-        ImVec2 secondaryPos(menuPosX + PRIMARY_W + PANEL_GAP, menuPosY);
-        ImVec2 contentPos(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2.0f, menuPosY);
+        ImVec2 primaryPos(static_cast<float>((int)menuPosX), static_cast<float>((int)menuPosY));
+        ImVec2 secondaryPos(static_cast<float>((int)(menuPosX + PRIMARY_W + PANEL_GAP)), static_cast<float>((int)menuPosY));
+        ImVec2 contentPos(static_cast<float>((int)(menuPosX + PRIMARY_W + SECONDARY_W + PANEL_GAP * 2.0f)), static_cast<float>((int)menuPosY));
 
         int secCount = 0;
         int activePluginMap = -1;
@@ -1035,13 +1035,18 @@ namespace NightSharpMenu {
                     primaryLabels[i],
                     activePrimaryIdx == i,
                     true)) {
-                if (activePrimaryIdx != i) {
+                if (activePrimaryIdx == i) {
+                    activePrimaryIdx = -1;
+                    activeSecondaryIdx = -1;
+                    primarySelected = false;
+                    secondarySelected = false;
+                } else {
                     activePrimaryIdx = i;
                     activeSecondaryIdx = -1;
                     secondarySelected = false;
+                    primarySelected = true;
+                    activePluginIdx = primaryPluginMap[i];
                 }
-                primarySelected = true;
-                activePluginIdx = primaryPluginMap[i];
             }
             y += ITEM_H;
         }
@@ -1106,8 +1111,13 @@ namespace NightSharpMenu {
                     secLabel,
                     activeSecondaryIdx == i,
                     true)) {
-                activeSecondaryIdx = i;
-                secondarySelected = true;
+                if (activeSecondaryIdx == i) {
+                    activeSecondaryIdx = -1;
+                    secondarySelected = false;
+                } else {
+                    activeSecondaryIdx = i;
+                    secondarySelected = true;
+                }
             }
             y += ITEM_H;
         }
@@ -1119,11 +1129,6 @@ namespace NightSharpMenu {
         }
 
         // Content panel.
-        dl->AddRectFilled(
-            contentPos,
-            ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH),
-            COL_CONTENT_BG,
-            0.0f);
         dl->AddRectFilled(
             contentPos,
             ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
@@ -1148,7 +1153,7 @@ namespace NightSharpMenu {
             ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
             COL_BORDER);
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(8.0f / 255.0f, 10.0f / 255.0f, 18.0f / 255.0f, 128.0f / 255.0f));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.08f, 0.13f, 0.22f, 0.72f));
@@ -1179,8 +1184,7 @@ namespace NightSharpMenu {
                 ImGuiWindowFlags_NoResize |
                 ImGuiWindowFlags_NoMove |
                 ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoCollapse |
-                ImGuiWindowFlags_NoBackground);
+                ImGuiWindowFlags_NoCollapse);
 
         if (activePluginMap < 0) {
             DrawCoreContentPanel(activeSecondaryIdx);
