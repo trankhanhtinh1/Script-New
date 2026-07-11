@@ -204,9 +204,8 @@ protected:
     //   - If cursor is invalid (HUD picker not warmed up yet etc.):
     //     fall back to the closest enemy in range, period.
     //
-    // This is test-only selection. It deliberately avoids rejecting on
-    // dead/visible/targetable/range fields before the native CanCastCheck
-    // gets a chance to report the real cast result.
+    // This is test-only selection. It rejects HP-dead units up front, then
+    // lets the native CanCastCheck report visibility/targetable/range failures.
     uintptr_t ResolveNearestEnemyHero(
         float maxRangeFromPlayer = 0.0f,
         float /*maxRangeFromCursor*/ = 0.0f) const {
@@ -287,10 +286,9 @@ protected:
 
             const std::uint8_t team =
                 Globals::Read<std::uint8_t>(hero + Offset::All::Team);
-            const std::uint8_t dead =
-                Globals::Read<std::uint8_t>(hero + Offset::All::Dead);
             const float health =
                 Globals::Read<float>(hero + Offset::AttackableUnit::HP);
+            const bool hpDead = health <= 0.0f;
             const std::uint32_t networkId =
                 Globals::Read<std::uint32_t>(hero + Offset::All::NetworkId);
             const std::uint32_t objectIndex =
@@ -301,13 +299,30 @@ protected:
             if (!heroPos.IsValid() || heroPos.IsZero()) {
                 /*
                 Appendf(
-                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=%u hp=%.1f pos=%.1f %.1f %.1f skip=invalid-position\r\n",
+                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u hpDead=%d hp=%.1f pos=%.1f %.1f %.1f skip=invalid-position\r\n",
                     DebugPrefix(),
                     i,
                     static_cast<unsigned long long>(hero),
                     networkId,
                     static_cast<unsigned>(team),
-                    static_cast<unsigned>(dead),
+                    hpDead ? 1 : 0,
+                    health,
+                    heroPos.x,
+                    heroPos.y,
+                    heroPos.z);
+                */
+                continue;
+            }
+
+            if (hpDead) {
+                /*
+                Appendf(
+                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u hpDead=1 hp=%.1f pos=%.1f %.1f %.1f skip=hp-dead\r\n",
+                    DebugPrefix(),
+                    i,
+                    static_cast<unsigned long long>(hero),
+                    networkId,
+                    static_cast<unsigned>(team),
                     health,
                     heroPos.x,
                     heroPos.y,
@@ -322,13 +337,13 @@ protected:
             if (enforcePlayerRange && distFromPlayerSq > maxFromPlayerSq) {
                 /*
                 Appendf(
-                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=%u hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f skip=out-of-test-range\r\n",
+                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u hpDead=%d hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f skip=out-of-test-range\r\n",
                     DebugPrefix(),
                     i,
                     static_cast<unsigned long long>(hero),
                     networkId,
                     static_cast<unsigned>(team),
-                    static_cast<unsigned>(dead),
+                    hpDead ? 1 : 0,
                     health,
                     heroPos.x,
                     heroPos.y,
@@ -363,7 +378,7 @@ protected:
 
             /*
             Appendf(
-                "[%s] target-candidate index=%d ptr=0x%llX objIndex=0x%X net=%u team=%u enemy=%d hudMatch=%d deadRaw=%u hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f distCursor=%.1f\r\n",
+                "[%s] target-candidate index=%d ptr=0x%llX objIndex=0x%X net=%u team=%u enemy=%d hudMatch=%d hpDead=%d hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f distCursor=%.1f\r\n",
                 DebugPrefix(),
                 i,
                 static_cast<unsigned long long>(hero),
@@ -372,7 +387,7 @@ protected:
                 static_cast<unsigned>(team),
                 differentTeam ? 1 : 0,
                 hudMatch ? 1 : 0,
-                static_cast<unsigned>(dead),
+                hpDead ? 1 : 0,
                 health,
                 heroPos.x,
                 heroPos.y,

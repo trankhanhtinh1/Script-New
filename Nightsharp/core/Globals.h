@@ -95,6 +95,32 @@ namespace Globals {
         return regionEnd >= baseAddress && addr < regionEnd && bytes <= (regionEnd - addr);
     }
 
+    // Memoized IsExecutablePtr for STABLE pointers (vtable vfunc slots, resolved
+    // native game fns). IsExecutablePtr() runs a VirtualQuery() SYSCALL; the
+    // per-tick spell/prediction/collision hot paths call it for the same handful
+    // of addresses every frame across all champions, so the repeated syscall was
+    // a real FPS cost. Once an address validates it is remembered and the syscall
+    // is skipped thereafter. Only successes are cached (rare failures re-check).
+    // thread_local: game thread (OnGameUpdate) and render thread (OnDraw/drawing)
+    // keep independent tables — no lock, no data race. Use ONLY for addresses
+    // that don't change protection at runtime (true for game code pointers).
+    inline bool IsExecutablePtrCached(uintptr_t addr, size_t bytes = 1) {
+        static thread_local uintptr_t okList[512] = {};
+        static thread_local int okCount = 0;
+        for (int i = 0; i < okCount; ++i) {
+            if (okList[i] == addr) {
+                return true;
+            }
+        }
+        if (!IsExecutablePtr(addr, bytes)) {
+            return false;
+        }
+        if (okCount < 512) {
+            okList[okCount++] = addr;
+        }
+        return true;
+    }
+
     template <typename T>
     inline T Read(uintptr_t addr) {
         static_assert(std::is_trivially_copyable_v<T>,

@@ -542,7 +542,7 @@ namespace detail {
         Read(object + Offset::All::NetId, info.NetworkId);
         Read(object + Offset::All::Index, info.Index);
         Read(object + Offset::All::Team, info.Team);
-        Read(object + Offset::All::Dead, info.IsDead);
+        info.IsDead = ::Core::Objects::IsDead(object);
         info.IsVisible = ::Core::Objects::ReadVisibleFlag(object);
         Read(object + Offset::All::Position, info.Position);
         CopyRuntimeStringField(

@@ -321,15 +321,45 @@ inline bool IsInGame() {
            GetTime() > 0.0f;
 }
 
+// Focus state pushed by the overlay's WndProc hook (WM_ACTIVATEAPP). When set,
+// IsGameFocused() reads this flag instead of polling GetForegroundWindow() — a
+// USER32 call that intermittently BLOCKS for several ms when the foreground
+// window's thread is busy, spiking the per-tick key-check cost (measured: the
+// champion's `dispatch-keys` oscillated 3 -> 120 ms/s, and the orbwalker handler
+// stayed 5-6 ms/fire, both from the ~12 GetForegroundWindow calls/tick that
+// Key()/ShouldProcessInput() issue). WM_ACTIVATEAPP updates this instantly with
+// zero syscalls. g_windowFocusTracked stays false until the overlay seeds it, so
+// there is always a safe fallback.
+inline bool g_windowFocusTracked = false;
+inline bool g_windowFocused = true;
+
+inline void SetWindowFocused(bool focused) {
+    g_windowFocused = focused;
+    g_windowFocusTracked = true;
+}
+
 inline bool IsGameFocused() {
-    const HWND foreground = GetForegroundWindow();
-    if (!foreground) {
-        return false;
+    if (g_windowFocusTracked) {
+        return g_windowFocused;
     }
 
-    DWORD processId = 0;
-    GetWindowThreadProcessId(foreground, &processId);
-    return processId == GetCurrentProcessId();
+    // Fallback before the WndProc hook seeds the flag: still cache within the
+    // current GetTickCount() window (~15 ms) to avoid one syscall per Key() call.
+    static thread_local DWORD s_tick = 0;
+    static thread_local bool s_focused = false;
+    const DWORD now = GetTickCount();
+    if (now != s_tick) {
+        s_tick = now;
+        const HWND foreground = GetForegroundWindow();
+        if (!foreground) {
+            s_focused = false;
+        } else {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(foreground, &processId);
+            s_focused = (processId == GetCurrentProcessId());
+        }
+    }
+    return s_focused;
 }
 
 inline bool IsChatOpen() {

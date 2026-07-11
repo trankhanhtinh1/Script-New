@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Filter Include="..">
+      <UniqueIdentifier>{FE845A5D-C6E8-BE6B-26F5-D8B15983CFBA}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="..\NightSharpCrashProtocol">
+      <UniqueIdentifier>{E6944E3B-746D-2AEF-54BF-BCFB5EA29DA6}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Core">
       <UniqueIdentifier>{9F598203-716A-7A2D-8442-9773E3C111AD}</UniqueIdentifier>
     </Filter>
@@ -81,6 +87,21 @@
     </Filter>
     <Filter Include="Plugins\ZDEvade">
       <UniqueIdentifier>{F7A041B1-3273-0C47-BA23-181DA02B6A3E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDEvade\Core">
+      <UniqueIdentifier>{B1A9D4DF-5BDC-3D65-8C19-979A1AE49819}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDEvade\Database">
+      <UniqueIdentifier>{7DA19114-744A-2517-5FE1-D59F4F6318B0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDEvade\Detection">
+      <UniqueIdentifier>{488E119C-A0C4-B7FE-98DF-FCD9B9018485}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDEvade\Evade">
+      <UniqueIdentifier>{9D136BB4-1DDD-1A09-ACAE-C0D9D513BC78}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDEvade\EvadeSpells">
+      <UniqueIdentifier>{46A99B7F-0B06-188E-DA30-4380E1699943}</UniqueIdentifier>
     </Filter>
     <Filter Include="SDK">
       <UniqueIdentifier>{E6959F98-715F-22EE-9380-5276E036B646}</UniqueIdentifier>
@@ -166,9 +187,6 @@
     <Filter Include="SDK\Wrappers\TargetSelector\Modes\Weights">
       <UniqueIdentifier>{BFBEA2E8-01B1-6D9F-4572-83A1E83F02A8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="tests">
-      <UniqueIdentifier>{4FAE6411-AFAD-7C68-CE48-488842120F74}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Third_Party">
       <UniqueIdentifier>{B84401D1-F983-022A-98D3-AF26F3CA93C6}</UniqueIdentifier>
     </Filter>
@@ -177,6 +195,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\NightSharpCrashProtocol\CrashClient.cpp">
+      <Filter>..\NightSharpCrashProtocol</Filter>
+    </ClCompile>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="imgui\imgui.cpp">
       <Filter>imgui</Filter>
@@ -208,9 +229,6 @@
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp">
       <Filter>SDK\Data</Filter>
     </ClCompile>
-    <ClCompile Include="tests\polygon_guard_test.cpp">
-      <Filter>tests</Filter>
-    </ClCompile>
     <ClCompile Include="Third_Party\clipper\clipper.cpp">
       <Filter>Third_Party\clipper</Filter>
     </ClCompile>
@@ -221,6 +239,12 @@
     </MASM>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\NightSharpCrashProtocol\CrashClient.h">
+      <Filter>..\NightSharpCrashProtocol</Filter>
+    </ClInclude>
+    <ClInclude Include="..\NightSharpCrashProtocol\CrashProtocol.h">
+      <Filter>..\NightSharpCrashProtocol</Filter>
+    </ClInclude>
     <ClInclude Include="Core\CoreAIHeroClient.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -240,6 +264,9 @@
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="Core\CoreControl.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\CoreEvadeState.h">
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="Core\CoreEvents.h">
@@ -314,12 +341,16 @@
     <ClInclude Include="Core\PackmanHook.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Core\PebHide.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Core\spoof\spoofcall.h">
       <Filter>Core\spoof</Filter>
     </ClInclude>
     <ClInclude Include="Core\Vector.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="CrashReporter.h" />
     <ClInclude Include="crt_shim.h" />
     <ClInclude Include="DebugLog.h" />
@@ -399,6 +430,12 @@
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\7UPAIO\Kalista.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\KalistaComboInput.h">
+      <Filter>Plugins\Champion\7UPAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\7UPAIO\KalistaRendDamage.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\7UPAIO\Viktor.h">
@@ -935,6 +972,9 @@
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h">
       <Filter>Plugins\Utility</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Utility\IsDeadDebugPlugin.h">
+      <Filter>Plugins\Utility</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Utility\MinionTracePlugin.h">
       <Filter>Plugins\Utility</Filter>
     </ClInclude>
@@ -956,6 +996,69 @@
     <ClInclude Include="Plugins\Utility\YasuoWallDebugPlugin.h">
       <Filter>Plugins\Utility</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Core\Situation.h">
+      <Filter>Plugins\ZDEvade\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellData.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellDatabase.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\SpellData.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\SpellDatabase.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\SpellWindupDatabase.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\ThreatDatabase.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Database\WindupSpellData.h">
+      <Filter>Plugins\ZDEvade\Database</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Detection\SpellDetector.h">
+      <Filter>Plugins\ZDEvade\Detection</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Detection\Threat.h">
+      <Filter>Plugins\ZDEvade\Detection</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Detection\ThreatDetector.h">
+      <Filter>Plugins\ZDEvade\Detection</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Detection\TrackedSpell.h">
+      <Filter>Plugins\ZDEvade\Detection</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeCommand.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeCommandEngine.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeController.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeGeometry.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeHelper.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeMath.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadePlanner.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeTypes.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\PositionInfo.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\EvadeCommand.h">
       <Filter>Plugins\ZDEvade</Filter>
     </ClInclude>
@@ -970,6 +1073,18 @@
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\EvadeSpellManager.h">
       <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellData.h">
+      <Filter>Plugins\ZDEvade\EvadeSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellDatabase.h">
+      <Filter>Plugins\ZDEvade\EvadeSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellEngine.h">
+      <Filter>Plugins\ZDEvade\EvadeSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellManager.h">
+      <Filter>Plugins\ZDEvade\EvadeSpells</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\PositionInfo.h">
       <Filter>Plugins\ZDEvade</Filter>
@@ -1184,6 +1299,9 @@
     <ClInclude Include="SDK\Events\Stealth.h">
       <Filter>SDK\Events</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\Events\StructureLifecyclePolicy.h">
+      <Filter>SDK\Events</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\Events\Teleport.h">
       <Filter>SDK\Events</Filter>
     </ClInclude>
@@ -1218,6 +1336,9 @@
       <Filter>SDK\GameObjects</Filter>
     </ClInclude>
     <ClInclude Include="SDK\GameObjects\StructureScan.h">
+      <Filter>SDK\GameObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\GameObjects\YasuoWallTracker.h">
       <Filter>SDK\GameObjects</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Lifecycle.h">
@@ -1273,6 +1394,15 @@
     </ClInclude>
     <ClInclude Include="SDK\Math\Prediction\Types.h">
       <Filter>SDK\Math\Prediction</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Math\WindwallGeometry.h">
+      <Filter>SDK\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Math\WindwallTracker.h">
+      <Filter>SDK\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Math\YasuoWallModel.h">
+      <Filter>SDK\Math</Filter>
     </ClInclude>
     <ClInclude Include="SDK\SDK.h">
       <Filter>SDK</Filter>

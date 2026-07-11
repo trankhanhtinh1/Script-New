@@ -19,6 +19,7 @@
 #include "../Extensions/Unit.h"
 #include "../GameObjects/GameObjects.h"
 #include "../GameObjects/ObjectManager.h"
+#include "../GameObjects/YasuoWallTracker.h"
 #include "HealthPrediction.h"
 #include "Prediction.h"
 
@@ -40,6 +41,9 @@ inline bool WillDead(const PredictionInput& input,
 inline bool HasYasuoWindWallCollision(const Vector3& start,
                                       const Vector3& end,
                                       float extraRadius);
+inline bool HasProjectileWallCollision(const Vector3& start,
+                                       const Vector3& end,
+                                       float extraRadius);
 
 namespace detail {
 
@@ -47,18 +51,6 @@ inline bool Initialized = false;
 inline bool YasuoInGame = false;
 inline bool SamiraInGame = false;
 inline bool MelInGame = false;
-inline int WallCastT = 0;
-inline std::vector<EffectEmitter> Windwalls;
-inline bool DoCastHooked = false;
-
-struct SyntheticWindwall {
-    int castTick = 0;
-    int level = 1;
-    Vector3 center = {};
-    Vec2 spanDirection = {};
-};
-
-inline std::vector<SyntheticWindwall> SyntheticWindwalls;
 
 inline std::string ToLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -89,200 +81,14 @@ inline void RefreshChampionFlags() {
     MelInGame = IsChampionInGame("Mel");
 }
 
-inline bool IsWindWallName(const std::string& name) {
-    const auto lower = ToLower(name);
-    return lower.find("yasuo") != std::string::npos &&
-           lower.find("_w_windwall") != std::string::npos;
-}
-
-inline std::string RuntimeObjectName(const GameObject& object) {
-    std::string name = object.Name();
-    if (!name.empty()) {
-        return name;
-    }
-
-    char buffer[128] = {};
-    const uintptr_t address = object.Address();
-    if (::Core::Objects::ReadCharacterName(address, buffer, static_cast<int>(sizeof(buffer))) ||
-        ::Core::Objects::ReadName(address, buffer, static_cast<int>(sizeof(buffer)))) {
-        name = buffer;
-    }
-    return name;
-}
-
-inline bool IsYasuoWCast(const Events::ProcessSpellEventArgs& args) {
-    const std::string championName = ToLower(
-        args.Sender.CharacterName[0] ? args.Sender.CharacterName : args.Sender.Name);
-    if (championName != "yasuo") {
-        return false;
-    }
-
-    const auto player = ObjectManager::Player();
-    if (player.IsValid() &&
-        args.Sender.Team == static_cast<std::uint32_t>(player.Team())) {
-        return false;
-    }
-
-    if (args.Slot == static_cast<int>(SpellSlot::W)) {
-        return true;
-    }
-
-    const std::string spellName = ToLower(args.SpellName);
-    const std::string slotName = ToLower(args.SpellSlotName);
-    return spellName.find("yasuow") != std::string::npos ||
-           slotName.find("yasuow") != std::string::npos;
-}
-
-inline Vector3 FirstValidPosition(std::initializer_list<Vector3> positions) {
-    for (const auto& position : positions) {
-        if (position.IsValid() && !position.IsZero()) {
-            return position;
-        }
-    }
-    return Vector3();
-}
-
-inline int ResolveYasuoWLevel(const Events::ProcessSpellEventArgs& args) {
-    if (!args.Sender.IsValid()) {
-        return 1;
-    }
-
-    AIHeroClient caster(args.Sender.Ptr);
-    if (!caster.IsValid()) {
-        return 1;
-    }
-
-    const int level = caster.Spellbook().GetSpell(SpellSlot::W).Level();
-    return std::clamp(level, 1, 5);
-}
-
-inline bool TryBuildSyntheticWindwall(const Events::ProcessSpellEventArgs& args,
-                                      SyntheticWindwall& wall) {
-    if (!IsYasuoWCast(args)) {
-        return false;
-    }
-
-    const Vector3 casterPosition = args.Sender.Position;
-    const Vector3 start = FirstValidPosition({
-        args.StartPosition,
-        casterPosition
-    });
-    Vector3 end = FirstValidPosition({
-        args.CastPosition,
-        args.EndPosition
-    });
-
-    Vec2 castDirection;
-    if (start.IsValid() && !start.IsZero() && end.IsValid() && !end.IsZero()) {
-        castDirection = (end - start).To2D();
-    }
-
-    if (castDirection.LengthSqr() < 0.001f && args.Sender.Ptr) {
-        const GameObject caster(args.Sender.Ptr, args.Sender.Type);
-        castDirection = caster.Direction().To2D();
-    }
-
-    if (castDirection.LengthSqr() < 0.001f) {
-        return false;
-    }
-
-    castDirection = castDirection.Normalized();
-    if (!end.IsValid() || end.IsZero()) {
-        end = start + Vector3(castDirection.x, 0.0f, castDirection.y) * 400.0f;
-    }
-
-    Vector3 center = end;
-    if (start.IsValid() && !start.IsZero()) {
-        const float distance = start.Distance2D(center);
-        if (!std::isfinite(distance) || distance < 75.0f || distance > 475.0f) {
-            center = start + Vector3(castDirection.x, 0.0f, castDirection.y) * 400.0f;
-        }
-    }
-
-    wall.castTick = Variables::TickCount();
-    wall.level = ResolveYasuoWLevel(args);
-    wall.center = center;
-    wall.spanDirection = Vec2(-castDirection.y, castDirection.x).Normalized();
-    return wall.center.IsValid() && !wall.center.IsZero() &&
-           wall.spanDirection.LengthSqr() >= 0.001f;
-}
-
-inline void PruneSyntheticWindwalls() {
-    const int now = Variables::TickCount();
-    SyntheticWindwalls.erase(
-        std::remove_if(
-            SyntheticWindwalls.begin(),
-            SyntheticWindwalls.end(),
-            [now](const SyntheticWindwall& wall) {
-                return now - wall.castTick > 4000 ||
-                       !wall.center.IsValid() ||
-                       wall.center.IsZero() ||
-                       wall.spanDirection.LengthSqr() < 0.001f;
-            }),
-        SyntheticWindwalls.end());
-}
-
-inline void AddSyntheticWindwall(const SyntheticWindwall& wall) {
-    SyntheticWindwalls.clear();
-    SyntheticWindwalls.push_back(wall);
-    WallCastT = wall.castTick;
-}
-
-inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    SyntheticWindwall wall = {};
-    if (TryBuildSyntheticWindwall(args, wall)) {
-        AddSyntheticWindwall(wall);
-    }
-}
-
-inline void EnsureEventHooks() {
-    if (DoCastHooked) {
-        return;
-    }
-
-    DoCastHooked = Events::AddOnDoCast(&OnDoCast);
-}
-
-inline bool IsWindWallEmitter(const GameObject& object) {
-    return object.IsValid() &&
-           object.Type() == ::Core::Objects::ObjectType::EffectEmitter &&
-           IsWindWallName(RuntimeObjectName(object));
-}
-
-inline void AddWindwall(const EffectEmitter& emitter) {
-    if (!emitter.IsValid()) {
-        return;
-    }
-    const int networkId = emitter.NetworkId();
-    const auto exists = std::find_if(Windwalls.begin(), Windwalls.end(), [&](const EffectEmitter& entry) {
-        return entry.IsValid() && entry.NetworkId() == networkId;
-    });
-    if (exists == Windwalls.end()) {
-        Windwalls.push_back(emitter);
-        WallCastT = Variables::TickCount();
-    }
-}
-
-inline void RefreshWindwalls() {
-    PruneSyntheticWindwalls();
-
-    Windwalls.erase(
-        std::remove_if(Windwalls.begin(), Windwalls.end(), [](const EffectEmitter& emitter) {
-            return !emitter.IsValid() || emitter.IsDead() || !IsWindWallName(RuntimeObjectName(emitter));
-        }),
-        Windwalls.end());
-}
-
 inline void Initialize() {
     if (Initialized) {
-        EnsureEventHooks();
+        YasuoWallTracker::EnsureInitialized();
         return;
     }
-
     Initialized = true;
     RefreshChampionFlags();
-    EnsureEventHooks();
-    RefreshWindwalls();
+    YasuoWallTracker::EnsureInitialized();
 }
 
 inline bool ContainsCollisionObject(const PredictionInput& input, CollisionableObjects object) {
@@ -521,88 +327,16 @@ inline bool HasAnyBuff(const AIBaseClient& unit, std::initializer_list<const cha
     return false;
 }
 
-inline int GetWindWallLevel(const EffectEmitter& emitter) {
-    if (!YasuoInGame || !emitter.IsValid()) {
-        return -5;
-    }
-
-    const auto lower = ToLower(RuntimeObjectName(emitter));
-    if (lower.find("windwall5") != std::string::npos) return 5;
-    if (lower.find("windwall4") != std::string::npos) return 4;
-    if (lower.find("windwall3") != std::string::npos) return 3;
-    if (lower.find("windwall2") != std::string::npos) return 2;
-    return 1;
-}
-
-inline bool IsWallCastActive() {
-    RefreshChampionFlags();
-    if (!YasuoInGame) {
-        return false;
-    }
-
-    RefreshWindwalls();
-    return (!Windwalls.empty() || !SyntheticWindwalls.empty()) &&
-           Variables::TickCount() - WallCastT <= 4000;
-}
-
-inline bool SegmentIntersectsWindwall(const Vector3& start,
-                                      const Vector3& end,
-                                      float widthBase,
-                                      float extraRadius) {
+inline bool SegmentIntersectsYasuoWall(const Vector3& start,
+                                       const Vector3& end,
+                                       float projectileRadius) {
     Initialize();
-    if (!IsWallCastActive()) {
-        return false;
-    }
-
-    const Vec2 start2D = start.To2D();
-    const Vec2 end2D = end.To2D();
-    for (const auto& emitter : Windwalls) {
-        if (!emitter.IsValid() || emitter.IsDead()) {
-            continue;
-        }
-
-        const int level = GetWindWallLevel(emitter);
-        const float wallWidth = widthBase + 50.0f * static_cast<float>(level) + extraRadius;
-
-        // C# EnsoulSharp.SDK: Vector2(emitter.Orientation.M11, emitter.Orientation.M13)
-        // = Vector2(m[0][0], m[0][2]) — the wall's span direction directly.
-        const auto mat = emitter.Orientation();
-        Vec2 wallDir(mat.m[0][0], mat.m[0][2]);
-        if (wallDir.LengthSqr() < 0.001f) {
-            wallDir = emitter.Direction().To2D();
-            if (wallDir.LengthSqr() < 0.001f) {
-                wallDir = Vec2(1.0f, 0.0f);
-            } else {
-                wallDir = Vec2(-wallDir.y, wallDir.x).Normalized();
-            }
-        } else {
-            wallDir = wallDir.Normalized();
-        }
-
-        const Vec2 wallCenter = emitter.Position().To2D();
-        const Vec2 wallStart = wallCenter + wallDir * (wallWidth * 0.5f);
-        const Vec2 wallEnd = wallStart - wallDir * wallWidth;
-        if (Prediction::Vec2Ext::Intersection(wallStart, wallEnd, end2D, start2D).Valid) {
-            return true;
-        }
-    }
-
-    for (const auto& wall : SyntheticWindwalls) {
-        if (Variables::TickCount() - wall.castTick > 4000 ||
-            wall.spanDirection.LengthSqr() < 0.001f) {
-            continue;
-        }
-
-        const float wallWidth = widthBase + 50.0f * static_cast<float>(wall.level) + extraRadius;
-        const Vec2 wallCenter = wall.center.To2D();
-        const Vec2 wallStart = wallCenter + wall.spanDirection * (wallWidth * 0.5f);
-        const Vec2 wallEnd = wallStart - wall.spanDirection * wallWidth;
-        if (Prediction::Vec2Ext::Intersection(wallStart, wallEnd, end2D, start2D).Valid) {
-            return true;
-        }
-    }
-
-    return false;
+    RefreshChampionFlags();
+    return YasuoInGame &&
+           YasuoWallTracker::Intersects(
+               start,
+               end,
+               std::max(projectileRadius, 0.0f));
 }
 
 inline bool HasCircularShieldCollision(const char* championName,
@@ -872,18 +606,16 @@ inline void ProcessProjectileWalls(std::vector<AIBaseClient>& result,
     const Vector3 from = input.ResolveFrom();
 
     if (ContainsCollisionObject(input, CollisionableObjects::YasuoWall) &&
-        SegmentIntersectsWindwall(from, position, 350.0f, 0.0f)) {
+        SegmentIntersectsYasuoWall(from, position, input.Radius)) {
         AddPlayerSentinel(result);
     }
 
-    if ((ContainsCollisionObject(input, CollisionableObjects::YasuoWall) ||
-         ContainsCollisionObject(input, CollisionableObjects::SamiraWall)) &&
+    if (ContainsCollisionObject(input, CollisionableObjects::SamiraWall) &&
         HasSamiraCollision(from, position, input.Radius)) {
         AddPlayerSentinel(result);
     }
 
-    if ((ContainsCollisionObject(input, CollisionableObjects::YasuoWall) ||
-         ContainsCollisionObject(input, CollisionableObjects::MelWall)) &&
+    if (ContainsCollisionObject(input, CollisionableObjects::MelWall) &&
         HasMelCollision(from, position, input.Radius)) {
         AddPlayerSentinel(result);
     }
@@ -996,9 +728,15 @@ inline bool HasYasuoWindWallCollision(const Vector3& start,
                                       const Vector3& end,
                                       float extraRadius) {
     Initialize();
-    return detail::HasSamiraCollision(start, end, extraRadius) ||
-           detail::HasMelCollision(start, end, extraRadius) ||
-           detail::SegmentIntersectsWindwall(start, end, 250.0f, extraRadius);
+    return detail::SegmentIntersectsYasuoWall(start, end, extraRadius);
+}
+
+inline bool HasProjectileWallCollision(const Vector3& start,
+                                       const Vector3& end,
+                                       float extraRadius = 0.0f) {
+    return HasYasuoWindWallCollision(start, end, extraRadius) ||
+           HasSamiraWallCollision(start, end, extraRadius) ||
+           HasMelWallCollision(start, end, extraRadius);
 }
 
 inline bool IsCollision(const Vector3& position, float radius = 50.0f) {
@@ -1007,10 +745,10 @@ inline bool IsCollision(const Vector3& position, float radius = 50.0f) {
         return false;
     }
 
-    const Vector3 from = detail::ServerPositionOrPosition(player);
-    return HasYasuoWindWallCollision(from, position, radius) ||
-           HasSamiraWallCollision(from, position, radius) ||
-           HasMelWallCollision(from, position, radius);
+    return HasProjectileWallCollision(
+        detail::ServerPositionOrPosition(player),
+        position,
+        radius);
 }
 
 // ============================================================================

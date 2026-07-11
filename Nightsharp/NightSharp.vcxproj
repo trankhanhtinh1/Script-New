@@ -98,6 +98,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\NightSharpCrashProtocol\CrashClient.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
@@ -109,13 +110,14 @@
     <ClCompile Include="overlay\Overlay.cpp" />
     <ClCompile Include="overlay\OverlayManager.cpp" />
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp" />
-    <ClCompile Include="tests\polygon_guard_test.cpp" />
     <ClCompile Include="Third_Party\clipper\clipper.cpp" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="Core\spoof\spoof.asm" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\NightSharpCrashProtocol\CrashClient.h" />
+    <ClInclude Include="..\NightSharpCrashProtocol\CrashProtocol.h" />
     <ClInclude Include="Core\CoreAIHeroClient.h" />
     <ClInclude Include="Core\CoreAiManager.h" />
     <ClInclude Include="Core\CoreAttackableUnit.h" />
@@ -123,6 +125,7 @@
     <ClInclude Include="Core\CoreBypass.h" />
     <ClInclude Include="Core\CoreCastSpell.h" />
     <ClInclude Include="Core\CoreControl.h" />
+    <ClInclude Include="Core\CoreEvadeState.h" />
     <ClInclude Include="Core\CoreEvents.h" />
     <ClInclude Include="Core\CoreGame.h" />
     <ClInclude Include="Core\Corehook.h" />
@@ -147,8 +150,10 @@
     <ClInclude Include="Core\LeagueObfuscation.h" />
     <ClInclude Include="Core\offset.h" />
     <ClInclude Include="Core\PackmanHook.h" />
+    <ClInclude Include="Core\PebHide.h" />
     <ClInclude Include="Core\spoof\spoofcall.h" />
     <ClInclude Include="Core\Vector.h" />
+    <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="CrashReporter.h" />
     <ClInclude Include="crt_shim.h" />
     <ClInclude Include="DebugLog.h" />
@@ -180,6 +185,8 @@
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Jinx.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Kalista.h" />
+    <ClInclude Include="Plugins\Champion\7UPAIO\KalistaComboInput.h" />
+    <ClInclude Include="Plugins\Champion\7UPAIO\KalistaRendDamage.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Viktor.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Xerath.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Zed.h" />
@@ -358,6 +365,7 @@
     <ClInclude Include="Plugins\PluginManager.h" />
     <ClInclude Include="Plugins\PluginRegistry.h" />
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h" />
+    <ClInclude Include="Plugins\Utility\IsDeadDebugPlugin.h" />
     <ClInclude Include="Plugins\Utility\MinionTracePlugin.h" />
     <ClInclude Include="Plugins\Utility\MovementStateDrawPlugin.h" />
     <ClInclude Include="Plugins\Utility\NavGridDrawPlugin.h" />
@@ -365,11 +373,36 @@
     <ClInclude Include="Plugins\Utility\PredictionDebugPlugin.h" />
     <ClInclude Include="Plugins\Utility\VisibilityInvulnerabilityOffsetPlugin.h" />
     <ClInclude Include="Plugins\Utility\YasuoWallDebugPlugin.h" />
+    <ClInclude Include="Plugins\ZDEvade\Core\Situation.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellData.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellDatabase.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\SpellData.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\SpellDatabase.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\SpellWindupDatabase.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\ThreatDatabase.h" />
+    <ClInclude Include="Plugins\ZDEvade\Database\WindupSpellData.h" />
+    <ClInclude Include="Plugins\ZDEvade\Detection\SpellDetector.h" />
+    <ClInclude Include="Plugins\ZDEvade\Detection\Threat.h" />
+    <ClInclude Include="Plugins\ZDEvade\Detection\ThreatDetector.h" />
+    <ClInclude Include="Plugins\ZDEvade\Detection\TrackedSpell.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeCommand.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeCommandEngine.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeController.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeGeometry.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeHelper.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeMath.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadePlanner.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeTypes.h" />
+    <ClInclude Include="Plugins\ZDEvade\Evade\PositionInfo.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeCommand.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeHelper.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpellData.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpellDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpellManager.h" />
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellData.h" />
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellDatabase.h" />
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellEngine.h" />
+    <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellManager.h" />
     <ClInclude Include="Plugins\ZDEvade\PositionInfo.h" />
     <ClInclude Include="Plugins\ZDEvade\Situation.h" />
     <ClInclude Include="Plugins\ZDEvade\SpellData.h" />
@@ -441,6 +474,7 @@
     <ClInclude Include="SDK\Events\InterruptableSpell.h" />
     <ClInclude Include="SDK\Events\Load.h" />
     <ClInclude Include="SDK\Events\Stealth.h" />
+    <ClInclude Include="SDK\Events\StructureLifecyclePolicy.h" />
     <ClInclude Include="SDK\Events\Teleport.h" />
     <ClInclude Include="SDK\Events\Turret.h" />
     <ClInclude Include="SDK\Extensions\AIBaseClientExtensions.h" />
@@ -453,6 +487,7 @@
     <ClInclude Include="SDK\GameObjects\InventorySlot.h" />
     <ClInclude Include="SDK\GameObjects\ObjectManager.h" />
     <ClInclude Include="SDK\GameObjects\StructureScan.h" />
+    <ClInclude Include="SDK\GameObjects\YasuoWallTracker.h" />
     <ClInclude Include="SDK\Lifecycle.h" />
     <ClInclude Include="SDK\Math\Collision.h" />
     <ClInclude Include="SDK\Math\ConvexHull.h" />
@@ -471,6 +506,9 @@
     <ClInclude Include="SDK\Math\Prediction\Health.h" />
     <ClInclude Include="SDK\Math\Prediction\Movement.h" />
     <ClInclude Include="SDK\Math\Prediction\Types.h" />
+    <ClInclude Include="SDK\Math\WindwallGeometry.h" />
+    <ClInclude Include="SDK\Math\WindwallTracker.h" />
+    <ClInclude Include="SDK\Math\YasuoWallModel.h" />
     <ClInclude Include="SDK\SDK.h" />
     <ClInclude Include="SDK\Signals\Signal.h" />
     <ClInclude Include="SDK\Signals\SignalManager.h" />

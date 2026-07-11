@@ -14,6 +14,7 @@
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
+#include "Utility/IsDeadDebugPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
 #include "Utility/ObjectDefinitionDrawPlugin.h"
@@ -140,6 +141,7 @@ namespace PluginBootstrap {
 
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins begin");
         PluginManager::Get().Register<AttackRangeDrawPlugin>();
+        PluginManager::Get().Register<IsDeadDebugPlugin>();
         PluginManager::Get().Register<MovementStateDrawPlugin>();
         PluginManager::Get().Register<NavGridDrawPlugin>();
         PluginManager::Get().Register<ObjectDefinitionDrawPlugin>();

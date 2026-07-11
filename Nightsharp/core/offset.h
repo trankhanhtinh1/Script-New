@@ -621,7 +621,7 @@ namespace SpellBookLayout {
     //     AIBaseClientLayout::NetId       -> All::NetId         (0xCC)
     //     AIBaseClientLayout::Team        -> All::Team          (0x259, uint8)
     //     AIBaseClientLayout::Position    -> All::Position      (0x25C)
-    //     AIBaseClientLayout::IsDead      -> All::Dead          (0x250)
+    //     AIBaseClientLayout::IsDead      -> derived from AttackableUnit::HP/MaxHP
     //     AIBaseClientLayout::Health      -> AttackableUnit::HP (0x1080)
     //     AIBaseClientLayout::MaxHealth   -> AttackableUnit::MaxHP (0x10A8)
     //     AIBaseClientLayout::Mana        -> AIHeroClient::MP     (0x360)
@@ -629,8 +629,7 @@ namespace SpellBookLayout {
     //     AIBaseClientLayout::Experience  -> AIHeroClient::Exp    (0x4D28)
     //     AIBaseClientLayout::LevelRef    -> AIHeroClient::LevelRef (0x4D50)
     //
-    // The only in-tree consumer was `CheckDeathForHero` in CoreEventHook.h;
-    // it now reads `Offset::All::Dead` directly. Any downstream code that
+    // The old 0x250 "dead" byte was proven wrong in runtime logs. Any downstream code that
     // still references `AIBaseClientLayout::*` needs to be migrated to the
     // verified namespaces.
 
@@ -924,9 +923,10 @@ namespace SpellBookLayout {
     // `AIHeroClient` = champion-only fields (adds on top of AttackableUnit).
     //
     // These three namespaces are the CANONICAL source for per-object field
-    // offsets. `CheckDeathForHero` in CoreEventHook.h reads `All::Dead`
-    // (0x250) directly; any new hook or SDK consumer should use the same
-    // values rather than inventing a private layout.
+    // offsets. Death state is intentionally not listed here because the old
+    // obj+0x250 field is not a valid dead flag on the current client. Use
+    // Core::Objects::IsDead() or SDK GameObject::IsDead(), both of which derive
+    // death from attackable-unit health.
     namespace All {
         constexpr auto Index               = 0x20;    // GetID/sub_371690 -> obj+0x20; slot-array lookup sub_54EF60 keys (index & 0xFFFF) and validates obj+0x20
         constexpr auto Team                = 0x259;  // byte team index
@@ -943,7 +943,6 @@ namespace SpellBookLayout {
         // Previous build aliased NetId = Index (0x20) which was wrong.
         constexpr auto NetId               = 0xCC;    // obj+0xCC -> object network id (GetNetworkID)
         constexpr auto NetworkId           = NetId;
-        constexpr auto Dead                = 0x250;
         constexpr auto Position            = 0x25C;
         constexpr auto Visible             = 0x308;   // GameObject visible flag.
         constexpr auto IsInvulnerable      = 0x5A0;   // Legacy/debug only; IsInvulnerable is native/buff logic, not this byte.
@@ -961,21 +960,9 @@ namespace SpellBookLayout {
         constexpr auto DirectionComponent  = 0x1288;  // object + component -> vfunc +0xA8 -> holder
         constexpr auto DirectionVFunc      = 0xA8;
         constexpr auto DirectionVector     = 0x20;    // holder + 0x20 -> facing direction Vec3
-        constexpr auto EffectEmitterHandle = 0x258;
         constexpr auto MissileClientHandle = 0x2D8;
         constexpr auto ItemList            = 0x4E08;  // = InventoryComponent
     } // namespace All
-
-    // EffectEmitter InstanceProxy layout.
-    // IDA 13337:
-    //   sub_A22420 (GetFXParticleEmitter dispatcher) case 8 → lea rax, [rcx+258h]
-    //   EnsoulSharp: InstanceProxy* ptr = *(uint*)GetFXParticleEmitter(obj)
-    //     = *(uintptr_t*)(obj + 0x258)
-    //   sub_307D60 (InstanceProxy::GetOrientation) → lea rax, [rcx+108h]; retn
-    //     where rcx = InstanceProxy, +0x108 = D3DMATRIX (16 floats)
-    namespace EffectEmitterLayout {
-        constexpr auto ProxyOrientation = 0x108;
-    } // namespace EffectEmitterLayout
 
     namespace AttackableUnit {
         constexpr auto HP              = 0x1080;

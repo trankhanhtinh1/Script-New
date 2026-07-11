@@ -12,7 +12,7 @@ $MsbuildNs = 'http://schemas.microsoft.com/developer/msbuild/2003'
 $HeaderExtensions = @('.h', '.hh', '.hpp', '.hxx', '.inl')
 $SourceExtensions = @('.c', '.cc', '.cpp', '.cxx')
 $MasmExtensions = @('.asm')
-$ExcludedDirectories = @('.vs', '.codemap', 'bin', 'obj', 'Debug', 'Release', 'x64')
+$ExcludedDirectories = @('.vs', '.codemap', 'bin', 'obj', 'Debug', 'Release', 'x64', 'tests')
 $ExcludedFiles = @()
 
 if (-not $IncludeDx9Backend) {
@@ -83,6 +83,11 @@ function Get-ProjectItems {
             $items.MASM.Add($relativePath)
         }
     }
+    
+    # Add external CrashProtocol files
+    [void]$items.ClCompile.Add('..\NightSharpCrashProtocol\CrashClient.cpp')
+    [void]$items.ClInclude.Add('..\NightSharpCrashProtocol\CrashClient.h')
+    [void]$items.ClInclude.Add('..\NightSharpCrashProtocol\CrashProtocol.h')
 
     foreach ($key in @('ClCompile', 'ClInclude', 'MASM')) {
         $items[$key] = @($items[$key] | Sort-Object -Unique)

@@ -16,6 +16,10 @@ Khảo sát code hiện tại cho thấy NightSharp có sẵn hạ tầng detect
 
 Hệ quả: production chỉ còn `SyntheticWindwalls` dựng từ event `OnDoCast` — geometry **ước lượng từ vị trí cast**, sai lệch → xuyên tường.
 
+Đã xác nhận **live path**: `Prediction::Movement::GetPrediction` ([Movement.h:986](../../../sdk/Math/Prediction/Movement.h)) gọi `SDK::Collision::GetCollision(positions, input)` → `ProcessProjectileWalls` → `SegmentIntersectsWindwall` → nhánh synthetic. Đúng như chẩn đoán.
+
+Thêm một **dead path thứ 4** cần dọn: `Prediction::Movement::CollectLineCollisions` ([Movement.h:1050](../../../sdk/Math/Prediction/Movement.h)) có nguyên block YasuoWall riêng dùng `ObjectManager::Get<EffectEmitter>()` + `emitter.Name()` **không fallback** — nhưng hàm này **không được gọi ở đâu** (dead). Nếu tương lai ai đó wire nó vào, `Name()` rỗng sẽ lại xuyên tường. Phải xóa block windwall trong đó.
+
 Thêm một nghi phạm: **mâu thuẫn geometry** giữa hai consumer đang tồn tại:
 - [Collision.h:569-570](../../../sdk/Math/Collision.h): `Vec2(mat.m[0][0], mat.m[0][2])` dùng **trực tiếp** làm hướng trải tường.
 - [YasuoWallDebugPlugin.h:182-192](../../../plugins/Utility/YasuoWallDebugPlugin.h): `emitter.Direction()` rồi lấy **vuông góc** `Vec2(-y, x)`.
@@ -31,13 +35,23 @@ Hai cách lệch nhau 90° — một đúng, một sai; phải verify in-game.
 
 Ngoài phạm vi: Samira wall, Mel wall, Braum shield — giữ nguyên, không đụng. Public API của `SDK::Collision` giữ nguyên để không vỡ callers khác.
 
-## 3. Về CommunityDragon (trả lời câu hỏi gốc)
+## 3. Tên emitter runtime — ĐÃ XÁC MINH (CheatEngine, 2026-07-09)
 
-- `raw.communitydragon.org` host asset đã giải nén; particle của Yasuo ở path kiểu
-  `.../game/data/characters/yasuo/particles/...`.
-- Vai trò: **tra chuỗi tên chính xác** của particle/emitter windwall theo client hiện tại, đối chiếu với match `yasuo` + `_w_windwall`.
-- **Không** cho offset, **không** giúp enumerate object. "Troys / EffectEmitters" là **object type runtime**, phải lấy qua ObjectManager trong game — không tải về nhét vào code.
-- Bước xác minh: fetch CDragon lấy tên; nếu cần chắc hơn, dùng RE tools (ReClass/CheatEngine) đọc tên object emitter thật lúc runtime.
+Search string trong memory League (PID 19820, game paused, wall có sẵn) xác nhận tên particle thật:
+
+- **`Yasuo_Base_W_windwall1`** → level 1
+- **`Yasuo_Base_W_windwall2`** → level 2
+- **`Yasuo_Base_W_windwall3`** → level 3
+- **`Yasuo_Base_W_windwall4`** → level 4
+- **`Yasuo_Base_W_windwall5`** → level 5
+- (phụ: `Yasuo_Base_W_windwall_big_impact`, `..._groud_crack.tex` — không phải wall chính)
+
+Kết luận:
+- Match hiện tại `contains("yasuo") && contains("_w_windwall")` (lowercase) **ĐÚNG** — `yasuo_base_w_windwall5` chứa cả hai. Không đổi.
+- Level-parse theo `windwall2..5` **ĐÚNG**.
+- Chuỗi `_W_windWall` (casing cũ) **không tồn tại** runtime — nếu match case-sensitive sẽ trượt; phải giữ lowercase.
+
+Về CommunityDragon: `raw.communitydragon.org` chỉ dùng để tra tên particle (path `.../characters/yasuo/particles/...`); "Troys/EffectEmitters" là object type runtime, không tải về nhét code. Vì đã xác minh tên trực tiếp bằng CE nên bước fetch CDragon **không còn bắt buộc**.
 
 ## 4. Thiết kế chi tiết
 
@@ -62,7 +76,8 @@ File header riêng (đề xuất `sdk/Math/WindwallTracker.h` hoặc trong `deta
 
 ### 4.2 Chốt geometry (một nguồn duy nhất)
 
-- Verify in-game bằng debug plugin trước khi chốt: vẽ cả hai cách (`mat.m[0][0]/m[0][2]` trực tiếp vs `Direction()` vuông góc), xem cách nào trùng tường thật.
+- **Không verify được bằng RE khi game pause** — chọn đúng giữa 2 cách lệch 90° cần **nhìn** tường thật trên màn hình, nên đây là việc bắt buộc làm bằng debug overlay lúc test.
+- Verify in-game bằng debug plugin: vẽ cả hai cách (`mat.m[0][0]/m[0][2]` trực tiếp vs `Direction()` vuông góc), xem cách nào trùng tường thật.
 - Chốt **một** công thức span direction + width theo level (`base + 50 * level`); xóa cách còn lại để không còn 2 nguồn mâu thuẫn.
 - Rủi ro offset: `Orientation()` phụ thuộc `Offset::All::EffectEmitterHandle` và `Offset::EffectEmitterLayout::ProxyOrientation`. Nếu proxy resolve fail → matrix = 0 → hướng tường = rác. Bước verify phải kiểm tra matrix trả về khác 0; nếu stale thì cập nhật offset trước.
 

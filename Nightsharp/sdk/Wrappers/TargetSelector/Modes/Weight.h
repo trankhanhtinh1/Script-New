@@ -86,12 +86,22 @@ public:
             }
         }
 
+        // TEMP PROBE: per-item GetValue timing (remove after profiling).
+        LARGE_INTEGER _ocStart{}, _ocFreq{};
+        QueryPerformanceCounter(&_ocStart);
+        QueryPerformanceFrequency(&_ocFreq);
+        double _itemMs[32] = {};
+
         // Pass 1: find min/max values
         std::map<uint32_t, std::vector<float>> heroRawValues;
         for (const auto& hero : heroes) {
             uint32_t nid = hero.NetworkId();
             for (size_t i = 0; i < wrappers_.size(); ++i) {
+                LARGE_INTEGER _a{}, _b{};
+                QueryPerformanceCounter(&_a);
                 float val = wrappers_[i].Item->GetValue(hero);
+                QueryPerformanceCounter(&_b);
+                if (i < 32) _itemMs[i] += static_cast<double>(_b.QuadPart - _a.QuadPart) * 1000.0 / static_cast<double>(_ocFreq.QuadPart);
                 heroRawValues[nid].push_back(val);
                 if (val < wrappers_[i].MinValue) wrappers_[i].MinValue = val;
                 if (val > wrappers_[i].MaxValue) wrappers_[i].MaxValue = val;
@@ -127,6 +137,30 @@ public:
         std::sort(result.begin(), result.end(), [&currentScores](const AIHeroClient& a, const AIHeroClient& b) {
             return currentScores[a.NetworkId()] > currentScores[b.NetworkId()];
         });
+
+        // TEMP PROBE: if this OrderChampions pass was slow, log per-item ms + hero
+        // count so we can see which weight item dominates. Throttled to 500ms.
+        {
+            LARGE_INTEGER _ocEnd{};
+            QueryPerformanceCounter(&_ocEnd);
+            const double _totalMs = static_cast<double>(_ocEnd.QuadPart - _ocStart.QuadPart) * 1000.0 / static_cast<double>(_ocFreq.QuadPart);
+            static DWORD _lastLog = 0;
+            const DWORD _now = GetTickCount();
+            if (_totalMs > 1.0 && _now - _lastLog >= 500) {
+                _lastLog = _now;
+                char b[512];
+                int n = std::snprintf(b, sizeof(b),
+                    "[TSWeight] total=%.2fms heroes=%zu items[AP,Aggro,AD,CC,Dist,HP,Kill,LessAtk,LessCast,MaxHP,NearMs,Prio]=",
+                    _totalMs, heroes.size());
+                for (size_t i = 0; i < wrappers_.size() && i < 12 && n < (int)sizeof(b) - 16; ++i) {
+                    n += std::snprintf(b + n, sizeof(b) - n, "%.2f ", _itemMs[i]);
+                }
+                n += std::snprintf(b + n, sizeof(b) - n, "\r\n");
+                HANDLE h = CreateFileA("C:\\Users\\Public\\nightsharp_fps_drop_debug.txt",
+                                       FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                if (h != INVALID_HANDLE_VALUE) { DWORD w = 0; WriteFile(h, b, (DWORD)n, &w, nullptr); CloseHandle(h); }
+            }
+        }
         return result;
     }
 

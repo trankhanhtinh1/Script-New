@@ -76,7 +76,7 @@ public:
         return spell.startPos + spell.direction * speed * (static_cast<float>(elapsed) / 1000.0f);
     }
 
-    // ── EzEvade port: GetPositionValue (cursor dist + turret/enemy penalty) ──
+    // GetPositionValue: cursor distance plus turret/enemy penalty.
     static float GetPositionValue(const Vec2& pos) {
         float value = EvadeMath::Dist(pos, SDK::Game::CursorPos().To2D());
         for (const auto& turret : SDK::ObjectManager::EnemyTurrets()) {
@@ -89,7 +89,7 @@ public:
         return value;
     }
 
-    // ── EzEvade port: GetDistanceToChampions ──
+    // GetDistanceToChampions.
     static float GetDistanceToChampions(const Vec2& pos) {
         float minDist = FLT_MAX;
         for (const auto& hero : SDK::ObjectManager::EnemyHeroes()) {
@@ -101,7 +101,7 @@ public:
         return minDist;
     }
 
-    // ── EzEvade port: IsNearEnemy ──
+    // IsNearEnemy.
     static bool IsNearEnemy(const Vec2& pos, const Vec2& heroPos, float distance) {
         const float curDist = GetDistanceToChampions(heroPos);
         const float posDist = GetDistanceToChampions(pos);
@@ -109,7 +109,7 @@ public:
         return posDist < distance;
     }
 
-    // ── EzEvade port: CheckMoveToDirection (path crossing check) ──
+    // CheckMoveToDirection: path crossing check.
     static bool CheckMoveToDirection(const Vec2& from, const Vec2& to, float boundingRadius) {
         const float dist = EvadeMath::Dist(from, to);
         if (dist < 1.0f) return false;
@@ -129,7 +129,7 @@ public:
         const float spellRadius = spell.Radius();
         if (IsLineType(type)) {
             // Use current missile position as start — not the original cast position.
-            // This matches EzEvade: the line only covers from where the missile IS NOW
+            // The line only covers from where the missile is now
             // to the end position. Positions behind the missile head are safe.
             Vec2 start = GetCurrentSpellPosition(spell);
             bool onSeg = false;
@@ -215,7 +215,7 @@ public:
         return CoreNavGrid::IsWallBetween(from, dest);
     }
 
-    // ── ScorePosition: EzEvade CanHeroWalkToPos + InitPositionInfo port ──
+    // ScorePosition: walkability and position-info scoring.
     static PositionInfo ScorePosition(const Vec2& pos, float speed, float delayMs, float extraDist,
                                       const Vec2& heroPos, float boundingRadius, float planeY,
                                       const std::vector<TrackedSpell>& spells) {
@@ -248,7 +248,7 @@ public:
         return info;
     }
 
-    // ── GetFastestPosition: perpendicular escape point for a spell (EzEvade port) ──
+    // GetFastestPosition: perpendicular escape point for a spell.
     static Vec2 GetFastestPosition(const TrackedSpell& spell, const Vec2& heroPos,
                                    float boundingRadius) {
         if (IsLineType(spell.Type())) {
@@ -415,7 +415,7 @@ public:
         return lastSafe;
     }
 
-    // ── GetBestPosition: ring search for safest position (EzEvade port) ──
+    // GetBestPosition: ring search for the safest position.
     static bool GetBestPosition(const SDK::AIHeroClient& player, const Vec2& heroPos,
                                 float boundingRadius,
                                 const std::vector<TrackedSpell>& spells,
@@ -442,7 +442,7 @@ public:
                 posTable.push_back(info);
             }
         }
-        // EzEvade: sort direct candidates and pick first safe one
+        // Sort direct candidates and pick the first safe one.
         std::sort(directTable.begin(), directTable.end(), Better);
         for (const auto& info : directTable) {
             if (!info.rejectPosition && !info.isDangerousPos) {
@@ -472,7 +472,7 @@ public:
             }
         }
 
-        // EzEvade sort: check fastEvadeMode, then fallback to normal → fast
+        // Sort by fastEvadeMode, then fall back from normal to fast.
         if (fastEvadeMode) {
             std::sort(posTable.begin(), posTable.end(), FastBetter);
         } else {
@@ -529,7 +529,7 @@ public:
                 posTable.push_back(info);
             }
         }
-        // EzEvade GetBestPositionMovementBlock: sort direct candidates, pick first safe
+        // GetBestPositionMovementBlock: sort direct candidates and pick the first safe one.
         std::sort(directTable.begin(), directTable.end(), Better);
         for (const auto& info : directTable) {
             if (!info.rejectPosition && !info.isDangerousPos) {
@@ -557,7 +557,7 @@ public:
             }
         }
 
-        // EzEvade movement block: ring search
+        // Movement block: ring search.
         constexpr int kMaxPos = 50;
         constexpr int kPosRadius = 50;
         int posChecked = 0;
@@ -648,7 +648,7 @@ public:
         return false;
     }
 
-    // ── EzEvade port: CheckMovePath checks path crossing + endpoint ──
+    // CheckMovePath checks path crossing plus endpoint safety.
     static bool CheckMovePath(const Vec2& movePos, float delayMs,
                               const Vec2& heroPos, float boundingRadius,
                               const std::vector<TrackedSpell>& spells, float moveSpeed) {
@@ -694,7 +694,7 @@ public:
     }
 
 private:
-    // EzEvade normal sort: rejectPosition → posDangerLevel → posDangerCount → distanceToMouse
+    // Normal sort: rejectPosition, posDangerLevel, posDangerCount, distanceToMouse.
     static bool Better(const PositionInfo& a, const PositionInfo& b) {
         if (a.rejectPosition != b.rejectPosition) return !a.rejectPosition;
         if (a.posDangerLevel != b.posDangerLevel) return a.posDangerLevel < b.posDangerLevel;
@@ -702,7 +702,7 @@ private:
         return a.distanceToMouse < b.distanceToMouse;
     }
 
-    // EzEvade fast sort: isDangerousPos → intersectionTime DESC → posDangerLevel → posDangerCount
+    // Fast sort: isDangerousPos, intersectionTime descending, posDangerLevel, posDangerCount.
     static bool FastBetter(const PositionInfo& a, const PositionInfo& b) {
         if (a.isDangerousPos != b.isDangerousPos) return !a.isDangerousPos;
         if (a.closestDistance != b.closestDistance) return a.closestDistance > b.closestDistance;

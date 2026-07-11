@@ -420,6 +420,13 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
             : DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
+    // Track window focus from the message stream so IsGameFocused() never has to
+    // poll GetForegroundWindow() (a USER32 call that intermittently blocks for
+    // several ms) on the per-tick Key()/ShouldProcessInput() hot path.
+    if (msg == WM_ACTIVATEAPP) {
+        ::CoreGame::SetWindowFocused(wParam != FALSE);
+    }
+
     if (NightSharpMenu::showMenu &&
         SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
         return TRUE;
@@ -481,6 +488,17 @@ static bool HookWndProc(HWND hWnd) {
 
     g_originalWndProc = reinterpret_cast<WNDPROC>(current);
     g_gameHwnd = hWnd;
+
+    // Seed focus state once (injection happens in the active game) so IsGameFocused()
+    // uses the message-driven flag immediately; WM_ACTIVATEAPP keeps it accurate.
+    {
+        DWORD pid = 0;
+        const HWND fg = GetForegroundWindow();
+        if (fg) {
+            GetWindowThreadProcessId(fg, &pid);
+        }
+        ::CoreGame::SetWindowFocused(fg == hWnd || pid == GetCurrentProcessId());
+    }
 
     NightSharpDebug::Logf("[D3D11Hook] WndProc hooked: original=0x%p new=0x%p",
                           (void*)current, (void*)WndProcHook);

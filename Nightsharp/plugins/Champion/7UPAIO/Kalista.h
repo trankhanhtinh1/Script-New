@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
+#include "KalistaRendDamage.h"
 
 #include <algorithm>
 #include <cctype>
@@ -511,47 +512,22 @@ static double GetEDamage(const AIBaseClient& target) {
         return 0.0;
     }
 
-    // CDragon latest KalistaExpungeWrapper:
-    // NormalDamage = BaseDamage + BaseADRatio * total AD + APRatio * AP.
-    // AdditionalDamage = AdditionalBaseDamage + AdditionalADRatio * total AD + AdditionalAPRatio * AP.
-    // Raw DataValues include rank-0 sentinels, so spell level indexes directly.
-    static constexpr float eBaseDamage[] = { 0.0f, 5.0f, 15.0f, 25.0f, 35.0f, 45.0f };
-    static constexpr float eAdditionalBaseDamage[] = { 0.0f, 7.0f, 14.0f, 21.0f, 28.0f, 35.0f };
-    static constexpr float eAdditionalAdRatio[] = {
-        0.0f,
-        0.2000000030f,
-        0.2750000060f,
-        0.3499999940f,
-        0.4250000119f,
-        0.5f
-    };
-
     const int level = std::clamp(E.Level(), 1, 5);
-    const float normal =
-        eBaseDamage[level] +
-        0.6999999881f * player.AD() +
-        0.6499999762f * player.AP();
-    const float additional =
-        eAdditionalBaseDamage[level] +
-        eAdditionalAdRatio[level] * player.AD() +
-        0.5f * player.AP();
-    float raw = normal + additional * static_cast<float>(stacks - 1);
+    bool isEpicMonster = false;
 
-    // C# Kalista.cs GetEDamage/EDamage (1-1):
-    //   if (target is AIMinionClient minion &&
-    //       (minion.GetJungleType() & JungleType.Legendary) != 0) total /= 2;
-    // Chia đôi raw TRƯỚC khi tính giáp, gate bằng bitwise & Legendary
-    // (Legendary=8, Epic=24 chứa bit 8 → Baron/Dragon/Herald/Voidgrub...),
-    // rồi CalculateDamage physical bình thường — giữ nguyên hệt bản C#.
+    // Treat every currently known epic objective as Legendary for Rend's
+    // CDragon EpicMonsterDamageMod, including the name fallback used by this port.
     if (target.IsMinion()) {
         const AIMinionClient minion(target.Handle());
-        if (minion.IsValid() &&
-            (minion.GetJungleType() & JungleType::Legendary) != JungleType::Unknown) {
-            raw *= 0.5f;   // C#: total /= 2
-        }
+        isEpicMonster = minion.IsValid() && IsEpicJungleMob(minion);
     }
 
-    const double finalDamage = player.CalculatePhysicalDamage(target, std::max(0.0f, raw));
+    // CDragon latest KalistaExpungeWrapper: NormalDamage + AdditionalDamage
+    // per extra spear, with EpicMonsterDamageMod applied before armor.
+    const double raw = RendDamage::RawDamage(
+        level, stacks, player.AD(), player.AP(), isEpicMonster);
+    const double finalDamage = player.CalculatePhysicalDamage(
+        target, static_cast<float>(raw));
 
     if (DebugRendEnabled()) {
         const char* name = "?";
@@ -1232,7 +1208,8 @@ static void Clear() {
                 continue;
             }
 
-            const double damage = GetEDamage(mob);
+            const double damage = RendDamage::SecureJungleDamage(
+                GetEDamage(mob), IsLargeOrEpicJungleMob(mob));
             if (damage > 0.0 && mob.Health() < damage) {
                 CastE("clear-E-jungle");
                 return;
@@ -1391,7 +1368,8 @@ static void Routine() {
             });
 
         for (const auto& mob : mobs) {
-            const double damage = GetEDamage(mob);
+            const double damage = RendDamage::SecureJungleDamage(
+                GetEDamage(mob), IsLargeOrEpicJungleMob(mob));
             if (mob.Health() < damage) {
                 CastE("routine-E-jungle-secure");
                 return;

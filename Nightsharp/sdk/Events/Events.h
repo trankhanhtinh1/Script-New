@@ -5,6 +5,7 @@
 #include "../../CrashReporter.h"
 #include "../../FpsDropDebug.h"
 #include "../Data/Database.h"
+#include "StructureLifecyclePolicy.h"
 
 #include <atomic>
 #include <cstdint>
@@ -509,7 +510,8 @@ namespace detail {
 
     inline void QueueObjectCreate(const CoreHookArgs& raw) {
         const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
-        if (!args.Sender.IsValid()) {
+        if (!args.Sender.IsValid() ||
+            !ShouldQueueObjectLifecycle(args.Sender.Type)) {
             return;
         }
 
@@ -533,7 +535,8 @@ namespace detail {
 
     inline void QueueObjectDelete(const CoreHookArgs& raw) {
         const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
-        if (!args.Sender.IsValid()) {
+        if (!args.Sender.IsValid() ||
+            !ShouldQueueObjectLifecycle(args.Sender.Type)) {
             return;
         }
 

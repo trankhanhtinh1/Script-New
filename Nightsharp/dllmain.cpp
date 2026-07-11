@@ -17,6 +17,7 @@
 #include "overlay/OverlayManager.h"
 
 #include "Core/PackmanHook.h"
+#include "Core/PebHide.h"
 #pragma comment(lib, "psapi.lib")
 
 #pragma comment(lib, "user32.lib")
@@ -143,6 +144,8 @@ static void ShutdownNightSharpRuntime() {
 static DWORD WINAPI OverlayWorker(LPVOID param) {
     HMODULE module = reinterpret_cast<HMODULE>(param);
 
+    NightSharpDebug::CrashBridge::Install(module);
+    NightSharpDebug::CrashReporter::StartGuard();
     NightSharpDebug::Phase("overlay-worker-enter");
     NightSharpDebug::Logf("[NightSharp] OverlayWorker entered");
 
@@ -165,6 +168,8 @@ static DWORD WINAPI OverlayWorker(LPVOID param) {
         ShutdownNightSharpRuntime();
         NightSharpDebug::Phase("self-unload");
         NightSharpDebug::Logf("[NightSharp] FreeLibraryAndExitThread module=%p", module);
+        NightSharpDebug::CrashReporter::StopGuard();
+        NightSharpDebug::CrashBridge::Uninstall();
         FreeLibraryAndExitThread(module, 0);
     }
 
@@ -199,14 +204,16 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK NextHook(int code, WPARAM wPar
 // DllMain
 // ========================================================================
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
-    (void)reserved;
-
     switch (reason) {
     case DLL_PROCESS_ATTACH: {
         DisableThreadLibraryCalls(hModule);
         NightSharpDebug::CrashReporter::Install(hModule);
         NightSharpDebug::Phase("dll-attach");
         NightSharpDebug::Logf("[NightSharp] DllMain attach module=%p", hModule);
+
+        // PHẢI gọi ResetLogFile TRƯỚC mọi DbgLog — nó xóa+tạo lại file, nếu
+        // gọi sau sẽ wipe log của các block PEB scrub bên dưới.
+        ResetLogFile();
 
         // PEB.BeingDebugged = 0 — Packman checks IsDebuggerPresent
         {
@@ -222,8 +229,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             }
         }
 
-        // PackmanHook: reset log + init syscalls + deferred CRC bypass install
-        ResetLogFile();
+        // PackmanHook: init syscalls + deferred CRC bypass install
+        // (ResetLogFile đã gọi ở đầu DllMain để không wipe log PEB scrub)
         DirectSyscall::InitAll();
         DirectSyscall::DumpSyscallTable();
         ResetDeferredCRCInstallShutdown();
@@ -233,15 +240,30 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         }
 
         StartOverlayWorker(hModule);
+
+        // Module E — PEB Ldr Unlink. Gọi CUỐI, sau khi overlay worker
+        // + deferred CRC thread đã spawn (không cần module lookup nữa).
+        // Sau lệnh này: GetModuleHandleW(L"KiteMod.dll") trả nullptr,
+        // EnumProcessModulesEx không list module, string "KiteMod" bị xóa
+        // khỏi UNICODE_STRING trong LDR_DATA_TABLE_ENTRY.
+        {
+            const int nUnlinked = PebHide::HideAndErase(hModule);
+            DbgLogFmt("[PEB] HideAndErase: unlinked %d/3 list(s) for module=%p\r\n",
+                      nUnlinked, hModule);
+        }
         break;
     }
     case DLL_PROCESS_DETACH:
-        NightSharpDebug::Phase("dll-detach");
-        NightSharpDebug::Logf("[NightSharp] DllMain detach");
-        if (InterlockedCompareExchange(&g_selfUnloading, 0, 0) == 0) {
-            ShutdownNightSharpRuntime();
+        if (reserved == nullptr) {
+            NightSharpDebug::Phase("dll-detach");
+            NightSharpDebug::Logf("[NightSharp] DllMain detach");
+            if (InterlockedCompareExchange(&g_selfUnloading, 0, 0) == 0) {
+                ShutdownNightSharpRuntime();
+            }
+            NightSharpDebug::CrashReporter::StopGuard();
+            NightSharpDebug::CrashBridge::Uninstall();
+            NightSharpDebug::CrashReporter::Uninstall();
         }
-        NightSharpDebug::CrashReporter::Uninstall();
         break;
     default:
         break;

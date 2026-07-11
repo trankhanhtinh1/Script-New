@@ -111,7 +111,7 @@ inline CastInfoRef GetSpellCastInfo(uintptr_t owner, std::int32_t slot) {
 
     const uintptr_t fn = CoreRuntime::ResolveRva(
         Offset::ControlRuntime::GetSpellCastInfo);
-    if (!Globals::IsExecutablePtr(fn, 16)) {
+    if (!Globals::IsExecutablePtrCached(fn, 16)) {   // was VirtualQuery() per call
         return ref;
     }
 
@@ -217,7 +217,7 @@ inline bool IsCharging(uintptr_t owner) {
 
     const uintptr_t fn = CoreRuntime::ResolveRva(
         Offset::ControlRuntime::SpellTypeClassify);
-    if (!Globals::IsExecutablePtr(fn, 16)) {
+    if (!Globals::IsExecutablePtrCached(fn, 16)) {   // was VirtualQuery() per call
         return false;
     }
 

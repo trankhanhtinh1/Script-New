@@ -53,6 +53,8 @@ inline void OrbwalkerBase::OnDebugDrawStatic() {
     }
 }
 
+// OrbProbe (TEMP accumulator profiler) is defined in OrbwalkerActions.inl —
+// included before this file — so it is available here too.
 inline void OrbwalkerBase::OnGameUpdate() {
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
