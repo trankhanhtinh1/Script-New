@@ -365,6 +365,66 @@ inline void LogSlowFrame() {
     }
 }
 
+// Heartbeat: dumps the full phase + slow-event breakdown UNCONDITIONALLY every
+// ~1s (not gated on SlowFrameMs), so IDLE frames — which never cross the slow
+// threshold — are still captured. This is the evidence needed to see where the
+// per-frame time goes before any combo/logic runs (overlay-thread phases +
+// game-thread GameUpdate event ms).
+inline DWORD LastHeartbeatTick = 0;
+
+inline void LogHeartbeat() {
+    if (!LogEnabled) {
+        return;
+    }
+    const DWORD now = GetTickCount();
+    if (now - LastHeartbeatTick < 1000) {
+        return;
+    }
+    LastHeartbeatTick = now;
+
+    char line[1024] = {};
+    std::snprintf(
+        line,
+        sizeof(line),
+        "[Heartbeat] tick=%lu frame=%.2fms fps=%.0f core=%.2f memhacks=%.2f update=%.2f render=%.2f draw=%.2f menu=%.2f present=%.2f sleep=%.2f\r\n",
+        static_cast<unsigned long>(now),
+        LastFrameMs,
+        LastFrameMs > 0.0 ? 1000.0 / LastFrameMs : 0.0,
+        LastCoreTickMs,
+        // CoreMemoryHacks::Tick + DispatchDraw are captured as generic phases;
+        // pull them from the phase array below rather than dedicated fields.
+        0.0,
+        LastUpdateMs,
+        LastRenderMs,
+        0.0,
+        LastMenuMs,
+        LastPresentMs,
+        LastSleepMs);
+    AppendLog(line);
+
+    // All phases this frame (so CoreMemoryHacks::Tick / DispatchDraw / DispatchEndScene show up).
+    for (int i = 0; i < PhaseCount; ++i) {
+        std::snprintf(
+            line, sizeof(line), "  phase %s %.2fms\r\n",
+            PhaseSamples[i].Name ? PhaseSamples[i].Name : "", PhaseSamples[i].Ms);
+        AppendLog(line);
+    }
+
+    // Recent game-thread events (GameUpdate etc.) — the handler cost that runs on
+    // the game thread and caps in-game FPS at idle.
+    const DWORD tnow = GetTickCount();
+    for (int i = 0; i < EventCount; ++i) {
+        const auto& s = EventSamples[i];
+        if (tnow - s.LastTick > 1500) {
+            continue;
+        }
+        std::snprintf(
+            line, sizeof(line), "  event %s last=%.2fms max=%.2fms hits=%u\r\n",
+            s.Name ? s.Name : "", s.LastMs, s.MaxMs, s.Hits);
+        AppendLog(line);
+    }
+}
+
 inline void EndFrame() {
     if (!Enabled) {
         return;
@@ -375,6 +435,7 @@ inline void EndFrame() {
         ++SlowFrameCount;
         LogSlowFrame();
     }
+    LogHeartbeat();
 }
 
 // Renders the collected timing stats with ImGui. Assumes an ImGui window is

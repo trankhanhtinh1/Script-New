@@ -435,7 +435,7 @@ inline bool TryCallObjectFloatVFunc(uintptr_t object, uintptr_t vtableOffset, fl
 
         using ObjectFloatVFunc = float(__fastcall*)(uintptr_t);
         const uintptr_t fnAddress = Globals::Read<uintptr_t>(vtable + vtableOffset);
-        if (!Globals::IsExecutablePtr(fnAddress)) {
+        if (!Globals::IsExecutablePtrCached(fnAddress)) {
             out = 0.0f;
             return false;
         }
@@ -543,7 +543,7 @@ inline Vec3 ReadDirection(uintptr_t object) {
         using GetDirectionHolderFn = uintptr_t(__fastcall*)(uintptr_t);
         const uintptr_t getHolderAddress =
             Globals::Read<uintptr_t>(vtable + Offset::All::DirectionVFunc);
-        if (!Globals::IsExecutablePtr(getHolderAddress)) {
+        if (!Globals::IsExecutablePtrCached(getHolderAddress)) {
             return {};
         }
 
@@ -593,7 +593,19 @@ inline JungleRuntimeType ReadJungleRuntimeType(uintptr_t object) {
 }
 
 inline bool IsDead(uintptr_t object) {
-    return ReadBoolByte(object, Offset::All::Dead);
+    if (!Globals::IsValidPtr(object)) {
+        return false;
+    }
+
+    const float health = ReadField<float>(object, Offset::AttackableUnit::HP);
+    const float maxHealth = ReadField<float>(object, Offset::AttackableUnit::MaxHP);
+    if (!IsSaneFloat(health, -100000.0f, 1000000.0f) ||
+        !IsSaneFloat(maxHealth, 0.0f, 1000000.0f) ||
+        maxHealth <= 0.0f) {
+        return false;
+    }
+
+    return health <= 0.0f;
 }
 
 inline bool IsJungleMonster(uintptr_t object) {
@@ -787,7 +799,7 @@ namespace detail {
             }
             if (snapshot.team == 0) snapshot.team = teamSlot;
 
-            snapshot.isDead = IsDead(object);
+            snapshot.isDead = IsAttackable(type) && IsDead(object);
 
             snapshot.isVisible = ReadVisibleFlag(object);
             snapshot.isInvulnerable = false;

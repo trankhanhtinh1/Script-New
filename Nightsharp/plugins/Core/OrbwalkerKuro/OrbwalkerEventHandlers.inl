@@ -53,32 +53,8 @@ inline void OrbwalkerBase::OnDebugDrawStatic() {
     }
 }
 
-// TEMP PROBE (remove after FPS profiling) — self-contained; appends any
-// sub-call > 1ms to nightsharp_fps_drop_debug.txt (same file as slow-handler).
-struct OrbProbe {
-    const char* n;
-    LARGE_INTEGER s;
-    explicit OrbProbe(const char* name) : n(name) { QueryPerformanceCounter(&s); }
-    ~OrbProbe() {
-        LARGE_INTEGER e{}, f{};
-        QueryPerformanceCounter(&e);
-        QueryPerformanceFrequency(&f);
-        const double ms = static_cast<double>(e.QuadPart - s.QuadPart) * 1000.0 /
-                          static_cast<double>(f.QuadPart);
-        if (ms > 1.0) {
-            char b[160] = {};
-            const int len = std::snprintf(b, sizeof(b), "[OrbProbe] %-14s %.2fms\r\n", n, ms);
-            HANDLE h = CreateFileA("C:\\Users\\Public\\nightsharp_fps_drop_debug.txt",
-                                   FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
-                                   OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (h != INVALID_HANDLE_VALUE) {
-                DWORD w = 0;
-                WriteFile(h, b, static_cast<DWORD>(len), &w, nullptr);
-                CloseHandle(h);
-            }
-        }
-    }
-};
+// OrbProbe (TEMP accumulator profiler) is defined in OrbwalkerActions.inl —
+// included before this file — so it is available here too.
 
 inline void OrbwalkerBase::OnGameUpdate() {
     if (!menu_.Enabled()) {

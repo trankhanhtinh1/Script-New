@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreBypass.h"
+#include "CoreEvadeState.h"
 #include "CoreObjects.h"
 #include "CoreRuntime.h"
 #include "CoreValidation.h"
@@ -434,6 +435,10 @@ inline bool IssueOrder(OrderType order,
     }
 
     const bool isAttack = IsAttackCommand(order);
+    if (isAttack && CoreEvadeState::IsComboBlocked(static_cast<int>(GetTickCount()))) {
+        CoreValidation::MarkIssueOrderResult(false);
+        return false;
+    }
     const bool isPet = IsPetOrder(order);
     bool ok = false;
     bool bypassTouched = false;

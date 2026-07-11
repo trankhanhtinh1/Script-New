@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "CrashBridge.h"
+
 namespace NightSharpDebug {
 
 inline constexpr const char* kCrashLogPath =
@@ -30,12 +32,14 @@ inline void WriteRaw(const char* text) {
         FILE_ATTRIBUTE_NORMAL,
         nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
+        NightSharpDebug::CrashBridge::EnqueueLog(text, lstrlenA(text));
         return;
     }
 
     DWORD written = 0;
     WriteFile(hFile, text, static_cast<DWORD>(lstrlenA(text)), &written, nullptr);
     CloseHandle(hFile);
+    NightSharpDebug::CrashBridge::EnqueueLog(text, lstrlenA(text));
 }
 
 inline const char* BaseName(const char* path) {
@@ -84,6 +88,7 @@ inline void Phase(const char* phase) {
     SetPhase(phase);
     char current[128] = {};
     GetPhase(current, sizeof(current));
+    NightSharpDebug::CrashBridge::PublishPhase(current);
     WriteRaw("[NightSharp] phase=");
     WriteRaw(current);
     WriteRaw("\r\n");

@@ -881,8 +881,18 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     }
 }
 
-// TEMP PROBE (remove after FPS profiling) — self-contained; appends any
-// sub-call > 1ms to nightsharp_fps_drop_debug.txt (same file as slow-handler).
+// TEMP PROBE (remove after FPS profiling). ACCUMULATOR version: each scope adds
+// its ms to a per-name running total and only ONE file write happens per second
+// (dumping + resetting all totals). This removes the per-call file-I/O that the
+// old >threshold-write version did on the game thread — that I/O was inflating
+// every enclosing scope's measurement (observer effect). All ZedProbe uses are
+// on the game thread (OnGameUpdate/Combo/KillSteal), so no locking is needed.
+// Read [Acc] lines as: name=<total ms in the last ~1s>/<call count>.
+struct ProbeAcc { const char* n; double ms; unsigned cnt; };
+inline ProbeAcc g_probeAcc[48] = {};
+inline int g_probeAccN = 0;
+inline DWORD g_probeAccLast = 0;
+
 struct ZedProbe {
     const char* n;
     LARGE_INTEGER s;
@@ -893,15 +903,34 @@ struct ZedProbe {
         QueryPerformanceFrequency(&f);
         const double ms = static_cast<double>(e.QuadPart - s.QuadPart) * 1000.0 /
                           static_cast<double>(f.QuadPart);
-        if (ms > 1.0) {
-            char b[160] = {};
-            const int len = std::snprintf(b, sizeof(b), "[ZedProbe] %-14s %.2fms\r\n", n, ms);
+
+        ProbeAcc* a = nullptr;
+        for (int i = 0; i < g_probeAccN; ++i) {
+            if (g_probeAcc[i].n == n) { a = &g_probeAcc[i]; break; }
+        }
+        if (!a && g_probeAccN < 48) {
+            a = &g_probeAcc[g_probeAccN++];
+            a->n = n; a->ms = 0.0; a->cnt = 0;
+        }
+        if (a) { a->ms += ms; a->cnt += 1; }
+
+        const DWORD now = GetTickCount();
+        if (now - g_probeAccLast >= 1000) {
+            g_probeAccLast = now;
+            char b[1536];
+            int p = std::snprintf(b, sizeof(b), "[Acc/1s] ");
+            for (int i = 0; i < g_probeAccN && p < static_cast<int>(sizeof(b)) - 48; ++i) {
+                p += std::snprintf(b + p, sizeof(b) - p, "%s=%.2f/%u ",
+                                   g_probeAcc[i].n, g_probeAcc[i].ms, g_probeAcc[i].cnt);
+                g_probeAcc[i].ms = 0.0; g_probeAcc[i].cnt = 0;
+            }
+            p += std::snprintf(b + p, sizeof(b) - p, "\r\n");
             HANDLE h = CreateFileA("C:\\Users\\Public\\nightsharp_fps_drop_debug.txt",
                                    FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
                                    OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (h != INVALID_HANDLE_VALUE) {
                 DWORD w = 0;
-                WriteFile(h, b, static_cast<DWORD>(len), &w, nullptr);
+                WriteFile(h, b, static_cast<DWORD>(p), &w, nullptr);
                 CloseHandle(h);
             }
         }
@@ -921,6 +950,13 @@ static void OnGameUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Measures the ENTIRE handler each tick — fires even at idle (no combo key),
+    // so this captures the per-tick cost that drops FPS before any logic runs.
+    ZedProbe pTotal("OnUpdate-TOTAL");
+
+    { // isolates the per-tick menu-accessor (Key/Bool) overhead — at idle the
+      // if-bodies below all skip, so this measures the Key()/Bool() lookups only.
+    ZedProbe pDisp("dispatch-keys");
     if (Key(ComboMenu, "ActiveCombo")) {
         AIHeroClient e; { ZedProbe p("GetEnemy"); e = GetEnemy(); }
         ZedProbe p("Combo");
@@ -945,26 +981,38 @@ static void OnGameUpdate(const GameUpdateEventArgs&) {
         ZedProbe p("AutoE-CastE");
         CastE();
     }
+    }
     if (SDK::Variables::TickCount() >= ClockOn && CountDanger > CountUlts) {
         CastUnit(R, GetTarget(640.0f, DamageType::Magical), "delayed-danger-R");
         CountUlts = CountUlts + 1;
     }
 
-    ZedProbe pKS("rest(RPos+KS)");
     const auto& lastCast = SDK::LastCast::LastCastPacketSent();
     if (lastCast.Slot == SpellSlot::R) {
+        ZedProbe pRs("Rshadow-scan");
         // C# original scans ObjectManager.Get<AIMinionClient>() (raw list); the
         // shadow is not a lane minion so AllyMinions() would never find it.
         for (const auto& minion : SDK::ObjectManager::Get<AIMinionClient>()) {
-            if (minion.IsVisible() && minion.IsAlly() &&
-                EqualsIgnoreCase(RuntimeName(minion).c_str(), "Shadow")) {
+            if (!minion.IsVisible() || !minion.IsAlly()) {
+                continue;
+            }
+            // Stack-buffer name read (no std::string alloc per minion) — matches
+            // EnsureShadowCache. RuntimeName() allocated a std::string for every
+            // ally minion each tick this ran (lastCast==R during combo), the bulk
+            // of the rest(RPos+KS) cost.
+            char name[64] = {};
+            if (!(::Core::Objects::ReadName(minion.Address(), name, static_cast<int>(sizeof(name))) && name[0]) &&
+                !(::Core::Objects::ReadCharacterName(minion.Address(), name, static_cast<int>(sizeof(name))) && name[0])) {
+                continue;
+            }
+            if (_stricmp(name, "Shadow") == 0) {
                 RPos = minion.Position();
                 break;
             }
         }
     }
 
-    KillSteal();
+    { ZedProbe pKS("KillSteal"); KillSteal(); }
 }
 
 static float ComboDamage(const AIBaseClient& enemy) {
@@ -1012,6 +1060,7 @@ static void Combo(AIHeroClient t) {
     // evaluated when that branch is actually reachable. Behavior is identical —
     // the damage helpers are pure reads with no side effects.
     bool ultOpener = false;
+    { ZedProbe pu("Combo-ult");
     if (Bool(ComboMenu, "UseUlt") && GetUltStage() == UltCastStage::First) {
         const double overkill =
             QDamage(target) + EDamage(target) + Damage::GetAutoAttackDamage(player, target) * 2.0;
@@ -1020,6 +1069,7 @@ static void Combo(AIHeroClient t) {
             (!W.IsReady() && doubleu.Cooldown() > 2.0f &&
              QDamage(target) < target.Health() &&
              target.Distance(player.Position()) > 400.0f);
+    }
     }
     if (ultOpener) {
         if ((target.Distance(player.Position()) > 700.0f && target.MoveSpeed() > player.MoveSpeed()) ||
@@ -1032,10 +1082,12 @@ static void Combo(AIHeroClient t) {
     } else {
         if (target.IsValid() && Bool(ComboMenu, "UseIgnitecombo") &&
             Ignite.Slot != SpellSlot::Unknown && Ignite.IsReady()) {
+            ZedProbe p("Combo-ignitedmg");
             if (ComboDamage(target) > target.Health() || target.HasBuff("zedulttargetmark")) {
                 CastUnit(Ignite, target, "combo-ignite");
             }
         }
+        { ZedProbe ps("Combo-stages");
         if (target.IsValid() && GetShadowStage() == ShadowCastStage::First &&
             Bool(ComboMenu, "UseWC") && target.Distance(player.Position()) > 400.0f &&
             target.Distance(player.Position()) < 1300.0f) {
@@ -1047,9 +1099,10 @@ static void Combo(AIHeroClient t) {
             target.Distance(wShadow.Position()) < target.Distance(player.Position())) {
             CastSelf(W, "combo-W-recast");
         }
-        UseItemes(target);
-        CastE();
-        CastQ(target);
+        }
+        { ZedProbe p("Combo-items"); UseItemes(target); }
+        { ZedProbe p("Combo-CastE"); CastE(); }
+        { ZedProbe p("Combo-CastQ"); CastQ(target); }
     }
 }
 
@@ -1346,13 +1399,17 @@ static void CastQ(AIBaseClient target) {
 }
 
 static void CastE() {
-    const auto player = Player();
-    if (!E.IsReady()) {
+    AIHeroClient player;
+    { ZedProbe p("CE-Player"); player = Player(); }
+    bool eReady;
+    { ZedProbe p("CE-IsReady"); eReady = E.IsReady(); }
+    if (!eReady) {
         return;
     }
-    const auto wShadow = WShadow();
-    const auto rShadow = RShadow();
+    AIMinionClient wShadow, rShadow;
+    { ZedProbe p("CastE-shadow"); wShadow = WShadow(); rShadow = RShadow(); }
     int count = 0;
+    { ZedProbe p("CastE-eloop");
     for (const auto& hero : GameObjects::EnemyHeroes()) {
         if (ValidHeroTarget(hero) &&
             (hero.Distance(player.Position()) <= E.Range ||
@@ -1360,6 +1417,7 @@ static void CastE() {
              (rShadow.IsValid() && hero.Distance(rShadow.Position()) <= E.Range))) {
             ++count;
         }
+    }
     }
     if (count > 0) {
         CastSelf(E, "cast-E");
@@ -1384,17 +1442,20 @@ static void KillSteal() {
         return;
     }
 
-    const auto target = GetTarget(2000.0f, DamageType::Magical);
+    AIHeroClient target;
+    { ZedProbe p("KS-GetTarget"); target = GetTarget(2000.0f, DamageType::Magical); }
     if (!ValidHeroTarget(target)) {
         return;
     }
     if (useIgnite) {
+        ZedProbe p("KS-igniteDmg");
         const double igniteDmg = IgniteDamage(target);
         if (igniteDmg > target.Health() && player.Distance(target.Position()) <= 600.0f) {
             CastUnit(Ignite, target, "ks-ignite");
         }
     }
     if (useQ) {
+        ZedProbe p("KS-Qdmg");
         const double qDamage = QDamage(target);
         if (qDamage > target.Health() ||
             CanCollectorExecuteAfterDamage(target, qDamage)) {
@@ -1417,6 +1478,7 @@ static void KillSteal() {
     }
 
     if (useE) {
+        ZedProbe p("KS-Edmg-loop");
         const auto wShadow = WShadow();
         const auto rShadow = RShadow();
         for (const auto& t : GameObjects::EnemyHeroes()) {

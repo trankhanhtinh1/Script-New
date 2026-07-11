@@ -14,6 +14,7 @@
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
+#include "Utility/IsDeadDebugPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
 #include "Utility/ObjectDefinitionDrawPlugin.h"
@@ -28,7 +29,6 @@
 #include "Champion/KuroAIO/KuroAIO.h"
 #include "Champion/SharpShooterAIO/SharpShooterAIO.h"
 #include "Champion/ziblldev9898/ziblldev9898.h"
-#include "EzEvade/EzEvadePlugin.h"
 #include "ZDEvade/ZDEvade.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
@@ -135,6 +135,7 @@ namespace PluginBootstrap {
 
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins begin");
         PluginManager::Get().Register<AttackRangeDrawPlugin>();
+        PluginManager::Get().Register<IsDeadDebugPlugin>();
         PluginManager::Get().Register<MovementStateDrawPlugin>();
         PluginManager::Get().Register<NavGridDrawPlugin>();
         PluginManager::Get().Register<ObjectDefinitionDrawPlugin>();
@@ -152,7 +153,6 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<KuroAIOPlugin>();
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
         PluginManager::Get().Register<Ziblldev9898Plugin>();
-        PluginManager::Get().Register<EzEvadePlugin>();
         PluginManager::Get().Register<ZDEvadePlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 

@@ -1,11 +1,9 @@
 #pragma once
 
 // ============================================================================
-// EvadeSpellData.h  —  C++ port of EzEvade's EvadeSpellData schema.
+// EvadeSpellData.h - evade spell data schema.
 // ============================================================================
-// Ported 1-1 from `EzEvade/EvadeSpells/EvadeSpellData.cs`.
-// Contains the data struct + enums for spells the PLAYER can use to EVADE
-// enemy skillshots (dash, blink, spell shield, movement speed buff, windwall).
+// Contains the data struct + enums for player evade spells.
 // ============================================================================
 
 #include <cstdint>

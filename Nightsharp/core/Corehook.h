@@ -177,8 +177,9 @@ inline int ResolveSSNFromDisk(const char* funcName) {
 
 inline bool BuildSyscallStub(int ssn, void** outStub) {
     if (!outStub || ssn < 0) return false;
-    auto* stub = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr, 32,
-        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    // Module MM: alloc qua CreateFileMapping → region MEM_MAPPED (giấu khỏi
+    // MEM_PRIVATE + PAGE_EXECUTE_* scanner). Delegate sang PackmanHook helper.
+    auto* stub = reinterpret_cast<uint8_t*>(DirectSyscall::AllocSectionRWX(32));
     if (!stub) return false;
     stub[0] = 0x4C; stub[1] = 0x8B; stub[2] = 0xD1;
     stub[3] = 0xB8;
@@ -326,11 +327,11 @@ inline void Shutdown() {
     g_ntWrite = nullptr;
 
     if (g_stubPtr) {
-        VirtualFree(g_stubPtr, 0, MEM_RELEASE);
+        UnmapViewOfFile(g_stubPtr);  // Module MM: BuildSyscallStub dùng section
         g_stubPtr = nullptr;
     }
     if (g_writeStubPtr) {
-        VirtualFree(g_writeStubPtr, 0, MEM_RELEASE);
+        UnmapViewOfFile(g_writeStubPtr);  // Module MM: BuildSyscallStub dùng section
         g_writeStubPtr = nullptr;
     }
 
@@ -439,10 +440,12 @@ struct RawAsmDetour {
                 return false;
             }
 
-            // Alloc as RW first, write code, then protect to RX
-            // so VAD scan sees PAGE_EXECUTE_READ (not RWX)
-            trampolineAddr = reinterpret_cast<uintptr_t>(VirtualAlloc(
-                nullptr, 256, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+            // Module MM: alloc qua section-mapping (MEM_MAPPED) thay vì
+            // VirtualAlloc (MEM_PRIVATE). View khởi tạo với PAGE_EXECUTE_READWRITE
+            // (yêu cầu để sau downgrade RX được), memcpy trực tiếp, cuối cùng
+            // VirtualProtectDirect xuống PAGE_EXECUTE_READ như cũ.
+            trampolineAddr = reinterpret_cast<uintptr_t>(
+                DirectSyscall::AllocSectionRWX(256));
             if (!trampolineAddr) {
                 lastStatus = kInst_VAllocFail;
                 return false;
@@ -509,7 +512,7 @@ struct RawAsmDetour {
             DWORD oldProt = 0;
             if (!stealth::VirtualProtectDirect(reinterpret_cast<void*>(target), stolenSize,
                                                PAGE_EXECUTE_WRITECOPY, &oldProt)) {
-                VirtualFree(reinterpret_cast<void*>(trampolineAddr), 0, MEM_RELEASE);
+                UnmapViewOfFile(reinterpret_cast<void*>(trampolineAddr));  // Module MM cleanup
                 trampolineAddr = 0;
                 lastStatus = kInst_VProtectFail;
                 return false;
@@ -527,7 +530,7 @@ struct RawAsmDetour {
             return true;
         } __except (1) {
             if (trampolineAddr) {
-                VirtualFree(reinterpret_cast<void*>(trampolineAddr), 0, MEM_RELEASE);
+                UnmapViewOfFile(reinterpret_cast<void*>(trampolineAddr));  // Module MM cleanup
                 trampolineAddr = 0;
             }
             lastStatus = kInst_SehFault;
@@ -548,7 +551,7 @@ struct RawAsmDetour {
         } __except (1) {}
 
         if (trampolineAddr) {
-            VirtualFree(reinterpret_cast<void*>(trampolineAddr), 0, MEM_RELEASE);
+            UnmapViewOfFile(reinterpret_cast<void*>(trampolineAddr));  // Module MM cleanup
             trampolineAddr = 0;
         }
         installed = false;

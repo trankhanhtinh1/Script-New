@@ -431,11 +431,24 @@ inline bool TryGetRawState(const SpellSlotRef& ref,
         return false;
     }
 
-    const uintptr_t fn = CoreRuntime::ResolveRva(
-        Offset::ControlRuntime::GetSpellState);
-    if (!Globals::IsExecutablePtr(fn, 16)) {
+    // Resolve + validate the native GetSpellState pointer ONCE per module base.
+    // IsExecutablePtr() runs a VirtualQuery() SYSCALL; TryGetRawState is called
+    // by every spell.State()/IsReady() (~10-20x/tick per champion), so the
+    // per-call VirtualQuery here was — together with RemainingCooldownNative —
+    // the dominant idle FPS cost across ALL champions. Address is fixed per base.
+    static uintptr_t s_cachedBase = 0;
+    static uintptr_t s_cachedFn = 0;
+    const uintptr_t base = CoreRuntime::GetContext().moduleBase;
+    if (base != s_cachedBase) {
+        s_cachedBase = base;
+        const uintptr_t resolved = CoreRuntime::ResolveRva(
+            Offset::ControlRuntime::GetSpellState);
+        s_cachedFn = Globals::IsExecutablePtr(resolved, 16) ? resolved : 0;
+    }
+    if (!s_cachedFn) {
         return false;
     }
+    const uintptr_t fn = s_cachedFn;
 
     using FnGetSpellState = std::uint32_t(__fastcall*)(
         uintptr_t spellbook,
@@ -473,16 +486,31 @@ inline float RemainingCooldownNative(const SpellSlotRef& ref) {
         return 0.0f;
     }
 
-    const uintptr_t fn = CoreRuntime::ResolveRva(
-        Offset::ControlRuntime::GetSpellRemainingCooldown);
-    if (!Globals::IsExecutablePtr(fn, 16)) {
+    // Resolve + validate the native GetSpellRemainingCooldown pointer ONCE per
+    // module base, not per call. IsExecutablePtr() runs a VirtualQuery() SYSCALL,
+    // and this function is invoked by every spell.IsReady()/State() on a spell
+    // that is on cooldown — ~10-20x per game tick per champion. That per-call
+    // VirtualQuery was the dominant IDLE FPS cost shared across ALL champions
+    // (measured: spell.IsReady() ≈ 0.58 ms/call). The game function address is
+    // fixed for a given module base, so cache the validated pointer; re-resolve
+    // only if the base changes (module reload).
+    static uintptr_t s_cachedBase = 0;
+    static uintptr_t s_cachedFn = 0;
+    const uintptr_t base = CoreRuntime::GetContext().moduleBase;
+    if (base != s_cachedBase) {
+        s_cachedBase = base;
+        const uintptr_t fn = CoreRuntime::ResolveRva(
+            Offset::ControlRuntime::GetSpellRemainingCooldown);
+        s_cachedFn = Globals::IsExecutablePtr(fn, 16) ? fn : 0;
+    }
+    if (!s_cachedFn) {
         return 0.0f;
     }
 
     using FnRemainingCooldown = float(__fastcall*)(uintptr_t spellSlot);
 
     __try {
-        const float value = reinterpret_cast<FnRemainingCooldown>(fn)(ref.slot);
+        const float value = reinterpret_cast<FnRemainingCooldown>(s_cachedFn)(ref.slot);
         return IsSaneSeconds(value) ? value : 0.0f;
     }
     __except (1) {

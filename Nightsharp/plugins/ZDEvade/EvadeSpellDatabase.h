@@ -1,9 +1,9 @@
 #pragma once
 
 // ============================================================================
-// EvadeSpellDatabase.h  —  C++ port of EzEvade's EvadeSpellDatabase.cs
+// EvadeSpellDatabase.h - evade spell database.
 // ============================================================================
-// Ported 1-1 from `EzEvade/EvadeSpells/EvadeSpellDatabase.cs`.
+// Contains player spell data used for avoiding enemy skillshots.
 // Spell data verified against CDragon latest (raw.communitydragon.org).
 // Unverified entries keep original C# values; verified entries have comments
 // marking the CDragon source field.

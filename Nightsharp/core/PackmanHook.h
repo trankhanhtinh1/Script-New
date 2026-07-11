@@ -23,6 +23,7 @@
 
 #include <Windows.h>
 #include <psapi.h>
+#include <intrin.h>
 #include <vector>
 #include <mutex>
 #include <cstdint>
@@ -37,7 +38,20 @@
 // ít bị anti-cheat sweep hơn C:\Users\Public. Tên file ngắn, không có
 // từ khoá ("packman", "hook", "bypass") để giảm risk pattern match.
 
+// ── Log control (Module J) ───────────────────────────────────────────────────
+inline volatile LONG g_logEnabled = 1;
+
+inline void SetLogEnabled(bool en) {
+    InterlockedExchange(&g_logEnabled, en ? 1 : 0);
+}
+inline bool IsLogEnabled() {
+    return InterlockedCompareExchange(&g_logEnabled, 0, 0) != 0;
+}
+
 static const char* GetLogPath() {
+#ifdef NS_PACKMAN_SILENT
+    return "";   // không dùng
+#else
     static char path[MAX_PATH] = {};
     if (path[0]) return path;
     char tmp[MAX_PATH] = {};
@@ -48,15 +62,22 @@ static const char* GetLogPath() {
         _snprintf(path, MAX_PATH, "%sph.log", tmp);
     }
     return path;
+#endif
 }
 
 static void DbgLog(const char* msg) {
+#ifdef NS_PACKMAN_SILENT
+    (void)msg;
+    return;
+#else
+    if (!IsLogEnabled()) return;
     OutputDebugStringA(msg);
     HANDLE hFile = CreateFileA(GetLogPath(), FILE_APPEND_DATA, FILE_SHARE_READ,
-                               nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) return;
     DWORD w; WriteFile(hFile, msg, static_cast<DWORD>(strlen(msg)), &w, nullptr);
     CloseHandle(hFile);
+#endif
 }
 
 // Timestamp prefix: [HH:MM:SS.mmm]
@@ -68,15 +89,26 @@ static void GetTimestamp(char* out, size_t outLen) {
 }
 
 static void DbgLogTs(const char* msg) {
+#ifdef NS_PACKMAN_SILENT
+    (void)msg;
+    return;
+#else
+    if (!IsLogEnabled()) return;
     char ts[32];
     GetTimestamp(ts, sizeof(ts));
     char line[600];
     _snprintf(line, sizeof(line), "[%s] %s", ts, msg);
     line[sizeof(line) - 1] = 0;
     DbgLog(line);
+#endif
 }
 
 static void DbgLogFmt(const char* fmt, ...) {
+#ifdef NS_PACKMAN_SILENT
+    (void)fmt;
+    return;
+#else
+    if (!IsLogEnabled()) return;
     char ts[32];
     GetTimestamp(ts, sizeof(ts));
     char body[512];
@@ -89,6 +121,7 @@ static void DbgLogFmt(const char* fmt, ...) {
     _snprintf(line, sizeof(line), "[%s] %s", ts, body);
     line[sizeof(line) - 1] = 0;
     DbgLog(line);
+#endif
 }
 
 // ── Pattern Scanner ──────────────────────────────────────────────────────────
@@ -119,6 +152,13 @@ static void* PatternScan(const unsigned char* base, size_t size,
 
 namespace DirectSyscall {
 
+// ── djb2 hash (compile-time) ─────────────────────────────────────────────────
+// Dùng để tránh string "Nt*" plaintext trong .rdata (anti-scan surface B).
+constexpr uint32_t djb2(const char* s, uint32_t h = 5381u) {
+    return *s ? djb2(s + 1, ((h << 5) + h) ^ static_cast<uint8_t>(*s)) : h;
+}
+#define NS_HASH(name) (::DirectSyscall::djb2(name))
+
 // ── Function typedefs ────────────────────────────────────────────────────────
 using NtProtectFn  = LONG(NTAPI*)(HANDLE, PVOID*, PSIZE_T, ULONG, PULONG);
 using NtWriteFn    = LONG(NTAPI*)(HANDLE, PVOID, PVOID, SIZE_T, PSIZE_T);
@@ -131,12 +171,14 @@ using NtSetCtxFn   = LONG(NTAPI*)(HANDLE, PCONTEXT);
 using NtGetCtxFn   = LONG(NTAPI*)(HANDLE, PCONTEXT);
 using NtCreateThreadExFn = LONG(NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, HANDLE,
     LPTHREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PVOID);
+using NtSetInfoThreadFn = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG);
 
 // ── Syscall entry table ──────────────────────────────────────────────────────
 // Mỗi entry: tên function (cho resolve), SSN fallback (verify từ IDA ntdll),
 // stub pointer, function pointer, SSN thực tế.
 struct SyscallEntry {
-    const char* name;
+    uint32_t    nameHash;      // djb2(name) — dùng để resolve ẩn danh
+    const char* name;          // giữ cho debug/DumpSyscallTable; sẽ được stringify tùy build
     int         fallbackSsn;
     void*       stub;
     void*       fn;
@@ -145,26 +187,17 @@ struct SyscallEntry {
 
 // SSN fallback values verified từ IDA 13339 (ntdll.dll Win11 26100)
 inline SyscallEntry g_syscalls[] = {
-    // idx 0: NtProtectVirtualMemory
-    { "NtProtectVirtualMemory", 0x050, nullptr, nullptr, -1 },
-    // idx 1: NtWriteVirtualMemory
-    { "NtWriteVirtualMemory",   0x03A, nullptr, nullptr, -1 },
-    // idx 2: NtContinue
-    { "NtContinue",             0x043, nullptr, nullptr, -1 },
-    // idx 3: NtDelayExecution
-    { "NtDelayExecution",       0x034, nullptr, nullptr, -1 },
-    // idx 4: NtQueryVirtualMemory
-    { "NtQueryVirtualMemory",   0x023, nullptr, nullptr, -1 },
-    // idx 5: NtSuspendThread
-    { "NtSuspendThread",        0x1BE, nullptr, nullptr, -1 },
-    // idx 6: NtContinueEx
-    { "NtContinueEx",           0x0A1, nullptr, nullptr, -1 },
-    // idx 7: NtSetContextThread
-    { "NtSetContextThread",     0x18D, nullptr, nullptr, -1 },
-    // idx 8: NtGetContextThread
-    { "NtGetContextThread",     0x0F3, nullptr, nullptr, -1 },
-    // idx 9: NtCreateThreadEx (Packman hook INT3 tại entry + ret)
-    { "NtCreateThreadEx",       0x0C2, nullptr, nullptr, -1 },
+    { NS_HASH("NtProtectVirtualMemory"), "NtProtectVirtualMemory", 0x050, nullptr, nullptr, -1 },
+    { NS_HASH("NtWriteVirtualMemory"),   "NtWriteVirtualMemory",   0x03A, nullptr, nullptr, -1 },
+    { NS_HASH("NtContinue"),             "NtContinue",             0x043, nullptr, nullptr, -1 },
+    { NS_HASH("NtDelayExecution"),       "NtDelayExecution",       0x034, nullptr, nullptr, -1 },
+    { NS_HASH("NtQueryVirtualMemory"),   "NtQueryVirtualMemory",   0x023, nullptr, nullptr, -1 },
+    { NS_HASH("NtSuspendThread"),        "NtSuspendThread",        0x1BE, nullptr, nullptr, -1 },
+    { NS_HASH("NtContinueEx"),           "NtContinueEx",           0x0A1, nullptr, nullptr, -1 },
+    { NS_HASH("NtSetContextThread"),     "NtSetContextThread",     0x18D, nullptr, nullptr, -1 },
+    { NS_HASH("NtGetContextThread"),     "NtGetContextThread",     0x0F3, nullptr, nullptr, -1 },
+    { NS_HASH("NtCreateThreadEx"),       "NtCreateThreadEx",       0x0C2, nullptr, nullptr, -1 },
+    { NS_HASH("NtSetInformationThread"), "NtSetInformationThread", 0x00D, nullptr, nullptr, -1 },
 };
 
 enum SyscallIdx : size_t {
@@ -178,8 +211,21 @@ enum SyscallIdx : size_t {
     IDX_SETCTX        = 7,
     IDX_GETCTX        = 8,
     IDX_CREATETHREADEX= 9,
-    SYSCALL_COUNT     = 10,
+    IDX_SETINFOTHREAD = 10,
+    SYSCALL_COUNT     = 11,
 };
+
+// Compile-time hash-collision guard cho g_syscalls[]. Nếu 2 entry cùng hash,
+// static_assert này sẽ fail — đổi tên hoặc dùng hash algo khác.
+static_assert(NS_HASH("NtProtectVirtualMemory") != NS_HASH("NtWriteVirtualMemory"), "hash collision");
+static_assert(NS_HASH("NtProtectVirtualMemory") != NS_HASH("NtContinue"),           "hash collision");
+static_assert(NS_HASH("NtWriteVirtualMemory")   != NS_HASH("NtContinue"),           "hash collision");
+static_assert(NS_HASH("NtDelayExecution")       != NS_HASH("NtQueryVirtualMemory"), "hash collision");
+static_assert(NS_HASH("NtSuspendThread")        != NS_HASH("NtContinueEx"),         "hash collision");
+static_assert(NS_HASH("NtSetContextThread")     != NS_HASH("NtGetContextThread"),   "hash collision");
+static_assert(NS_HASH("NtCreateThreadEx")       != NS_HASH("NtSuspendThread"),      "hash collision");
+static_assert(NS_HASH("NtSetInformationThread") != NS_HASH("NtCreateThreadEx"),     "hash collision");
+static_assert(NS_HASH("NtSetInformationThread") != NS_HASH("NtSetContextThread"),   "hash collision");
 
 // ── Backward compat globals (giữ API cũ cho CRCBypass) ───────────────────────
 inline void*         g_protectStub = nullptr;
@@ -192,6 +238,13 @@ inline NtWriteFn   g_ntWrite   = nullptr;
 inline int         g_writeSsn  = -1;
 inline volatile LONG g_lastWriteStatus = 0;
 
+// ── Syscall gadget cache (Module A) ──────────────────────────────────────────
+// Danh sách địa chỉ 0F 05 C3 trong ntdll .text. Cache 1 lần lúc InitAll,
+// pick ngẫu nhiên cho mỗi stub build. Cỡ 64 đủ (ntdll có 30+ mặc định).
+inline void*    g_syscallGadgets[64] = {};
+inline size_t   g_gadgetCount        = 0;
+inline volatile LONG g_gadgetInited  = 0;
+
 inline DWORD RvaToFileOff(const IMAGE_NT_HEADERS* nt, DWORD rva) {
     const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
     for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
@@ -201,6 +254,31 @@ inline DWORD RvaToFileOff(const IMAGE_NT_HEADERS* nt, DWORD rva) {
         }
     }
     return 0;
+}
+
+inline int ExtractSSNFromImageByHash(const uint8_t* buf, uint32_t nameHash) {
+    if (!buf) return -1;
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return -1;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return -1;
+    const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!dir.VirtualAddress) return -1;
+    const auto* exp = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(
+        buf + RvaToFileOff(nt, dir.VirtualAddress));
+    const auto* names = reinterpret_cast<const DWORD*>(buf + RvaToFileOff(nt, exp->AddressOfNames));
+    const auto* ords  = reinterpret_cast<const WORD*>(buf + RvaToFileOff(nt, exp->AddressOfNameOrdinals));
+    const auto* funcs = reinterpret_cast<const DWORD*>(buf + RvaToFileOff(nt, exp->AddressOfFunctions));
+    for (DWORD i = 0; i < exp->NumberOfNames; ++i) {
+        const auto* name = reinterpret_cast<const char*>(buf + RvaToFileOff(nt, names[i]));
+        if (djb2(name) != nameHash) continue;
+        const auto* stub = buf + RvaToFileOff(nt, funcs[ords[i]]);
+        if (stub[0] == 0x4C && stub[1] == 0x8B && stub[2] == 0xD1 && stub[3] == 0xB8) {
+            return static_cast<int>(*reinterpret_cast<const uint32_t*>(stub + 4));
+        }
+        return -1;
+    }
+    return -1;
 }
 
 inline int ExtractSSNFromImage(const uint8_t* buf, const char* funcName) {
@@ -241,6 +319,32 @@ inline int ResolveSSNInMemory(const char* funcName) {
     return -1;
 }
 
+inline int ResolveSSNInMemoryByHash(uint32_t nameHash) {
+    HMODULE h = GetModuleHandleW(L"ntdll.dll");
+    if (!h) return -1;
+    const auto* buf = reinterpret_cast<const uint8_t*>(h);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return -1;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return -1;
+    const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!dir.VirtualAddress) return -1;
+    const auto* exp   = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(buf + dir.VirtualAddress);
+    const auto* names = reinterpret_cast<const DWORD*>(buf + exp->AddressOfNames);
+    const auto* ords  = reinterpret_cast<const WORD*>(buf + exp->AddressOfNameOrdinals);
+    const auto* funcs = reinterpret_cast<const DWORD*>(buf + exp->AddressOfFunctions);
+    for (DWORD i = 0; i < exp->NumberOfNames; ++i) {
+        const char* name = reinterpret_cast<const char*>(buf + names[i]);
+        if (djb2(name) != nameHash) continue;
+        const uint8_t* p = buf + funcs[ords[i]];
+        if (p[0] == 0x4C && p[1] == 0x8B && p[2] == 0xD1 && p[3] == 0xB8) {
+            return static_cast<int>(*reinterpret_cast<const uint32_t*>(p + 4));
+        }
+        return -1;
+    }
+    return -1;
+}
+
 inline int ResolveSSNFromDisk(const char* funcName) {
     HANDLE hFile = CreateFileW(L"\\\\?\\C:\\Windows\\System32\\ntdll.dll",
         GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -273,16 +377,143 @@ inline int ResolveSSNFromDisk(const char* funcName) {
     return ssn;
 }
 
+inline int ResolveSSNFromDiskByHash(uint32_t nameHash) {
+    HANDLE hFile = CreateFileW(L"\\\\?\\C:\\Windows\\System32\\ntdll.dll",
+        GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) return -1;
+    LARGE_INTEGER sz{};
+    if (!GetFileSizeEx(hFile, &sz) || sz.QuadPart <= 0 || sz.QuadPart > (64LL << 20)) {
+        CloseHandle(hFile); return -1;
+    }
+    auto* buf = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr,
+        static_cast<SIZE_T>(sz.QuadPart), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+    if (!buf) { CloseHandle(hFile); return -1; }
+    DWORD total = 0;
+    while (total < static_cast<DWORD>(sz.QuadPart)) {
+        DWORD chunk = 0;
+        if (!ReadFile(hFile, buf + total,
+                      static_cast<DWORD>(sz.QuadPart) - total, &chunk, nullptr) ||
+            chunk == 0) break;
+        total += chunk;
+    }
+    CloseHandle(hFile);
+    const int ssn = (total == static_cast<DWORD>(sz.QuadPart))
+        ? ExtractSSNFromImageByHash(buf, nameHash) : -1;
+    VirtualFree(buf, 0, MEM_RELEASE);
+    return ssn;
+}
+
+// Quét .text ntdll tìm mọi `0F 05 C3` (syscall;ret) → cache.
+// Chỉ quét trong hàm UNHOOKED (byte đầu = 0x4C 8B D1) để tránh Packman patch
+// tail lâu về sau. Fallback: quét toàn .text nếu không đủ candidate.
+inline void EnumerateSyscallGadgets() {
+    if (InterlockedCompareExchange(&g_gadgetInited, 1, 0) != 0) return;
+
+    HMODULE h = GetModuleHandleW(L"ntdll.dll");
+    if (!h) return;
+    const auto* buf = reinterpret_cast<const uint8_t*>(h);
+    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(buf);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(buf + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return;
+
+    // Tìm .text section
+    const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    const uint8_t* textStart = nullptr; size_t textSize = 0;
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i, ++sec) {
+        if (memcmp(sec->Name, ".text", 5) == 0) {
+            textStart = buf + sec->VirtualAddress;
+            textSize  = sec->Misc.VirtualSize;
+            break;
+        }
+    }
+    if (!textStart || textSize == 0) return;
+
+    // Pass 1: chỉ giữ gadget nằm sau head `4C 8B D1 B8 xx 00 00 00 F6 04 25`
+    // (tail của Nt* stub UNHOOKED) — offset gadget = start + 0x12.
+    for (size_t i = 0; i + 3 < textSize && g_gadgetCount < 64; ++i) {
+        if (textStart[i]   == 0x4C && textStart[i+1] == 0x8B &&
+            textStart[i+2] == 0xD1 && textStart[i+3] == 0xB8) {
+            // stub start ok. gadget candidate = i + 0x12
+            size_t g = i + 0x12;
+            if (g + 3 <= textSize &&
+                textStart[g]   == 0x0F &&
+                textStart[g+1] == 0x05 &&
+                textStart[g+2] == 0xC3) {
+                g_syscallGadgets[g_gadgetCount++] =
+                    const_cast<void*>(reinterpret_cast<const void*>(textStart + g));
+            }
+            i += 0x14; // skip past this stub
+        }
+    }
+    DbgLogFmt("[SYS] EnumerateSyscallGadgets: found %zu candidates\r\n", g_gadgetCount);
+}
+
+inline void* PickSyscallGadget() {
+    if (g_gadgetCount == 0) return nullptr;
+    // random dựa __rdtsc (dispersion đủ dùng)
+    unsigned long long r = __rdtsc();
+    return g_syscallGadgets[(size_t)(r % g_gadgetCount)];
+}
+
+// ── AllocSectionRWX (Module MM) ──────────────────────────────────────────────
+// CreateFileMapping(INVALID_HANDLE_VALUE) → anonymous section backed by
+// pagefile. MapViewOfFile → region hiện MEM_MAPPED thay vì MEM_PRIVATE khi
+// NtQueryVirtualMemory (anti-cheat filter MEM_PRIVATE+PAGE_EXECUTE_* miss).
+// Section handle được CloseHandle nhưng view giữ mapping alive qua kernel refcount.
+inline void* AllocSectionRWX(SIZE_T size) {
+    if (size == 0) return nullptr;
+    HANDLE hMap = CreateFileMappingA(
+        INVALID_HANDLE_VALUE, nullptr,
+        PAGE_EXECUTE_READWRITE, 0, static_cast<DWORD>(size), nullptr);
+    if (!hMap) return nullptr;
+    void* view = MapViewOfFile(hMap,
+        FILE_MAP_EXECUTE | FILE_MAP_WRITE | FILE_MAP_READ,
+        0, 0, size);
+    CloseHandle(hMap); // view giữ section alive qua kernel refcount
+    return view;
+}
+
 inline bool BuildSyscallStub(int ssn, void** outStub) {
     if (!outStub || ssn < 0) return false;
-    auto* stub = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr, 32,
-        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+
+    void* gadget = PickSyscallGadget();
+    // Fallback nếu chưa enumerate (vd. InitSyscall gọi trước InitAll):
+    // emit stub cũ (syscall inline) để giữ hoạt động, chấp nhận regression stealth.
+    if (!gadget) {
+        auto* stub = reinterpret_cast<uint8_t*>(AllocSectionRWX(32));
+        if (!stub) return false;
+        stub[0] = 0x4C; stub[1] = 0x8B; stub[2] = 0xD1;
+        stub[3] = 0xB8;
+        *reinterpret_cast<uint32_t*>(stub + 4) = static_cast<uint32_t>(ssn);
+        stub[8] = 0x0F; stub[9] = 0x05;
+        stub[10] = 0xC3;
+        *outStub = stub;
+        DbgLogFmt("[SYS] BuildSyscallStub: FALLBACK inline syscall (gadgetCount=0)\r\n");
+        return true;
+    }
+
+    // Indirect stub — 22 bytes:
+    //   4C 8B D1                mov r10, rcx
+    //   B8 SSN 00 00 00         mov eax, SSN
+    //   FF 25 00 00 00 00       jmp qword ptr [rip+0]  ; qword ngay sau
+    //   <8 bytes gadget addr>
+    // Module MM: alloc qua CreateFileMapping → region MEM_MAPPED.
+    auto* stub = reinterpret_cast<uint8_t*>(AllocSectionRWX(32));
     if (!stub) return false;
+
     stub[0] = 0x4C; stub[1] = 0x8B; stub[2] = 0xD1;
     stub[3] = 0xB8;
     *reinterpret_cast<uint32_t*>(stub + 4) = static_cast<uint32_t>(ssn);
-    stub[8] = 0x0F; stub[9] = 0x05;
-    stub[10] = 0xC3;
+    stub[8]  = 0xFF; stub[9]  = 0x25;
+    stub[10] = 0x00; stub[11] = 0x00; stub[12] = 0x00; stub[13] = 0x00;
+    *reinterpret_cast<uint64_t*>(stub + 14) = reinterpret_cast<uint64_t>(gadget);
+
+    // Downgrade từ RWX → RX (giảm 1 anti-scan surface: RWX private region).
+    DWORD oldProt = 0;
+    VirtualProtect(stub, 32, PAGE_EXECUTE_READ, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), stub, 32);
+
     *outStub = stub;
     return true;
 }
@@ -293,11 +524,11 @@ inline bool InitSyscall(size_t idx) {
     auto& e = g_syscalls[idx];
     if (e.fn) return true;
 
-    int ssn = ResolveSSNInMemory(e.name);
-    const char* src = "memory";
+    int ssn = ResolveSSNInMemoryByHash(e.nameHash);
+    const char* src = "memory-hash";
     if (ssn < 0) {
-        ssn = ResolveSSNFromDisk(e.name);
-        src = "disk";
+        ssn = ResolveSSNFromDiskByHash(e.nameHash);
+        src = "disk-hash";
     }
     if (ssn < 0) {
         ssn = e.fallbackSsn;
@@ -318,6 +549,7 @@ inline bool InitSyscall(size_t idx) {
 // ── InitAll: khởi tạo tất cả syscall stub cùng lúc ────────────────────────────
 inline bool InitAll() {
     DbgLogFmt("[SYS] InitAll: initializing %zu syscall stubs...\r\n", (size_t)SYSCALL_COUNT);
+    EnumerateSyscallGadgets();  // NEW: cache gadgets trước khi build stub
     bool ok = true;
     for (size_t i = 0; i < SYSCALL_COUNT; ++i)
         if (!InitSyscall(i)) ok = false;
@@ -439,6 +671,15 @@ inline LONG NtGetContextThreadDirect(HANDLE thread, PCONTEXT ctx) {
     return fn(thread, ctx);
 }
 
+// NtSetInformationThread (SSN 0x0D) — Module F ThreadHideFromDebugger.
+// ThreadInfoClass = 0x11 (ThreadHideFromDebugger), buffer/length = null/0.
+inline LONG NtSetInformationThreadDirect(HANDLE thread, ULONG infoClass,
+                                         PVOID info, ULONG infoLen) {
+    if (!InitSyscall(IDX_SETINFOTHREAD)) return -1;
+    auto fn = reinterpret_cast<NtSetInfoThreadFn>(g_syscalls[IDX_SETINFOTHREAD].fn);
+    return fn(thread, infoClass, info, infoLen);
+}
+
 // ── Stealth Sleep (dùng NtDelayExecution direct, bypass Packman hook) ────────
 inline void StealthSleep(DWORD ms) {
     LARGE_INTEGER delay;
@@ -467,7 +708,10 @@ inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
         // Fallback: CreateThread thường (sẽ đi qua Packman hook, nhưng
         // vẫn hoạt động nếu Packman chỉ log chứ không block).
         HANDLE h = CreateThread(nullptr, 0, routine, param, 0, nullptr);
-        if (h) DbgLog("[SYS] CreateThreadDirect: fallback CreateThread OK\r\n");
+        if (h) {
+            NtSetInformationThreadDirect(h, 0x11 /*ThreadHideFromDebugger*/, nullptr, 0);
+            DbgLog("[SYS] CreateThreadDirect: fallback CreateThread OK\r\n");
+        }
         return h;
     }
     auto fn = reinterpret_cast<NtCreateThreadExFn>(g_syscalls[IDX_CREATETHREADEX].fn);
@@ -486,13 +730,17 @@ inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
         nullptr                // AttributeList
     );
     if (status >= 0 && hThread) {
+        // Module F: ẩn thread khỏi debugger enumeration.
+        NtSetInformationThreadDirect(hThread, 0x11 /*ThreadHideFromDebugger*/, nullptr, 0);
         DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx OK (handle=%p, status=0x%X)\r\n",
                   hThread, (unsigned)status);
         return hThread;
     }
     DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx FAIL status=0x%X — fallback CreateThread\r\n",
               (unsigned)status);
-    return CreateThread(nullptr, 0, routine, param, 0, nullptr);
+    HANDLE hRetry = CreateThread(nullptr, 0, routine, param, 0, nullptr);
+    if (hRetry) NtSetInformationThreadDirect(hRetry, 0x11 /*ThreadHideFromDebugger*/, nullptr, 0);
+    return hRetry;
 }
 
 } // namespace DirectSyscall
@@ -606,9 +854,10 @@ static void* BuildHookStub(uintptr_t checkFnAddr,
                            size_t origSize,
                            uintptr_t jmpBackAddr) {
     constexpr size_t kStubMax = 512;
+    // Module MM: alloc qua CreateFileMapping → region MEM_MAPPED (giấu khỏi
+    // MEM_PRIVATE + PAGE_EXECUTE_* scanner).
     auto* stub = reinterpret_cast<unsigned char*>(
-        VirtualAlloc(nullptr, kStubMax, MEM_COMMIT | MEM_RESERVE,
-                     PAGE_EXECUTE_READWRITE));
+        DirectSyscall::AllocSectionRWX(kStubMax));
     if (!stub) return nullptr;
 
     size_t idx = 0;
@@ -908,5 +1157,12 @@ inline DWORD WINAPI DeferredCRCInstallThread(LPVOID) {
 // ── Init log ─────────────────────────────────────────────────────────────────
 // Xoá file log cũ khi DLL load để mỗi session có log riêng.
 inline void ResetLogFile() {
+#ifdef NS_PACKMAN_SILENT
+    return;
+#else
     DeleteFileA(GetLogPath());
+    HANDLE h = CreateFileA(GetLogPath(), GENERIC_WRITE, 0, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+#endif
 }

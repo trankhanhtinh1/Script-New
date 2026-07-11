@@ -97,6 +97,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="..\NightSharpCrashProtocol\CrashClient.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
@@ -115,6 +116,7 @@
   <ItemGroup>
     <ClInclude Include="Core\*.h" />
     <ClInclude Include="DebugLog.h" />
+    <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="libs\**\*.h" />
     <ClInclude Include="Plugins\**\*.h" />
     <ClInclude Include="SDK\**\*.h" />

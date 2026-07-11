@@ -1099,63 +1099,6 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
         }
     }
 
-    // ── Yasuo Wind Wall ──────────────────────────────────────────────
-    // C# EnsoulSharp.SDK.Collisions: checks EffectEmitter matching
-    // "Yasuo_.+_w_windwall" regex. Wall width = 250 + 50 * level.
-    // Direction = Vector2(Orientation.M11, Orientation.M13) = Vec2(m[0][0], m[0][2]).
-    if (SDK::HasFlag(flags, CollisionableObjects::YasuoWall)) {
-        bool hasYasuo = false;
-        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
-            if (hero.IsValid() && !hero.IsDead()
-                && isEnemy(hero)
-                && hero.CharacterName() == "Yasuo") {
-                hasYasuo = true;
-                break;
-            }
-        }
-        if (hasYasuo) {
-            for (const auto& emitter : SDK::ObjectManager::Get<EffectEmitter>()) {
-                if (!emitter.IsValid()) continue;
-                const std::string name = emitter.Name();
-                if (name.find("Yasuo") == std::string::npos
-                    || name.find("_w_windwall") == std::string::npos)
-                    continue;
-
-                // Level from name suffix (windwall2→2, windwall5→5, else→1)
-                int level = 1;
-                for (int i = 2; i <= 5; ++i) {
-                    char suffix[16];
-                    std::snprintf(suffix, sizeof(suffix), "windwall%d", i);
-                    if (name.find(suffix) != std::string::npos) {
-                        level = i;
-                        break;
-                    }
-                }
-
-                const float wallWidth = 250.0f + 50.0f * static_cast<float>(level);
-                const Vec2 wallPos = emitter.Position().To2D();
-
-                // C#: Vector2(emitter.Orientation.M11, emitter.Orientation.M13)
-                const auto mat = emitter.Orientation();
-                Vec2 wallDir(mat.m[0][0], mat.m[0][2]);
-                if (wallDir.LengthSqr() < 0.001f) {
-                    wallDir = emitter.Direction().To2D();
-                    if (wallDir.LengthSqr() < 0.001f) continue;
-                    wallDir = Vec2(-wallDir.y, wallDir.x);
-                }
-                wallDir = wallDir.Normalized();
-
-                const Vec2 wallStart = wallPos + wallDir * (wallWidth * 0.5f);
-                const Vec2 wallEnd = wallStart - wallDir * wallWidth;
-                auto inter = Vec2Ext::Intersection(wallStart, wallEnd, to2D, from2D);
-                if (inter.Valid) {
-                    result.push_back(SDK::GameObjects::Player());
-                    break;
-                }
-            }
-        }
-    }
-
     // ── Samira Blade Whirl (W) ───────────────────────────────────────
     // Samira's W blocks projectiles in a radius around her for ~1s
     // Detect via buff "SamiraW" or "SamiraWBuff"

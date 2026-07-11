@@ -598,20 +598,40 @@ inline LONG LogAndDumpException(const char* stage, EXCEPTION_POINTERS* exception
 
     if (exceptionPointers && exceptionPointers->ExceptionRecord &&
         IsSeriousException(exceptionPointers->ExceptionRecord->ExceptionCode)) {
-        LogStackTrace(exceptionPointers, stage);
-        LogModuleSnapshot();
-        WriteMiniDump(exceptionPointers, stage);
+        NightSharpDebug::CrashBridge::CaptureException(
+            nscrash::CrashKind::Handled,
+            stage,
+            exceptionPointers);
     }
 
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
 inline LONG WINAPI UnhandledFilter(EXCEPTION_POINTERS* exceptionPointers) {
-    LogAndDumpException("UnhandledExceptionFilter", exceptionPointers);
-    if (g_previousFilter) {
+    NightSharpDebug::LogException("UnhandledExceptionFilter", exceptionPointers);
+    if (exceptionPointers && exceptionPointers->ExceptionRecord &&
+        IsSeriousException(exceptionPointers->ExceptionRecord->ExceptionCode)) {
+        NightSharpDebug::CrashBridge::CaptureException(
+            nscrash::CrashKind::Unhandled,
+            "UnhandledExceptionFilter",
+            exceptionPointers);
+    }
+
+    MEMORY_BASIC_INFORMATION mbi{};
+    const bool previousIsExecutable =
+        g_previousFilter &&
+        g_previousFilter != &UnhandledFilter &&
+        VirtualQuery(
+            reinterpret_cast<const void*>(g_previousFilter),
+            &mbi,
+            sizeof(mbi)) == sizeof(mbi) &&
+        mbi.State == MEM_COMMIT &&
+        (mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ |
+                        PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
+    if (previousIsExecutable) {
         return g_previousFilter(exceptionPointers);
     }
-    return EXCEPTION_EXECUTE_HANDLER;
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 inline LONG WINAPI VectoredHandler(EXCEPTION_POINTERS* exceptionPointers) {
@@ -624,17 +644,7 @@ inline LONG WINAPI VectoredHandler(EXCEPTION_POINTERS* exceptionPointers) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    static volatile LONG s_firstSerious = 0;
-    if (InterlockedCompareExchange(&s_firstSerious, 1, 0) == 0) {
-#if NIGHTSHARP_LOG_FIRST_CHANCE_EXCEPTIONS
-        NightSharpDebug::Logf("[CrashReporter] first-chance serious exception observed");
-#if NIGHTSHARP_DUMP_FIRST_CHANCE_EXCEPTIONS
-        LogAndDumpException("VectoredExceptionHandler", exceptionPointers);
-#else
-        NightSharpDebug::LogException("FirstChance/VectoredExceptionHandler", exceptionPointers);
-#endif
-#endif
-    }
+    NightSharpDebug::CrashBridge::ObserveFirstChance(exceptionPointers);
 
     return EXCEPTION_CONTINUE_SEARCH;
 }
@@ -654,6 +664,28 @@ inline DWORD WINAPI FilterGuardThread(LPVOID) {
     return 0;
 }
 
+inline void StartGuard() {
+    if (InterlockedCompareExchange(&g_guardRunning, 1, 0) != 0) {
+        return;
+    }
+    g_guardThread = CreateThread(nullptr, 0, &FilterGuardThread, nullptr, 0, nullptr);
+    if (!g_guardThread) {
+        InterlockedExchange(&g_guardRunning, 0);
+        NightSharpDebug::Logf(
+            "[CrashReporter] filter guard CreateThread failed gle=%lu",
+            GetLastError());
+    }
+}
+
+inline void StopGuard() {
+    InterlockedExchange(&g_guardRunning, 0);
+    if (g_guardThread) {
+        WaitForSingleObject(g_guardThread, 2500);
+        CloseHandle(g_guardThread);
+        g_guardThread = nullptr;
+    }
+}
+
 inline void Install(HMODULE module) {
     g_module = module;
     if (InterlockedCompareExchange(&g_installed, 1, 0) != 0) {
@@ -662,8 +694,6 @@ inline void Install(HMODULE module) {
 
     g_vectoredHandler = AddVectoredExceptionHandler(1, &VectoredHandler);
     g_previousFilter = SetUnhandledExceptionFilter(&UnhandledFilter);
-    InterlockedExchange(&g_guardRunning, 1);
-    g_guardThread = CreateThread(nullptr, 0, &FilterGuardThread, nullptr, 0, nullptr);
     NightSharpDebug::Logf("[CrashReporter] installed module=%p veh=%p",
                           module,
                           g_vectoredHandler);
@@ -679,12 +709,7 @@ inline void Uninstall() {
         g_vectoredHandler = nullptr;
     }
 
-    InterlockedExchange(&g_guardRunning, 0);
-    if (g_guardThread) {
-        WaitForSingleObject(g_guardThread, 2500);
-        CloseHandle(g_guardThread);
-        g_guardThread = nullptr;
-    }
+    StopGuard();
 
     SetUnhandledExceptionFilter(g_previousFilter);
     g_previousFilter = nullptr;

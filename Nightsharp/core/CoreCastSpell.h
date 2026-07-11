@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreBypass.h"
+#include "CoreEvadeState.h"
 #include "CoreRuntime.h"
 #include "CoreValidation.h"
 #include "Globals.h"
@@ -418,6 +419,10 @@ namespace CoreCastSpell {
             }
 
             const auto& ctx = CoreRuntime::GetContext();
+            if (CoreEvadeState::AreSpellCastsBlocked(static_cast<int>(ctx.gameTime * 1000.0f))) {
+                Fail(CastFailure::CanCastRejected);
+                return false;
+            }
             g_lastTrace.localPlayer = ctx.localPlayer;
             if (!Globals::IsValidPtr(g_lastTrace.localPlayer)) {
                 Fail(CastFailure::RuntimeUnavailable);

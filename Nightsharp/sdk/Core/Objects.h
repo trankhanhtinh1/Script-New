@@ -1905,54 +1905,6 @@ public:
         : GameObject(handle) {
         handle_.type = ::Core::Objects::ObjectType::EffectEmitter;
     }
-
-    struct D3DMatrix {
-        float m[4][4];
-    };
-
-    uintptr_t ResolveProxy() const {
-        const uintptr_t a = Address();
-        if (!a) return 0;
-
-        __try {
-            const auto proxy = *reinterpret_cast<const uintptr_t*>(
-                a + Offset::All::EffectEmitterHandle);
-            if (proxy) return proxy;
-        } __except (1) {}
-        return 0;
-    }
-
-    D3DMatrix Orientation() const {
-        D3DMatrix result = {};
-        const uintptr_t proxy = ResolveProxy();
-        if (!proxy) return result;
-
-        __try {
-            const auto* mat = reinterpret_cast<const float*>(
-                proxy + Offset::EffectEmitterLayout::ProxyOrientation);
-            for (int i = 0; i < 16; ++i)
-                reinterpret_cast<float*>(&result)[i] = mat[i];
-        } __except (1) {}
-        return result;
-    }
-
-    Vector3 Direction() const {
-        const auto mat = Orientation();
-        if (mat.m[0][0] == 0.0f && mat.m[0][2] == 0.0f &&
-            mat.m[2][0] == 0.0f && mat.m[2][2] == 0.0f)
-            return Vector3();
-
-        const float dx = mat.m[2][0] - mat.m[0][0];
-        const float dz = mat.m[2][2] - mat.m[0][2];
-        if (dx == 0.0f && dz == 0.0f)
-            return Vector3();
-
-        const float len = std::sqrt(dx * dx + dz * dz);
-        if (len < 0.001f)
-            return Vector3();
-
-        return Vector3(dx / len, 0.0f, dz / len);
-    }
 };
 
 } // namespace SDK

@@ -3106,7 +3106,10 @@ protected:
         }
 
         return !shouldCheck ||
-               !Collisions::HasYasuoWindWallCollision(player.ServerPosition(), target.Position());
+               !Collisions::HasProjectileWallCollision(
+                   player.ServerPosition(),
+                   target.Position(),
+                   0.0f);
     }
 
     bool SupportMode() const {

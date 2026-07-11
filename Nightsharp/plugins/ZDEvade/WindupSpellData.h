@@ -1,10 +1,9 @@
 #pragma once
 
 // ============================================================================
-// WindupSpellData.h  —  C++ port of EzEvade's SpellWindupDatabase SpellData.
+// WindupSpellData.h - spell windup/cast delay data.
 // ============================================================================
 // Simple struct for spell windup/cast delay tracking.
-// Ported 1-1 from `EzEvade/Spells/SpellWindupDatabase.cs`.
 // ============================================================================
 
 #include <string>

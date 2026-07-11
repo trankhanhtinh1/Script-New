@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Database/SpellDatabase.h"
+#include "../../../Core/CoreEvadeState.h"
 
 #include "../../Core/Game.h"
 #include "../../Core/NavMesh.h"
@@ -110,7 +111,9 @@ public:
     CollisionObjectsBridge CollisionObjects =
         CollisionableObjects::Minions |
         CollisionableObjects::Heroes |
-        CollisionableObjects::YasuoWall;
+        CollisionableObjects::YasuoWall |
+        CollisionableObjects::SamiraWall |
+        CollisionableObjects::MelWall;
     bool Collision = false;
     DamageType DamageType = DamageType::Physical;
     float Delay = 0.0f;
@@ -787,6 +790,9 @@ private:
 
     bool TryReserveCastRequest() {
         const int now = Variables::TickCount();
+        if (CoreEvadeState::AreSpellCastsBlocked(now)) {
+            return false;
+        }
         if (LastCastAttemptT != 0 && now - LastCastAttemptT < kCastRequestThrottleMs) {
             return false;
         }

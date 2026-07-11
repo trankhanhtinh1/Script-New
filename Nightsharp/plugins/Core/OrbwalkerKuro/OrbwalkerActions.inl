@@ -4,6 +4,51 @@ namespace OrbwalkerKuro {
 
 using namespace ::SDK;
 
+// TEMP PROBE (remove after FPS profiling). ACCUMULATOR: sum ms per name, ONE file
+// write per second → `[OrbAcc/1s] name=totalMs/count`. No per-call file-I/O
+// (avoids observer effect). Game-thread only, no locking. Defined here (in the
+// first .inl included) so both Actions.inl and EventHandlers.inl can use it.
+struct OrbProbeAcc { const char* n; double ms; unsigned cnt; };
+inline OrbProbeAcc g_orbAcc[48] = {};
+inline int g_orbAccN = 0;
+inline DWORD g_orbAccLast = 0;
+
+struct OrbProbe {
+    const char* n;
+    LARGE_INTEGER s;
+    explicit OrbProbe(const char* name) : n(name) { QueryPerformanceCounter(&s); }
+    ~OrbProbe() {
+        LARGE_INTEGER e{}, f{};
+        QueryPerformanceCounter(&e);
+        QueryPerformanceFrequency(&f);
+        const double ms = static_cast<double>(e.QuadPart - s.QuadPart) * 1000.0 /
+                          static_cast<double>(f.QuadPart);
+
+        OrbProbeAcc* a = nullptr;
+        for (int i = 0; i < g_orbAccN; ++i) {
+            if (g_orbAcc[i].n == n) { a = &g_orbAcc[i]; break; }
+        }
+        if (!a && g_orbAccN < 48) { a = &g_orbAcc[g_orbAccN++]; a->n = n; a->ms = 0.0; a->cnt = 0; }
+        if (a) { a->ms += ms; a->cnt += 1; }
+
+        const DWORD now = GetTickCount();
+        if (now - g_orbAccLast >= 1000) {
+            g_orbAccLast = now;
+            char b[1536];
+            int p = std::snprintf(b, sizeof(b), "[OrbAcc/1s] ");
+            for (int i = 0; i < g_orbAccN && p < static_cast<int>(sizeof(b)) - 48; ++i) {
+                p += std::snprintf(b + p, sizeof(b) - p, "%s=%.2f/%u ",
+                                   g_orbAcc[i].n, g_orbAcc[i].ms, g_orbAcc[i].cnt);
+                g_orbAcc[i].ms = 0.0; g_orbAcc[i].cnt = 0;
+            }
+            p += std::snprintf(b + p, sizeof(b) - p, "\r\n");
+            HANDLE h = CreateFileA("C:\\Users\\Public\\nightsharp_fps_drop_debug.txt",
+                                   FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h != INVALID_HANDLE_VALUE) { DWORD w = 0; WriteFile(h, b, static_cast<DWORD>(p), &w, nullptr); CloseHandle(h); }
+        }
+    }
+};
+
 inline bool OrbwalkerBase::CanAttack() { return CanAttack(0.0f); }
 
 inline bool OrbwalkerBase::CanAttack(float extraWindup) {
@@ -264,10 +309,14 @@ inline void OrbwalkerBase::Orbwalk(const AttackableUnit& target, const Vector3& 
         return;
     }
 
-    if (target.IsValid() && Attack(target)) {
-        return;
+    {
+        OrbProbe p("Orb-Attack");
+        if (target.IsValid() && Attack(target)) {
+            return;
+        }
     }
 
+    OrbProbe p("Orb-Move");
     if (CanMove(0.0f, false)) {
         Move(position.IsZero() ? context_.orbwalkerPosition : position);
     }

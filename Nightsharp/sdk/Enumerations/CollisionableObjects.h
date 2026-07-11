@@ -90,7 +90,10 @@ inline std::vector<CollisionableObjects> ToCollisionObjectArray(CollisionableObj
 
 struct CollisionObjectsBridge {
     CollisionableObjects Flags =
-        CollisionableObjects::Minions | CollisionableObjects::YasuoWall;
+        CollisionableObjects::Minions |
+        CollisionableObjects::YasuoWall |
+        CollisionableObjects::SamiraWall |
+        CollisionableObjects::MelWall;
     std::vector<CollisionableObjects> Values =
         ToCollisionObjectArray(Flags);
 
