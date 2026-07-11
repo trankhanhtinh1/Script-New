@@ -50,21 +50,20 @@ namespace NightSharpMenu {
     constexpr float HEADER_H = 32.0f;
     constexpr float PANEL_GAP = 0.0f;
     constexpr float MAX_CONTENT_H = 620.0f;
-    constexpr float CORNER_RADIUS = 0.0f;
 
     // Margin from the screen edges when auto-positioning PermaShow.
     constexpr float PERMASHOW_EDGE_MARGIN = 18.0f;
 
-    inline ImU32 COL_BG = IM_COL32(15, 18, 24, 255);
-    inline ImU32 COL_CONTENT_BG = IM_COL32(20, 24, 32, 255);
-    inline ImU32 COL_HEADER = IM_COL32(29, 35, 45, 255);
-    inline ImU32 COL_ITEM = IM_COL32(24, 29, 38, 255);
-    inline ImU32 COL_ITEM_HOVER = IM_COL32(39, 53, 66, 255);
-    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(38, 94, 106, 255);
-    inline ImU32 COL_ACCENT = IM_COL32(84, 214, 184, 255);
+    inline ImU32 COL_BG = IM_COL32(8, 10, 18, 214);
+    inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 128);
+    inline ImU32 COL_HEADER = IM_COL32(16, 18, 28, 236);
+    inline ImU32 COL_ITEM = IM_COL32(18, 20, 30, 118);
+    inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 215);
+    inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 232);
+    inline ImU32 COL_ACCENT = IM_COL32(120, 235, 120, 255);
     inline ImU32 COL_TEXT = IM_COL32(255, 255, 255, 255);
-    inline ImU32 COL_TEXT_DIM = IM_COL32(202, 212, 222, 255);
-    inline ImU32 COL_BORDER = IM_COL32(69, 84, 100, 255);
+    inline ImU32 COL_TEXT_DIM = IM_COL32(185, 185, 205, 255);
+    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 180);
 
     struct SidebarEntry {
         const char* label;
@@ -85,10 +84,6 @@ namespace NightSharpMenu {
 
     inline float MaxF(float a, float b) {
         return a > b ? a : b;
-    }
-
-    inline float SnapToPixel(float value) {
-        return static_cast<float>(static_cast<int>(value));
     }
 
     inline int MaxI(int a, int b) {
@@ -179,16 +174,16 @@ namespace NightSharpMenu {
         bool clicked = hovered && ImGui::IsMouseClicked(0);
 
         if (hovered || isActive) {
-            dl->AddRectFilled(mn, mx, isActive ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, CORNER_RADIUS);
+            dl->AddRectFilled(mn, mx, isActive ? COL_ITEM_ACTIVE : COL_ITEM_HOVER, 0.0f);
         }
         if (isActive) {
-            dl->AddLine(ImVec2(mn.x + 1, mn.y), ImVec2(mn.x + 1, mx.y), COL_ACCENT, 3.0f);
+            dl->AddLine(ImVec2(mn.x + 1, mn.y + 2), ImVec2(mn.x + 1, mx.y - 2), COL_ACCENT, 2.0f);
         }
 
         dl->AddLine(ImVec2(mn.x, mx.y), ImVec2(mx.x, mx.y), COL_BORDER, 1.0f);
-        dl->AddText(ImVec2(SnapToPixel(pos.x + 12.0f), SnapToPixel(pos.y + 7.0f)), COL_TEXT, text);
+        dl->AddText(ImVec2(pos.x + 12, pos.y + 7), COL_TEXT, text);
         if (hasArrow) {
-            dl->AddText(ImVec2(SnapToPixel(pos.x + w - 18.0f), SnapToPixel(pos.y + 7.0f)), COL_TEXT_DIM, isActive ? "-" : ">");
+            dl->AddText(ImVec2(pos.x + w - 18, pos.y + 7), COL_TEXT_DIM, ">");
         }
 
         return clicked;
@@ -198,9 +193,9 @@ namespace NightSharpMenu {
         ImVec4 activeBase = positive ? ImVec4(0.18f, 0.55f, 0.28f, 0.98f) : ImVec4(0.65f, 0.22f, 0.24f, 0.98f);
         ImVec4 activeHover = positive ? ImVec4(0.22f, 0.64f, 0.32f, 1.0f) : ImVec4(0.75f, 0.27f, 0.29f, 1.0f);
         ImVec4 activePress = positive ? ImVec4(0.15f, 0.48f, 0.24f, 1.0f) : ImVec4(0.58f, 0.18f, 0.20f, 1.0f);
-        ImVec4 inactiveBase = ImVec4(0.12f, 0.15f, 0.18f, 0.98f);
-        ImVec4 inactiveHov = ImVec4(0.18f, 0.23f, 0.27f, 1.0f);
-        ImVec4 inactivePr = ImVec4(0.22f, 0.28f, 0.32f, 1.0f);
+        ImVec4 inactiveBase = ImVec4(0.14f, 0.16f, 0.24f, 0.98f);
+        ImVec4 inactiveHov = ImVec4(0.20f, 0.24f, 0.34f, 1.0f);
+        ImVec4 inactivePr = ImVec4(0.24f, 0.28f, 0.40f, 1.0f);
         ImVec4 text = active ? ImVec4(0.96f, 0.97f, 1.0f, 1.0f) : ImVec4(0.78f, 0.81f, 0.90f, 1.0f);
 
         ImGui::PushID(id);
@@ -209,7 +204,7 @@ namespace NightSharpMenu {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePress : inactivePr);
         ImGui::PushStyleColor(ImGuiCol_Text, text);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, CORNER_RADIUS);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
         bool clicked = ImGui::Button(label, ImVec2(width, 0));
         ImGui::PopStyleVar(2);
@@ -320,7 +315,7 @@ namespace NightSharpMenu {
         // stale NightSharp.dll (wrong path / wrong config), not the fresh build.
         ImGui::TextColored(ImVec4(0.55f, 0.85f, 0.55f, 1.0f), "Build: %s %s", __DATE__, __TIME__);
         ImGui::Text("Overlay: D3D11 External");
-        ImGui::Text("Menu: square sidebar style");
+        ImGui::Text("Menu: Old sidebar style");
         ImGui::Text("Input: %s", Config::OverlayInput::clickThrough ? "Click-through" : "Menu capture");
         ImGui::Separator();
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
@@ -425,14 +420,12 @@ namespace NightSharpMenu {
                     if (DrawStateButton("unload", "Unload", true, false, 74.0f)) {
                         PluginRegistry::UnloadPlugin(i);
                     }
-                }
-                else {
+                } else {
                     if (DrawStateButton("load", "Load", false, true, 74.0f)) {
                         PluginRegistry::LoadPlugin(i);
                     }
                 }
-            }
-            else {
+            } else {
                 ImGui::BeginDisabled(true);
                 ImGui::Button("N/A", ImVec2(74.0f, 0));
                 ImGui::EndDisabled();
@@ -483,17 +476,17 @@ namespace NightSharpMenu {
     // ----------------------------------------------------------------
 
     inline void DrawPermaShowRow(ImDrawList* dl,
-        float x,
-        float width,
-        float indicatorWidth,
-        float padding,
-        float& currentY,
-        float lineHeight,
-        const char* label,
-        const char* value,
-        bool hasState,
-        bool stateOn,
-        ImU32 color) {
+                                 float x,
+                                 float width,
+                                 float indicatorWidth,
+                                 float padding,
+                                 float& currentY,
+                                 float lineHeight,
+                                 const char* label,
+                                 const char* value,
+                                 bool hasState,
+                                 bool stateOn,
+                                 ImU32 color) {
         if (!dl || !label || !value) {
             return;
         }
@@ -522,13 +515,13 @@ namespace NightSharpMenu {
     // Render one SDK::UI::PermaShow entry. Mirrors EnsoulSharp PermaShow's
     // per-MenuValueType branching.
     inline void DrawPermaShowEntry(ImDrawList* dl,
-        const SDK::UI::PermaShow::Entry& entry,
-        float x,
-        float width,
-        float indicatorWidth,
-        float padding,
-        float& currentY,
-        float lineHeight) {
+                                   const SDK::UI::PermaShow::Entry& entry,
+                                   float x,
+                                   float width,
+                                   float indicatorWidth,
+                                   float padding,
+                                   float& currentY,
+                                   float lineHeight) {
         SDK::UI::MenuItem* item = entry.Item;
         if (!item) return;
 
@@ -539,9 +532,9 @@ namespace NightSharpMenu {
         case SDK::UI::MenuValueType::Boolean: {
             auto* b = static_cast<SDK::UI::MenuBool*>(item);
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                name, b->Value ? "True" : "False",
-                true, b->Value, color);
+                             currentY, lineHeight,
+                             name, b->Value ? "True" : "False",
+                             true, b->Value, color);
             break;
         }
         case SDK::UI::MenuValueType::Slider: {
@@ -549,8 +542,8 @@ namespace NightSharpMenu {
             char val[24] = {};
             std::snprintf(val, sizeof(val), "%d", s->Value);
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                name, val, false, false, color);
+                             currentY, lineHeight,
+                             name, val, false, false, color);
             break;
         }
         case SDK::UI::MenuValueType::SliderF: {
@@ -558,27 +551,27 @@ namespace NightSharpMenu {
             char val[32] = {};
             std::snprintf(val, sizeof(val), "%.2f", s->Value);
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                name, val, false, false, color);
+                             currentY, lineHeight,
+                             name, val, false, false, color);
             break;
         }
         case SDK::UI::MenuValueType::KeyBind: {
             auto* k = static_cast<SDK::UI::MenuKeyBind*>(item);
             char label[160] = {};
             std::snprintf(label, sizeof(label), "%s [%s]",
-                name, SDK::UI::MenuKeyBind::VkToText(k->Key));
+                          name, SDK::UI::MenuKeyBind::VkToText(k->Key));
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                label, k->Active ? "True" : "False",
-                true, k->Active, color);
+                             currentY, lineHeight,
+                             label, k->Active ? "True" : "False",
+                             true, k->Active, color);
             break;
         }
         case SDK::UI::MenuValueType::List: {
             auto* l = static_cast<SDK::UI::MenuList*>(item);
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                name, l->SelectedValue(),
-                false, false, color);
+                             currentY, lineHeight,
+                             name, l->SelectedValue(),
+                             false, false, color);
             break;
         }
         case SDK::UI::MenuValueType::Color: {
@@ -586,14 +579,14 @@ namespace NightSharpMenu {
             char val[16] = {};
             std::snprintf(val, sizeof(val), "0x%08X", c->Value);
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                name, val, false, false, color);
+                             currentY, lineHeight,
+                             name, val, false, false, color);
             break;
         }
         default:
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                name, "", false, false, color);
+                             currentY, lineHeight,
+                             name, "", false, false, color);
             break;
         }
     }
@@ -660,28 +653,27 @@ namespace NightSharpMenu {
                 x = static_cast<float>(Config::PermaShow::x);
                 y = static_cast<float>(Config::PermaShow::y);
             }
-        }
-        else {
+        } else {
             permaShowDragging = false;
         }
 
         permaShowBoundsRight = x + width;
         permaShowBoundsBottom = y + totalHeight;
 
-        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(18, 20, 26, 255), CORNER_RADIUS);
+        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(18, 20, 26, 255), 0.0f);
+        dl->AddRect(ImVec2(x, y), ImVec2(x + width, y + totalHeight), COL_BORDER, 0.0f);
         dl->AddText(ImVec2(x + padding, y + padding - 1.0f), COL_ACCENT, "PermaShow");
 
         float currentY = y + padding + titleHeight;
         if (rows <= 0) {
             DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                currentY, lineHeight,
-                "No PermaShow items", "", false, false, COL_TEXT_DIM);
-        }
-        else {
+                             currentY, lineHeight,
+                             "No PermaShow items", "", false, false, COL_TEXT_DIM);
+        } else {
             for (int i = 0; i < rows; ++i) {
                 DrawPermaShowEntry(dl, SDK::UI::PermaShow::At(i),
-                    x, width, indicatorWidth, padding,
-                    currentY, lineHeight);
+                                   x, width, indicatorWidth, padding,
+                                   currentY, lineHeight);
             }
         }
     }
@@ -689,17 +681,13 @@ namespace NightSharpMenu {
     inline void DrawCoreContentPanel(int secondaryIdx) {
         if (secondaryIdx == 0) {
             DrawLanguageSection();
-        }
-        else if (secondaryIdx == 1) {
+        } else if (secondaryIdx == 1) {
             DrawMenuSection();
-        }
-        else if (secondaryIdx == 2) {
+        } else if (secondaryIdx == 2) {
             DrawDebugSection();
-        }
-        else if (secondaryIdx == 3) {
+        } else if (secondaryIdx == 3) {
             DrawPluginsSection();
-        }
-        else {
+        } else {
             DrawLanguageSection();
         }
     }
@@ -710,8 +698,8 @@ namespace NightSharpMenu {
             p.Loaded &&
             PluginRegistry::CanPluginLoad(idx) &&
             (p.Kind == PluginRegistry::PluginKind::SDK ||
-                p.Kind == PluginRegistry::PluginKind::Plugin ||
-                p.Kind == PluginRegistry::PluginKind::External);
+             p.Kind == PluginRegistry::PluginKind::Plugin ||
+             p.Kind == PluginRegistry::PluginKind::External);
     }
 
     inline SDK::UI::Menu* FindMenuByPluginName(SDK::UI::Menu* menu, const char* internalId, const char* displayName) {
@@ -1019,14 +1007,19 @@ namespace NightSharpMenu {
         // Primary sidebar.
         dl->AddRectFilled(
             primaryPos,
-            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + sidebarH),
+            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH),
             COL_BG,
-            CORNER_RADIUS);
+            0.0f);
         dl->AddRectFilled(
             primaryPos,
             ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + HEADER_H),
             COL_HEADER,
-            CORNER_RADIUS);
+            0.0f);
+        dl->AddRect(
+            primaryPos,
+            ImVec2(primaryPos.x + PRIMARY_W, primaryPos.y + primaryH),
+            COL_BORDER,
+            0.0f);
         dl->AddText(ImVec2(primaryPos.x + 10.0f, primaryPos.y + 8.0f), COL_ACCENT, "NightSharp");
         dl->AddLine(
             ImVec2(primaryPos.x, primaryPos.y + HEADER_H),
@@ -1035,28 +1028,20 @@ namespace NightSharpMenu {
 
         float y = primaryPos.y + HEADER_H + 2.0f;
         for (int i = 0; i < primaryCount; ++i) {
-            const bool itemOpen = primarySelected && activePrimaryIdx == i;
             if (DrawSidebarItem(
-                dl,
-                ImVec2(primaryPos.x, y),
-                PRIMARY_W,
-                primaryLabels[i],
-                itemOpen,
-                true)) {
-                if (itemOpen) {
-                    activePrimaryIdx = -1;
-                    activeSecondaryIdx = -1;
-                    activePluginIdx = -1;
-                    primarySelected = false;
-                    secondarySelected = false;
-                }
-                else {
+                    dl,
+                    ImVec2(primaryPos.x, y),
+                    PRIMARY_W,
+                    primaryLabels[i],
+                    activePrimaryIdx == i,
+                    true)) {
+                if (activePrimaryIdx != i) {
                     activePrimaryIdx = i;
                     activeSecondaryIdx = -1;
-                    primarySelected = true;
                     secondarySelected = false;
-                    activePluginIdx = primaryPluginMap[i];
                 }
+                primarySelected = true;
+                activePluginIdx = primaryPluginMap[i];
             }
             y += ITEM_H;
         }
@@ -1084,14 +1069,20 @@ namespace NightSharpMenu {
         // Secondary sidebar.
         dl->AddRectFilled(
             secondaryPos,
-            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + sidebarH),
+            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH),
             COL_BG,
-            CORNER_RADIUS);
+            0.0f);
         dl->AddRectFilled(
             secondaryPos,
             ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + HEADER_H),
             COL_HEADER,
-            CORNER_RADIUS);
+            0.0f);
+        dl->AddRect(
+            secondaryPos,
+            ImVec2(secondaryPos.x + SECONDARY_W, secondaryPos.y + secondaryH),
+            COL_BORDER,
+            0.0f);
+
         const char* headerLabel = primaryLabels[activePrimaryIdx] ? primaryLabels[activePrimaryIdx] : "?";
         dl->AddText(ImVec2(secondaryPos.x + 10.0f, secondaryPos.y + 8.0f), COL_ACCENT, headerLabel);
         dl->AddLine(
@@ -1108,22 +1099,15 @@ namespace NightSharpMenu {
                 secLabel = "?";
             }
 
-            const bool itemOpen = secondarySelected && activeSecondaryIdx == i;
             if (DrawSidebarItem(
-                dl,
-                ImVec2(secondaryPos.x, y),
-                SECONDARY_W,
-                secLabel,
-                itemOpen,
-                true)) {
-                if (itemOpen) {
-                    activeSecondaryIdx = -1;
-                    secondarySelected = false;
-                }
-                else {
-                    activeSecondaryIdx = i;
-                    secondarySelected = true;
-                }
+                    dl,
+                    ImVec2(secondaryPos.x, y),
+                    SECONDARY_W,
+                    secLabel,
+                    activeSecondaryIdx == i,
+                    true)) {
+                activeSecondaryIdx = i;
+                secondarySelected = true;
             }
             y += ITEM_H;
         }
@@ -1139,17 +1123,22 @@ namespace NightSharpMenu {
             contentPos,
             ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH),
             COL_CONTENT_BG,
-            CORNER_RADIUS);
+            0.0f);
         dl->AddRectFilled(
             contentPos,
             ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
             COL_HEADER,
-            CORNER_RADIUS);
+            0.0f);
+        dl->AddRect(
+            contentPos,
+            ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH),
+            COL_BORDER,
+            0.0f);
+
         const char* sectionLabel = "?";
         if (activePluginMap < 0 && activeSecondaryIdx < CORE_SECONDARY_COUNT) {
             sectionLabel = CORE_SECONDARY[activeSecondaryIdx].label;
-        }
-        else if (activePluginMap >= 0) {
+        } else if (activePluginMap >= 0) {
             sectionLabel = GetPluginSecondaryLabel(activePluginMap, activeSecondaryIdx);
         }
 
@@ -1162,30 +1151,24 @@ namespace NightSharpMenu {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.15f, 0.23f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.15f, 0.24f, 0.37f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.18f, 0.31f, 0.48f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.25f, 0.51f, 0.82f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.08f, 0.13f, 0.22f, 0.72f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.12f, 0.20f, 0.34f, 0.88f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.15f, 0.26f, 0.44f, 0.96f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.20f, 0.39f, 0.72f, 0.95f));
         ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.28f, 0.50f, 0.88f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.20f, 0.32f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.31f, 0.50f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.17f, 0.28f, 0.78f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.28f, 0.46f, 0.92f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.36f, 0.58f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.14f, 0.25f, 0.40f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.20f, 0.34f, 0.55f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.12f, 0.22f, 0.36f, 0.78f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.18f, 0.30f, 0.50f, 0.90f));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.22f, 0.38f, 0.62f, 0.98f));
-        ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.35f, 0.88f, 0.77f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(0.16f, 0.22f, 0.30f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_SeparatorHovered, ImVec4(0.25f, 0.52f, 0.66f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_SeparatorActive, ImVec4(0.35f, 0.88f, 0.77f, 1.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, CORNER_RADIUS);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, CORNER_RADIUS);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, CORNER_RADIUS);
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, CORNER_RADIUS);
-        ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, CORNER_RADIUS);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 4.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 5.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 5.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 10.0f);
 
         ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
@@ -1193,22 +1176,21 @@ namespace NightSharpMenu {
             "##ns_content",
             nullptr,
             ImGuiWindowFlags_NoTitleBar |
-            ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoBackground);
+                ImGuiWindowFlags_NoResize |
+                ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoCollapse |
+                ImGuiWindowFlags_NoBackground);
 
         if (activePluginMap < 0) {
             DrawCoreContentPanel(activeSecondaryIdx);
-        }
-        else {
+        } else {
             DrawPluginContentPanel(activePluginMap, activeSecondaryIdx);
         }
 
         ImGui::End();
-        ImGui::PopStyleVar(9);
-        ImGui::PopStyleColor(18);
+        ImGui::PopStyleVar(7);
+        ImGui::PopStyleColor(14);
 
         menuBoundsRight = menuPosX + PRIMARY_W + PANEL_GAP + SECONDARY_W + PANEL_GAP + CONTENT_W;
         menuBoundsBottom = menuPosY + contentH;

@@ -405,11 +405,11 @@ private:
                                  const Vec2& end,
                                  const SDK::AIHeroClient& player = SDK::AIHeroClient()) {
         Vec2 direction = (end - start).Normalized();
-        if (direction.IsZero() && player.IsValid()) {
-            direction = (player.ServerPosition().To2D() - start).Normalized();
-        }
         if (direction.IsZero() && caster.IsValid()) {
             direction = caster.Direction().To2D().Normalized();
+        }
+        if (direction.IsZero() && player.IsValid()) {
+            direction = (player.ServerPosition().To2D() - start).Normalized();
         }
         if (direction.IsZero()) {
             direction = Vec2(1.0f, 0.0f);
@@ -427,14 +427,11 @@ private:
         if (end.IsZero()) {
             end = secondaryEnd;
         }
-
-        const bool missingOrTooClose = end.IsZero() || end.DistanceSqr(start) < 25.0f;
-        if (missingOrTooClose && !heroPos.IsZero()) {
-            end = heroPos;
+        if (end.IsZero()) {
+            end = start;
         }
 
-        if (SDK::IsLineSpellType(data.sdk.SpellType) &&
-            (!data.UseEndPosition || missingOrTooClose)) {
+        if (SDK::IsLineSpellType(data.sdk.SpellType)) {
             const SDK::AIHeroClient player = SDK::ObjectManager::Player();
             const Vec2 direction = ResolveDirection(caster, start, end, player);
             return start + direction * static_cast<float>(std::max(1, data.sdk.Range));
@@ -480,12 +477,16 @@ private:
     }
 
     static bool IsBasicAttackName(const char* name) {
-        return ContainsInsensitive(name, "basicattack");
+        return ContainsInsensitive(name, "basicattack") || ContainsInsensitive(name, "attack");
     }
 
     static const Generated::SpellDataEntry* FindProcessSpellData(
         const SDK::Events::ProcessSpellEventArgs& args,
         const SDK::AIBaseClient& caster) {
+        if (args.IsAutoAttack || IsBasicAttackName(args.SpellName) || IsBasicAttackName(args.PayloadSpellName)) {
+            return nullptr;
+        }
+
         const char* names[] = {
             args.SpellName,
             args.PayloadSpellName,

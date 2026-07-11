@@ -99,7 +99,11 @@ private:
             return;
         }
 
-        menu_ = parentMenu_->AddSubMenu(new Menu("orbwalker", "Orbwalker"));
+        if (parentMenu_->Root) {
+            menu_ = parentMenu_;
+        } else {
+            menu_ = parentMenu_->AddSubMenu(new Menu("orbwalker", "Orbwalker"));
+        }
         if (!menu_) {
             return;
         }

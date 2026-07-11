@@ -67,6 +67,7 @@ public:
         m_detector.Clear();
         m_spellVisuals.clear();
         m_evadeIntervening = false;
+        m_enemySpellsLoaded = false;
         DestroyMenu();
         KuroEvade::Evade::RestoreOrbwalkerMove();
         KuroCombatCoordination::Coordinator::Reset();
@@ -198,6 +199,7 @@ private:
     KuroEvade::Evade m_evade;
     KuroEvade::SpellDrawer::VisualMap m_spellVisuals;
     bool m_evadeIntervening = false;
+    bool m_enemySpellsLoaded = false;
     bool m_visualInterventionState = false;
     int m_lastVisualUpdateTick = 0;
 
@@ -562,6 +564,12 @@ private:
     }
 
     void Tick() {
+        if (!m_enemySpellsLoaded && !SDK::GameObjects::EnemyHeroes().empty()) {
+            RebuildSpellsMenu();
+            RebuildEvadeSpellsMenu();
+            m_enemySpellsLoaded = true;
+        }
+
         const auto settings = SettingsSnapshot();
         m_detector.SetCollisionEnabled(settings.CheckSpellCollision);
         m_detector.SetFowEnabled(settings.DodgeFow);
@@ -858,6 +866,81 @@ private:
             std::clamp(data.IndexUseWhen, 0, 2)));
         m_evadeSpellOptions.emplace(key, option);
         ++m_evadeSpellMenuEntries;
+    }
+
+    void RebuildSpellsMenu() {
+        if (!m_spellsMenu) return;
+        for (int i = 0; i < m_spellsMenu->Components.size(); ++i) {
+            delete m_spellsMenu->Components[i];
+        }
+        m_spellsMenu->Components.clear();
+
+        m_spellOptions.clear();
+        m_spellMenuEntries = 0;
+
+        auto* globalMenu = m_spellsMenu->AddSubMenu(new Menu("all_champions", "All Champions"));
+        for (const auto& data : KuroEvade::SpellDatabase::Spells()) {
+            if (_stricmp(data.sdk.ChampionName.c_str(), "AllChampions") == 0) {
+                AddSpellMenuEntry(globalMenu, data);
+            }
+        }
+
+        std::unordered_set<std::string> addedChampions;
+        for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
+            if (!enemy.IsValid()) {
+                continue;
+            }
+
+            const std::string championName = enemy.CharacterName();
+            if (championName.empty()) {
+                continue;
+            }
+
+            const std::string championKey = KuroEvade::SpellMenuKey::Lower(championName);
+            if (!addedChampions.insert(championKey).second) {
+                continue;
+            }
+
+            auto* championMenu = m_spellsMenu->AddSubMenu(
+                new Menu(KuroEvade::SpellMenuKey::Sanitize(championName).c_str(), championName.c_str()));
+
+            for (const auto& data : KuroEvade::SpellDatabase::Spells()) {
+                if (_stricmp(data.sdk.ChampionName.c_str(), championName.c_str()) == 0) {
+                    AddSpellMenuEntry(championMenu, data);
+                }
+            }
+        }
+    }
+
+    void RebuildEvadeSpellsMenu() {
+        if (!m_evadeSpellsMenu) return;
+        for (int i = 0; i < m_evadeSpellsMenu->Components.size(); ++i) {
+            delete m_evadeSpellsMenu->Components[i];
+        }
+        m_evadeSpellsMenu->Components.clear();
+
+        m_evadeSpellOptions.clear();
+        m_evadeSpellMenuEntries = 0;
+
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid()) {
+            return;
+        }
+
+        const std::string championName = player.CharacterName();
+        auto* championMenu = m_evadeSpellsMenu->AddSubMenu(new Menu(
+            KuroEvade::SpellMenuKey::Sanitize("self_" + championName).c_str(),
+            championName.empty() ? "My Champion" : championName.c_str()));
+        auto* globalMenu = m_evadeSpellsMenu->AddSubMenu(new Menu("all_champions_evade", "All Champions"));
+
+        for (const auto* data : KuroEvade::EvadeSpellDatabase::ForChampion(championName.c_str(), false)) {
+            AddEvadeSpellMenuEntry(championMenu, *data);
+        }
+        for (const auto& data : KuroEvade::EvadeSpellDatabase::Spells()) {
+            if (_stricmp(data.ChampionName.c_str(), "AllChampions") == 0) {
+                AddEvadeSpellMenuEntry(globalMenu, data);
+            }
+        }
     }
 
     void DestroyMenu() {
