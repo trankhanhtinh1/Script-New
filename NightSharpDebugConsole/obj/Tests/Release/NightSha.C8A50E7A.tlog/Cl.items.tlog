@@ -1,0 +1,11 @@
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\tests\TestMain.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\TestMain.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\tests\CrashProtocolTests.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\CrashProtocolTests.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\tests\IncidentModelTests.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\IncidentModelTests.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\src\IncidentModel.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\IncidentModel.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\tests\WerLocalDumpsTests.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\WerLocalDumpsTests.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\src\WerLocalDumps.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\WerLocalDumps.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\tests\CrashReportTests.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\CrashReportTests.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\src\DumpWriter.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\DumpWriter.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\src\CrashReport.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\CrashReport.obj
+C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\tests\NightSharpCrashBridgeCompileTest.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\NightSharpCrashBridgeCompileTest.obj
+C:\Users\MR THINH\Downloads\New\NightSharpCrashProtocol\CrashClient.cpp;C:\Users\MR THINH\Downloads\New\NightSharpDebugConsole\obj\Tests\Release\CrashClient.obj
