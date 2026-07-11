@@ -116,18 +116,23 @@ namespace SDK { namespace UI {
         ImVec4 activePress = positive
             ? ImVec4(0.09f, 0.38f, 0.35f, 1.0f)
             : ImVec4(0.50f, 0.16f, 0.22f, 1.0f);
-        ImVec4 inactiveBase = ImVec4(0.10f, 0.14f, 0.20f, 1.0f);
-        ImVec4 inactiveHover = ImVec4(0.16f, 0.22f, 0.31f, 1.0f);
-        ImVec4 inactivePress = ImVec4(0.20f, 0.27f, 0.38f, 1.0f);
+        ImVec4 inactiveBase = ImVec4(0.12f, 0.15f, 0.18f, 0.98f);
+        ImVec4 inactiveHover = ImVec4(0.18f, 0.23f, 0.27f, 1.0f);
+        ImVec4 inactivePress = ImVec4(0.22f, 0.28f, 0.32f, 1.0f);
+        ImVec4 text = active ? ImVec4(0.96f, 0.97f, 1.0f, 1.0f) : ImVec4(0.78f, 0.81f, 0.90f, 1.0f);
+
+        ImGui::PushID(id);
         ImGui::PushStyleColor(ImGuiCol_Button, active ? activeBase : inactiveBase);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? activeHover : inactiveHover);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePress : inactivePress);
+        ImGui::PushStyleColor(ImGuiCol_Text, text);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
         bool clicked = ImGui::Button(label, size);
         ImGui::PopStyleVar(2);
-        ImGui::PopStyleColor(4);
+        ImGui::PopStyleColor(5);
+        ImGui::PopID();
         return clicked;
     }
 
@@ -203,18 +208,18 @@ namespace SDK { namespace UI {
         ImGui::TextUnformatted(label ? label : "");
         ImGui::SameLine();
 
-        const float totalWidth = 86.0f;
+        const float totalWidth = 96.0f;
         const float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - totalWidth;
         if (targetX > ImGui::GetCursorPosX()) {
             ImGui::SetCursorPosX(targetX);
         }
 
-        if (DrawStateToggleButton("##on", "On", value, true, ImVec2(40.0f, 0.0f)) && !value) {
+        if (DrawStateToggleButton("on", "On", value, true, ImVec2(45.0f, 0.0f)) && !value) {
             value = true;
             changed = true;
         }
         ImGui::SameLine(0.0f, 6.0f);
-        if (DrawStateToggleButton("##off", "Off", !value, false, ImVec2(40.0f, 0.0f)) && value) {
+        if (DrawStateToggleButton("off", "Off", !value, false, ImVec2(45.0f, 0.0f)) && value) {
             value = false;
             changed = true;
         }
