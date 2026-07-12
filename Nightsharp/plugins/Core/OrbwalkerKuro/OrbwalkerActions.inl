@@ -83,6 +83,9 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     if (!player.IsValid() || player.IsDead()) {
         return false;
     }
+    if (!::SDK::CanAttack(player)) {
+        return false;
+    }
     if (!ChampionCanAttack(player)) {
         return false;
     }
@@ -348,7 +351,16 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
 
     const int now = Tick();
     const int pendingTick = context_.pendingAttackTick;
-    if (now - context_.pendingAttackTick < PendingAttackTimeoutMs()) {
+    bool shouldExpire = false;
+
+    if (context_.pendingAttackTargetNetworkId != 0) {
+        const auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(context_.pendingAttackTargetNetworkId);
+        if (!target.IsValid() || target.IsDead() || !target.IsTargetable()) {
+            shouldExpire = true;
+        }
+    }
+
+    if (!shouldExpire && now - context_.pendingAttackTick < PendingAttackTimeoutMs()) {
         return;
     }
 
@@ -358,7 +370,9 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
         context_.lastAutoAttackTick = pendingTick > 0 ? pendingTick : now;
         context_.hasConfirmedAttack = false;
     }
-    context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs);
+    if (!shouldExpire) {
+        context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs);
+    }
 }
 
 inline int OrbwalkerBase::PendingAttackTimeoutMs() const {

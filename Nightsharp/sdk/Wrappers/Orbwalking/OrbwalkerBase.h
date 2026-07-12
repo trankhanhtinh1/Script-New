@@ -978,6 +978,99 @@ public:
         return OrbwalkingDetail::Contains(AttackResets(), name);
     }
 
+    struct AutoAttackResetSlotEntry {
+        const char* ChampionName;
+        SpellSlot Slot;
+    };
+
+    static bool IsKnownAutoAttackResetSlot(const std::string& championName, int slot) {
+        if (championName.empty()) {
+            return false;
+        }
+        static constexpr AutoAttackResetSlotEntry entries[] = {
+            { "Aatrox", SpellSlot::E },
+            { "Ashe", SpellSlot::Q },
+            { "Belveth", SpellSlot::Q },
+            { "Blitzcrank", SpellSlot::E },
+            { "Briar", SpellSlot::Q },
+            { "Briar", SpellSlot::W },
+            { "Camille", SpellSlot::Q },
+            { "Chogath", SpellSlot::E },
+            { "Darius", SpellSlot::W },
+            { "DrMundo", SpellSlot::E },
+            { "Ekko", SpellSlot::E },
+            { "Fiora", SpellSlot::E },
+            { "Fizz", SpellSlot::W },
+            { "Garen", SpellSlot::Q },
+            { "Graves", SpellSlot::E },
+            { "Gwen", SpellSlot::E },
+            { "Hecarim", SpellSlot::E },
+            { "Illaoi", SpellSlot::W },
+            { "Jax", SpellSlot::W },
+            { "Kassadin", SpellSlot::W },
+            { "Katarina", SpellSlot::E },
+            { "Kayle", SpellSlot::E },
+            { "Kindred", SpellSlot::Q },
+            { "Leona", SpellSlot::Q },
+            { "Lucian", SpellSlot::Q },
+            { "Lucian", SpellSlot::W },
+            { "Lucian", SpellSlot::E },
+            { "Lucian", SpellSlot::R },
+            { "Malphite", SpellSlot::W },
+            { "MasterYi", SpellSlot::W },
+            { "MonkeyKing", SpellSlot::Q },
+            { "Nasus", SpellSlot::Q },
+            { "Nautilus", SpellSlot::W },
+            { "Nilah", SpellSlot::E },
+            { "Olaf", SpellSlot::W },
+            { "Pantheon", SpellSlot::W },
+            { "Kaisa", SpellSlot::R },
+            { "Quinn", SpellSlot::E },
+            { "RekSai", SpellSlot::Q },
+            { "Rell", SpellSlot::W },
+            { "Renekton", SpellSlot::W },
+            { "Rengar", SpellSlot::Q },
+            { "Riven", SpellSlot::Q },
+            { "Sejuani", SpellSlot::E },
+            { "Sett", SpellSlot::Q },
+            { "Shyvana", SpellSlot::Q },
+            { "Sivir", SpellSlot::W },
+            { "Talon", SpellSlot::Q },
+            { "Trundle", SpellSlot::Q },
+            { "Vayne", SpellSlot::Q },
+            { "Vi", SpellSlot::E },
+            { "Viego", SpellSlot::W },
+            { "Volibear", SpellSlot::Q },
+            { "XinZhao", SpellSlot::Q },
+            { "Yorick", SpellSlot::Q },
+            { "Zac", SpellSlot::Q },
+            { "Zeri", SpellSlot::E },
+            { "Zoe", SpellSlot::R },
+        };
+        for (const auto& entry : entries) {
+            if (slot == static_cast<int>(entry.Slot) &&
+                _stricmp(championName.c_str(), entry.ChampionName) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const {
+        if (!OrbwalkingDetail::IsLocalPlayer(sender)) {
+            return false;
+        }
+        std::string championName;
+        const auto player = GameObjects::Player();
+        if (player.IsValid()) {
+            championName = player.CharacterName();
+        }
+        if (championName.empty()) {
+            championName = sender.CharacterName;
+        }
+        return IsKnownAutoAttackResetSlot(championName, slot);
+    }
+
 protected:
     static constexpr bool kFarmDebugEnabled = false;
     static constexpr bool kAADebugEnabled = false;
@@ -2385,7 +2478,7 @@ protected:
         const char* attackEventReason = nullptr;
         const bool localAttackEvent =
             IsIssuedAutoAttackEvent(args, spellName, nativeAutoAttack, &attackEventReason);
-        if (IsAutoAttackReset(spellName)) {
+        if (IsAutoAttackReset(spellName) || IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
             AADebugAppend(
                 "[AADebug] PROCESS_RESET id=%d spell='%s' slot=%d dtLocal=%d",
                 aaDebugAttackId_,
@@ -2460,7 +2553,7 @@ protected:
         const char* attackEventReason = nullptr;
         const bool localAttackEvent =
             IsIssuedAutoAttackEvent(args, spellName, nativeAutoAttack, &attackEventReason);
-        if (IsAutoAttackReset(spellName) && args.CastDelay <= 0.0f) {
+        if ((IsAutoAttackReset(spellName) || IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) && args.CastDelay <= 0.0f) {
             AADebugAppend(
                 "[AADebug] DOCAST_RESET id=%d spell='%s' slot=%d castDelay=%.1f dtAA=%d dtLocal=%d",
                 aaDebugAttackId_,

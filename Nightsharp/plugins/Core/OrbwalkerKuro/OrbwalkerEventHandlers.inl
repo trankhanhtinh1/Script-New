@@ -227,8 +227,10 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
     }
 
     const int now = Tick();
+    const int pingSafety = 30 + static_cast<int>(OneWayPingMs());
     const bool stoppedPending =
         context_.pendingAttack &&
+        now - context_.pendingAttackTick > pingSafety &&
         now - context_.pendingAttackTick <= PendingAttackTimeoutMs();
 
     SnapshotAttackTimings(GameObjects::Player());

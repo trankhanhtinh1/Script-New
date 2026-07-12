@@ -17,6 +17,7 @@
 #include "../../../sdk/Utils/AutoAttack.h"
 #include "../../../sdk/Wrappers/Damages/Damage.h"
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
+#include "../../../sdk/Extensions/AIBaseClientExtensions.h"
 #include "../../../core/CoreControl.h"
 
 #include <algorithm>
