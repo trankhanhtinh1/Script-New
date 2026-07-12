@@ -70,8 +70,14 @@
     <Filter Include="Plugins\Core\OrbwalkerKuro">
       <UniqueIdentifier>{5806612D-F755-EF07-9329-C1DC3708712F}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Core\TargetSelectorImpulse">
+      <UniqueIdentifier>{25D38118-D72E-E612-764C-52187EF8D430}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\EzEvade">
       <UniqueIdentifier>{A09C5CD7-04AE-F82F-9B86-7E0F523E36B4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\EzEvade\Spells">
+      <UniqueIdentifier>{64659F90-9001-12B5-369A-CFA30FD75670}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\KuroEvade">
       <UniqueIdentifier>{A82A7D67-6215-3F63-95C9-449C4BD4C61B}</UniqueIdentifier>
@@ -105,6 +111,21 @@
     </Filter>
     <Filter Include="Plugins\ZDEvade\EvadeSpells">
       <UniqueIdentifier>{46A99B7F-0B06-188E-DA30-4380E1699943}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDPrediction">
+      <UniqueIdentifier>{D282EFDC-F7C1-2A87-4553-B9057DAEB1BE}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDPrediction\Analysis">
+      <UniqueIdentifier>{A8356E1F-310B-34C1-CA93-3883DA76C7E3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDPrediction\Core">
+      <UniqueIdentifier>{BCEA4694-E33C-9ECD-0313-88CBF4B57A18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDPrediction\Math">
+      <UniqueIdentifier>{06E35306-AF6D-7E8B-6E2E-22FD3A7666E3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugins\ZDPrediction\Tracking">
+      <UniqueIdentifier>{6BD91F13-265B-423D-556C-CB7C32F02DF4}</UniqueIdentifier>
     </Filter>
     <Filter Include="SDK">
       <UniqueIdentifier>{E6959F98-715F-22EE-9380-5276E036B646}</UniqueIdentifier>
@@ -248,6 +269,9 @@
     <ClInclude Include="..\NightSharpCrashProtocol\CrashProtocol.h">
       <Filter>..\NightSharpCrashProtocol</Filter>
     </ClInclude>
+    <ClInclude Include="Core\BuffEventDecodePolicy.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Core\CoreAIHeroClient.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -286,12 +310,6 @@
     </ClInclude>
     <ClInclude Include="Core\CoreItem.h">
       <Filter>Core</Filter>
-    </ClInclude>
-    <ClInclude Include="CrashTrace.h">
-      <Filter>Root</Filter>
-    </ClInclude>
-    <ClInclude Include="CrashBridge.h">
-      <Filter>Root</Filter>
     </ClInclude>
     <ClInclude Include="Core\CoreMap.h">
       <Filter>Core</Filter>
@@ -361,6 +379,7 @@
     </ClInclude>
     <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="CrashReporter.h" />
+    <ClInclude Include="CrashTrace.h" />
     <ClInclude Include="crt_shim.h" />
     <ClInclude Include="DebugLog.h" />
     <ClInclude Include="FpsDropDebug.h" />
@@ -699,6 +718,18 @@
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Damage.h">
+      <Filter>Plugins\Champion\ziblldev9898</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Ezreal.h">
+      <Filter>Plugins\Champion\ziblldev9898</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Irelia.h">
+      <Filter>Plugins\Champion\ziblldev9898</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Leesin.h">
+      <Filter>Plugins\Champion\ziblldev9898</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\ziblldev9898\Locke.h">
       <Filter>Plugins\Champion\ziblldev9898</Filter>
     </ClInclude>
@@ -762,8 +793,26 @@
     <ClInclude Include="Plugins\Core\SpellTrackingDebugPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\TargetSelectorImpulse\ImpulsePriorityData.h">
+      <Filter>Plugins\Core\TargetSelectorImpulse</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulse.h">
+      <Filter>Plugins\Core\TargetSelectorImpulse</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulsePlugin.h">
+      <Filter>Plugins\Core\TargetSelectorImpulse</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\EzEvade.h">
+      <Filter>Plugins\EzEvade</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\EzEvade\EzEvadePlugin.h">
       <Filter>Plugins\EzEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h">
+      <Filter>Plugins\EzEvade\Spells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Spells\SpellDatabase.h">
+      <Filter>Plugins\EzEvade\Spells</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\IPlugin.h">
       <Filter>Plugins</Filter>
@@ -1127,6 +1176,36 @@
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\ZDEvade.h">
       <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\AoeOptimizer.h">
+      <Filter>Plugins\ZDPrediction\Analysis</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\ConfidenceEvaluator.h">
+      <Filter>Plugins\ZDPrediction\Analysis</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\MovementPatternAnalyzer.h">
+      <Filter>Plugins\ZDPrediction\Analysis</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\StateAnalyzer.h">
+      <Filter>Plugins\ZDPrediction\Analysis</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Core\PredictionConfig.h">
+      <Filter>Plugins\ZDPrediction\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Core\PredictionEngine.h">
+      <Filter>Plugins\ZDPrediction\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Math\Kinematics.h">
+      <Filter>Plugins\ZDPrediction\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Math\Vector2.h">
+      <Filter>Plugins\ZDPrediction\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\Tracking\MovementTracker.h">
+      <Filter>Plugins\ZDPrediction\Tracking</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDPrediction\ZDPrediction.h">
+      <Filter>Plugins\ZDPrediction</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Bootstrap.h">
       <Filter>SDK</Filter>
@@ -1737,6 +1816,9 @@
     <ClInclude Include="SDK\Wrappers\TargetSelector\HeroVisibleEntry.h">
       <Filter>SDK\Wrappers\TargetSelector</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\Wrappers\TargetSelector\ITargetSelector.h">
+      <Filter>SDK\Wrappers\TargetSelector</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\Wrappers\TargetSelector\ITargetSelectorMode.h">
       <Filter>SDK\Wrappers\TargetSelector</Filter>
     </ClInclude>
@@ -1822,6 +1904,12 @@
       <Filter>SDK\Wrappers\TargetSelector</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorMode.h">
+      <Filter>SDK\Wrappers\TargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorRegistry.h">
+      <Filter>SDK\Wrappers\TargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorSdk.h">
       <Filter>SDK\Wrappers\TargetSelector</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorSelected.h">

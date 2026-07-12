@@ -352,4 +352,67 @@ DWORD CrashClient::WorkerLoop() {
     return 0;
 }
 
+void CrashClient::Trace(
+    TraceTag tag,
+    std::uint64_t programCounter,
+    std::uint64_t arg0,
+    std::uint64_t arg1) {
+    (void)tag;
+    (void)programCounter;
+    (void)arg0;
+    (void)arg1;
+}
+
+std::uint64_t CrashClient::TraceDetailed(
+    TraceTag tag,
+    std::uint64_t programCounter,
+    std::uint64_t arg0,
+    std::uint64_t arg1,
+    std::uint64_t arg2,
+    std::uint64_t arg3,
+    std::uint64_t arg4,
+    std::uint64_t arg5,
+    const char* text) {
+    (void)tag;
+    (void)programCounter;
+    (void)arg0;
+    (void)arg1;
+    (void)arg2;
+    (void)arg3;
+    (void)arg4;
+    (void)arg5;
+    (void)text;
+    return 0;
+}
+
+std::uint64_t CrashClient::TraceExtended(
+    TraceTag tag,
+    std::uint64_t programCounter,
+    std::uint64_t arg0,
+    std::uint64_t arg1,
+    std::uint64_t arg2,
+    std::uint64_t arg3,
+    std::uint64_t arg4,
+    std::uint64_t arg5,
+    std::uint64_t arg6,
+    std::uint64_t arg7,
+    std::uint64_t arg8,
+    std::uint64_t arg9,
+    const char* text) {
+    (void)tag;
+    (void)programCounter;
+    (void)arg0;
+    (void)arg1;
+    (void)arg2;
+    (void)arg3;
+    (void)arg4;
+    (void)arg5;
+    (void)arg6;
+    (void)arg7;
+    (void)arg8;
+    (void)arg9;
+    (void)text;
+    return 0;
+}
+
 } // namespace nscrash

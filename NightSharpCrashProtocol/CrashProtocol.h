@@ -23,6 +23,33 @@ enum class MessageType : std::uint16_t {
     Log = 2,
 };
 
+enum class TraceTag : std::uint32_t {
+    None = 0,
+    LifecycleCallbackEnter,
+    LifecycleCallbackExit,
+    BuffHandlerEnter,
+    BuffHandlerExit,
+    SdkEventQueue,
+    LifecycleEnqueue,
+    LifecycleQueuePop,
+    CoreHookEntry,
+    BuffQueuePop,
+    BuffDecodeBegin,
+    BuffDecodeComplete,
+    BuffApplyBegin,
+    BuffApplyComplete,
+    BuffQueueEnqueue,
+    ObjectEnumeration,
+    StructureScan,
+    SpellCast,
+    IssueOrder,
+    PluginCallback,
+    OverlayWorkerEnter,
+    OverlayRun,
+    D3DUpdate,
+    D3DPresent,
+};
+
 enum class CrashKind : std::uint32_t {
     None = 0,
     Handled = 1,

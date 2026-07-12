@@ -118,6 +118,7 @@
   <ItemGroup>
     <ClInclude Include="..\NightSharpCrashProtocol\CrashClient.h" />
     <ClInclude Include="..\NightSharpCrashProtocol\CrashProtocol.h" />
+    <ClInclude Include="Core\BuffEventDecodePolicy.h" />
     <ClInclude Include="Core\CoreAIHeroClient.h" />
     <ClInclude Include="Core\CoreAiManager.h" />
     <ClInclude Include="Core\CoreAttackableUnit.h" />
@@ -155,6 +156,7 @@
     <ClInclude Include="Core\Vector.h" />
     <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="CrashReporter.h" />
+    <ClInclude Include="CrashTrace.h" />
     <ClInclude Include="crt_shim.h" />
     <ClInclude Include="DebugLog.h" />
     <ClInclude Include="FpsDropDebug.h" />
@@ -271,6 +273,10 @@
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Zeri.h" />
     <ClInclude Include="Plugins\Champion\XerathSemiCastNew.h" />
     <ClInclude Include="Plugins\Champion\XerathSemiPlugin.h" />
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Damage.h" />
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Ezreal.h" />
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Irelia.h" />
+    <ClInclude Include="Plugins\Champion\ziblldev9898\Leesin.h" />
     <ClInclude Include="Plugins\Champion\ziblldev9898\Locke.h" />
     <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h" />
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h" />
@@ -292,7 +298,13 @@
     <ClInclude Include="Plugins\Core\PlayerBuffDebugPlugin.h" />
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h" />
     <ClInclude Include="Plugins\Core\SpellTrackingDebugPlugin.h" />
+    <ClInclude Include="Plugins\Core\TargetSelectorImpulse\ImpulsePriorityData.h" />
+    <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulse.h" />
+    <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulsePlugin.h" />
+    <ClInclude Include="Plugins\EzEvade\EzEvade.h" />
     <ClInclude Include="Plugins\EzEvade\EzEvadePlugin.h" />
+    <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h" />
+    <ClInclude Include="Plugins\EzEvade\Spells\SpellDatabase.h" />
     <ClInclude Include="Plugins\IPlugin.h" />
     <ClInclude Include="Plugins\KuroEvade\KuroEvadePlugin.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\CastType.h" />
@@ -414,6 +426,16 @@
     <ClInclude Include="Plugins\ZDEvade\SpellWindupDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\WindupSpellData.h" />
     <ClInclude Include="Plugins\ZDEvade\ZDEvade.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\AoeOptimizer.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\ConfidenceEvaluator.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\MovementPatternAnalyzer.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Analysis\StateAnalyzer.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Core\PredictionConfig.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Core\PredictionEngine.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Math\Kinematics.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Math\Vector2.h" />
+    <ClInclude Include="Plugins\ZDPrediction\Tracking\MovementTracker.h" />
+    <ClInclude Include="Plugins\ZDPrediction\ZDPrediction.h" />
     <ClInclude Include="SDK\Bootstrap.h" />
     <ClInclude Include="SDK\Constants.h" />
     <ClInclude Include="SDK\Core\Game.h" />
@@ -617,6 +639,7 @@
     <ClInclude Include="SDK\Wrappers\Spells\Tracker\Detector.h" />
     <ClInclude Include="SDK\Wrappers\Spells\Tracker\Tracker.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\HeroVisibleEntry.h" />
+    <ClInclude Include="SDK\Wrappers\TargetSelector\ITargetSelector.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\ITargetSelectorMode.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\Modes\Closest.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\Modes\IWeightItem.h" />
@@ -646,6 +669,8 @@
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorDrawing.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorHumanizer.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorMode.h" />
+    <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorRegistry.h" />
+    <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorSdk.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorSelected.h" />
     <ClInclude Include="SectionProfiler.h" />
     <ClInclude Include="Third_Party\clipper\clipper.h" />
