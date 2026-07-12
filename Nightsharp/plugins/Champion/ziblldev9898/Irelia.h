@@ -6,7 +6,6 @@
 #include <cctype>
 #include <cfloat>
 #include <cmath>
-#include <cstdarg>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -24,7 +23,6 @@ inline Menu* HarassMenu = nullptr;
 inline Menu* LaneClearMenu = nullptr;
 inline Menu* JungleClearMenu = nullptr;
 inline Menu* KillStealMenu = nullptr;
-inline Menu* DebugMenu = nullptr;
 
 // ============================================================================
 // Spell instances (CDragon irelia.bin.json verified 2026-07-09)
@@ -46,26 +44,14 @@ inline DWORD LastComboEvalTick = 0;
 inline DWORD LastHarassEvalTick = 0;
 inline DWORD LastLaneClearEvalTick = 0;
 inline DWORD LastJungleClearEvalTick = 0;
-
-// --- E two-cast tracking ---
-// E1 cast position (first blade), E2 cast position (second blade)
-// When both are set, the line between them stuns enemies
-inline Vec3 E1Position = {};
-inline bool E1Active = false;
-inline DWORD E1CastTick = 0;
-inline Vec3 E2Position = {};
-inline bool E2Active = false;
-inline DWORD E2CastTick = 0;
-// E spell name to detect: "IreliaE" (first cast), "IreliaE2" (second cast)
-
-// --- W channel tracking ---
-inline bool WChanneling = false;
-inline DWORD WChannelStartTick = 0;
+inline uintptr_t QFarmStyleLastTargetAddress = 0;
+inline Vec3 QFarmStylePreviousPosition = {};
+inline Vec3 QFarmStyleLastPosition = {};
+inline DWORD QFarmStyleLastCastTick = 0;
+inline int QFarmStyleDirection = 1;
 
 // --- Passive tracking ---
 inline int PassiveStacks = 0;
-inline float PassiveRemainingTime = 0.0f;
-inline bool PassiveMaxed = false;
 
 // ============================================================================
 // Helpers
@@ -115,128 +101,87 @@ static bool HitchanceAtLeast(HitChance actual, HitChance needed) {
 }
 
 // ============================================================================
-// Buff reading (same pattern as Locke.h)
-// ============================================================================
-static int GetActiveBuffStacksDirect(uintptr_t obj, const char* name) {
-    uintptr_t buffs[256] = {};
-    const int count = CoreBuffs::Enumerate(obj, buffs, 256);
-    const float gameTime = CoreBuffs::ResolveGameTime();
-    char buf[96] = {};
-    int bestStacks = 0;
-    for (int i = 0; i < count; ++i) {
-        CoreBuffs::BuffRef buff{ buffs[i] };
-        if (!buff.IsActive(gameTime)) continue;
-        if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) continue;
-        if (CoreBuffs::NameMatchesQuery(buf, name)) {
-            const int s = buff.GetStacks();
-            if (s > bestStacks) bestStacks = s;
-        }
-    }
-    return bestStacks;
-}
-
-static float GetBuffRemainingTime(uintptr_t obj, const char* name) {
-    uintptr_t buffs[256] = {};
-    const int count = CoreBuffs::Enumerate(obj, buffs, 256);
-    const float gameTime = CoreBuffs::ResolveGameTime();
-    char buf[96] = {};
-    float bestRemaining = 0.0f;
-    for (int i = 0; i < count; ++i) {
-        CoreBuffs::BuffRef buff{ buffs[i] };
-        if (!buff.IsActive(gameTime)) continue;
-        if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) continue;
-        if (CoreBuffs::NameMatchesQuery(buf, name)) {
-            const float remaining = buff.GetRemainingTime(gameTime);
-            if (remaining > bestRemaining) bestRemaining = remaining;
-        }
-    }
-    return bestRemaining;
-}
-
-// ============================================================================
-// Debug log — writes to C:\Users\Public\IreliaDebug.txt
-// ============================================================================
-static void IreliaLog(const char* fmt, ...) {
-    FILE* f = nullptr;
-    fopen_s(&f, "C:\\Users\\Public\\IreliaDebug.txt", "a");
-    if (!f) return;
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(f, fmt, args);
-    va_end(args);
-    fprintf(f, "\n");
-    fclose(f);
-}
-
-// ============================================================================
 // Passive: Ionian Fervor
 // Buff: IreliaPassiveStacks (max 4, duration 6s)
 // Each stack is a separate buff entry, so we count entries instead of GetStacks.
-// Logs all buffs when stack count changes to help identify correct buff name.
 // ============================================================================
-static int LastLoggedPassiveStacks = -1;
 
-static void UpdatePassiveState() {
+static int DetectPassiveStacks() {
+    const auto player = Player();
+    if (!player.IsValid() || player.IsDead()) {
+        return 0;
+    }
+
+    uintptr_t buffs[256] = {};
+    const int count = CoreBuffs::Enumerate(player.Address(), buffs, 256);
+    const float gameTime = CoreBuffs::ResolveGameTime();
+    int matchingEntries = 0;
+    int fallbackStacks = 0;
+    int counterStacks = 0;
+    char name[96] = {};
+
+    for (int i = 0; i < count; ++i) {
+        CoreBuffs::BuffRef buff{ buffs[i] };
+        if (!buff.IsActive(gameTime) ||
+            !buff.ReadName(name, static_cast<int>(sizeof(name))) ||
+            !CoreBuffs::NameMatchesQuery(name, "IreliaPassiveStacks")) {
+            continue;
+        }
+
+        ++matchingEntries;
+
+        const int raw38 = Globals::Read<int>(
+            buff.address + Offset::BuffDataLayout::BuffStacks);
+        const int raw3C = Globals::Read<int>(
+            buff.address + Offset::BuffDataLayout::BuffStacksAlt);
+        fallbackStacks = std::max(fallbackStacks, std::max(raw38, raw3C));
+
+        const int current = buff.GetCounterCurrent();
+        const int maximum = buff.GetCounterMax();
+        if (current >= 0 && current <= 4 &&
+            (maximum == 0 || maximum == 4 ||
+             (maximum > 0 && maximum <= 4 && current <= maximum))) {
+            counterStacks = std::max(counterStacks, current);
+        }
+    }
+
+    const int detectedStacks = std::max(
+        matchingEntries,
+        std::max(fallbackStacks, counterStacks));
+    return std::clamp(detectedStacks, 0, 4);
+}
+
+static void UpdatePassiveState(int hintedStacks = -1) {
     const auto player = Player();
     if (!player.IsValid()) {
         PassiveStacks = 0;
-        PassiveRemainingTime = 0.0f;
-        PassiveMaxed = false;
         return;
     }
 
-    // Use SDK's GetBuffCount — uses event cache + live resolution
-    PassiveStacks = player.GetBuffCount("ireliapassivestacks");
-
-    // Get remaining time via CoreBuffs::FindActiveByName
-    const float gameTime = CoreBuffs::ResolveGameTime();
-    const auto buff = CoreBuffs::FindActiveByName(player.Address(), "ireliapassivestacks", gameTime);
-    PassiveRemainingTime = buff.IsValid() ? buff.GetRemainingTime(gameTime) : 0.0f;
-    PassiveMaxed = PassiveStacks >= 4;
-
-    // Log all buffs when passive stack count changes
-    if (PassiveStacks != LastLoggedPassiveStacks) {
-        IreliaLog("[Irelia] Passive stacks changed: %d -> %d (SDK GetBuffCount=%d remaining=%.3f)",
-                  LastLoggedPassiveStacks, PassiveStacks,
-                  player.GetBuffCount("ireliapassivestacks"), PassiveRemainingTime);
-        LastLoggedPassiveStacks = PassiveStacks;
+    PassiveStacks = DetectPassiveStacks();
+    if (hintedStacks >= 0 && hintedStacks <= 4) {
+        PassiveStacks = std::max(PassiveStacks, hintedStacks);
     }
 }
 
 // ============================================================================
-// E: Flawless Duet - two-cast detection
-// E1 = IreliaE (first blade), E2 = IreliaE2 (second blade, free recast)
-// We hook OnProcessSpell to catch both casts and record their EndPosition
+// Passive buff change handling
 // ============================================================================
-static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
+static void OnBuffChanged(const Events::BuffEventArgs& args) {
     const auto player = Player();
-    if (!player.IsValid()) return;
+    if (!player.IsValid() || player.IsDead()) return;
     if (args.Sender.NetworkId != player.NetworkId()) return;
 
-    // Detect E1 cast
-    if (_stricmp(args.SpellName, "IreliaE") == 0) {
-        E1Position = args.EndPosition;
-        E1Active = true;
-        E1CastTick = GetTickCount();
-        E2Active = false; // reset E2 when E1 is cast again
+    bool isPassiveBuff = _stricmp(args.BuffName, "IreliaPassiveStacks") == 0;
+    if (!isPassiveBuff && args.BuffAddress != 0) {
+        CoreBuffs::BuffRef buff{ args.BuffAddress };
+        char name[96] = {};
+        isPassiveBuff = buff.ReadName(name, static_cast<int>(sizeof(name))) &&
+            CoreBuffs::NameMatchesQuery(name, "IreliaPassiveStacks");
     }
 
-    // Detect E2 cast
-    if (_stricmp(args.SpellName, "IreliaE2") == 0) {
-        E2Position = args.EndPosition;
-        E2Active = true;
-        E2CastTick = GetTickCount();
-    }
-
-    // Detect W channel start
-    if (_stricmp(args.SpellName, "IreliaW") == 0) {
-        WChanneling = true;
-        WChannelStartTick = GetTickCount();
-    }
-
-    // Detect W release (W2)
-    if (_stricmp(args.SpellName, "IreliaW2") == 0) {
-        WChanneling = false;
+    if (isPassiveBuff) {
+        UpdatePassiveState(std::clamp(args.Count, 0, 4));
     }
 }
 
@@ -249,6 +194,360 @@ static double QDamage(const AIBaseClient& target) {
     const float sdkDamage = Q.GetDamage(target);
     if (sdkDamage > 0.0f) return sdkDamage;
     return player.GetSpellDamage(target, SpellSlot::Q);
+}
+
+static float QFarmOnHitDamage(const AIHeroClient& player, const AIBaseClient& target) {
+    float onHitDamage = Damage::GetAutoAttackDamage(player, target, true) -
+        Damage::GetAutoAttackDamage(player, target, false);
+
+    if (PassiveStacks >= 4) {
+        const int level = std::clamp(player.Level(), 1, 18);
+        const float cdragonPassiveRawDamage =
+            10.0f + 3.0f * static_cast<float>(level - 1) +
+            0.20f * player.BonusAttackDamage();
+        const float cdragonPassiveDamage =
+            player.CalculateMagicDamage(target, cdragonPassiveRawDamage);
+
+        if (player.GetBuffCount("ireliapassivestacks") >= 4) {
+            const float legacyPassiveRawDamage =
+                10.0f + 3.0f * static_cast<float>(level - 1) +
+                0.25f * player.BonusAttackDamage();
+            onHitDamage -= player.CalculateMagicDamage(
+                target, legacyPassiveRawDamage);
+        }
+        onHitDamage += cdragonPassiveDamage;
+    }
+
+    return std::max(onHitDamage, 0.0f);
+}
+
+static double QFarmDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) return 0.0;
+
+    static constexpr float qBaseDamage[6] = {
+        0.0f, 5.0f, 25.0f, 45.0f, 65.0f, 85.0f
+    };
+    static constexpr float qMinionLevelBonus[18] = {
+        50.0f, 61.0f, 72.0f, 83.0f, 94.0f, 105.0f,
+        116.0f, 127.0f, 138.0f, 149.0f, 160.0f, 171.0f,
+        182.0f, 193.0f, 204.0f, 215.0f, 226.0f, 237.0f
+    };
+
+    const int qRank = std::clamp(Q.Level(), 1, 5);
+    const int championLevel = std::clamp(player.Level(), 1, 18);
+    const float rawDamage = qBaseDamage[qRank] +
+        qMinionLevelBonus[championLevel - 1] +
+        0.70f * player.TotalAttackDamage();
+    return player.CalculatePhysicalDamage(target, rawDamage) +
+        QFarmOnHitDamage(player, target);
+}
+
+static bool QFarmCanKill(const AIBaseClient& target) {
+    if (!target.IsValid() || target.IsDead()) return false;
+    const float effectiveHealth = target.Health() + target.AllShield();
+    return QFarmDamage(target) > effectiveHealth + 1.0f;
+}
+
+static bool IsLargeJungleMonster(const AIMinionClient& mob) {
+    const auto type = mob.GetJungleType();
+    return type == JungleType::Large ||
+           type == JungleType::Epic ||
+           type == JungleType::Legendary;
+}
+
+static int LaneFarmPriority(const AIMinionClient& minion) {
+    const MinionTypes type = minion.GetMinionType();
+    if (HasFlag(type, MinionTypes::Super)) return 4000;
+    if (HasFlag(type, MinionTypes::Siege)) return 3000;
+    if (HasFlag(type, MinionTypes::Melee)) return 2000;
+    if (HasFlag(type, MinionTypes::Ranged)) return 1000;
+    return 0;
+}
+
+static bool IsLaneFarmMinion(const AIMinionClient& minion) {
+    return ValidTarget(minion, Q.Range) &&
+           !minion.IsJungle() &&
+           !minion.IsPlant() &&
+           !minion.IsPet() &&
+           !minion.IsClone();
+}
+
+static bool IsJungleFarmMonster(const AIMinionClient& mob) {
+    return ValidTarget(mob, Q.Range) &&
+           mob.IsJungle() &&
+           !mob.IsPlant() &&
+           !mob.IsPet() &&
+           !mob.IsClone();
+}
+
+static bool HasMark(const AIBaseClient& target) {
+    if (!target.IsValid()) return false;
+    return target.HasBuff("IreliaMark");
+}
+
+static bool CastQFarmTarget(const AIMinionClient& target) {
+    if (!Q.IsReady() || !ValidTarget(target, Q.Range)) return false;
+    return Q.Cast(target) == CastStates::SuccessfullyCasted;
+}
+
+static void ResetQFarmStyle() {
+    QFarmStyleLastTargetAddress = 0;
+    QFarmStylePreviousPosition = {};
+    QFarmStyleLastPosition = {};
+    QFarmStyleLastCastTick = 0;
+    QFarmStyleDirection = 1;
+}
+
+static float QFarmStyleAngleDelta(float from, float to) {
+    constexpr float pi = 3.14159265358979323846f;
+    constexpr float twoPi = pi * 2.0f;
+    float delta = to - from;
+    while (delta > pi) delta -= twoPi;
+    while (delta < -pi) delta += twoPi;
+    return delta;
+}
+
+static bool QFarmPreviousTargetResolved() {
+    if (QFarmStyleLastTargetAddress == 0) return true;
+
+    const AIMinionClient previousTarget(QFarmStyleLastTargetAddress);
+    if (previousTarget.IsValid() &&
+        !previousTarget.IsDead() &&
+        previousTarget.Health() > 0.0f) {
+        return false;
+    }
+
+    QFarmStyleLastTargetAddress = 0;
+    return true;
+}
+
+static bool SelectStyledLaneTarget(
+    const std::vector<AIMinionClient>& candidates,
+    AIMinionClient& selected) {
+    if (candidates.empty()) return false;
+
+    const auto player = Player();
+    if (!player.IsValid()) return false;
+
+    const Vec3 playerPosition = player.Position();
+    float centerX = 0.0f;
+    float centerZ = 0.0f;
+    for (const auto& minion : candidates) {
+        centerX += minion.Position().x;
+        centerZ += minion.Position().z;
+    }
+    centerX /= static_cast<float>(candidates.size());
+    centerZ /= static_cast<float>(candidates.size());
+
+    float forwardX = centerX - playerPosition.x;
+    float forwardZ = centerZ - playerPosition.z;
+    float forwardLength = std::hypot(forwardX, forwardZ);
+
+    const float previousX = QFarmStyleLastPosition.x - QFarmStylePreviousPosition.x;
+    const float previousZ = QFarmStyleLastPosition.z - QFarmStylePreviousPosition.z;
+    const float previousLength = std::hypot(previousX, previousZ);
+    const bool hasPreviousDash = previousLength > 1.0f;
+
+    if (forwardLength <= 1.0f && hasPreviousDash) {
+        forwardX = previousX;
+        forwardZ = previousZ;
+        forwardLength = previousLength;
+    }
+    if (forwardLength <= 1.0f) {
+        forwardX = 1.0f;
+        forwardZ = 0.0f;
+        forwardLength = 1.0f;
+    }
+
+    forwardX /= forwardLength;
+    forwardZ /= forwardLength;
+    const float rightX = -forwardZ;
+    const float rightZ = forwardX;
+    const float previousAngle = std::atan2(previousZ, previousX);
+    const bool hasAlternative = candidates.size() > 1;
+
+    bool hasMeaningfulDash = false;
+    for (const auto& minion : candidates) {
+        if (hasAlternative && minion.Address() == QFarmStyleLastTargetAddress) {
+            continue;
+        }
+        if (playerPosition.Distance2D(minion.Position()) >= 90.0f) {
+            hasMeaningfulDash = true;
+            break;
+        }
+    }
+
+    float bestScore = -FLT_MAX;
+    bool found = false;
+    for (const auto& minion : candidates) {
+        if (hasAlternative && minion.Address() == QFarmStyleLastTargetAddress) {
+            continue;
+        }
+
+        const Vec3 minionPosition = minion.Position();
+        const float offsetX = minionPosition.x - playerPosition.x;
+        const float offsetZ = minionPosition.z - playerPosition.z;
+        const float distance = std::hypot(offsetX, offsetZ);
+        if (distance <= 1.0f) continue;
+        if (hasMeaningfulDash && distance < 90.0f) continue;
+
+        const float lateral = offsetX * rightX + offsetZ * rightZ;
+        const float desiredLateral = QFarmStyleDirection > 0 ? lateral : -lateral;
+        float score = desiredLateral * 4.0f;
+        if (desiredLateral >= 0.0f) score += 700.0f;
+        score += std::min(distance, Q.Range) * 0.75f;
+        score += static_cast<float>(LaneFarmPriority(minion)) * 0.001f;
+
+        const float angle = std::atan2(offsetZ, offsetX);
+        if (hasPreviousDash) {
+            const float alignment =
+                (offsetX * previousX + offsetZ * previousZ) / (distance * previousLength);
+            const float turn = QFarmStyleDirection > 0
+                ? QFarmStyleAngleDelta(previousAngle, angle)
+                : QFarmStyleAngleDelta(angle, previousAngle);
+            score -= alignment * 350.0f;
+            score += turn * 120.0f;
+        } else {
+            score += (QFarmStyleDirection > 0 ? angle : -angle) * 20.0f;
+        }
+
+        if (!found || score > bestScore) {
+            bestScore = score;
+            selected = minion;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
+static bool LaneClear() {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        ResetQFarmStyle();
+        return false;
+    }
+
+    if (!Bool(LaneClearMenu, "useQ") ||
+        player.ManaPercent() < static_cast<float>(Slider(LaneClearMenu, "ManaLC", 30))) {
+        ResetQFarmStyle();
+        return false;
+    }
+
+    if (QFarmStyleLastCastTick != 0 &&
+        GetTickCount() - QFarmStyleLastCastTick > 1500) {
+        ResetQFarmStyle();
+    }
+
+    if (!Q.IsReady()) {
+        return false;
+    }
+
+    if (QFarmStyleLastCastTick != 0 &&
+        GetTickCount() - QFarmStyleLastCastTick < 100) {
+        return false;
+    }
+
+    if (!QFarmPreviousTargetResolved()) {
+        return false;
+    }
+
+    if (!ShouldRunNow(LastLaneClearEvalTick, 120)) {
+        return false;
+    }
+
+    auto minions = GameObjects::EnemyLaneMinions();
+    if (minions.empty()) minions = GameObjects::EnemyMinions();
+
+    minions.erase(
+        std::remove_if(
+            minions.begin(),
+            minions.end(),
+            [](const AIMinionClient& minion) {
+                return !IsLaneFarmMinion(minion);
+            }),
+        minions.end());
+
+    std::vector<AIMinionClient> candidates;
+    candidates.reserve(minions.size());
+    for (const auto& minion : minions) {
+        if (QFarmCanKill(minion)) candidates.push_back(minion);
+    }
+
+    if (candidates.empty()) {
+        ResetQFarmStyle();
+        return false;
+    }
+
+    AIMinionClient target;
+    if (!SelectStyledLaneTarget(candidates, target) || !QFarmCanKill(target)) {
+        return false;
+    }
+
+    const Vec3 sourcePosition = player.Position();
+    if (!CastQFarmTarget(target)) return false;
+
+    QFarmStylePreviousPosition = sourcePosition;
+    QFarmStyleLastPosition = target.Position();
+    QFarmStyleLastTargetAddress = target.Address();
+    QFarmStyleLastCastTick = GetTickCount();
+    QFarmStyleDirection *= -1;
+    LastLaneClearEvalTick = 0;
+    return true;
+}
+
+static int JungleFarmPriority(const AIMinionClient& mob) {
+    const auto type = mob.GetJungleType();
+    if (type == JungleType::Legendary) return 5000;
+    if (type == JungleType::Epic) return 4000;
+    if (type == JungleType::Large) return 3000;
+    return 1000;
+}
+
+static bool JungleClear() {
+    const auto player = Player();
+    if (!player.IsValid() || !Bool(JungleClearMenu, "useQ") ||
+        player.ManaPercent() < static_cast<float>(Slider(JungleClearMenu, "ManaJC", 30)) ||
+        !Q.IsReady() || !ShouldRunNow(LastJungleClearEvalTick, 120)) {
+        return false;
+    }
+
+    auto mobs = GameObjects::Jungle();
+    mobs.erase(
+        std::remove_if(
+            mobs.begin(),
+            mobs.end(),
+            [](const AIMinionClient& mob) {
+                return !IsJungleFarmMonster(mob);
+            }),
+        mobs.end());
+
+    std::sort(
+        mobs.begin(),
+        mobs.end(),
+        [](const AIMinionClient& a, const AIMinionClient& b) {
+            const bool aMarkedLarge = IsLargeJungleMonster(a) && HasMark(a);
+            const bool bMarkedLarge = IsLargeJungleMonster(b) && HasMark(b);
+            if (aMarkedLarge != bMarkedLarge) return aMarkedLarge;
+
+            const bool aKillable = QFarmCanKill(a);
+            const bool bKillable = QFarmCanKill(b);
+            if (aKillable != bKillable) return aKillable;
+
+            const int aPriority = JungleFarmPriority(a);
+            const int bPriority = JungleFarmPriority(b);
+            if (aPriority != bPriority) return aPriority > bPriority;
+            return a.DistanceToPlayer() < b.DistanceToPlayer();
+        });
+
+    for (const auto& mob : mobs) {
+        const bool markedLarge = IsLargeJungleMonster(mob) && HasMark(mob);
+        if ((markedLarge || QFarmCanKill(mob)) && CastQFarmTarget(mob)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static double EDamage(const AIBaseClient& target) {
@@ -284,23 +583,14 @@ static double GetComboDamage(const AIHeroClient& target) {
     return damage;
 }
 
-// ============================================================================
-// Mark detection (IreliaMark on enemy = Q reset)
-// ============================================================================
-static bool HasMark(const AIBaseClient& target) {
-    if (!target.IsValid()) return false;
-    return target.HasBuff("IreliaMark");
-}
-
 static bool HasMaxPassive() {
-    return PassiveMaxed;
+    return PassiveStacks >= 4;
 }
 
 // ============================================================================
 // Forward declarations
 // ============================================================================
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
-static void OnDraw();
 static void OnUnload();
 
 // ============================================================================
@@ -334,12 +624,6 @@ static void BuildMenu() {
     KillStealMenu->Add(new MenuBool("killstealQ", "Use Q"));
     KillStealMenu->Add(new MenuBool("killstealR", "Use R"));
 
-    DebugMenu = MenuRoot->AddSubMenu(new Menu("Debug Settings", "Debug"));
-    DebugMenu->Add(new MenuBool("debugPassive", "Debug Passive Stacks", true));
-    DebugMenu->Add(new MenuBool("debugE", "Debug E Positions", true));
-    DebugMenu->Add(new MenuBool("debugW", "Debug W Channel", true));
-    DebugMenu->Add(new MenuBool("debugMarks", "Debug Marks on Enemies", true));
-
     MenuRoot->Attach();
 }
 
@@ -360,8 +644,9 @@ static void OnGameLoad() {
     BuildMenu();
 
     Events::hook.OnGameUpdate += &Game_OnUpdate;
-    Events::hook.OnProcessSpell += &OnProcessSpell;
-    Drawing::OnDraw += &OnDraw;
+    Events::hook.OnBuffAdd += &OnBuffChanged;
+    Events::hook.OnBuffUpdate += &OnBuffChanged;
+    Events::hook.OnBuffRemove += &OnBuffChanged;
 
     Loaded = true;
     Game::Print("<font color='#8ec5ff' size='20'>ziblldev9898 - Irelia loaded</font>");
@@ -372,169 +657,27 @@ static void OnGameLoad() {
 // ============================================================================
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
     const auto player = Player();
-    if (!player.IsValid() || player.IsDead() || player.IsRecalling()) return;
+    if (!player.IsValid()) {
+        ResetQFarmStyle();
+        return;
+    }
+    if (player.IsDead() || player.IsRecalling()) {
+        ResetQFarmStyle();
+        return;
+    }
+
+    UpdatePassiveState();
+
     if (Game::IsChatOpen()) return;
     if (player.Spellbook().IsWindingUp()) return;
 
-    // Update passive state every frame
-    UpdatePassiveState();
-
-    // Clear E positions after timeout (E has 0.25s CD between casts, 5s mark duration)
-    const DWORD now = GetTickCount();
-    if (E1Active && now - E1CastTick > 5000) {
-        E1Active = false;
-        E1Position = {};
-    }
-    if (E2Active && now - E2CastTick > 5000) {
-        E2Active = false;
-        E2Position = {};
-    }
-
-    // TODO: Combo, Harass, LaneClear, JungleClear, KillSteal
-}
-
-// ============================================================================
-// Debug Draw
-// ============================================================================
-static void OnDraw() {
-    if (!Loaded) return;
-    const auto player = Player();
-    if (!player.IsValid()) return;
-    if (!Drawing::IsEnabled()) return;
-
-    const bool debugPassive = Bool(DebugMenu, "debugPassive", true);
-    const bool debugE = Bool(DebugMenu, "debugE", true);
-    const bool debugW = Bool(DebugMenu, "debugW", true);
-    const bool debugMarks = Bool(DebugMenu, "debugMarks", true);
-
-    // --- Debug: Passive stacks + countdown ---
-    if (debugPassive) {
-        char text[128] = {};
-        if (PassiveStacks > 0) {
-            if (PassiveMaxed) {
-                _snprintf_s(text, sizeof(text), _TRUNCATE,
-                    "PASSIVE: MAX (4/4) | %.1fs", PassiveRemainingTime);
-            } else {
-                _snprintf_s(text, sizeof(text), _TRUNCATE,
-                    "PASSIVE: %d/4 | %.1fs", PassiveStacks, PassiveRemainingTime);
-            }
-        } else {
-            _snprintf_s(text, sizeof(text), _TRUNCATE, "PASSIVE: 0/4");
-        }
-
-        const uint32_t color = PassiveMaxed ? 0xFF00FF00 :
-            (PassiveStacks >= 2 ? 0xFFFFFF00 : 0xFFFF8800);
-
-        Vec2 screenPos = {};
-        if (Drawing::WorldToScreen(player.Position(), screenPos) && screenPos.IsValid()) {
-            Drawing::DrawText(screenPos.x - 40.0f, screenPos.y - 80.0f, color, text);
-        }
-    }
-
-    // --- Debug: E1/E2 positions ---
-    if (debugE) {
-        // Draw E range circle
-        Drawing::DrawCircle(player.Position(), E.Range, 0xFF00AAAA);
-
-        const DWORD now = GetTickCount();
-
-        // Draw E1 position
-        if (E1Active) {
-            Drawing::DrawCircle(E1Position, 80.0f, 0xFF00FFFF);
-
-            Vec2 screenPos = {};
-            if (Drawing::WorldToScreen(E1Position, screenPos) && screenPos.IsValid()) {
-                const float elapsed = static_cast<float>(now - E1CastTick) / 1000.0f;
-                char text[128] = {};
-                _snprintf_s(text, sizeof(text), _TRUNCATE,
-                    "E1 (%.0f,%.0f) %.1fs", E1Position.x, E1Position.z, elapsed);
-                Drawing::DrawText(screenPos.x - 50.0f, screenPos.y - 30.0f,
-                    0xFF00FFFF, text);
-            }
-        }
-
-        // Draw E2 position
-        if (E2Active) {
-            Drawing::DrawCircle(E2Position, 80.0f, 0xFFFF00FF);
-
-            Vec2 screenPos = {};
-            if (Drawing::WorldToScreen(E2Position, screenPos) && screenPos.IsValid()) {
-                const float elapsed = static_cast<float>(now - E2CastTick) / 1000.0f;
-                char text[128] = {};
-                _snprintf_s(text, sizeof(text), _TRUNCATE,
-                    "E2 (%.0f,%.0f) %.1fs", E2Position.x, E2Position.z, elapsed);
-                Drawing::DrawText(screenPos.x - 50.0f, screenPos.y - 30.0f,
-                    0xFFFF00FF, text);
-            }
-        }
-
-        // Draw line between E1 and E2 (stun zone)
-        if (E1Active && E2Active) {
-            Drawing::DrawLine(E1Position, E2Position, 4, 0xFFFF0000);
-
-            // Draw distance between E1 and E2
-            const float dist = E1Position.Distance2D(E2Position);
-            Vec2 midScreen = {};
-            const Vec3 midPos(
-                (E1Position.x + E2Position.x) * 0.5f,
-                (E1Position.y + E2Position.y) * 0.5f,
-                (E1Position.z + E2Position.z) * 0.5f
-            );
-            if (Drawing::WorldToScreen(midPos, midScreen) && midScreen.IsValid()) {
-                char text[128] = {};
-                _snprintf_s(text, sizeof(text), _TRUNCATE,
-                    "STUN LINE dist=%.0f", dist);
-                Drawing::DrawText(midScreen.x - 50.0f, midScreen.y - 15.0f,
-                    0xFFFF0000, text);
-            }
-        }
-    }
-
-    // --- Debug: W channel ---
-    if (debugW) {
-        if (WChanneling) {
-            const DWORD channelMs = GetTickCount() - WChannelStartTick;
-            const float channelSec = static_cast<float>(channelMs) / 1000.0f;
-            char text[64] = {};
-            _snprintf_s(text, sizeof(text), _TRUNCATE, "W CHARGING: %.2fs", channelSec);
-
-            Vec2 screenPos = {};
-            if (Drawing::WorldToScreen(player.Position(), screenPos) && screenPos.IsValid()) {
-                // Green if < 0.75s (max charge), yellow if approaching
-                const uint32_t color = channelSec >= 0.75f ? 0xFF00FF00 : 0xFFFFFF00;
-                Drawing::DrawText(screenPos.x - 40.0f, screenPos.y - 100.0f, color, text);
-            }
-        }
-
-        // Draw W range
-        if (W.IsReady()) {
-            Drawing::DrawCircle(player.Position(), W.Range, 0xFF00FFAA);
-        }
-    }
-
-    // --- Debug: Marks on enemies ---
-    if (debugMarks) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) continue;
-
-            const bool marked = HasMark(enemy);
-            if (!marked) continue;
-
-            // Draw mark indicator above enemy
-            Vec2 screenPos = {};
-            if (Drawing::WorldToScreen(enemy.Position(), screenPos) && screenPos.IsValid()) {
-                Drawing::DrawText(screenPos.x - 25.0f, screenPos.y - 60.0f,
-                    0xFFFF0000, "MARKED");
-
-                // Also draw circle around marked enemy
-                Drawing::DrawCircle(enemy.Position(), 100.0f, 0xFFFF0000);
-            }
-        }
-    }
-
-    // --- Debug: R range ---
-    if (R.IsReady()) {
-        Drawing::DrawCircle(player.Position(), R.Range, 0xFFFF00FF);
+    switch (Orbwalker::ActiveMode()) {
+    case OrbwalkingMode::LaneClear:
+        if (!LaneClear()) JungleClear();
+        break;
+    default:
+        ResetQFarmStyle();
+        break;
     }
 }
 
@@ -545,14 +688,13 @@ static void OnUnload() {
     if (!Loaded) return;
 
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
-    Events::hook.OnProcessSpell -= &OnProcessSpell;
-    Drawing::OnDraw -= &OnDraw;
+    Events::hook.OnBuffAdd -= &OnBuffChanged;
+    Events::hook.OnBuffUpdate -= &OnBuffChanged;
+    Events::hook.OnBuffRemove -= &OnBuffChanged;
 
     Loaded = false;
-    E1Active = false;
-    E2Active = false;
-    WChanneling = false;
     PassiveStacks = 0;
+    ResetQFarmStyle();
 }
 
 } // namespace Plugins::ziblldev9898::Irelia

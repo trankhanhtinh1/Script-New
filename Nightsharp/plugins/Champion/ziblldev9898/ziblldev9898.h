@@ -13,6 +13,7 @@
 #include "Locke.h"
 #include "Ezreal.h"
 #include "Leesin.h"
+#include "Irelia.h"
 
 #include <string>
 
@@ -36,6 +37,8 @@ public:
             ziblldev9898::Ezreal::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "LeeSin") == 0) {
             ziblldev9898::LeeSin::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Irelia") == 0) {
+            ziblldev9898::Irelia::OnGameLoad();
         }
     }
 
@@ -43,6 +46,7 @@ public:
         ziblldev9898::Locke::OnUnload();
         ziblldev9898::Ezreal::OnUnload();
         ziblldev9898::LeeSin::OnUnload();
+        ziblldev9898::Irelia::OnUnload();
     }
 
 private:
@@ -50,7 +54,8 @@ private:
         return championName && championName[0] &&
                (_stricmp(championName, "Locke") == 0 ||
                 _stricmp(championName, "Ezreal") == 0 ||
-                _stricmp(championName, "LeeSin") == 0);
+                _stricmp(championName, "LeeSin") == 0 ||
+                _stricmp(championName, "Irelia") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -72,6 +77,7 @@ private:
         if (_stricmp(champion.c_str(), "Locke") == 0) return "Locke";
         if (_stricmp(champion.c_str(), "Ezreal") == 0) return "Ezreal";
         if (_stricmp(champion.c_str(), "LeeSin") == 0) return "LeeSin";
+        if (_stricmp(champion.c_str(), "Irelia") == 0) return "Irelia";
         return nullptr;
     }
 };
