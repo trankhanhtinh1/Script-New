@@ -13,6 +13,7 @@
 #include <new>
 
 #include "CrashReporter.h"
+#include "CrashTrace.h"
 #include "DebugLog.h"
 #include "overlay/OverlayManager.h"
 
@@ -146,10 +147,14 @@ static DWORD WINAPI OverlayWorker(LPVOID param) {
 
     NightSharpDebug::CrashBridge::Install(module);
     NightSharpDebug::CrashReporter::StartGuard();
+    NightSharpDebug::CrashTrace::Record(
+        nscrash::TraceTag::OverlayWorkerEnter,
+        reinterpret_cast<std::uintptr_t>(module));
     NightSharpDebug::Phase("overlay-worker-enter");
     NightSharpDebug::Logf("[NightSharp] OverlayWorker entered");
 
     __try {
+        NightSharpDebug::CrashTrace::Record(nscrash::TraceTag::OverlayRun);
         NightSharpDebug::Phase("overlay-manager-run");
         OverlayManager::Run();
         NightSharpDebug::Logf("[NightSharp] OverlayManager exited");

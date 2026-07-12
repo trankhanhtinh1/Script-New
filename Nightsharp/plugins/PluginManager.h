@@ -9,6 +9,7 @@
 #include "IPlugin.h"
 #include "PluginRegistry.h"
 #include "../CrashReporter.h"
+#include "../CrashTrace.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 
@@ -189,6 +190,10 @@ namespace Plugins {
         void OnUpdate() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
+                    NightSharpDebug::CrashTrace::Record(
+                        nscrash::TraceTag::PluginCallback,
+                        reinterpret_cast<std::uintptr_t>(plugin.get()),
+                        1);
                     char phase[160] = {};
                     _snprintf_s(phase,
                                 sizeof(phase),
@@ -222,6 +227,10 @@ namespace Plugins {
         void OnRender() {
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
+                    NightSharpDebug::CrashTrace::Record(
+                        nscrash::TraceTag::PluginCallback,
+                        reinterpret_cast<std::uintptr_t>(plugin.get()),
+                        2);
                     char phase[160] = {};
                     _snprintf_s(phase,
                                 sizeof(phase),

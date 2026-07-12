@@ -33,22 +33,33 @@ public:
             entries_.emplace_back(hero);
         }
 
-#if NIGHTSHARP_TARGETSELECTOR_HUMANIZER_LIFECYCLE
-        Events::hook.OnCreateObject += &OnCreateObjectHandler;
-        Events::hook.OnDeleteObject += &OnDeleteObjectHandler;
-#endif
-        Events::hook.OnUpdate += &OnGameUpdateHandler;
+        Resume();
     }
 
     ~TargetSelectorHumanizer() {
+        Suspend();
+        if (Ptr() == this) Ptr() = nullptr;
+    }
+
+    void Suspend() {
+        if (suspended_) return;
         Events::hook.OnUpdate -= &OnGameUpdateHandler;
 #if NIGHTSHARP_TARGETSELECTOR_HUMANIZER_LIFECYCLE
         Events::hook.OnDeleteObject -= &OnDeleteObjectHandler;
         Events::hook.OnCreateObject -= &OnCreateObjectHandler;
 #endif
-        if (Ptr() == this) {
-            Ptr() = nullptr;
-        }
+        suspended_ = true;
+    }
+
+    void Resume() {
+        if (!suspended_) return;
+        Ptr() = this;
+#if NIGHTSHARP_TARGETSELECTOR_HUMANIZER_LIFECYCLE
+        Events::hook.OnCreateObject += &OnCreateObjectHandler;
+        Events::hook.OnDeleteObject += &OnDeleteObjectHandler;
+#endif
+        Events::hook.OnUpdate += &OnGameUpdateHandler;
+        suspended_ = false;
     }
 
     int FowDelay() const { return fowDelay_; }
@@ -143,6 +154,7 @@ private:
     Menu* menu_ = nullptr;
     std::vector<HeroVisibleEntry> entries_;
     int fowDelay_ = 250;
+    bool suspended_ = true;
 };
 
 } // namespace SDK

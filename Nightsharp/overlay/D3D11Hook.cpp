@@ -17,6 +17,7 @@
 #include "../Core/CoreSkinChanger.h"
 #include "../Core/CoreZoomHack.h"
 #include "../CrashReporter.h"
+#include "../CrashTrace.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 #include "../SDK/Lifecycle.h"
@@ -710,6 +711,9 @@ static void Render() {
         return;
 
     NightSharpDebug::SetPhase("d3d11hook-render-begin");
+    NightSharpDebug::CrashTrace::Record(
+        nscrash::TraceTag::D3DUpdate,
+        g_bootstrapDone ? 1u : 0u);
     NightSharpPerf::BeginFrame();
 
     NightSharpDebug::SetPhase("d3d11hook-imgui-newframe");
@@ -800,6 +804,10 @@ static void PresentFrameSafe(IDXGISwapChain* pSwapChain) {
 struct DxgiPresent {
     static long WINAPI Hooked(IDXGISwapChain* pSwapChain, UINT syncInterval, UINT flags) {
         HookCallScope scope;
+        NightSharpDebug::CrashTrace::Record(
+            nscrash::TraceTag::D3DPresent,
+            syncInterval,
+            flags);
         if (!IsUnloading()) {
             PresentFrameSafe(pSwapChain);
         }

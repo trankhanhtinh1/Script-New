@@ -9,6 +9,7 @@
 #include "Vector.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
+#include "../CrashTrace.h"
 
 #include <Windows.h>
 #include <cmath>
@@ -448,6 +449,10 @@ inline bool IssueOrder(OrderType order,
     std::uint32_t originalSelectedNetId = 0;
 
     __try {
+        NightSharpDebug::CrashTrace::Record(
+            nscrash::TraceTag::IssueOrder,
+            static_cast<std::uint64_t>(order),
+            target);
         if (isAttack && NeedsTarget(order)) {
             patchedHudInput = PatchHudAttackInput(
                 position,

@@ -3,6 +3,7 @@
 #include "../../Core/CoreBuffs.h"
 #include "../../Core/CoreEvents.h"
 #include "../../CrashReporter.h"
+#include "../../CrashTrace.h"
 #include "../../FpsDropDebug.h"
 #include "../Data/Database.h"
 #include "StructureLifecyclePolicy.h"
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <type_traits>
 
 namespace SDK::Events {
 
@@ -72,11 +74,22 @@ namespace detail {
         using Handler = void(*)(const T&);
 
         const char* Name = "";
+        std::uint32_t LifecycleActionValue = 0;
+        nscrash::TraceTag DetailedEntryTag = nscrash::TraceTag::None;
+        nscrash::TraceTag DetailedExitTag = nscrash::TraceTag::None;
         Handler Handlers[MaxHandlers] = {};
         int Count = 0;
 
         EventList() = default;
-        explicit EventList(const char* name) : Name(name ? name : "") {}
+        explicit EventList(
+            const char* name,
+            std::uint32_t lifecycleAction = 0,
+            nscrash::TraceTag detailedEntryTag = nscrash::TraceTag::None,
+            nscrash::TraceTag detailedExitTag = nscrash::TraceTag::None)
+            : Name(name ? name : ""),
+              LifecycleActionValue(lifecycleAction),
+              DetailedEntryTag(detailedEntryTag),
+              DetailedExitTag(detailedExitTag) {}
 
         bool Add(Handler handler) {
             if (!handler) {
@@ -123,8 +136,42 @@ namespace detail {
                     continue;
                 }
                 const auto handlerPerfStart = NightSharpPerf::Now();
+                bool completed = false;
+                if constexpr (std::is_same_v<T, ObjectEventArgs>) {
+                    if (LifecycleActionValue != 0) {
+                        NightSharpDebug::CrashTrace::RecordDetailed(
+                            nscrash::TraceTag::LifecycleCallbackEnter,
+                            LifecycleActionValue,
+                            reinterpret_cast<std::uint64_t>(handler),
+                            static_cast<std::uint64_t>(i),
+                            static_cast<std::uint64_t>(Count),
+                            args.LifecycleTraceSerial,
+                            args.Sender.NetworkId,
+                            Name);
+                    }
+                }
+                if constexpr (std::is_same_v<T, BuffEventArgs>) {
+                    if (DetailedEntryTag != nscrash::TraceTag::None) {
+                        NightSharpDebug::CrashTrace::RecordExtended(
+                            DetailedEntryTag,
+                            args.BuffTraceHookId,
+                            reinterpret_cast<std::uint64_t>(handler),
+                            static_cast<std::uint64_t>(i),
+                            static_cast<std::uint64_t>(Count),
+                            args.BuffAddress,
+                            args.Sender.Ptr,
+                            args.Sender.NetworkId,
+                            args.BuffTraceSerial,
+                            args.EventBridge,
+                            (static_cast<std::uint64_t>(
+                                 static_cast<std::uint32_t>(args.Type)) << 32) |
+                                static_cast<std::uint32_t>(args.Count),
+                            args.BuffName);
+                    }
+                }
                 __try {
                     handler(args);
+                    completed = true;
                 } __except (LogEventHandlerException(
                                  Name,
                                  i,
@@ -132,6 +179,39 @@ namespace detail {
                                  GetExceptionInformation())) {
                     Handlers[i] = nullptr;
                     compactHandlers = true;
+                }
+                if constexpr (std::is_same_v<T, ObjectEventArgs>) {
+                    if (completed && LifecycleActionValue != 0) {
+                        NightSharpDebug::CrashTrace::RecordDetailed(
+                            nscrash::TraceTag::LifecycleCallbackExit,
+                            LifecycleActionValue,
+                            reinterpret_cast<std::uint64_t>(handler),
+                            static_cast<std::uint64_t>(i),
+                            static_cast<std::uint64_t>(Count),
+                            args.LifecycleTraceSerial,
+                            args.Sender.NetworkId,
+                            Name);
+                    }
+                }
+                if constexpr (std::is_same_v<T, BuffEventArgs>) {
+                    if (completed &&
+                        DetailedExitTag != nscrash::TraceTag::None) {
+                        NightSharpDebug::CrashTrace::RecordExtended(
+                            DetailedExitTag,
+                            args.BuffTraceHookId,
+                            reinterpret_cast<std::uint64_t>(handler),
+                            static_cast<std::uint64_t>(i),
+                            static_cast<std::uint64_t>(Count),
+                            args.BuffAddress,
+                            args.Sender.Ptr,
+                            args.Sender.NetworkId,
+                            args.BuffTraceSerial,
+                            args.EventBridge,
+                            (static_cast<std::uint64_t>(
+                                 static_cast<std::uint32_t>(args.Type)) << 32) |
+                                static_cast<std::uint32_t>(args.Count),
+                            args.BuffName);
+                    }
                 }
                 NightSharpPerf::AddEventHandlerTiming(
                     Name,
@@ -191,7 +271,7 @@ namespace detail {
             ReleaseSRWLockExclusive(&Lock);
         }
 
-        bool Pop(T& out) {
+        bool Pop(T& out, int* remaining = nullptr) {
             AcquireSRWLockExclusive(&Lock);
             if (Count <= 0) {
                 ReleaseSRWLockExclusive(&Lock);
@@ -204,6 +284,9 @@ namespace detail {
             --Count;
             if (Count == 0) {
                 Head = 0;
+            }
+            if (remaining) {
+                *remaining = Count;
             }
             ReleaseSRWLockExclusive(&Lock);
             return true;
@@ -255,13 +338,31 @@ namespace detail {
 
     inline EventList<CoreHookArgs> CoreHookHandlers{ "CoreHook" };
     inline EventList<GameUpdateEventArgs> GameUpdateHandlers{ "GameUpdate" };
-    inline EventList<ObjectEventArgs> ObjectCreateHandlers{ "ObjectCreate" };
-    inline EventList<ObjectEventArgs> ObjectDeleteHandlers{ "ObjectDelete" };
+    inline EventList<ObjectEventArgs> ObjectCreateHandlers{
+        "ObjectCreate",
+        static_cast<std::uint32_t>(
+            NightSharpDebug::CrashTrace::LifecycleAction::Create)};
+    inline EventList<ObjectEventArgs> ObjectDeleteHandlers{
+        "ObjectDelete",
+        static_cast<std::uint32_t>(
+            NightSharpDebug::CrashTrace::LifecycleAction::Delete)};
     inline EventList<ObjectEventArgs> MissileCreateHandlers{ "MissileCreate" };
     inline EventList<ObjectEventArgs> MissileDeleteHandlers{ "MissileDelete" };
-    inline EventList<BuffEventArgs> BuffAddHandlers{ "BuffAdd" };
-    inline EventList<BuffEventArgs> BuffRemoveHandlers{ "BuffRemove" };
-    inline EventList<BuffEventArgs> BuffUpdateHandlers{ "BuffUpdate" };
+    inline EventList<BuffEventArgs> BuffAddHandlers{
+        "BuffAdd",
+        0,
+        nscrash::TraceTag::BuffHandlerEnter,
+        nscrash::TraceTag::BuffHandlerExit};
+    inline EventList<BuffEventArgs> BuffRemoveHandlers{
+        "BuffRemove",
+        0,
+        nscrash::TraceTag::BuffHandlerEnter,
+        nscrash::TraceTag::BuffHandlerExit};
+    inline EventList<BuffEventArgs> BuffUpdateHandlers{
+        "BuffUpdate",
+        0,
+        nscrash::TraceTag::BuffHandlerEnter,
+        nscrash::TraceTag::BuffHandlerExit};
     inline EventList<NewPathEventArgs> NewPathHandlers{ "NewPath" };
     inline EventList<IntegerPropertyChangeEventArgs> IntegerPropertyChangeHandlers{ "IntegerPropertyChange" };
     inline EventList<TeleportRawEventArgs> TeleportHandlers{ "Teleport" };
@@ -509,13 +610,30 @@ namespace detail {
     }
 
     inline void QueueObjectCreate(const CoreHookArgs& raw) {
-        const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
+        ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
         if (!args.Sender.IsValid() ||
             !ShouldQueueObjectLifecycle(args.Sender.Type)) {
             return;
         }
+        NightSharpDebug::CrashTrace::Record(
+            nscrash::TraceTag::SdkEventQueue,
+            static_cast<std::uint64_t>(raw.Id),
+            args.Sender.NetworkId);
 
         AcquireSRWLockExclusive(&PendingObjectLock);
+        args.LifecycleTraceAction = static_cast<std::uint32_t>(
+            NightSharpDebug::CrashTrace::LifecycleAction::Create);
+        args.LifecycleTraceSerial =
+            NightSharpDebug::CrashTrace::RecordDetailed(
+                nscrash::TraceTag::LifecycleEnqueue,
+                args.LifecycleTraceAction,
+                args.Sender.Ptr,
+                args.Sender.NetworkId,
+                (static_cast<std::uint64_t>(args.Sender.Type) << 32) |
+                    args.Sender.Index,
+                args.Sender.Team,
+                static_cast<std::uint64_t>(PendingObjectCreateCount),
+                args.Sender.Name);
         for (int index = 0; index < PendingObjectCreateCount; ++index) {
             if (SameObjectIdentity(
                     PendingObjectCreates[index],
@@ -534,13 +652,30 @@ namespace detail {
     }
 
     inline void QueueObjectDelete(const CoreHookArgs& raw) {
-        const ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
+        ObjectEventArgs args = ::Core::Events::DecodeObjectLifecycleEvent(raw);
         if (!args.Sender.IsValid() ||
             !ShouldQueueObjectLifecycle(args.Sender.Type)) {
             return;
         }
+        NightSharpDebug::CrashTrace::Record(
+            nscrash::TraceTag::SdkEventQueue,
+            static_cast<std::uint64_t>(raw.Id),
+            args.Sender.NetworkId);
 
         AcquireSRWLockExclusive(&PendingObjectLock);
+        args.LifecycleTraceAction = static_cast<std::uint32_t>(
+            NightSharpDebug::CrashTrace::LifecycleAction::Delete);
+        args.LifecycleTraceSerial =
+            NightSharpDebug::CrashTrace::RecordDetailed(
+                nscrash::TraceTag::LifecycleEnqueue,
+                args.LifecycleTraceAction,
+                args.Sender.Ptr,
+                args.Sender.NetworkId,
+                (static_cast<std::uint64_t>(args.Sender.Type) << 32) |
+                    args.Sender.Index,
+                args.Sender.Team,
+                static_cast<std::uint64_t>(PendingObjectDeleteCount),
+                args.Sender.Name);
         RemovePendingObjectCreateLocked(args.Sender.Ptr, args.Sender.NetworkId);
 
         for (int index = 0; index < PendingObjectDeleteCount; ++index) {
@@ -560,7 +695,9 @@ namespace detail {
         ReleaseSRWLockExclusive(&PendingObjectLock);
     }
 
-    inline bool PopPendingObjectCreate(ObjectEventArgs& out) {
+    inline bool PopPendingObjectCreate(
+        ObjectEventArgs& out,
+        int* remaining = nullptr) {
         AcquireSRWLockExclusive(&PendingObjectLock);
         if (PendingObjectCreateCount <= 0) {
             ReleaseSRWLockExclusive(&PendingObjectLock);
@@ -568,11 +705,16 @@ namespace detail {
         }
         out = PendingObjectCreates[--PendingObjectCreateCount];
         PendingObjectCreates[PendingObjectCreateCount] = {};
+        if (remaining) {
+            *remaining = PendingObjectCreateCount;
+        }
         ReleaseSRWLockExclusive(&PendingObjectLock);
         return true;
     }
 
-    inline bool PopPendingObjectDelete(ObjectEventArgs& out) {
+    inline bool PopPendingObjectDelete(
+        ObjectEventArgs& out,
+        int* remaining = nullptr) {
         AcquireSRWLockExclusive(&PendingObjectLock);
         if (PendingObjectDeleteCount <= 0) {
             ReleaseSRWLockExclusive(&PendingObjectLock);
@@ -580,27 +722,50 @@ namespace detail {
         }
         out = PendingObjectDeletes[--PendingObjectDeleteCount];
         PendingObjectDeletes[PendingObjectDeleteCount] = {};
+        if (remaining) {
+            *remaining = PendingObjectDeleteCount;
+        }
         ReleaseSRWLockExclusive(&PendingObjectLock);
         return true;
     }
 
     inline void FlushObjectLifecycleEvents() {
         ObjectEventArgs args = {};
+        int remaining = 0;
         for (int i = 0; i < kMaxObjectLifecycleEventsPerFrame &&
-                        PopPendingObjectCreate(args); ++i) {
+                        PopPendingObjectCreate(args, &remaining); ++i) {
             if (args.Sender.IsValid()) {
+                NightSharpDebug::CrashTrace::RecordDetailed(
+                    nscrash::TraceTag::LifecycleQueuePop,
+                    args.LifecycleTraceAction,
+                    args.LifecycleTraceSerial,
+                    args.Sender.Ptr,
+                    args.Sender.NetworkId,
+                    static_cast<std::uint64_t>(i),
+                    static_cast<std::uint64_t>(remaining),
+                    args.Sender.Name);
                 ObjectCreateHandlers.Fire(args);
             }
         }
         for (int i = 0; i < kMaxObjectLifecycleEventsPerFrame &&
-                        PopPendingObjectDelete(args); ++i) {
+                        PopPendingObjectDelete(args, &remaining); ++i) {
             if (args.Sender.IsValid()) {
+                NightSharpDebug::CrashTrace::RecordDetailed(
+                    nscrash::TraceTag::LifecycleQueuePop,
+                    args.LifecycleTraceAction,
+                    args.LifecycleTraceSerial,
+                    args.Sender.Ptr,
+                    args.Sender.NetworkId,
+                    static_cast<std::uint64_t>(i),
+                    static_cast<std::uint64_t>(remaining),
+                    args.Sender.Name);
                 ObjectDeleteHandlers.Fire(args);
             }
         }
     }
 
     inline void FlushQueuedEvents() {
+        NightSharpDebug::CrashTrace::Record(nscrash::TraceTag::CoreHookEntry);
         CoreHookArgs coreArgs = {};
         for (int i = 0; i < kMaxQueuedEventsPerFrame &&
                         PendingCoreHooks.Pop(coreArgs); ++i) {
@@ -620,16 +785,63 @@ namespace detail {
         }
 
         BuffEventArgs buffArgs = {};
+        int buffAddRemaining = 0;
         for (int i = 0; i < kMaxQueuedEventsPerFrame &&
-                        PendingBuffAdds.Pop(buffArgs); ++i) {
+                        PendingBuffAdds.Pop(buffArgs, &buffAddRemaining); ++i) {
+            NightSharpDebug::CrashTrace::RecordExtended(
+                nscrash::TraceTag::BuffQueuePop,
+                buffArgs.BuffTraceHookId,
+                buffArgs.BuffTraceSerial,
+                buffArgs.BuffAddress,
+                buffArgs.Sender.Ptr,
+                buffArgs.Sender.NetworkId,
+                static_cast<std::uint64_t>(i),
+                static_cast<std::uint64_t>(buffAddRemaining),
+                buffArgs.EventBridge,
+                buffArgs.OwnerComponent,
+                (static_cast<std::uint64_t>(
+                     static_cast<std::uint32_t>(buffArgs.Type)) << 32) |
+                    static_cast<std::uint32_t>(buffArgs.Count),
+                buffArgs.BuffName);
             BuffAddHandlers.Fire(buffArgs);
         }
+        int buffRemaining = 0;
         for (int i = 0; i < kMaxQueuedEventsPerFrame &&
-                        PendingBuffRemoves.Pop(buffArgs); ++i) {
+                        PendingBuffRemoves.Pop(buffArgs, &buffRemaining); ++i) {
+            NightSharpDebug::CrashTrace::RecordExtended(
+                nscrash::TraceTag::BuffQueuePop,
+                buffArgs.BuffTraceHookId,
+                buffArgs.BuffTraceSerial,
+                buffArgs.BuffAddress,
+                buffArgs.Sender.Ptr,
+                buffArgs.Sender.NetworkId,
+                static_cast<std::uint64_t>(i),
+                static_cast<std::uint64_t>(buffRemaining),
+                buffArgs.EventBridge,
+                buffArgs.OwnerComponent,
+                (static_cast<std::uint64_t>(
+                     static_cast<std::uint32_t>(buffArgs.Type)) << 32) |
+                    static_cast<std::uint32_t>(buffArgs.Count),
+                buffArgs.BuffName);
             BuffRemoveHandlers.Fire(buffArgs);
         }
         for (int i = 0; i < kMaxQueuedEventsPerFrame &&
-                        PendingBuffUpdates.Pop(buffArgs); ++i) {
+                        PendingBuffUpdates.Pop(buffArgs, &buffRemaining); ++i) {
+            NightSharpDebug::CrashTrace::RecordExtended(
+                nscrash::TraceTag::BuffQueuePop,
+                buffArgs.BuffTraceHookId,
+                buffArgs.BuffTraceSerial,
+                buffArgs.BuffAddress,
+                buffArgs.Sender.Ptr,
+                buffArgs.Sender.NetworkId,
+                static_cast<std::uint64_t>(i),
+                static_cast<std::uint64_t>(buffRemaining),
+                buffArgs.EventBridge,
+                buffArgs.OwnerComponent,
+                (static_cast<std::uint64_t>(
+                     static_cast<std::uint32_t>(buffArgs.Type)) << 32) |
+                    static_cast<std::uint32_t>(buffArgs.Count),
+                buffArgs.BuffName);
             BuffUpdateHandlers.Fire(buffArgs);
         }
 
@@ -761,13 +973,57 @@ namespace detail {
         PendingMissileDeletes.Push(args);
     }
 
+    inline void TraceBuffDecodeBegin(const CoreHookArgs& raw) {
+        NightSharpDebug::CrashTrace::RecordExtended(
+            nscrash::TraceTag::BuffDecodeBegin,
+            static_cast<std::uint64_t>(raw.Id),
+            0,
+            0,
+            0,
+            0,
+            raw.Rcx,
+            0,
+            raw.Rdx,
+            raw.R8,
+            raw.R9,
+            nullptr);
+    }
+
+    inline std::uint64_t TraceDecodedBuff(
+        nscrash::TraceTag tag,
+        const BuffEventArgs& args,
+        std::uint64_t secondary = 0,
+        std::uint64_t extra = 0) {
+        return NightSharpDebug::CrashTrace::RecordExtended(
+            tag,
+            args.BuffTraceHookId,
+            secondary,
+            args.BuffAddress,
+            args.Sender.Ptr,
+            args.Sender.NetworkId,
+            args.EventBridge,
+            args.OwnerComponent,
+            static_cast<std::uint64_t>(args.Count),
+            static_cast<std::uint64_t>(
+                static_cast<std::uint32_t>(args.Type)),
+            extra,
+            args.BuffName);
+    }
+
     inline void OnRawBuffAdd(const CoreHookArgs& raw) {
         if (!CanDeliverRawEvents()) {
             return;
         }
-        const BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        TraceBuffDecodeBegin(raw);
+        BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        args.BuffTraceHookId = static_cast<std::uint32_t>(raw.Id);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffDecodeComplete, args);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyBegin, args);
         CoreBuffs::ApplyBuffAddEvent(args.Sender.Ptr, args.BuffName, args.Count, args.BuffAddress);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyComplete, args);
         if (BuffAddHandlers.HasHandlers()) {
+            args.BuffTraceSerial =
+                TraceDecodedBuff(nscrash::TraceTag::BuffQueueEnqueue, args);
             PendingBuffAdds.Push(args);
         }
     }
@@ -776,9 +1032,16 @@ namespace detail {
         if (!CanDeliverRawEvents()) {
             return;
         }
-        const BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        TraceBuffDecodeBegin(raw);
+        BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        args.BuffTraceHookId = static_cast<std::uint32_t>(raw.Id);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffDecodeComplete, args);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyBegin, args);
         CoreBuffs::ApplyBuffRemoveEvent(args.Sender.Ptr, args.BuffName, args.BuffAddress);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyComplete, args);
         if (BuffRemoveHandlers.HasHandlers()) {
+            args.BuffTraceSerial =
+                TraceDecodedBuff(nscrash::TraceTag::BuffQueueEnqueue, args);
             PendingBuffRemoves.Push(args);
         }
     }
@@ -787,9 +1050,16 @@ namespace detail {
         if (!CanDeliverRawEvents()) {
             return;
         }
-        const BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        TraceBuffDecodeBegin(raw);
+        BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
+        args.BuffTraceHookId = static_cast<std::uint32_t>(raw.Id);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffDecodeComplete, args);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyBegin, args);
         CoreBuffs::ApplyBuffUpdateEvent(args.Sender.Ptr, args.BuffName, args.Count, args.BuffAddress);
+        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyComplete, args);
         if (BuffUpdateHandlers.HasHandlers()) {
+            args.BuffTraceSerial =
+                TraceDecodedBuff(nscrash::TraceTag::BuffQueueEnqueue, args);
             PendingBuffUpdates.Push(args);
         }
     }

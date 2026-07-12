@@ -270,7 +270,7 @@ inline bool CastSpell(uintptr_t owner, std::int32_t slot) {
 }
 
 inline bool CastSpell(uintptr_t owner, std::int32_t slot, const Vec3& position) {
-    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotTrinket) {
         return false;
     }
 

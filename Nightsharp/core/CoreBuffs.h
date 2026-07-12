@@ -68,6 +68,13 @@ namespace CoreBuffs {
             if (stacks > 0) return stacks;
             return Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacksAlt);
         }
+        int GetCounterCurrent() const {
+            return Globals::Read<int>(address + Offset::BuffDataLayout::BuffCounterCurrent);
+        }
+
+        int GetCounterMax() const {
+            return Globals::Read<int>(address + Offset::BuffDataLayout::BuffCounterMax);
+        }
 
         float GetStartTime() const {
             return Globals::Read<float>(address + Offset::BuffDataLayout::BuffStartTime);

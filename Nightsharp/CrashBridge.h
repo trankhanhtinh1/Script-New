@@ -54,6 +54,66 @@ inline void EnqueueLog(const char* text, std::size_t length) {
     g_client.EnqueueLog(text, length);
 }
 
+inline void Trace(
+    nscrash::TraceTag tag,
+    std::uint64_t programCounter,
+    std::uint64_t arg0,
+    std::uint64_t arg1) {
+    g_client.Trace(tag, programCounter, arg0, arg1);
+}
+
+inline std::uint64_t TraceDetailed(
+    nscrash::TraceTag tag,
+    std::uint64_t programCounter,
+    std::uint64_t arg0,
+    std::uint64_t arg1,
+    std::uint64_t arg2,
+    std::uint64_t arg3,
+    std::uint64_t arg4,
+    std::uint64_t arg5,
+    const char* text) {
+    return g_client.TraceDetailed(
+        tag,
+        programCounter,
+        arg0,
+        arg1,
+        arg2,
+        arg3,
+        arg4,
+        arg5,
+        text);
+}
+
+inline std::uint64_t TraceExtended(
+    nscrash::TraceTag tag,
+    std::uint64_t programCounter,
+    std::uint64_t arg0,
+    std::uint64_t arg1,
+    std::uint64_t arg2,
+    std::uint64_t arg3,
+    std::uint64_t arg4,
+    std::uint64_t arg5,
+    std::uint64_t arg6,
+    std::uint64_t arg7,
+    std::uint64_t arg8,
+    std::uint64_t arg9,
+    const char* text) {
+    return g_client.TraceExtended(
+        tag,
+        programCounter,
+        arg0,
+        arg1,
+        arg2,
+        arg3,
+        arg4,
+        arg5,
+        arg6,
+        arg7,
+        arg8,
+        arg9,
+        text);
+}
+
 inline void ObserveFirstChance(EXCEPTION_POINTERS* exceptionPointers) {
     g_client.ObserveFirstChance(exceptionPointers);
 }

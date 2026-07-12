@@ -112,6 +112,8 @@ struct ObjectEventArgs {
     Vec3 CastEndPosition = {};
     char SpellName[96] = {};
     char MissileName[96] = {};
+    uint32_t LifecycleTraceAction = 0;
+    uint64_t LifecycleTraceSerial = 0;
 };
 
 struct BuffEventArgs {
@@ -125,6 +127,8 @@ struct BuffEventArgs {
     float StartTime = 0.0f;
     float EndTime = 0.0f;
     char BuffName[96] = {};
+    uint32_t BuffTraceHookId = 0;
+    uint64_t BuffTraceSerial = 0;
 };
 
 struct NewPathEventArgs {
@@ -574,6 +578,10 @@ namespace detail {
     }
 
     inline bool LooksLikeObject(uintptr_t object) {
+        if (!IsValidAddress(object)) {
+            return false;
+        }
+
         const ObjectInfo info = ReadObject(object);
         if (!info.IsValid() || info.NetworkId == 0 || info.NetworkId == 0xFFFFFFFFu) {
             return false;
@@ -727,9 +735,10 @@ namespace detail {
             raw.R8,
             raw.R9
         };
-        for (const uintptr_t arg : args) {
-            if (LooksLikeObject(arg)) {
-                return arg;
+        const int argCount = raw.Id == Hooks::OnBuffUpdate ? 3 : 4;
+        for (int i = 0; i < argCount; ++i) {
+            if (LooksLikeObject(args[i])) {
+                return args[i];
             }
         }
         return 0;
@@ -742,9 +751,10 @@ namespace detail {
             raw.R8,
             raw.R9
         };
-        for (const uintptr_t arg : args) {
-            if (!LooksLikeObject(arg) && LooksLikeBuff(arg)) {
-                return arg;
+        const int argCount = raw.Id == Hooks::OnBuffUpdate ? 3 : 4;
+        for (int i = 0; i < argCount; ++i) {
+            if (!LooksLikeObject(args[i]) && LooksLikeBuff(args[i])) {
+                return args[i];
             }
         }
         return 0;

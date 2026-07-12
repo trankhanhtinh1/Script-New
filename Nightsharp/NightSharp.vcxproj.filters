@@ -287,6 +287,12 @@
     <ClInclude Include="Core\CoreItem.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="CrashTrace.h">
+      <Filter>Root</Filter>
+    </ClInclude>
+    <ClInclude Include="CrashBridge.h">
+      <Filter>Root</Filter>
+    </ClInclude>
     <ClInclude Include="Core\CoreMap.h">
       <Filter>Core</Filter>
     </ClInclude>
