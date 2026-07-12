@@ -25,6 +25,7 @@
 #include "../../core/CoreObjectManager.h"
 #include "../../DebugLog.h"
 #include "../../CrashReporter.h"
+#include "../../CrashTrace.h"
 
 #include <cstdint>
 #include <cstring>
@@ -83,6 +84,12 @@ struct StructureInfo {
 // __except filter: dump the first few faults with a full minidump, then log-only
 // so a persistent fault cannot spam gigabytes of dumps.
 inline LONG StructureProbeFilter(EXCEPTION_POINTERS* ep) {
+    NightSharpDebug::CrashTrace::Record(
+        nscrash::TraceTag::StructureScan,
+        ep && ep->ExceptionRecord
+            ? reinterpret_cast<std::uint64_t>(ep->ExceptionRecord->ExceptionAddress)
+            : 0,
+        ep && ep->ExceptionRecord ? ep->ExceptionRecord->ExceptionCode : 0);
     static volatile LONG s_faultCount = 0;
     const LONG n = InterlockedIncrement(&s_faultCount);
     if (n == 1) {
@@ -120,6 +127,11 @@ inline bool ProbeStructureGuarded(uintptr_t address, StructureInfo& out) {
         if (out.kind == StructureKind::None) {
             return true;
         }
+
+        NightSharpDebug::CrashTrace::Record(
+            nscrash::TraceTag::StructureScan,
+            address,
+            static_cast<std::uint64_t>(out.kind));
 
         // Confirmed real structure -> now it is safe to read its identity/name.
         ::Core::Objects::ReadName(address, out.name, static_cast<int>(sizeof(out.name)));

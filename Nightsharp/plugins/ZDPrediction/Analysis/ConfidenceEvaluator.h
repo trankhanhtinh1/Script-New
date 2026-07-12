@@ -34,7 +34,7 @@ public:
         double score = 0.34;
         score += 0.20 * std::clamp(movement.directionStability, 0.0, 1.0);
         score += 0.10 * std::clamp(movement.speedStability, 0.0, 1.0);
-        score += 0.04 * static_cast<double>(std::min(4, movement.repeatedDestinationCount));
+        score += 0.04 * std::min(4.0, movement.repeatedDestinationCount);
         score -= 0.025 * std::min(4.0, movement.pathChangesPerSecond);
         score -= 0.035 * std::min(3.0, movement.directionReversalsPerSecond);
 

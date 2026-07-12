@@ -34,6 +34,7 @@
 #include "ObjectManager.h"
 #include "StructureScan.h"
 #include "../Events/Events.h" // kept for include-order compatibility (SDK.h)
+#include "../../CrashTrace.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -550,6 +551,10 @@ namespace detail {
         const int myTeam = PlayerTeam();
         static uintptr_t entries[kStructScanMax]; // guarded by g_mutex
         const int count = ::Core::ObjectManager::EnumerateAll(entries, kStructScanMax);
+        NightSharpDebug::CrashTrace::Record(
+            nscrash::TraceTag::ObjectEnumeration,
+            static_cast<std::uint64_t>(count),
+            kStructScanMax);
 
         StructureInfo info;
         for (int i = 0; i < count; ++i) {

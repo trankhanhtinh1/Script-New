@@ -40,6 +40,7 @@ struct MovementSnapshot {
     double sampleSpanSeconds = 0.0;
     double pathChangesPerSecond = 0.0;
     double directionReversalsPerSecond = 0.0;
+    double displacementEfficiency = 1.0;
     double repeatedDestinationCount = 0.0;
     double windingUpRemainingSeconds = 0.0;
     double specialCastRemainingSeconds = 0.0;

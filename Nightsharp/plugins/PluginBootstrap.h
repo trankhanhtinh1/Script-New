@@ -10,6 +10,7 @@
 
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
+#include "Core/TargetSelectorImpulse/TargetSelectorImpulsePlugin.h"
 #include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
@@ -113,7 +114,11 @@ namespace PluginBootstrap {
                                     nullptr,
                                     &::SDK::SdkWrappers::ResumeSdkOrbwalkerRuntime,
                                     &::SDK::SdkWrappers::SuspendSdkOrbwalkerRuntime);
-        PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        const int targetSelectorRegistryIdx = PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+        PluginRegistry::BindRuntime(targetSelectorRegistryIdx,
+                                    nullptr,
+                                    &::SDK::SdkWrappers::ResumeSdkTargetSelectorRuntime,
+                                    &::SDK::SdkWrappers::SuspendSdkTargetSelectorRuntime);
         const int predictionRegistryIdx = PluginRegistry::Register("Prediction", "prediction", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
         PluginRegistry::BindRuntime(predictionRegistryIdx,
                                     nullptr,
@@ -134,6 +139,7 @@ namespace PluginBootstrap {
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
         PluginManager::Get().Register<OrbwalkerKuroPlugin>();
+        PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
         PluginManager::Get().Register<PlayerBuffDebugPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();

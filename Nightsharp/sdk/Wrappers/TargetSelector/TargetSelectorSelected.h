@@ -28,7 +28,25 @@ public:
         focus_ = menu_->Get<MenuBool>("focus")->Value;
         force_ = menu_->Get<MenuBool>("forceFocus")->Value;
 
+        Resume();
+    }
+
+    ~TargetSelectorSelected() {
+        Suspend();
+        if (Ptr() == this) Ptr() = nullptr;
+    }
+
+    void Suspend() {
+        if (suspended_) return;
+        Game::OnWndProc -= &OnWndProcHandler;
+        suspended_ = true;
+    }
+
+    void Resume() {
+        if (!suspended_) return;
+        Ptr() = this;
         Game::OnWndProc += &OnWndProcHandler;
+        suspended_ = false;
     }
 
     bool Focus() const { return focus_; }
@@ -84,6 +102,7 @@ private:
     bool focus_ = true;
     bool force_ = false;
     float clickBuffer_ = 100.0f;
+    bool suspended_ = true;
 };
 
 } // namespace SDK

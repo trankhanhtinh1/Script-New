@@ -998,6 +998,9 @@ public:
         const uintptr_t a = Address();
         return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::MagicalShield) : 0.0f;
     }
+    float HealthRegenRate() const {
+        return IsValid() ? ::CoreAIHeroClient::HealthRegenRate(Address()) : 0.0f;
+    }
 };
 
 class AIBaseClient : public AttackableUnit {

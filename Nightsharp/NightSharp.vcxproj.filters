@@ -119,6 +119,9 @@
     <ClInclude Include="DebugLog.h">
       <Filter>Root</Filter>
     </ClInclude>
+    <ClInclude Include="CrashTrace.h">
+      <Filter>Root</Filter>
+    </ClInclude>
     <ClInclude Include="CrashBridge.h">
       <Filter>Root</Filter>
     </ClInclude>

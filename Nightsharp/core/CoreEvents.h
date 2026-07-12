@@ -112,6 +112,8 @@ struct ObjectEventArgs {
     Vec3 CastEndPosition = {};
     char SpellName[96] = {};
     char MissileName[96] = {};
+    uint32_t LifecycleTraceAction = 0;
+    uint64_t LifecycleTraceSerial = 0;
 };
 
 struct BuffEventArgs {
@@ -125,6 +127,8 @@ struct BuffEventArgs {
     float StartTime = 0.0f;
     float EndTime = 0.0f;
     char BuffName[96] = {};
+    uint32_t BuffTraceHookId = 0;
+    uint64_t BuffTraceSerial = 0;
 };
 
 struct NewPathEventArgs {

@@ -43,7 +43,25 @@ public:
         menu->Add(drawingMenu);
         drawingMenu_ = drawingMenu;
 
+        Resume();
+    }
+
+    ~TargetSelectorDrawing() {
+        Suspend();
+        if (Ptr() == this) Ptr() = nullptr;
+    }
+
+    void Suspend() {
+        if (suspended_) return;
+        Drawing::OnDraw -= &OnDrawHandler;
+        suspended_ = true;
+    }
+
+    void Resume() {
+        if (!suspended_) return;
+        Ptr() = this;
         Drawing::OnDraw += &OnDrawHandler;
+        suspended_ = false;
     }
 
 private:
@@ -124,6 +142,7 @@ private:
     TargetSelectorMode* mode_ = nullptr;
     std::function<AIHeroClient()> getTarget_ = nullptr;
     Menu* drawingMenu_ = nullptr;
+    bool suspended_ = true;
 };
 
 } // namespace SDK

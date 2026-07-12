@@ -8,6 +8,7 @@
 #include "Vector.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
+#include "../CrashTrace.h"
 
 #include <chrono>
 #include <cmath>
@@ -584,6 +585,10 @@ namespace CoreCastSpell {
             }
 
             __try {
+                NightSharpDebug::CrashTrace::Record(
+                    nscrash::TraceTag::SpellCast,
+                    static_cast<std::uint64_t>(slot),
+                    static_cast<std::uint64_t>(kind));
                 g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 

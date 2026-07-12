@@ -531,15 +531,34 @@ inline InputDebugState GetInputDebugState() {
     return g_inputDebug;
 }
 
-inline bool Print(const char* text, bool /*triggerEvent*/ = true, std::uint32_t /*flags*/ = 0) {
+inline bool Print(const char* text, bool /*triggerEvent*/ = true, std::uint32_t flags = 0) {
     if (!text) {
         text = "";
     }
 
     NightSharpDebug::Logf("[Game.Print] %s", text);
+
+    auto& ctx = CoreRuntime::g_ctx;
+    if (ctx.moduleBase) {
+        // sub_B62E90 dispatcher: pre-game queues the line, in-game tail-calls
+        // sub_B62690 to render it. 'this' is the chat container pointer.
+        const uintptr_t container = Globals::Read<uintptr_t>(
+            ctx.moduleBase + Offset::GameRuntime::ChatMessageInstance);
+        if (Globals::IsValidPtr(container)) {
+            using DisplayChatFn = void(__fastcall*)(uintptr_t, const char*, int);
+            const auto fn = reinterpret_cast<DisplayChatFn>(
+                ctx.moduleBase + Offset::GameRuntime::PrintChat);
+            __try {
+                fn(container, text, static_cast<int>(flags));
+                return true;
+            }
+            __except (1) {}
+        }
+    }
+
     detail::LogOnce(
         "print-native-missing",
-        "[CoreGame] ChatViewController.DisplayChat native offset is not verified; Game.Print is routed to NightSharpDebug.");
+        "[CoreGame] ChatViewController.DisplayChat container/offset unavailable; Game.Print is routed to NightSharpDebug.");
     return false;
 }
 
