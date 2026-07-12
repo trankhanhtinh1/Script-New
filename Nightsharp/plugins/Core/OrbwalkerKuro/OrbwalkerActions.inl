@@ -225,7 +225,7 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
 inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     ExpirePendingAttack();
     if (!context_.attackEnabled ||
-        !OrbwalkingDetail::IsValidAttackTarget(target, Utils::AutoAttack::GetRealAutoAttackRange(target))) {
+        !OrbwalkingDetail::IsValidAttackTarget(target, GetRealAutoAttackRange(target))) {
         return false;
     }
     if (context_.pendingAttack) {
@@ -245,7 +245,7 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     const AttackableUnit attackTarget = beforeArgs.Target;
     if (!OrbwalkingDetail::IsValidAttackTarget(
             attackTarget,
-            Utils::AutoAttack::GetRealAutoAttackRange(attackTarget))) {
+            GetRealAutoAttackRange(attackTarget))) {
         return false;
     }
 

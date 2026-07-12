@@ -152,6 +152,36 @@ private:
     OrbwalkerRuntimeContext context_ = {};
 };
 
+inline float GetRealAutoAttackRange(const AIBaseClient& sender, const AttackableUnit& target = AttackableUnit()) {
+    if (!sender.IsValid()) {
+        return 0.0f;
+    }
+
+    float result = sender.AttackRange();
+    if (target.IsValid() && !target.IsDead()) {
+        const AIBaseClient targetBase(target.Handle());
+        if (sender.CharacterName() == "Caitlyn" &&
+            (targetBase.HasBuff("CaitlynWSnare") || targetBase.HasBuff("CaitlynEMissile"))) {
+            result = 1300.0f;
+        } else if (sender.CharacterName() == "Aphelios" &&
+                   targetBase.HasBuff("aphelioscalibrumbonusrangedebuff") &&
+                   sender.HasBuff("aphelioscalibrumbonusrangebuff")) {
+            result = 1800.0f;
+        }
+        result += target.BoundingRadius();
+    }
+
+    return result;
+}
+
+inline float GetRealAutoAttackRange(const AttackableUnit& target) {
+    const auto player = GameObjects::Player();
+    if (target.Compare(player)) {
+        return GetRealAutoAttackRange(player, AttackableUnit());
+    }
+    return GetRealAutoAttackRange(player, target);
+}
+
 } // namespace OrbwalkerKuro
 
 #include "OrbwalkerLifecycle.inl"

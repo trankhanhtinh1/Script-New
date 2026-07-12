@@ -398,7 +398,7 @@ inline void OrbwalkerBase::OnDraw() {
     if (menu_.DrawAARange()) {
         Drawing::DrawCircle(
             player.Position(),
-            Utils::AutoAttack::GetRealAutoAttackRange(player),
+            Utils::AutoAttack::GetRealAutoAttackRange(player) + player.BoundingRadius(),
             0xFF00BFFFu,
             1.5f,
             64);

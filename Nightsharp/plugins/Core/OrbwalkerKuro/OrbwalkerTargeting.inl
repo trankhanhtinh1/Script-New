@@ -121,7 +121,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     std::vector<AIMinionClient> cloneMinions;
 
     auto isInAttackRange = [&player](const AIMinionClient& minion) {
-        return Utils::AutoAttack::GetRealAutoAttackRange(player, minion);
+        return GetRealAutoAttackRange(player, minion);
     };
 
     if (includeLaneAndJungleAndWard) {
@@ -266,7 +266,7 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
     if (auto* selector = TargetSelector::Instance()) {
         const auto hero = selector->GetTarget(-1.0f, DamageType::True);
         const AttackableUnit target(hero.Handle());
-        if (IsValidAttackTarget(player, target, Utils::AutoAttack::GetRealAutoAttackRange(player, target))) {
+        if (IsValidAttackTarget(player, target, GetRealAutoAttackRange(player, target))) {
             return target;
         }
     }
@@ -275,7 +275,7 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
     float bestDistance = FLT_MAX;
     for (const auto& hero : GameObjects::EnemyHeroes()) {
         const AttackableUnit target(hero.Handle());
-        if (!IsValidAttackTarget(player, target, Utils::AutoAttack::GetRealAutoAttackRange(player, target))) {
+        if (!IsValidAttackTarget(player, target, GetRealAutoAttackRange(player, target))) {
             continue;
         }
 
@@ -298,7 +298,7 @@ inline bool HasEnemyHeroNearAutoAttackRange(const AIHeroClient& player) {
         if (IsValidAttackTarget(
                 player,
                 target,
-                Utils::AutoAttack::GetRealAutoAttackRange(player, target) * 2.0f)) {
+                GetRealAutoAttackRange(player, target) * 2.0f)) {
             return true;
         }
     }
@@ -311,7 +311,7 @@ inline AttackableUnit FirstValidMinionTarget(const AIHeroClient& player,
         if (IsValidMinionTarget(
                 player,
                 minion,
-                Utils::AutoAttack::GetRealAutoAttackRange(player, minion))) {
+                GetRealAutoAttackRange(player, minion))) {
             return AttackableUnit(minion.Handle());
         }
     }
@@ -335,7 +335,7 @@ inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
                 IsValidAttackTarget(
                     player,
                     minion,
-                    Utils::AutoAttack::GetRealAutoAttackRange(player, minion))) {
+                    GetRealAutoAttackRange(player, minion))) {
                 return AttackableUnit(minion.Handle());
             }
         }
@@ -366,7 +366,7 @@ inline bool IsSoonKillableMinion(const AIHeroClient& player,
     if (!IsValidMinionTarget(
             player,
             minion,
-            Utils::AutoAttack::GetRealAutoAttackRange(player, minion))) {
+            GetRealAutoAttackRange(player, minion))) {
         return false;
     }
 
@@ -484,7 +484,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             OrbwalkingDetail::IsValidAttackTarget(
                 player,
                 context_.forceTarget,
-                Utils::AutoAttack::GetRealAutoAttackRange(player, context_.forceTarget))) {
+                GetRealAutoAttackRange(player, context_.forceTarget))) {
             return cacheTarget(context_.forceTarget);
         }
 
@@ -517,7 +517,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         OrbwalkingDetail::IsValidAttackTarget(
             player,
             context_.forceTarget,
-            Utils::AutoAttack::GetRealAutoAttackRange(player, context_.forceTarget))) {
+            GetRealAutoAttackRange(player, context_.forceTarget))) {
         return cacheTarget(context_.forceTarget);
     }
 
@@ -528,7 +528,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             if (OrbwalkingDetail::IsValidAttackTarget(
                     player,
                     target,
-                    Utils::AutoAttack::GetRealAutoAttackRange(player, target))) {
+                    GetRealAutoAttackRange(player, target))) {
                 return cacheTarget(target);
             }
         }
@@ -537,7 +537,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             if (OrbwalkingDetail::IsValidAttackTarget(
                     player,
                     target,
-                    Utils::AutoAttack::GetRealAutoAttackRange(player, target))) {
+                    GetRealAutoAttackRange(player, target))) {
                 return cacheTarget(target);
             }
         }
@@ -546,7 +546,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         if (OrbwalkingDetail::IsValidAttackTarget(
                 player,
                 nexusTarget,
-                Utils::AutoAttack::GetRealAutoAttackRange(player, nexusTarget))) {
+                GetRealAutoAttackRange(player, nexusTarget))) {
             return cacheTarget(nexusTarget);
         }
     }
@@ -574,7 +574,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             if (OrbwalkingDetail::IsValidMinionTarget(
                     player,
                     minion,
-                    Utils::AutoAttack::GetRealAutoAttackRange(player, minion))) {
+                    GetRealAutoAttackRange(player, minion))) {
                 return cacheTarget(AttackableUnit(minion.Handle()));
             }
         }
@@ -637,7 +637,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             if (!OrbwalkingDetail::IsValidMinionTarget(
                     player,
                     minion,
-                    Utils::AutoAttack::GetRealAutoAttackRange(player, minion)) ||
+                    GetRealAutoAttackRange(player, minion)) ||
                 minion.Team() == GameObjectTeam::Neutral) {
                 return false;
             }

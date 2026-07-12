@@ -55,7 +55,7 @@ public:
             return 0.0f;
         }
 
-        float result = sender.AttackRange() + sender.BoundingRadius();
+        float result = sender.AttackRange();
         if (target.IsValid() && !target.IsDead()) {
             const AIBaseClient targetBase(target.Handle());
             if (sender.CharacterName() == "Caitlyn" &&

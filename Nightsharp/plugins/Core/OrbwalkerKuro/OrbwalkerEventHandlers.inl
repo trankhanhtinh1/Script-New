@@ -411,7 +411,7 @@ inline void OrbwalkerBase::OnDraw() {
     if (menu_.DrawAARange()) {
         Drawing::DrawCircle(
             player.Position(),
-            Utils::AutoAttack::GetRealAutoAttackRange(player),
+            GetRealAutoAttackRange(player) + player.BoundingRadius(),
             0xFF00BFFFu,
             1.5f,
             64);
@@ -433,7 +433,7 @@ inline void OrbwalkerBase::OnDraw() {
             }
             Drawing::DrawCircle(
                 enemy.Position(),
-                Utils::AutoAttack::GetRealAutoAttackRange(enemy, player),
+                GetRealAutoAttackRange(enemy, player),
                 0xFF00BFFFu,
                 1.5f,
                 64);
@@ -446,7 +446,7 @@ inline void OrbwalkerBase::OnDraw() {
         return;
     }
 
-    const float range = Utils::AutoAttack::GetRealAutoAttackRange(player) * 2.0f;
+    const float range = GetRealAutoAttackRange(player) * 2.0f;
     const float rangeSqr = range * range;
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (!OrbwalkingDetail::IsValidMinionTarget(minion) ||
