@@ -29,6 +29,33 @@ enum class CrashKind : std::uint32_t {
     Unhandled = 2,
 };
 
+enum class TraceTag : std::uint16_t {
+    None = 0,
+    BuffApplyBegin,
+    BuffApplyComplete,
+    BuffDecodeBegin,
+    BuffDecodeComplete,
+    BuffHandlerEnter,
+    BuffHandlerExit,
+    BuffQueueEnqueue,
+    BuffQueuePop,
+    CoreHookEntry,
+    D3DPresent,
+    D3DUpdate,
+    IssueOrder,
+    LifecycleCallbackEnter,
+    LifecycleCallbackExit,
+    LifecycleEnqueue,
+    LifecycleQueuePop,
+    ObjectEnumeration,
+    OverlayRun,
+    OverlayWorkerEnter,
+    PluginCallback,
+    SdkEventQueue,
+    SpellCast,
+    StructureScan,
+};
+
 enum class CaptureSource : std::uint32_t {
     None = 0,
     Bridge = 1,

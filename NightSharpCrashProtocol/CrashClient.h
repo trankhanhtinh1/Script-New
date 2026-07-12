@@ -24,6 +24,35 @@ public:
     void PublishPhase(const char* phase);
     void PublishStage(const char* stage);
     void EnqueueLog(const char* text, std::size_t length);
+    void Trace(
+        TraceTag tag,
+        std::uint64_t programCounter,
+        std::uint64_t arg0,
+        std::uint64_t arg1);
+    std::uint64_t TraceDetailed(
+        TraceTag tag,
+        std::uint64_t programCounter,
+        std::uint64_t arg0,
+        std::uint64_t arg1,
+        std::uint64_t arg2,
+        std::uint64_t arg3,
+        std::uint64_t arg4,
+        std::uint64_t arg5,
+        const char* text);
+    std::uint64_t TraceExtended(
+        TraceTag tag,
+        std::uint64_t programCounter,
+        std::uint64_t arg0,
+        std::uint64_t arg1,
+        std::uint64_t arg2,
+        std::uint64_t arg3,
+        std::uint64_t arg4,
+        std::uint64_t arg5,
+        std::uint64_t arg6,
+        std::uint64_t arg7,
+        std::uint64_t arg8,
+        std::uint64_t arg9,
+        const char* text);
     void ObserveFirstChance(EXCEPTION_POINTERS* exceptionPointers);
     bool CaptureException(
         CrashKind kind,
