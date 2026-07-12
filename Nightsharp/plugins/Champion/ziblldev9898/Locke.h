@@ -335,7 +335,7 @@ static void OnDraw();
 static void OnUnload();
 
 static void BuildMenu() {
-    MenuRoot = new Menu("champion.ziblldev9898", "ziblldev9898 - Locke", true);
+    MenuRoot = new Menu("champion.ziblldev9898", "Locke", true);
 
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
     ComboMenu->Add(new MenuBool("useQ", "Use Q"));

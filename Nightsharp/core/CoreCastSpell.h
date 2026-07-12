@@ -8,6 +8,7 @@
 #include "Vector.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
+#include "../CrashTrace.h"
 
 #include <chrono>
 #include <cmath>
@@ -21,6 +22,7 @@ namespace CoreCastSpell {
     inline constexpr std::uint8_t SlotR = 3;
     inline constexpr std::uint8_t SlotSummonerD = 4;
     inline constexpr std::uint8_t SlotSummonerF = 5;
+    inline constexpr std::uint8_t SlotTrinket = 12;
 
     enum class CastKind : std::uint8_t {
         Position,
@@ -357,7 +359,7 @@ namespace CoreCastSpell {
         };
 
         inline bool IsSupportedSlot(std::uint8_t slot) {
-            return slot <= SlotSummonerF;
+            return slot <= SlotTrinket;
         }
 
         inline int NowMs() {
@@ -371,8 +373,8 @@ namespace CoreCastSpell {
         // if the same slot fired within kCastThrottleMs, otherwise records `now` and
         // returns true. Prevents cast spam when a combo key (space) is held down.
         inline bool ThrottleReserve(std::uint8_t slot) {
-            static int lastTick[8] = {};
-            const int idx = slot < 8 ? slot : 7;
+            static int lastTick[13] = {};
+            const int idx = slot < 13 ? slot : 12;
             const int now = NowMs();
             if (lastTick[idx] != 0 && now - lastTick[idx] < kCastThrottleMs) {
                 return false;
@@ -583,6 +585,10 @@ namespace CoreCastSpell {
             }
 
             __try {
+                NightSharpDebug::CrashTrace::Record(
+                    nscrash::TraceTag::SpellCast,
+                    static_cast<std::uint64_t>(slot),
+                    static_cast<std::uint64_t>(kind));
                 g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
@@ -803,6 +809,67 @@ namespace CoreCastSpell {
             return true;
         }
 
+        inline bool DispatchItemPosition(std::uint8_t slot, const Vec3& position) {
+            if (!ResolveCommon(CastKind::Position, slot)) {
+                return false;
+            }
+
+            if (!ThrottleReserve(slot)) {
+                Fail(CastFailure::Throttled);
+                return false;
+            }
+
+            if (!position.IsValid()) {
+                Fail(CastFailure::InvalidPosition);
+                return false;
+            }
+            g_lastTrace.endPosition = position;
+            g_lastTrace.castSpellSafe =
+                CoreRuntime::ResolveRva(Offset::ControlRuntime::HudSpellHandler);
+            if (!Globals::IsValidPtr(g_lastTrace.castSpellSafe)) {
+                Fail(CastFailure::MissingNativeFunction);
+                return false;
+            }
+
+            bool nativeException = false;
+            bool bypassTouched = false;
+            ScopedVirtualCursor virtualCursor;
+            if (!virtualCursor.Apply(position)) {
+                return false;
+            }
+
+            __try {
+                g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
+                bypassTouched = true;
+                spoof_call(
+                    reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
+                    reinterpret_cast<FnHudSpellHandler>(g_lastTrace.castSpellSafe),
+                    g_lastTrace.castContext,
+                    static_cast<std::int64_t>(slot),
+                    kHudModeSmartCast,
+                    kHudKeyPress);
+                g_lastTrace.canCastAccepted = true;
+                g_lastTrace.nativeResult = 1;
+            }
+            __except (1) {
+                nativeException = true;
+            }
+
+            ClearBypassFlag(bypassTouched);
+            virtualCursor.Restore();
+
+            if (nativeException) {
+                Fail(CastFailure::NativeException);
+                return false;
+            }
+
+            g_lastTrace.failure = CastFailure::None;
+            g_lastTrace.success = true;
+            CoreValidation::MarkCastResult(true);
+            return true;
+        }
+
+
         inline bool DispatchCharge(CastKind kind,
             std::uint8_t slot,
             const Vec3& position,
@@ -893,7 +960,9 @@ namespace CoreCastSpell {
     // Position casts use the native HUD cursor selected by CanCastCheck. No
     // SpellInput fields are modified.
     inline bool CastPositionSpell(std::uint8_t slot, const Vec3& position) {
-        return detail::CastValidated(CastKind::Position, slot, position, 0);
+        return slot > SlotSummonerF
+        ? detail::DispatchItemPosition(slot, position)
+        : detail::CastValidated(CastKind::Position, slot, position, 0);
     }
 
     inline bool CastVectorSpell(std::uint8_t slot,

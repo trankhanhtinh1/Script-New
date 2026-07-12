@@ -1218,6 +1218,20 @@ inline bool SetPrediction(const std::string& name) {
     return true;
 }
 
+inline bool RemovePrediction(const std::string& name) {
+    Initialize();
+    if (name == detail::SDKPredictionName) return false;
+    const auto it = detail::Implementations.find(name);
+    if (it == detail::Implementations.end()) return false;
+    IPrediction* removed = it->second;
+    detail::Implementations.erase(it);
+    if (detail::Implementation == removed) {
+        detail::Implementation = &detail::DefaultPrediction;
+        detail::SelectedPredictionName = detail::SDKPredictionName;
+    }
+    return true;
+}
+
 inline IPrediction* GetPrediction(const std::string& name) {
     Initialize();
     const auto it = detail::Implementations.find(name);
@@ -1241,6 +1255,19 @@ inline IPrediction* CurrentPrediction() {
 inline const std::string& CurrentPredictionName() {
     Initialize();
     return detail::SelectedPredictionName;
+}
+
+inline bool SuspendSdkPredictionRuntime(void*) {
+    Initialize();
+    if (detail::Implementation == &detail::DefaultPrediction) {
+        detail::Implementation = nullptr;
+        detail::SelectedPredictionName.clear();
+    }
+    return true;
+}
+
+inline bool ResumeSdkPredictionRuntime(void*) {
+    return SetPrediction(detail::SDKPredictionName);
 }
 
 inline PredictionOutput GetPrediction(PredictionInput input,

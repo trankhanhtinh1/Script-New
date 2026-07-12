@@ -56,4 +56,23 @@ inline bool SuspendSdkOrbwalkerRuntime(void*) {
     return false;
 }
 
+inline bool ResumeSdkTargetSelectorRuntime(void*) {
+    if (TargetSelector::CurrentTargetSelectorName() != "SDK") {
+        return false;
+    }
+    if (ITargetSelector* implementation = TargetSelector::GetTargetSelector("SDK")) {
+        implementation->Resume();
+        return true;
+    }
+    return false;
+}
+
+inline bool SuspendSdkTargetSelectorRuntime(void*) {
+    if (ITargetSelector* implementation = TargetSelector::GetTargetSelector("SDK")) {
+        implementation->Suspend();
+        return true;
+    }
+    return false;
+}
+
 } // namespace SDK::SdkWrappers

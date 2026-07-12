@@ -1,68 +1,66 @@
 #pragma once
 
-#include "TargetSelectorDrawing.h"
-#include "TargetSelectorHumanizer.h"
-#include "TargetSelectorMode.h"
-#include "TargetSelectorSelected.h"
+#include "ITargetSelector.h"
+#include "TargetSelectorRegistry.h"
+#include "TargetSelectorSdk.h"
 #include "../Spells/Spell.h"
 
-#include "../../Extensions/Unit.h"
-#include "../../UI/UI.h"
-#include "../../Utils/AutoAttack.h"
-#include "../../Utils/Invulnerable.h"
-
 #include <algorithm>
-#include <cfloat>
-#include <cmath>
-#include <fstream>
+#include <string>
 #include <vector>
-
-#ifndef NIGHTSHARP_ORBWALKER_LOGGING
-#define NIGHTSHARP_ORBWALKER_LOGGING 0
-#endif
 
 namespace SDK {
 
 class TargetSelector {
 public:
-    explicit TargetSelector(Menu* parentMenu) {
+    explicit TargetSelector(Menu* parentMenu)
+        : sdkImplementation_(parentMenu)
+    {
         Instance_() = this;
-        parentMenu_ = parentMenu;
-        internalMenu_ = new Menu("targetselector", "Target Selector");
-        parentMenu_->Add(internalMenu_);
-
-        selected_ = new TargetSelectorSelected(internalMenu_);
-        humanizer_ = new TargetSelectorHumanizer(internalMenu_);
-        mode_ = new TargetSelectorMode(internalMenu_);
-        drawing_ = new TargetSelectorDrawing(internalMenu_, selected_, mode_, [this]() { return this->GetTarget(2000.0f); });
+        AddTargetSelector("SDK", &sdkImplementation_);
+        SetTargetSelector("SDK");
     }
 
     ~TargetSelector() {
-        delete drawing_;
-        delete mode_;
-        delete humanizer_;
-        delete selected_;
-        drawing_ = nullptr;
-        mode_ = nullptr;
-        humanizer_ = nullptr;
-        selected_ = nullptr;
-        if (Instance_() == this) {
-            Instance_() = nullptr;
-        }
+        RemoveTargetSelector("SDK");
+        if (Instance_() == this) Instance_() = nullptr;
     }
 
     static TargetSelector* Instance() { return Instance_(); }
+    static ITargetSelector* Implementation() { return Registry_().Implementation(); }
 
-    TargetSelectorHumanizer* Humanizer() const { return humanizer_; }
-    TargetSelectorMode* Mode() const { return mode_; }
-    TargetSelectorSelected* Selected() const { return selected_; }
+    static bool AddTargetSelector(const std::string& name, ITargetSelector* implementation) {
+        return Registry_().Add(name, implementation);
+    }
 
-    AIHeroClient GetSelectedTarget() {
-        return selected_ ? selected_->Target() : AIHeroClient();
+    static bool SetTargetSelector(const std::string& name) {
+        return Registry_().Set(name);
+    }
+
+    static ITargetSelector* GetTargetSelector(const std::string& name) {
+        return Registry_().Get(name);
+    }
+
+    static bool RemoveTargetSelector(const std::string& name) {
+        return Registry_().Remove(name);
+    }
+
+    static const std::string& CurrentTargetSelectorName() { return Registry_().CurrentName(); }
+
+    TargetSelectorHumanizer* Humanizer() const { return sdkImplementation_.Humanizer(); }
+    TargetSelectorMode* Mode() const { return sdkImplementation_.Mode(); }
+    TargetSelectorSelected* Selected() const { return sdkImplementation_.Selected(); }
+
+    AIHeroClient GetSelectedTarget() const {
+        return Implementation() ? Implementation()->GetSelectedTarget() : AIHeroClient();
     }
 
     void SetTarget(const AIHeroClient& target) {
-        if (selected_) selected_->Target(target);
+        if (Implementation()) Implementation()->SetTarget(target);
+    }
+
+    int GetPriority(const AIHeroClient& target) const {
+        return Implementation() ? Implementation()->GetPriority(target) : 1;
     }
 
     AIHeroClient GetTarget(
@@ -70,11 +68,10 @@ public:
         bool ignoreShields = true,
         const std::vector<AIHeroClient>* ignoreChampions = nullptr)
     {
+        if (!spell) return {};
         float maxBounding = 50.0f;
         for (const auto& hero : GameObjects::EnemyHeroes()) {
-            if (hero.BoundingRadius() > maxBounding) {
-                maxBounding = hero.BoundingRadius();
-            }
+            if (hero.BoundingRadius() > maxBounding) maxBounding = hero.BoundingRadius();
         }
         return GetTarget(
             spell->Range + spell->Width + maxBounding,
@@ -91,8 +88,9 @@ public:
         const Vector3& from = Vector3(),
         const std::vector<AIHeroClient>* ignoreChampions = nullptr)
     {
-        auto targets = GetTargets(range, damageType, ignoreShields, from, ignoreChampions);
-        return targets.empty() ? AIHeroClient() : targets[0];
+        return Implementation()
+            ? Implementation()->GetTarget(range, damageType, ignoreShields, from, ignoreChampions)
+            : AIHeroClient();
     }
 
     AIHeroClient GetTargetNoCollision(
@@ -100,13 +98,13 @@ public:
         bool ignoreShields = true,
         const std::vector<AIHeroClient>* ignoreChampions = nullptr)
     {
-        auto targets = GetTargets(spell->Range, spell->DamageType, ignoreShields, spell->From, ignoreChampions);
-        for (auto& t : targets) {
-            if (spell->GetPrediction(t).Hitchance != HitChance::Collision) {
-                return t;
-            }
+        if (!spell) return {};
+        auto targets = GetTargets(
+            spell->Range, spell->DamageType, ignoreShields, spell->From, ignoreChampions);
+        for (auto& target : targets) {
+            if (spell->GetPrediction(target).Hitchance != HitChance::Collision) return target;
         }
-        return AIHeroClient();
+        return {};
     }
 
     std::vector<AIHeroClient> GetTargets(
@@ -116,46 +114,9 @@ public:
         const Vector3& from = Vector3(),
         const std::vector<AIHeroClient>* ignoreChampions = nullptr)
     {
-        if (selected_->Focus() && selected_->Force()) {
-            if (IsValidTarget(selected_->Target(), FLT_MAX, damageType, ignoreShields, from)) {
-                return { selected_->Target() };
-            }
-        }
-
-        auto temp = GameObjects::EnemyHeroes();
-        auto targets = humanizer_->FilterTargets(std::move(temp));
-
-        targets.erase(
-            std::remove_if(targets.begin(), targets.end(),
-                [ignoreChampions](const AIHeroClient& h) {
-                    if (!ignoreChampions || ignoreChampions->empty()) return false;
-                    for (const auto& ign : *ignoreChampions) {
-                        if (ign.Compare(h)) return true;
-                    }
-                    return false;
-                }),
-            targets.end());
-
-        targets.erase(
-            std::remove_if(targets.begin(), targets.end(),
-                [this, range, damageType, ignoreShields, &from](const AIHeroClient& h) {
-                    return !IsValidTarget(h, range, damageType, ignoreShields, from);
-                }),
-            targets.end());
-
-        targets = mode_->OrderChampions(targets);
-
-        if (selected_->Focus() && selected_->Target().IsValid()) {
-            const auto& selTarget = selected_->Target();
-            std::stable_sort(targets.begin(), targets.end(),
-                [&selTarget](const AIHeroClient& a, const AIHeroClient& b) {
-                    const bool aIs = a.Compare(selTarget);
-                    const bool bIs = b.Compare(selTarget);
-                    return aIs && !bIs;
-                });
-        }
-
-        return targets;
+        return Implementation()
+            ? Implementation()->GetTargets(range, damageType, ignoreShields, from, ignoreChampions)
+            : std::vector<AIHeroClient>();
     }
 
     static bool IsValidTarget(
@@ -165,50 +126,7 @@ public:
         bool ignoreShields = true,
         const Vector3& from = Vector3())
     {
-#if NIGHTSHARP_ORBWALKER_LOGGING
-        std::ofstream tsLog("c:\\Users\\Public\\nightsharp_orbwalker_debug.txt", std::ios::app);
-        tsLog << "  [TS] Eval: " << hero.CharacterName() << "\n";
-#endif
-
-        if (!Extensions::IsValidTarget(hero)) {
-#if NIGHTSHARP_ORBWALKER_LOGGING
-            tsLog << "    -> Failed Extensions::IsValidTarget\n";
-#endif
-            return false;
-        }
-
-        if (range < FLT_MAX) {
-            const Vector3 origin = from.IsZero()
-                ? (GameObjects::Player().IsValid() ? GameObjects::Player().Position() : Vector3())
-                : from;
-            const float effectiveRange = range <= 0.0f ? Utils::AutoAttack::GetRealAutoAttackRange(GameObjects::Player(), hero) : range;
-            const float distSqr = origin.DistanceSqr2D(hero.Position());
-
-#if NIGHTSHARP_ORBWALKER_LOGGING
-            tsLog << "    -> DistSqr: " << distSqr << " EffRangeSqr: " << (effectiveRange * effectiveRange) << "\n";
-#endif
-
-            if (origin.IsValid() && !origin.IsZero() &&
-                distSqr >= effectiveRange * effectiveRange) {
-#if NIGHTSHARP_ORBWALKER_LOGGING
-                tsLog << "    -> Failed Distance Check\n";
-#endif
-                return false;
-            }
-        }
-
-        bool invuln = Utils::Invulnerable::Check(hero, damageType, ignoreShields);
-        if (invuln) {
-#if NIGHTSHARP_ORBWALKER_LOGGING
-            tsLog << "    -> Failed Invulnerable Check\n";
-#endif
-            return false;
-        }
-
-#if NIGHTSHARP_ORBWALKER_LOGGING
-        tsLog << "    -> SUCCESS\n";
-#endif
-        return true;
+        return TargetSelectorSdk::IsValidTarget(hero, range, damageType, ignoreShields, from);
     }
 
 private:
@@ -217,26 +135,26 @@ private:
         return instance;
     }
 
-    Menu* parentMenu_ = nullptr;
-    Menu* internalMenu_ = nullptr;
-    TargetSelectorHumanizer* humanizer_ = nullptr;
-    TargetSelectorSelected* selected_ = nullptr;
-    TargetSelectorMode* mode_ = nullptr;
-    TargetSelectorDrawing* drawing_ = nullptr;
+    static TargetSelectorRegistry<ITargetSelector>& Registry_() {
+        static TargetSelectorRegistry<ITargetSelector> registry;
+        return registry;
+    }
+
+    TargetSelectorSdk sdkImplementation_;
 };
 
-inline AIHeroClient Spell::GetTarget(float extraRange,
-                                     bool accountForCollision,
-                                     const std::vector<AIHeroClient>& champsToIgnore) const {
-    auto* ts = TargetSelector::Instance();
-    if (!ts) {
-        return AIHeroClient();
-    }
-    const std::vector<AIHeroClient>* ignorePtr = champsToIgnore.empty() ? nullptr : &champsToIgnore;
+inline AIHeroClient Spell::GetTarget(
+    float extraRange,
+    bool accountForCollision,
+    const std::vector<AIHeroClient>& champsToIgnore) const
+{
+    auto* selector = TargetSelector::Instance();
+    if (!selector) return {};
+    const std::vector<AIHeroClient>* ignore = champsToIgnore.empty() ? nullptr : &champsToIgnore;
     if (accountForCollision) {
-        return ts->GetTargetNoCollision(const_cast<Spell*>(this), true, ignorePtr);
+        return selector->GetTargetNoCollision(const_cast<Spell*>(this), true, ignore);
     }
-    return ts->GetTarget(CurrentRange() + extraRange, DamageType, true, From, ignorePtr);
+    return selector->GetTarget(CurrentRange() + extraRange, DamageType, true, From, ignore);
 }
 
 } // namespace SDK

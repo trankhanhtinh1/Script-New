@@ -83,7 +83,15 @@ namespace GameRuntime {
     constexpr auto MouseScreenVec2 = 0x1EA0200;
     constexpr auto GetPing = 0x6CC720;
     constexpr auto GetMapID = 0x27E660;
-    constexpr auto PrintChat = 0x1158CB0;
+    // ChatViewController::DisplayChat dispatcher (sub_B62E90). Signature
+    //   void __fastcall(void* chatContainer, const char* utf8, int flags)
+    // Pre-game it queues the line; in-game it tail-calls sub_B62690 which
+    // renders with channel/color flags. flags=0 is a plain system line.
+    // (Old value 0x1158CB0 was wrong: that is only a UTF-8 truncation helper.)
+    constexpr auto PrintChat = 0xB62E90;
+    // 'this' container passed to PrintChat/DisplayChat; deref before the call.
+    // IDA labels it NetInstance but it is distinct from GameRuntime::NetInstance.
+    constexpr auto ChatMessageInstance = 0x1EA0490;
 } // namespace GameRuntime
 
 namespace MouseInputLayout {
@@ -402,6 +410,8 @@ namespace BuffDataLayout {
     constexpr auto BuffStackCount = 0x38;
     constexpr auto BuffStacks = 0x38;
     constexpr auto BuffStacksAlt = 0x3C;
+    constexpr auto BuffCounterCurrent = 0x8C;
+    constexpr auto BuffCounterMax = 0x90;
 } // namespace BuffDataLayout
 
 // BuffScriptInstance is obtained by dereferencing the first 8 bytes of each
