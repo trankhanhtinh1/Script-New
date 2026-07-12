@@ -16,15 +16,19 @@ struct InterceptSolution {
     double residual = std::numeric_limits<double>::infinity();
 };
 
+inline bool IsInstantSpeed(double speed) {
+    return !std::isfinite(speed) || speed >= 1e12;
+}
+
 inline double InterceptResidual(const Vector2& source,
                                 const Vector2& targetPosition,
                                 double projectileSpeed,
                                 double launchDelay,
                                 double absoluteTime) {
-    if (!targetPosition.IsFinite() || absoluteTime < launchDelay) {
+    if (!source.IsFinite() || !targetPosition.IsFinite() || absoluteTime < launchDelay) {
         return std::numeric_limits<double>::infinity();
     }
-    if (!std::isfinite(projectileSpeed) || projectileSpeed >= 1e12) return 0.0;
+    if (IsInstantSpeed(projectileSpeed)) return 0.0;
     return std::abs(Distance(source, targetPosition) -
                     projectileSpeed * (absoluteTime - launchDelay));
 }
@@ -35,31 +39,35 @@ inline bool SelectQuadraticRoot(double a,
                                 double minimum,
                                 double maximum,
                                 double& root) {
-    if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c)) return false;
+    if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c) ||
+        !std::isfinite(minimum) || !std::isfinite(maximum) || maximum < minimum) {
+        return false;
+    }
+
     if (std::abs(a) <= Epsilon) {
         if (std::abs(b) <= Epsilon) return false;
         const double candidate = -c / b;
-        if (candidate + Epsilon < minimum || candidate - Epsilon > maximum) return false;
-        root = std::clamp(candidate, minimum, maximum);
+        if (!std::isfinite(candidate) || candidate < minimum - Epsilon ||
+            candidate > maximum + Epsilon) return false;
+        root = Clamp(candidate, minimum, maximum);
         return true;
     }
 
     const double discriminant = b * b - 4.0 * a * c;
-    if (discriminant < -Epsilon) return false;
+    if (!std::isfinite(discriminant) || discriminant < -Epsilon) return false;
     const double squareRoot = std::sqrt(std::max(0.0, discriminant));
-    const double q = -0.5 * (b + std::copysign(squareRoot, b));
-    const double first = q / a;
-    const double second = std::abs(q) > Epsilon ? c / q : (-b - squareRoot) / (2.0 * a);
-
+    const double denominator = 2.0 * a;
+    const double first = (-b - squareRoot) / denominator;
+    const double second = (-b + squareRoot) / denominator;
     bool found = false;
     double best = maximum;
     for (const double candidate : {first, second}) {
-        if (!std::isfinite(candidate) || candidate + Epsilon < minimum ||
-            candidate - Epsilon > maximum) continue;
-        const double bounded = std::clamp(candidate, minimum, maximum);
+        if (!std::isfinite(candidate) || candidate < minimum - Epsilon ||
+            candidate > maximum + Epsilon) continue;
+        const double bounded = Clamp(candidate, minimum, maximum);
         if (!found || bounded < best) {
-            best = bounded;
             found = true;
+            best = bounded;
         }
     }
     if (found) root = best;
@@ -75,18 +83,21 @@ inline InterceptSolution SolveLinearInterceptInterval(const Vector2& source,
                                                        double maximumTime) {
     InterceptSolution result;
     if (!source.IsFinite() || !targetAtTimeZero.IsFinite() ||
-        !targetVelocity.IsFinite() || launchDelay < 0.0 ||
-        maximumTime < minimumTime) return result;
+        !targetVelocity.IsFinite() || !std::isfinite(launchDelay) ||
+        !std::isfinite(minimumTime) || !std::isfinite(maximumTime) ||
+        launchDelay < 0.0 || maximumTime < minimumTime) return result;
 
-    const double minimum = std::max(launchDelay, minimumTime);
-    if (!std::isfinite(projectileSpeed) || projectileSpeed >= 1e12) {
-        result.valid = minimum <= maximumTime;
+    const double minimum = std::max({0.0, launchDelay, minimumTime});
+    if (minimum > maximumTime + Epsilon) return result;
+
+    if (IsInstantSpeed(projectileSpeed)) {
+        result.valid = true;
         result.time = minimum;
         result.position = targetAtTimeZero + targetVelocity * minimum;
         result.residual = 0.0;
         return result;
     }
-    if (projectileSpeed <= Epsilon) return result;
+    if (!std::isfinite(projectileSpeed) || projectileSpeed <= Epsilon) return result;
 
     const Vector2 relative = targetAtTimeZero - source;
     const double speedSquared = projectileSpeed * projectileSpeed;
@@ -99,9 +110,8 @@ inline InterceptSolution SolveLinearInterceptInterval(const Vector2& source,
     result.valid = true;
     result.time = time;
     result.position = targetAtTimeZero + targetVelocity * time;
-    result.residual = InterceptResidual(
-        source, result.position, projectileSpeed, launchDelay, time);
-    return result;
+    result.residual = InterceptResidual(source, result.position, projectileSpeed, launchDelay, time);
+    return result.residual <= std::max(1.0, projectileSpeed * 0.003) ? result : InterceptSolution{};
 }
 
 inline InterceptSolution SolveLinearIntercept(const Vector2& source,
@@ -125,7 +135,7 @@ inline Vector2 PositionOnPath(const std::vector<Vector2>& path,
     if (path.empty()) return {};
     if (path.size() == 1 || moveSpeed <= Epsilon || time <= 0.0) return path.front();
 
-    double remaining = moveSpeed * time;
+    double remaining = std::max(0.0, time) * moveSpeed;
     for (std::size_t index = 0; index + 1 < path.size(); ++index) {
         const Vector2& start = path[index];
         const Vector2& end = path[index + 1];
@@ -152,7 +162,17 @@ inline InterceptSolution SolvePathIntercept(const Vector2& source,
                                              double launchDelay,
                                              double maximumTime = 8.0) {
     InterceptSolution result;
-    if (path.empty() || targetSpeed < 0.0 || launchDelay < 0.0) return result;
+    if (!source.IsFinite() || path.empty() || targetSpeed < 0.0 ||
+        launchDelay < 0.0 || maximumTime < launchDelay) return result;
+
+    if (IsInstantSpeed(projectileSpeed)) {
+        result.valid = true;
+        result.time = launchDelay;
+        result.position = PositionOnPath(path, targetSpeed, launchDelay);
+        result.residual = 0.0;
+        return result;
+    }
+
     if (path.size() == 1 || targetSpeed <= Epsilon) {
         return SolveLinearIntercept(source,
                                     path.front(),
@@ -160,13 +180,6 @@ inline InterceptSolution SolvePathIntercept(const Vector2& source,
                                     projectileSpeed,
                                     launchDelay,
                                     maximumTime);
-    }
-    if (!std::isfinite(projectileSpeed) || projectileSpeed >= 1e12) {
-        result.valid = launchDelay <= maximumTime;
-        result.time = launchDelay;
-        result.position = PositionOnPath(path, targetSpeed, launchDelay);
-        result.residual = 0.0;
-        return result;
     }
 
     double segmentStartTime = 0.0;
@@ -176,8 +189,9 @@ inline InterceptSolution SolvePathIntercept(const Vector2& source,
         const Vector2 segment = end - start;
         const double length = segment.Length();
         if (length <= Epsilon) continue;
-        const double duration = length / std::max(targetSpeed, Epsilon);
+        const double duration = length / targetSpeed;
         const double segmentEndTime = segmentStartTime + duration;
+        if (segmentStartTime > maximumTime + Epsilon) break;
         const Vector2 velocity = segment * (targetSpeed / length);
         const Vector2 targetAtTimeZero = start - velocity * segmentStartTime;
         result = SolveLinearInterceptInterval(source,
@@ -189,7 +203,6 @@ inline InterceptSolution SolvePathIntercept(const Vector2& source,
                                               std::min(segmentEndTime, maximumTime));
         if (result.valid) return result;
         segmentStartTime = segmentEndTime;
-        if (segmentStartTime > maximumTime) return {};
     }
 
     result = SolveLinearIntercept(source,
@@ -198,18 +211,20 @@ inline InterceptSolution SolvePathIntercept(const Vector2& source,
                                   projectileSpeed,
                                   launchDelay,
                                   maximumTime);
-    if (result.valid && result.time + Epsilon < segmentStartTime) return {};
-    return result;
+    if (result.valid && result.time + Epsilon >= segmentStartTime) return result;
+    return {};
 }
 
 inline Vector2 PositionWithTurn(const Vector2& position,
                                 const Vector2& velocity,
                                 double angularVelocity,
                                 double time) {
-    if (std::abs(angularVelocity) <= 1e-5 || time <= 0.0) {
-        return position + velocity * std::max(0.0, time);
+    if (!position.IsFinite() || !velocity.IsFinite()) return {};
+    const double horizon = std::max(0.0, time);
+    if (std::abs(angularVelocity) <= 1e-5 || horizon <= Epsilon) {
+        return position + velocity * horizon;
     }
-    const double angle = angularVelocity * time;
+    const double angle = angularVelocity * horizon;
     const double sine = std::sin(angle);
     const double cosine = std::cos(angle);
     return position + Vector2{
@@ -229,29 +244,35 @@ inline InterceptSolution SolveTurnIntercept(const Vector2& source,
     if (!source.IsFinite() || !targetPosition.IsFinite() ||
         !targetVelocity.IsFinite() || launchDelay < 0.0 ||
         maximumTime < launchDelay) return result;
-    if (!std::isfinite(projectileSpeed) || projectileSpeed >= 1e12) {
+
+    if (IsInstantSpeed(projectileSpeed)) {
         result.valid = true;
         result.time = launchDelay;
-        result.position = PositionWithTurn(
-            targetPosition, targetVelocity, angularVelocity, launchDelay);
+        result.position = PositionWithTurn(targetPosition, targetVelocity, angularVelocity, launchDelay);
         result.residual = 0.0;
         return result;
     }
     if (projectileSpeed <= Epsilon) return result;
 
     const auto function = [&](double time) {
-        const Vector2 position = PositionWithTurn(
-            targetPosition, targetVelocity, angularVelocity, time);
+        const Vector2 position = PositionWithTurn(targetPosition, targetVelocity, angularVelocity, time);
         return Distance(source, position) - projectileSpeed * (time - launchDelay);
     };
 
     constexpr int scanSteps = 256;
     double previousTime = launchDelay;
     double previousValue = function(previousTime);
+    if (previousValue <= 0.0) {
+        result.valid = true;
+        result.time = launchDelay;
+        result.position = PositionWithTurn(targetPosition, targetVelocity, angularVelocity, launchDelay);
+        result.residual = InterceptResidual(source, result.position, projectileSpeed, launchDelay, result.time);
+        return result;
+    }
+
     for (int step = 1; step <= scanSteps; ++step) {
         const double currentTime = launchDelay +
-            (maximumTime - launchDelay) * static_cast<double>(step) /
-                static_cast<double>(scanSteps);
+            (maximumTime - launchDelay) * static_cast<double>(step) / static_cast<double>(scanSteps);
         const double currentValue = function(currentTime);
         if (currentValue <= 0.0 || previousValue * currentValue <= 0.0) {
             double left = previousTime;
@@ -263,11 +284,9 @@ inline InterceptSolution SolveTurnIntercept(const Vector2& source,
             }
             result.valid = true;
             result.time = (left + right) * 0.5;
-            result.position = PositionWithTurn(
-                targetPosition, targetVelocity, angularVelocity, result.time);
-            result.residual = InterceptResidual(
-                source, result.position, projectileSpeed, launchDelay, result.time);
-            return result;
+            result.position = PositionWithTurn(targetPosition, targetVelocity, angularVelocity, result.time);
+            result.residual = InterceptResidual(source, result.position, projectileSpeed, launchDelay, result.time);
+            return result.residual <= std::max(1.0, projectileSpeed * 0.003) ? result : InterceptSolution{};
         }
         previousTime = currentTime;
         previousValue = currentValue;
@@ -282,12 +301,17 @@ inline InterceptSolution SolveAcceleratedIntercept(const Vector2& source,
                                                     double projectileSpeed,
                                                     double launchDelay,
                                                     double maximumTime = 8.0) {
-    if (!std::isfinite(projectileSpeed) || projectileSpeed >= 1e12) {
-        const double time = std::clamp(launchDelay, 0.0, maximumTime);
-        const Vector2 position = targetPosition + targetVelocity * time +
-            targetAcceleration * (0.5 * time * time);
-        return {true, time, position, 0.0};
+    if (!source.IsFinite() || !targetPosition.IsFinite() ||
+        !targetVelocity.IsFinite() || !targetAcceleration.IsFinite() ||
+        launchDelay < 0.0 || maximumTime < launchDelay) return {};
+
+    if (IsInstantSpeed(projectileSpeed)) {
+        const double time = Clamp(launchDelay, 0.0, maximumTime);
+        return {true, time,
+                targetPosition + targetVelocity * time + targetAcceleration * (0.5 * time * time),
+                0.0};
     }
+    if (projectileSpeed <= Epsilon) return {};
 
     InterceptSolution linear = SolveLinearIntercept(source,
                                                     targetPosition,
@@ -295,11 +319,12 @@ inline InterceptSolution SolveAcceleratedIntercept(const Vector2& source,
                                                     projectileSpeed,
                                                     launchDelay,
                                                     maximumTime);
-    double time = linear.valid ? linear.time : launchDelay + Distance(source, targetPosition) /
-        std::max(projectileSpeed, Epsilon);
-    time = std::clamp(time, launchDelay, maximumTime);
+    double time = linear.valid
+        ? linear.time
+        : launchDelay + Distance(source, targetPosition) / std::max(projectileSpeed, Epsilon);
+    time = Clamp(time, launchDelay, maximumTime);
 
-    for (int iteration = 0; iteration < 12; ++iteration) {
+    for (int iteration = 0; iteration < 16; ++iteration) {
         const Vector2 position = targetPosition + targetVelocity * time +
             targetAcceleration * (0.5 * time * time);
         const Vector2 velocity = targetVelocity + targetAcceleration * time;
@@ -309,8 +334,8 @@ inline InterceptSolution SolveAcceleratedIntercept(const Vector2& source,
         const double function = distance - projectileSpeed * (time - launchDelay);
         const double derivative = relative.Dot(velocity) / distance - projectileSpeed;
         if (std::abs(derivative) <= Epsilon) break;
-        const double next = std::clamp(time - function / derivative, launchDelay, maximumTime);
-        if (std::abs(next - time) <= 1e-6) {
+        const double next = Clamp(time - function / derivative, launchDelay, maximumTime);
+        if (std::abs(next - time) <= 1e-7) {
             time = next;
             break;
         }
@@ -319,10 +344,9 @@ inline InterceptSolution SolveAcceleratedIntercept(const Vector2& source,
 
     const Vector2 position = targetPosition + targetVelocity * time +
         targetAcceleration * (0.5 * time * time);
-    const double residual = InterceptResidual(
-        source, position, projectileSpeed, launchDelay, time);
+    const double residual = InterceptResidual(source, position, projectileSpeed, launchDelay, time);
     const bool valid = time >= launchDelay && time <= maximumTime &&
-        std::isfinite(residual) && residual <= std::max(1.0, projectileSpeed * 0.002);
+        std::isfinite(residual) && residual <= std::max(1.0, projectileSpeed * 0.004);
     return {valid, time, position, residual};
 }
 

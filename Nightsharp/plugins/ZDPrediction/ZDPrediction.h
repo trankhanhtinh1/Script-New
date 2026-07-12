@@ -22,35 +22,69 @@ public:
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {
+        if (active_) return;
         previousPrediction_ = SDK::Prediction::CurrentPredictionName();
+        previousWasSdk_ = previousPrediction_.empty() || previousPrediction_ == kSdkPredictionName;
+        if (previousPrediction_.empty()) previousPrediction_ = kSdkPredictionName;
+
         CreateMenu();
         engine_.SetConfig(BuildConfig());
         ZDPrediction::MovementTracker::Initialize();
 
         const bool added = SDK::Prediction::AddPrediction(kImplementationName, &engine_);
-        const bool alreadyOwned = SDK::Prediction::GetPrediction(kImplementationName) == &engine_;
-        if (added || alreadyOwned) {
-            SDK::Prediction::SetPrediction(kImplementationName);
-            SetSdkPredictionLoaded(false);
-            active_ = true;
+        const bool registered = SDK::Prediction::GetPrediction(kImplementationName) == &engine_;
+        if (!registered || !SDK::Prediction::SetPrediction(kImplementationName)) {
+            if (added) SDK::Prediction::RemovePrediction(kImplementationName);
+            ZDPrediction::MovementTracker::Shutdown();
+            DestroyMenu();
+            previousPrediction_.clear();
+            previousWasSdk_ = false;
+            return;
         }
+
+        providerRegistered_ = true;
+        active_ = true;
+        if (previousWasSdk_) SetSdkPredictionLoaded(false);
     }
 
     void OnUnload() override {
+        if (!active_ && !providerRegistered_) {
+            DestroyMenu();
+            ZDPrediction::MovementTracker::Shutdown();
+            return;
+        }
+
+        const bool ownsActiveProvider =
+            SDK::Prediction::GetPrediction(kImplementationName) == &engine_ &&
+            SDK::Prediction::CurrentPredictionName() == kImplementationName;
         active_ = false;
-        SetSdkPredictionLoaded(true);
-        SDK::Prediction::RemovePrediction(kImplementationName);
-        if (!previousPrediction_.empty() && previousPrediction_ != kImplementationName) {
-            SDK::Prediction::SetPrediction(previousPrediction_);
+
+        if (ownsActiveProvider) {
+            if (previousWasSdk_) {
+                SetSdkPredictionLoaded(true);
+            } else if (!previousPrediction_.empty() &&
+                       SDK::Prediction::GetPrediction(previousPrediction_) != nullptr) {
+                SDK::Prediction::SetPrediction(previousPrediction_);
+            } else {
+                SetSdkPredictionLoaded(true);
+            }
+        }
+
+        if (providerRegistered_) {
+            SDK::Prediction::RemovePrediction(kImplementationName);
+            providerRegistered_ = false;
         }
         previousPrediction_.clear();
+        previousWasSdk_ = false;
         ZDPrediction::MovementTracker::Shutdown();
         DestroyMenu();
     }
 
     void OnUpdate() override {
+        if (!active_) return;
         engine_.SetConfig(BuildConfig());
-        if (active_ && SDK::Prediction::CurrentPredictionName() != kImplementationName) {
+        if (SDK::Prediction::GetPrediction(kImplementationName) == &engine_ &&
+            SDK::Prediction::CurrentPredictionName() != kImplementationName) {
             SDK::Prediction::SetPrediction(kImplementationName);
         }
     }
@@ -66,13 +100,19 @@ public:
                     static_cast<unsigned long long>(stats.immobile));
         ImGui::Text("AoE: %llu  Collision: %llu", static_cast<unsigned long long>(stats.aoe),
                     static_cast<unsigned long long>(stats.collision));
+        ImGui::Text("Rejected: %llu  No solution: %llu",
+                    static_cast<unsigned long long>(stats.rejected),
+                    static_cast<unsigned long long>(stats.noSolution));
     }
 
 private:
     static constexpr const char* kImplementationName = "ZD Prediction";
+    static constexpr const char* kSdkPredictionName = "SDK Prediction";
 
     ZDPrediction::PredictionEngine engine_;
     std::string previousPrediction_;
+    bool previousWasSdk_ = false;
+    bool providerRegistered_ = false;
     bool active_ = false;
 
     Menu* menu_ = nullptr;
@@ -94,15 +134,15 @@ private:
         ZDPrediction::PredictionConfig config;
         config.usePathHistory = !pathHistory_ || pathHistory_->Value;
         config.useVelocityBlend = !velocityBlend_ || velocityBlend_->Value;
-        config.useAcceleration = !acceleration_ || acceleration_->Value;
-        config.useWallAnalysis = !wallAnalysis_ || wallAnalysis_->Value;
+        config.useAcceleration = acceleration_ && acceleration_->Value;
+        config.useWallAnalysis = wallAnalysis_ && wallAnalysis_->Value;
         config.useCollision = !collision_ || collision_->Value;
         config.useAoe = !aoe_ || aoe_->Value;
-        config.reactionTimeMs = reactionTime_ ? reactionTime_->Value : 220;
-        config.historyWindowMs = historyWindow_ ? historyWindow_->Value : 700;
+        config.reactionTimeMs = reactionTime_ ? reactionTime_->Value : 280;
+        config.historyWindowMs = historyWindow_ ? historyWindow_->Value : 800;
         config.maximumPredictionMs = maximumPrediction_ ? maximumPrediction_->Value : 6000;
         config.maximumPathSegments = maximumSegments_ ? maximumSegments_->Value : 24;
-        config.maximumRangePercent = static_cast<float>(maximumRange_ ? maximumRange_->Value : 100);
+        config.maximumRangePercent = static_cast<float>(maximumRange_ ? maximumRange_->Value : 90);
         config.highThreshold = static_cast<float>(highThreshold_ ? highThreshold_->Value : 60) / 100.0f;
         config.veryHighThreshold = static_cast<float>(veryHighThreshold_ ? veryHighThreshold_->Value : 78) / 100.0f;
         if (config.veryHighThreshold <= config.highThreshold) {
@@ -118,17 +158,17 @@ private:
         auto* movement = menu_->AddSubMenu(new Menu("movement", "Movement Model"));
         pathHistory_ = movement->Add(new MenuBool("pathHistory", "Path History", true));
         velocityBlend_ = movement->Add(new MenuBool("velocityBlend", "Velocity Blend", true));
-        acceleration_ = movement->Add(new MenuBool("acceleration", "Acceleration Solver", true));
-        reactionTime_ = movement->Add(new MenuSlider("reactionTime", "Enemy Reaction Time", 220, 0, 700));
-        historyWindow_ = movement->Add(new MenuSlider("historyWindow", "History Window", 700, 250, 1600));
+        acceleration_ = movement->Add(new MenuBool("acceleration", "Acceleration Solver", false));
+        reactionTime_ = movement->Add(new MenuSlider("reactionTime", "Enemy Reaction Time", 280, 0, 700));
+        historyWindow_ = movement->Add(new MenuSlider("historyWindow", "History Window", 800, 250, 1200));
         maximumSegments_ = movement->Add(new MenuSlider("maximumSegments", "Maximum Path Segments", 24, 2, 48));
 
         auto* accuracy = menu_->AddSubMenu(new Menu("accuracy", "Accuracy"));
-        wallAnalysis_ = accuracy->Add(new MenuBool("wallAnalysis", "Wall Restriction Analysis", true));
+        wallAnalysis_ = accuracy->Add(new MenuBool("wallAnalysis", "Wall Restriction Analysis", false));
         collision_ = accuracy->Add(new MenuBool("collision", "Collision Validation", true));
         aoe_ = accuracy->Add(new MenuBool("aoe", "AoE Optimization", true));
         maximumPrediction_ = accuracy->Add(new MenuSlider("maximumPrediction", "Maximum Prediction Time", 6000, 500, 12000));
-        maximumRange_ = accuracy->Add(new MenuSlider("maximumRange", "Maximum Range Percent", 100, 50, 100));
+        maximumRange_ = accuracy->Add(new MenuSlider("maximumRange", "Maximum Range Percent", 90, 50, 100));
         highThreshold_ = accuracy->Add(new MenuSlider("highThreshold", "High Threshold", 60, 40, 90));
         veryHighThreshold_ = accuracy->Add(new MenuSlider("veryHighThreshold", "Very High Threshold", 78, 55, 99));
 

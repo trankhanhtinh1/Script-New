@@ -34,9 +34,9 @@ struct MovementPatternMetrics {
 
 struct MovementModelPolicy {
     double jukeScore = 0.0;
-    double pathWeight = 0.0;
-    double velocityWeight = 0.0;
-    double accelerationWeight = 0.0;
+    double pathWeight = 0.46;
+    double velocityWeight = 0.34;
+    double accelerationWeight = 0.20;
     double velocityScale = 1.0;
     double centerPull = 0.0;
     double displacementScale = 1.15;
@@ -50,13 +50,10 @@ public:
                                         double moveSpeed,
                                         double minimumJump = 110.0) {
         if (!previous.IsFinite() || !current.IsFinite() ||
-            elapsedSeconds < 0.0 || elapsedSeconds > 0.50) {
-            return false;
-        }
-        const double elapsed = std::max(0.001, elapsedSeconds);
+            elapsedSeconds <= 0.0 || elapsedSeconds > 0.50) return false;
         const double physicallyPlausible = std::max(
             minimumJump,
-            std::max(0.0, moveSpeed) * elapsed * 2.75 + 45.0);
+            std::max(0.0, moveSpeed) * elapsedSeconds * 2.75 + 45.0);
         return Math::Distance(previous, current) > physicallyPlausible;
     }
 
@@ -68,16 +65,9 @@ public:
             visibleSeconds >= 0.10 && positionStableSeconds >= 0.10;
     }
 
-    static int ActiveDirectionReversalCount(int reversalCount,
-                                            double directionStableSeconds) {
-        const int count = std::max(0, reversalCount);
-        return directionStableSeconds >= 0.45 ? std::min(count, 1) : count;
-    }
-
     static double RequiredDirectionCommitment(double travelTime,
                                               int reversalCount) {
-        const double base = 0.08 +
-            std::clamp(travelTime, 0.0, 1.5) * 0.09;
+        const double base = 0.08 + std::clamp(travelTime, 0.0, 1.5) * 0.09;
         const double repeatedJukeHold = reversalCount >= 2 ? 0.04 : 0.0;
         return std::clamp(base + repeatedJukeHold, 0.08, 0.22);
     }
@@ -87,25 +77,33 @@ public:
         MovementHistorySummary summary;
         if (points.empty()) return summary;
 
+        std::vector<MovementHistoryPoint> ordered;
+        ordered.reserve(points.size());
+        for (const auto& point : points) {
+            if (point.position.IsFinite()) ordered.push_back(point);
+        }
+        if (ordered.empty()) return summary;
+        std::sort(ordered.begin(), ordered.end(), [](const auto& left, const auto& right) {
+            return left.ageSeconds > right.ageSeconds;
+        });
+
         Math::Vector2 weightedCenter;
         double centerWeight = 0.0;
         double traveled = 0.0;
+        Math::Vector2 oldestPosition = ordered.front().position;
+        Math::Vector2 newestPosition = ordered.back().position;
         Math::Vector2 previousPosition;
-        Math::Vector2 oldestPosition;
-        Math::Vector2 newestPosition;
         Math::Vector2 previousDirection;
-        double oldestPositionAge = -1.0;
-        double newestPositionAge = 1.0;
-        double oldestDirectionAge = 0.0;
-        double newestDirectionAge = 0.55;
-        double reversals = 0.0;
+        double oldestAge = ordered.front().ageSeconds;
+        double newestAge = ordered.back().ageSeconds;
+        double firstDirectionAge = -1.0;
+        double lastDirectionAge = 0.0;
+        int reversals = 0;
         bool hasPreviousPosition = false;
-        bool hasRecentDirection = false;
+        bool hasPreviousDirection = false;
 
-        for (const MovementHistoryPoint& point : points) {
+        for (const auto& point : ordered) {
             const double age = std::max(0.0, point.ageSeconds);
-            if (!point.position.IsFinite()) continue;
-
             if (age <= 0.45) {
                 const double weight = 1.0 / (1.0 + age / 0.14);
                 weightedCenter += point.position * weight;
@@ -118,42 +116,33 @@ public:
                 }
                 previousPosition = point.position;
                 hasPreviousPosition = true;
-                if (age > oldestPositionAge) {
-                    oldestPositionAge = age;
-                    oldestPosition = point.position;
-                }
-                if (age < newestPositionAge) {
-                    newestPositionAge = age;
-                    newestPosition = point.position;
-                }
+                oldestAge = std::max(oldestAge, age);
+                newestAge = std::min(newestAge, age);
             }
-            if (age > 0.55 || !point.velocity.IsFinite() ||
-                point.velocity.Length() < 80.0) continue;
-
+            if (age > 0.60 || !point.velocity.IsFinite() || point.velocity.Length() < 60.0) continue;
             const Math::Vector2 direction = point.velocity.Normalized();
-            if (hasRecentDirection && previousDirection.Dot(direction) < -0.25) {
-                reversals += 1.0;
-            }
+            if (hasPreviousDirection && previousDirection.Dot(direction) < -0.25) ++reversals;
             previousDirection = direction;
-            hasRecentDirection = true;
-            oldestDirectionAge = std::max(oldestDirectionAge, age);
-            newestDirectionAge = std::min(newestDirectionAge, age);
+            hasPreviousDirection = true;
+            if (firstDirectionAge < 0.0) firstDirectionAge = age;
+            firstDirectionAge = std::max(firstDirectionAge, age);
+            lastDirectionAge = std::min(lastDirectionAge, age);
         }
 
         summary.recentCenter = centerWeight > Math::Epsilon
             ? weightedCenter / centerWeight
-            : (hasPreviousPosition ? newestPosition : points.back().position);
-        const double net = oldestPositionAge >= 0.0
-            ? Math::Distance(oldestPosition, newestPosition)
-            : 0.0;
+            : newestPosition;
+        const double net = Math::Distance(oldestPosition, newestPosition);
         summary.displacementEfficiency = traveled > 5.0
             ? std::clamp(net / traveled, 0.0, 1.0)
             : 1.0;
-        const double recentDuration = oldestDirectionAge - newestDirectionAge;
-        summary.directionReversalsPerSecond = recentDuration >= 0.18
-            ? reversals / recentDuration
+        const double directionDuration = firstDirectionAge >= 0.0
+            ? std::max(0.0, firstDirectionAge - lastDirectionAge)
             : 0.0;
-        summary.directionReversalCount = static_cast<int>(reversals);
+        summary.directionReversalsPerSecond = directionDuration >= 0.18
+            ? static_cast<double>(reversals) / directionDuration
+            : 0.0;
+        summary.directionReversalCount = reversals;
         return summary;
     }
 
@@ -161,45 +150,36 @@ public:
         const double direction = std::clamp(metrics.directionStability, 0.0, 1.0);
         const double speed = std::clamp(metrics.speedStability, 0.0, 1.0);
         const double efficiency = std::clamp(metrics.displacementEfficiency, 0.0, 1.0);
-        const double changePressure = std::clamp(
-            (metrics.pathChangesPerSecond - 1.0) / 4.0, 0.0, 1.0);
-        const double repeatedAlternation = std::clamp(
+        const double changes = std::clamp((metrics.pathChangesPerSecond - 1.0) / 4.0, 0.0, 1.0);
+        const double reversals = std::clamp(metrics.directionReversalsPerSecond / 3.0, 0.0, 1.0);
+        const double repeated = std::clamp(
             (static_cast<double>(metrics.directionReversalCount) - 1.0) / 2.0,
             0.0,
             1.0);
-        const double reversalPressure = std::clamp(
-            metrics.directionReversalsPerSecond / 3.0, 0.0, 1.0) *
-            (0.15 + repeatedAlternation * 0.85);
 
-        double rawJuke = changePressure * 0.25 + reversalPressure * 0.35 +
-            (1.0 - efficiency) * 0.23 + (1.0 - direction) * 0.12 +
+        double rawJuke = changes * 0.27 + reversals * (0.20 + repeated * 0.25) +
+            (1.0 - efficiency) * 0.25 + (1.0 - direction) * 0.18 +
             (1.0 - speed) * 0.05;
         if (metrics.directionReversalCount == 1) rawJuke *= 0.55;
-        if (metrics.pathChangesPerSecond < 2.0 &&
-            metrics.directionReversalCount == 0) {
+        if (metrics.pathChangesPerSecond < 2.0 && metrics.directionReversalCount == 0) {
             rawJuke *= 0.35;
         }
 
         MovementModelPolicy policy;
-        policy.jukeScore = std::clamp((rawJuke - 0.12) / 0.72, 0.0, 1.0);
-
+        policy.jukeScore = std::clamp((rawJuke - 0.10) / 0.78, 0.0, 1.0);
         const double pathFreshness = metrics.pathAgeSeconds <= 0.35
             ? 1.0
-            : std::clamp(1.0 - (metrics.pathAgeSeconds - 0.35) / 1.2, 0.25, 1.0);
+            : std::clamp(1.0 - (metrics.pathAgeSeconds - 0.35) / 1.4, 0.20, 1.0);
         const double stableTurn = std::clamp(
             (std::abs(metrics.angularVelocity) - 0.06) / 0.75, 0.0, 1.0) *
-            direction * efficiency * (1.0 - changePressure) *
-            (1.0 - policy.jukeScore);
-
+            direction * efficiency * (1.0 - changes) * (1.0 - policy.jukeScore);
         policy.pathWeight = 0.50 * pathFreshness * (0.65 + direction * 0.35) *
             (1.0 - policy.jukeScore * 0.92);
-        policy.velocityWeight = 0.34 * (0.75 + speed * 0.25) +
-            policy.jukeScore * 0.16;
+        policy.velocityWeight = 0.34 * (0.75 + speed * 0.25) + policy.jukeScore * 0.16;
         policy.accelerationWeight = (0.20 + stableTurn * 0.75) *
             (1.0 - policy.jukeScore * 0.92);
         policy.velocityScale = std::clamp(1.0 - policy.jukeScore * 0.70, 0.25, 1.0);
-        policy.centerPull = std::clamp(
-            (policy.jukeScore - 0.25) / 0.75, 0.0, 1.0) * 0.55;
+        policy.centerPull = std::clamp((policy.jukeScore - 0.25) / 0.75, 0.0, 1.0) * 0.55;
         policy.displacementScale = 1.15 - policy.jukeScore * 0.45;
         return policy;
     }

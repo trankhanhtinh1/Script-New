@@ -12,6 +12,7 @@
 
 #include "Locke.h"
 #include "Ezreal.h"
+#include "Leesin.h"
 
 #include <string>
 
@@ -33,19 +34,23 @@ public:
             ziblldev9898::Locke::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Ezreal") == 0) {
             ziblldev9898::Ezreal::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "LeeSin") == 0) {
+            ziblldev9898::LeeSin::OnGameLoad();
         }
     }
 
     void OnUnload() override {
         ziblldev9898::Locke::OnUnload();
         ziblldev9898::Ezreal::OnUnload();
+        ziblldev9898::LeeSin::OnUnload();
     }
 
 private:
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
                (_stricmp(championName, "Locke") == 0 ||
-                _stricmp(championName, "Ezreal") == 0);
+                _stricmp(championName, "Ezreal") == 0 ||
+                _stricmp(championName, "LeeSin") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -66,6 +71,7 @@ private:
         const std::string champion = CurrentChampionName();
         if (_stricmp(champion.c_str(), "Locke") == 0) return "Locke";
         if (_stricmp(champion.c_str(), "Ezreal") == 0) return "Ezreal";
+        if (_stricmp(champion.c_str(), "LeeSin") == 0) return "LeeSin";
         return nullptr;
     }
 };

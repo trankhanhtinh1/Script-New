@@ -402,6 +402,8 @@ namespace BuffDataLayout {
     constexpr auto BuffStackCount = 0x38;
     constexpr auto BuffStacks = 0x38;
     constexpr auto BuffStacksAlt = 0x3C;
+    constexpr auto BuffCounterCurrent = 0x8C;
+    constexpr auto BuffCounterMax = 0x90;
 } // namespace BuffDataLayout
 
 // BuffScriptInstance is obtained by dereferencing the first 8 bytes of each

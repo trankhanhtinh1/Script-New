@@ -5,15 +5,15 @@ namespace ZDPrediction {
 struct PredictionConfig {
     bool usePathHistory = true;
     bool useVelocityBlend = true;
-    bool useAcceleration = true;
-    bool useWallAnalysis = true;
+    bool useAcceleration = false;
+    bool useWallAnalysis = false;
     bool useCollision = true;
     bool useAoe = true;
-    int reactionTimeMs = 220;
-    int historyWindowMs = 700;
+    int reactionTimeMs = 280;
+    int historyWindowMs = 800;
     int maximumPredictionMs = 6000;
     int maximumPathSegments = 24;
-    float maximumRangePercent = 100.0f;
+    float maximumRangePercent = 90.0f;
     float highThreshold = 0.60f;
     float veryHighThreshold = 0.78f;
 };

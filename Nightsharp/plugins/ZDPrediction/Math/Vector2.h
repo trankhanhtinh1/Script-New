@@ -90,6 +90,10 @@ inline double Distance(const Vector2& left, const Vector2& right) {
     return std::sqrt(DistanceSquared(left, right));
 }
 
+inline bool NearlyEqual(const Vector2& left, const Vector2& right, double tolerance = 1e-4) {
+    return DistanceSquared(left, right) <= tolerance * tolerance;
+}
+
 inline Vector2 Lerp(const Vector2& from, const Vector2& to, double amount) {
     return from + (to - from) * amount;
 }
