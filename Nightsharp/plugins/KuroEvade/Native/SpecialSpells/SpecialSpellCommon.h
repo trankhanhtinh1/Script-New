@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../SpellData.h"
+#include "../EvadeUtils.h"
 
 #include "../../../../SDK/SDK.h"
 

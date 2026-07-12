@@ -43,6 +43,9 @@
     <Filter Include="Plugins\Champion\KuroAIO\Champion">
       <UniqueIdentifier>{70C028BE-9FEE-B21E-4EB3-DA3B0419D053}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Champion\KuroAIO\Champion\Fiora">
+      <UniqueIdentifier>{3D400D2B-24FF-F2EE-0797-C41128EC0B4D}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Champion\KuroAIO\Champion\Yasuo">
       <UniqueIdentifier>{CB2EDF10-63CE-9BB9-133B-FD4128E4A742}</UniqueIdentifier>
     </Filter>
@@ -461,6 +464,12 @@
     </ClInclude>
     <ClInclude Include="Plugins\Champion\JaxSemiPlugin.h">
       <Filter>Plugins\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\Fiora.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion\Fiora</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\FioraDatabase.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion\Fiora</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>

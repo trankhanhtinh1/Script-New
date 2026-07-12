@@ -30,8 +30,8 @@ struct SpellDrawStyle {
     bool Fill = true;
     bool DrawIrrelevant = true;
     bool DrawLabels = false;
-    int IrrelevantOpacity = 12;
-    int ThreatOpacity = 42;
+    int IrrelevantOpacity = 15;
+    int ThreatOpacity = 70;
     ImU32 IrrelevantColor = IM_COL32(145, 154, 164, 255);
     ImU32 PathColor = IM_COL32(255, 190, 65, 255);
     ImU32 DirectColor = IM_COL32(255, 72, 72, 255);
@@ -225,6 +225,8 @@ private:
                                       WithAlpha(base, fillAlpha));
         }
 
+        // Border outline drawing disabled as requested (only fill region is shown)
+        /*
         if (info.State == SpellVisualState::Intervention && allVisible) {
             const float pulse = 0.82f + 0.18f *
                 std::sin(SDK::Game::Time() * 7.0f);
@@ -242,6 +244,7 @@ private:
             DrawPartialOutline(draw, screens, visible, count,
                                WithAlpha(base, outlineAlpha), thickness);
         }
+        */
 
         if (style.DrawLabels && !irrelevant && allVisible) {
             DrawLabel(draw, skillshot, info, screens, count, base);

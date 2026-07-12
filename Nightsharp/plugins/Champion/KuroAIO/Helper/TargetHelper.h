@@ -13,6 +13,26 @@ inline AIHeroClient Player() {
     return ObjectManager::Player();
 }
 
+inline std::string GetObjectName(const GameObject& object) {
+    if (!object.IsValid()) return {};
+    char nameBuf[96] = {};
+    if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+        return nameBuf;
+    }
+    return {};
+}
+
+inline std::string GetObjectCharacterName(const GameObject& object) {
+    if (!object.IsValid()) return {};
+    std::string name = object.CharacterName();
+    if (!name.empty()) return name;
+    char nameBuf[96] = {};
+    if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+        return nameBuf;
+    }
+    return {};
+}
+
 inline bool Recent(int tick, int windowMs) {
     const int now = SDK::Variables::TickCount();
     return tick > 0 && now >= tick && now - tick <= windowMs;

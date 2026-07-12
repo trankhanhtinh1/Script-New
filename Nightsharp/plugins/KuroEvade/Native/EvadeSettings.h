@@ -21,6 +21,8 @@ struct EvadeSettings {
     bool CalculateWindupDelay = true;
     bool CheckSpellCollision = false;
     bool ClickOnlyOnce = true;
+    bool DevMode = false;
+    bool SameTeam = false;
 
     int EvadeMode = 2;
     int CandidateBudget = 0;

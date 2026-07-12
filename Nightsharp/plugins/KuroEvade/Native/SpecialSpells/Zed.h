@@ -15,7 +15,7 @@ struct Zed {
                 continue;
             }
 
-            const std::string name = ToLower(emitter.Name());
+            const std::string name = ToLower(EvadeUtils::GetObjectName(emitter));
             if (name.find("zed_") != std::string::npos &&
                 (name.find("_w_cloneswap_buf") != std::string::npos ||
                  name.find("_r_cloneswap_buf") != std::string::npos)) {

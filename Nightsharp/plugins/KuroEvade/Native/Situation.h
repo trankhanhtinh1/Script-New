@@ -2,6 +2,7 @@
 
 #include "EvadeSettings.h"
 #include "ObjectCache.h"
+#include "EvadeUtils.h"
 
 #include "../../../SDK/SDK.h"
 
@@ -22,7 +23,7 @@ struct Situation final {
         if (!emitter.IsValid()) {
             return false;
         }
-        std::string name = emitter.Name();
+        std::string name = EvadeUtils::GetObjectName(emitter);
         std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });

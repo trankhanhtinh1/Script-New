@@ -80,7 +80,7 @@ private:
         return minion.IsValid() &&
                !minion.IsDead() &&
                minion.IsEnemy() &&
-               ToLower(minion.CharacterName()) == "syndrasphere";
+               ToLower(EvadeUtils::GetObjectCharacterName(minion)) == "syndrasphere";
     }
 
     static void CleanupSpots() {

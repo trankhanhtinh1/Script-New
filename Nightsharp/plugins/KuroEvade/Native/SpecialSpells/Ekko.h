@@ -15,8 +15,8 @@ struct Ekko {
                 continue;
             }
 
-            const std::string name = ToLower(minion.Name());
-            const std::string characterName = ToLower(minion.CharacterName());
+            const std::string name = ToLower(EvadeUtils::GetObjectName(minion));
+            const std::string characterName = ToLower(EvadeUtils::GetObjectCharacterName(minion));
             if (name == "ekko" || characterName == "ekko") {
                 AddExtra(result, context.Start3, minion.Position(), context.Source);
             }

@@ -186,6 +186,7 @@ public:
                 }
 
                 DisableOrbwalkerMove();
+                (void)CoreControl::HoldPosition(true);
                 return true;
             }
 

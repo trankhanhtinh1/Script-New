@@ -112,6 +112,37 @@ public:
                     m_evade.IsWaitingForWindup());
             }
         }
+
+        if (DevMode()) {
+            const auto player = SDK::ObjectManager::Player();
+            if (player.IsValid() && !player.IsDead()) {
+                const auto playerPos = player.Position();
+                const auto playerPos2D = playerPos.To2D();
+                
+                int dangerousCount = KuroEvade::SpellTester::CountDangerousAt(
+                    m_detector.Skillshots(), playerPos2D, player.BoundingRadius());
+                
+                const auto* closest = KuroEvade::SpellTester::ClosestHit(
+                    m_detector.Skillshots(), playerPos2D, player.BoundingRadius());
+                
+                KuroEvade::EvadeTester::DrawCandidate(playerPos2D, 30.0f, dangerousCount > 0 ? 0xFFFF0000u : 0xFF00FF00u);
+                
+                char buffer[256];
+                if (closest) {
+                    float hitTime = KuroEvade::EvadeHelper::SpellHitTime(*closest, playerPos2D);
+                    std::snprintf(buffer, sizeof(buffer), "[DevMode] Danger: %d | Closest hit in %.0fms (%s)", 
+                                  dangerousCount, hitTime, closest->SData.SpellName.c_str());
+                } else {
+                    std::snprintf(buffer, sizeof(buffer), "[DevMode] Danger: %d | Zone Clear", dangerousCount);
+                }
+                
+                SDK::Vector2 screenPos;
+                if (SDK::Drawing::WorldToScreen(playerPos, screenPos)) {
+                    SDK::Drawing::DrawText(screenPos.x - 100.0f, screenPos.y + 40.0f, 0xFFFFFFFFu, buffer);
+                }
+            }
+        }
+
         KuroEvade::RenderObjects::Render();
     }
 
@@ -190,6 +221,9 @@ private:
     MenuColor* m_interventionColorMenu = nullptr;
     MenuColor* m_routeColorMenu = nullptr;
     MenuBool* m_clickOnlyOnceMenu = nullptr;
+    MenuBool* m_devModeMenu = nullptr;
+    MenuBool* m_devSameTeamMenu = nullptr;
+    MenuKeyBind* m_devSimulateKeyMenu = nullptr;
     Menu* m_spellsMenu = nullptr;
     Menu* m_evadeSpellsMenu = nullptr;
 
@@ -283,19 +317,58 @@ private:
     }
 
     static void OnWndProcStatic(SDK::Game::WndEventArgs& args) {
-        if (!s_instance || args.Msg != WM_LBUTTONDOWN ||
-            !s_instance->m_clickRemoveMenu ||
-            !s_instance->m_clickRemoveMenu->Value) {
+        if (!s_instance) {
             return;
         }
-        const int removed = s_instance->m_detector.RemoveAtPosition(
-            SDK::Game::CursorPos().To2D(), 50.0f);
-        if (removed > 0) {
-            std::snprintf(s_instance->m_lastEvent,
-                          sizeof(s_instance->m_lastEvent),
-                          "removed %d spell%s",
-                          removed,
-                          removed == 1 ? "" : "s");
+
+        if (args.Msg == WM_RBUTTONDOWN || args.Msg == WM_RBUTTONUP || args.Msg == WM_RBUTTONDBLCLK) {
+            if (s_instance->m_evadeIntervening) {
+                args.Process = false;
+                return;
+            }
+
+            if (args.Msg == WM_RBUTTONDOWN || args.Msg == WM_RBUTTONDBLCLK) {
+                const auto player = SDK::ObjectManager::Player();
+                if (player.IsValid() && !player.IsDead()) {
+                    const auto settings = s_instance->SettingsSnapshot();
+                    if (settings.Enabled) {
+                        KuroEvade::EvadeHelper helper(settings);
+                        const Vec2 from = player.ServerPosition().To2D();
+                        const Vec2 to = SDK::Game::CursorPos().To2D();
+                        const float boundingRadius = player.BoundingRadius();
+                        const float speed = std::max(50.0f, player.MoveSpeed());
+                        const float delayMs = settings.ExtraDelay +
+                            static_cast<float>(SDK::Game::Ping()) +
+                            std::max(0.0f, settings.CurrentWindupDelay);
+
+                        if (helper.CheckMovePath(to, delayMs, from, boundingRadius,
+                                                 s_instance->m_detector.Skillshots(), speed)) {
+                            args.Process = false;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (args.Msg == WM_KEYDOWN && s_instance->m_devSimulateKeyMenu &&
+            args.WParam == s_instance->m_devSimulateKeyMenu->Key) {
+            s_instance->SimulateSkillshot();
+            return;
+        }
+
+        if (args.Msg == WM_LBUTTONDOWN &&
+            s_instance->m_clickRemoveMenu &&
+            s_instance->m_clickRemoveMenu->Value) {
+            const int removed = s_instance->m_detector.RemoveAtPosition(
+                SDK::Game::CursorPos().To2D(), 50.0f);
+            if (removed > 0) {
+                std::snprintf(s_instance->m_lastEvent,
+                              sizeof(s_instance->m_lastEvent),
+                              "removed %d spell%s",
+                              removed,
+                              removed == 1 ? "" : "s");
+            }
         }
     }
 
@@ -321,6 +394,8 @@ private:
     }
     bool DodgeFow() const { return !m_dodgeFowMenu || m_dodgeFowMenu->Value; }
     bool DodgeCircular() const { return !m_dodgeCircularMenu || m_dodgeCircularMenu->Value; }
+    bool DevMode() const { return m_devModeMenu && m_devModeMenu->Value; }
+    bool SameTeam() const { return m_devSameTeamMenu && m_devSameTeamMenu->Value; }
     bool UseEvadeSpells() const { return !m_useEvadeSpellsMenu || m_useEvadeSpellsMenu->Active; }
     bool PreferEvadeSpells() const { return m_preferEvadeSpellsMenu && m_preferEvadeSpellsMenu->Value; }
     bool ExtremeEvade() const { return m_extremeEvadeMenu && m_extremeEvadeMenu->Value; }
@@ -443,6 +518,8 @@ private:
         settings.DodgeDangerousOnly = DodgeDangerousOnly();
         settings.DodgeFow = DodgeFow();
         settings.DodgeCircular = DodgeCircular();
+        settings.DevMode = DevMode();
+        settings.SameTeam = SameTeam();
         settings.UseEvadeSpells = UseEvadeSpells();
         settings.PreferEvadeSpells = PreferEvadeSpells();
         settings.ExtremeEvade = ExtremeEvade();
@@ -676,6 +753,7 @@ private:
         const auto settings = SettingsSnapshot();
         m_detector.SetCollisionEnabled(settings.CheckSpellCollision);
         m_detector.SetFowEnabled(settings.DodgeFow);
+        m_detector.SetDevSameTeam(settings.SameTeam);
         m_detector.Update();
         RemoveDisabledSkillshots();
         const std::vector<Vec3> observedPath = player.IsValid()
@@ -726,6 +804,45 @@ private:
             skillshots.end());
     }
 
+    void SimulateSkillshot() {
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid()) return;
+
+        // Create a dummy spell data entry
+        KuroEvade::Generated::SpellDataEntry entry;
+        entry.sdk.ChampionName = "Dummy";
+        entry.sdk.SpellName = "DummySkillshot";
+        entry.sdk.SpellType = SDK::SpellType::SkillshotLine;
+        entry.sdk.Range = 1200;
+        entry.sdk.Radius = 80;
+        entry.sdk.MissileSpeed = 1000; // Slower so it's easy to see/test
+        entry.sdk.Delay = 250;
+
+        // Position from cursor extending towards player, or from player extending to cursor
+        // Let's make it start from cursor, and travel towards player, so the player has to dodge it!
+        // This is a perfect simulation!
+        Vec3 start = SDK::Game::CursorPos();
+        Vec3 end = player.Position();
+        if (start.Distance(end) < 100.0f) {
+            // If cursor is too close to player, start from a distance
+            start = player.Position() + player.Direction() * 800.0f;
+        }
+
+        // We can create the skillshot
+        auto skillshot = std::make_shared<SDK::SkillshotLine>(entry.sdk);
+        skillshot->DetectionType = SDK::SkillshotDetectionType::ProcessSpell;
+        skillshot->Caster = player; // Use player as dummy caster
+        skillshot->StartPosition = start.To2D();
+        skillshot->EndPosition = end.To2D();
+        skillshot->Direction = (end.To2D() - start.To2D()).Normalized();
+        skillshot->StartTime = SDK::Variables::TickCount();
+
+        // Refresh geometry and add to detector
+        KuroEvade::SpecialSpells::RefreshSkillshotGeometry(*skillshot);
+        m_detector.AddSimulatedSkillshot(skillshot, entry);
+        SDK::Orbwalker::DebugPrint("[KuroEvade][Dev] Simulated Q skillshot from cursor to player!");
+    }
+
     void CreateMenu() {
         DestroyMenu();
         m_menu = new Menu(GetInternalId(), GetName(), true);
@@ -762,9 +879,9 @@ private:
         m_drawThreatLabelsMenu = drawing->Add(new MenuBool(
             "drawThreatLabels", "Draw Spell / Hit-Time Labels", false));
         m_irrelevantOpacityMenu = drawing->Add(new MenuSlider(
-            "irrelevantOpacity", "Irrelevant Fill Opacity %", 8, 0, 35));
+            "irrelevantOpacity", "Irrelevant Fill Opacity %", 15, 0, 100));
         m_threatOpacityMenu = drawing->Add(new MenuSlider(
-            "threatOpacity", "Threat Fill Opacity %", 38, 5, 85));
+            "threatOpacity", "Threat Fill Opacity %", 70, 0, 100));
         m_irrelevantColorMenu = drawing->Add(new MenuColor(
             "irrelevantColor", "Irrelevant / Gray", 0.57f, 0.60f, 0.64f, 1.0f));
         m_pathThreatColorMenu = drawing->Add(new MenuColor(
@@ -836,6 +953,11 @@ private:
             "dodgeInterval", "Dodge Re-issue Interval (ms)", 0, 0, 500));
         m_dodgeHpMenu = humanizer->Add(new MenuSlider(
             "dodgeHp", "Only Dodge Below HP %", 100, 1, 100));
+
+        auto* dev = m_menu->AddSubMenu(new Menu("dev", "Developer / Test Mode"));
+        m_devModeMenu = dev->Add(new MenuBool("devMode", "Enable Developer Mode", false));
+        m_devSameTeamMenu = dev->Add(new MenuBool("sameTeam", "Detect Ally Spells (Test)", false));
+        m_devSimulateKeyMenu = dev->Add(new MenuKeyBind("simulateKey", "Simulate Skillshot at Cursor", 'T', KeyBindType::Press, false));
 
         BuildSpellMenu();
         BuildEvadeSpellMenu();
@@ -1107,6 +1229,9 @@ private:
         m_interventionColorMenu = nullptr;
         m_routeColorMenu = nullptr;
         m_clickOnlyOnceMenu = nullptr;
+        m_devModeMenu = nullptr;
+        m_devSameTeamMenu = nullptr;
+        m_devSimulateKeyMenu = nullptr;
         m_spellsMenu = nullptr;
         m_evadeSpellsMenu = nullptr;
         m_spellOptions.clear();

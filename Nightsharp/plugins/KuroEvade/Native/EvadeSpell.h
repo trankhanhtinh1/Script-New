@@ -4,6 +4,7 @@
 #include "EvadeSettings.h"
 #include "EvadeSpellData.h"
 #include "EvadeSpellDatabase.h"
+#include "EvadeUtils.h"
 
 #include "../../../Core/CoreControl.h"
 #include "../../../SDK/SDK.h"
@@ -59,7 +60,7 @@ struct EvadeSpell final {
             return false;
         }
 
-        const std::string championName = player.CharacterName();
+        const std::string championName = EvadeUtils::GetObjectCharacterName(player);
         auto spells = EvadeSpellDatabase::ForChampion(championName.c_str(), true);
         if (spells.empty()) {
             return false;
@@ -281,7 +282,7 @@ private:
 
         if (_stricmp(data.Name.c_str(), "Ekko R") == 0) {
             for (const auto& minion : SDK::GameObjects::AllyMinions()) {
-                if (!minion.IsValid() || minion.IsDead() || _stricmp(minion.Name().c_str(), "Ekko") != 0) {
+                if (!minion.IsValid() || minion.IsDead() || _stricmp(EvadeUtils::GetObjectName(minion).c_str(), "Ekko") != 0) {
                     continue;
                 }
                 if (IsSafeAt(settings, minion.ServerPosition().To2D(), player.BoundingRadius(), skillshots)) {

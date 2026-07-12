@@ -3,6 +3,7 @@
 
 #include "SpecialSpells/SpecialSpellProcessor.h"
 #include "SpellDatabase.h"
+#include "EvadeUtils.h"
 
 #include "../../../Core/CoreNavGrid.h"
 #include "../../../SDK/SDK.h"
@@ -41,6 +42,14 @@ public:
 
     void SetFowEnabled(bool enabled) {
         m_dodgeFow = enabled;
+    }
+
+    void SetDevSameTeam(bool enabled) {
+        m_devSameTeam = enabled;
+    }
+
+    void AddSimulatedSkillshot(const SkillshotPtr& skillshot, const Generated::SpellDataEntry& data) {
+        AddSkillshot(skillshot, data, true);
     }
 
     void Clear() {
@@ -116,10 +125,10 @@ public:
         SDK::AIBaseClient caster = MakeCaster(args.Sender);
         if (caster.IsValid() && caster.IsHero() && !args.IsAutoAttack) {
             SDK::Orbwalker::DebugPrint("[SpellDetector] Caster: %s | Spell: %s | Slot: %d",
-                                       GetCasterName(caster).c_str(), args.SpellName, args.Slot);
+                                       EvadeUtils::GetObjectCharacterName(caster).c_str(), args.SpellName, args.Slot);
         }
 
-        if (!caster.IsValid() || caster.IsAlly()) {
+        if (!caster.IsValid() || (caster.IsAlly() && !m_devSameTeam)) {
             return;
         }
 
@@ -199,19 +208,19 @@ public:
             static_cast<int>(args.Sender.NetworkId));
         if (caster.IsValid() && caster.IsHero()) {
             SDK::Orbwalker::DebugPrint("[SpellDetector][CastSpell] Caster: %s | Slot: %d",
-                                       GetCasterName(caster).c_str(), args.Slot);
+                                       EvadeUtils::GetObjectCharacterName(caster).c_str(), args.Slot);
         }
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid() || args.Sender.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
             return;
         }
-        if (caster.IsValid() && caster.IsAlly()) {
+        if (caster.IsValid() && caster.IsAlly() && !m_devSameTeam) {
             return;
         }
-        const auto* data = FindUniqueByChampionAndSlot(args.Sender.CharacterName, args.Slot);
+        const auto* data = FindUniqueByChampionAndSlot(EvadeUtils::GetObjectCharacterName(caster).c_str(), args.Slot);
         if (!data && caster.IsValid()) {
-            data = FindUniqueByChampionAndSlot(GetCasterName(caster).c_str(), args.Slot);
+            data = FindUniqueByChampionAndSlot(EvadeUtils::GetObjectCharacterName(caster).c_str(), args.Slot);
         }
         if (!data || !IsSpellEnabled(*data)) {
             return;
@@ -262,7 +271,7 @@ public:
         }
         if (caster.IsValid() && caster.IsHero()) {
             SDK::Orbwalker::DebugPrint("[SpellDetector][Missile] Caster: %s | Missile: %s | Spell: %s",
-                                       GetCasterName(caster).c_str(), missileName, args.SpellName);
+                                       EvadeUtils::GetObjectCharacterName(caster).c_str(), missileName, args.SpellName);
         }
 
         const auto* data = FindByMissileName(missileName);
@@ -277,7 +286,7 @@ public:
         }
 
 
-        if (!caster.IsValid() || caster.IsAlly()) {
+        if (!caster.IsValid() || (caster.IsAlly() && !m_devSameTeam)) {
             return;
         }
         if (!caster.IsVisible() && !m_dodgeFow) {
@@ -328,12 +337,12 @@ public:
         }
 
         SDK::GameObject object(args.Sender.Ptr, args.Sender.Type);
-        if (object.IsValid() && !object.IsAlly()) {
+        if (object.IsValid() && (!object.IsAlly() || m_devSameTeam)) {
             SDK::Orbwalker::DebugPrint("[SpellDetector][Object] Name: %s | CharName: %s",
-                                       object.Name().c_str(), GetObjectName(object).c_str());
+                                       EvadeUtils::GetObjectName(object).c_str(), EvadeUtils::GetObjectCharacterName(object).c_str());
         }
 
-        if (!object.IsValid() || object.IsAlly()) {
+        if (!object.IsValid() || (object.IsAlly() && !m_devSameTeam)) {
             return;
         }
 
@@ -344,8 +353,8 @@ public:
             return;
         }
 
-        const std::string objectName = object.Name();
-        const std::string characterName = GetObjectName(object);
+        const std::string objectName = EvadeUtils::GetObjectName(object);
+        const std::string characterName = EvadeUtils::GetObjectCharacterName(object);
         const auto* data = FindTrapData(objectName, characterName);
         if (!data || !IsSpellEnabled(*data)) {
             return;
@@ -354,7 +363,7 @@ public:
         SDK::AIBaseClient caster;
         for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
             if (enemy.IsValid() &&
-                _stricmp(GetCasterName(enemy).c_str(), data->sdk.ChampionName.c_str()) == 0) {
+                _stricmp(EvadeUtils::GetObjectCharacterName(enemy).c_str(), data->sdk.ChampionName.c_str()) == 0) {
                 caster = SDK::AIBaseClient(enemy.Handle());
                 break;
             }
@@ -405,6 +414,7 @@ private:
     int m_lastCollisionTick = 0;
     bool m_checkCollisions = false;
     bool m_dodgeFow = true;
+    bool m_devSameTeam = false;
 
     bool IsSpellEnabled(const Generated::SpellDataEntry& data) const {
         return !m_spellEnabledPredicate || m_spellEnabledPredicate(data);
@@ -509,32 +519,6 @@ private:
         return haystack.find(needle) != std::string::npos;
     }
 
-    static std::string GetCasterName(const SDK::AIBaseClient& caster) {
-        if (!caster.IsValid()) return "";
-        std::string name = caster.CharacterName();
-        if (!name.empty()) {
-            return name;
-        }
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadCharacterName(caster.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return "";
-    }
-
-    static std::string GetObjectName(const SDK::GameObject& object) {
-        if (!object.IsValid()) return "";
-        std::string name = object.CharacterName();
-        if (!name.empty()) {
-            return name;
-        }
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return "";
-    }
-
     static bool IsBasicAttackName(const char* name) {
         return ContainsInsensitive(name, "basicattack") || ContainsInsensitive(name, "attack");
     }
@@ -578,9 +562,8 @@ private:
             args.Slot < 0 || args.Slot > 3) {
             return nullptr;
         }
-        return caster.IsValid()
-            ? FindUniqueByChampionAndSlot(GetCasterName(caster).c_str(), args.Slot)
-            : nullptr;
+        // Disabled unique slot fallback to prevent inaccurate ghost skillshot detection
+        return nullptr;
     }
 
     static bool MatchesRegexInsensitive(const std::string& text, const std::string& pattern) {
@@ -621,7 +604,7 @@ private:
         }
 
         const std::string casterName = skillshot.Caster.IsValid()
-            ? GetCasterName(skillshot.Caster)
+            ? EvadeUtils::GetObjectCharacterName(skillshot.Caster)
             : std::string();
         for (const auto& entry : SpellDatabase::Spells()) {
             if (!SameText(entry.sdk.SpellName, skillshot.SData.SpellName)) {
@@ -1225,7 +1208,7 @@ private:
             SpecialSpells::RefreshSkillshotGeometry(*skillshot);
             AddSkillshot(skillshot, data, allowDuplicate);
             SDK::Orbwalker::DebugPrint("[SpellDetector][Detected] Spell: %s | Caster: %s | Type: %d | Range: %.1f",
-                                       data.sdk.SpellName.c_str(), GetCasterName(caster).c_str(),
+                                       data.sdk.SpellName.c_str(), EvadeUtils::GetObjectCharacterName(caster).c_str(),
                                        static_cast<int>(detectionType), range);
             return skillshot;
         }

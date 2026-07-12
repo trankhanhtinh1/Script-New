@@ -34,32 +34,6 @@ inline bool UpdateR = false;
 inline int LastR = 0;
 inline std::vector<Dagger> Daggers;
 
-static std::string GetObjectName(const GameObject& object) {
-    if (!object.IsValid()) {
-        return {};
-    }
-    char nameBuf[96] = {};
-    if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-        return nameBuf;
-    }
-    return {};
-}
-
-static std::string GetObjectCharacterName(const GameObject& object) {
-    if (!object.IsValid()) {
-        return {};
-    }
-    std::string name = object.CharacterName();
-    if (!name.empty()) {
-        return name;
-    }
-    char nameBuf[96] = {};
-    if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-        return nameBuf;
-    }
-    return {};
-}
-
 static std::string RuntimeName(const GameObject& object) {
     return GetObjectCharacterName(object);
 }

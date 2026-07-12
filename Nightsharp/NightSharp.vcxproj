@@ -195,6 +195,8 @@
     <ClInclude Include="Plugins\Champion\EzrealSemiPlugin.h" />
     <ClInclude Include="Plugins\Champion\JaxSemiCastNew.h" />
     <ClInclude Include="Plugins\Champion\JaxSemiPlugin.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\Fiora.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\FioraDatabase.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Yasuo\Yasuo.h" />
