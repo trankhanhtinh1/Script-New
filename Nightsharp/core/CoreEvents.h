@@ -574,6 +574,10 @@ namespace detail {
     }
 
     inline bool LooksLikeObject(uintptr_t object) {
+        if (!IsValidAddress(object)) {
+            return false;
+        }
+
         const ObjectInfo info = ReadObject(object);
         if (!info.IsValid() || info.NetworkId == 0 || info.NetworkId == 0xFFFFFFFFu) {
             return false;
@@ -727,9 +731,10 @@ namespace detail {
             raw.R8,
             raw.R9
         };
-        for (const uintptr_t arg : args) {
-            if (LooksLikeObject(arg)) {
-                return arg;
+        const int argCount = raw.Id == Hooks::OnBuffUpdate ? 3 : 4;
+        for (int i = 0; i < argCount; ++i) {
+            if (LooksLikeObject(args[i])) {
+                return args[i];
             }
         }
         return 0;
@@ -742,9 +747,10 @@ namespace detail {
             raw.R8,
             raw.R9
         };
-        for (const uintptr_t arg : args) {
-            if (!LooksLikeObject(arg) && LooksLikeBuff(arg)) {
-                return arg;
+        const int argCount = raw.Id == Hooks::OnBuffUpdate ? 3 : 4;
+        for (int i = 0; i < argCount; ++i) {
+            if (!LooksLikeObject(args[i]) && LooksLikeBuff(args[i])) {
+                return args[i];
             }
         }
         return 0;
