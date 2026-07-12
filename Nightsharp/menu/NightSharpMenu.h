@@ -45,11 +45,19 @@ namespace NightSharpMenu {
 
     constexpr float PRIMARY_W = 190.0f;
     constexpr float SECONDARY_W = 190.0f;
-    constexpr float CONTENT_W = 560.0f;
     constexpr float ITEM_H = 30.0f;
     constexpr float HEADER_H = 32.0f;
     constexpr float PANEL_GAP = 0.0f;
-    constexpr float MAX_CONTENT_H = 620.0f;
+    // Functional content panel: size follows content only (no fixed 560/620).
+    constexpr float CONTENT_MIN_W = 200.0f;
+    constexpr float CONTENT_PAD_X = 0.0f; // flush rows like sidebar
+    constexpr float CONTENT_PAD_Y = 0.0f;
+    constexpr float CONTENT_MAX_H_RATIO = 0.70f; // max 70% of screen height
+
+    // Cached body size from the previous frame (height refined by measure; width estimated).
+    inline float contentPanelW = CONTENT_MIN_W;
+    inline float contentPanelBodyH = ITEM_H;
+    inline int contentPanelSizeKey = -1;
 
     // Margin from the screen edges when auto-positioning PermaShow.
     constexpr float PERMASHOW_EDGE_MARGIN = 18.0f;
@@ -204,7 +212,7 @@ namespace NightSharpMenu {
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, active ? activePress : inactivePr);
         ImGui::PushStyleColor(ImGuiCol_Text, text);
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 7.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
         bool clicked = ImGui::Button(label, ImVec2(width, 0));
         ImGui::PopStyleVar(2);
@@ -506,7 +514,7 @@ namespace NightSharpMenu {
                     ImVec2(boxLeft, currentY + 1.0f),
                     ImVec2(boxRight, currentY + lineHeight - 2.0f),
                     stateOn ? IM_COL32(0, 140, 60, 255) : IM_COL32(170, 40, 40, 255),
-                    3.0f);
+                    0.0f);
 
                 // Draw status text inside the box (centered, white text color for high contrast)
                 const ImVec2 valSize = ImGui::CalcTextSize(value);
@@ -672,7 +680,7 @@ namespace NightSharpMenu {
         permaShowBoundsRight = x + width;
         permaShowBoundsBottom = y + totalHeight;
 
-        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(18, 20, 26, 255), 0.0f);
+        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(18, 20, 26, 178), 0.0f);
         dl->AddRect(ImVec2(x, y), ImVec2(x + width, y + totalHeight), COL_BORDER, 0.0f);
         dl->AddText(ImVec2(x + padding, y + padding - 1.0f), COL_ACCENT, "PermaShow");
 
@@ -872,13 +880,175 @@ namespace NightSharpMenu {
             if (!component || !component->Visible || component->IsMenu()) {
                 continue;
             }
-            component->DrawImGui();
+            // Same sidebar cell chrome as Menu::DrawChildren (rect + border per item).
+            if (SDK::UI::g_FunctionalMenuStyle.enabled) {
+                SDK::UI::BeginFunctionalMenuRow(component);
+                component->DrawImGui();
+                SDK::UI::EndFunctionalMenuRow();
+            } else {
+                component->DrawImGui();
+            }
             drewAny = true;
         }
 
         if (!drewAny) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No items in this section.");
         }
+    }
+
+    inline void ApplyFunctionalMenuSidebarStyle() {
+        auto& s = SDK::UI::g_FunctionalMenuStyle;
+        s.enabled = true;
+        s.itemHeight = ITEM_H;
+        s.padX = 12.0f;
+        s.colItem = COL_ITEM;
+        s.colItemHover = COL_ITEM_HOVER;
+        s.colItemActive = COL_ITEM_ACTIVE;
+        s.colBorder = COL_BORDER;
+        s.colText = COL_TEXT;
+        s.colTextDim = COL_TEXT_DIM;
+        s.colAccent = COL_ACCENT;
+    }
+
+    inline void ClearFunctionalMenuSidebarStyle() {
+        SDK::UI::g_FunctionalMenuStyle.enabled = false;
+        SDK::UI::g_FunctionalMenuRowNest = 0;
+    }
+
+    // Preferred control width for each functional menu item kind (matches UI.h DrawImGui).
+    inline float PreferredControlWidthForItem(const SDK::UI::AMenuComponent* component) {
+        if (!component || component->IsMenu()) {
+            return 0.0f;
+        }
+
+        switch (component->Kind()) {
+            case SDK::UI::MenuValueType::Boolean:   return 86.0f;
+            case SDK::UI::MenuValueType::Slider:    return 280.0f;
+            case SDK::UI::MenuValueType::SliderF:   return 280.0f;
+            case SDK::UI::MenuValueType::KeyBind:   return 300.0f;
+            case SDK::UI::MenuValueType::List:      return 212.0f;
+            case SDK::UI::MenuValueType::Button:    return 136.0f;
+            case SDK::UI::MenuValueType::Color:     return 136.0f;
+            case SDK::UI::MenuValueType::Separator: return 0.0f;
+            case SDK::UI::MenuValueType::SliderBtn: return 320.0f;
+            default:                               return 160.0f;
+        }
+    }
+
+    inline void AccumulateMenuContentMetrics(
+        const SDK::UI::AMenuComponent* component,
+        float& maxRowW,
+        int& rowCount,
+        int depth = 0) {
+        if (!component || !component->Visible) {
+            return;
+        }
+
+        const float indentAmount = 16.0f;
+        const float currentIndent = static_cast<float>(depth) * indentAmount;
+
+        const char* label = component->DisplayName.c_str();
+        const float labelW = ImGui::CalcTextSize(label ? label : "").x;
+
+        if (component->IsMenu()) {
+            // Collapsing header row + nested children (headers default open).
+            maxRowW = MaxF(maxRowW, labelW + 24.0f + currentIndent);
+            ++rowCount;
+            const auto* menu = static_cast<const SDK::UI::Menu*>(component);
+            for (int i = 0; i < menu->Components.size(); ++i) {
+                AccumulateMenuContentMetrics(menu->Components[i], maxRowW, rowCount, depth + 1);
+            }
+            return;
+        }
+
+        const float controlW = PreferredControlWidthForItem(component);
+        const float rowW = labelW + (controlW > 0.0f ? (8.0f + controlW) : 0.0f) + currentIndent;
+        maxRowW = MaxF(maxRowW, rowW);
+        ++rowCount;
+    }
+
+    // Estimate functional panel size from an SDK menu section (content-driven).
+    inline void EstimateSdkMenuContentSize(SDK::UI::Menu* menu, bool leafOnly, float& outW, float& outBodyH) {
+        float maxRowW = 120.0f;
+        int rowCount = 0;
+
+        if (menu) {
+            for (int i = 0; i < menu->Components.size(); ++i) {
+                auto* component = menu->Components[i];
+                if (!component || !component->Visible) {
+                    continue;
+                }
+                if (leafOnly && component->IsMenu()) {
+                    continue;
+                }
+                AccumulateMenuContentMetrics(component, maxRowW, rowCount);
+            }
+        }
+
+        if (rowCount <= 0) {
+            rowCount = 1;
+            maxRowW = MaxF(maxRowW, 180.0f);
+        }
+
+        // Width = longest label+control; height = exact item rows (sidebar ITEM_H each).
+        outW = maxRowW + 24.0f + 8.0f; // side pad (12*2) + scrollbar slack
+        outBodyH = static_cast<float>(rowCount) * ITEM_H;
+    }
+
+    inline void EstimateCoreContentSize(int secondaryIdx, float& outW, float& outBodyH) {
+        // Core panels are hand-built; estimate from known sections (refined by measured height).
+        int rows = 4;
+        float rowW = 280.0f;
+        if (secondaryIdx == 0) {
+            rows = 3;
+            rowW = 220.0f;
+        } else if (secondaryIdx == 1) {
+            rows = 10;
+            rowW = 300.0f;
+        } else if (secondaryIdx == 2) {
+            rows = 14;
+            rowW = 360.0f;
+        } else if (secondaryIdx == 3) {
+            rows = MaxI(4, PluginRegistry::PluginCount + 3);
+            rowW = 420.0f;
+        }
+        outW = rowW + 24.0f;
+        outBodyH = static_cast<float>(rows) * ITEM_H;
+    }
+
+    inline float ClampContentWidth(float width) {
+        const ImVec2 display = GetOverlayDisplaySize();
+        const float maxW = MaxF(CONTENT_MIN_W, display.x * 0.55f);
+        if (width < CONTENT_MIN_W) {
+            return CONTENT_MIN_W;
+        }
+        if (width > maxW) {
+            return maxW;
+        }
+        return width;
+    }
+
+    inline float GetContentMaxTotalHeight() {
+        return GetOverlayDisplaySize().y * CONTENT_MAX_H_RATIO;
+    }
+
+    // Match functional controls to sidebar row height (ITEM_H) and default font.
+    // Slight inset so widgets sit inside the bordered cell without touching edges.
+    inline void PushFunctionalMenuItemStyle() {
+        const float fontSize = ImGui::GetFontSize();
+        const float innerH = ITEM_H - 4.0f;
+        float padY = (innerH - fontSize) * 0.5f;
+        if (padY < 1.0f) {
+            padY = 1.0f;
+        }
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, padY));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    }
+
+    inline void PopFunctionalMenuItemStyle() {
+        ImGui::PopStyleVar(4);
     }
 
     inline void DrawPluginContentPanel(int pluginIdx, int secondaryIdx) {
@@ -958,12 +1128,13 @@ namespace NightSharpMenu {
         const bool showSecondary = primarySelected && activePrimaryIdx >= 0;
         const bool showContent = showSecondary && secondarySelected && activeSecondaryIdx >= 0;
 
+        // Content panel width is content-driven (cached / estimated). Height is capped later.
         float totalW = PRIMARY_W;
         if (showSecondary) {
             totalW += PANEL_GAP + SECONDARY_W;
         }
         if (showContent) {
-            totalW += PANEL_GAP + CONTENT_W;
+            totalW += PANEL_GAP + contentPanelW;
         }
 
         ImVec2 mouse = ImGui::GetIO().MousePos;
@@ -1014,7 +1185,6 @@ namespace NightSharpMenu {
             ? HEADER_H + ITEM_H * static_cast<float>(MaxI(1, secCount)) + 4.0f
             : 0.0f;
         float sidebarH = MaxF(primaryH, secondaryH > 0.0f ? secondaryH : primaryH);
-        float contentH = MaxF(sidebarH, MAX_CONTENT_H);
 
         // Primary sidebar.
         dl->AddRectFilled(
@@ -1081,7 +1251,6 @@ namespace NightSharpMenu {
 
         secondaryH = HEADER_H + ITEM_H * static_cast<float>(MaxI(1, secCount)) + 4.0f;
         sidebarH = MaxF(primaryH, secondaryH);
-        contentH = MaxF(sidebarH, MAX_CONTENT_H);
 
         // Secondary sidebar.
         dl->AddRectFilled(
@@ -1140,15 +1309,52 @@ namespace NightSharpMenu {
             return;
         }
 
-        // Content panel.
+        // Content panel — pure content size (no fixed 620). Max height = 70% screen.
+        // Each functional item is a sidebar-style rectangle with border.
+        const int sizeKey = (activePluginMap + 1) * 1000 + activeSecondaryIdx;
+        if (sizeKey != contentPanelSizeKey) {
+            contentPanelSizeKey = sizeKey;
+            float estW = CONTENT_MIN_W;
+            float estBodyH = ITEM_H;
+            if (activePluginMap < 0) {
+                EstimateCoreContentSize(activeSecondaryIdx, estW, estBodyH);
+            } else {
+                SDK::UI::Menu* section = GetPluginSecondaryMenu(activePluginMap, activeSecondaryIdx);
+                const bool leafOnly =
+                    IsPluginLeafSection(activePluginMap, activeSecondaryIdx) ||
+                    (!section && CountRootSubMenus(FindPluginSdkMenu(activePluginMap)) <= 0);
+                SDK::UI::Menu* measureMenu = section
+                    ? section
+                    : (leafOnly ? FindPluginSdkMenu(activePluginMap) : nullptr);
+                EstimateSdkMenuContentSize(measureMenu, leafOnly && !section, estW, estBodyH);
+            }
+            contentPanelW = ClampContentWidth(estW);
+            contentPanelBodyH = MaxF(ITEM_H, estBodyH);
+        }
+
+        const float maxTotalH = GetContentMaxTotalHeight();
+        const float maxBodyH = MaxF(ITEM_H, maxTotalH - HEADER_H);
+        // Height follows content only — never pad up to a fixed panel size.
+        const float idealBodyH = MaxF(ITEM_H, contentPanelBodyH);
+        const bool contentScroll = idealBodyH > maxBodyH + 0.5f;
+        const float bodyH = contentScroll ? maxBodyH : idealBodyH;
+        const float contentH = HEADER_H + bodyH;
+        const float contentW = contentPanelW;
+
         dl->AddRectFilled(
             contentPos,
-            ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
+            ImVec2(contentPos.x + contentW, contentPos.y + HEADER_H),
             COL_HEADER,
+            0.0f);
+        // Body uses same solid sidebar bg so item cells read like the primary/secondary lists.
+        dl->AddRectFilled(
+            ImVec2(contentPos.x, contentPos.y + HEADER_H),
+            ImVec2(contentPos.x + contentW, contentPos.y + contentH),
+            COL_BG,
             0.0f);
         dl->AddRect(
             contentPos,
-            ImVec2(contentPos.x + CONTENT_W, contentPos.y + contentH),
+            ImVec2(contentPos.x + contentW, contentPos.y + contentH),
             COL_BORDER,
             0.0f);
 
@@ -1162,41 +1368,48 @@ namespace NightSharpMenu {
         dl->AddText(ImVec2(contentPos.x + 10.0f, contentPos.y + 8.0f), COL_ACCENT, sectionLabel);
         dl->AddLine(
             ImVec2(contentPos.x, contentPos.y + HEADER_H),
-            ImVec2(contentPos.x + CONTENT_W, contentPos.y + HEADER_H),
+            ImVec2(contentPos.x + contentW, contentPos.y + HEADER_H),
             COL_BORDER);
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(8.0f / 255.0f, 10.0f / 255.0f, 18.0f / 255.0f, 128.0f / 255.0f));
+        // Sidebar colors as the primary look for every functional control.
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(8.0f / 255.0f, 10.0f / 255.0f, 18.0f / 255.0f, 214.0f / 255.0f));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.08f, 0.13f, 0.22f, 0.72f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.12f, 0.20f, 0.34f, 0.88f));
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.15f, 0.26f, 0.44f, 0.96f));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(0.20f, 0.39f, 0.72f, 0.95f));
-        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.28f, 0.50f, 0.88f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.17f, 0.28f, 0.78f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.28f, 0.46f, 0.92f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.20f, 0.36f, 0.58f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.12f, 0.22f, 0.36f, 0.78f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.18f, 0.30f, 0.50f, 0.90f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.22f, 0.38f, 0.62f, 0.98f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(18.0f / 255.0f, 20.0f / 255.0f, 30.0f / 255.0f, 180.0f / 255.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(52.0f / 255.0f, 48.0f / 255.0f, 82.0f / 255.0f, 215.0f / 255.0f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(82.0f / 255.0f, 66.0f / 255.0f, 132.0f / 255.0f, 232.0f / 255.0f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, ImVec4(120.0f / 255.0f, 235.0f / 255.0f, 120.0f / 255.0f, 0.85f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(120.0f / 255.0f, 235.0f / 255.0f, 120.0f / 255.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(18.0f / 255.0f, 20.0f / 255.0f, 30.0f / 255.0f, 200.0f / 255.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(52.0f / 255.0f, 48.0f / 255.0f, 82.0f / 255.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(82.0f / 255.0f, 66.0f / 255.0f, 132.0f / 255.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(18.0f / 255.0f, 20.0f / 255.0f, 30.0f / 255.0f, 200.0f / 255.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(52.0f / 255.0f, 48.0f / 255.0f, 82.0f / 255.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(82.0f / 255.0f, 66.0f / 255.0f, 132.0f / 255.0f, 1.0f));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarRounding, 0.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 4.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 5.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+        PushFunctionalMenuItemStyle();
+        ApplyFunctionalMenuSidebarStyle();
 
         ImGui::SetNextWindowPos(ImVec2(contentPos.x, contentPos.y + HEADER_H), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(CONTENT_W, contentH - HEADER_H), ImGuiCond_Always);
-        ImGui::Begin(
-            "##ns_content",
-            nullptr,
+        ImGui::SetNextWindowSize(ImVec2(contentW, bodyH), ImGuiCond_Always);
+        ImGuiWindowFlags contentFlags =
             ImGuiWindowFlags_NoTitleBar |
-                ImGuiWindowFlags_NoResize |
-                ImGuiWindowFlags_NoMove |
-                ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoCollapse);
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoFocusOnAppearing;
+        if (!contentScroll) {
+            contentFlags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        }
+
+        ImGui::Begin("##ns_content", nullptr, contentFlags);
 
         if (activePluginMap < 0) {
             DrawCoreContentPanel(activeSecondaryIdx);
@@ -1204,11 +1417,19 @@ namespace NightSharpMenu {
             DrawPluginContentPanel(activePluginMap, activeSecondaryIdx);
         }
 
+        // Height = laid-out content only (row count * ITEM_H), not a fixed panel.
+        const float measuredBodyH = ImGui::GetCursorPosY();
+        if (measuredBodyH > 0.5f) {
+            contentPanelBodyH = measuredBodyH;
+        }
+
         ImGui::End();
+        ClearFunctionalMenuSidebarStyle();
+        PopFunctionalMenuItemStyle();
         ImGui::PopStyleVar(7);
         ImGui::PopStyleColor(14);
 
-        menuBoundsRight = menuPosX + PRIMARY_W + PANEL_GAP + SECONDARY_W + PANEL_GAP + CONTENT_W;
+        menuBoundsRight = menuPosX + PRIMARY_W + PANEL_GAP + SECONDARY_W + PANEL_GAP + contentW;
         menuBoundsBottom = menuPosY + contentH;
     }
 

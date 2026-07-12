@@ -102,6 +102,116 @@ namespace SDK { namespace UI {
     inline void (*g_MenuValueChangedHook)(MenuItem*) = nullptr;
     inline void (*g_MenuAttachedHook)(Menu*)        = nullptr;
 
+    // NightSharp sidebar-like chrome for functional items (MenuBool, MenuList, …).
+    // Enabled by NightSharpMenu while drawing the content panel.
+    struct FunctionalMenuStyle {
+        bool  enabled     = false;
+        float itemHeight  = 30.0f;
+        float padX        = 12.0f;
+        ImU32 colItem     = IM_COL32(18, 20, 30, 118);
+        ImU32 colItemHover  = IM_COL32(52, 48, 82, 215);
+        ImU32 colItemActive = IM_COL32(82, 66, 132, 232);
+        ImU32 colBorder   = IM_COL32(88, 100, 148, 180);
+        ImU32 colText     = IM_COL32(255, 255, 255, 255);
+        ImU32 colTextDim  = IM_COL32(185, 185, 205, 255);
+        ImU32 colAccent   = IM_COL32(120, 235, 120, 255);
+    };
+    inline FunctionalMenuStyle g_FunctionalMenuStyle;
+
+    struct FunctionalMenuRowState {
+        ImVec2 origin{};
+        float  width  = 0.0f;
+        float  height = 0.0f;
+    };
+    inline FunctionalMenuRowState g_FunctionalMenuRow{};
+    inline int g_FunctionalMenuRowNest = 0;
+    inline int g_FunctionalMenuDepth = 0;
+
+    inline void BeginFunctionalMenuRow(const void* id, bool isActive = false) {
+        if (!g_FunctionalMenuStyle.enabled) {
+            return;
+        }
+
+        auto& style = g_FunctionalMenuStyle;
+        ImGui::PushID(id);
+        ++g_FunctionalMenuRowNest;
+
+        const float w = ImGui::GetContentRegionAvail().x;
+        const float h = style.itemHeight > 1.0f ? style.itemHeight : 30.0f;
+        const ImVec2 p0 = ImGui::GetCursorScreenPos();
+        const ImVec2 p1(p0.x + w, p0.y + h);
+
+        g_FunctionalMenuRow.origin = p0;
+        g_FunctionalMenuRow.width = w;
+        g_FunctionalMenuRow.height = h;
+
+        const bool hovered = ImGui::IsMouseHoveringRect(p0, p1, false);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float indentAmount = 16.0f;
+        const float currentIndent = static_cast<float>(g_FunctionalMenuDepth) * indentAmount;
+
+        if (dl) {
+            // Draw background rectangle only on hover or active (same as sidebar)
+            if (hovered || isActive) {
+                const ImU32 bg = isActive
+                    ? style.colItemActive
+                    : style.colItemHover;
+                dl->AddRectFilled(p0, p1, bg, 0.0f);
+            } else {
+                dl->AddRectFilled(p0, p1, style.colItem, 0.0f);
+            }
+
+            // Bottom border line (same as sidebar bottom line)
+            dl->AddLine(ImVec2(p0.x, p1.y), ImVec2(p1.x, p1.y), style.colBorder, 1.0f);
+
+            // Left indicator line when active (same as sidebar active indicator)
+            if (isActive) {
+                float lineX = p0.x + currentIndent + 1.0f;
+                dl->AddLine(ImVec2(lineX, p0.y + 2.0f), ImVec2(lineX, p1.y - 2.0f), style.colAccent, 2.0f);
+            }
+
+            // Draw vertical hierarchy guides
+            for (int i = 0; i < g_FunctionalMenuDepth; ++i) {
+                float guideX = p0.x + style.padX + static_cast<float>(i) * indentAmount + 6.0f;
+                dl->AddLine(ImVec2(guideX, p0.y), ImVec2(guideX, p1.y), (style.colBorder & 0x00FFFFFF) | 0x40000000, 1.0f);
+            }
+        }
+
+        // Vertically center controls inside the fixed-height cell.
+        const float frameH = ImGui::GetFrameHeight();
+        float innerY = p0.y + (h - frameH) * 0.5f;
+        if (innerY < p0.y + 1.0f) {
+            innerY = p0.y + 1.0f;
+        }
+        ImGui::SetCursorScreenPos(ImVec2(p0.x + style.padX + currentIndent, innerY));
+        ImGui::BeginGroup();
+        const float innerW = w - style.padX * 2.0f - currentIndent;
+        ImGui::PushItemWidth(innerW > 40.0f ? innerW : 40.0f);
+    }
+
+    inline void EndFunctionalMenuRow() {
+        if (!g_FunctionalMenuStyle.enabled || g_FunctionalMenuRowNest <= 0) {
+            return;
+        }
+
+        ImGui::PopItemWidth();
+        ImGui::EndGroup();
+
+        const ImVec2 p0 = g_FunctionalMenuRow.origin;
+        const float w = g_FunctionalMenuRow.width;
+        const float h = g_FunctionalMenuRow.height;
+        ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
+        ImGui::Dummy(ImVec2(w > 0.0f ? w : 1.0f, 0.0f));
+
+        --g_FunctionalMenuRowNest;
+        ImGui::PopID();
+    }
+
+    // True when the caller should open its own cell (e.g. Core panel DrawOnOffEditor).
+    inline bool FunctionalMenuRowNeedsSelfWrap() {
+        return g_FunctionalMenuStyle.enabled && g_FunctionalMenuRowNest == 0;
+    }
+
     inline bool DrawStateToggleButton(const char* id,
                                       const char* label,
                                       bool active,
@@ -134,6 +244,11 @@ namespace SDK { namespace UI {
 
     inline bool DrawOnOffEditor(const char* label, bool& value, const char* idSuffix = nullptr) {
         bool changed = false;
+        const bool selfRow = FunctionalMenuRowNeedsSelfWrap();
+        if (selfRow) {
+            BeginFunctionalMenuRow(idSuffix ? static_cast<const void*>(idSuffix) : static_cast<const void*>(label));
+        }
+
         ImGui::PushID(idSuffix ? idSuffix : label);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label ? label : "");
@@ -156,6 +271,9 @@ namespace SDK { namespace UI {
         }
 
         ImGui::PopID();
+        if (selfRow) {
+            EndFunctionalMenuRow();
+        }
         return changed;
     }
 
@@ -312,7 +430,9 @@ namespace SDK { namespace UI {
         AMenuComponent* Parent  = nullptr;
         bool   Root             = false;
         bool   Visible          = true;
-        bool   Toggled          = false;
+        // Expanded state for nested functional sub-menus (sidebar-style rows).
+        // Defaults open to match former CollapsingHeader DefaultOpen behavior.
+        bool   Toggled          = true;
 
         AMenuComponent() = default;
         AMenuComponent(const char* name, const char* displayName, const char* uniqueString = "")
@@ -1382,8 +1502,18 @@ namespace SDK { namespace UI {
     inline void Menu::DrawChildren() {
         for (int i = 0; i < Components.size(); ++i) {
             AMenuComponent* c = Components[i];
-            if (!c || !c->Visible) continue;
-            c->DrawImGui();
+            if (!c || !c->Visible) {
+                continue;
+            }
+
+            // Nested menus draw their own sidebar-style header row.
+            if (g_FunctionalMenuStyle.enabled && !c->IsMenu()) {
+                BeginFunctionalMenuRow(c);
+                c->DrawImGui();
+                EndFunctionalMenuRow();
+            } else {
+                c->DrawImGui();
+            }
         }
     }
 
@@ -1394,6 +1524,47 @@ namespace SDK { namespace UI {
             DrawChildren();
             return;
         }
+
+        // Sidebar-style expandable row (same chrome as MenuBool / MenuList cells).
+        if (g_FunctionalMenuStyle.enabled) {
+            BeginFunctionalMenuRow(this, Toggled);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(DisplayName.c_str());
+            {
+                const char* arrow = Toggled ? "v" : ">";
+                const float arrowW = ImGui::CalcTextSize(arrow).x;
+                const float targetX =
+                    ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - arrowW;
+                if (targetX > ImGui::GetCursorPosX()) {
+                    ImGui::SameLine();
+                    ImGui::SetCursorPosX(targetX);
+                    ImGui::TextColored(
+                        ImGui::ColorConvertU32ToFloat4(g_FunctionalMenuStyle.colTextDim),
+                        "%s",
+                        arrow);
+                }
+            }
+            // Click anywhere on the cell toggles open/closed.
+            if (ImGui::IsMouseHoveringRect(
+                    g_FunctionalMenuRow.origin,
+                    ImVec2(
+                        g_FunctionalMenuRow.origin.x + g_FunctionalMenuRow.width,
+                        g_FunctionalMenuRow.origin.y + g_FunctionalMenuRow.height),
+                    false) &&
+                ImGui::IsMouseClicked(0) &&
+                !ImGui::IsAnyItemActive()) {
+                Toggled = !Toggled;
+            }
+            EndFunctionalMenuRow();
+
+            if (Toggled) {
+                g_FunctionalMenuDepth++;
+                DrawChildren();
+                g_FunctionalMenuDepth--;
+            }
+            return;
+        }
+
         ImGui::PushID(this);
         if (ImGui::CollapsingHeader(DisplayName.c_str(),
                 ImGuiTreeNodeFlags_DefaultOpen)) {
