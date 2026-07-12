@@ -427,4 +427,187 @@ inline float GetDamage(const SDK::AIBaseClient& source,
     return Calculate(source, target, raw).TotalDamage;
 }
 
+inline float LockeLevelInterpolation(int level, float start, float end) {
+    const float normalized = std::clamp(
+        (static_cast<float>(std::clamp(level, 1, 18)) - 1.0f) / 17.0f,
+        0.0f,
+        1.0f);
+    return start + (end - start) * normalized;
+}
+
+inline int LockeSpellRank(int rank, int maxRank) {
+    return std::clamp(rank, 1, maxRank);
+}
+
+inline float LockeRankValue(const float* values, int rank, int maxRank) {
+    return values[LockeSpellRank(rank, maxRank)];
+}
+
+inline DamageResult CalculateLockePassiveDamage(
+    const SDK::AIBaseClient& source,
+    const SDK::AIBaseClient& target) {
+    DamageResult result = {};
+    if (!source.IsValid() || !target.IsValid()) {
+        return result;
+    }
+
+    const float maxHealth = std::max(target.MaxHealth(), 0.0f);
+    const float missingHealth = maxHealth > 0.0f
+        ? std::clamp((maxHealth - target.Health()) / maxHealth, 0.0f, 1.0f)
+        : 0.0f;
+    AbilityInput input = {};
+    input.BaseDamage = LockeLevelInterpolation(source.Level(), 5.0f, 40.0f) +
+        (LockeLevelInterpolation(source.Level(), 10.0f, 80.0f) -
+         LockeLevelInterpolation(source.Level(), 5.0f, 40.0f)) * missingHealth;
+    input.APRatio = 0.10f + 0.10f * missingHealth;
+    input.Type = SDK::DamageType::Magical;
+    return CalculateAbility(source, target, input);
+}
+
+inline DamageResult CalculateLockeQMissileDamage(
+    const SDK::AIBaseClient& source,
+    const SDK::AIBaseClient& target,
+    int rank) {
+    static constexpr float baseDamage[6] = {
+        0.0f, 50.0f, 60.0f, 70.0f, 80.0f, 90.0f
+    };
+    AbilityInput input = {};
+    input.BaseDamage = LockeRankValue(baseDamage, rank, 5);
+    input.APRatio = 0.20f;
+    input.Type = SDK::DamageType::Magical;
+    return CalculateAbility(source, target, input);
+}
+
+inline DamageResult CalculateLockeQMarkDamage(
+    const SDK::AIBaseClient& source,
+    const SDK::AIBaseClient& target,
+    int rank,
+    int stacks) {
+    static constexpr float baseDamage[6] = {
+        0.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f
+    };
+    static constexpr float apRatio[6] = {
+        0.0f, 0.25f, 0.275f, 0.30f, 0.325f, 0.35f
+    };
+    const int clampedStacks = std::clamp(stacks, 0, 3);
+    if (clampedStacks <= 0) {
+        return {};
+    }
+
+    const float stackMultiplier = clampedStacks == 3
+        ? 1.40f
+        : (clampedStacks == 2 ? 1.20f : 1.0f);
+    AbilityInput input = {};
+    input.BaseDamage = LockeRankValue(baseDamage, rank, 5) *
+        static_cast<float>(clampedStacks) * stackMultiplier;
+    input.APRatio = LockeRankValue(apRatio, rank, 5) *
+        static_cast<float>(clampedStacks) * stackMultiplier;
+    input.Type = SDK::DamageType::Magical;
+    return CalculateAbility(source, target, input);
+}
+
+inline DamageResult CalculateLockeE1Damage(
+    const SDK::AIBaseClient& source,
+    const SDK::AIBaseClient& target,
+    int rank) {
+    static constexpr float baseDamage[6] = {
+        0.0f, 40.0f, 60.0f, 80.0f, 100.0f, 120.0f
+    };
+    AbilityInput input = {};
+    input.BaseDamage = LockeRankValue(baseDamage, rank, 5);
+    input.APRatio = 0.40f;
+    input.Type = SDK::DamageType::Magical;
+    return CalculateAbility(source, target, input);
+}
+
+inline DamageResult CalculateLockeE2Damage(
+    const SDK::AIBaseClient& source,
+    const SDK::AIBaseClient& target,
+    int rank) {
+    static constexpr float baseDamage[6] = {
+        0.0f, 40.0f, 50.0f, 60.0f, 70.0f, 80.0f
+    };
+    AbilityInput input = {};
+    input.BaseDamage = LockeRankValue(baseDamage, rank, 5);
+    input.APRatio = 0.40f;
+    input.Type = SDK::DamageType::Magical;
+    return CalculateAbility(source, target, input);
+}
+
+inline DamageResult CalculateLockeRDamage(
+    const SDK::AIBaseClient& source,
+    const SDK::AIBaseClient& target,
+    int rank) {
+    static constexpr float baseDamage[4] = {
+        0.0f, 150.0f, 225.0f, 300.0f
+    };
+    AbilityInput input = {};
+    input.BaseDamage = LockeRankValue(baseDamage, rank, 3);
+    input.APRatio = 0.60f;
+    input.Type = SDK::DamageType::Magical;
+    return CalculateAbility(source, target, input);
+}
+
+inline float LockeRExecuteThreshold(int rank, int sealedChampionStacks) {
+    static constexpr float thresholds[4] = {
+        0.0f, 0.10f, 0.11f, 0.12f
+    };
+    return LockeRankValue(thresholds, rank, 3) +
+        static_cast<float>(std::clamp(sealedChampionStacks, 0, 100)) * 0.005f;
+}
+
+inline float GetLockePassiveDamage(const SDK::AIBaseClient& source,
+                                   const SDK::AIBaseClient& target) {
+    return CalculateLockePassiveDamage(source, target).TotalDamage;
+}
+
+inline float GetLockeQMissileDamage(const SDK::AIBaseClient& source,
+                                    const SDK::AIBaseClient& target,
+                                    int rank) {
+    return CalculateLockeQMissileDamage(source, target, rank).TotalDamage;
+}
+
+inline float GetLockeQMarkDamage(const SDK::AIBaseClient& source,
+                                 const SDK::AIBaseClient& target,
+                                 int rank,
+                                 int stacks) {
+    return CalculateLockeQMarkDamage(source, target, rank, stacks).TotalDamage;
+}
+
+inline float GetLockeE1Damage(const SDK::AIBaseClient& source,
+                              const SDK::AIBaseClient& target,
+                              int rank) {
+    return CalculateLockeE1Damage(source, target, rank).TotalDamage;
+}
+
+inline float GetLockeE2Damage(const SDK::AIBaseClient& source,
+                              const SDK::AIBaseClient& target,
+                              int rank) {
+    return CalculateLockeE2Damage(source, target, rank).TotalDamage;
+}
+
+inline float GetLockeRDamage(const SDK::AIBaseClient& source,
+                             const SDK::AIBaseClient& target,
+                             int rank) {
+    return CalculateLockeRDamage(source, target, rank).TotalDamage;
+}
+
+inline float GetLockeAutoAttackDamage(const SDK::AIHeroClient& source,
+                                      const SDK::AIBaseClient& target,
+                                      int qRank,
+                                      int qStacks = 0,
+                                      bool includeOtherPassives = true) {
+    if (!source.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+
+    float damage = CalculateAutoAttack(
+        source, target, includeOtherPassives).TotalDamage;
+    if (!includeOtherPassives) {
+        damage += GetLockePassiveDamage(source, target);
+    }
+    damage += GetLockeQMarkDamage(source, target, qRank, qStacks);
+    return std::max(damage, 0.0f);
+}
+
 } // namespace Plugins::ziblldev9898::Damage

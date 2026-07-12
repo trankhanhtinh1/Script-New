@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
+#include "Damage.h"
 
 #include <algorithm>
 #include <cctype>
@@ -196,13 +197,7 @@ static double QDamage(const AIBaseClient& target) {
     if (!player.IsValid() || !target.IsValid()) {
         return 0.0;
     }
-
-    const float sdkDamage = Q.GetDamage(target);
-    if (sdkDamage > 0.0f) {
-        return sdkDamage;
-    }
-
-    return player.GetSpellDamage(target, SpellSlot::Q);
+    return Damage::GetLockeQMissileDamage(player, target, Q.Level());
 }
 
 static Vector3 ExtendFromPlayer(const Vector3& target, float distance) {
@@ -220,13 +215,17 @@ static double EDamage(const AIBaseClient& target) {
     if (!player.IsValid() || !target.IsValid()) {
         return 0.0;
     }
+    return Damage::GetLockeE1Damage(player, target, E.Level());
+}
 
-    const float sdkDamage = E.GetDamage(target);
-    if (sdkDamage > 0.0f) {
-        return sdkDamage;
+static double E2Damage(const AIBaseClient& target, int qStacks = 0) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0;
     }
-
-    return player.GetSpellDamage(target, SpellSlot::E);
+    return Damage::GetLockeE2Damage(player, target, E.Level()) +
+        Damage::GetLockeAutoAttackDamage(
+            player, target, Q.Level(), qStacks, true);
 }
 
 static int GetActiveBuffStacksDirect(uintptr_t obj, const char* name);
@@ -236,31 +235,18 @@ static double RDamage(const AIBaseClient& target) {
     if (!player.IsValid() || !target.IsValid()) {
         return 0.0;
     }
-
-    const float sdkDamage = R.GetDamage(target);
-    if (sdkDamage > 0.0f) {
-        return sdkDamage;
-    }
-
-    return player.GetSpellDamage(target, SpellSlot::R);
+    return Damage::GetLockeRDamage(player, target, R.Level());
 }
 
-// CDragon: ExecutionThreshold = [9%, 10%, 15%] by rank + 0.5% per LockeRStack
+// CDragon: ExecutionThreshold = [10%, 11%, 12%] by rank + 0.5% per LockeRStack
 static float GetRExecuteThreshold() {
     const auto player = Player();
     if (!player.IsValid()) {
         return 0.0f;
     }
 
-    const int rLevel = R.Level();
-    static constexpr float kBaseThreshold[] = { 0.0f, 0.09f, 0.10f, 0.15f };
-    const int idx = std::clamp(rLevel, 0, 3);
-    float threshold = kBaseThreshold[idx];
-
     const int rStacks = GetActiveBuffStacksDirect(player.Address(), "LockeRStack");
-    threshold += rStacks * 0.005f;
-
-    return threshold;
+    return Damage::LockeRExecuteThreshold(R.Level(), rStacks);
 }
 
 static bool ComboCanKillWithoutE(const AIHeroClient& target) {
@@ -269,7 +255,9 @@ static bool ComboCanKillWithoutE(const AIHeroClient& target) {
         return false;
     }
 
-    double damage = Damage::GetAutoAttackDamage(player, target);
+    const int qStacks = GetActiveBuffStacksDirect(target.Address(), "LockeQ");
+    double damage = Damage::GetLockeAutoAttackDamage(
+        player, target, Q.Level(), qStacks, true);
     if (Q.IsReady()) {
         damage += QDamage(target);
     }
@@ -283,13 +271,16 @@ static double GetComboDamage(const AIHeroClient& target) {
         return 0.0;
     }
 
-    double damage = Damage::GetAutoAttackDamage(player, target);
-    if (Q.IsReady()) {
+    const int qStacks = GetActiveBuffStacksDirect(target.Address(), "LockeQ");
+    const bool qWillCast = Q.IsReady();
+    double damage = Damage::GetLockeAutoAttackDamage(
+        player, target, Q.Level(), qStacks, true);
+    if (qWillCast) {
         damage += QDamage(target);
     }
     if (E.IsReady()) {
         damage += EDamage(target);
-        damage += Damage::GetAutoAttackDamage(player, target);
+        damage += E2Damage(target, qWillCast ? 1 : 0);
     }
     return damage;
 }
