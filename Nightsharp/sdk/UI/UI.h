@@ -1048,17 +1048,40 @@ namespace SDK { namespace UI {
 
             const float controlWidth = BeginMenuValueRow(DisplayName.c_str(), 212.0f);
             ImGui::SetNextItemWidth(controlWidth);
+
+            const bool styled = g_FunctionalMenuStyle.enabled;
+            if (styled) {
+                ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(8.0f / 255.0f, 10.0f / 255.0f, 18.0f / 255.0f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_Border, ImGui::ColorConvertU32ToFloat4(g_FunctionalMenuStyle.colBorder));
+                ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+            }
+
             if (ImGui::BeginCombo("##combo", SelectedValue(), ImGuiComboFlags_None)) {
+                const bool applyItemStyle = g_FunctionalMenuStyle.enabled;
+                if (applyItemStyle) {
+                    ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+                }
+
                 for (int i = 0; i < Options.size(); ++i) {
                     const bool isSelected = (Index == i);
-                    if (ImGui::Selectable(Options[i].c_str(), isSelected)) {
+                    ImVec2 size = applyItemStyle ? ImVec2(0.0f, g_FunctionalMenuStyle.itemHeight) : ImVec2(0.0f, 0.0f);
+                    if (ImGui::Selectable(Options[i].c_str(), isSelected, ImGuiSelectableFlags_None, size)) {
                         Set(i);
                     }
                     if (isSelected) {
                         ImGui::SetItemDefaultFocus();
                     }
                 }
+
+                if (applyItemStyle) {
+                    ImGui::PopStyleVar();
+                }
                 ImGui::EndCombo();
+            }
+
+            if (styled) {
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(2);
             }
 
             DrawTooltipIfHovered();

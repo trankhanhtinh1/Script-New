@@ -9,7 +9,6 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     OrbwalkingDetail::RuntimeInstance = this;
     Events::AddOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::AddOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
-    Events::AddOnProcessCastSpell(&OrbwalkerBase::OnProcessCastSpellStatic);
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Events::AddOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
@@ -99,7 +98,6 @@ inline void OrbwalkerBase::Dispose() {
     }
     Events::RemoveOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::RemoveOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
-    Events::RemoveOnProcessCastSpell(&OrbwalkerBase::OnProcessCastSpellStatic);
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Events::RemoveOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);

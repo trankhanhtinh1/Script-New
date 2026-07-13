@@ -22,6 +22,8 @@ public:
     bool Enabled() const { return BoolValue(enabledOption_, true); }
 
     bool DrawAARange() const { return BoolValue(drawAARange_, true); }
+    int AARangeFadeWidth() const { return SliderValue(aaRangeFadeWidth_, 200); }
+    int AARangeFadeOpacityPercent() const { return SliderValue(aaRangeFadeOpacityPercent_, 70); }
     bool DrawAARangeEnemy() const { return BoolValue(drawAARangeEnemy_, false); }
     bool DrawExtraHoldPosition() const { return BoolValue(drawExtraHoldPosition_, false); }
     bool DrawKillableMinion() const { return BoolValue(drawKillableMinion_, false); }
@@ -111,6 +113,10 @@ private:
         drawingsMenu_ = menu_->AddSubMenu(new Menu("drawings", "Drawings"));
         if (drawingsMenu_) {
             drawAARange_ = drawingsMenu_->Add(new MenuBool("drawAARange", "Auto-Attack Range", true));
+            aaRangeFadeWidth_ = drawingsMenu_->Add(new MenuSlider(
+                "aaRangeFadeWidth", "AA Range Fade Width", 200, 1, 600));
+            aaRangeFadeOpacityPercent_ = drawingsMenu_->Add(new MenuSlider(
+                "aaRangeFadeOpacityPercent", "AA Range Max Opacity (%)", 70, 0, 100));
             drawAARangeEnemy_ = drawingsMenu_->Add(new MenuBool("drawAARangeEnemy", "Auto-Attack Range Enemy", false));
             drawExtraHoldPosition_ = drawingsMenu_->Add(new MenuBool("drawExtraHoldPosition", "Extra Hold Position", false));
             drawKillableMinion_ = drawingsMenu_->Add(new MenuBool("drawKillableMinion", "Killable Minions", false));
@@ -173,6 +179,8 @@ private:
     Menu* advancedMenu_ = nullptr;
 
     MenuBool* drawAARange_ = nullptr;
+    MenuSlider* aaRangeFadeWidth_ = nullptr;
+    MenuSlider* aaRangeFadeOpacityPercent_ = nullptr;
     MenuBool* drawAARangeEnemy_ = nullptr;
     MenuBool* drawExtraHoldPosition_ = nullptr;
     MenuBool* drawKillableMinion_ = nullptr;

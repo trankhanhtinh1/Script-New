@@ -667,11 +667,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 }
 
 static void OnObjectCreate(const GameObject& object) {
-    if (object.IsValid()) {
-        Orbwalker::DebugPrint("[Create] Name: %s | CharName: %s | Minion: %d",
-                              GetObjectName(object).c_str(), GetObjectCharacterName(object).c_str(), object.IsMinion() ? 1 : 0);
-    }
-
     if (!IsHiddenMinion(object)) {
         return;
     }
@@ -688,11 +683,6 @@ static void OnObjectCreate(const GameObject& object) {
 }
 
 static void OnObjectDelete(const GameObject& object) {
-    if (object.IsValid()) {
-        Orbwalker::DebugPrint("[Delete] Name: %s | CharName: %s | Minion: %d",
-                              GetObjectName(object).c_str(), GetObjectCharacterName(object).c_str(), object.IsMinion() ? 1 : 0);
-    }
-
     if (!IsHiddenMinion(object)) {
         return;
     }

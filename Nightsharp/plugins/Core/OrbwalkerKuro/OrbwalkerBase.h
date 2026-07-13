@@ -102,7 +102,6 @@ private:
 
     static void OnGameUpdateStatic(const Events::GameUpdateEventArgs& args);
     static void OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args);
-    static void OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args);
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
     static void OnMissileCreateStatic(const Events::ObjectEventArgs& args);
@@ -111,7 +110,6 @@ private:
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
-    void OnProcessCastSpell(const Events::CastSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
     void OnMissileCreate(const Events::ObjectEventArgs& args);
@@ -145,6 +143,7 @@ private:
     void TrackFakeCursorClick(const Vector3& position, int now);
     bool EnsureFakeCursorTexture();
     void DrawFakeCursorFallback(ImDrawList* draw, const Vec2& position, float size) const;
+    void DrawAutoAttackRangeFade(const AIHeroClient& player);
     void DrawFakeCursor();
     void DrawFakeVisuals();
 

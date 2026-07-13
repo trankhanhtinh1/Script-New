@@ -83,9 +83,7 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     if (!player.IsValid() || player.IsDead()) {
         return false;
     }
-    if (!::SDK::CanAttack(player)) {
-        return false;
-    }
+
     if (!ChampionCanAttack(player)) {
         return false;
     }

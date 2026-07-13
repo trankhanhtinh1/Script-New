@@ -160,6 +160,10 @@ namespace NightSharpMenu {
             return false;
         }
 
+        if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
+            return true;
+        }
+
         const bool insideMenu = x >= menuPosX &&
             x <= menuBoundsRight &&
             y >= menuPosY &&
@@ -223,7 +227,7 @@ namespace NightSharpMenu {
 
     inline bool DrawOnOffEditor(const char* label, bool& value, const char* id) {
         bool changed = false;
-        ImGui::PushID(id);
+        SDK::UI::BeginFunctionalMenuRow(id);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label);
         ImGui::SameLine();
@@ -242,7 +246,7 @@ namespace NightSharpMenu {
             value = false;
             changed = true;
         }
-        ImGui::PopID();
+        SDK::UI::EndFunctionalMenuRow();
         return changed;
     }
 
@@ -255,6 +259,15 @@ namespace NightSharpMenu {
         DrawSectionTitle("Language");
         const char* langs[] = { "EN", "CN", "VN" };
 
+        SDK::UI::BeginFunctionalMenuRow("##lang_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Select Language");
+        ImGui::SameLine();
+        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 186.0f;
+        if (targetX > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetX);
+        }
+
         for (int i = 0; i < 3; ++i) {
             ImGui::PushID(langs[i]);
             if (DrawStateButton(langs[i], langs[i], Config::Language::index == i, true, 56.0f)) {
@@ -265,31 +278,58 @@ namespace NightSharpMenu {
                 ImGui::SameLine(0, 8);
             }
         }
+        SDK::UI::EndFunctionalMenuRow();
     }
 
     inline void DrawMenuSection() {
         DrawSectionTitle("Menu Settings");
         DrawOnOffEditor("Skin Changer", Config::SkinChanger::enabled, "menu_skin");
         if (Config::SkinChanger::enabled) {
-            ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "Skin ID: %d");
-            // Skin id is saved per champion (skins.ini). Show which champion this
-            // slider currently applies to so the per-champion behavior is clear.
+            SDK::UI::BeginFunctionalMenuRow("##skin_id_row");
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Skin ID");
+            ImGui::SameLine();
+            float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+            if (targetX > ImGui::GetCursorPosX()) {
+                ImGui::SetCursorPosX(targetX);
+            }
+            ImGui::SetNextItemWidth(120.0f);
+            ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "%d");
+            SDK::UI::EndFunctionalMenuRow();
+
+            SDK::UI::BeginFunctionalMenuRow("##skin_champ_row");
+            ImGui::AlignTextToFramePadding();
             const std::string& champ = ConfigStore::g_skinChampion;
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Skin luu rieng theo tuong: %s",
                                champ.empty() ? "(chua vao game)" : champ.c_str());
+            SDK::UI::EndFunctionalMenuRow();
         }
 
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
         if (Config::ZoomHack::enabled) {
+            SDK::UI::BeginFunctionalMenuRow("##zoom_hack_info");
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Lan chuot de zoom xa tuy y");
+            SDK::UI::EndFunctionalMenuRow();
         }
 
         DrawOnOffEditor("PermaShow", Config::PermaShow::enabled, "perma_show");
         DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
-        ImGui::Separator();
+
+        SDK::UI::BeginFunctionalMenuRow("##bypass_obs_info1");
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##bypass_obs_info2");
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(requires Win10 2004+)");
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##bypass_obs_info3");
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click-through always on: clicks pass through the overlay.");
+        SDK::UI::EndFunctionalMenuRow();
     }
 
     // Performance profiler panel, embedded in the Debug Info section.
@@ -302,14 +342,21 @@ namespace NightSharpMenu {
 
         DrawOnOffEditor("Profiler", NightSharpPerf::Enabled, "perf_profiler");
         if (!NightSharpPerf::Enabled) {
+            SDK::UI::BeginFunctionalMenuRow("##perf_info");
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
                                "Bat de do frame/plugin/event timing. Tat = 0 overhead.");
+            SDK::UI::EndFunctionalMenuRow();
             return;
         }
 
         DrawOnOffEditor("Ghi log ra file (.txt)", NightSharpPerf::LogEnabled, "perf_log");
+
+        SDK::UI::BeginFunctionalMenuRow("##perf_log_info");
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
                            "Log: C:\\Users\\Public\\nightsharp_fps_drop_debug.txt");
+        SDK::UI::EndFunctionalMenuRow();
 
         ImGui::Separator();
         NightSharpPerf::DrawStatsBody();
@@ -317,18 +364,42 @@ namespace NightSharpMenu {
 
     inline void DrawDebugSection() {
         DrawSectionTitle("Debug Info");
+
+        SDK::UI::BeginFunctionalMenuRow("##debug1");
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("NightSharp");
-        // Build stamp: confirms which compiled DLL is actually loaded in-game.
-        // If this timestamp is old after a rebuild, the injector is loading a
-        // stale NightSharp.dll (wrong path / wrong config), not the fresh build.
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##debug2");
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.55f, 0.85f, 0.55f, 1.0f), "Build: %s %s", __DATE__, __TIME__);
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##debug3");
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("Overlay: D3D11 External");
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##debug4");
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("Menu: Old sidebar style");
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##debug5");
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("Input: %s", Config::OverlayInput::clickThrough ? "Click-through" : "Menu capture");
-        ImGui::Separator();
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##debug6");
+        ImGui::AlignTextToFramePadding();
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        SDK::UI::EndFunctionalMenuRow();
+
         if (ImGui::GetIO().Framerate > 0.0f) {
+            SDK::UI::BeginFunctionalMenuRow("##debug7");
+            ImGui::AlignTextToFramePadding();
             ImGui::Text("Frame: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+            SDK::UI::EndFunctionalMenuRow();
         }
 
         DrawProfilerSection();
@@ -390,7 +461,10 @@ namespace NightSharpMenu {
     inline void DrawPluginManagerRows(PluginRegistry::PluginKind kind, const char* emptyText, int idBase = 0) {
         if (CountPluginManagerRows(kind) == 0) {
             if (emptyText && emptyText[0]) {
+                SDK::UI::BeginFunctionalMenuRow("##empty_row");
+                ImGui::AlignTextToFramePadding();
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "%s", emptyText);
+                SDK::UI::EndFunctionalMenuRow();
             }
             return;
         }
@@ -404,9 +478,12 @@ namespace NightSharpMenu {
             const bool canLoad = PluginRegistry::CanPluginLoad(i);
             ImGui::PushID(i + idBase);
 
+            SDK::UI::BeginFunctionalMenuRow("##plugin_row");
+
             ImVec4 statusColor = !canLoad
                 ? ImVec4(0.75f, 0.55f, 0.18f, 1.0f)
                 : (p.Loaded ? ImVec4(0.30f, 0.86f, 0.34f, 1.0f) : ImVec4(0.62f, 0.64f, 0.70f, 1.0f));
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(statusColor, "%s", p.Loaded ? "[ON]" : (canLoad ? "[--]" : "[NC]"));
             ImGui::SameLine(0, 8);
             ImGui::Text("%s", p.Name);
@@ -445,11 +522,15 @@ namespace NightSharpMenu {
                 PluginRegistry::SetAlwaysLoad(i, alwaysLoad);
             }
 
-            if (!p.RuntimeMenu) {
-                ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.64f, 1.0f), "No custom ImGui menu callback.");
+            SDK::UI::EndFunctionalMenuRow();
+
+            if (!p.RuntimeMenu && p.Loaded) {
+                SDK::UI::BeginFunctionalMenuRow("##no_menu_callback");
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextColored(ImVec4(0.55f, 0.55f, 0.64f, 1.0f), "  No custom ImGui menu callback.");
+                SDK::UI::EndFunctionalMenuRow();
             }
 
-            ImGui::Separator();
             ImGui::PopID();
         }
     }
@@ -1412,9 +1493,9 @@ namespace NightSharpMenu {
         }
 
         // Height = laid-out content only (row count * ITEM_H), not a fixed panel.
-        const float measuredBodyH = ImGui::GetCursorPosY();
+        const float measuredBodyH = ImGui::GetCursorPosY() + 4.0f;
         if (measuredBodyH > 0.5f) {
-            contentPanelBodyH = measuredBodyH;
+            contentPanelBodyH = MaxF(contentPanelBodyH, measuredBodyH);
         }
 
         ImGui::End();

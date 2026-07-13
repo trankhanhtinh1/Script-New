@@ -123,10 +123,6 @@ public:
 
     void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         SDK::AIBaseClient caster = MakeCaster(args.Sender);
-        if (caster.IsValid() && caster.IsHero() && !args.IsAutoAttack) {
-            SDK::Orbwalker::DebugPrint("[SpellDetector] Caster: %s | Spell: %s | Slot: %d",
-                                       EvadeUtils::GetObjectCharacterName(caster).c_str(), args.SpellName, args.Slot);
-        }
 
         if (!caster.IsValid() || (caster.IsAlly() && !m_devSameTeam)) {
             return;
@@ -206,10 +202,6 @@ public:
         }
         const auto caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
             static_cast<int>(args.Sender.NetworkId));
-        if (caster.IsValid() && caster.IsHero()) {
-            SDK::Orbwalker::DebugPrint("[SpellDetector][CastSpell] Caster: %s | Slot: %d",
-                                       EvadeUtils::GetObjectCharacterName(caster).c_str(), args.Slot);
-        }
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid() || args.Sender.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
@@ -268,10 +260,6 @@ public:
         SDK::AIBaseClient caster = MakeCaster(args.Source);
         if (!caster.IsValid() && missile.CasterNetworkId() != 0) {
             caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(missile.CasterNetworkId());
-        }
-        if (caster.IsValid() && caster.IsHero()) {
-            SDK::Orbwalker::DebugPrint("[SpellDetector][Missile] Caster: %s | Missile: %s | Spell: %s",
-                                       EvadeUtils::GetObjectCharacterName(caster).c_str(), missileName, args.SpellName);
         }
 
         const auto* data = FindByMissileName(missileName);
@@ -337,10 +325,6 @@ public:
         }
 
         SDK::GameObject object(args.Sender.Ptr, args.Sender.Type);
-        if (object.IsValid() && (!object.IsAlly() || m_devSameTeam)) {
-            SDK::Orbwalker::DebugPrint("[SpellDetector][Object] Name: %s | CharName: %s",
-                                       EvadeUtils::GetObjectName(object).c_str(), EvadeUtils::GetObjectCharacterName(object).c_str());
-        }
 
         if (!object.IsValid() || (object.IsAlly() && !m_devSameTeam)) {
             return;
@@ -1207,9 +1191,6 @@ private:
             skillshot->Direction = (end - start).Normalized();
             SpecialSpells::RefreshSkillshotGeometry(*skillshot);
             AddSkillshot(skillshot, data, allowDuplicate);
-            SDK::Orbwalker::DebugPrint("[SpellDetector][Detected] Spell: %s | Caster: %s | Type: %d | Range: %.1f",
-                                       data.sdk.SpellName.c_str(), EvadeUtils::GetObjectCharacterName(caster).c_str(),
-                                       static_cast<int>(detectionType), range);
             return skillshot;
         }
         return {};

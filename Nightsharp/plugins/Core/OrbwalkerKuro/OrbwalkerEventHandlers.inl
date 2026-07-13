@@ -17,12 +17,6 @@ inline void OrbwalkerBase::OnProcessSpellStatic(const Events::ProcessSpellEventA
     }
 }
 
-inline void OrbwalkerBase::OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args) {
-    if (OrbwalkingDetail::RuntimeInstance) {
-        OrbwalkingDetail::RuntimeInstance->OnProcessCastSpell(args);
-    }
-}
-
 inline void OrbwalkerBase::OnDoCastStatic(const Events::ProcessSpellEventArgs& args) {
     if (OrbwalkingDetail::RuntimeInstance) {
         OrbwalkingDetail::RuntimeInstance->OnDoCast(args);
@@ -82,15 +76,12 @@ inline void OrbwalkerBase::OnGameUpdate() {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
-    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
-        ResetAutoAttackTimer();
-        return;
-    }
-
     const bool isAttack = IsLocalAutoAttack(args);
     const bool isAttackReset = IsLocalAutoAttackReset(args);
 
-    if (isAttackReset) {
+    // A slot/name can identify the reset spell, but an empowered AA may carry
+    // that same slot/name.  Record the AA instead of resetting it away.
+    if (isAttackReset && !isAttack) {
         ResetAutoAttackTimer();
         return;
     }
@@ -143,20 +134,10 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     OrbwalkingDetail::FireOnAttack(attackArgs);
 }
 
-inline void OrbwalkerBase::OnProcessCastSpell(const Events::CastSpellEventArgs& args) {
-    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
-        ResetAutoAttackTimer();
-    }
-}
-
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
-        ResetAutoAttackTimer();
-        return;
-    }
-
+    const bool isAttack = IsLocalAutoAttack(args);
     const bool isAttackReset = IsLocalAutoAttackReset(args);
-    if (!IsLocalAutoAttack(args)) {
+    if (!isAttack) {
         if (isAttackReset) {
             ResetAutoAttackTimer();
         }
@@ -211,10 +192,6 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
             "Kuro");
         OrbwalkingDetail::FireAfterAttack(afterArgs);
         context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
-    }
-
-    if (isAttackReset) {
-        ResetAutoAttackTimer();
     }
 }
 
@@ -409,12 +386,7 @@ inline void OrbwalkerBase::OnDraw() {
     }
 
     if (menu_.DrawAARange()) {
-        Drawing::DrawCircle(
-            player.Position(),
-            GetRealAutoAttackRange(player) + player.BoundingRadius(),
-            0xFF00BFFFu,
-            1.5f,
-            64);
+        DrawAutoAttackRangeFade(player);
     }
 
     if (menu_.DrawExtraHoldPosition()) {
