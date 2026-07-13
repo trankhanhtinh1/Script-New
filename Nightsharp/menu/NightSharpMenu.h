@@ -62,16 +62,16 @@ namespace NightSharpMenu {
     // Margin from the screen edges when auto-positioning PermaShow.
     constexpr float PERMASHOW_EDGE_MARGIN = 18.0f;
 
-    inline ImU32 COL_BG = IM_COL32(8, 10, 18, 214);
-    inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 128);
-    inline ImU32 COL_HEADER = IM_COL32(16, 18, 28, 236);
+    inline ImU32 COL_BG = IM_COL32(8, 10, 18, 255);
+    inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 255);
+    inline ImU32 COL_HEADER = IM_COL32(16, 18, 28, 255);
     inline ImU32 COL_ITEM = IM_COL32(18, 20, 30, 118);
     inline ImU32 COL_ITEM_HOVER = IM_COL32(52, 48, 82, 215);
     inline ImU32 COL_ITEM_ACTIVE = IM_COL32(82, 66, 132, 232);
     inline ImU32 COL_ACCENT = IM_COL32(120, 235, 120, 255);
     inline ImU32 COL_TEXT = IM_COL32(255, 255, 255, 255);
     inline ImU32 COL_TEXT_DIM = IM_COL32(185, 185, 205, 255);
-    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 180);
+    inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 255);
 
     struct SidebarEntry {
         const char* label;
@@ -1346,12 +1346,6 @@ namespace NightSharpMenu {
             ImVec2(contentPos.x + contentW, contentPos.y + HEADER_H),
             COL_HEADER,
             0.0f);
-        // Body uses same solid sidebar bg so item cells read like the primary/secondary lists.
-        dl->AddRectFilled(
-            ImVec2(contentPos.x, contentPos.y + HEADER_H),
-            ImVec2(contentPos.x + contentW, contentPos.y + contentH),
-            COL_BG,
-            0.0f);
         dl->AddRect(
             contentPos,
             ImVec2(contentPos.x + contentW, contentPos.y + contentH),
@@ -1372,7 +1366,7 @@ namespace NightSharpMenu {
             COL_BORDER);
 
         // Sidebar colors as the primary look for every functional control.
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(8.0f / 255.0f, 10.0f / 255.0f, 18.0f / 255.0f, 214.0f / 255.0f));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(8.0f / 255.0f, 10.0f / 255.0f, 18.0f / 255.0f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(18.0f / 255.0f, 20.0f / 255.0f, 30.0f / 255.0f, 180.0f / 255.0f));

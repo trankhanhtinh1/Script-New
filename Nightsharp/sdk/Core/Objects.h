@@ -483,6 +483,7 @@ namespace StaticStringCache {
     struct Entry {
         bool valid        = false;
         std::string characterName;  // populated only for AIHeroClient
+        std::string name;
         uint32_t    team       = 0;
         int         minionClass = 0;
     };
@@ -848,27 +849,46 @@ public:
     // Returns empty string if the cache hasn't been populated yet (rare —
     // only possible if the object existed before script injection).
     const std::string& Name() const {
-        // Entry::name removed — name reads eliminated from hot path.
+        auto* sc = const_cast<StaticStringCache::Entry*>(StaticStringCache::Get(static_cast<uint32_t>(handle_.index)));
+        if (sc && !sc->name.empty()) return sc->name;
+
+        const uintptr_t a = Address();
+        if (Globals::IsValidPtr(a)) {
+            char nameBuf[96] = {};
+            if (::Core::Objects::ReadName(a, nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+                if (sc) {
+                    sc->name = nameBuf;
+                    return sc->name;
+                }
+                thread_local std::string tempName;
+                tempName = nameBuf;
+                return tempName;
+            }
+        }
+
         static const std::string kEmpty;
         return kEmpty;
     }
 
     const std::string& CharacterName() const {
-        auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index));
+        auto* sc = const_cast<StaticStringCache::Entry*>(StaticStringCache::Get(static_cast<uint32_t>(handle_.index)));
         if (sc && !sc->characterName.empty()) return sc->characterName;
 
         const uintptr_t a = Address();
-        if (Globals::IsValidPtr(a) &&
-            Globals::IsValidPtr(CoreRuntime::g_ctx.localPlayer) &&
-            a == CoreRuntime::g_ctx.localPlayer) {
+        if (Globals::IsValidPtr(a)) {
             char charBuf[96] = {};
-            if (::Core::Objects::ReadCharacterName(
-                    a,
-                    charBuf,
-                    static_cast<int>(sizeof(charBuf))) &&
-                charBuf[0]) {
-                s_cachedChampionName = charBuf;
-                return s_cachedChampionName;
+            if (::Core::Objects::ReadCharacterName(a, charBuf, sizeof(charBuf)) && charBuf[0]) {
+                if (sc) {
+                    sc->characterName = charBuf;
+                    return sc->characterName;
+                }
+                if (Globals::IsValidPtr(CoreRuntime::g_ctx.localPlayer) && a == CoreRuntime::g_ctx.localPlayer) {
+                    s_cachedChampionName = charBuf;
+                    return s_cachedChampionName;
+                }
+                thread_local std::string tempName;
+                tempName = charBuf;
+                return tempName;
             }
         }
 
