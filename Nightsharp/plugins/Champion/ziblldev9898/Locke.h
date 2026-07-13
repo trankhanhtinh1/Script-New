@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
+#include "../../../SDK/MenuSDK/Visual/VisualSDK.h"
 #include "Damage.h"
 
 #include <algorithm>
@@ -16,12 +17,11 @@ namespace Plugins::ziblldev9898::Locke {
 
 using SDK::Core::Utils::AutoAttack;
 
-inline Menu* MenuRoot = nullptr;
-inline Menu* ComboMenu = nullptr;
-inline Menu* HarassMenu = nullptr;
-inline Menu* LaneClearMenu = nullptr;
-inline Menu* JungleClearMenu = nullptr;
-inline Menu* KillStealMenu = nullptr;
+inline constexpr const char* ComboMenu = "locke.combo";
+inline constexpr const char* HarassMenu = "locke.harass";
+inline constexpr const char* LaneClearMenu = "locke.lane";
+inline constexpr const char* JungleClearMenu = "locke.jungle";
+inline constexpr const char* KillStealMenu = "locke.killSteal";
 
 // CDragon locke.bin.json: Q=950, W=250, E=425, R=1000
 inline Spell Q{ SpellSlot::Q, 950.0f };
@@ -30,6 +30,7 @@ inline Spell E{ SpellSlot::E, 425.0f };
 inline Spell R{ SpellSlot::R, 1000.0f };
 
 inline bool Loaded = false;
+inline constexpr const char* VisualOwnerId = "champion.ziblldev9898.locke";
 inline DWORD LastComboEvalTick = 0;
 inline DWORD LastHarassEvalTick = 0;
 inline DWORD LastLaneClearEvalTick = 0;
@@ -40,20 +41,16 @@ static AIHeroClient Player() {
     return ObjectManager::Player();
 }
 
-static bool Bool(Menu* menu, const char* key, bool fallback = true) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuBool>(key);
-    return item ? item->Value : fallback;
+static NightSharp::Menu::VisualContext Visuals() {
+    return NightSharp::Menu::VisualSDK::Instance().Owner(VisualOwnerId, 100);
 }
 
-static int Slider(Menu* menu, const char* key, int fallback = 0) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuSlider>(key);
-    return item ? item->Value : fallback;
+static bool Bool(const char* section, const char* key, bool fallback = true) {
+    return AioMenu::Bool(section, key, fallback);
+}
+
+static int Slider(const char* section, const char* key, int fallback = 0) {
+    return AioMenu::Slider(section, key, fallback);
 }
 
 static bool ShouldRunNow(DWORD& lastTick, DWORD intervalMs) {
@@ -325,42 +322,6 @@ static void KillSteal();
 static void OnDraw();
 static void OnUnload();
 
-static void BuildMenu() {
-    MenuRoot = new Menu("champion.ziblldev9898", "Locke", true);
-
-    ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
-    ComboMenu->Add(new MenuBool("useQ", "Use Q"));
-    ComboMenu->Add(new MenuBool("useE", "Use E"));
-    ComboMenu->Add(new MenuSlider("eMinStacks", "Min Q Stacks to E", 2, 1, 3));
-    ComboMenu->Add(new MenuBool("useEGapclose", "Use E to Escape Gapclosers"));
-    ComboMenu->Add(new MenuSlider("eGapcloseHpPercent", "Don't Escape Below HP %", 50, 0, 100));
-    ComboMenu->Add(new MenuBool("useW", "Use W"));
-    ComboMenu->Add(new MenuSlider("wRecastHpPercent", "Recast W Below HP %", 30, 0, 100));
-    ComboMenu->Add(new MenuSlider("wRecastExpiryTime", "Recast W When Buff Has X*0.1s Left", 15, 5, 30));
-    ComboMenu->Add(new MenuBool("useR", "Use R"));
-    ComboMenu->Add(new MenuBool("rExecute", "Use R Execute", true));
-    ComboMenu->Add(new MenuBool("rAoe", "Use R AoE", true));
-    ComboMenu->Add(new MenuSlider("rMinEnemies", "Min Enemies for R AoE", 4, 1, 5));
-
-    HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
-    HarassMenu->Add(new MenuBool("useQ", "Use Q"));
-    HarassMenu->Add(new MenuSlider("ManaHarass", "Mana Harass", 30, 0, 100));
-
-    LaneClearMenu = MenuRoot->AddSubMenu(new Menu("LaneClear Settings", "Lane Clear"));
-    LaneClearMenu->Add(new MenuBool("useQ", "Use Q"));
-    LaneClearMenu->Add(new MenuSlider("ManaLC", "Mana Clear", 30, 0, 100));
-
-    JungleClearMenu = MenuRoot->AddSubMenu(new Menu("Jungle Settings", "Jungle Clear"));
-    JungleClearMenu->Add(new MenuBool("useQ", "Use Q"));
-    JungleClearMenu->Add(new MenuSlider("ManaJC", "Mana Clear", 30, 0, 100));
-
-    KillStealMenu = MenuRoot->AddSubMenu(new Menu("KillSteal Settings", "KillSteal"));
-    KillStealMenu->Add(new MenuBool("killstealQ", "Use Q"));
-    KillStealMenu->Add(new MenuBool("killstealR", "Use R"));
-
-    MenuRoot->Attach();
-}
-
 static void OnGameLoad() {
     const auto player = Player();
     if (!player.IsValid() || Loaded) {
@@ -383,8 +344,6 @@ static void OnGameLoad() {
     // CDragon: R castRange=1000, castRadius=425, castTime=0.25, missileTravelTime=0.5
     R = Spell(SpellSlot::R, 1000.0f);
     R.SetSkillshot(0.25f, 425.0f, FLT_MAX, false, SpellType::Circle);
-
-    BuildMenu();
 
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Orbwalker::OnAfterAttack += &Orbwalker_OnAfterAttack;
@@ -1081,6 +1040,7 @@ static void KillSteal() {
 
 static void OnUnload() {
     if (!Loaded) {
+        NightSharp::Menu::VisualSDK::Instance().ReleaseOwner(VisualOwnerId);
         return;
     }
 
@@ -1088,6 +1048,7 @@ static void OnUnload() {
     Orbwalker::OnAfterAttack -= &Orbwalker_OnAfterAttack;
     Events::hook.OnGapCloser -= &Gapcloser_OnGapcloser;
     Drawing::OnDraw -= &OnDraw;
+    NightSharp::Menu::VisualSDK::Instance().ReleaseOwner(VisualOwnerId);
 
     Loaded = false;
     LastWCastTick = 0;
@@ -1103,24 +1064,33 @@ static void OnDraw() {
         return;
     }
 
-    if (!Drawing::IsEnabled()) {
-        return;
-    }
+    auto visuals = Visuals();
 
-    // Draw E range circle
-    Drawing::DrawCircle(player.Position(), E.Range, 0xFF00FFFF);
+    NightSharp::Menu::VisualStyle eRangeStyle;
+    eRangeStyle.color = 0xFF00FFFFu;
+    eRangeStyle.thickness = 1.75f;
+    eRangeStyle.layer = NightSharp::Menu::VisualLayer::World;
+    eRangeStyle.order = 10;
+    visuals.CircleWorld(player.Position(), E.Range, eRangeStyle);
 
-    // Draw R range circle when ready
     if (R.IsReady()) {
-        Drawing::DrawCircle(player.Position(), R.Range, 0xFFFF00FF);
+        NightSharp::Menu::VisualStyle rRangeStyle;
+        rRangeStyle.color = 0xFFFF00FFu;
+        rRangeStyle.thickness = 1.75f;
+        rRangeStyle.layer = NightSharp::Menu::VisualLayer::World;
+        rRangeStyle.order = 20;
+        visuals.CircleWorld(player.Position(), R.Range, rRangeStyle);
     }
 
-    // Draw W range circle when ready
     if (W.IsReady()) {
-        Drawing::DrawCircle(player.Position(), W.Range, 0xFF00FFAA);
+        NightSharp::Menu::VisualStyle wRangeStyle;
+        wRangeStyle.color = 0xFF00FFAAu;
+        wRangeStyle.thickness = 1.75f;
+        wRangeStyle.layer = NightSharp::Menu::VisualLayer::World;
+        wRangeStyle.order = 30;
+        visuals.CircleWorld(player.Position(), W.Range, wRangeStyle);
     }
 
-    // Draw Q stacks on each enemy
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) {
             continue;
@@ -1141,13 +1111,21 @@ static void OnDraw() {
         char text[64] = {};
         _snprintf_s(text, sizeof(text), _TRUNCATE, "Q: %d (dist=%.0f)", stacks, dist);
 
-        const uint32_t color = stacks >= 3 ? 0xFF00FF00 : (stacks >= 2 ? 0xFFFFFF00 : 0xFFFF8800);
+        const std::uint32_t color = stacks >= 3
+            ? 0xFF00FF00u
+            : (stacks >= 2 ? 0xFFFFFF00u : 0xFFFF8800u);
+        NightSharp::Menu::VisualTarget target;
+        target.position = enemy.Position();
+        target.hpBarHeight = enemy.GetHpBarHeight();
 
-        Vec2 screenPos = {};
-        const Vec3 worldPos = enemy.Position();
-        if (Drawing::WorldToScreen(worldPos, screenPos) && screenPos.IsValid()) {
-            Drawing::DrawText(screenPos.x - 30.0f, screenPos.y - 50.0f, color, text);
-        }
+        NightSharp::Menu::VisualLabelStyle labelStyle;
+        labelStyle.color = color;
+        labelStyle.offset = Vec2{ 0.0f, -28.0f };
+        labelStyle.maxWidth = 240.0f;
+        labelStyle.anchor = NightSharp::Menu::VisualAnchor::AboveHead;
+        labelStyle.layer = NightSharp::Menu::VisualLayer::Text;
+        labelStyle.order = 10;
+        visuals.Label(target, text, labelStyle);
     }
 }
 

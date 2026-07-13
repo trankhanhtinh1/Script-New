@@ -22,6 +22,7 @@
 #include "../SDK/Core/Game.h"
 #include "../SDK/Data/DragonSoulData.h"
 #include "../SDK/UI/Drawing.h"
+#include "../SDK/MenuSDK/Visual/VisualSDK.h"
 #include "../SDK/UI/Icons.h"
 #include "../SDK/Utils/AssetInstaller.h"
 
@@ -673,8 +674,23 @@ void SetAntiCapture(bool enabled) {
 }
 
 void UpdateClickThroughFromMenuBounds() {
-    if (!IsTargetForeground()) {
+    if (!IsTargetForeground() || g_bMenuVisible == 0) {
         SetClickThrough(true);
+        return;
+    }
+
+    POINT cursorScreen = {};
+    GetCursorPos(&cursorScreen);
+    POINT cursorClient = cursorScreen;
+    ScreenToClient(g_hOverlay, &cursorClient);
+
+    const bool overMenuSdk =
+        Config::MenuBackend::mode != Config::MenuBackend::Mode::Legacy &&
+        NightSharpMenu::MenuSDKBridge::Instance().IsPointInside(ImVec2(
+            static_cast<float>(cursorClient.x),
+            static_cast<float>(cursorClient.y)));
+    if (overMenuSdk) {
+        SetClickThrough(false);
         return;
     }
 
@@ -683,14 +699,9 @@ void UpdateClickThroughFromMenuBounds() {
         return;
     }
 
-    if (g_bMenuVisible == 0) {
-        SetClickThrough(true);
-        return;
-    }
-
-    POINT cursorPt = {};
-    GetCursorPos(&cursorPt);
-    SetClickThrough(!IsScreenPointOverMenu(cursorPt));
+    SetClickThrough(!NightSharpMenu::IsPointInside(
+        static_cast<float>(cursorClient.x),
+        static_cast<float>(cursorClient.y)));
 }
 
 void ToggleMenuVisible() {
@@ -1002,6 +1013,7 @@ void Overlay::Run() {
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.Fonts->AddFontDefault();
+    NightSharpMenu::MenuSDKBridge::Instance().Initialize();
 
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
@@ -1109,6 +1121,7 @@ void Overlay::Run() {
         ImGui_ImplWin32_NewFrame();
         SyncImGuiMouse();
         ImGui::NewFrame();
+        ::NightSharp::Menu::VisualSDK::Instance().BeginFrame();
 
         // Refresh game state once per frame before any plugin accesses it.
         // EnsureReady() in CoreObjectManager no longer calls RefreshReadState
@@ -1141,6 +1154,12 @@ void Overlay::Run() {
         SDK::Drawing::DispatchDraw();
         NightSharpPerf::AddPhase(
             "SDK::Drawing::DispatchDraw",
+            NightSharpPerf::MsSince(perfStart));
+
+        perfStart = NightSharpPerf::Now();
+        ::NightSharp::Menu::VisualSDK::Instance().Flush();
+        NightSharpPerf::AddPhase(
+            "VisualSDK::Flush",
             NightSharpPerf::MsSince(perfStart));
 
         perfStart = NightSharpPerf::Now();

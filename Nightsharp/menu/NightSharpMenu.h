@@ -16,6 +16,7 @@
 #include "../FpsDropDebug.h"
 #include "MenuConfig.h"
 #include "ConfigStore.h"
+#include "../SDK/MenuSDK/Integration/MenuSDKBridge.h"
 
 #include <cstdio>
 
@@ -152,6 +153,11 @@ namespace NightSharpMenu {
             return false;
         }
 
+        if (Config::MenuBackend::mode != Config::MenuBackend::Mode::Legacy &&
+            NightSharpMenu::MenuSDKBridge::Instance().IsPointInside(ImVec2(x, y))) {
+            return true;
+        }
+
         const bool insideMenu = x >= menuPosX &&
             x <= menuBoundsRight &&
             y >= menuPosY &&
@@ -261,27 +267,7 @@ namespace NightSharpMenu {
 
     inline void DrawMenuSection() {
         DrawSectionTitle("Menu Settings");
-        DrawOnOffEditor("Skin Changer", Config::SkinChanger::enabled, "menu_skin");
-        if (Config::SkinChanger::enabled) {
-            ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "Skin ID: %d");
-            // Skin id is saved per champion (skins.ini). Show which champion this
-            // slider currently applies to so the per-champion behavior is clear.
-            const std::string& champ = ConfigStore::g_skinChampion;
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Skin luu rieng theo tuong: %s",
-                               champ.empty() ? "(chua vao game)" : champ.c_str());
-        }
-
-        DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
-        if (Config::ZoomHack::enabled) {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Lan chuot de zoom xa tuy y");
-        }
-
         DrawOnOffEditor("PermaShow", Config::PermaShow::enabled, "perma_show");
-        DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
-        ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(requires Win10 2004+)");
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click-through always on: clicks pass through the overlay.");
     }
 
     // Performance profiler panel, embedded in the Debug Info section.
@@ -693,6 +679,10 @@ namespace NightSharpMenu {
     }
 
     inline bool IsPrimaryPluginEntry(const PluginRegistry::PluginEntry& p, int idx) {
+        if (Config::MenuBackend::mode != Config::MenuBackend::Mode::Legacy &&
+            NightSharpMenu::MenuSDKBridge::Instance().IsPorted(p.InternalId)) {
+            return false;
+        }
         return idx >= 0 &&
             p.Name &&
             p.Loaded &&
@@ -875,6 +865,10 @@ namespace NightSharpMenu {
         }
 
         auto& p = PluginRegistry::Plugins[pluginIdx];
+        if (Config::MenuBackend::mode != Config::MenuBackend::Mode::Legacy &&
+            NightSharpMenu::MenuSDKBridge::Instance().IsPorted(p.InternalId)) {
+            return;
+        }
         if (!p.Loaded) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Plugin is not loaded.");
             return;
@@ -911,9 +905,19 @@ namespace NightSharpMenu {
         // menu is hidden so a change made just before hiding still flushes.
         ConfigStore::Tick();
 
+        auto& menuSdk = NightSharpMenu::MenuSDKBridge::Instance();
+        menuSdk.SetBackend(
+            Config::MenuBackend::mode == Config::MenuBackend::Mode::Legacy
+                ? NightSharpMenu::MenuBackend::Legacy
+                : (Config::MenuBackend::mode == Config::MenuBackend::Mode::MenuSDK
+                    ? NightSharpMenu::MenuBackend::MenuSDK
+                    : NightSharpMenu::MenuBackend::Hybrid));
+        menuSdk.Renderer().SetVisible(showMenu);
+        menuSdk.Render();
         DrawPermaShowOverlay();
 
-        if (!showMenu) {
+        if (Config::MenuBackend::mode == Config::MenuBackend::Mode::MenuSDK ||
+            !showMenu) {
             menuBoundsRight = menuPosX;
             menuBoundsBottom = menuPosY;
             return;

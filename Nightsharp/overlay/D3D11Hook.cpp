@@ -26,6 +26,7 @@
 #include "../SDK/UI/Icons.h"
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/Drawing.h"
+#include "../SDK/MenuSDK/Visual/VisualSDK.h"
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -555,6 +556,7 @@ static bool InitImGui(IDXGISwapChain* swapChain) {
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.Fonts->AddFontDefault();
+    NightSharpMenu::MenuSDKBridge::Instance().Initialize();
 
     g_pSwapChain = swapChain;
     HRESULT hr = g_pSwapChain->GetDevice(
@@ -720,6 +722,8 @@ static void Render() {
     // completed on the install thread. Without this, TickRead/OnUpdate can dereference
     // SDK singletons that haven't been initialized yet, causing ACCESS_VIOLATION.
     if (g_bootstrapDone) {
+        ::NightSharp::Menu::VisualSDK::Instance().BeginFrame();
+
         // Read game state once per frame
         {
             NightSharpDebug::SetPhase("d3d11hook-render-tickread");
@@ -749,6 +753,11 @@ static void Render() {
             NightSharpDebug::SetPhase("d3d11hook-render-drawing-dispatch");
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchDraw");
             SDK::Drawing::DispatchDraw();
+        }
+        {
+            NightSharpDebug::SetPhase("d3d11hook-render-visualsdk-flush");
+            NightSharpPerf::ScopedTimer timer("VisualSDK::Flush");
+            ::NightSharp::Menu::VisualSDK::Instance().Flush();
         }
         {
             NightSharpDebug::SetPhase("d3d11hook-render-endscene-dispatch");

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
+#include "../../../SDK/MenuSDK/Visual/VisualSDK.h"
+#include "AioMenu.h"
 #include "Damage.h"
 
 #include <algorithm>
@@ -49,20 +51,9 @@ inline constexpr DWORD MultiRW1ToRDelayMs = 50;
 inline constexpr DWORD MultiRW1ConfirmTimeoutMs = 300;
 inline constexpr DWORD ComboIntervalMs = 50;
 
-inline Menu* MenuRoot = nullptr;
-inline Menu* ComboMenu = nullptr;
-inline MenuBool* DrawPassiveMenu = nullptr;
-inline MenuBool* DrawComboMenu = nullptr;
-inline MenuBool* WardHopEnabledMenu = nullptr;
-inline MenuKeyBind* WardHopKeyMenu = nullptr;
-inline MenuKeyBind* InsecKeyMenu = nullptr;
-inline MenuBool* FancyComboMenu = nullptr;
-inline MenuSlider* FancyQ2HealthMenu = nullptr;
-inline MenuSlider* FancyQ2EnemiesMenu = nullptr;
-inline MenuBool* MultiRComboMenu = nullptr;
-inline MenuSlider* MultiRMinCollisionsMenu = nullptr;
-inline Menu* KillStealMenu = nullptr;
-inline MenuBool* RAutoKillStealMenu = nullptr;
+inline constexpr const char* VisualOwnerId = "champion.ziblldev9898.leesin";
+inline constexpr const char* ComboMenu = "leesin.combo";
+inline constexpr const char* KillStealMenu = "leesin.killSteal";
 
 inline Spell Q{ SpellSlot::Q, Q1Range };
 inline Spell W{ SpellSlot::W, W1Range };
@@ -165,6 +156,10 @@ static float SimulatedRDamage(const AIHeroClient& target);
 
 static AIHeroClient Player() {
     return ObjectManager::Player();
+}
+
+static NightSharp::Menu::VisualContext Visuals() {
+    return NightSharp::Menu::VisualSDK::Instance().Owner(VisualOwnerId, 110);
 }
 
 static bool EqualsIgnoreCase(const char* left, const char* right) {
@@ -304,11 +299,7 @@ static int CurrentPassiveStacks() {
 }
 
 static bool ComboEnabled(const char* key) {
-    if (!ComboMenu || !key) {
-        return true;
-    }
-    const auto* item = ComboMenu->Get<MenuBool>(key);
-    return item ? item->Value : true;
+    return !key || AioMenu::Bool(ComboMenu, key, true);
 }
 
 static bool IsValidEnemy(const AIHeroClient& target, float range = FLT_MAX) {
@@ -549,14 +540,18 @@ static bool CanStartNewSkill(const AIHeroClient& target) {
 }
 
 static float ComboQ2HealthThreshold() {
-    const int value = FancyQ2HealthMenu
-        ? FancyQ2HealthMenu->Value
-        : static_cast<int>(Q2HealthThreshold * 100.0f);
+    const int value = AioMenu::Slider(
+        ComboMenu,
+        "fancyQ2Health",
+        static_cast<int>(Q2HealthThreshold * 100.0f));
     return static_cast<float>(std::clamp(value, 0, 100)) / 100.0f;
 }
 
 static int ComboQ2MaxNearbyEnemies() {
-    return std::clamp(FancyQ2EnemiesMenu ? FancyQ2EnemiesMenu->Value : 1, 0, 5);
+    return std::clamp(
+        AioMenu::Slider(ComboMenu, "fancyQ2Enemies", 1),
+        0,
+        5);
 }
 
 static bool Q2IsSafeAtHealth(const AIHeroClient& target, float health) {
@@ -876,16 +871,12 @@ static bool FinishWardHop() {
 }
 
 static bool WardHopKeyActive() {
-    if (!WardHopKeyMenu || WardHopKeyMenu->Key <= 0) {
-        return false;
-    }
-
-    return WardHopKeyMenu->Active ||
-           (GetAsyncKeyState(WardHopKeyMenu->Key) & 0x8000) != 0;
+    return AioMenu::KeyDown(ComboMenu, "wardHopKey");
 }
 
 static bool HandleWardHop() {
-    if (!WardHopEnabledMenu || !WardHopKeyMenu || !WardHopEnabledMenu->Value) {
+    if (!AioMenu::Bool(ComboMenu, "wardHop", true) ||
+        AioMenu::Key(ComboMenu, "wardHopKey") <= 0) {
         WardHopPending = false;
         WardHopKeyWasActive = false;
         WardHopCompleted = false;
@@ -1017,9 +1008,8 @@ static bool InsecActionReady(DWORD now) {
 }
 
 static bool HandleInsec() {
-    const bool keyActive = InsecKeyMenu && InsecKeyMenu->Key > 0 &&
-        (InsecKeyMenu->Active ||
-         (::GetAsyncKeyState(InsecKeyMenu->Key) & 0x8000) != 0);
+    const bool keyActive =
+        AioMenu::KeyDown(ComboMenu, "insecKey");
 
     if (!keyActive) {
         if (CurrentInsecStage != InsecStage::Idle) {
@@ -1184,7 +1174,7 @@ static bool CastE2(const AIHeroClient& target) {
 }
 
 static bool FancyComboEnabled() {
-    return FancyComboMenu && FancyComboMenu->Value;
+    return AioMenu::Bool(ComboMenu, "fancyCombo", false);
 }
 
 static void ResetFancyComboState() {
@@ -1372,11 +1362,14 @@ static bool HandleFancyCombo() {
 }
 
 static bool MultiRComboEnabled() {
-    return MultiRComboMenu && MultiRComboMenu->Value;
+    return AioMenu::Bool(ComboMenu, "multiRCombo", false);
 }
 
 static int MultiRMinCollisions() {
-    return std::clamp(MultiRMinCollisionsMenu ? MultiRMinCollisionsMenu->Value : 2, 2, 5);
+    return std::clamp(
+        AioMenu::Slider(ComboMenu, "multiRMinCollisions", 2),
+        2,
+        5);
 }
 
 static AIHeroClient GetActiveMultiRTarget() {
@@ -1647,7 +1640,7 @@ static bool IsRProtectedTarget(const AIHeroClient& target) {
 }
 
 static bool HandleRAutoKillSteal() {
-    if (!RAutoKillStealMenu || !RAutoKillStealMenu->Value ||
+    if (!AioMenu::Bool(KillStealMenu, "rAutoKillSteal", false) ||
         !R.IsReady() || CurrentMultiRStage != MultiRStage::Idle) {
         return false;
     }
@@ -2077,17 +2070,12 @@ static KillComboPlan BuildKillComboPlan(const AIHeroClient& target) {
 }
 
 static void DrawKillCombo(const AIHeroClient& target) {
-    if (!DrawComboMenu || !DrawComboMenu->Value) {
+    if (!AioMenu::Bool(ComboMenu, "drawCombo", true)) {
         return;
     }
 
     const auto plan = BuildKillComboPlan(target);
     if (plan.Count == 0 || plan.FinalHealth > 0.0f) {
-        return;
-    }
-
-    Vec2 worldToScreen = {};
-    if (!Drawing::WorldToScreen(target.Position(), worldToScreen)) {
         return;
     }
 
@@ -2115,12 +2103,31 @@ static void DrawKillCombo(const AIHeroClient& target) {
                 _TRUNCATE,
                 "Kill combo: %.0f damage",
                 plan.TotalDamage);
-    const Vec2 summaryPosition{ worldToScreen.x, worldToScreen.y - 88.0f };
-    const Vec2 sequencePosition{ worldToScreen.x, worldToScreen.y - 70.0f };
-    const Vec2 detailsPosition{ worldToScreen.x, worldToScreen.y - 52.0f };
-    Drawing::DrawText(summaryPosition, summary, 0xFF00FF00, true);
-    Drawing::DrawText(sequencePosition, sequence.c_str(), 0xFFFFFFFF, true);
-    Drawing::DrawText(detailsPosition, damageBreakdown.c_str(), 0xFFFFFF00, true);
+    auto visuals = Visuals();
+    NightSharp::Menu::VisualTarget visualTarget;
+    visualTarget.position = target.Position();
+    visualTarget.hpBarHeight = target.GetHpBarHeight();
+
+    NightSharp::Menu::VisualLabelStyle summaryStyle;
+    summaryStyle.color = 0xFF00FF00u;
+    summaryStyle.offset = Vec2{ 0.0f, -36.0f };
+    summaryStyle.maxWidth = 420.0f;
+    summaryStyle.anchor = NightSharp::Menu::VisualAnchor::AboveHead;
+    summaryStyle.layer = NightSharp::Menu::VisualLayer::Text;
+    summaryStyle.order = 10;
+    visuals.Label(visualTarget, summary, summaryStyle);
+
+    NightSharp::Menu::VisualLabelStyle sequenceStyle = summaryStyle;
+    sequenceStyle.color = 0xFFFFFFFFu;
+    sequenceStyle.offset = Vec2{ 0.0f, -18.0f };
+    sequenceStyle.order = 20;
+    visuals.Label(visualTarget, sequence, sequenceStyle);
+
+    NightSharp::Menu::VisualLabelStyle detailsStyle = summaryStyle;
+    detailsStyle.color = 0xFFFFFF00u;
+    detailsStyle.offset = Vec2{ 0.0f, 0.0f };
+    detailsStyle.order = 30;
+    visuals.Label(visualTarget, damageBreakdown, detailsStyle);
 }
 
 static void OnDraw() {
@@ -2131,7 +2138,7 @@ static void OnDraw() {
         DrawKillCombo(target);
     }
 
-    if (!DrawPassiveMenu || !DrawPassiveMenu->Value) {
+    if (!AioMenu::Bool(ComboMenu, "drawPassive", true)) {
         return;
     }
 
@@ -2140,55 +2147,25 @@ static void OnDraw() {
         return;
     }
 
-    Vec2 worldToScreen = {};
-    if (!Drawing::WorldToScreen(player.Position(), worldToScreen)) {
-        return;
-    }
-    const Vec2 screenPosition(worldToScreen.x, worldToScreen.y - 40.0f);
-
     const int passiveStacks = CurrentPassiveStacks();
     char text[48] = {};
     _snprintf_s(text, sizeof(text), _TRUNCATE, "Flurry: %d/2", passiveStacks);
     const uint32_t color = passiveStacks >= 2
         ? 0xFF00FF00
         : (passiveStacks == 1 ? 0xFFFFFF00 : 0xFFFFFFFF);
-    const Vec2 shadowPosition{ screenPosition.x + 1.0f, screenPosition.y + 1.0f };
-    Drawing::DrawText(shadowPosition, text, 0xE0000000, true);
-    Drawing::DrawText(screenPosition, text, color, true);
-}
+    auto visuals = Visuals();
+    NightSharp::Menu::VisualTarget visualTarget;
+    visualTarget.position = player.Position();
+    visualTarget.hpBarHeight = player.GetHpBarHeight();
 
-static void BuildMenu() {
-    MenuRoot = new Menu("champion.ziblldev9898", "Lee Sin", true);
-
-    ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
-    ComboMenu->Add(new MenuBool("useQ", "Use Q", true));
-    ComboMenu->Add(new MenuBool("useW", "Use W", true));
-    ComboMenu->Add(new MenuBool("useE", "Use E", true));
-    ComboMenu->Add(new MenuBool("drawPassive", "Draw Passive Stacks", true));
-    ComboMenu->Add(new MenuBool("drawCombo", "Draw Kill Combo", true));
-    WardHopEnabledMenu = ComboMenu->Add(new MenuBool("wardHop", "Use Ward Hop", true));
-    WardHopKeyMenu = ComboMenu->Add(new MenuKeyBind(
-        "wardHopKey", "Ward Hop Key", SDK::Keys::Z, SDK::KeyBindType::Press));
-    InsecKeyMenu = ComboMenu->Add(new MenuKeyBind(
-        "insecKey", "Insec Key", SDK::Keys::A, SDK::KeyBindType::Press));
-    FancyComboMenu = ComboMenu->Add(new MenuBool(
-        "fancyCombo", "Fancy Combo", false));
-    FancyQ2HealthMenu = ComboMenu->Add(new MenuSlider(
-        "fancyQ2Health", "Q2 Health Threshold (%)", 30, 0, 100));
-    FancyQ2EnemiesMenu = ComboMenu->Add(new MenuSlider(
-        "fancyQ2Enemies", "Q2 Max Nearby Enemies", 1, 0, 5));
-    MultiRComboMenu = ComboMenu->Add(new MenuBool(
-        "multiRCombo", "Multi-Enemy R Kick", false));
-    MultiRMinCollisionsMenu = ComboMenu->Add(new MenuSlider(
-        "multiRMinCollisions", "Minimum R Collisions", 2, 2, 5));
-
-    KillStealMenu = MenuRoot->AddSubMenu(new Menu("KillSteal Settings", "KillSteal"));
-    RAutoKillStealMenu = KillStealMenu->Add(new MenuBool(
-        "rAutoKillSteal", "R Auto KS", false));
-
-    DrawPassiveMenu = ComboMenu->Get<MenuBool>("drawPassive");
-    DrawComboMenu = ComboMenu->Get<MenuBool>("drawCombo");
-    MenuRoot->Attach();
+    NightSharp::Menu::VisualLabelStyle passiveStyle;
+    passiveStyle.color = color;
+    passiveStyle.offset = Vec2{ 0.0f, -8.0f };
+    passiveStyle.maxWidth = 180.0f;
+    passiveStyle.anchor = NightSharp::Menu::VisualAnchor::AboveHead;
+    passiveStyle.layer = NightSharp::Menu::VisualLayer::Text;
+    passiveStyle.order = 40;
+    visuals.Label(visualTarget, text, passiveStyle);
 }
 
 static void OnGameLoad() {
@@ -2208,8 +2185,6 @@ static void OnGameLoad() {
 
     R = Spell(SpellSlot::R, RRange);
     R.Delay = 0.25f;
-
-    BuildMenu();
 
     DrawHooked = (Drawing::OnDraw += &OnDraw);
     UpdateHooked = (Events::hook.OnGameUpdate += &Game_OnUpdate);
@@ -2248,28 +2223,10 @@ static void OnUnload() {
     if (DrawHooked) {
         Drawing::OnDraw -= &OnDraw;
     }
+    NightSharp::Menu::VisualSDK::Instance().ReleaseOwner(VisualOwnerId);
     if (UpdateHooked) {
         Events::hook.OnGameUpdate -= &Game_OnUpdate;
     }
-    if (MenuRoot) {
-        MenuManager::Instance().Remove(MenuRoot);
-        delete MenuRoot;
-    }
-
-    MenuRoot = nullptr;
-    ComboMenu = nullptr;
-    DrawPassiveMenu = nullptr;
-    DrawComboMenu = nullptr;
-    WardHopEnabledMenu = nullptr;
-    WardHopKeyMenu = nullptr;
-    InsecKeyMenu = nullptr;
-    FancyComboMenu = nullptr;
-    FancyQ2HealthMenu = nullptr;
-    FancyQ2EnemiesMenu = nullptr;
-    MultiRComboMenu = nullptr;
-    MultiRMinCollisionsMenu = nullptr;
-    KillStealMenu = nullptr;
-    RAutoKillStealMenu = nullptr;
     ResetInsecState();
     ResetFancyComboState();
     ResetMultiRState();

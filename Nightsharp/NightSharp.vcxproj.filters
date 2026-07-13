@@ -78,6 +78,60 @@
     <ClCompile Include="sdk\Data\EmbeddedAssets.cpp">
       <Filter>SDK</Filter>
     </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Animation\Animator.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Controls\Button.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Controls\Checkbox.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Controls\ColorPicker.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Controls\Dropdown.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Controls\KeyBind.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Controls\Slider.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Input\KeyBindController.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Integration\MenuSDKBridge.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Navigation\NavigationTransition.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Platform\Windows\FontLoader.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Rendering\PermashowRenderer.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererContent.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererFrame.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererLayout.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererLifecycle.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererNavigation.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="SDK\MenuSDK\Visual\VisualSDK.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
     <ClCompile Include="Third_Party\clipper\clipper.cpp">
       <Filter>Third_Party</Filter>
     </ClCompile>

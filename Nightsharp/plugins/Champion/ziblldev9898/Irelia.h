@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
+#include "AioMenu.h"
 
 #include <algorithm>
 #include <cctype>
@@ -17,12 +18,11 @@ using SDK::Core::Utils::AutoAttack;
 // ============================================================================
 // Menu pointers
 // ============================================================================
-inline Menu* MenuRoot = nullptr;
-inline Menu* ComboMenu = nullptr;
-inline Menu* HarassMenu = nullptr;
-inline Menu* LaneClearMenu = nullptr;
-inline Menu* JungleClearMenu = nullptr;
-inline Menu* KillStealMenu = nullptr;
+inline constexpr const char* ComboMenu = "irelia.combo";
+inline constexpr const char* HarassMenu = "irelia.harass";
+inline constexpr const char* LaneClearMenu = "irelia.lane";
+inline constexpr const char* JungleClearMenu = "irelia.jungle";
+inline constexpr const char* KillStealMenu = "irelia.killSteal";
 
 // ============================================================================
 // Spell instances (CDragon irelia.bin.json verified 2026-07-09)
@@ -60,16 +60,12 @@ static AIHeroClient Player() {
     return ObjectManager::Player();
 }
 
-static bool Bool(Menu* menu, const char* key, bool fallback = true) {
-    if (!menu) return fallback;
-    const auto* item = menu->Get<MenuBool>(key);
-    return item ? item->Value : fallback;
+static bool Bool(const char* section, const char* key, bool fallback = true) {
+    return AioMenu::Bool(section, key, fallback);
 }
 
-static int Slider(Menu* menu, const char* key, int fallback = 0) {
-    if (!menu) return fallback;
-    const auto* item = menu->Get<MenuSlider>(key);
-    return item ? item->Value : fallback;
+static int Slider(const char* section, const char* key, int fallback = 0) {
+    return AioMenu::Slider(section, key, fallback);
 }
 
 static bool ShouldRunNow(DWORD& lastTick, DWORD intervalMs) {
@@ -594,40 +590,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs& args);
 static void OnUnload();
 
 // ============================================================================
-// Menu
-// ============================================================================
-static void BuildMenu() {
-    MenuRoot = new Menu("champion.ziblldev9898.irelia", "ziblldev9898 - Irelia", true);
-
-    ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
-    ComboMenu->Add(new MenuBool("useQ", "Use Q"));
-    ComboMenu->Add(new MenuBool("useW", "Use W"));
-    ComboMenu->Add(new MenuBool("useE", "Use E"));
-    ComboMenu->Add(new MenuBool("useR", "Use R"));
-    ComboMenu->Add(new MenuBool("rExecute", "Use R Execute", true));
-    ComboMenu->Add(new MenuBool("rAoe", "Use R AoE", true));
-    ComboMenu->Add(new MenuSlider("rMinEnemies", "Min Enemies for R AoE", 3, 1, 5));
-
-    HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
-    HarassMenu->Add(new MenuBool("useQ", "Use Q"));
-    HarassMenu->Add(new MenuSlider("ManaHarass", "Mana Harass", 30, 0, 100));
-
-    LaneClearMenu = MenuRoot->AddSubMenu(new Menu("LaneClear Settings", "Lane Clear"));
-    LaneClearMenu->Add(new MenuBool("useQ", "Use Q (lasthit)"));
-    LaneClearMenu->Add(new MenuSlider("ManaLC", "Mana Clear", 30, 0, 100));
-
-    JungleClearMenu = MenuRoot->AddSubMenu(new Menu("Jungle Settings", "Jungle Clear"));
-    JungleClearMenu->Add(new MenuBool("useQ", "Use Q"));
-    JungleClearMenu->Add(new MenuSlider("ManaJC", "Mana Clear", 30, 0, 100));
-
-    KillStealMenu = MenuRoot->AddSubMenu(new Menu("KillSteal Settings", "KillSteal"));
-    KillStealMenu->Add(new MenuBool("killstealQ", "Use Q"));
-    KillStealMenu->Add(new MenuBool("killstealR", "Use R"));
-
-    MenuRoot->Attach();
-}
-
-// ============================================================================
 // OnGameLoad
 // ============================================================================
 static void OnGameLoad() {
@@ -640,8 +602,6 @@ static void OnGameLoad() {
     E = Spell(SpellSlot::E, 850.0f);
     R = Spell(SpellSlot::R, 950.0f);
     R.SetSkillshot(0.25f, 160.0f, 2000.0f, false, SpellType::Line);
-
-    BuildMenu();
 
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Events::hook.OnBuffAdd += &OnBuffChanged;

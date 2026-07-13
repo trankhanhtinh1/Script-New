@@ -9,6 +9,7 @@
 #include "../Events/Events.h"
 #include "../GameObjects/ObjectManager.h"
 #include "Objects.h"
+#include "WndEvent.h"
 
 #include <DirectXMath.h>
 #include <Windows.h>
@@ -88,14 +89,6 @@ namespace detail {
     };
 } // namespace detail
 
-struct WndEventArgs {
-    HWND HWnd = nullptr;
-    std::uint32_t Msg = 0;
-    std::uintptr_t WParam = 0;
-    std::intptr_t LParam = 0;
-    bool Process = true;
-};
-
 using PingCategory = ::CoreGame::PingCategory;
 using EmoteId = ::CoreGame::EmoteId;
 using SummonerEmoteSlot = ::CoreGame::SummonerEmoteSlot;
@@ -116,13 +109,8 @@ using SendChatEventArgs = GameSendChatEventArgs;
 using DisplayChatEventArgs = GameDisplayChatEventArgs;
 
 using UpdateHandler = void(*)();
-using WndProcHandler = void(*)(WndEventArgs&);
 using SendChatHandler = void(*)(GameSendChatEventArgs&);
 using DisplayChatHandler = void(*)(GameDisplayChatEventArgs&);
-
-// Forward declarations (defined below) — needed for circular include safety
-inline bool AddOnWndProc(WndProcHandler handler);
-inline bool RemoveOnWndProc(WndProcHandler handler);
 
 namespace detail {
     inline HandlerList<UpdateHandler> UpdateHandlers;

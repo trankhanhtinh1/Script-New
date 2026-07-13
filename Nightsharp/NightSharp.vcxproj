@@ -108,6 +108,24 @@
     <ClCompile Include="overlay\Overlay.cpp" />
     <ClCompile Include="overlay\OverlayManager.cpp" />
     <ClCompile Include="sdk\Data\EmbeddedAssets.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Animation\Animator.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Controls\Button.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Controls\Checkbox.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Controls\ColorPicker.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Controls\Dropdown.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Controls\KeyBind.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Controls\Slider.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Input\KeyBindController.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Integration\MenuSDKBridge.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Navigation\NavigationTransition.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Platform\Windows\FontLoader.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Rendering\PermashowRenderer.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererContent.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererFrame.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererLayout.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererLifecycle.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Rendering\RendererNavigation.cpp" />
+    <ClCompile Include="SDK\MenuSDK\Visual\VisualSDK.cpp" />
     <ClCompile Include="Third_Party\clipper\clipper.cpp" />
   </ItemGroup>
   <ItemGroup>

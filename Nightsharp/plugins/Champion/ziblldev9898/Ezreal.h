@@ -1,14 +1,13 @@
 #pragma once
 
 #include "../../../SDK/SDK.h"
+#include "AioMenu.h"
 
 #include <cfloat>
 #include <string>
 
 namespace Plugins::ziblldev9898::Ezreal {
 
-inline Menu* MenuRoot = nullptr;
-inline MenuBool* UseQMenu = nullptr;
 inline Spell Q{SpellSlot::Q, 1200.0f};
 inline bool Loaded = false;
 inline DWORD LastQTick = 0;
@@ -28,7 +27,8 @@ static AIHeroClient GetTarget() {
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
-    if (!Loaded || !Q.IsReady() || !UseQMenu || !UseQMenu->Value) return;
+    if (!Loaded || !Q.IsReady() ||
+        !AioMenu::Bool("ezreal", "useQ")) return;
     if (SDK::Prediction::CurrentPredictionName() != "ZD Prediction") return;
     if (Orbwalker::ActiveMode() != OrbwalkingMode::Combo) return;
 
@@ -55,10 +55,6 @@ static void OnGameLoad() {
     Q = Spell(SpellSlot::Q, 1200.0f);
     Q.SetSkillshot(0.25f, 53.0f, 2000.0f, true, SpellType::Line);
 
-    MenuRoot = new Menu("champion.ziblldev9898.ezreal", "ziblldev9898 - Ezreal Q Test", true);
-    UseQMenu = MenuRoot->Add(new MenuBool("useQ", "Cast Q In Combo", true));
-    MenuRoot->Attach();
-
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Loaded = true;
 }
@@ -66,12 +62,6 @@ static void OnGameLoad() {
 static void OnUnload() {
     if (!Loaded) return;
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
-    if (MenuRoot) {
-        MenuManager::Instance().Remove(MenuRoot);
-        delete MenuRoot;
-    }
-    MenuRoot = nullptr;
-    UseQMenu = nullptr;
     LastQTick = 0;
     Loaded = false;
 }

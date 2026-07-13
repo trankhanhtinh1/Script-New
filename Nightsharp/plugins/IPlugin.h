@@ -32,6 +32,7 @@ namespace Plugins {
         virtual bool CanLoad() const { return true; }
 
         // ── Lifecycle ──
+        virtual void OnMenuRegister() {}
         virtual void OnLoad()   {}
         virtual void OnUnload() {}
         virtual void OnUpdate() {}

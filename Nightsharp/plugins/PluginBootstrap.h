@@ -143,6 +143,8 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
         PluginManager::Get().Register<PlayerBuffDebugPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();
+        PluginManager::Get().Register<ZDEvadePlugin>();
+        PluginManager::Get().Register<ZDPredictionPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins complete");
 
         NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins begin");
@@ -165,8 +167,6 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<KuroAIOPlugin>();
         PluginManager::Get().Register<SharpShooterAIOPlugin>();
         PluginManager::Get().Register<Ziblldev9898Plugin>();
-        PluginManager::Get().Register<ZDEvadePlugin>();
-        PluginManager::Get().Register<ZDPredictionPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

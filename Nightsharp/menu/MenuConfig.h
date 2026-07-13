@@ -2,6 +2,16 @@
 
 namespace Config {
 
+    namespace MenuBackend {
+        enum class Mode {
+            Legacy,
+            Hybrid,
+            MenuSDK,
+        };
+
+        inline Mode mode = Mode::Hybrid;
+    }
+
     namespace ZoomHack {
         inline bool enabled = false;
         inline float maxZoom = 4000.0f;

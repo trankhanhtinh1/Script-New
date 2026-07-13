@@ -9,7 +9,9 @@
 
 #include "../../IPlugin.h"
 #include "../../../SDK/SDK.h"
+#include "../../../SDK/MenuSDK/Integration/MenuSDKBridge.h"
 
+#include "AioMenu.h"
 #include "Locke.h"
 #include "Ezreal.h"
 #include "Leesin.h"
@@ -21,6 +23,11 @@ namespace Plugins {
 
 class Ziblldev9898Plugin final : public IPlugin {
 public:
+    ~Ziblldev9898Plugin() override {
+        ziblldev9898::AioMenu::Unregister();
+        NightSharpMenu::MenuSDKBridge::Instance().UnregisterPlugin(GetInternalId());
+    }
+
     const char* GetName() const override { return "Ziblldev9898"; }
     const char* GetInternalId() const override { return "champion.ziblldev9898"; }
     const char* GetAuthor() const override { return "ziblldev9898"; }
@@ -29,8 +36,24 @@ public:
     bool AutoLoadByDefault() const override { return true; }
     bool CanLoad() const override { return IsCurrentChampionSupported(); }
 
+    void OnMenuRegister() override {
+        NightSharpMenu::MenuSDKBridge::Instance().RegisterPlugin(
+            GetInternalId(),
+            GetName(),
+            GetAuthor(),
+            GetRegistryIndex(),
+            "champions");
+        ziblldev9898::AioMenu::Register();
+        ziblldev9898::AioMenu::SetActiveChampion(CurrentChampionName().c_str());
+    }
+
+    void OnUpdate() override {
+        ziblldev9898::AioMenu::SetActiveChampion(CurrentChampionName().c_str());
+    }
+
     void OnLoad() override {
         const std::string champ = CurrentChampionName();
+        ziblldev9898::AioMenu::SetActiveChampion(champ.c_str());
         if (_stricmp(champ.c_str(), "Locke") == 0) {
             ziblldev9898::Locke::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Ezreal") == 0) {

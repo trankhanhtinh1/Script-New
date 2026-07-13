@@ -12,6 +12,8 @@
 #include "UI/Icons.h"
 #include "UI/PermaShow.h"
 #include "UI/UI.h"
+#include "MenuSDK/Integration/MenuSDKBridge.h"
+#include "MenuSDK/Visual/VisualSDK.h"
 #include "Utils/Storage.h"
 
 #include <Windows.h>
@@ -40,6 +42,7 @@ inline void Shutdown() {
     __try { Events::Reset(); } __except (1) {}
     __try { Game::Reset(); } __except (1) {}
     __try { Drawing::Reset(); } __except (1) {}
+    __try { ::NightSharp::Menu::VisualSDK::Instance().Reset(); } __except (1) {}
     __try { GameObjects::Shutdown(); } __except (1) {}
 
     // The core dispatcher can still be called by native detours. Put it into
@@ -52,6 +55,7 @@ inline void Shutdown() {
     __try { UI::Icons::Reset(); } __except (1) {}
     __try { UI::PermaShow::Clear(); } __except (1) {}
     __try { UI::MenuManager::Instance().Clear(); } __except (1) {}
+    __try { ::NightSharpMenu::MenuSDKBridge::Instance().Shutdown(); } __except (1) {}
     __try { CoreRuntime::Shutdown(); } __except (1) {}
 }
 

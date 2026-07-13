@@ -62,6 +62,7 @@ namespace Plugins {
 
             m_plugins.push_back(std::move(plugin));
             SyncRegistry(raw);
+            InvokeMenuRegister(raw);
             NightSharpDebug::Logf("[PluginManager] Register complete name=%s idx=%d",
                                   raw->GetName(), raw->m_registryIndex);
             return raw;
@@ -246,6 +247,22 @@ namespace Plugins {
         static PluginRegistry::PluginKind ToRegistryKind(PluginCategory category) {
             (void)category;
             return PluginRegistry::PluginKind::Plugin;
+        }
+
+        static void InvokeMenuRegister(IPlugin* plugin) {
+            if (!plugin) {
+                return;
+            }
+            __try {
+                plugin->OnMenuRegister();
+            }
+            __except (NightSharpDebug::CrashReporter::LogAndDumpException(
+                          "PluginManager::Register/OnMenuRegister",
+                          GetExceptionInformation())) {
+                NightSharpDebug::Logf("[PluginManager] OnMenuRegister crashed name=%s id=%s",
+                                      plugin->GetName(),
+                                      plugin->GetInternalId());
+            }
         }
 
         static bool LoadThunk(void* userData) {

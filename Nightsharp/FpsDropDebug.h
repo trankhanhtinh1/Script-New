@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui/imgui.h"
+#include "SDK/Core/WndEvent.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -546,8 +547,6 @@ private:
 } // namespace NightSharpPerf
 
 // WndProc-based hotkey handler (declared here after NightSharpPerf types to avoid circular include with Events.h)
-#include "SDK/Core/Game.h"
-
 namespace NightSharpPerf {
 inline void ToggleHotkeysWndProc(SDK::Game::WndEventArgs& args) {
     if (args.Msg == WM_KEYDOWN) {

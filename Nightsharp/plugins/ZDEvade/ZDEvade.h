@@ -11,7 +11,7 @@
 #include "../../Core/Globals.h"
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
-#include "../../SDK/UI/IMenu/Menu.h"
+#include "../../SDK/MenuSDK/Integration/MenuSDKBridge.h"
 
 #include "Debug/ZDLog.h"
 #include "Debug/CandidateDebug.h"
@@ -38,15 +38,29 @@ class ZDEvadePlugin final : public IPlugin {
 public:
     const char* GetName() const override { return "ZDEvade"; }
     const char* GetInternalId() const override { return "core.zdevade"; }
-    const char* GetAuthor() const override { return "ZD"; }
+    const char* GetAuthor() const override { return "ziblldev9898"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
     bool AutoLoadByDefault() const override { return false; }
+
+    void OnMenuRegister() override {
+        NightSharpMenu::MenuSDKBridge::Instance().RegisterPlugin(
+            GetInternalId(),
+            GetName(),
+            GetAuthor(),
+            GetRegistryIndex(),
+            "core");
+    }
+
+    ~ZDEvadePlugin() override {
+        DestroyMenuSDK();
+        NightSharpMenu::MenuSDKBridge::Instance().UnregisterPlugin(GetInternalId());
+    }
 
     void OnLoad() override {
         s_instance = this;
 
         ZDEvade::ThreatDetector::Initialize();
-        CreateMenu();
+        CreateMenuSDK();
 
         SDK::Events::AddOnGameUpdate(&ZDEvadePlugin::OnGameUpdateStatic);
         SDK::Orbwalker::OnBeforeMove += &ZDEvadePlugin::OnBeforeMoveStatic;
@@ -60,7 +74,7 @@ public:
         m_controller.Reset();
         ZDEvade::ThreatDetector::Shutdown();
 
-        DestroyMenu();
+        DestroyMenuSDK();
 
         if (s_instance == this) {
             s_instance = nullptr;
@@ -136,28 +150,6 @@ public:
         }
     }
 
-    void OnMenu() override {
-        if (!m_menu) return;
-        m_menu->DrawImGui();
-        const RenderState renderState = GetRenderState();
-        ImGui::Separator();
-        ImGui::Text("Tracked threats: %d", static_cast<int>(ZDEvade::ThreatDetector::Snapshot().size()));
-        ImGui::Text("Detector serial: %d", ZDEvade::ThreatDetector::ChangeSerial());
-        ImGui::Text("Detector dropped: %d", ZDEvade::ThreatDetector::DroppedRawEvents());
-        ImGui::Text("State: %s", ZDEvade::ControllerStateName(renderState.state));
-        if (renderState.locked.valid) {
-            ImGui::Text("Target: %s %s", ZDEvade::CandidateSourceName(renderState.locked.source),
-                        renderState.locked.strictSafe ? "strict" : "fallback");
-            ImGui::Text("Exit: %.1f  Travel: %.1f  Margin: %.1fms",
-                        renderState.locked.exitDistance,
-                        renderState.locked.travelDistance,
-                        renderState.locked.timeMarginMs);
-            ImGui::Text("Clearance: %.1f  Exposure: %.1fms",
-                        renderState.locked.minimumClearance,
-                        renderState.locked.dangerExposureMs);
-        }
-    }
-
 private:
     struct RenderState {
         ZDEvade::EvadeControllerState state = ZDEvade::EvadeControllerState::Idle;
@@ -165,45 +157,51 @@ private:
         std::vector<ZDEvade::CandidateEvaluation> candidates;
     };
 
-    struct SpellMenuBinding {
-        MenuBool* enabled = nullptr;
-        MenuSlider* danger = nullptr;
-        MenuSlider* health = nullptr;
+    struct SdkSpellMenuBinding {
+        NightSharp::Menu::MenuItemHandle enabled;
+        NightSharp::Menu::MenuItemHandle danger;
+        NightSharp::Menu::MenuItemHandle health;
     };
 
     static inline ZDEvadePlugin* s_instance = nullptr;
 
-    Menu* m_menu = nullptr;
-    Menu* m_spellsMenu = nullptr;
-    MenuBool* m_enabledMenu = nullptr;
-    MenuBool* m_walkEnabledMenu = nullptr;
-    MenuBool* m_evadeSpellsMenu = nullptr;
-    MenuBool* m_fallbackMenu = nullptr;
-    MenuBool* m_drawSpellsMenu = nullptr;
-    MenuBool* m_drawCandidatesMenu = nullptr;
-    MenuSlider* m_minDangerMenu = nullptr;
-    MenuSlider* m_evadeSpellDangerMenu = nullptr;
-    MenuSlider* m_evadeSpellMarginMenu = nullptr;
-    MenuSlider* m_endpointBufferMenu = nullptr;
-    MenuSlider* m_pathBufferMenu = nullptr;
-    MenuSlider* m_releaseBufferMenu = nullptr;
-    MenuSlider* m_inputDelayMenu = nullptr;
-    MenuSlider* m_minMarginMenu = nullptr;
-    MenuSlider* m_preferredClearanceMenu = nullptr;
-    MenuSlider* m_searchRadiusMenu = nullptr;
-    MenuSlider* m_moveIntervalMenu = nullptr;
-    MenuSlider* m_moveRefreshMenu = nullptr;
-    MenuSlider* m_replanIntervalMenu = nullptr;
+    NightSharp::Menu::MenuItemHandle sdkEnabledMenu_;
+    NightSharp::Menu::MenuItemHandle sdkWalkingEnabledMenu_;
+    NightSharp::Menu::MenuItemHandle sdkEvadeSpellsMenu_;
+    NightSharp::Menu::MenuItemHandle sdkFallbackMenu_;
+    NightSharp::Menu::MenuItemHandle sdkMinimumDangerMenu_;
+    NightSharp::Menu::MenuItemHandle sdkEvadeSpellDangerMenu_;
+    NightSharp::Menu::MenuItemHandle sdkEvadeSpellMarginMenu_;
+    NightSharp::Menu::MenuItemHandle sdkEndpointBufferMenu_;
+    NightSharp::Menu::MenuItemHandle sdkPathBufferMenu_;
+    NightSharp::Menu::MenuItemHandle sdkReleaseBufferMenu_;
+    NightSharp::Menu::MenuItemHandle sdkInputDelayMenu_;
+    NightSharp::Menu::MenuItemHandle sdkMinimumMarginMenu_;
+    NightSharp::Menu::MenuItemHandle sdkPreferredClearanceMenu_;
+    NightSharp::Menu::MenuItemHandle sdkSearchRadiusMenu_;
+    NightSharp::Menu::MenuItemHandle sdkMoveIntervalMenu_;
+    NightSharp::Menu::MenuItemHandle sdkMoveRefreshMenu_;
+    NightSharp::Menu::MenuItemHandle sdkReplanIntervalMenu_;
+    NightSharp::Menu::MenuItemHandle sdkDrawSpellsMenu_;
+    NightSharp::Menu::MenuItemHandle sdkDrawCandidatesMenu_;
 
     ZDEvade::EvadeController m_controller;
-    std::unordered_map<std::string, SpellMenuBinding> m_spellBindings;
+    std::unordered_map<std::string, SdkSpellMenuBinding> sdkSpellBindings_;
     ZDEvade::ThreatRuleMap m_threatRules;
     mutable SRWLOCK m_renderStateLock = SRWLOCK_INIT;
     RenderState m_renderState;
 
-    bool Enabled() const { return !m_enabledMenu || m_enabledMenu->Value; }
-    bool DrawSpells() const { return !m_drawSpellsMenu || m_drawSpellsMenu->Value; }
-    bool DrawCandidates() const { return m_drawCandidatesMenu && m_drawCandidatesMenu->Value; }
+    bool Enabled() const {
+        return !sdkEnabledMenu_ || sdkEnabledMenu_->value;
+    }
+
+    bool DrawSpells() const {
+        return !sdkDrawSpellsMenu_ || sdkDrawSpellsMenu_->value;
+    }
+
+    bool DrawCandidates() const {
+        return sdkDrawCandidatesMenu_ && sdkDrawCandidatesMenu_->value;
+    }
 
     static void OnGameUpdateStatic(const SDK::Events::GameUpdateEventArgs&) {
         if (s_instance) s_instance->Tick();
@@ -218,28 +216,40 @@ private:
 
     ZDEvade::EvadeRuntimeConfig BuildConfig() const {
         ZDEvade::EvadeRuntimeConfig config;
+        const auto boolValue = [](const NightSharp::Menu::MenuItemHandle& item, bool fallback) {
+            return item ? item->value : fallback;
+        };
+        const auto intValue = [](const NightSharp::Menu::MenuItemHandle& item, int fallback) {
+            return item ? item->integer : fallback;
+        };
         config.enabled = Enabled();
-        config.walkingEnabled = !m_walkEnabledMenu || m_walkEnabledMenu->Value;
-        config.evadeSpellsEnabled = !m_evadeSpellsMenu || m_evadeSpellsMenu->Value;
-        config.leastDangerFallback = !m_fallbackMenu || m_fallbackMenu->Value;
-        config.minimumDanger = m_minDangerMenu ? m_minDangerMenu->Value : 1;
-        config.evadeSpellMinimumDanger = m_evadeSpellDangerMenu ? m_evadeSpellDangerMenu->Value : 3;
+        config.walkingEnabled = boolValue(sdkWalkingEnabledMenu_, true);
+        config.evadeSpellsEnabled = boolValue(sdkEvadeSpellsMenu_, true);
+        config.leastDangerFallback = boolValue(sdkFallbackMenu_, true);
+        config.minimumDanger = intValue(sdkMinimumDangerMenu_, 1);
+        config.evadeSpellMinimumDanger = intValue(sdkEvadeSpellDangerMenu_, 3);
         config.evadeSpellMarginThresholdMs = static_cast<float>(
-            m_evadeSpellMarginMenu ? m_evadeSpellMarginMenu->Value : 45);
+            intValue(sdkEvadeSpellMarginMenu_, 45));
         config.threatRules = &m_threatRules;
-        config.moveIntervalMs = m_moveIntervalMenu ? m_moveIntervalMenu->Value : 85;
-        config.moveRefreshMs = m_moveRefreshMenu ? m_moveRefreshMenu->Value : 320;
-        config.replanIntervalMs = m_replanIntervalMenu ? m_replanIntervalMenu->Value : 90;
+        config.moveIntervalMs = intValue(sdkMoveIntervalMenu_, 85);
+        config.moveRefreshMs = intValue(sdkMoveRefreshMenu_, 320);
+        config.replanIntervalMs = intValue(sdkReplanIntervalMenu_, 90);
         config.fallbackReplanIntervalMs = std::max(25, config.replanIntervalMs / 2);
-        config.planner.endpointBuffer = static_cast<float>(m_endpointBufferMenu ? m_endpointBufferMenu->Value : 32);
-        config.planner.pathBuffer = static_cast<float>(m_pathBufferMenu ? m_pathBufferMenu->Value : 12);
-        config.planner.releaseBuffer = static_cast<float>(m_releaseBufferMenu ? m_releaseBufferMenu->Value : 48);
-        config.planner.inputDelayMs = static_cast<float>(m_inputDelayMenu ? m_inputDelayMenu->Value : 55) +
+        config.planner.endpointBuffer = static_cast<float>(
+            intValue(sdkEndpointBufferMenu_, 32));
+        config.planner.pathBuffer = static_cast<float>(
+            intValue(sdkPathBufferMenu_, 12));
+        config.planner.releaseBuffer = static_cast<float>(
+            intValue(sdkReleaseBufferMenu_, 48));
+        config.planner.inputDelayMs = static_cast<float>(
+            intValue(sdkInputDelayMenu_, 55)) +
             static_cast<float>(std::max(0, SDK::Game::Ping())) * 0.5f;
-        config.planner.minimumTimeMarginMs = static_cast<float>(m_minMarginMenu ? m_minMarginMenu->Value : 25);
+        config.planner.minimumTimeMarginMs = static_cast<float>(
+            intValue(sdkMinimumMarginMenu_, 25));
         config.planner.preferredClearance = static_cast<float>(
-            m_preferredClearanceMenu ? m_preferredClearanceMenu->Value : 24);
-        config.planner.maxSearchRadius = static_cast<float>(m_searchRadiusMenu ? m_searchRadiusMenu->Value : 760);
+            intValue(sdkPreferredClearanceMenu_, 24));
+        config.planner.maxSearchRadius = static_cast<float>(
+            intValue(sdkSearchRadiusMenu_, 760));
         return config;
     }
 
@@ -262,46 +272,25 @@ private:
         return result;
     }
 
-    void CreateMenu() {
-        DestroyMenu();
-        m_menu = new Menu(GetInternalId(), GetName(), true);
+    void CreateMenuSDK() {
+        DestroyMenuSDK();
+        auto builder = NightSharpMenu::MenuSDKBridge::Instance().RegisterMenu(
+            GetInternalId(),
+            GetName());
 
-        auto* main = m_menu->AddSubMenu(new Menu("main", "Main"));
-        m_enabledMenu = main->Add(new MenuBool("enabled", "Enable ZDEvade", true));
-        m_walkEnabledMenu = main->Add(new MenuBool("walking", "Walking Evade", true));
-        m_evadeSpellsMenu = main->Add(new MenuBool("evadeSpells", "Direct Evade Spells", true));
-        m_fallbackMenu = main->Add(new MenuBool("leastDangerFallback", "Least Danger Fallback", true));
-        m_minDangerMenu = main->Add(new MenuSlider("minimumDanger", "Minimum Danger", 1, 1, 4));
-        m_evadeSpellDangerMenu = main->Add(new MenuSlider("evadeSpellDanger", "Evade Spell Minimum Danger", 3, 1, 4));
-        m_evadeSpellMarginMenu = main->Add(new MenuSlider("evadeSpellMargin", "Evade Spell Margin Threshold", 45, 0, 250));
+        auto main = builder.Section("main", "Main");
+        sdkEnabledMenu_ = main.Checkbox("enabled", "Enable ZDEvade", true);
+        sdkWalkingEnabledMenu_ = main.Checkbox("walking", "Walking Evade", true);
+        sdkEvadeSpellsMenu_ = main.Checkbox("evadeSpells", "Direct Evade Spells", true);
+        sdkFallbackMenu_ = main.Checkbox("leastDangerFallback", "Least Danger Fallback", true);
+        sdkMinimumDangerMenu_ = main.Slider("minimumDanger", "Minimum Danger", 1, 1, 4);
+        sdkEvadeSpellDangerMenu_ = main.Slider(
+            "evadeSpellDanger", "Evade Spell Minimum Danger", 3, 1, 4);
+        sdkEvadeSpellMarginMenu_ = main.Slider(
+            "evadeSpellMargin", "Evade Spell Margin Threshold", 45, 0, 250);
 
-        m_spellsMenu = m_menu->AddSubMenu(new Menu("spells", "Enemy Spells"));
-        CreateSpellMenus();
-
-        auto* safety = m_menu->AddSubMenu(new Menu("safety", "Safety and Timing"));
-        m_endpointBufferMenu = safety->Add(new MenuSlider("endpointBuffer", "Endpoint Buffer", 32, 0, 120));
-        m_pathBufferMenu = safety->Add(new MenuSlider("pathBuffer", "Path Buffer", 12, 0, 100));
-        m_releaseBufferMenu = safety->Add(new MenuSlider("releaseBuffer", "Release Buffer", 48, 0, 140));
-        m_inputDelayMenu = safety->Add(new MenuSlider("inputDelay", "Extra Input Delay", 55, 0, 200));
-        m_minMarginMenu = safety->Add(new MenuSlider("minimumMargin", "Minimum Time Margin", 25, 0, 250));
-        m_preferredClearanceMenu = safety->Add(new MenuSlider(
-            "preferredClearance", "Preferred Clearance", 24, 0, 100));
-        m_searchRadiusMenu = safety->Add(new MenuSlider("searchRadius", "Maximum Search Radius", 760, 300, 1200));
-
-        auto* control = m_menu->AddSubMenu(new Menu("control", "Control"));
-        m_moveIntervalMenu = control->Add(new MenuSlider("moveInterval", "Move Interval", 85, 25, 250));
-        m_moveRefreshMenu = control->Add(new MenuSlider("moveRefresh", "Move Refresh", 320, 100, 600));
-        m_replanIntervalMenu = control->Add(new MenuSlider("replanInterval", "Replan Interval", 90, 20, 250));
-
-        auto* draw = m_menu->AddSubMenu(new Menu("draw", "Draw"));
-        m_drawSpellsMenu = draw->Add(new MenuBool("drawSpells", "Draw Skillshots", true));
-        m_drawCandidatesMenu = draw->Add(new MenuBool("drawCandidates", "Draw Candidates", false));
-
-        m_menu->Attach();
-    }
-
-    void CreateSpellMenus() {
-        if (!m_spellsMenu) return;
+        auto spellsSection = builder.Section("spells", "Enemy Spells");
+        sdkSpellBindings_.clear();
         std::unordered_set<std::string> enemyNames;
         for (const auto& enemy : SDK::ObjectManager::EnemyHeroes()) {
             if (!enemy.IsValid()) continue;
@@ -310,63 +299,96 @@ private:
         int index = 0;
         for (const auto& spell : ZDEvade::SpellDatabase::Spells) {
             if (spell.spellName.empty()) continue;
-            if (spell.charName != "AllChampions" && enemyNames.find(spell.charName) == enemyNames.end()) continue;
-            if (m_spellBindings.find(spell.spellName) != m_spellBindings.end()) continue;
+            if (spell.charName != "AllChampions" &&
+                enemyNames.find(spell.charName) == enemyNames.end()) {
+                continue;
+            }
+            if (sdkSpellBindings_.find(spell.spellName) != sdkSpellBindings_.end()) {
+                continue;
+            }
             const std::string id = "spell_" + std::to_string(index++);
             const std::string label = spell.charName + " - " +
                 (spell.name.empty() ? spell.spellName : spell.name);
-            auto* menu = m_spellsMenu->AddSubMenu(new Menu(id.c_str(), label.c_str()));
-            SpellMenuBinding binding;
-            binding.enabled = menu->Add(new MenuBool("enabled", "Dodge", !spell.defaultOff));
-            binding.danger = menu->Add(new MenuSlider(
-                "danger", "Danger", std::clamp(spell.dangerlevel, 1, 4), 1, 4));
-            binding.health = menu->Add(new MenuSlider(
-                "health", "Dodge Only Below HP", spell.dangerlevel == 1 ? 90 : 100, 0, 100));
-            m_spellBindings.emplace(spell.spellName, binding);
+            auto spellSection = spellsSection.Section(id, label);
+            SdkSpellMenuBinding binding;
+            const bool enabled = !spell.defaultOff;
+            const int danger = std::clamp(spell.dangerlevel, 1, 4);
+            const int health = spell.dangerlevel == 1 ? 90 : 100;
+            binding.enabled = spellSection.Checkbox("enabled", "Dodge", enabled);
+            binding.danger = spellSection.Slider(
+                "danger", "Danger", danger, 1, 4);
+            binding.health = spellSection.Slider(
+                "health", "Dodge Only Below HP", health, 0, 100);
+            sdkSpellBindings_.emplace(spell.spellName, std::move(binding));
         }
+
+        auto safety = builder.Section("safety", "Safety and Timing");
+        sdkEndpointBufferMenu_ = safety.Slider(
+            "endpointBuffer", "Endpoint Buffer", 32, 0, 120);
+        sdkPathBufferMenu_ = safety.Slider(
+            "pathBuffer", "Path Buffer", 12, 0, 100);
+        sdkReleaseBufferMenu_ = safety.Slider(
+            "releaseBuffer", "Release Buffer", 48, 0, 140);
+        sdkInputDelayMenu_ = safety.Slider(
+            "inputDelay", "Extra Input Delay", 55, 0, 200);
+        sdkMinimumMarginMenu_ = safety.Slider(
+            "minimumMargin", "Minimum Time Margin", 25, 0, 250);
+        sdkPreferredClearanceMenu_ = safety.Slider(
+            "preferredClearance", "Preferred Clearance", 24, 0, 100);
+        sdkSearchRadiusMenu_ = safety.Slider(
+            "searchRadius", "Maximum Search Radius", 760, 300, 1200);
+
+        auto control = builder.Section("control", "Control");
+        sdkMoveIntervalMenu_ = control.Slider(
+            "moveInterval", "Move Interval", 85, 25, 250);
+        sdkMoveRefreshMenu_ = control.Slider(
+            "moveRefresh", "Move Refresh", 320, 100, 600);
+        sdkReplanIntervalMenu_ = control.Slider(
+            "replanInterval", "Replan Interval", 90, 20, 250);
+
+        auto draw = builder.Section("draw", "Draw");
+        sdkDrawSpellsMenu_ = draw.Checkbox("drawSpells", "Draw Skillshots", true);
+        sdkDrawCandidatesMenu_ = draw.Checkbox("drawCandidates", "Draw Candidates", false);
         RefreshThreatRules();
     }
 
-    void RefreshThreatRules() {
-        for (const auto& entry : m_spellBindings) {
-            ZDEvade::ThreatRule& rule = m_threatRules[entry.first];
-            rule.enabled = !entry.second.enabled || entry.second.enabled->Value;
-            rule.danger = entry.second.danger ? entry.second.danger->Value : 1;
-            rule.dodgeHealthPercent = static_cast<float>(
-                entry.second.health ? entry.second.health->Value : 100);
-        }
-    }
-
-    void DestroyMenu() {
-        if (!m_menu) return;
-        MenuManager::Instance().Remove(m_menu);
-        delete m_menu;
-        m_menu = nullptr;
-        m_spellsMenu = nullptr;
-        m_spellBindings.clear();
+    void DestroyMenuSDK() {
+        auto& bridge = NightSharpMenu::MenuSDKBridge::Instance();
+        bridge.UnregisterMenu(GetInternalId());
+        sdkEnabledMenu_.reset();
+        sdkWalkingEnabledMenu_.reset();
+        sdkEvadeSpellsMenu_.reset();
+        sdkFallbackMenu_.reset();
+        sdkMinimumDangerMenu_.reset();
+        sdkEvadeSpellDangerMenu_.reset();
+        sdkEvadeSpellMarginMenu_.reset();
+        sdkEndpointBufferMenu_.reset();
+        sdkPathBufferMenu_.reset();
+        sdkReleaseBufferMenu_.reset();
+        sdkInputDelayMenu_.reset();
+        sdkMinimumMarginMenu_.reset();
+        sdkPreferredClearanceMenu_.reset();
+        sdkSearchRadiusMenu_.reset();
+        sdkMoveIntervalMenu_.reset();
+        sdkMoveRefreshMenu_.reset();
+        sdkReplanIntervalMenu_.reset();
+        sdkDrawSpellsMenu_.reset();
+        sdkDrawCandidatesMenu_.reset();
+        sdkSpellBindings_.clear();
         m_threatRules.clear();
-        m_enabledMenu = nullptr;
-        m_walkEnabledMenu = nullptr;
-        m_evadeSpellsMenu = nullptr;
-        m_fallbackMenu = nullptr;
-        m_drawSpellsMenu = nullptr;
-        m_drawCandidatesMenu = nullptr;
-        m_minDangerMenu = nullptr;
-        m_evadeSpellDangerMenu = nullptr;
-        m_evadeSpellMarginMenu = nullptr;
-        m_endpointBufferMenu = nullptr;
-        m_pathBufferMenu = nullptr;
-        m_releaseBufferMenu = nullptr;
-        m_inputDelayMenu = nullptr;
-        m_minMarginMenu = nullptr;
-        m_preferredClearanceMenu = nullptr;
-        m_searchRadiusMenu = nullptr;
-        m_moveIntervalMenu = nullptr;
-        m_moveRefreshMenu = nullptr;
-        m_replanIntervalMenu = nullptr;
         AcquireSRWLockExclusive(&m_renderStateLock);
         m_renderState = {};
         ReleaseSRWLockExclusive(&m_renderStateLock);
+    }
+
+    void RefreshThreatRules() {
+        for (const auto& entry : sdkSpellBindings_) {
+            ZDEvade::ThreatRule& rule = m_threatRules[entry.first];
+            rule.enabled = !entry.second.enabled || entry.second.enabled->value;
+            rule.danger = entry.second.danger ? entry.second.danger->integer : 1;
+            rule.dodgeHealthPercent = static_cast<float>(
+                entry.second.health ? entry.second.health->integer : 100);
+        }
     }
 };
 
