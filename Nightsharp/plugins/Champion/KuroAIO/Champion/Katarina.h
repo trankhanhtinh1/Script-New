@@ -32,6 +32,7 @@ struct Dagger {
 inline bool Loaded = false;
 inline bool UpdateR = false;
 inline int LastR = 0;
+inline int LastCastE = 0;
 inline std::vector<Dagger> Daggers;
 
 static std::string RuntimeName(const GameObject& object) {
@@ -167,6 +168,17 @@ static float EDamage(const AIBaseClient& target) {
         baseDamage[rank] + 0.40f * TotalAttackDamage() + 0.25f * player.AP());
 }
 
+static float EOnHitDamage(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+
+    // Shunpo applies on-hit effects, but it does not add the basic attack's
+    // base physical damage. GetPassiveDamage returns only those extra effects.
+    return Damage::GetPassiveDamage(player, target);
+}
+
 static float RDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
@@ -223,10 +235,20 @@ static bool AllowDashTo(const Vector3& position) {
 }
 
 static bool CastE(const Vector3& position) {
-    if (!E.IsReady() || position.IsZero() || Player().Distance(position) > E.Range) {
+    const int now = SDK::Variables::TickCount();
+    if (!E.IsReady() ||
+        now - LastCastE <= 250 ||
+        position.IsZero() ||
+        Player().Distance(position) > E.Range) {
         return false;
     }
-    return E.Cast(position);
+
+    if (!E.Cast(position)) {
+        return false;
+    }
+
+    LastCastE = SDK::Variables::TickCount();
+    return true;
 }
 
 static bool CastQ(const AIBaseClient& target) {
@@ -271,7 +293,10 @@ static const Dagger* BestDaggerNearPosition(const Vector3& position, float range
     return best;
 }
 
-static Vector3 GetBestECastPos(const AIBaseClient& target, const Dagger& dagger) {
+static Vector3 GetBestECastPos(
+    const AIBaseClient& target,
+    const Dagger& dagger,
+    float maxTargetDistance = 340.0f) {
     const auto player = Player();
     const Vector3 A = player.Position();
     const Vector3 B = dagger.Position;
@@ -293,7 +318,7 @@ static Vector3 GetBestECastPos(const AIBaseClient& target, const Dagger& dagger)
 
     if (A.Distance2D(bestPos) <= R_A) {
         bestPos.y = NavMesh::GetHeightForPosition(bestPos);
-        if (T.Distance2D(bestPos) <= 340.0f) {
+        if (T.Distance2D(bestPos) <= maxTargetDistance) {
             return bestPos;
         }
         return Vector3();
@@ -307,7 +332,7 @@ static Vector3 GetBestECastPos(const AIBaseClient& target, const Dagger& dagger)
     Vector3 P_B = B.Extend(T, R_B);
     if (A.Distance2D(P_B) <= R_A) {
         P_B.y = NavMesh::GetHeightForPosition(P_B);
-        if (T.Distance2D(P_B) <= 340.0f) {
+        if (T.Distance2D(P_B) <= maxTargetDistance) {
             return P_B;
         }
         return Vector3();
@@ -316,7 +341,7 @@ static Vector3 GetBestECastPos(const AIBaseClient& target, const Dagger& dagger)
     Vector3 P_A = A.Extend(T, R_A);
     if (B.Distance2D(P_A) <= R_B) {
         P_A.y = NavMesh::GetHeightForPosition(P_A);
-        if (T.Distance2D(P_A) <= 340.0f) {
+        if (T.Distance2D(P_A) <= maxTargetDistance) {
             return P_A;
         }
         return Vector3();
@@ -335,7 +360,7 @@ static Vector3 GetBestECastPos(const AIBaseClient& target, const Dagger& dagger)
             I1.y = NavMesh::GetHeightForPosition(I1);
             I2.y = NavMesh::GetHeightForPosition(I2);
             Vector3 bestI = (T.Distance2D(I1) < T.Distance2D(I2)) ? I1 : I2;
-            if (T.Distance2D(bestI) <= 340.0f) {
+            if (T.Distance2D(bestI) <= maxTargetDistance) {
                 return bestI;
             }
         }
@@ -502,9 +527,10 @@ static bool TryEKillSteal() {
         if (!ShouldCancelRForKillsteal(target)) {
             continue;
         }
-        const float damage = EDamage(target) +
-            (!HaveRBuff() ? Damage::GetAutoAttackDamage(Player(), target) : 0.0f);
-        if (target.Health() <= damage && CastE(target.Position())) {
+        const float damage = EDamage(target) + EOnHitDamage(target);
+        if (target.Health() <= damage &&
+            AllowDashTo(target.Position()) &&
+            CastE(target.Position())) {
             return true;
         }
     }
@@ -512,7 +538,7 @@ static bool TryEKillSteal() {
 }
 
 static bool TryDaggerKillSteal() {
-    if (!E.IsReady()) {
+    if (!E.IsReady() || !Bool(EMenu, "EKs")) {
         return false;
     }
 
@@ -530,11 +556,10 @@ static bool TryDaggerKillSteal() {
                 continue;
             }
 
-            Vector3 castPos = dagger.Position.Extend(target.Position(), 100.0f);
-            if (Player().Distance(castPos) > E.Range) {
-                castPos = dagger.Position.Extend(Player().Position(), 150.0f);
+            Vector3 castPos = GetBestECastPos(target, dagger);
+            if (castPos.IsZero() || castPos.Distance2D(target.Position()) > W.Range) {
+                continue;
             }
-            castPos.y = NavMesh::GetHeightForPosition(castPos);
             if (AllowDashTo(castPos) && CastE(castPos)) {
                 return true;
             }
@@ -560,7 +585,10 @@ static bool TryQKillSteal() {
 }
 
 static bool TryEQKillSteal() {
-    if (!Q.IsReady() || !E.IsReady()) {
+    if (!Q.IsReady() ||
+        !E.IsReady() ||
+        !Bool(QMenu, "useQKS") ||
+        !Bool(EMenu, "EKs")) {
         return false;
     }
 
@@ -576,13 +604,12 @@ static bool TryEQKillSteal() {
 
     for (const auto& dagger : Daggers) {
         if (IsOwnDagger(dagger) &&
-            Player().Distance(dagger.Position) <= E.Range + 150.0f &&
-            dagger.Position.Distance2D(target.Position()) <= Q.Range) {
-            Vector3 castPos = dagger.Position;
-            if (Player().Distance(castPos) > E.Range) {
-                castPos = dagger.Position.Extend(Player().Position(), 150.0f);
-            }
-            if (AllowDashTo(castPos) && CastE(castPos)) {
+            Player().Distance(dagger.Position) <= E.Range + 150.0f) {
+            Vector3 castPos = GetBestECastPos(target, dagger, Q.Range);
+            if (!castPos.IsZero() &&
+                castPos.Distance2D(target.Position()) <= Q.Range &&
+                AllowDashTo(castPos) &&
+                CastE(castPos)) {
                 return true;
             }
         }
@@ -829,7 +856,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
-    if (TryEKillSteal() || TryDaggerKillSteal() || TryQKillSteal() || TryEQKillSteal()) {
+    if (TryDaggerKillSteal() || TryEKillSteal() || TryQKillSteal() || TryEQKillSteal()) {
         return;
     }
 
@@ -849,6 +876,13 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         break;
     default:
         break;
+    }
+}
+
+static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
+    if (Events::IsLocalPlayer(args.Sender) &&
+        args.Slot == static_cast<int>(SpellSlot::E)) {
+        LastCastE = SDK::Variables::TickCount();
     }
 }
 
@@ -995,7 +1029,9 @@ static void OnGameLoad() {
 
     BuildMenu();
 
+    LastCastE = 0;
     Events::hook.OnGameUpdate += &Game_OnUpdate;
+    Events::hook.OnDoCast += &OnDoCast;
     GameObjects::AddOnCreate(&OnObjectCreate);
     GameObjects::AddOnDelete(&OnObjectDelete);
     Drawing::OnDraw += &OnDraw;
@@ -1010,6 +1046,7 @@ static void OnUnload() {
     }
 
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
+    Events::hook.OnDoCast -= &OnDoCast;
     GameObjects::RemoveOnCreate(&OnObjectCreate);
     GameObjects::RemoveOnDelete(&OnObjectDelete);
     Drawing::OnDraw -= &OnDraw;
@@ -1018,6 +1055,7 @@ static void OnUnload() {
     Orbwalker::SetOrbwalkerPosition({});
 
     Daggers.clear();
+    LastCastE = 0;
     RemoveMenu();
     Loaded = false;
 }

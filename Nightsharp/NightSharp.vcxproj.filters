@@ -502,6 +502,9 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\TwistedFate.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Yasuo\Yasuo.h">
       <Filter>Plugins\Champion\KuroAIO\Champion\Yasuo</Filter>
     </ClInclude>
@@ -515,6 +518,9 @@
       <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Helper\OrbwalkerModeHelper.h">
+      <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Helper\RenderHelper.h">
       <Filter>Plugins\Champion\KuroAIO\Helper</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Helper\TargetHelper.h">

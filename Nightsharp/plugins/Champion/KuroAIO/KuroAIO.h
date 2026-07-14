@@ -12,6 +12,7 @@
 
 #include "Champion/Katarina.h"
 #include "Champion/Samira.h"
+#include "Champion/TwistedFate.h"
 #include "Champion/Yasuo/Yasuo.h"
 #include "Champion/Fiora/Fiora.h"
 
@@ -33,6 +34,9 @@ public:
         }
         if (_stricmp(champ.c_str(), "Fiora") == 0) {
             return "champion.kuroaio.fiora";
+        }
+        if (_stricmp(champ.c_str(), "TwistedFate") == 0) {
+            return "champion.kuroaio.twistedfate";
         }
         return "champion.kuroaio";
     }
@@ -56,6 +60,8 @@ public:
             KuroAIO::Yasuo::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Fiora") == 0) {
             KuroAIO::Fiora::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "TwistedFate") == 0) {
+            KuroAIO::TwistedFate::OnGameLoad();
         }
     }
 
@@ -64,6 +70,7 @@ public:
         KuroAIO::Samira::OnUnload();
         KuroAIO::Yasuo::OnUnload();
         KuroAIO::Fiora::OnUnload();
+        KuroAIO::TwistedFate::OnUnload();
     }
 
 private:
@@ -72,7 +79,8 @@ private:
             (_stricmp(championName, "Katarina") == 0 ||
              _stricmp(championName, "Samira") == 0 ||
              _stricmp(championName, "Yasuo") == 0 ||
-             _stricmp(championName, "Fiora") == 0);
+             _stricmp(championName, "Fiora") == 0 ||
+             _stricmp(championName, "TwistedFate") == 0);
     }
 
     static std::string CurrentChampionName() {
@@ -103,6 +111,9 @@ private:
         }
         if (_stricmp(championName.c_str(), "Fiora") == 0) {
             return "Fiora";
+        }
+        if (_stricmp(championName.c_str(), "TwistedFate") == 0) {
+            return "TwistedFate";
         }
         return nullptr;
     }
