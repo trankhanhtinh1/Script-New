@@ -50,6 +50,7 @@ static bool HaveRBuff() {
     return Player().HasBuff("KatarinaRSound");
 }
 
+
 static bool IsOwnDagger(const Dagger& dagger) {
     return dagger.Unit.IsValid();
 }
@@ -239,7 +240,7 @@ static const Dagger* BestDaggerNearTarget(const AIBaseClient& target, float rang
     const auto player = Player();
     for (const auto& dagger : Daggers) {
         if (!IsOwnDagger(dagger) ||
-            player.Distance(dagger.Position) > E.Range ||
+            player.Distance(dagger.Position) > E.Range + 150.0f ||
             dagger.Position.Distance2D(target.Position()) > range) {
             continue;
         }
@@ -257,7 +258,7 @@ static const Dagger* BestDaggerNearPosition(const Vector3& position, float range
     const auto player = Player();
     for (const auto& dagger : Daggers) {
         if (!IsOwnDagger(dagger) ||
-            player.Distance(dagger.Position) > E.Range ||
+            player.Distance(dagger.Position) > E.Range + 150.0f ||
             dagger.Position.Distance2D(position) > range) {
             continue;
         }
@@ -270,19 +271,156 @@ static const Dagger* BestDaggerNearPosition(const Vector3& position, float range
     return best;
 }
 
+static Vector3 GetBestECastPos(const AIBaseClient& target, const Dagger& dagger) {
+    const auto player = Player();
+    const Vector3 A = player.Position();
+    const Vector3 B = dagger.Position;
+    const Vector3 T = target.Position();
+    const float R_A = E.Range;
+    const float playerRadius = player.BoundingRadius();
+    const float targetRadius = target.BoundingRadius();
+    const float R_B = 150.0f + playerRadius;
+    const float distToDagger = T.Distance2D(B);
+    Vector3 bestPos;
+
+    if (distToDagger <= 150.0f) {
+        bestPos = T.Extend(B, 10.0f);
+    } else if (distToDagger <= 150.0f + targetRadius + playerRadius - 5.0f) {
+        bestPos = T.Extend(B, targetRadius - 5.0f);
+    } else {
+        bestPos = B.Extend(T, R_B);
+    }
+
+    if (A.Distance2D(bestPos) <= R_A) {
+        bestPos.y = NavMesh::GetHeightForPosition(bestPos);
+        if (T.Distance2D(bestPos) <= 340.0f) {
+            return bestPos;
+        }
+        return Vector3();
+    }
+
+    const float d = A.Distance2D(B);
+    if (d > R_A + R_B) {
+        return Vector3();
+    }
+
+    Vector3 P_B = B.Extend(T, R_B);
+    if (A.Distance2D(P_B) <= R_A) {
+        P_B.y = NavMesh::GetHeightForPosition(P_B);
+        if (T.Distance2D(P_B) <= 340.0f) {
+            return P_B;
+        }
+        return Vector3();
+    }
+
+    Vector3 P_A = A.Extend(T, R_A);
+    if (B.Distance2D(P_A) <= R_B) {
+        P_A.y = NavMesh::GetHeightForPosition(P_A);
+        if (T.Distance2D(P_A) <= 340.0f) {
+            return P_A;
+        }
+        return Vector3();
+    }
+
+    if (d > 0.0f) {
+        const float a = (R_A * R_A - R_B * R_B + d * d) / (2.0f * d);
+        const float h_sqr = R_A * R_A - a * a;
+        if (h_sqr >= 0.0f) {
+            const float h = std::sqrt(h_sqr);
+            const Vector3 dir = (B - A).Normalized();
+            const Vector3 P_m = A + dir * a;
+            const Vector3 perp{-dir.z, 0.0f, dir.x};
+            Vector3 I1 = P_m + perp * h;
+            Vector3 I2 = P_m - perp * h;
+            I1.y = NavMesh::GetHeightForPosition(I1);
+            I2.y = NavMesh::GetHeightForPosition(I2);
+            Vector3 bestI = (T.Distance2D(I1) < T.Distance2D(I2)) ? I1 : I2;
+            if (T.Distance2D(bestI) <= 340.0f) {
+                return bestI;
+            }
+        }
+    }
+
+    return Vector3();
+}
+
 static AIHeroClient BestDaggerTarget(float range) {
     AIHeroClient best;
     float bestScore = FLT_MAX;
+    const auto player = Player();
     for (const auto& target : EnemyHeroes(range)) {
-        const float score =
-            target.Health() -
-            PassiveDamage(target) * static_cast<float>(CountOwnDaggersNear(target, 350.0f));
+        if (!ValidHeroTarget(target, range)) {
+            continue;
+        }
+
+        bool canReach = false;
+        if (player.Distance(target.Position()) <= E.Range) {
+            canReach = true;
+        } else {
+            for (const auto& dagger : Daggers) {
+                if (IsOwnDagger(dagger) &&
+                    player.Distance(dagger.Position) <= E.Range + 150.0f) {
+                    Vector3 testPos = GetBestECastPos(target, dagger);
+                    if (!testPos.IsZero()) {
+                        canReach = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!canReach) {
+            continue;
+        }
+
+        const int daggersNear = CountOwnDaggersNear(target, 350.0f);
+        float score = target.Health() - PassiveDamage(target) * static_cast<float>(daggersNear);
+        
+        if (daggersNear > 0) {
+            score -= 1000.0f;
+        }
+
         if (!best.IsValid() || score < bestScore) {
             best = target;
             bestScore = score;
         }
     }
     return best;
+}
+
+static bool ShouldCancelRForKillsteal(const AIBaseClient& target) {
+    if (!HaveRBuff()) {
+        return true;
+    }
+    if (Key(RMenu, "NeverCancelR")) {
+        return false;
+    }
+    if (target.DistanceToPlayer() > R.Range) {
+        return true;
+    }
+    if (SDK::Variables::TickCount() - LastR >= 1500) {
+        return true;
+    }
+    if (Player().CountEnemyHeroesInRange(R.Range) == 0) {
+        return true;
+    }
+    return false;
+}
+
+static bool ShouldKeepR() {
+    if (!HaveRBuff()) {
+        return false;
+    }
+    if (Key(RMenu, "NeverCancelR") && Player().CountEnemyHeroesInRange(R.Range) > 0) {
+        return true;
+    }
+    if (Player().CountEnemyHeroesInRange(R.Range) == 0) {
+        return false;
+    }
+    if (SDK::Variables::TickCount() - LastR < 1500) {
+        return true;
+    }
+    return false;
 }
 
 static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
@@ -303,29 +441,55 @@ static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
     }
 
     outTarget = AIBaseClient(target.Handle());
-    Vector3 targetDashPos = target.Position().Extend(player.Position(), -50.0f);
-    targetDashPos.y = NavMesh::GetHeightForPosition(targetDashPos);
 
-    if (checkForDagger && !Q.IsReady() && !W.IsReady()) {
-        const Dagger* dagger = BestDaggerNearPosition(targetDashPos, 400.0f);
-        if (!dagger) {
-            return false;
+    const Dagger* dagger = BestDaggerNearTarget(target, 490.0f);
+    if (dagger && IsOwnDagger(*dagger)) {
+        Vector3 castPos = GetBestECastPos(target, *dagger);
+        if (AllowDashTo(castPos) && CastE(castPos)) {
+            return true;
         }
     }
 
-    if (HasOwnDagger()) {
-        if (const Dagger* dagger = BestDaggerNearTarget(target, 390.0f)) {
-            Vector3 castPos = dagger->Position.Extend(target.Position(), 150.0f);
-            castPos.y = NavMesh::GetHeightForPosition(castPos);
-            if (AllowDashTo(castPos) && CastE(castPos)) {
-                return true;
-            }
+    if (checkForDagger && !Q.IsReady() && !W.IsReady() && !dagger) {
+        return false;
+    }
+
+    Vector3 castPos = target.Position();
+    Vector3 pathPos = target.Position() + target.Direction() * 100.0f;
+    if (target.IsMoving()) {
+        const auto waypoints = target.Path();
+        if (waypoints.size() >= 2) {
+            pathPos = waypoints[1];
         }
     }
 
-    if (player.Distance(targetDashPos) <= 725.0f && AllowDashTo(targetDashPos)) {
-        return CastE(targetDashPos);
+    if (Q.IsReady()) {
+        if (target.IsMoving()) {
+            castPos = target.Position().Extend(pathPos, -10.0f);
+        } else {
+            castPos = target.Position();
+        }
+    } else if (W.IsReady()) {
+        if (target.IsMoving()) {
+            castPos = target.Position().Extend(pathPos, target.BoundingRadius() + 50.0f);
+        } else {
+            castPos = target.Position();
+        }
+    } else {
+        castPos = target.Position();
     }
+
+    castPos.y = NavMesh::GetHeightForPosition(castPos);
+    if (player.Distance(castPos) <= E.Range && AllowDashTo(castPos)) {
+        return CastE(castPos);
+    }
+    
+    Vector3 fallbackPos = target.Position().Extend(player.Position(), -50.0f);
+    fallbackPos.y = NavMesh::GetHeightForPosition(fallbackPos);
+    if (player.Distance(fallbackPos) <= E.Range && AllowDashTo(fallbackPos)) {
+        return CastE(fallbackPos);
+    }
+
     return false;
 }
 
@@ -335,6 +499,9 @@ static bool TryEKillSteal() {
     }
 
     for (const auto& target : EnemyHeroes(E.Range)) {
+        if (!ShouldCancelRForKillsteal(target)) {
+            continue;
+        }
         const float damage = EDamage(target) +
             (!HaveRBuff() ? Damage::GetAutoAttackDamage(Player(), target) : 0.0f);
         if (target.Health() <= damage && CastE(target.Position())) {
@@ -350,17 +517,23 @@ static bool TryDaggerKillSteal() {
     }
 
     for (const auto& dagger : Daggers) {
-        if (!IsDaggerReady(dagger) || Player().Distance(dagger.Position) > E.Range) {
+        if (!IsDaggerReady(dagger) || Player().Distance(dagger.Position) > E.Range + 150.0f) {
             continue;
         }
 
         for (const auto& target : EnemyHeroes(E.Range + W.Range)) {
-            if (dagger.Position.Distance2D(target.Position()) > 390.0f ||
+            if (!ShouldCancelRForKillsteal(target)) {
+                continue;
+            }
+            if (dagger.Position.Distance2D(target.Position()) > 490.0f ||
                 target.Health() > PassiveDamage(target)) {
                 continue;
             }
 
             Vector3 castPos = dagger.Position.Extend(target.Position(), 100.0f);
+            if (Player().Distance(castPos) > E.Range) {
+                castPos = dagger.Position.Extend(Player().Position(), 150.0f);
+            }
             castPos.y = NavMesh::GetHeightForPosition(castPos);
             if (AllowDashTo(castPos) && CastE(castPos)) {
                 return true;
@@ -376,6 +549,9 @@ static bool TryQKillSteal() {
     }
 
     for (const auto& target : EnemyHeroes(Q.Range)) {
+        if (!ShouldCancelRForKillsteal(target)) {
+            continue;
+        }
         if (target.Health() <= QDamage(target) && CastQ(target)) {
             return true;
         }
@@ -394,13 +570,21 @@ static bool TryEQKillSteal() {
         return false;
     }
 
+    if (!ShouldCancelRForKillsteal(target)) {
+        return false;
+    }
+
     for (const auto& dagger : Daggers) {
         if (IsOwnDagger(dagger) &&
-            Player().Distance(dagger.Position) <= E.Range &&
-            dagger.Position.Distance2D(target.Position()) <= Q.Range &&
-            AllowDashTo(dagger.Position) &&
-            CastE(dagger.Position)) {
-            return true;
+            Player().Distance(dagger.Position) <= E.Range + 150.0f &&
+            dagger.Position.Distance2D(target.Position()) <= Q.Range) {
+            Vector3 castPos = dagger.Position;
+            if (Player().Distance(castPos) > E.Range) {
+                castPos = dagger.Position.Extend(Player().Position(), 150.0f);
+            }
+            if (AllowDashTo(castPos) && CastE(castPos)) {
+                return true;
+            }
         }
     }
 
@@ -467,7 +651,12 @@ static void EQ() {
     }
 
     AIBaseClient eTarget;
+    bool eCasted = false;
     if (E.IsReady() && DoComboE(eTarget, Key(EMenu, "SaveEIfNoDaggers", true))) {
+        eCasted = true;
+    }
+
+    if (!eCasted && E.IsReady(500)) {
         return;
     }
 
@@ -475,9 +664,7 @@ static void EQ() {
     if (!ValidTarget(qTarget, Q.Range)) {
         qTarget = AIBaseClient(GetMagicalTarget(Q.Range).Handle());
     }
-    if (CastQ(qTarget)) {
-        return;
-    }
+    (void)CastQ(qTarget);
 
     if (TryCastW()) {
         return;
@@ -491,15 +678,16 @@ static void QE() {
     }
 
     const auto qTarget = GetMagicalTarget(Q.Range);
-    if (CastQ(qTarget)) {
-        return;
+    (void)CastQ(qTarget);
+
+    AIBaseClient eTarget;
+    bool eCasted = false;
+    if (E.IsReady() && DoComboE(eTarget, Key(EMenu, "SaveEIfNoDaggers", true))) {
+        eCasted = true;
     }
 
-    if (E.IsReady() && !Q.IsReady()) {
-        AIBaseClient eTarget;
-        if (DoComboE(eTarget, Key(EMenu, "SaveEIfNoDaggers", true))) {
-            return;
-        }
+    if (!eCasted && E.IsReady(500)) {
+        return;
     }
 
     if (TryCastW()) {
@@ -637,9 +825,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
-    if (HaveRBuff() &&
-        Key(RMenu, "NeverCancelR") &&
-        !EnemyHeroes(R.Range).empty()) {
+    if (ShouldKeepR()) {
         return;
     }
 
@@ -709,7 +895,7 @@ static void OnDraw() {
             if (!IsOwnDagger(dagger)) {
                 continue;
             }
-            Drawing::DrawCircle(dagger.Position, 340.0f, 0xFFFFD700u, 1.5f, 64);
+            Render::DrawRingImGui(dagger.Position, 340.0f + 150.0f, 340.0f, 0xFFFFD700u, 60);
             Drawing::DrawCircle(dagger.Position, 150.0f, 0xFF7FFF00u, 1.5f, 64);
         }
     }

@@ -3,3 +3,4 @@
 #include "MenuHelper.h"
 #include "OrbwalkerModeHelper.h"
 #include "TargetHelper.h"
+#include "RenderHelper.h"

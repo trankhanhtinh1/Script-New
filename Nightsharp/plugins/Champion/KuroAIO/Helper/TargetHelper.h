@@ -43,7 +43,7 @@ inline bool EqualsIgnoreCase(const char* left, const char* right) {
 }
 
 inline bool ValidUnit(const AttackableUnit& unit) {
-    return unit.IsValid() && !unit.IsDead() && unit.Health() > 0.0f;
+    return unit.IsValid() && !unit.IsDead() && unit.Health() > 0.0f && unit.IsTargetable();
 }
 
 inline bool ValidTarget(const AIBaseClient& unit, float range = FLT_MAX) {
