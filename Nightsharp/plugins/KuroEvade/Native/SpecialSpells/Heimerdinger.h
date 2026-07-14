@@ -17,24 +17,24 @@ struct Heimerdinger {
         }
 
         const float firstDistance = ClampedCastDistance(
-            context.Start3, context.End3, static_cast<float>(context.Source.sdk.Range));
+            context.Start3, context.End3, static_cast<float>(context.Source.Runtime.Range));
         const Vec2 firstEnd = context.Start + context.Direction * firstDistance;
-        const int baseStartTick = SDK::Variables::TickCount() + context.Source.sdk.Delay +
+        const int baseStartTick = SDK::Variables::TickCount() + context.Source.Runtime.Delay +
             static_cast<int>(firstDistance * 1000.0f /
-                std::max(1.0f, static_cast<float>(context.Source.sdk.MissileSpeed)));
+                std::max(1.0f, static_cast<float>(context.Source.Runtime.MissileSpeed)));
 
         AddExtra(result,
                  From2D(firstEnd, context.Start3.y),
-                 From2D(firstEnd + context.Direction * static_cast<float>(context.Source.sdk.Radius), context.Start3.y),
+                 From2D(firstEnd + context.Direction * static_cast<float>(context.Source.Runtime.Radius), context.Start3.y),
                  *ult2,
                  baseStartTick);
         AddExtra(result,
-                 From2D(firstEnd + context.Direction * static_cast<float>(context.Source.sdk.Radius), context.Start3.y),
+                 From2D(firstEnd + context.Direction * static_cast<float>(context.Source.Runtime.Radius), context.Start3.y),
                  From2D(firstEnd + context.Direction *
-                     static_cast<float>(context.Source.sdk.Radius + ult2->sdk.Radius), context.Start3.y),
+                     static_cast<float>(context.Source.Runtime.Radius + ult2->Runtime.Radius), context.Start3.y),
                  *ult3,
-                 baseStartTick + static_cast<int>(context.Source.sdk.Radius * 1000.0f /
-                     std::max(1.0f, static_cast<float>(ult2->sdk.MissileSpeed))));
+                 baseStartTick + static_cast<int>(context.Source.Runtime.Radius * 1000.0f /
+                     std::max(1.0f, static_cast<float>(ult2->Runtime.MissileSpeed))));
         return true;
     }
 };

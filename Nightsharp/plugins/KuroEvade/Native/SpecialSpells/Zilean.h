@@ -10,8 +10,8 @@ struct Zilean {
             return false;
         }
 
-        result.Data.sdk.MissileSpeed = static_cast<int>(
-            ClampedCastDistance(context.Start3, context.End3, static_cast<float>(context.Source.sdk.Range)) / 0.45f);
+        result.Data.Runtime.MissileSpeed = static_cast<int>(
+            ClampedCastDistance(context.Start3, context.End3, static_cast<float>(context.Source.Runtime.Range)) / 0.45f);
         return true;
     }
 };

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../SpellData.h"
-#include "../EvadeUtils.h"
+#include "../Database/SpellData.h"
+#include "../Helpers/Utils.h"
 
 #include "../../../../SDK/SDK.h"
 
@@ -17,23 +17,23 @@ namespace Plugins::KuroEvade::SpecialSpells {
 struct ExtraSpellCast {
     Vector3 Start;
     Vector3 End;
-    SpellDataEntry Data;
+    Database::SpellData Data;
     int OverrideStartTick = 0;
 };
 
 struct ProcessResult {
-    SpellDataEntry Data;
+    Database::SpellData Data;
     bool NoProcess = false;
     std::vector<ExtraSpellCast> ExtraSpells;
     std::vector<std::string> RemoveSpellNames;
 };
 
-using SpellLookupFn = const SpellDataEntry* (*)(const char*);
+using SpellLookupFn = const Database::SpellData* (*)(const char*);
 
 struct CastContext {
     const SDK::AIBaseClient& Caster;
     const SDK::Events::ProcessSpellEventArgs& Args;
-    const SpellDataEntry& Source;
+    const Database::SpellData& Source;
     SpellLookupFn Lookup = nullptr;
     Vector3 Start3;
     Vector3 End3;
@@ -42,8 +42,8 @@ struct CastContext {
     Vec2 Direction;
 };
 
-inline bool EqualsSpell(const SpellDataEntry& data, const char* name) {
-    return name && _stricmp(data.sdk.SpellName.c_str(), name) == 0;
+inline bool EqualsSpell(const Database::SpellData& data, const char* name) {
+    return name && _stricmp(data.Runtime.SpellName.c_str(), name) == 0;
 }
 
 inline bool EqualsText(const std::string& value, const char* name) {
@@ -87,7 +87,7 @@ inline Vec2 SafeDirection(const Vec2& start, const Vec2& end, const SDK::AIBaseC
 
 inline CastContext MakeCastContext(const SDK::AIBaseClient& caster,
                                    const SDK::Events::ProcessSpellEventArgs& args,
-                                   const SpellDataEntry& source,
+                                   const Database::SpellData& source,
                                    SpellLookupFn lookup) {
     CastContext context{ caster, args, source, lookup };
     context.Start3 = args.StartPosition;
@@ -101,7 +101,7 @@ inline CastContext MakeCastContext(const SDK::AIBaseClient& caster,
 inline void AddExtra(ProcessResult& result,
                      const Vector3& start,
                      const Vector3& end,
-                     const SpellDataEntry& data,
+                     const Database::SpellData& data,
                      int overrideStartTick = 0) {
     result.ExtraSpells.push_back({ start, end, data, overrideStartTick });
 }

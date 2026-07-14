@@ -6,7 +6,8 @@ enum class SpellTargets {
     AllyMinions,
     EnemyMinions,
     AllyChampions,
-    EnemyChampions
+    EnemyChampions,
+    Targetables
 };
 
 } // namespace Plugins::KuroEvade

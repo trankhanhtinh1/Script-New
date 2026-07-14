@@ -3,7 +3,7 @@
 #include "OrbwalkerContext.h"
 #include "OrbwalkerEventBus.h"
 #include "OrbwalkerMenu.h"
-#include "../KuroCombatCoordinator.h"
+#include "../../../Core/KuroCombatCoordinator.h"
 
 #include "../../../sdk/Core/Game.h"
 #include "../../../sdk/Core/Hud.h"

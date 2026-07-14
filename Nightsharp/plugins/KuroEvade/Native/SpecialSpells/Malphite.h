@@ -11,7 +11,7 @@ struct Malphite {
             return false;
         }
 
-        result.Data.sdk.MissileSpeed = 1600 + static_cast<int>(context.Caster.MoveSpeed());
+        result.Data.Runtime.MissileSpeed = 1600 + static_cast<int>(context.Caster.MoveSpeed());
         return true;
     }
 };

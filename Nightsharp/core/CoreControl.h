@@ -12,6 +12,7 @@
 #include "../CrashTrace.h"
 
 #include <Windows.h>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -31,6 +32,11 @@ inline constexpr bool kIssueOrderDebugEnabled = false;
 // Even when the flag above is enabled for debugging, never write more than once per
 // this many ms for a given message class, so enabling it can't reintroduce the stall.
 inline constexpr DWORD kIssueOrderDebugThrottleMs = 1000;
+// Global high-level move gate. Every SDK/plugin IssueOrder(MoveTo) funnels
+// through this file, so one noisy script cannot combine with another and
+// flood the game with movement orders.
+inline constexpr DWORD kMoveOrderMinIntervalMs = 45;
+inline std::atomic<DWORD> g_lastMoveOrderTick{0};
 
 inline constexpr float DefaultAttackDelaySeconds = 0.625f;
 inline constexpr float DefaultAttackWindupSeconds = 0.300f;
@@ -139,6 +145,24 @@ inline bool IsAttackCommand(OrderType order) {
            order == AutoAttack ||
            order == AutoAttackPet ||
            order == AttackMove;
+}
+
+inline bool ReserveMoveOrderWindow(OrderType order, DWORD now) {
+    if (order != MoveTo) {
+        return true;
+    }
+    DWORD previous = g_lastMoveOrderTick.load(std::memory_order_relaxed);
+    for (;;) {
+        if (previous != 0 && now - previous < kMoveOrderMinIntervalMs) {
+            return false;
+        }
+        if (g_lastMoveOrderTick.compare_exchange_weak(
+                previous, now,
+                std::memory_order_acq_rel,
+                std::memory_order_relaxed)) {
+            return true;
+        }
+    }
 }
 
 inline uintptr_t LocalPlayerAddress() {
@@ -438,6 +462,12 @@ inline bool IssueOrder(OrderType order,
     const bool isAttack = IsAttackCommand(order);
     if (isAttack && CoreEvadeState::IsComboBlocked(static_cast<int>(GetTickCount()))) {
         CoreValidation::MarkIssueOrderResult(false);
+        return false;
+    }
+    if (!ReserveMoveOrderWindow(order, GetTickCount())) {
+        // This is an intentional high-level throttle, not a failed native
+        // IssueOrder call. Do not poison CoreValidation with a synthetic
+        // failure when another script already used the shared move window.
         return false;
     }
     const bool isPet = IsPetOrder(order);

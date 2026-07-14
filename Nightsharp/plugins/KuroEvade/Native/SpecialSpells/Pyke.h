@@ -11,14 +11,14 @@ struct Pyke {
         }
 
         const float castDistance = ClampedCastDistance(
-            context.Start3, context.End3, static_cast<float>(context.Source.sdk.Range));
+            context.Start3, context.End3, static_cast<float>(context.Source.Runtime.Range));
         const Vec2 center = context.Start + context.Direction * castDistance;
         const Vec2 axisX(1.0f, 0.0f);
         const Vec2 axisY(0.0f, 1.0f);
-        SpellDataEntry armData = context.Source;
-        armData.sdk.SpellType = SDK::SpellType::SkillshotLine;
-        armData.sdk.MissileSpeed = INT_MAX;
-        armData.sdk.Range = 710;
+        Database::SpellData armData = context.Source;
+        armData.Runtime.SpellType = SDK::SpellType::SkillshotLine;
+        armData.Runtime.MissileSpeed = INT_MAX;
+        armData.Runtime.Range = 710;
         armData.UseEndPosition = true;
 
         AddExtra(result,

@@ -10,21 +10,21 @@ struct Nami {
             return false;
         }
 
-        result.Data.sdk.MissileSpeed = static_cast<int>(
-            ClampedCastDistance(context.Start3, context.End3, static_cast<float>(context.Source.sdk.Range)) / 0.7f);
+        result.Data.Runtime.MissileSpeed = static_cast<int>(
+            ClampedCastDistance(context.Start3, context.End3, static_cast<float>(context.Source.Runtime.Range)) / 0.7f);
         return true;
     }
 
     static bool ProcessMissile(const SDK::AIBaseClient& caster,
                                const SDK::MissileClient& missile,
-                               Generated::SpellDataEntry& data) {
+                               Database::SpellData& data) {
         (void)caster;
         if (!EqualsText(missile.MissileName(), "NamiQMissile")) {
             return false;
         }
 
-        data.sdk.MissileSpeed = static_cast<int>(
-            std::min(static_cast<float>(data.sdk.Range),
+        data.Runtime.MissileSpeed = static_cast<int>(
+            std::min(static_cast<float>(data.Runtime.Range),
                      missile.StartPosition().Distance(missile.EndPosition())) / 0.7f);
         return true;
     }

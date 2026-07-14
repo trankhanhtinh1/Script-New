@@ -421,7 +421,9 @@ namespace CoreCastSpell {
             }
 
             const auto& ctx = CoreRuntime::GetContext();
-            if (CoreEvadeState::AreSpellCastsBlocked(static_cast<int>(ctx.gameTime * 1000.0f))) {
+            if (CoreEvadeState::AreSpellCastsBlocked(
+                    static_cast<int>(ctx.gameTime * 1000.0f),
+                    static_cast<int>(slot))) {
                 Fail(CastFailure::CanCastRejected);
                 return false;
             }

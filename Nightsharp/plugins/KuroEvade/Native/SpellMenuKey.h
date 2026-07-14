@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SpellData.h"
+#include "Database/SpellData.h"
 
 #include "../../../SDK/SDK.h"
 
@@ -40,16 +40,16 @@ inline std::string DisplayName(const SDK::SpellDatabaseEntry& data) {
     return data.ChampionName.empty() ? std::string("UnknownSpell") : data.ChampionName + "Spell";
 }
 
-inline std::string DisplayName(const SpellDataEntry& data) {
-    return data.DisplayName.empty() ? DisplayName(data.sdk) : data.DisplayName;
+inline std::string DisplayName(const Database::SpellData& data) {
+    return data.DisplayName.empty() ? DisplayName(data.Runtime) : data.DisplayName;
 }
 
 inline std::string Key(const SDK::SpellDatabaseEntry& data) {
     return Lower(data.ChampionName + "|" + DisplayName(data) + "|" + data.MissileSpellName);
 }
 
-inline std::string Key(const SpellDataEntry& data) {
-    return Key(data.sdk);
+inline std::string Key(const Database::SpellData& data) {
+    return Key(data.Runtime);
 }
 
 inline const char* SlotName(SDK::SpellSlot slot) {

@@ -10,7 +10,7 @@ struct Warwick {
             return false;
         }
 
-        result.Data.sdk.Range = static_cast<int>(std::ceil(2.5f * context.Caster.MoveSpeed()));
+        result.Data.Runtime.Range = static_cast<int>(std::ceil(2.5f * context.Caster.MoveSpeed()));
         return true;
     }
 };

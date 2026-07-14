@@ -7,6 +7,7 @@ enum class EvadeType {
     Dash,
     Invulnerability,
     MovementSpeedBuff,
+    Shield,
     SpellShield,
     WindWall
 };

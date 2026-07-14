@@ -13,7 +13,7 @@ struct AllChampions {
 
     static bool ProcessMissile(const SDK::AIBaseClient& caster,
                                const SDK::MissileClient& missile,
-                               Generated::SpellDataEntry& data) {
+                               Database::SpellData& data) {
         (void)caster;
         const std::string missileName = missile.MissileName();
         if (!NameContains(missileName.c_str(), "HowlingGaleSpell")) {
@@ -21,7 +21,7 @@ struct AllChampions {
         }
 
         const float distance = missile.StartPosition().Distance(missile.EndPosition());
-        data.sdk.MissileSpeed = static_cast<int>(std::max(0.0f, std::min(1166.0f, distance / 1.5f)));
+        data.Runtime.MissileSpeed = static_cast<int>(std::max(0.0f, std::min(1166.0f, distance / 1.5f)));
         return true;
     }
 };

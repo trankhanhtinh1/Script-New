@@ -10,19 +10,19 @@ struct Jinx {
             return false;
         }
 
-        result.Data.sdk.Delay = static_cast<int>(
+        result.Data.Runtime.Delay = static_cast<int>(
             std::max(400.0f, 600.0f - context.Caster.AttackSpeedMod() / 2.5f * 200.0f));
         return true;
     }
 
     static bool ProcessMissile(const SDK::AIBaseClient& caster,
                                const SDK::MissileClient& missile,
-                               Generated::SpellDataEntry& data) {
+                               Database::SpellData& data) {
         if (!EqualsText(missile.MissileName(), "JinxWMissile")) {
             return false;
         }
 
-        data.sdk.Delay = static_cast<int>(600.0f - caster.AttackSpeedMod() / 2.5f * 200.0f);
+        data.Runtime.Delay = static_cast<int>(600.0f - caster.AttackSpeedMod() / 2.5f * 200.0f);
         return true;
     }
 };

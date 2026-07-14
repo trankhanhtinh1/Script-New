@@ -12,9 +12,9 @@ struct Syndra {
 
         if (EqualsSpell(context.Source, "SyndraQ") || EqualsSpell(context.Source, "SyndraWCast")) {
             Vector3 spot = context.End3;
-            if (context.Start3.Distance(spot) > static_cast<float>(context.Source.sdk.Range)) {
+            if (context.Start3.Distance(spot) > static_cast<float>(context.Source.Runtime.Range)) {
                 spot = From2D(
-                    context.Start + context.Direction * static_cast<float>(context.Source.sdk.Range),
+                    context.Start + context.Direction * static_cast<float>(context.Source.Runtime.Range),
                     context.Start3.y);
             }
 
@@ -42,12 +42,12 @@ struct Syndra {
                 return;
             }
 
-            Generated::SpellDataEntry pushed = context.Source;
-            pushed.sdk.Delay = static_cast<int>(
+            Database::SpellData pushed = context.Source;
+            pushed.Runtime.Delay = static_cast<int>(
                 spherePos.Distance(context.Caster.ServerPosition()) /
-                std::max(1.0f, static_cast<float>(context.Source.sdk.MissileSpeed)) * 1000.0f);
+                std::max(1.0f, static_cast<float>(context.Source.Runtime.MissileSpeed)) * 1000.0f);
             const Vector3 spellEnd = From2D(
-                casterPos + direction * static_cast<float>(context.Source.sdk.Range),
+                casterPos + direction * static_cast<float>(context.Source.Runtime.Range),
                 spherePos.y);
             AddExtra(result, spherePos, spellEnd, pushed);
         };

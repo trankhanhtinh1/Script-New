@@ -30,7 +30,7 @@ namespace Plugins::KuroEvade::SpecialSpells {
 
 inline ProcessResult ProcessCast(const SDK::AIBaseClient& caster,
                                  const SDK::Events::ProcessSpellEventArgs& args,
-                                 const Generated::SpellDataEntry& source,
+                                 const Database::SpellData& source,
                                  SpellLookupFn lookup) {
     ProcessResult result;
     result.Data = source;
@@ -69,7 +69,7 @@ inline ProcessResult ProcessCast(const SDK::AIBaseClient& caster,
 
 inline void ProcessMissile(const SDK::AIBaseClient& caster,
                            const SDK::MissileClient& missile,
-                           Generated::SpellDataEntry& data) {
+                           Database::SpellData& data) {
     if (AllChampions::ProcessMissile(caster, missile, data) ||
         Jinx::ProcessMissile(caster, missile, data) ||
         Nami::ProcessMissile(caster, missile, data)) {

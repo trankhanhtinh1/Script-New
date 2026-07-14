@@ -1,10 +1,11 @@
 #pragma once
 
-// KuroEvade is intentionally separate from the original EzEvade plugin.
+// Standalone NightSharp port of the supplied Evade project.
 // Runtime logic lives in plugins/KuroEvade/Native as native C++.
 
 #include "../IPlugin.h"
-#include "../Core/KuroCombatCoordinator.h"
+#include "../../Core/KuroCombatCoordinator.h"
+#include "../../Core/CoreEvadeState.h"
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
 #include "../../SDK/UI/IMenu/Menu.h"
@@ -14,6 +15,7 @@
 
 #include <Windows.h>
 #include <algorithm>
+#include <cfloat>
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -47,10 +49,9 @@ public:
     void OnLoad() override {
         s_instance = this;
         KuroCombatCoordination::Coordinator::Reset();
+        CoreEvadeState::SetSpellBlockPredicate(
+            &KuroEvadePlugin::ShouldBlockCastStatic);
         CreateMenu();
-        m_detector.SetSpellEnabledPredicate([this](const KuroEvade::Generated::SpellDataEntry& data) {
-            return IsSpellDodgeEnabled(data);
-        });
         m_detector.Clear();
 
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnProcessSpell, &KuroEvadePlugin::OnRawProcessSpellImmediateStatic);
@@ -61,6 +62,7 @@ public:
         SDK::Events::AddOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
         SDK::Events::AddOnMissileDelete(&KuroEvadePlugin::OnMissileDeleteStatic);
         SDK::Game::AddOnWndProc(&KuroEvadePlugin::OnWndProcStatic);
+        SDK::Orbwalker::OnBeforeMove += &KuroEvadePlugin::OnBeforeMoveStatic;
         SDK::Game::OnUpdate += &KuroEvadePlugin::OnUpdateStatic;
 
         NightSharpDebug::Logf("[KuroEvade] loaded");
@@ -68,6 +70,7 @@ public:
 
     void OnUnload() override {
         SDK::Game::OnUpdate -= &KuroEvadePlugin::OnUpdateStatic;
+        SDK::Orbwalker::OnBeforeMove -= &KuroEvadePlugin::OnBeforeMoveStatic;
         SDK::Game::RemoveOnWndProc(&KuroEvadePlugin::OnWndProcStatic);
         SDK::Events::RemoveOnMissileDelete(&KuroEvadePlugin::OnMissileDeleteStatic);
         SDK::Events::RemoveOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
@@ -77,17 +80,17 @@ public:
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnProcessSpell, &KuroEvadePlugin::OnRawProcessSpellImmediateStatic);
 
-        m_detector.SetSpellEnabledPredicate({});
+        m_evade.Shutdown();
         m_detector.Clear();
+        m_benchmark.Stop();
         m_spellVisuals.clear();
         m_evadeIntervening = false;
         m_loadedChampions.clear();
-        m_debugSeparator = nullptr;
-        m_diagnosticsMenu = nullptr;
-        m_lastDiagnosticsUpdateTick = 0;
         DestroyMenu();
-        KuroEvade::Evade::RestoreOrbwalkerMove();
+        KuroEvade::SourceEvadeEngine::RestoreOrbwalkerMove();
         KuroCombatCoordination::Coordinator::Reset();
+        CoreEvadeState::SetStrictEvadeActive(false);
+        CoreEvadeState::SetSpellBlockPredicate(nullptr);
         if (s_instance == this) {
             s_instance = nullptr;
         }
@@ -96,13 +99,13 @@ public:
     }
 
     void OnRender() override {
-        if (!Enabled() || !DrawSpells() || !ImGui::GetCurrentContext()) {
+        if (!DrawSpells() || !ImGui::GetCurrentContext()) {
             return;
         }
 
         KuroEvade::SpellDrawer::Draw(
             m_detector.Skillshots(), m_spellVisuals, DrawingStyleSnapshot());
-        if (DrawEvadeRoute() && m_evadeIntervening && m_evade.HasMoveTarget()) {
+        if (Enabled() && DrawEvadeRoute() && m_evadeIntervening && m_evade.HasMoveTarget()) {
             const auto player = SDK::ObjectManager::Player();
             if (player.IsValid()) {
                 KuroEvade::SpellDrawer::DrawRoute(
@@ -113,33 +116,21 @@ public:
             }
         }
 
-        if (DevMode()) {
-            const auto player = SDK::ObjectManager::Player();
-            if (player.IsValid() && !player.IsDead()) {
-                const auto playerPos = player.Position();
-                const auto playerPos2D = playerPos.To2D();
-                
-                int dangerousCount = KuroEvade::SpellTester::CountDangerousAt(
-                    m_detector.Skillshots(), playerPos2D, player.BoundingRadius());
-                
-                const auto* closest = KuroEvade::SpellTester::ClosestHit(
-                    m_detector.Skillshots(), playerPos2D, player.BoundingRadius());
-                
-                KuroEvade::EvadeTester::DrawCandidate(playerPos2D, 30.0f, dangerousCount > 0 ? 0xFFFF0000u : 0xFF00FF00u);
-                
-                char buffer[256];
-                if (closest) {
-                    float hitTime = KuroEvade::EvadeHelper::SpellHitTime(*closest, playerPos2D);
-                    std::snprintf(buffer, sizeof(buffer), "[DevMode] Danger: %d | Closest hit in %.0fms (%s)", 
-                                  dangerousCount, hitTime, closest->SData.SpellName.c_str());
-                } else {
-                    std::snprintf(buffer, sizeof(buffer), "[DevMode] Danger: %d | Zone Clear", dangerousCount);
-                }
-                
-                SDK::Vector2 screenPos;
-                if (SDK::Drawing::WorldToScreen(playerPos, screenPos)) {
-                    SDK::Drawing::DrawText(screenPos.x - 100.0f, screenPos.y + 40.0f, 0xFFFFFFFFu, buffer);
-                }
+        if ((m_showEvadeStatusMenu && m_showEvadeStatusMenu->Value) ||
+            (m_drawWarningMessageMenu && m_drawWarningMessageMenu->Value &&
+             m_evadeIntervening)) {
+            ImDrawList* draw = ImGui::GetForegroundDrawList();
+            const ImVec2 base(24.0f, 120.0f);
+            if (m_showEvadeStatusMenu && m_showEvadeStatusMenu->Value) {
+                draw->AddText(base, Enabled() ? IM_COL32(90, 255, 120, 255)
+                                              : IM_COL32(255, 90, 90, 255),
+                              Enabled() ? "Evade: On" : "Evade: Off");
+            }
+            if (m_drawWarningMessageMenu && m_drawWarningMessageMenu->Value &&
+                m_evadeIntervening) {
+                draw->AddText(ImVec2(base.x, base.y + 22.0f),
+                              IM_COL32(255, 210, 80, 255),
+                              "Right click is blocked while evading");
             }
         }
 
@@ -157,115 +148,163 @@ public:
                     static_cast<int>(m_detector.Skillshots().size()));
         ImGui::Text("Spell menu entries: %d", m_spellMenuEntries);
         ImGui::Text("Evade spell entries: %d", m_evadeSpellMenuEntries);
-        ImGui::Text("Optimization: %s", OptimizationProfileName());
+        ImGui::Text("Recommended config: %s", RecommendedConfigName());
         ImGui::Text("Visual threats: %d", RelevantVisualCount());
         ImGui::Text("Orbwalker sync: %s",
                     KuroCombatCoordination::Coordinator::PhaseName(
                         KuroCombatCoordination::Coordinator::Phase(
                             SDK::Variables::TickCount())));
         ImGui::Text("Last dodge: %s", m_lastEvent);
+        if (m_benchmarkResult.Iterations > 0) {
+            ImGui::Separator();
+            ImGui::Text("Benchmark: %d iterations | %d plans",
+                        m_benchmarkResult.Iterations,
+                        m_benchmarkResult.PlansFound);
+            ImGui::Text("Planner us: avg %.2f | min %.2f | max %.2f",
+                        m_benchmarkResult.AverageMicroseconds,
+                        m_benchmarkResult.MinimumMicroseconds,
+                        m_benchmarkResult.MaximumMicroseconds);
+            ImGui::Text("Last candidates: %d",
+                        m_benchmarkResult.LastCandidateCount);
+            ImGui::Text("Database: %d skillshots + %d evade spells | invalid %d",
+                        m_benchmarkResult.SkillshotDatabaseEntries,
+                        m_benchmarkResult.EvadeSpellDatabaseEntries,
+                        m_benchmarkResult.InvalidDatabaseEntries);
+        }
+
     }
 
 private:
     static inline KuroEvadePlugin* s_instance = nullptr;
 
     Menu* m_menu = nullptr;
-    MenuBool* m_enabledMenu = nullptr;
-    MenuKeyBind* m_dodgeKeyMenu = nullptr;
-    MenuBool* m_dodgeDangerousMenu = nullptr;
-    MenuBool* m_dodgeFowMenu = nullptr;
-    MenuBool* m_dodgeCircularMenu = nullptr;
-    MenuBool* m_dangerKeysEnabledMenu = nullptr;
-    MenuKeyBind* m_dangerKeyMenu = nullptr;
-    MenuKeyBind* m_dangerKey2Menu = nullptr;
-    MenuBool* m_comboOnlyEnabledMenu = nullptr;
-    MenuKeyBind* m_comboKeyMenu = nullptr;
-    MenuBool* m_dontDodgeEnabledMenu = nullptr;
-    MenuKeyBind* m_dontDodgeKeyMenu = nullptr;
-    MenuBool* m_drawSpellsMenu = nullptr;
-    MenuKeyBind* m_useEvadeSpellsMenu = nullptr;
-    MenuBool* m_preferEvadeSpellsMenu = nullptr;
-    MenuList* m_optimizationProfileMenu = nullptr;
-    MenuList* m_evadeModeMenu = nullptr;
-    MenuBool* m_extremeEvadeMenu = nullptr;
-    MenuBool* m_kurokamiPosMenu = nullptr;
-    MenuBool* m_higherPrecisionMenu = nullptr;
-    MenuBool* m_calculateWindupMenu = nullptr;
-    MenuBool* m_checkCollisionMenu = nullptr;
-    MenuBool* m_clickRemoveMenu = nullptr;
-    MenuBool* m_preventTowerMenu = nullptr;
-    MenuBool* m_preventEnemyMenu = nullptr;
-    MenuSlider* m_extraDelayMenu = nullptr;
-    MenuSlider* m_extraDistMenu = nullptr;
-    MenuSlider* m_extraSpellRadiusMenu = nullptr;
+    MenuBool* m_focusOnEvadeMenu = nullptr;
+    MenuBool* m_onlyEvadeWhileCanMenu = nullptr;
+    MenuBool* m_enhanceDetectMenu = nullptr;
+    MenuList* m_recommendedConfigMenu = nullptr;
+    MenuSlider* m_skillshotsExtraRadiusMenu = nullptr;
+    MenuSlider* m_skillshotsExtraRangeMenu = nullptr;
     MenuSlider* m_extraEvadeDistanceMenu = nullptr;
-    MenuSlider* m_extraAvoidDistanceMenu = nullptr;
-    MenuSlider* m_minComfortZoneMenu = nullptr;
-    MenuSlider* m_reactionTimeMenu = nullptr;
-    MenuSlider* m_spellDetectionTimeMenu = nullptr;
-    MenuSlider* m_minHitTimeMenu = nullptr;
-    MenuSlider* m_dodgeIntervalMenu = nullptr;
-    MenuSlider* m_dodgeHpMenu = nullptr;
-    MenuSlider* m_spellActivationMenu = nullptr;
-    MenuSlider* m_fastActivationMenu = nullptr;
-    MenuSlider* m_rejectMinDistanceMenu = nullptr;
-    MenuColor* m_spellColorMenu = nullptr;
-    MenuBool* m_fillSkillshotsMenu = nullptr;
-    MenuBool* m_drawIrrelevantMenu = nullptr;
-    MenuBool* m_drawEvadeRouteMenu = nullptr;
-    MenuBool* m_drawThreatLabelsMenu = nullptr;
-    MenuSlider* m_irrelevantOpacityMenu = nullptr;
-    MenuSlider* m_threatOpacityMenu = nullptr;
-    MenuColor* m_irrelevantColorMenu = nullptr;
-    MenuColor* m_pathThreatColorMenu = nullptr;
-    MenuColor* m_interventionColorMenu = nullptr;
-    MenuColor* m_routeColorMenu = nullptr;
-    MenuBool* m_clickOnlyOnceMenu = nullptr;
+    // Config.cs keeps these source controls instantiated but commented out of
+    // the visible menu. Presets still update their backing values.
+    int m_gridSize = 10;
+    int m_pathFindingDistance = 300;
+    int m_pathFindingDistance2 = 100;
+    int m_diagonalEvadePointsCount = 7;
+    int m_diagonalEvadePointsStep = 20;
+    int m_crossingTimeOffset = 250;
+    int m_evadingFirstTimeOffset = 250;
+    int m_evadingSecondTimeOffset = 80;
+    int m_evadingRouteChangeTimeOffset = 250;
+    int m_evadePointChangeInterval = 250;
+
+    MenuBool* m_smoothEvadeSpellMenu = nullptr;
+    MenuBool* m_improveMoveMenu = nullptr;
+    MenuBool* m_useCurrentPathMenu = nullptr;
+    MenuBool* m_lowEvadeSmoothMenu = nullptr;
+
+    MenuBool* m_spellBlockerQMenu = nullptr;
+    MenuBool* m_spellBlockerWMenu = nullptr;
+    MenuBool* m_spellBlockerEMenu = nullptr;
+    MenuBool* m_spellBlockerRMenu = nullptr;
+
+    MenuBool* m_minionCollisionMenu = nullptr;
+    MenuBool* m_heroCollisionMenu = nullptr;
+    MenuBool* m_yasuoCollisionMenu = nullptr;
+    MenuBool* m_enableCollisionMenu = nullptr;
+
+    MenuColor* m_enabledColorMenu = nullptr;
+    MenuColor* m_disabledColorMenu = nullptr;
+    MenuColor* m_missileColorMenu = nullptr;
+    MenuSlider* m_borderMenu = nullptr;
+    MenuBool* m_enableDrawingsMenu = nullptr;
+    MenuBool* m_drawWarningMessageMenu = nullptr;
+
+    MenuList* m_blockSpellsMenu = nullptr;
+    MenuSlider* m_allowAaLevelMenu = nullptr;
+    MenuBool* m_disableFowMenu = nullptr;
+    MenuBool* m_showEvadeStatusMenu = nullptr;
+    MenuBool* m_disableOlafRMenu = nullptr;
+
+    MenuKeyBind* m_enabledMenu = nullptr;
+    MenuKeyBind* m_onlyDangerousMenu = nullptr;
     MenuBool* m_devModeMenu = nullptr;
     MenuBool* m_devSameTeamMenu = nullptr;
-    MenuKeyBind* m_devSimulateKeyMenu = nullptr;
+    MenuKeyBind* m_benchmarkLineKeyMenu = nullptr;
+    MenuKeyBind* m_benchmarkCircleKeyMenu = nullptr;
+    MenuKeyBind* m_benchmarkRunKeyMenu = nullptr;
     Menu* m_spellsMenu = nullptr;
     Menu* m_evadeSpellsMenu = nullptr;
+    Menu* m_allyShieldMenu = nullptr;
+    KuroEvade::Benchmarking::Benchmark m_benchmark;
+    KuroEvade::Benchmarking::BenchmarkResult m_benchmarkResult;
 
     struct SpellMenuOption {
-        MenuBool* Dodge = nullptr;
+        MenuSlider* Danger = nullptr;
+        MenuBool* Dangerous = nullptr;
         MenuBool* Draw = nullptr;
+        MenuBool* Enabled = nullptr;
     };
 
     std::unordered_map<std::string, SpellMenuOption> m_spellOptions;
     int m_spellMenuEntries = 0;
 
     struct EvadeSpellMenuOption {
-        MenuBool* Use = nullptr;
-        MenuList* Danger = nullptr;
-        MenuList* Mode = nullptr;
+        MenuSlider* Danger = nullptr;
+        MenuBool* WardJump = nullptr;
+        MenuBool* Enabled = nullptr;
     };
 
     std::unordered_map<std::string, EvadeSpellMenuOption> m_evadeSpellOptions;
     int m_evadeSpellMenuEntries = 0;
+    std::unordered_map<std::uint32_t, MenuBool*> m_allyShieldOptions;
 
     char m_lastEvent[96] = "none";
     int m_lastDodgeTick = 0;
-    KuroEvade::SpellDetector m_detector;
-    KuroEvade::Evade m_evade;
+    KuroEvade::SourceSkillshotDetector m_detector;
+    KuroEvade::SourceEvadeEngine m_evade;
     KuroEvade::SpellDrawer::VisualMap m_spellVisuals;
     bool m_evadeIntervening = false;
     std::unordered_set<std::string> m_loadedChampions;
-    MenuSeparator* m_debugSeparator = nullptr;
-    Menu* m_diagnosticsMenu = nullptr;
-    int m_lastDiagnosticsUpdateTick = 0;
     bool m_visualInterventionState = false;
+    bool m_currentDangerousThreat = false;
+    int m_currentDangerLevel = 0;
     int m_lastVisualUpdateTick = 0;
 
     static inline uintptr_t s_lastImmediateProcessCastInfo = 0;
     static inline int s_lastImmediateProcessTick = 0;
+
+    static bool ShouldBlockCastStatic(int rawSlot) {
+        if (!s_instance || !s_instance->Enabled() ||
+            !s_instance->m_evadeIntervening) {
+            return false;
+        }
+        const int blockMode = s_instance->m_blockSpellsMenu
+            ? s_instance->m_blockSpellsMenu->Index
+            : 1;
+        if (blockMode == 0 ||
+            (blockMode == 1 && !s_instance->m_currentDangerousThreat)) {
+            return false;
+        }
+        switch (static_cast<SDK::SpellSlot>(rawSlot)) {
+        case SDK::SpellSlot::Q:
+            return s_instance->m_spellBlockerQMenu && s_instance->m_spellBlockerQMenu->Value;
+        case SDK::SpellSlot::W:
+            return s_instance->m_spellBlockerWMenu && s_instance->m_spellBlockerWMenu->Value;
+        case SDK::SpellSlot::E:
+            return s_instance->m_spellBlockerEMenu && s_instance->m_spellBlockerEMenu->Value;
+        case SDK::SpellSlot::R:
+            return s_instance->m_spellBlockerRMenu && s_instance->m_spellBlockerRMenu->Value;
+        default:
+            return false;
+        }
+    }
 
     static void OnRawProcessSpellImmediateStatic(const SDK::Events::CoreHookArgs& raw) {
         if (!s_instance || raw.Id != SDK::Events::Hooks::OnProcessSpell) return;
         auto decoded = ::Core::Events::DecodeProcessSpell(raw);
         s_lastImmediateProcessCastInfo = decoded.CastInfo;
         s_lastImmediateProcessTick = SDK::Variables::TickCount();
-        s_instance->m_evade.OnProcessSpell(decoded);
         s_instance->m_detector.OnProcessSpell(decoded);
     }
 
@@ -276,7 +315,6 @@ private:
             SDK::Variables::TickCount() - s_lastImmediateProcessTick <= 50) {
             return;
         }
-        s_instance->m_evade.OnProcessSpell(decoded);
         s_instance->m_detector.OnProcessSpell(decoded);
     }
 
@@ -316,13 +354,25 @@ private:
         }
     }
 
+    static void OnBeforeMoveStatic(SDK::OrbwalkingActionArgs& args) {
+        if (!s_instance || !args.Process) {
+            return;
+        }
+        const auto settings = s_instance->SettingsSnapshot();
+        if (s_instance->m_evade.ShouldBlockMove(
+                args.Position.To2D(), settings,
+                s_instance->m_detector.Skillshots())) {
+            args.Process = false;
+        }
+    }
+
     static void OnWndProcStatic(SDK::Game::WndEventArgs& args) {
         if (!s_instance) {
             return;
         }
 
         if (args.Msg == WM_RBUTTONDOWN || args.Msg == WM_RBUTTONUP || args.Msg == WM_RBUTTONDBLCLK) {
-            if (s_instance->m_evadeIntervening) {
+            if (s_instance->Enabled() && s_instance->m_evadeIntervening) {
                 args.Process = false;
                 return;
             }
@@ -332,17 +382,10 @@ private:
                 if (player.IsValid() && !player.IsDead()) {
                     const auto settings = s_instance->SettingsSnapshot();
                     if (settings.Enabled) {
-                        KuroEvade::EvadeHelper helper(settings);
-                        const Vec2 from = player.ServerPosition().To2D();
                         const Vec2 to = SDK::Game::CursorPos().To2D();
-                        const float boundingRadius = player.BoundingRadius();
-                        const float speed = std::max(50.0f, player.MoveSpeed());
-                        const float delayMs = settings.ExtraDelay +
-                            static_cast<float>(SDK::Game::Ping()) +
-                            std::max(0.0f, settings.CurrentWindupDelay);
-
-                        if (helper.CheckMovePath(to, delayMs, from, boundingRadius,
-                                                 s_instance->m_detector.Skillshots(), speed)) {
+                        if (s_instance->m_evade.ShouldBlockMove(
+                                to, settings,
+                                s_instance->m_detector.Skillshots())) {
                             args.Process = false;
                             return;
                         }
@@ -351,146 +394,67 @@ private:
             }
         }
 
-        if (args.Msg == WM_KEYDOWN && s_instance->m_devSimulateKeyMenu &&
-            args.WParam == s_instance->m_devSimulateKeyMenu->Key) {
-            s_instance->SimulateSkillshot();
-            return;
-        }
-
-        if (args.Msg == WM_LBUTTONDOWN &&
-            s_instance->m_clickRemoveMenu &&
-            s_instance->m_clickRemoveMenu->Value) {
-            const int removed = s_instance->m_detector.RemoveAtPosition(
-                SDK::Game::CursorPos().To2D(), 50.0f);
-            if (removed > 0) {
-                std::snprintf(s_instance->m_lastEvent,
-                              sizeof(s_instance->m_lastEvent),
-                              "removed %d spell%s",
-                              removed,
-                              removed == 1 ? "" : "s");
+        if (s_instance->DevMode() && args.Msg == WM_KEYDOWN &&
+            (args.LParam & (1u << 30)) == 0) {
+            if (s_instance->m_benchmarkLineKeyMenu &&
+                args.WParam == s_instance->m_benchmarkLineKeyMenu->Key) {
+                s_instance->SpawnBenchmarkSkillshot(false);
+                return;
+            }
+            if (s_instance->m_benchmarkCircleKeyMenu &&
+                args.WParam == s_instance->m_benchmarkCircleKeyMenu->Key) {
+                s_instance->SpawnBenchmarkSkillshot(true);
+                return;
+            }
+            if (s_instance->m_benchmarkRunKeyMenu &&
+                args.WParam == s_instance->m_benchmarkRunKeyMenu->Key) {
+                s_instance->RunPlannerBenchmark();
+                return;
             }
         }
+
+        if (s_instance->DevMode() && args.Msg == WM_LBUTTONDOWN) {
+            s_instance->m_benchmark.CaptureStart(
+                SDK::Game::CursorPos().To2D());
+        } else if (s_instance->DevMode() && args.Msg == WM_LBUTTONUP) {
+            s_instance->m_benchmark.CaptureEnd(
+                SDK::Game::CursorPos().To2D());
+        }
+
     }
 
-    bool Enabled() const { return !m_enabledMenu || m_enabledMenu->Value; }
-    bool DrawSpells() const { return !m_drawSpellsMenu || m_drawSpellsMenu->Value; }
-    bool DodgeKeyActive() const {
-        const bool baseActive = !m_dodgeKeyMenu || m_dodgeKeyMenu->Active;
-        const bool comboAllowed = !m_comboOnlyEnabledMenu ||
-            !m_comboOnlyEnabledMenu->Value ||
-            (m_comboKeyMenu && m_comboKeyMenu->Active);
-        const bool blocked = m_dontDodgeEnabledMenu &&
-            m_dontDodgeEnabledMenu->Value &&
-            m_dontDodgeKeyMenu &&
-            m_dontDodgeKeyMenu->Active;
-        return baseActive && comboAllowed && !blocked;
-    }
-    bool DodgeDangerousOnly() const {
-        const bool hotkey = m_dangerKeysEnabledMenu &&
-            m_dangerKeysEnabledMenu->Value &&
-            ((m_dangerKeyMenu && m_dangerKeyMenu->Active) ||
-             (m_dangerKey2Menu && m_dangerKey2Menu->Active));
-        return (m_dodgeDangerousMenu && m_dodgeDangerousMenu->Value) || hotkey;
-    }
-    bool DodgeFow() const { return !m_dodgeFowMenu || m_dodgeFowMenu->Value; }
-    bool DodgeCircular() const { return !m_dodgeCircularMenu || m_dodgeCircularMenu->Value; }
+    bool Enabled() const { return m_enabledMenu && m_enabledMenu->Active; }
+    bool DrawSpells() const { return m_enableDrawingsMenu && m_enableDrawingsMenu->Value; }
     bool DevMode() const { return m_devModeMenu && m_devModeMenu->Value; }
     bool SameTeam() const { return m_devSameTeamMenu && m_devSameTeamMenu->Value; }
-    bool UseEvadeSpells() const { return !m_useEvadeSpellsMenu || m_useEvadeSpellsMenu->Active; }
-    bool PreferEvadeSpells() const { return m_preferEvadeSpellsMenu && m_preferEvadeSpellsMenu->Value; }
-    bool ExtremeEvade() const { return m_extremeEvadeMenu && m_extremeEvadeMenu->Value; }
-    bool KurokamiPosition() const { return !m_kurokamiPosMenu || m_kurokamiPosMenu->Value; }
-    bool HigherPrecision() const { return ExtremeEvade() || (m_higherPrecisionMenu && m_higherPrecisionMenu->Value); }
-    bool CalculateWindupDelay() const { return !m_calculateWindupMenu || m_calculateWindupMenu->Value; }
-    bool CheckSpellCollision() const { return m_checkCollisionMenu && m_checkCollisionMenu->Value; }
-    bool PreventTower() const { return m_preventTowerMenu && m_preventTowerMenu->Value; }
-    bool PreventEnemy() const { return !m_preventEnemyMenu || m_preventEnemyMenu->Value; }
-    int EvadeMode() const { return m_evadeModeMenu ? m_evadeModeMenu->Index : 2; }
-    float ExtraDelay() const { return m_extraDelayMenu ? static_cast<float>(m_extraDelayMenu->Value) : 30.0f; }
-    float ExtraDist() const { return m_extraDistMenu ? static_cast<float>(m_extraDistMenu->Value) : 10.0f; }
-    float ExtraSpellRadius() const { return m_extraSpellRadiusMenu ? static_cast<float>(m_extraSpellRadiusMenu->Value) : 0.0f; }
-    float ExtraEvadeDistance() const { return m_extraEvadeDistanceMenu ? static_cast<float>(m_extraEvadeDistanceMenu->Value) : 100.0f; }
-    float ExtraAvoidDistance() const { return m_extraAvoidDistanceMenu ? static_cast<float>(m_extraAvoidDistanceMenu->Value) : 50.0f; }
-    float MinComfortZone() const { return m_minComfortZoneMenu ? static_cast<float>(m_minComfortZoneMenu->Value) : 550.0f; }
-    int ReactionTime() const { return m_reactionTimeMenu ? m_reactionTimeMenu->Value : 0; }
-    int SpellDetectionTime() const {
-        return m_spellDetectionTimeMenu ? m_spellDetectionTimeMenu->Value : 0;
-    }
-    int MinHitTime() const { return m_minHitTimeMenu ? m_minHitTimeMenu->Value : 900; }
-    int DodgeInterval() const { return m_dodgeIntervalMenu ? m_dodgeIntervalMenu->Value : 0; }
-    float DodgeHp() const { return m_dodgeHpMenu ? static_cast<float>(m_dodgeHpMenu->Value) : 100.0f; }
-    int SpellActivationTime() const { return m_spellActivationMenu ? m_spellActivationMenu->Value : 400; }
-    float FastActivationTime() const { return m_fastActivationMenu ? static_cast<float>(m_fastActivationMenu->Value) : 65.0f; }
-    float RejectMinDistance() const { return m_rejectMinDistanceMenu ? static_cast<float>(m_rejectMinDistanceMenu->Value) : 10.0f; }
-    bool ClickOnlyOnce() const {
-        return !m_clickOnlyOnceMenu || m_clickOnlyOnceMenu->Value;
-    }
-    std::uint32_t SpellColor() const {
-        return m_spellColorMenu ? m_spellColorMenu->GetImU32() : IM_COL32(255, 80, 80, 220);
-    }
-    int OptimizationProfile() const {
-        return m_optimizationProfileMenu ? m_optimizationProfileMenu->Index : 0;
-    }
-    const char* OptimizationProfileName() const {
-        switch (OptimizationProfile()) {
-        case 1: return "Fastest Dodge";
-        case 2: return "Smooth Movement";
-        case 3: return "Low FPS Cost";
-        case 4: return "Custom";
-        default: return "Balanced";
+    bool DrawEvadeRoute() const { return DrawSpells(); }
+    ImU32 EnabledColor() const { return m_enabledColorMenu ? m_enabledColorMenu->GetImU32() : IM_COL32_WHITE; }
+    ImU32 DisabledColor() const { return m_disabledColorMenu ? m_disabledColorMenu->GetImU32() : IM_COL32(255, 0, 0, 255); }
+    ImU32 MissileColor() const { return m_missileColorMenu ? m_missileColorMenu->GetImU32() : IM_COL32(50, 205, 50, 255); }
+    ImU32 RouteColor() const { return MissileColor(); }
+
+    const char* RecommendedConfigName() const {
+        switch (m_recommendedConfigMenu ? m_recommendedConfigMenu->Index : 0) {
+        case 1: return "Configs 2";
+        case 2: return "Configs 3";
+        default: return "Configs 1";
         }
-    }
-    bool FillSkillshots() const {
-        return !m_fillSkillshotsMenu || m_fillSkillshotsMenu->Value;
-    }
-    bool DrawIrrelevant() const {
-        return !m_drawIrrelevantMenu || m_drawIrrelevantMenu->Value;
-    }
-    bool DrawEvadeRoute() const {
-        return !m_drawEvadeRouteMenu || m_drawEvadeRouteMenu->Value;
-    }
-    bool DrawThreatLabels() const {
-        return m_drawThreatLabelsMenu && m_drawThreatLabelsMenu->Value;
-    }
-    int IrrelevantOpacity() const {
-        return m_irrelevantOpacityMenu ? m_irrelevantOpacityMenu->Value : 10;
-    }
-    int ThreatOpacity() const {
-        return m_threatOpacityMenu ? m_threatOpacityMenu->Value : 42;
-    }
-    ImU32 IrrelevantColor() const {
-        return m_irrelevantColorMenu
-            ? m_irrelevantColorMenu->GetImU32()
-            : IM_COL32(145, 154, 164, 255);
-    }
-    ImU32 PathThreatColor() const {
-        return m_pathThreatColorMenu
-            ? m_pathThreatColorMenu->GetImU32()
-            : IM_COL32(255, 190, 65, 255);
-    }
-    ImU32 InterventionColor() const {
-        return m_interventionColorMenu
-            ? m_interventionColorMenu->GetImU32()
-            : IM_COL32(82, 220, 255, 255);
-    }
-    ImU32 RouteColor() const {
-        return m_routeColorMenu
-            ? m_routeColorMenu->GetImU32()
-            : IM_COL32(100, 255, 150, 255);
     }
 
     KuroEvade::SpellDrawStyle DrawingStyleSnapshot() const {
         KuroEvade::SpellDrawStyle style;
-        style.Fill = FillSkillshots();
-        style.DrawIrrelevant = DrawIrrelevant();
-        style.DrawLabels = DrawThreatLabels();
-        style.IrrelevantOpacity = IrrelevantOpacity();
-        style.ThreatOpacity = ThreatOpacity();
-        style.IrrelevantColor = IrrelevantColor();
-        style.PathColor = PathThreatColor();
-        style.DirectColor = SpellColor();
-        style.InterventionColor = InterventionColor();
+        style.Fill = true;
+        style.DrawIrrelevant = true;
+        style.DrawLabels = false;
+        style.IrrelevantOpacity = 15;
+        style.ThreatOpacity = 70;
+        style.IrrelevantColor = DisabledColor();
+        style.PathColor = EnabledColor();
+        style.DirectColor = EnabledColor();
+        style.InterventionColor = EnabledColor();
         style.RouteColor = RouteColor();
+        style.BorderWidth = m_borderMenu ? m_borderMenu->Value : 2;
+        style.MissileColor = MissileColor();
         return style;
     }
 
@@ -502,91 +466,55 @@ private:
             }));
     }
 
-    int VisualRefreshInterval() const {
-        switch (OptimizationProfile()) {
-        case 2: return 24;
-        case 3: return 50;
-        default: return 16;
-        }
-    }
+    int VisualRefreshInterval() const { return 16; }
 
     KuroEvade::EvadeSettings SettingsSnapshot() const {
         KuroEvade::EvadeSettings settings;
         settings.Enabled = Enabled();
-        settings.DrawSpells = DrawSpells();
-        settings.DodgeKeyActive = DodgeKeyActive();
-        settings.DodgeDangerousOnly = DodgeDangerousOnly();
-        settings.DodgeFow = DodgeFow();
-        settings.DodgeCircular = DodgeCircular();
-        settings.DevMode = DevMode();
-        settings.SameTeam = SameTeam();
-        settings.UseEvadeSpells = UseEvadeSpells();
-        settings.PreferEvadeSpells = PreferEvadeSpells();
-        settings.ExtremeEvade = ExtremeEvade();
-        settings.KurokamiPosition = KurokamiPosition();
-        settings.HigherPrecision = HigherPrecision();
-        settings.CalculateWindupDelay = CalculateWindupDelay();
-        settings.CheckSpellCollision = CheckSpellCollision();
-        settings.ClickOnlyOnce = ClickOnlyOnce();
-        settings.PreventTower = PreventTower();
-        settings.PreventEnemy = PreventEnemy();
-        settings.EvadeMode = EvadeMode();
-        settings.ExtraDelay = ExtraDelay();
-        settings.ExtraDist = ExtraDist();
-        settings.ExtraSpellRadius = ExtraSpellRadius();
-        settings.ExtraEvadeDistance = ExtraEvadeDistance();
-        settings.ExtraAvoidDistance = ExtraAvoidDistance();
-        settings.MinComfortZone = MinComfortZone();
-        settings.ReactionTime = ReactionTime();
-        settings.SpellDetectionTime = SpellDetectionTime();
-        settings.MinHitTime = MinHitTime();
-        settings.DodgeInterval = DodgeInterval();
-        settings.DodgeHp = DodgeHp();
-        settings.SpellActivationTime = SpellActivationTime();
-        settings.FastActivationTime = FastActivationTime();
-        settings.RejectMinDistance = RejectMinDistance();
-        settings.SpellColor = SpellColor();
-
-        switch (OptimizationProfile()) {
-        case 1: // Fastest Dodge: react early and spend more candidates once.
-            settings.CandidateBudget = 80;
-            settings.EvadeMode = 1;
-            settings.ReactionTime = 0;
-            settings.SpellDetectionTime = 0;
-            settings.MinHitTime = std::max(settings.MinHitTime, 1200);
-            settings.FastActivationTime = std::max(settings.FastActivationTime, 100.0f);
-            settings.KurokamiPosition = true;
-            settings.ClickOnlyOnce = true;
-            break;
-        case 2: // Smooth Movement: stable scoring and fewer direction changes.
-            settings.CandidateBudget = 48;
-            settings.EvadeMode = 0;
-            settings.HigherPrecision = false;
-            settings.KurokamiPosition = true;
-            settings.ClickOnlyOnce = true;
-            break;
-        case 3: // Low FPS Cost: analytical/gradient candidates, minimal scans.
-            settings.CandidateBudget = 28;
-            settings.ExtremeEvade = false;
-            settings.HigherPrecision = false;
-            settings.KurokamiPosition = false;
-            settings.CheckSpellCollision = false;
-            settings.ClickOnlyOnce = true;
-            break;
-        case 4: // Custom: use every manual option exactly as configured.
-            settings.CandidateBudget = 0;
-            break;
-        default: // Balanced.
-            settings.CandidateBudget = settings.HigherPrecision ? 150 : 50;
-            break;
-        }
+        settings.OnlyDangerous = m_onlyDangerousMenu && m_onlyDangerousMenu->Active;
+        settings.FocusOnEvade = !m_focusOnEvadeMenu || m_focusOnEvadeMenu->Value;
+        settings.OnlyEvadeWhileCan = m_onlyEvadeWhileCanMenu && m_onlyEvadeWhileCanMenu->Value;
+        settings.EnhanceDetect = !m_enhanceDetectMenu || m_enhanceDetectMenu->Value;
+        settings.SmoothEvadeSpell = !m_smoothEvadeSpellMenu || m_smoothEvadeSpellMenu->Value;
+        settings.ImproveMove = !m_improveMoveMenu || m_improveMoveMenu->Value;
+        settings.LowEvadeSmooth = m_lowEvadeSmoothMenu && m_lowEvadeSmoothMenu->Value;
+        settings.UseCurrentPath = !m_useCurrentPathMenu || m_useCurrentPathMenu->Value;
+        settings.TestOnAllies = SameTeam();
+        settings.EnableCollision = m_enableCollisionMenu && m_enableCollisionMenu->Value;
+        settings.MinionCollision = m_minionCollisionMenu && m_minionCollisionMenu->Value;
+        settings.HeroCollision = m_heroCollisionMenu && m_heroCollisionMenu->Value;
+        settings.YasuoCollision = !m_yasuoCollisionMenu || m_yasuoCollisionMenu->Value;
+        settings.EnableDrawings = DrawSpells();
+        settings.DrawWarningMessage = !m_drawWarningMessageMenu || m_drawWarningMessageMenu->Value;
+        settings.ShowEvadeStatus = m_showEvadeStatusMenu && m_showEvadeStatusMenu->Value;
+        settings.DisableFow = m_disableFowMenu && m_disableFowMenu->Value;
+        settings.DisableEvadeForOlafR = !m_disableOlafRMenu || m_disableOlafRMenu->Value;
+        settings.BlockSpells = m_blockSpellsMenu ? m_blockSpellsMenu->Index : 1;
+        settings.AllowAutoAttackDangerLevel = m_allowAaLevelMenu ? m_allowAaLevelMenu->Value : 4;
+        settings.BorderWidth = m_borderMenu ? m_borderMenu->Value : 2;
+        settings.SkillShotsExtraRadius = m_skillshotsExtraRadiusMenu ? m_skillshotsExtraRadiusMenu->Value : 0;
+        settings.SkillShotsExtraRange = m_skillshotsExtraRangeMenu ? m_skillshotsExtraRangeMenu->Value : 0;
+        settings.GridSize = m_gridSize;
+        settings.ExtraEvadeDistance = m_extraEvadeDistanceMenu ? m_extraEvadeDistanceMenu->Value : 25;
+        settings.PathFindingDistance = m_pathFindingDistance;
+        settings.PathFindingDistance2 = m_pathFindingDistance2;
+        settings.DiagonalEvadePointsCount = m_diagonalEvadePointsCount;
+        settings.DiagonalEvadePointsStep = m_diagonalEvadePointsStep;
+        settings.CrossingTimeOffset = m_crossingTimeOffset;
+        settings.EvadingFirstTimeOffset = m_evadingFirstTimeOffset;
+        settings.EvadingSecondTimeOffset = m_evadingSecondTimeOffset;
+        settings.EvadingRouteChangeTimeOffset = m_evadingRouteChangeTimeOffset;
+        settings.EvadePointChangeInterval = m_evadePointChangeInterval;
+        settings.EnabledColor = EnabledColor();
+        settings.DisabledColor = DisabledColor();
+        settings.MissileColor = MissileColor();
         return settings;
     }
 
     void UpdateSpellVisuals(const KuroEvade::EvadeSettings& settings,
-                            const std::vector<Vec3>& observedPath,
+                            const std::vector<Vec2>& observedPath,
                             bool intervention) {
-        if (!settings.DrawSpells) {
+        if (!settings.EnableDrawings) {
             m_spellVisuals.clear();
             return;
         }
@@ -609,44 +537,35 @@ private:
         }
 
         KuroEvade::EvadeSettings visualSettings = settings;
-        visualSettings.PreventEnemy = false;
-        visualSettings.PreventTower = false;
-        visualSettings.CurrentWindupDelay =
-            settings.CalculateWindupDelay && SDK::Orbwalker::IsAutoAttacking()
-                ? static_cast<float>(SDK::Orbwalker::AttackCastDelayRemaining())
-                : 0.0f;
-        KuroEvade::EvadeHelper helper(visualSettings);
 
         const Vec2 heroPos = player.ServerPosition().To2D();
         const float boundingRadius = player.BoundingRadius();
         const float moveSpeed = std::max(50.0f, player.MoveSpeed());
-        const float pathDelay = settings.ExtraDelay +
-            static_cast<float>(SDK::Game::Ping()) +
-            visualSettings.CurrentWindupDelay;
-        const float directWindow = static_cast<float>(
-            std::max(settings.MinHitTime, 1200));
+        const float directWindow = 1200.0f;
 
         for (const auto& skillshot : m_detector.Skillshots()) {
-            if (!skillshot || !ShouldDrawSpell(skillshot->SData)) {
+            if (!skillshot || !ShouldDrawSpell(skillshot->SpellData())) {
                 continue;
             }
 
             KuroEvade::SpellVisualInfo info;
-            info.Danger = KuroEvade::EvadeHelper::DangerValue(*skillshot);
-            info.HitTimeMs = KuroEvade::EvadeHelper::SpellHitTime(
-                *skillshot, heroPos);
+            info.Danger = KuroEvade::SourceEvader::DangerValue(*skillshot);
+            info.HitTimeMs = skillshot->HitTime(heroPos, visualSettings);
 
             bool directThreat = false;
             bool pathThreat = false;
-            if (helper.ShouldConsiderSpell(*skillshot)) {
+            if (settings.Enabled && KuroEvade::SourceEvader::ShouldConsider(
+                    skillshot, visualSettings)) {
                 directThreat =
                     info.HitTimeMs <= directWindow &&
-                    KuroEvade::EvadeHelper::InSkillShot(
-                        *skillshot, heroPos,
-                        boundingRadius + settings.ExtraSpellRadius);
-                pathThreat = helper.SkillshotAffectsPath(
-                    *skillshot, observedPath, pathDelay,
-                    heroPos, boundingRadius, moveSpeed);
+                    skillshot->ContainsStatic(
+                        heroPos, boundingRadius, visualSettings);
+                if (observedPath.size() >= 2) {
+                    pathThreat = !skillshot->IsSafePath(
+                        observedPath, 250, moveSpeed,
+                        0,
+                        boundingRadius, visualSettings).IsSafe;
+                }
             }
 
             if (intervention && (directThreat || pathThreat)) {
@@ -692,77 +611,68 @@ private:
         if (needRebuild) {
             RebuildSpellsMenu();
             RebuildEvadeSpellsMenu();
+            RebuildAllyShieldMenu();
             ::ConfigStore::ApplyLoaded(m_menu);
         }
 
-        if (m_debugSeparator) {
-            char debugText[256];
-            _snprintf_s(debugText, sizeof(debugText), _TRUNCATE,
-                "Debug: Enemies found: %d | Loaded: %d | Time: %.2f",
-                (int)SDK::GameObjects::EnemyHeroes().size(),
-                (int)m_loadedChampions.size(),
-                SDK::Game::Time());
-            m_debugSeparator->DisplayName = debugText;
-        }
-
-        if (m_diagnosticsMenu && static_cast<int>(GetTickCount() - m_lastDiagnosticsUpdateTick) > 1000) {
-            m_lastDiagnosticsUpdateTick = GetTickCount();
-
-            for (int i = 0; i < m_diagnosticsMenu->Components.size(); ++i) {
-                delete m_diagnosticsMenu->Components[i];
-            }
-            m_diagnosticsMenu->Components.clear();
-
-            char summaryText[128];
-            _snprintf_s(summaryText, sizeof(summaryText), _TRUNCATE,
-                "Summary: Enemies found: %d | Loaded Set: %d",
-                (int)SDK::GameObjects::EnemyHeroes().size(),
-                (int)m_loadedChampions.size());
-            m_diagnosticsMenu->Add(new MenuSeparator("summary", summaryText));
-
-            auto heroes = SDK::ObjectManager::Get<AIHeroClient>();
-            char heroText[256];
-            for (size_t idx = 0; idx < heroes.size(); ++idx) {
-                const auto& hero = heroes[idx];
-                if (!hero.IsValid()) {
-                    _snprintf_s(heroText, sizeof(heroText), _TRUNCATE,
-                        "Hero %d: Invalid Address (%p)",
-                        (int)idx, (void*)hero.Address());
-                } else {
-                    const std::string name = GetHeroCharacterName(hero);
-                    const int team = static_cast<int>(hero.Team());
-                    const int myTeam = static_cast<int>(SDK::ObjectManager::Player().Team());
-                    const bool isPlayer = (hero.Address() == SDK::ObjectManager::Player().Address());
-                    const bool isEnemy = (team != myTeam && team != 0 && team != 300);
-
-                    _snprintf_s(heroText, sizeof(heroText), _TRUNCATE,
-                        "Hero %d: %s | Team: %d | Player: %s | Enemy: %s | HP: %.0f",
-                        (int)idx,
-                        name.empty() ? "<empty_name>" : name.c_str(),
-                        team,
-                        isPlayer ? "Yes" : "No",
-                        isEnemy ? "Yes" : "No",
-                        hero.Health());
-                }
-                char nameKey[64];
-                _snprintf_s(nameKey, sizeof(nameKey), _TRUNCATE, "hero_%d", (int)idx);
-                m_diagnosticsMenu->Add(new MenuSeparator(nameKey, heroText));
-            }
-        }
-
         const auto settings = SettingsSnapshot();
-        m_detector.SetCollisionEnabled(settings.CheckSpellCollision);
-        m_detector.SetFowEnabled(settings.DodgeFow);
-        m_detector.SetDevSameTeam(settings.SameTeam);
+        m_detector.SetCollisionEnabled(settings.EnableCollision);
+        m_detector.SetCollisionTypes(settings.MinionCollision,
+                                     settings.HeroCollision,
+                                     settings.YasuoCollision);
+        m_detector.SetFowEnabled(!settings.DisableFow);
+        m_detector.SetEnhancedDetection(settings.EnhanceDetect);
+        m_detector.SetDevSameTeam(settings.TestOnAllies);
+        if (DevMode()) {
+            m_benchmark.Update(m_detector);
+        } else {
+            m_benchmark.Stop();
+        }
         m_detector.Update();
-        RemoveDisabledSkillshots();
-        const std::vector<Vec3> observedPath = player.IsValid()
-            ? player.Path()
-            : std::vector<Vec3>();
+        ApplySpellMenuValues();
+        m_currentDangerousThreat = false;
+        m_currentDangerLevel = 0;
+        if (player.IsValid()) {
+            const Vec2 position = player.ServerPosition().To2D();
+            for (const auto& skillshot : m_detector.Skillshots()) {
+                if (!skillshot ||
+                    !KuroEvade::SourceEvader::ShouldConsider(skillshot, settings) ||
+                    !skillshot->ContainsStatic(
+                        position, player.BoundingRadius(), settings)) {
+                    continue;
+                }
+                m_currentDangerLevel = std::max(
+                    m_currentDangerLevel, skillshot->Data.DangerValue);
+                m_currentDangerousThreat = m_currentDangerousThreat ||
+                    skillshot->Data.IsDangerous;
+            }
+        }
+        std::vector<Vec2> observedPath;
+        if (player.IsValid()) {
+            observedPath.push_back(player.ServerPosition().To2D());
+            for (const Vec3& point : player.Path()) {
+                const Vec2 value = point.To2D();
+                if (!value.IsZero() &&
+                    observedPath.back().DistanceSqr(value) > 4.0f) {
+                    observedPath.push_back(value);
+                }
+            }
+            if (observedPath.size() == 1) {
+                const Vec2 cursor = SDK::Game::CursorPos().To2D();
+                if (!cursor.IsZero()) {
+                    observedPath.push_back(cursor);
+                }
+            }
+        }
         m_evadeIntervening = m_evade.Tick(
             settings, m_detector.Skillshots(), m_lastDodgeTick,
-            [this](const KuroEvade::EvadeSpellData& data) {
+            [this](const KuroEvade::Database::EvadeSpellData& data) {
                 return ResolveEvadeSpellConfig(data);
+            },
+            [this](const SDK::AIBaseClient& ally) {
+                const auto it = m_allyShieldOptions.find(ally.NetworkId());
+                return it == m_allyShieldOptions.end() ||
+                    !it->second || it->second->Value;
             },
             m_lastEvent, sizeof(m_lastEvent));
         const auto phase = !m_evadeIntervening
@@ -774,20 +684,26 @@ private:
                     : KuroCombatCoordination::EvadePhase::Dodging;
         KuroCombatCoordination::Coordinator::Publish(
             phase, SDK::Variables::TickCount());
+        const bool lucianPassive = player.IsValid() &&
+            player.HasBuff("LucianPassiveBuff");
+        const bool blockAttacks = m_evadeIntervening && !lucianPassive &&
+            m_currentDangerLevel > settings.AllowAutoAttackDangerLevel;
+        CoreEvadeState::SetEvadeInterventionState(
+            m_evadeIntervening, blockAttacks);
         UpdateSpellVisuals(settings, observedPath, m_evadeIntervening);
     }
 
-    bool IsSpellDodgeEnabled(const KuroEvade::Generated::SpellDataEntry& data) const {
+    bool IsSpellDodgeEnabled(const KuroEvade::Database::SpellData& data) const {
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
         if (it == m_spellOptions.end()) {
             return !data.DisabledByDefault;
         }
-        return !it->second.Dodge || it->second.Dodge->Value;
+        return !it->second.Enabled || it->second.Enabled->Value;
     }
 
     bool IsSpellDodgeEnabled(const SDK::SpellDatabaseEntry& data) const {
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
-        return it == m_spellOptions.end() || !it->second.Dodge || it->second.Dodge->Value;
+        return it == m_spellOptions.end() || !it->second.Enabled || it->second.Enabled->Value;
     }
 
     bool ShouldDrawSpell(const SDK::SpellDatabaseEntry& data) const {
@@ -795,184 +711,214 @@ private:
         return it == m_spellOptions.end() || !it->second.Draw || it->second.Draw->Value;
     }
 
-    void RemoveDisabledSkillshots() {
-        auto& skillshots = m_detector.Skillshots();
-        skillshots.erase(
-            std::remove_if(skillshots.begin(), skillshots.end(), [&](const auto& skillshot) {
-                return skillshot && !IsSpellDodgeEnabled(skillshot->SData);
-            }),
-            skillshots.end());
+    int SpellDangerLevel(const KuroEvade::Database::SpellData& data) const {
+        const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
+        return it != m_spellOptions.end() && it->second.Danger
+            ? it->second.Danger->Value
+            : std::clamp(data.DangerValue, 1, 5);
     }
 
-    void SimulateSkillshot() {
-        const auto player = SDK::ObjectManager::Player();
-        if (!player.IsValid()) return;
+    bool IsSpellDangerous(const KuroEvade::Database::SpellData& data) const {
+        const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
+        return it != m_spellOptions.end() && it->second.Dangerous
+            ? it->second.Dangerous->Value
+            : data.IsDangerous || data.DangerValue >= 3;
+    }
 
-        // Create a dummy spell data entry
-        KuroEvade::Generated::SpellDataEntry entry;
-        entry.sdk.ChampionName = "Dummy";
-        entry.sdk.SpellName = "DummySkillshot";
-        entry.sdk.SpellType = SDK::SpellType::SkillshotLine;
-        entry.sdk.Range = 1200;
-        entry.sdk.Radius = 80;
-        entry.sdk.MissileSpeed = 1000; // Slower so it's easy to see/test
-        entry.sdk.Delay = 250;
-
-        // Position from cursor extending towards player, or from player extending to cursor
-        // Let's make it start from cursor, and travel towards player, so the player has to dodge it!
-        // This is a perfect simulation!
-        Vec3 start = SDK::Game::CursorPos();
-        Vec3 end = player.Position();
-        if (start.Distance(end) < 100.0f) {
-            // If cursor is too close to player, start from a distance
-            start = player.Position() + player.Direction() * 800.0f;
+    void ApplySpellMenuValues() {
+        for (const auto& skillshot : m_detector.Skillshots()) {
+            if (!skillshot || !skillshot->Native) continue;
+            skillshot->Data.DangerValue = SpellDangerLevel(skillshot->Data);
+            skillshot->Data.IsDangerous = IsSpellDangerous(skillshot->Data);
+            // Detection and drawing remain alive for a disabled evade entry;
+            // only the dodge decision ignores it, matching Skillshot.Evade().
+            skillshot->ForceDisabled = !IsSpellDodgeEnabled(skillshot->Data);
+            skillshot->Data.Runtime.DangerValue = skillshot->Data.DangerValue;
+            skillshot->Native->SData.DangerValue = skillshot->Data.DangerValue;
         }
+    }
 
-        // We can create the skillshot
-        auto skillshot = std::make_shared<SDK::SkillshotLine>(entry.sdk);
-        skillshot->DetectionType = SDK::SkillshotDetectionType::ProcessSpell;
-        skillshot->Caster = player; // Use player as dummy caster
-        skillshot->StartPosition = start.To2D();
-        skillshot->EndPosition = end.To2D();
-        skillshot->Direction = (end.To2D() - start.To2D()).Normalized();
-        skillshot->StartTime = SDK::Variables::TickCount();
+    void SpawnBenchmarkSkillshot(bool circle) {
+        const bool spawned = circle
+            ? m_benchmark.StartCircle(m_detector)
+            : m_benchmark.StartLine(m_detector);
+        std::snprintf(m_lastEvent, sizeof(m_lastEvent),
+                      spawned ? "benchmark %s spawned" : "benchmark spawn failed",
+                      circle ? "circle" : "line");
+    }
 
-        // Refresh geometry and add to detector
-        KuroEvade::SpecialSpells::RefreshSkillshotGeometry(*skillshot);
-        m_detector.AddSimulatedSkillshot(skillshot, entry);
-        SDK::Orbwalker::DebugPrint("[KuroEvade][Dev] Simulated Q skillshot from cursor to player!");
+    void RunPlannerBenchmark() {
+        const auto player = SDK::ObjectManager::Player();
+        m_benchmarkResult = m_benchmark.Run(
+            player, m_detector.Skillshots(), SettingsSnapshot(), 100);
+        std::snprintf(m_lastEvent, sizeof(m_lastEvent),
+                      "benchmark avg %.2fus (%d/%d plans)",
+                      m_benchmarkResult.AverageMicroseconds,
+                      m_benchmarkResult.PlansFound,
+                      m_benchmarkResult.Iterations);
+        NightSharpDebug::Logf(
+            "[KuroEvade][Benchmark] iterations=%d plans=%d candidates=%d avg=%.2fus min=%.2fus max=%.2fus db=%d+%d invalid=%d",
+            m_benchmarkResult.Iterations,
+            m_benchmarkResult.PlansFound,
+            m_benchmarkResult.LastCandidateCount,
+            m_benchmarkResult.AverageMicroseconds,
+            m_benchmarkResult.MinimumMicroseconds,
+            m_benchmarkResult.MaximumMicroseconds,
+            m_benchmarkResult.SkillshotDatabaseEntries,
+            m_benchmarkResult.EvadeSpellDatabaseEntries,
+            m_benchmarkResult.InvalidDatabaseEntries);
+    }
+
+    static void OnRecommendedConfigChangedStatic(MenuItem* sender, void* userData) {
+        auto* self = static_cast<KuroEvadePlugin*>(userData);
+        auto* list = sender ? sender->As<MenuList>() : nullptr;
+        if (self && list) {
+            self->ApplyRecommendedConfig(list->Index);
+        }
+    }
+
+    static void OnEnabledChangedStatic(MenuItem* sender, void* userData) {
+        auto* self = static_cast<KuroEvadePlugin*>(userData);
+        auto* key = sender ? sender->As<MenuKeyBind>() : nullptr;
+        if (self && key && !key->Active) {
+            self->ReleaseEvadeIntervention();
+        }
+    }
+
+    void ReleaseEvadeIntervention() {
+        m_evade.Shutdown();
+        m_evadeIntervening = false;
+        m_currentDangerousThreat = false;
+        m_currentDangerLevel = 0;
+        KuroCombatCoordination::Coordinator::Publish(
+            KuroCombatCoordination::EvadePhase::Idle,
+            SDK::Variables::TickCount());
+        CoreEvadeState::SetEvadeInterventionState(false, false);
+    }
+
+    void ApplyRecommendedConfig(int index) {
+        const auto values = KuroEvade::EvadeConfig::Recommended(index);
+        if (m_skillshotsExtraRadiusMenu) m_skillshotsExtraRadiusMenu->Set(values.SkillShotsExtraRadius);
+        if (m_skillshotsExtraRangeMenu) m_skillshotsExtraRangeMenu->Set(values.SkillShotsExtraRange);
+        m_gridSize = values.GridSize;
+        if (m_extraEvadeDistanceMenu) m_extraEvadeDistanceMenu->Set(values.ExtraEvadeDistance);
+        m_pathFindingDistance = values.PathFindingDistance;
+        m_pathFindingDistance2 = values.PathFindingDistance2;
+        m_diagonalEvadePointsCount = values.DiagonalEvadePointsCount;
+        m_diagonalEvadePointsStep = values.DiagonalEvadePointsStep;
+        m_crossingTimeOffset = values.CrossingTimeOffset;
+        m_evadingFirstTimeOffset = values.EvadingFirstTimeOffset;
+        m_evadingSecondTimeOffset = values.EvadingSecondTimeOffset;
+        m_evadingRouteChangeTimeOffset = values.EvadingRouteChangeTimeOffset;
+        m_evadePointChangeInterval = values.EvadePointChangeInterval;
     }
 
     void CreateMenu() {
         DestroyMenu();
+        m_gridSize = 10;
+        m_pathFindingDistance = 300;
+        m_pathFindingDistance2 = 100;
+        m_diagonalEvadePointsCount = 7;
+        m_diagonalEvadePointsStep = 20;
+        m_crossingTimeOffset = 250;
+        m_evadingFirstTimeOffset = 250;
+        m_evadingSecondTimeOffset = 80;
+        m_evadingRouteChangeTimeOffset = 250;
+        m_evadePointChangeInterval = 250;
         m_menu = new Menu(GetInternalId(), GetName(), true);
 
-        m_debugSeparator = m_menu->Add(new MenuSeparator("kuro_debug", "Debug Info Loading..."));
-        m_diagnosticsMenu = m_menu->AddSubMenu(new Menu("diagnostics", "KuroEvade Diagnostics"));
+        m_focusOnEvadeMenu = m_menu->Add(new MenuBool("FocusOnEvade", "Focus on Evade", true));
+        m_onlyEvadeWhileCanMenu = m_menu->Add(new MenuBool("OnlyEvadeWhileCan", "Only Evade if can", false));
+        m_enhanceDetectMenu = m_menu->Add(new MenuBool("EnchanceDetect", "EnchanceDetect", true));
 
-        auto* main = m_menu->AddSubMenu(new Menu("main", "Main"));
-        m_enabledMenu = main->Add(new MenuBool("enabled", "Enable KuroEvade", true));
-        m_dodgeKeyMenu = main->Add(new MenuKeyBind(
-            "dodgeKey", "Dodge Skillshots", 'K', KeyBindType::Toggle, true));
-        m_dodgeDangerousMenu = main->Add(new MenuBool("dodgeDangerous", "Dodge Only Dangerous", false));
-        m_dodgeFowMenu = main->Add(new MenuBool("dodgeFow", "Dodge FOW Skillshots", true));
-        m_dodgeCircularMenu = main->Add(new MenuBool("dodgeCircular", "Dodge Circular Skillshots", true));
-        m_drawSpellsMenu = main->Add(new MenuBool("drawSpells", "Draw Skillshots", true));
-        m_useEvadeSpellsMenu = main->Add(new MenuKeyBind(
-            "activateEvadeSpells", "Use Evade Spells", 'K', KeyBindType::Toggle, true));
-        m_preferEvadeSpellsMenu = main->Add(new MenuBool("preferEvadeSpells", "Prefer Evade Spells", false));
-        m_optimizationProfileMenu = main->Add(new MenuList(
-            "optimizationProfile", "Optimization Preset",
-            { "Balanced", "Fastest Dodge", "Smooth Movement", "Low FPS Cost", "Custom" }, 0));
-        m_evadeModeMenu = main->Add(new MenuList("evadeMode", "Position Scoring",
-            { "Smooth", "Fastest", "GuessWho" }, 2));
-        m_extremeEvadeMenu = main->Add(new MenuBool("extremeEvade", "Extreme Evade", false));
-        m_kurokamiPosMenu = main->Add(new MenuBool("kurokamiPos", "Kurokami Evade Pos", true));
+        auto* configs = m_menu->AddSubMenu(new Menu("Configs Evade", "Configs"));
+        m_recommendedConfigMenu = configs->Add(new MenuList(
+            "Recommand", "Recommand Configs", { "Configs 1", "Configs 2", "Configs 3" }, 0));
+        m_recommendedConfigMenu->ValueChanged = &KuroEvadePlugin::OnRecommendedConfigChangedStatic;
+        m_recommendedConfigMenu->ValueChangedUd = this;
+        m_skillshotsExtraRadiusMenu = configs->Add(new MenuSlider(
+            "SkillShotsExtraRadius", "SkillShots Extra Radius", 0, 0, 30));
+        m_skillshotsExtraRangeMenu = configs->Add(new MenuSlider(
+            "SkillShotsExtraRange", "SkillShots Extra Range", 0, 0, 50));
+        m_extraEvadeDistanceMenu = configs->Add(new MenuSlider(
+            "ExtraEvadeDistance", "Extra Evade Distance", 25, 0, 100));
 
-        auto* drawing = m_menu->AddSubMenu(new Menu("drawing", "Smart Drawing"));
-        m_fillSkillshotsMenu = drawing->Add(new MenuBool(
-            "fillSkillshots", "Filled Skillshots", true));
-        m_drawIrrelevantMenu = drawing->Add(new MenuBool(
-            "drawIrrelevant", "Show Irrelevant Skillshots", true));
-        m_drawEvadeRouteMenu = drawing->Add(new MenuBool(
-            "drawEvadeRoute", "Draw Active Evade Route", true));
-        m_drawThreatLabelsMenu = drawing->Add(new MenuBool(
-            "drawThreatLabels", "Draw Spell / Hit-Time Labels", false));
-        m_irrelevantOpacityMenu = drawing->Add(new MenuSlider(
-            "irrelevantOpacity", "Irrelevant Fill Opacity %", 15, 0, 100));
-        m_threatOpacityMenu = drawing->Add(new MenuSlider(
-            "threatOpacity", "Threat Fill Opacity %", 70, 0, 100));
-        m_irrelevantColorMenu = drawing->Add(new MenuColor(
-            "irrelevantColor", "Irrelevant / Gray", 0.57f, 0.60f, 0.64f, 1.0f));
-        m_pathThreatColorMenu = drawing->Add(new MenuColor(
-            "pathThreatColor", "Current Path Threat", 1.0f, 0.74f, 0.25f, 1.0f));
-        m_spellColorMenu = drawing->Add(new MenuColor(
-            "spellColor", "Direct Threat", 1.0f, 0.28f, 0.28f, 1.0f));
-        m_interventionColorMenu = drawing->Add(new MenuColor(
-            "interventionColor", "Evade Intervention", 0.32f, 0.86f, 1.0f, 1.0f));
-        m_routeColorMenu = drawing->Add(new MenuColor(
-            "routeColor", "Evade Route", 0.39f, 1.0f, 0.59f, 1.0f));
-
-        auto* keys = m_menu->AddSubMenu(new Menu("keys", "Key Settings"));
-        m_dangerKeysEnabledMenu = keys->Add(new MenuBool(
-            "dangerKeysEnabled", "Enable Dangerous Only Keys", false));
-        m_dangerKeyMenu = keys->Add(new MenuKeyBind(
-            "dangerKey", "Dangerous Only Key", VK_SPACE, KeyBindType::Press, false));
-        m_dangerKey2Menu = keys->Add(new MenuKeyBind(
-            "dangerKey2", "Dangerous Only Key 2", 'V', KeyBindType::Press, false));
-        m_comboOnlyEnabledMenu = keys->Add(new MenuBool(
-            "comboOnlyEnabled", "Dodge Only On Combo Key", false));
-        m_comboKeyMenu = keys->Add(new MenuKeyBind(
-            "comboKey", "Combo Key", VK_SPACE, KeyBindType::Press, false));
-        m_dontDodgeEnabledMenu = keys->Add(new MenuBool(
-            "dontDodgeEnabled", "Enable Don't Dodge Key", false));
-        m_dontDodgeKeyMenu = keys->Add(new MenuKeyBind(
-            "dontDodgeKey", "Don't Dodge Key", 'Z', KeyBindType::Press, false));
-
-        auto* misc = m_menu->AddSubMenu(new Menu("misc", "Misc Settings"));
-        m_higherPrecisionMenu = misc->Add(new MenuBool("higherPrecision", "Enhanced Dodge Precision", false));
-        m_calculateWindupMenu = misc->Add(new MenuBool("calculateWindup", "Calculate Windup Delay", true));
-        m_checkCollisionMenu = misc->Add(new MenuBool("checkCollision", "Check Spell Collision", true));
-        m_clickRemoveMenu = misc->Add(new MenuBool(
-            "clickRemove", "Allow Left Click Removal", true));
-        m_preventTowerMenu = misc->Add(new MenuBool("preventTower", "Prevent Dodging Under Tower", false));
-        m_preventEnemyMenu = misc->Add(new MenuBool("preventEnemy", "Prevent Dodging Near Enemies", true));
-
-        auto* buffers = m_menu->AddSubMenu(new Menu("buffers", "Extra Buffers"));
-        m_extraDelayMenu = buffers->Add(new MenuSlider(
-            "extraDelay", "Extra Ping Buffer (ms)", 0, 0, 200));
-        m_extraDistMenu = buffers->Add(new MenuSlider(
-            "extraDist", "Extra CPA Distance", 10, 0, 150));
-        m_extraSpellRadiusMenu = buffers->Add(new MenuSlider(
-            "extraSpellRadius", "Extra Spell Radius", 0, 0, 100));
-        m_extraEvadeDistanceMenu = buffers->Add(new MenuSlider(
-            "extraEvadeDistance", "Extra Evade Distance", 100, 0, 300));
-        m_extraAvoidDistanceMenu = buffers->Add(new MenuSlider(
-            "extraAvoidDistance", "Extra Avoid Distance", 50, 0, 300));
-        m_minComfortZoneMenu = buffers->Add(new MenuSlider(
-            "minComfortZone", "Min Distance to Champion", 550, 0, 1000));
-
-        auto* fast = m_menu->AddSubMenu(new Menu("fast", "Fast Evade"));
-        m_spellActivationMenu = fast->Add(new MenuSlider(
-            "spellActivationTime", "Spell Activation Time", 400, 0, 1000));
-        m_fastActivationMenu = fast->Add(new MenuSlider(
-            "fastActivation", "FastEvade Activation Time", 0, 0, 500));
-        m_rejectMinDistanceMenu = fast->Add(new MenuSlider(
-            "rejectMinDistance", "Collision Distance Buffer", 10, 0, 100));
-
-        auto* humanizer = m_menu->AddSubMenu(new Menu("humanizer", "Humanizer / Gates"));
-        m_clickOnlyOnceMenu = humanizer->Add(new MenuBool(
-            "clickOnlyOnce", "Click Only Once", true));
-        m_spellDetectionTimeMenu = humanizer->Add(new MenuSlider(
-            "spellDetectionTime", "Spell Detection Time (ms)", 0, 0, 1000));
-        m_reactionTimeMenu = humanizer->Add(new MenuSlider(
-            "reactionTime", "Reaction Time (ms)", 0, 0, 500));
-        m_minHitTimeMenu = humanizer->Add(new MenuSlider(
-            "minHitTime", "Max Hit Time to Dodge (ms)", 900, 100, 2000));
-        m_dodgeIntervalMenu = humanizer->Add(new MenuSlider(
-            "dodgeInterval", "Dodge Re-issue Interval (ms)", 0, 0, 500));
-        m_dodgeHpMenu = humanizer->Add(new MenuSlider(
-            "dodgeHp", "Only Dodge Below HP %", 100, 1, 100));
-
-        auto* dev = m_menu->AddSubMenu(new Menu("dev", "Developer / Test Mode"));
-        m_devModeMenu = dev->Add(new MenuBool("devMode", "Enable Developer Mode", false));
-        m_devSameTeamMenu = dev->Add(new MenuBool("sameTeam", "Detect Ally Spells (Test)", false));
-        m_devSimulateKeyMenu = dev->Add(new MenuKeyBind("simulateKey", "Simulate Skillshot at Cursor", 'T', KeyBindType::Press, false));
-
-        BuildSpellMenu();
+        // Keep the same root ordering as Config.cs. The remaining preset
+        // values are intentionally hidden there and live in backing fields.
         BuildEvadeSpellMenu();
+        BuildSpellMenu();
+        BuildAllyShieldMenu();
+
+        auto* blocker = m_menu->AddSubMenu(new Menu("Spell Blocker", "Spell Blocker"));
+        m_spellBlockerQMenu = blocker->Add(new MenuBool("spellBlockerQ", "Q",
+            KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::Q))));
+        m_spellBlockerWMenu = blocker->Add(new MenuBool("spellBlockerW", "W",
+            KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::W))));
+        m_spellBlockerEMenu = blocker->Add(new MenuBool("spellBlockerE", "E",
+            KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::E))));
+        m_spellBlockerRMenu = blocker->Add(new MenuBool("spellBlockerR", "R",
+            KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::R))));
+
+        auto* collision = m_menu->AddSubMenu(new Menu("Collision", "Collision"));
+        m_minionCollisionMenu = collision->Add(new MenuBool("MinionCollision", "Minion collision", false));
+        m_heroCollisionMenu = collision->Add(new MenuBool("HeroCollision", "Hero collision", false));
+        m_yasuoCollisionMenu = collision->Add(new MenuBool("YasuoCollision", "Yasuo wall collision", true));
+        m_enableCollisionMenu = collision->Add(new MenuBool("EnableCollision", "Enabled", false));
+
+        auto* drawings = m_menu->AddSubMenu(new Menu("Drawings", "Drawings"));
+        m_enabledColorMenu = drawings->Add(new MenuColor("EnabledColor", "Enabled spell color", 1.0f, 1.0f, 1.0f, 1.0f));
+        m_disabledColorMenu = drawings->Add(new MenuColor("DisabledColor", "Disabled spell color", 1.0f, 0.0f, 0.0f, 1.0f));
+        m_missileColorMenu = drawings->Add(new MenuColor("MissileColor", "Missile color", 0.20f, 0.80f, 0.20f, 1.0f));
+        m_borderMenu = drawings->Add(new MenuSlider("Border", "Border Width", 2, 1, 10));
+        m_enableDrawingsMenu = drawings->Add(new MenuBool("EnableDrawings", "Enabled", true));
+        m_drawWarningMessageMenu = drawings->Add(new MenuBool(
+            "DrawWarningMsg", "Draw Right Click warning msg", true));
+
+        auto* misc = m_menu->AddSubMenu(new Menu("Misc", "Misc"));
+        m_blockSpellsMenu = misc->Add(new MenuList("BlockSpells", "Block spells while evading",
+            { "No", "Only dangerous", "Always" }, 1));
+        m_allowAaLevelMenu = misc->Add(new MenuSlider(
+            "AllowAaLevel", "Allow auto-attacks danger level", 4, 1, 5));
+        m_disableFowMenu = misc->Add(new MenuBool(
+            "DisableFow", "Disable fog of war dodging", false));
+        m_showEvadeStatusMenu = misc->Add(new MenuBool(
+            "ShowEvadeStatus", "Show Evade Status", false));
+        const auto player = SDK::ObjectManager::Player();
+        if (player.IsValid() && _stricmp(GetHeroCharacterName(player).c_str(), "Olaf") == 0) {
+            m_disableOlafRMenu = misc->Add(new MenuBool(
+                "DisableEvadeForOlafR", "Automatic disable Evade when Olaf's ulti is active!", true));
+        }
+
+        auto* benchmark = m_menu->AddSubMenu(new Menu("Benchmarking", "Evade Bench"));
+        m_devModeMenu = benchmark->Add(new MenuBool("devMode", "Enable Benchmark", false));
+        m_devSameTeamMenu = benchmark->Add(new MenuBool("TestOnAllies", "Test On Allies", false));
+        m_benchmarkLineKeyMenu = benchmark->Add(new MenuKeyBind(
+            "KeyStartL", "Spawn Line (drag LMB first)", 'Z', KeyBindType::Press, false));
+        m_benchmarkCircleKeyMenu = benchmark->Add(new MenuKeyBind(
+            "KeyStartC", "Spawn Circle (drag LMB first)", 'X', KeyBindType::Press, false));
+        m_benchmarkRunKeyMenu = benchmark->Add(new MenuKeyBind(
+            "RunPlanner", "Run Planner Benchmark", 'B', KeyBindType::Press, false));
+
+        m_enabledMenu = m_menu->Add(new MenuKeyBind(
+            "Enabled", "Enabled", 'K', KeyBindType::Toggle, false));
+        m_enabledMenu->ValueChanged = &KuroEvadePlugin::OnEnabledChangedStatic;
+        m_enabledMenu->ValueChangedUd = this;
+        m_enabledMenu->AddPermashow("Evade");
+        m_onlyDangerousMenu = m_menu->Add(new MenuKeyBind(
+            "OnlyDangerous", "Dodge only dangerous", VK_SPACE,
+            KeyBindType::Press, false));
+        m_onlyDangerousMenu->AddPermashow();
         m_menu->Attach();
     }
 
     void BuildSpellMenu() {
         m_spellOptions.clear();
         m_spellMenuEntries = 0;
-        m_spellsMenu = m_menu->AddSubMenu(new Menu("spells", "Enemy Spells"));
+        m_spellsMenu = m_menu->AddSubMenu(new Menu("Skillshots", "Skill Shots"));
 
-        auto* globalMenu = m_spellsMenu->AddSubMenu(new Menu("all_champions", "All Champions"));
-        for (const auto& data : KuroEvade::SpellDatabase::Spells()) {
-            if (_stricmp(data.sdk.ChampionName.c_str(), "AllChampions") == 0) {
-                AddSpellMenuEntry(globalMenu, data);
+        for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
+            if (_stricmp(data.Runtime.ChampionName.c_str(), "AllChampions") == 0) {
+                AddSpellMenuEntry(m_spellsMenu, data);
             }
         }
 
@@ -992,19 +938,16 @@ private:
                 continue;
             }
 
-            auto* championMenu = m_spellsMenu->AddSubMenu(
-                new Menu(KuroEvade::SpellMenuKey::Sanitize(championName).c_str(), championName.c_str()));
-
-            for (const auto& data : KuroEvade::SpellDatabase::Spells()) {
-                if (_stricmp(data.sdk.ChampionName.c_str(), championName.c_str()) == 0) {
-                    AddSpellMenuEntry(championMenu, data);
+            for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
+                if (_stricmp(data.Runtime.ChampionName.c_str(), championName.c_str()) == 0) {
+                    AddSpellMenuEntry(m_spellsMenu, data);
                 }
             }
         }
     }
 
-    void AddSpellMenuEntry(Menu* parent, const KuroEvade::Generated::SpellDataEntry& data) {
-        if (!parent || data.IsSpecialIgnore) {
+    void AddSpellMenuEntry(Menu* parent, const KuroEvade::Database::SpellData& data) {
+        if (!parent || data.DontProcess) {
             return;
         }
 
@@ -1013,40 +956,46 @@ private:
             return;
         }
 
-        const std::string display = std::string(KuroEvade::SpellMenuKey::SlotName(data.sdk.Slot)) +
-            " - " + KuroEvade::SpellMenuKey::DisplayName(data);
+        const std::string display = KuroEvade::SpellMenuKey::DisplayName(data) +
+            " [" + KuroEvade::SpellMenuKey::SlotName(data.Runtime.Slot) + "]";
         const std::string menuId = "spell_" + KuroEvade::SpellMenuKey::Sanitize(key);
         auto* spellMenu = parent->AddSubMenu(new Menu(menuId.c_str(), display.c_str()));
 
         SpellMenuOption option;
-        option.Dodge = spellMenu->Add(new MenuBool("dodge", "Dodge", !data.DisabledByDefault));
-        option.Draw = spellMenu->Add(new MenuBool("draw", "Draw", true));
+        option.Danger = spellMenu->Add(new MenuSlider(
+            "DangerLevel", "Danger level", std::clamp(data.DangerValue, 1, 5), 1, 5));
+        option.Dangerous = spellMenu->Add(new MenuBool(
+            "IsDangerous", "Is Dangerous", data.IsDangerous || data.DangerValue >= 3));
+        option.Draw = spellMenu->Add(new MenuBool("Draw", "Draw", true));
+        option.Enabled = spellMenu->Add(new MenuBool(
+            "Enabled", "Enabled", !data.DisabledByDefault));
         m_spellOptions.emplace(key, option);
         ++m_spellMenuEntries;
     }
 
-    KuroEvade::EvadeSpellConfig ResolveEvadeSpellConfig(const KuroEvade::EvadeSpellData& data) const {
+    KuroEvade::EvadeSpellConfig ResolveEvadeSpellConfig(const KuroEvade::Database::EvadeSpellData& data) const {
         KuroEvade::EvadeSpellConfig config;
         config.Enabled = data.IsEnabled;
         config.DangerLevel = data.DangerLevel;
-        config.Mode = data.IndexUseWhen;
 
-        const auto it = m_evadeSpellOptions.find(KuroEvade::EvadeSpell::MenuKey(data));
+        const auto it = m_evadeSpellOptions.find(KuroEvade::SourceEvadeSpell::MenuKey(data));
         if (it == m_evadeSpellOptions.end()) {
             return config;
         }
 
         const EvadeSpellMenuOption& option = it->second;
-        config.Enabled = !option.Use || option.Use->Value;
-        config.DangerLevel = option.Danger ? option.Danger->Index + 1 : config.DangerLevel;
-        config.Mode = option.Mode ? option.Mode->Index : config.Mode;
+        config.Enabled = !option.Enabled || option.Enabled->Value;
+        config.DangerLevel = option.Danger ? option.Danger->Value : config.DangerLevel;
+        config.WardJump = !option.WardJump || option.WardJump->Value;
         return config;
     }
 
     void BuildEvadeSpellMenu() {
         m_evadeSpellOptions.clear();
         m_evadeSpellMenuEntries = 0;
-        m_evadeSpellsMenu = m_menu->AddSubMenu(new Menu("evade_spells", "Evade Spells"));
+        m_evadeSpellsMenu = m_menu->AddSubMenu(new Menu("Evade spells", "Evade Spells"));
+        m_smoothEvadeSpellMenu = m_evadeSpellsMenu->Add(new MenuBool(
+            "SmoothEvadeSpell", "Use 'Smooth Evade Spell'", true));
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) {
@@ -1054,27 +1003,24 @@ private:
         }
 
         const std::string championName = GetHeroCharacterName(player);
-        auto* championMenu = m_evadeSpellsMenu->AddSubMenu(new Menu(
-            KuroEvade::SpellMenuKey::Sanitize("self_" + championName).c_str(),
-            championName.empty() ? "My Champion" : championName.c_str()));
-        auto* globalMenu = m_evadeSpellsMenu->AddSubMenu(new Menu("all_champions_evade", "All Champions"));
-
-        for (const auto* data : KuroEvade::EvadeSpellDatabase::ForChampion(championName.c_str(), false)) {
-            AddEvadeSpellMenuEntry(championMenu, *data);
-        }
-        for (const auto& data : KuroEvade::EvadeSpellDatabase::Spells()) {
-            if (_stricmp(data.ChampionName.c_str(), "AllChampions") == 0) {
-                AddEvadeSpellMenuEntry(globalMenu, data);
-            }
+        bool first = true;
+        for (const auto* data :
+             KuroEvade::Database::EvadeSpellDatabase::ForChampion(
+                 championName.c_str(), true)) {
+            AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data, first);
+            first = false;
         }
     }
 
-    void AddEvadeSpellMenuEntry(Menu* parent, const KuroEvade::EvadeSpellData& data) {
+    void AddEvadeSpellMenuEntry(
+            Menu* parent,
+            const KuroEvade::Database::EvadeSpellData& data,
+            bool addMovementControls = false) {
         if (!parent) {
             return;
         }
 
-        const std::string key = KuroEvade::EvadeSpell::MenuKey(data);
+        const std::string key = KuroEvade::SourceEvadeSpell::MenuKey(data);
         if (m_evadeSpellOptions.find(key) != m_evadeSpellOptions.end()) {
             return;
         }
@@ -1084,15 +1030,40 @@ private:
         auto* spellMenu = parent->AddSubMenu(new Menu(menuId.c_str(), display.c_str()));
 
         EvadeSpellMenuOption option;
-        option.Use = spellMenu->Add(new MenuBool("use", "Use Spell", data.IsEnabled));
-        option.Danger = spellMenu->Add(new MenuList("danger", "Danger Level",
-            { "Low", "Normal", "High", "Extreme" },
-            std::clamp(data.DangerLevel - 1, 0, 3)));
-        option.Mode = spellMenu->Add(new MenuList("mode", "Spell Mode",
-            { "Undodgeable", "Activation Time", "Always" },
-            std::clamp(data.IndexUseWhen, 0, 2)));
+        if (addMovementControls) {
+            m_improveMoveMenu = spellMenu->Add(new MenuBool(
+                "ImproveMove", "Improve Move", true));
+            m_useCurrentPathMenu = spellMenu->Add(new MenuBool(
+                "UseCurrentPath", "Use Current Path", true));
+            m_lowEvadeSmoothMenu = spellMenu->Add(new MenuBool(
+                "LowEvadeSmooth", "Delay Walking for Humanity", false));
+        }
+        option.Danger = spellMenu->Add(new MenuSlider(
+            "DangerLevel", "Danger level", std::clamp(data.DangerLevel, 1, 5), 1, 5));
+        if (std::find(data.ValidTargets.begin(), data.ValidTargets.end(),
+                      KuroEvade::SpellTargets::Targetables) != data.ValidTargets.end()) {
+            option.WardJump = spellMenu->Add(new MenuBool(
+                "WardJump", "Ward Jump", true));
+        }
+        option.Enabled = spellMenu->Add(new MenuBool(
+            "Enabled", "Enabled", data.IsEnabled));
         m_evadeSpellOptions.emplace(key, option);
         ++m_evadeSpellMenuEntries;
+    }
+
+    void BuildAllyShieldMenu() {
+        m_allyShieldOptions.clear();
+        m_allyShieldMenu = m_menu->AddSubMenu(new Menu("Ally shielding", "Shield"));
+        for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
+            if (!ally.IsValid() || ally.IsMe()) {
+                continue;
+            }
+            const std::string name = GetHeroCharacterName(ally);
+            const std::string id = "shield" + KuroEvade::SpellMenuKey::Sanitize(name) +
+                std::to_string(ally.NetworkId());
+            m_allyShieldOptions[ally.NetworkId()] = m_allyShieldMenu->Add(
+                new MenuBool(id.c_str(), ("Shield " + name).c_str(), true));
+        }
     }
 
     void RebuildSpellsMenu() {
@@ -1105,10 +1076,9 @@ private:
         m_spellOptions.clear();
         m_spellMenuEntries = 0;
 
-        auto* globalMenu = m_spellsMenu->AddSubMenu(new Menu("all_champions", "All Champions"));
-        for (const auto& data : KuroEvade::SpellDatabase::Spells()) {
-            if (_stricmp(data.sdk.ChampionName.c_str(), "AllChampions") == 0) {
-                AddSpellMenuEntry(globalMenu, data);
+        for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
+            if (_stricmp(data.Runtime.ChampionName.c_str(), "AllChampions") == 0) {
+                AddSpellMenuEntry(m_spellsMenu, data);
             }
         }
 
@@ -1128,12 +1098,9 @@ private:
                 continue;
             }
 
-            auto* championMenu = m_spellsMenu->AddSubMenu(
-                new Menu(KuroEvade::SpellMenuKey::Sanitize(championName).c_str(), championName.c_str()));
-
-            for (const auto& data : KuroEvade::SpellDatabase::Spells()) {
-                if (_stricmp(data.sdk.ChampionName.c_str(), championName.c_str()) == 0) {
-                    AddSpellMenuEntry(championMenu, data);
+            for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
+                if (_stricmp(data.Runtime.ChampionName.c_str(), championName.c_str()) == 0) {
+                    AddSpellMenuEntry(m_spellsMenu, data);
                 }
             }
         }
@@ -1148,6 +1115,12 @@ private:
 
         m_evadeSpellOptions.clear();
         m_evadeSpellMenuEntries = 0;
+        m_improveMoveMenu = nullptr;
+        m_useCurrentPathMenu = nullptr;
+        m_lowEvadeSmoothMenu = nullptr;
+
+        m_smoothEvadeSpellMenu = m_evadeSpellsMenu->Add(new MenuBool(
+            "SmoothEvadeSpell", "Use 'Smooth Evade Spell'", true));
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) {
@@ -1155,18 +1128,29 @@ private:
         }
 
         const std::string championName = GetHeroCharacterName(player);
-        auto* championMenu = m_evadeSpellsMenu->AddSubMenu(new Menu(
-            KuroEvade::SpellMenuKey::Sanitize("self_" + championName).c_str(),
-            championName.empty() ? "My Champion" : championName.c_str()));
-        auto* globalMenu = m_evadeSpellsMenu->AddSubMenu(new Menu("all_champions_evade", "All Champions"));
-
-        for (const auto* data : KuroEvade::EvadeSpellDatabase::ForChampion(championName.c_str(), false)) {
-            AddEvadeSpellMenuEntry(championMenu, *data);
+        bool first = true;
+        for (const auto* data :
+             KuroEvade::Database::EvadeSpellDatabase::ForChampion(
+                 championName.c_str(), true)) {
+            AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data, first);
+            first = false;
         }
-        for (const auto& data : KuroEvade::EvadeSpellDatabase::Spells()) {
-            if (_stricmp(data.ChampionName.c_str(), "AllChampions") == 0) {
-                AddEvadeSpellMenuEntry(globalMenu, data);
-            }
+    }
+
+    void RebuildAllyShieldMenu() {
+        if (!m_allyShieldMenu) return;
+        for (int i = 0; i < m_allyShieldMenu->Components.size(); ++i) {
+            delete m_allyShieldMenu->Components[i];
+        }
+        m_allyShieldMenu->Components.clear();
+        m_allyShieldOptions.clear();
+        for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
+            if (!ally.IsValid() || ally.IsMe()) continue;
+            const std::string name = GetHeroCharacterName(ally);
+            const std::string id = "shield" + KuroEvade::SpellMenuKey::Sanitize(name) +
+                std::to_string(ally.NetworkId());
+            m_allyShieldOptions[ally.NetworkId()] = m_allyShieldMenu->Add(
+                new MenuBool(id.c_str(), ("Shield " + name).c_str(), true));
         }
     }
 
@@ -1178,69 +1162,56 @@ private:
         MenuManager::Instance().Remove(m_menu);
         delete m_menu;
         m_menu = nullptr;
-        m_enabledMenu = nullptr;
-        m_dodgeKeyMenu = nullptr;
-        m_dodgeDangerousMenu = nullptr;
-        m_dodgeFowMenu = nullptr;
-        m_dodgeCircularMenu = nullptr;
-        m_dangerKeysEnabledMenu = nullptr;
-        m_dangerKeyMenu = nullptr;
-        m_dangerKey2Menu = nullptr;
-        m_comboOnlyEnabledMenu = nullptr;
-        m_comboKeyMenu = nullptr;
-        m_dontDodgeEnabledMenu = nullptr;
-        m_dontDodgeKeyMenu = nullptr;
-        m_drawSpellsMenu = nullptr;
-        m_useEvadeSpellsMenu = nullptr;
-        m_preferEvadeSpellsMenu = nullptr;
-        m_optimizationProfileMenu = nullptr;
-        m_evadeModeMenu = nullptr;
-        m_extremeEvadeMenu = nullptr;
-        m_kurokamiPosMenu = nullptr;
-        m_higherPrecisionMenu = nullptr;
-        m_calculateWindupMenu = nullptr;
-        m_checkCollisionMenu = nullptr;
-        m_clickRemoveMenu = nullptr;
-        m_preventTowerMenu = nullptr;
-        m_preventEnemyMenu = nullptr;
-        m_extraDelayMenu = nullptr;
-        m_extraDistMenu = nullptr;
-        m_extraSpellRadiusMenu = nullptr;
+        m_focusOnEvadeMenu = nullptr;
+        m_onlyEvadeWhileCanMenu = nullptr;
+        m_enhanceDetectMenu = nullptr;
+        m_recommendedConfigMenu = nullptr;
+        m_skillshotsExtraRadiusMenu = nullptr;
+        m_skillshotsExtraRangeMenu = nullptr;
         m_extraEvadeDistanceMenu = nullptr;
-        m_extraAvoidDistanceMenu = nullptr;
-        m_minComfortZoneMenu = nullptr;
-        m_reactionTimeMenu = nullptr;
-        m_spellDetectionTimeMenu = nullptr;
-        m_minHitTimeMenu = nullptr;
-        m_dodgeIntervalMenu = nullptr;
-        m_dodgeHpMenu = nullptr;
-        m_spellActivationMenu = nullptr;
-        m_fastActivationMenu = nullptr;
-        m_rejectMinDistanceMenu = nullptr;
-        m_spellColorMenu = nullptr;
-        m_fillSkillshotsMenu = nullptr;
-        m_drawIrrelevantMenu = nullptr;
-        m_drawEvadeRouteMenu = nullptr;
-        m_drawThreatLabelsMenu = nullptr;
-        m_irrelevantOpacityMenu = nullptr;
-        m_threatOpacityMenu = nullptr;
-        m_irrelevantColorMenu = nullptr;
-        m_pathThreatColorMenu = nullptr;
-        m_interventionColorMenu = nullptr;
-        m_routeColorMenu = nullptr;
-        m_clickOnlyOnceMenu = nullptr;
+        m_smoothEvadeSpellMenu = nullptr;
+        m_improveMoveMenu = nullptr;
+        m_useCurrentPathMenu = nullptr;
+        m_lowEvadeSmoothMenu = nullptr;
+        m_spellBlockerQMenu = nullptr;
+        m_spellBlockerWMenu = nullptr;
+        m_spellBlockerEMenu = nullptr;
+        m_spellBlockerRMenu = nullptr;
+        m_minionCollisionMenu = nullptr;
+        m_heroCollisionMenu = nullptr;
+        m_yasuoCollisionMenu = nullptr;
+        m_enableCollisionMenu = nullptr;
+        m_enabledColorMenu = nullptr;
+        m_disabledColorMenu = nullptr;
+        m_missileColorMenu = nullptr;
+        m_borderMenu = nullptr;
+        m_enableDrawingsMenu = nullptr;
+        m_drawWarningMessageMenu = nullptr;
+        m_blockSpellsMenu = nullptr;
+        m_allowAaLevelMenu = nullptr;
+        m_disableFowMenu = nullptr;
+        m_showEvadeStatusMenu = nullptr;
+        m_disableOlafRMenu = nullptr;
+        m_enabledMenu = nullptr;
+        m_onlyDangerousMenu = nullptr;
         m_devModeMenu = nullptr;
         m_devSameTeamMenu = nullptr;
-        m_devSimulateKeyMenu = nullptr;
+        m_benchmarkLineKeyMenu = nullptr;
+        m_benchmarkCircleKeyMenu = nullptr;
+        m_benchmarkRunKeyMenu = nullptr;
         m_spellsMenu = nullptr;
         m_evadeSpellsMenu = nullptr;
+        m_allyShieldMenu = nullptr;
         m_spellOptions.clear();
         m_spellMenuEntries = 0;
         m_evadeSpellOptions.clear();
         m_evadeSpellMenuEntries = 0;
+        m_allyShieldOptions.clear();
         m_spellVisuals.clear();
         m_lastVisualUpdateTick = 0;
         m_visualInterventionState = false;
+        m_currentDangerousThreat = false;
+        m_currentDangerLevel = 0;
     }
 };
 

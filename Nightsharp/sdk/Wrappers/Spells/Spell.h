@@ -790,7 +790,8 @@ private:
 
     bool TryReserveCastRequest() {
         const int now = Variables::TickCount();
-        if (CoreEvadeState::AreSpellCastsBlocked(now)) {
+        if (CoreEvadeState::AreSpellCastsBlocked(
+                now, static_cast<int>(Slot))) {
             return false;
         }
         if (LastCastAttemptT != 0 && now - LastCastAttemptT < kCastRequestThrottleMs) {
