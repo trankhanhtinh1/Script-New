@@ -822,6 +822,23 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
     }
 
+    if (NightSharpMenu::showMenu && ImGui::GetCurrentContext()) {
+        if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
+            return TRUE;
+        }
+        if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+            POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
+                ScreenToClient(hWnd, &point);
+            }
+            if (NightSharpMenu::IsPointInside(
+                    static_cast<float>(point.x),
+                    static_cast<float>(point.y))) {
+                return TRUE;
+            }
+        }
+    }
+
     SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
 
     // Block keybind activation while the chat box is open (typing must not
@@ -829,12 +846,6 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
     SDK::UI::g_KeybindInputBlocked = SDK::Game::IsChatOpen();
 
     SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
-
-    if (NightSharpMenu::showMenu &&
-        ImGui::GetCurrentContext() &&
-        ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
-        return TRUE;
-    }
 
     return callOriginal();
 }
@@ -1002,6 +1013,17 @@ void Overlay::Run() {
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.Fonts->AddFontDefault();
+    ImFontConfig ensoulFontConfig;
+    ensoulFontConfig.OversampleH = 3;
+    ensoulFontConfig.OversampleV = 2;
+    ensoulFontConfig.PixelSnapH = true;
+    ImFont* ensoulFont = io.Fonts->AddFontFromFileTTF(
+        "C:\\Windows\\Fonts\\tahoma.ttf",
+        NightSharpMenu::EnsoulSharpTheme::FontSize,
+        &ensoulFontConfig,
+        NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
+    NightSharpMenu::EnsoulSharpTheme::SetFont(
+        ensoulFont ? ensoulFont : io.Fonts->Fonts.back());
 
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);

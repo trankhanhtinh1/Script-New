@@ -430,9 +430,8 @@ namespace SDK { namespace UI {
         AMenuComponent* Parent  = nullptr;
         bool   Root             = false;
         bool   Visible          = true;
-        // Expanded state for nested functional sub-menus (sidebar-style rows).
-        // Defaults open to match former CollapsingHeader DefaultOpen behavior.
-        bool   Toggled          = true;
+        // EnsoulSharp menus start collapsed and open one sibling branch at a time.
+        bool   Toggled          = false;
 
         AMenuComponent() = default;
         AMenuComponent(const char* name, const char* displayName, const char* uniqueString = "")

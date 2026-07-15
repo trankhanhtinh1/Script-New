@@ -439,6 +439,22 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         return TRUE;
     }
 
+    // The EnsoulSharp renderer uses the foreground draw list instead of ImGui
+    // widgets, so WantCaptureMouse is not sufficient.  Consume pointer input
+    // over one of its actual panels to keep the same click-through behavior as
+    // the external overlay and prevent a menu click from reaching the game.
+    if (NightSharpMenu::showMenu && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+        POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
+            ScreenToClient(hWnd, &point);
+        }
+        if (NightSharpMenu::IsPointInside(
+                static_cast<float>(point.x),
+                static_cast<float>(point.y))) {
+            return TRUE;
+        }
+    }
+
     // Handle keyboard shortcuts
     if (msg == WM_KEYDOWN) {
         if (wParam == VK_F1) {
@@ -560,6 +576,17 @@ static bool InitImGui(IDXGISwapChain* swapChain) {
     menuFontConfig.PixelSnapH = true;
     menuFontConfig.RasterizerMultiply = 1.1f;
     io.Fonts->AddFontDefault(&menuFontConfig);
+    ImFontConfig ensoulFontConfig;
+    ensoulFontConfig.OversampleH = 3;
+    ensoulFontConfig.OversampleV = 2;
+    ensoulFontConfig.PixelSnapH = true;
+    ImFont* ensoulFont = io.Fonts->AddFontFromFileTTF(
+        "C:\\Windows\\Fonts\\tahoma.ttf",
+        NightSharpMenu::EnsoulSharpTheme::FontSize,
+        &ensoulFontConfig,
+        NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
+    NightSharpMenu::EnsoulSharpTheme::SetFont(
+        ensoulFont ? ensoulFont : io.Fonts->Fonts.back());
 
     g_pSwapChain = swapChain;
     HRESULT hr = g_pSwapChain->GetDevice(

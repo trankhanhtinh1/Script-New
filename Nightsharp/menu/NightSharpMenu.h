@@ -16,7 +16,9 @@
 #include "../FpsDropDebug.h"
 #include "MenuConfig.h"
 #include "ConfigStore.h"
+#include "EnsoulSharpMenuTheme.h"
 
+#include <cstdint>
 #include <cstdio>
 
 namespace NightSharpMenu {
@@ -72,6 +74,217 @@ namespace NightSharpMenu {
     inline ImU32 COL_TEXT = IM_COL32(255, 255, 255, 255);
     inline ImU32 COL_TEXT_DIM = IM_COL32(185, 185, 205, 255);
     inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 255);
+
+    // Core controls used by the new EnsoulSharp-style tree.  Plugin menus
+    // already attach themselves to MenuManager; these entries preserve the
+    // NightSharp settings and plugin manager that previously lived only in the
+    // old three-column renderer.
+    inline SDK::UI::Menu* ensoulCoreRoot = nullptr;
+    inline SDK::UI::MenuList* ensoulLanguage = nullptr;
+    inline SDK::UI::MenuBool* ensoulSkinChanger = nullptr;
+    inline SDK::UI::MenuSlider* ensoulSkinId = nullptr;
+    inline SDK::UI::MenuBool* ensoulZoomHack = nullptr;
+    inline SDK::UI::MenuSliderF* ensoulMaxZoom = nullptr;
+    inline SDK::UI::MenuBool* ensoulPermaShow = nullptr;
+    inline SDK::UI::MenuBool* ensoulBypassObs = nullptr;
+    inline SDK::UI::MenuBool* ensoulProfiler = nullptr;
+    inline SDK::UI::MenuBool* ensoulProfilerLog = nullptr;
+
+    struct PluginMenuBinding {
+        int registryIndex = -1;
+        SDK::UI::MenuBool* loaded = nullptr;
+        SDK::UI::MenuBool* alwaysLoad = nullptr;
+    };
+
+    inline PluginMenuBinding ensoulPluginBindings[PluginRegistry::MAX_PLUGINS] = {};
+    inline int ensoulPluginBindingCount = 0;
+
+    inline int CoreLanguageToListIndex() {
+        return Config::Language::index == 2 ? 1 : 0;
+    }
+
+    inline void OnCoreLanguageChanged(SDK::UI::MenuItem* sender, void*) {
+        auto* item = static_cast<SDK::UI::MenuList*>(sender);
+        // Chinese is intentionally not exposed: 0 = English, 1 = Vietnamese.
+        Config::Language::index = item->Index == 1 ? 2 : 0;
+    }
+
+    inline void OnCoreBoolChanged(SDK::UI::MenuItem* sender, void* userData) {
+        const bool value = static_cast<SDK::UI::MenuBool*>(sender)->Value;
+        switch (static_cast<int>(reinterpret_cast<intptr_t>(userData))) {
+        case 1: Config::SkinChanger::enabled = value; break;
+        case 2: Config::ZoomHack::enabled = value; break;
+        case 3: Config::PermaShow::enabled = value; break;
+        case 4: Config::StreamProtection::bypassObs = value; break;
+        case 5: NightSharpPerf::Enabled = value; break;
+        case 6: NightSharpPerf::LogEnabled = value; break;
+        default: break;
+        }
+    }
+
+    inline void OnCoreSkinIdChanged(SDK::UI::MenuItem* sender, void*) {
+        Config::SkinChanger::skinId =
+            static_cast<SDK::UI::MenuSlider*>(sender)->Value;
+    }
+
+    inline void OnCoreZoomChanged(SDK::UI::MenuItem* sender, void*) {
+        Config::ZoomHack::maxZoom =
+            static_cast<SDK::UI::MenuSliderF*>(sender)->Value;
+    }
+
+    inline int PluginIndexFromUserData(void* userData) {
+        return static_cast<int>(reinterpret_cast<intptr_t>(userData)) - 1;
+    }
+
+    inline void OnPluginLoadedChanged(SDK::UI::MenuItem* sender, void* userData) {
+        auto* item = static_cast<SDK::UI::MenuBool*>(sender);
+        const int index = PluginIndexFromUserData(userData);
+        if (index < 0 || index >= PluginRegistry::PluginCount) {
+            return;
+        }
+        if (item->Value) {
+            if (PluginRegistry::CanPluginLoad(index)) {
+                PluginRegistry::LoadPlugin(index);
+            }
+        } else {
+            PluginRegistry::UnloadPlugin(index);
+        }
+        // A guarded runtime load can fail; always reflect the registry result.
+        item->Value = PluginRegistry::Plugins[index].Loaded;
+    }
+
+    inline void OnPluginAlwaysLoadChanged(SDK::UI::MenuItem* sender, void* userData) {
+        const int index = PluginIndexFromUserData(userData);
+        if (index < 0 || index >= PluginRegistry::PluginCount) {
+            return;
+        }
+        PluginRegistry::SetAlwaysLoad(
+            index,
+            static_cast<SDK::UI::MenuBool*>(sender)->Value);
+    }
+
+    inline void BindCoreBool(SDK::UI::MenuBool* item, int settingId) {
+        if (!item) return;
+        item->ValueChanged = &OnCoreBoolChanged;
+        item->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(settingId));
+    }
+
+    inline void EnsureEnsoulCoreMenu() {
+        if (ensoulCoreRoot) {
+            return;
+        }
+
+        ensoulCoreRoot = new SDK::UI::Menu("nightsharp.core", "NightSharp", true);
+
+        auto* language = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("Language", "Language"));
+        ensoulLanguage = language->Add(new SDK::UI::MenuList(
+            "SelectedLanguage",
+            "Select Language",
+            { "English", "Vietnamese" },
+            CoreLanguageToListIndex()));
+        ensoulLanguage->ValueChanged = &OnCoreLanguageChanged;
+
+        auto* settings = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("Menu", "Menu Settings"));
+        ensoulSkinChanger = settings->Add(new SDK::UI::MenuBool(
+            "SkinChanger", "Skin Changer", Config::SkinChanger::enabled));
+        BindCoreBool(ensoulSkinChanger, 1);
+        ensoulSkinId = settings->Add(new SDK::UI::MenuSlider(
+            "SkinId", "Skin ID", Config::SkinChanger::skinId, 0, 100));
+        ensoulSkinId->ValueChanged = &OnCoreSkinIdChanged;
+        ensoulZoomHack = settings->Add(new SDK::UI::MenuBool(
+            "ZoomHack", "Zoom Hack", Config::ZoomHack::enabled));
+        BindCoreBool(ensoulZoomHack, 2);
+        ensoulMaxZoom = settings->Add(new SDK::UI::MenuSliderF(
+            "MaxZoom", "Maximum Zoom", Config::ZoomHack::maxZoom, 1000.0f, 10000.0f));
+        ensoulMaxZoom->ValueChanged = &OnCoreZoomChanged;
+        ensoulPermaShow = settings->Add(new SDK::UI::MenuBool(
+            "PermaShow", "PermaShow", Config::PermaShow::enabled));
+        BindCoreBool(ensoulPermaShow, 3);
+        ensoulBypassObs = settings->Add(new SDK::UI::MenuBool(
+            "BypassObs", "Bypass OBS", Config::StreamProtection::bypassObs));
+        BindCoreBool(ensoulBypassObs, 4);
+
+        auto* debug = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("DebugInfo", "Debug Info"));
+        debug->Add(new SDK::UI::MenuSeparator("Build", "NightSharp " __DATE__ " " __TIME__));
+        debug->Add(new SDK::UI::MenuSeparator("Theme", "EnsoulSharp default DX9 theme"));
+        ensoulProfiler = debug->Add(new SDK::UI::MenuBool(
+            "Profiler", "Performance Profiler", NightSharpPerf::Enabled));
+        BindCoreBool(ensoulProfiler, 5);
+        ensoulProfilerLog = debug->Add(new SDK::UI::MenuBool(
+            "ProfilerLog", "Write profiler log", NightSharpPerf::LogEnabled));
+        BindCoreBool(ensoulProfilerLog, 6);
+
+        auto* plugins = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("Plugins", "Plugins"));
+        ensoulPluginBindingCount = 0;
+        for (int i = 0;
+             i < PluginRegistry::PluginCount &&
+             ensoulPluginBindingCount < PluginRegistry::MAX_PLUGINS;
+             ++i) {
+            auto& plugin = PluginRegistry::Plugins[i];
+            if (plugin.Kind == PluginRegistry::PluginKind::SDK ||
+                !plugin.Name || !plugin.InternalId) {
+                continue;
+            }
+            if (plugin.Category == PluginRegistry::PluginCategory::Champion &&
+                !PluginRegistry::CanPluginLoad(i)) {
+                continue;
+            }
+
+            auto* pluginMenu = plugins->AddSubMenu(
+                new SDK::UI::Menu(plugin.InternalId, plugin.Name));
+            auto* loaded = pluginMenu->Add(new SDK::UI::MenuBool(
+                "Loaded", "Loaded", plugin.Loaded));
+            auto* alwaysLoad = pluginMenu->Add(new SDK::UI::MenuBool(
+                "AlwaysLoad", "Always Load", plugin.AlwaysLoad));
+            const void* encodedIndex =
+                reinterpret_cast<void*>(static_cast<intptr_t>(i + 1));
+            loaded->ValueChanged = &OnPluginLoadedChanged;
+            loaded->ValueChangedUd = const_cast<void*>(encodedIndex);
+            alwaysLoad->ValueChanged = &OnPluginAlwaysLoadChanged;
+            alwaysLoad->ValueChangedUd = const_cast<void*>(encodedIndex);
+            ensoulPluginBindings[ensoulPluginBindingCount++] = {
+                i, loaded, alwaysLoad
+            };
+        }
+
+        ensoulCoreRoot->Attach();
+
+        // Keep NightSharp first, matching the previous menu's Core-first order.
+        auto& menus = SDK::UI::MenuManager::Instance().Menus;
+        if (menus.size() > 1 && menus[menus.size() - 1] == ensoulCoreRoot) {
+            for (int i = menus.size() - 1; i > 0; --i) {
+                menus[i] = menus[i - 1];
+            }
+            menus[0] = ensoulCoreRoot;
+        }
+    }
+
+    inline void SyncEnsoulCoreMenu() {
+        if (!ensoulCoreRoot) return;
+        ensoulLanguage->Index = CoreLanguageToListIndex();
+        ensoulSkinChanger->Value = Config::SkinChanger::enabled;
+        ensoulSkinId->Value = Config::SkinChanger::skinId;
+        ensoulZoomHack->Value = Config::ZoomHack::enabled;
+        ensoulMaxZoom->Value = Config::ZoomHack::maxZoom;
+        ensoulPermaShow->Value = Config::PermaShow::enabled;
+        ensoulBypassObs->Value = Config::StreamProtection::bypassObs;
+        ensoulProfiler->Value = NightSharpPerf::Enabled;
+        ensoulProfilerLog->Value = NightSharpPerf::LogEnabled;
+        for (int i = 0; i < ensoulPluginBindingCount; ++i) {
+            auto& binding = ensoulPluginBindings[i];
+            if (binding.registryIndex < 0 ||
+                binding.registryIndex >= PluginRegistry::PluginCount) {
+                continue;
+            }
+            const auto& plugin = PluginRegistry::Plugins[binding.registryIndex];
+            binding.loaded->Value = plugin.Loaded;
+            binding.alwaysLoad->Value = plugin.AlwaysLoad;
+        }
+    }
 
     struct SidebarEntry {
         const char* label;
@@ -164,10 +377,7 @@ namespace NightSharpMenu {
             return true;
         }
 
-        const bool insideMenu = x >= menuPosX &&
-            x <= menuBoundsRight &&
-            y >= menuPosY &&
-            y <= menuBoundsBottom;
+        const bool insideMenu = EnsoulSharpTheme::ContainsPoint(x, y);
 
         const bool insidePermaShow =
             Config::PermaShow::enabled &&
@@ -1173,6 +1383,8 @@ namespace NightSharpMenu {
         // Persist any pending menu/core changes (debounced). Runs even while the
         // menu is hidden so a change made just before hiding still flushes.
         ConfigStore::Tick();
+        EnsureEnsoulCoreMenu();
+        SyncEnsoulCoreMenu();
 
         DrawPermaShowOverlay();
 
@@ -1181,6 +1393,15 @@ namespace NightSharpMenu {
             menuBoundsBottom = menuPosY;
             return;
         }
+
+        // The SDK menu is rendered by the default EnsoulSharp theme: a root
+        // column at (30, 30), recursive child columns, and 30px component rows.
+        EnsoulSharpTheme::Render();
+        menuPosX = EnsoulSharpTheme::PositionX;
+        menuPosY = EnsoulSharpTheme::PositionY;
+        menuBoundsRight = EnsoulSharpTheme::BoundsRight;
+        menuBoundsBottom = EnsoulSharpTheme::BoundsBottom;
+        return;
 
         constexpr int MAX_PRIMARY = 64;
         const char* primaryLabels[MAX_PRIMARY] = {};
