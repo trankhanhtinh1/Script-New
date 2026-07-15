@@ -241,6 +241,9 @@
       <Filter>..\NightSharpCrashProtocol</Filter>
     </ClCompile>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="imgui\imgui.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
     <ClCompile Include="imgui\imgui_draw.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
@@ -254,9 +257,6 @@
       <Filter>imgui</Filter>
     </ClCompile>
     <ClCompile Include="imgui\imgui_widgets.cpp">
-      <Filter>imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="imgui\imgui.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
     <ClCompile Include="overlay\D3D11Hook.cpp">
@@ -407,6 +407,9 @@
     <ClInclude Include="imgui\imconfig.h">
       <Filter>imgui</Filter>
     </ClInclude>
+    <ClInclude Include="imgui\imgui.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
     <ClInclude Include="imgui\imgui_impl_dx11.h">
       <Filter>imgui</Filter>
     </ClInclude>
@@ -417,9 +420,6 @@
       <Filter>imgui</Filter>
     </ClInclude>
     <ClInclude Include="imgui\imgui_internal.h">
-      <Filter>imgui</Filter>
-    </ClInclude>
-    <ClInclude Include="imgui\imgui.h">
       <Filter>imgui</Filter>
     </ClInclude>
     <ClInclude Include="imgui\imstb_rectpack.h">
@@ -438,6 +438,9 @@
       <Filter>libs\nlohmann</Filter>
     </ClInclude>
     <ClInclude Include="menu\ConfigStore.h">
+      <Filter>menu</Filter>
+    </ClInclude>
+    <ClInclude Include="menu\EnsoulSharpMenuTheme.h">
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="menu\MenuConfig.h">
@@ -520,10 +523,22 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Lucian.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Senna.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Syndra.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\TwistedFate.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Viktor.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Yasuo\Yasuo.h">
@@ -859,6 +874,9 @@
     <ClInclude Include="Plugins\KuroEvade\Native\Database\EvadeSpellDatabase.h">
       <Filter>Plugins\KuroEvade\Native\Database</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\Database\ProjectileWallDatabase.h">
+      <Filter>Plugins\KuroEvade\Native\Database</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\Database\SpellBlocker.h">
       <Filter>Plugins\KuroEvade\Native\Database</Filter>
     </ClInclude>
@@ -955,7 +973,13 @@
     <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Nami.h">
       <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Ornn.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Pyke.h">
+      <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Samira.h">
       <Filter>Plugins\KuroEvade\Native\SpecialSpells</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\Native\SpecialSpells\Seraphine.h">
