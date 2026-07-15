@@ -30,6 +30,24 @@ struct Intersection {
     Vec2 Point;
 };
 
+struct PolygonProjection {
+    bool Valid = false;
+    bool Inside = false;
+    Vec2 Point;
+    float Distance = std::numeric_limits<float>::max();
+};
+
+// A small sampled signed-distance field for the navigation mesh. Clearance is
+// the nearest walkable distance before a wall/building is reached and
+// EscapeDirection is the local negative gradient (away from blocked cells).
+// This is deliberately sampled in a handful of rays instead of performing a
+// dense polar search for every evade candidate.
+struct NavigationProbe {
+    float Clearance = 0.0f;
+    Vec2 EscapeDirection;
+    int BlockedRays = 0;
+};
+
 inline Vec2 Perpendicular(const Vec2& value) {
     return Vec2(-value.y, value.x);
 }
@@ -156,6 +174,28 @@ inline float DistanceToPolygon(const Vec2& point, const std::vector<Vec2>& polyg
     return best;
 }
 
+inline PolygonProjection ClosestPointOnPolygon(
+        const Vec2& point,
+        const std::vector<Vec2>& polygon) {
+    PolygonProjection result;
+    if (polygon.size() < 2) {
+        return result;
+    }
+
+    result.Inside = PointInPolygon(point, polygon);
+    for (std::size_t i = 0; i < polygon.size(); ++i) {
+        const Vec2 projected = ProjectOn(
+            point, polygon[i], polygon[(i + 1) % polygon.size()]).SegmentPoint;
+        const float distance = point.Distance(projected);
+        if (distance < result.Distance) {
+            result.Valid = true;
+            result.Point = projected;
+            result.Distance = distance;
+        }
+    }
+    return result;
+}
+
 inline bool SegmentIntersectsPolygon(const Vec2& start,
                                      const Vec2& end,
                                      const std::vector<Vec2>& polygon,
@@ -200,6 +240,35 @@ inline std::vector<Vec2> RectanglePoints(const Vec2& start,
     }
     const Vec2 side = Perpendicular(direction) * halfWidth;
     return { start + side, end + side, end - side, start - side };
+}
+
+inline std::vector<Vec2> CapsulePoints(const Vec2& start,
+                                       const Vec2& end,
+                                       float radius,
+                                       int segments = 18) {
+    radius = std::max(0.0f, radius);
+    const Vec2 direction = (end - start).Normalized();
+    if (direction.IsZero() || start.DistanceSqr(end) <= 0.01f) {
+        return CirclePoints(start, radius, std::max(8, segments));
+    }
+
+    const int half = std::max(3, segments / 2);
+    const float heading = std::atan2(direction.y, direction.x);
+    std::vector<Vec2> result;
+    result.reserve(static_cast<std::size_t>((half + 1) * 2));
+    for (int index = 0; index <= half; ++index) {
+        const float angle = heading + Pi * 0.5f +
+            Pi * static_cast<float>(index) / static_cast<float>(half);
+        result.emplace_back(start.x + std::cos(angle) * radius,
+                            start.y + std::sin(angle) * radius);
+    }
+    for (int index = 0; index <= half; ++index) {
+        const float angle = heading - Pi * 0.5f +
+            Pi * static_cast<float>(index) / static_cast<float>(half);
+        result.emplace_back(end.x + std::cos(angle) * radius,
+                            end.y + std::sin(angle) * radius);
+    }
+    return result;
 }
 
 inline std::vector<Vec2> SectorPoints(const Vec2& center,
@@ -282,6 +351,122 @@ inline bool SegmentIsNavigable(const Vec2& start,
         }
     }
     return true;
+}
+
+// Finds the first map-wall/building contact on a route and returns the moving
+// object's centre at contact. The forward semicircle probes the full collision
+// radius instead of only the centre line, while omitting the rear half avoids
+// a false impact when a projectile is launched away from a wall behind it.
+// Binary refinement keeps the returned contact stable.
+inline bool FirstTerrainCollision(const Vec2& start,
+                                  const Vec2& end,
+                                  float height,
+                                  float clearance,
+                                  Vec2& collisionPoint,
+                                  float step = 18.0f) {
+    collisionPoint = {};
+    const Vec2 direction = (end - start).Normalized();
+    const float length = start.Distance(end);
+    if (direction.IsZero() || length <= 1.0f) {
+        return false;
+    }
+
+    step = std::clamp(step, 5.0f, 60.0f);
+    clearance = std::max(0.0f, clearance);
+    const auto footprintIsNavigable = [&](float distance) {
+        const Vec2 center = start + direction *
+            std::clamp(distance, 0.0f, length);
+        if (!IsNavigable(center, height)) {
+            return false;
+        }
+        if (clearance <= 1.0f) {
+            return true;
+        }
+        for (int ray = -2; ray <= 2; ++ray) {
+            const float angle = static_cast<float>(ray) * Pi * 0.25f;
+            if (!IsNavigable(center + Rotate(direction, angle) * clearance,
+                             height)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    float previousDistance = 0.0f;
+    for (float distance = step; distance <= length + step; distance += step) {
+        const float sampledDistance = std::min(length, distance);
+        if (footprintIsNavigable(sampledDistance)) {
+            previousDistance = sampledDistance;
+            if (sampledDistance >= length) {
+                break;
+            }
+            continue;
+        }
+
+        float low = previousDistance;
+        float high = sampledDistance;
+        for (int iteration = 0; iteration < 7; ++iteration) {
+            const float middle = (low + high) * 0.5f;
+            if (footprintIsNavigable(middle)) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        collisionPoint = start + direction *
+            std::clamp(high, 0.0f, length);
+        return true;
+    }
+    return false;
+}
+
+inline NavigationProbe ProbeNavigation(const Vec2& point,
+                                        float height,
+                                        float maxDistance = 160.0f,
+                                        int rayCount = 8,
+                                        int radialSteps = 4) {
+    NavigationProbe result;
+    maxDistance = std::max(20.0f, maxDistance);
+    rayCount = std::clamp(rayCount, 4, 16);
+    radialSteps = std::clamp(radialSteps, 2, 6);
+    result.Clearance = maxDistance;
+
+    if (!IsNavigable(point, height)) {
+        result.Clearance = 0.0f;
+    }
+
+    Vec2 escape;
+    for (int ray = 0; ray < rayCount; ++ray) {
+        const float angle = 2.0f * Pi * static_cast<float>(ray) /
+            static_cast<float>(rayCount);
+        const Vec2 direction(std::cos(angle), std::sin(angle));
+        float openDistance = 0.0f;
+        bool blocked = false;
+
+        for (int step = 1; step <= radialSteps; ++step) {
+            const float distance = maxDistance * static_cast<float>(step) /
+                static_cast<float>(radialSteps);
+            if (IsNavigable(point + direction * distance, height)) {
+                openDistance = distance;
+                continue;
+            }
+
+            blocked = true;
+            ++result.BlockedRays;
+            result.Clearance = std::min(result.Clearance, openDistance);
+            const float proximity = 1.0f -
+                std::clamp(openDistance / maxDistance, 0.0f, 1.0f);
+            // A blocked sample in +d contributes a derivative towards -d.
+            escape = escape - direction * (proximity * proximity);
+            break;
+        }
+
+        if (!blocked) {
+            result.Clearance = std::min(result.Clearance, maxDistance);
+        }
+    }
+
+    result.EscapeDirection = escape.Normalized();
+    return result;
 }
 
 } // namespace Plugins::KuroEvade::SourceGeometry

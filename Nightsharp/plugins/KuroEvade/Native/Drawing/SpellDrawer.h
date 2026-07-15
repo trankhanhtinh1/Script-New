@@ -71,7 +71,11 @@ public:
                 !style.DrawIrrelevant) {
                 continue;
             }
-            DrawSkillshot(draw, *skillshot->Native, info, style);
+            if (!skillshot->ProjectileTerminated &&
+                !skillshot->ProjectileWallSuppressesEndpointHazard()) {
+                DrawSkillshot(draw, *skillshot->Native, info, style);
+            }
+            DrawEndExplosion(draw, *skillshot, info, style);
         }
     }
 
@@ -250,6 +254,74 @@ private:
 
         if (style.DrawLabels && !irrelevant && allVisible) {
             DrawLabel(draw, skillshot, info, screens, count, base);
+        }
+    }
+
+    static void DrawEndExplosion(ImDrawList* draw,
+                                 const SourceSkillshot& skillshot,
+                                 const SpellVisualInfo& info,
+                                 const SpellDrawStyle& style) {
+        if (!draw || !skillshot.HasEndExplosionArea()) {
+            return;
+        }
+        const std::vector<std::vector<Vec2>> polygons =
+            skillshot.EndExplosionPolygons();
+        if (polygons.empty()) {
+            return;
+        }
+
+        const auto player = SDK::ObjectManager::Player();
+        const float height = player.IsValid() ? player.ServerPosition().y : 0.0f;
+        const bool irrelevant = info.State == SpellVisualState::Irrelevant;
+        const ImU32 base = BaseColor(info.State, style);
+        const int fillOpacity = irrelevant
+            ? style.IrrelevantOpacity
+            : style.ThreatOpacity;
+        const int fillAlpha = std::clamp(
+            static_cast<int>(255.0f * static_cast<float>(fillOpacity) / 100.0f),
+            0, 255);
+        const int outlineAlpha = irrelevant
+            ? std::max(24, fillAlpha * 2)
+            : (info.State == SpellVisualState::PathThreat ? 215 : 250);
+        const float thickness = std::max(
+            irrelevant ? 1.0f : 2.8f,
+            static_cast<float>(style.BorderWidth));
+
+        for (const std::vector<Vec2>& points : polygons) {
+            if (points.size() < 3 || points.size() > kMaxPoints) {
+                continue;
+            }
+            std::array<ImVec2, kMaxPoints> screens = {};
+            std::array<bool, kMaxPoints> visible = {};
+            const int count = static_cast<int>(points.size());
+            for (int i = 0; i < count; ++i) {
+                Vec2 screen;
+                visible[static_cast<std::size_t>(i)] =
+                    SDK::Drawing::WorldToScreen(
+                        Vec3::From2D(
+                            points[static_cast<std::size_t>(i)], height),
+                        screen);
+                if (visible[static_cast<std::size_t>(i)]) {
+                    screens[static_cast<std::size_t>(i)] =
+                        ImVec2(screen.x, screen.y);
+                }
+            }
+
+            const bool allVisible = std::all_of(
+                visible.begin(), visible.begin() + count,
+                [](bool value) { return value; });
+            if (style.Fill && allVisible && fillAlpha > 0) {
+                draw->AddConvexPolyFilled(
+                    screens.data(), count, WithAlpha(base, fillAlpha));
+            }
+            if (allVisible) {
+                draw->AddPolyline(screens.data(), count,
+                                  WithAlpha(base, outlineAlpha),
+                                  ImDrawFlags_Closed, thickness);
+            } else {
+                DrawPartialOutline(draw, screens, visible, count,
+                                   WithAlpha(base, outlineAlpha), thickness);
+            }
         }
     }
 };

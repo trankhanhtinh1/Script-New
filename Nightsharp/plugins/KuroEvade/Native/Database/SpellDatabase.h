@@ -209,16 +209,20 @@ public:
         {
             SpellData spell;
             spell.CharacterName = "Alistar";
-            spell.DisabledByDefault = true;
             spell.DangerValue = 3;
             spell.DisplayName = "Pulverize";
-            spell.Radius = 365.0f;
-            spell.Range = 365.0f;
-            spell.Delay = 0;
+            spell.Radius = 375.0f;
+            spell.Range = 375.0f;
+            spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "Pulverize";
             spell.Type = SkillShotType::SkillshotCircle;
-            spell.CrowdControl = CrowdControlType::KnockUp; // Hất tung tại chỗ cực nhanh
+            spell.CrowdControl = CrowdControlType::KnockUp;
+            spell.IsDangerous = true;
+            // The impact follows Alistar through the cast windup, then locks
+            // naturally when this short-lived skillshot expires.
+            spell.FollowCaster = true;
+            spell.UseEndPosition = true;
             Entries.push_back(spell);
         }
         // ===
@@ -329,16 +333,23 @@ public:
             SpellData spell;
             spell.CharacterName = "Aphelios";
             spell.DangerValue = 4;
-            spell.MissileSpellName = "ApheliosRMissile";
+            spell.MissileSpellName = "ApheliosRMis";
             spell.DisplayName = "Moonlight Vigil";
-            spell.MissileSpeed = 2000.0f;
+            spell.MissileSpeed = 2050.0f;
             spell.Radius = 125.0f;
             spell.Range = 1300.0f;
-            spell.Delay = 600;
+            spell.Delay = 500;
             spell.Slot = SpellSlot::R;
             spell.SpellName = "ApheliosR";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow; // Chiêu cuối có thể gây chậm hoặc trói tùy loại súng (ưu tiên đặt Slow cơ bản)
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 300.0f;
             Entries.push_back(spell);
         }
         // ===
@@ -358,6 +369,14 @@ public:
             spell.SpellName = "EnchantedCrystalArrow";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Stun; // Choáng Đại Băng Tiễn cực kỳ quan trọng đối với Evade
+            // The arrow stops on the first champion, but its shatter damage
+            // is centered on that champion and reaches surrounding units.
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 400.0f;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.EndExplosionAtUnitCenter = true;
             Entries.push_back(spell);
         }
         // ===
@@ -410,13 +429,23 @@ public:
             spell.DisplayName = "Cosmic Binding";
             spell.MissileSpeed = 1500.0f;
             spell.Radius = 60.0f;
-            spell.Range = 950.0f;
+            spell.Range = 850.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "BardQ";
             spell.Type = SkillShotType::SkillshotLine;
-            spell.CrowdControl = CrowdControlType::Slow; // Làm chậm cơ bản, trúng tường/mục tiêu thứ 2 thành Snare
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CrowdControl = CrowdControlType::Slow;
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::Terrain,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.CollisionTargetLimit = 2;
+            spell.CollisionInitialRange = 850.0f;
+            spell.CollisionContinuationDistance = 300.0f;
+            spell.CollisionContinuationRadius = 60.0f;
+            spell.CollisionContinuationStopsOnSecondTarget = true;
+            spell.CollisionContinuationStopsOnTerrain = true;
+            spell.FixedRange = true;
             Entries.push_back(spell);
         }
         {
@@ -523,7 +552,8 @@ public:
             spell.SpellName = "BraumQ";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions };
             Entries.push_back(spell);
         }
         {
@@ -757,10 +787,32 @@ public:
             spell.Delay = 175;
             spell.Slot = SpellSlot::R;
             spell.SpellName = "MissileBarrageMissile";
-            spell.ExtraMissileNames = { "MissileBarrageMissile2" }; // Tên Tên lửa cực đại
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::None;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 150.0f;
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Corki";
+            spell.DangerValue = 3;
+            spell.MissileSpellName = "MissileBarrageMissile2";
+            spell.DisplayName = "Missile Barrage - The Big One (R)";
+            spell.MissileSpeed = 2000.0f;
+            spell.Radius = 40.0f;
+            spell.Range = 1500.0f;
+            spell.Delay = 175;
+            spell.Slot = SpellSlot::R;
+            spell.SpellName = "MissileBarrageMissile2";
+            spell.Type = SkillShotType::SkillshotLine;
+            spell.CrowdControl = CrowdControlType::None;
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 300.0f;
             Entries.push_back(spell);
         }
         // ===
@@ -1052,17 +1104,30 @@ public:
             SpellData spell;
             spell.CharacterName = "Fizz";
             spell.DangerValue = 4;
-            spell.MissileSpellName = "FizzMarinerDoomMissile";
+            spell.MissileSpellName = "FizzRMissile";
             spell.DisplayName = "Chum the Waters (R)";
             spell.MissileSpeed = 1300.0f;
-            spell.Radius = 120.0f; // Bán kính tăng dần theo độ xa bay được
+            spell.Radius = 80.0f;
             spell.Range = 1300.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::R;
             spell.SpellName = "FizzR";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::KnockUp; // Thả cá gây hất tung diện rộng tại điểm cuối
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions };
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 200.0f;
+            spell.EndExplosionDelay = 2000;
+            spell.EndExplosionAtUnitCenter = true;
+            spell.EndExplosionFollowsUnit = true;
+            spell.EndExplosionMediumTravelDistance = 455.0f;
+            spell.EndExplosionFarTravelDistance = 910.0f;
+            spell.EndExplosionRadiusMedium = 325.0f;
+            spell.EndExplosionRadiusFar = 450.0f;
+            spell.ExtraEndTime = 150;
             Entries.push_back(spell);
         }
         // ===
@@ -1343,15 +1408,17 @@ public:
             spell.DangerValue = 2;
             spell.MissileSpellName = "HweiQQMissile";
             spell.DisplayName = "Subject: Disaster - Devastating Fire (QQ)";
-            spell.MissileSpeed = 1600.0f;
-            spell.Radius = 80.0f;
-            spell.Range = 1050.0f;
+            spell.MissileSpeed = 2000.0f;
+            spell.Radius = 50.0f;
+            spell.Range = 800.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "HweiQQ";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::None;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 200.0f;
             Entries.push_back(spell);
         }
         {
@@ -1406,16 +1473,27 @@ public:
             spell.CharacterName = "Hwei";
             spell.DangerValue = 4;
             spell.MissileSpellName = "HweiRMissile";
+            spell.ExtraMissileNames = { "HweiR", "Hwei_R_Mis" };
             spell.DisplayName = "Spiraling Despair (R)";
-            spell.MissileSpeed = 1600.0f;
+            spell.MissileSpeed = 1400.0f;
             spell.Radius = 90.0f;
-            spell.Range = 1300.0f;
-            spell.Delay = 500;
+            spell.Range = 1340.0f;
+            spell.Delay = 250;
             spell.Slot = SpellSlot::R;
             spell.SpellName = "HweiR";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow; // Dính vòng xoáy tuyệt vọng tăng tiến làm chậm rồi nổ tung
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions };
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.EndExplosionAtUnitCenter = true;
+            spell.EndExplosionFollowsUnit = true;
+            spell.EndExplosionDetonatesOnUnitDeath = true;
+            spell.EndExplosionDelay = 3000;
+            spell.SecondaryRadius = 500.0f;
             Entries.push_back(spell);
         }
         // ===
@@ -1568,7 +1646,12 @@ public:
             spell.SpellName = "JayceShockBlast";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::None;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 175.0f;
+            spell.DetectionGroup = "JayceShockBlast";
             Entries.push_back(spell);
         }
         {
@@ -1578,14 +1661,19 @@ public:
             spell.MissileSpellName = "JayceShockBlastWallMis";
             spell.DisplayName = "Shock Blast (Q Gia Tốc Cổng E)";
             spell.MissileSpeed = 2350.0f; // Tốc độ tăng vượt bậc
-            spell.Radius = 100.0f; // Bán kính vụ nổ lan rộng hơn
+            spell.Radius = 70.0f;
             spell.Range = 1600.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "JayceShockBlastCharged";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::None;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 250.0f;
+            spell.DetectionGroup = "JayceShockBlast";
             Entries.push_back(spell);
         }
         // ===
@@ -1605,6 +1693,10 @@ public:
             spell.SpellName = "JhinW";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Snare; // Trói chân mục tiêu bị đánh dấu
+            // Deadly Flourish damages minions along the line but only an
+            // enemy champion terminates it. Minions are deliberately absent.
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyYasuoWall };
             Entries.push_back(spell);
         }
         {
@@ -1659,6 +1751,10 @@ public:
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::None;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.EndExplosionAtUnitCenter = true;
+            spell.SecondaryRadius = 400.0f;
             Entries.push_back(spell);
         }
         // ===
@@ -1703,6 +1799,9 @@ public:
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 280.0f;
             Entries.push_back(spell);
         }
         {
@@ -1720,6 +1819,8 @@ public:
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow; // Tạo thêm vùng nổ chậm làm chậm sâu hơn
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 280.0f;
             Entries.push_back(spell);
         }
         // ===
@@ -1763,17 +1864,31 @@ public:
             SpellData spell;
             spell.CharacterName = "Kayle";
             spell.DangerValue = 1;
-            spell.MissileSpellName = "KayleQMissile";
+            spell.MissileSpellName = "KayleQMis";
             spell.DisplayName = "Radiant Blast (Q)";
             spell.MissileSpeed = 1600.0f;
             spell.Radius = 75.0f;
             spell.Range = 900.0f;
-            spell.Delay = 250;
+            spell.Delay = 264;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "KayleQ";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 100.0f;
+            spell.EndExplosionCross = true;
+            spell.EndExplosionCenterOffset = 100.0f;
+            spell.EndExplosionForwardLength = 400.0f;
+            spell.EndExplosionBackwardLength = 100.0f;
+            spell.EndExplosionSideLength = 150.0f;
+            spell.EndExplosionLongitudinalRadius = 45.0f;
+            spell.EndExplosionSideRadius = 62.5f;
             Entries.push_back(spell);
         }
         // ===
@@ -1845,6 +1960,9 @@ public:
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 275.0f;
             Entries.push_back(spell);
         }
         // ===
@@ -1864,7 +1982,9 @@ public:
             spell.SpellName = "KledQ";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow; // Dính xích bị chậm, sau đó bị kéo lùi dính vết thương sâu
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyLargeMonsters,
+                CollisionObjectType::EnemyYasuoWall };
             Entries.push_back(spell);
         }
         // ===
@@ -2036,16 +2156,45 @@ public:
             SpellData spell;
             spell.CharacterName = "Lillia";
             spell.DangerValue = 2;
-            spell.MissileSpellName = "LilliaE-Missile";
-            spell.DisplayName = "Swirlseed (E)";
+            spell.MissileSpellName = "LilliaE";
+            spell.DisplayName = "Swirlseed (E Initial Lob)";
             spell.MissileSpeed = 1400.0f;
-            spell.Radius = 60.0f;
-            spell.Range = 25000.0f; // Hạt lăn vô tận cho tới khi chạm địa hình hoặc mục tiêu
+            spell.Radius = 150.0f;
+            spell.Range = 700.0f;
             spell.Delay = 400;
             spell.Slot = SpellSlot::E;
             spell.SpellName = "LilliaE";
+            spell.Type = SkillShotType::SkillshotCircle;
+            spell.CrowdControl = CrowdControlType::Slow;
+            spell.UseEndPosition = true;
+            spell.DetectionGroup = "LilliaE";
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Lillia";
+            spell.DangerValue = 3;
+            spell.MissileSpellName = "LilliaERollingMissile";
+            spell.DisplayName = "Swirlseed (E Rolling)";
+            spell.MissileSpeed = 1150.0f;
+            spell.Radius = 60.0f;
+            spell.Range = 25000.0f;
+            spell.Delay = 0;
+            spell.Slot = SpellSlot::E;
+            spell.SpellName = "LilliaERollingMissile";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow;
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::Terrain,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresCollision = true;
+            spell.EndExplosionOnProjectileWall = true;
+            spell.SecondaryRadius = 150.0f;
+            spell.DetectionGroup = "LilliaE";
             Entries.push_back(spell);
         }
         // ===
@@ -2055,17 +2204,23 @@ public:
             SpellData spell;
             spell.CharacterName = "Lissandra";
             spell.DangerValue = 1;
-            spell.MissileSpellName = "LissandraQShards";
+            spell.MissileSpellName = "LissandraQMissile";
             spell.DisplayName = "Ice Shard (Q)";
             spell.MissileSpeed = 2200.0f;
             spell.Radius = 75.0f;
-            spell.Range = 725.0f; // Tầm bay kéo dài thêm một chút sau khi xuyên mục tiêu đầu
+            spell.Range = 725.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "LissandraQ";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Slow;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.CollisionInitialRange = 725.0f;
+            spell.CollisionContinuationRange = 950.0f;
+            spell.CollisionContinuationRadius = 90.0f;
+            spell.FixedRange = true;
             Entries.push_back(spell);
         }
         {
@@ -2179,7 +2334,9 @@ public:
             SpellData spell;
             spell.CharacterName = "Lux";
             spell.DangerValue = 3;
-            spell.MissileSpellName = "LuxLightBindingDummy";
+            // Track the functional missile. The dummy VFX missile is destroyed
+            // on the first target and must never truncate the real two-hit Q.
+            spell.MissileSpellName = "LuxLightBindingMis";
             spell.DisplayName = "Light Binding (Q)";
             spell.MissileSpeed = 1200.0f;
             spell.Radius = 70.0f;
@@ -2188,7 +2345,11 @@ public:
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "LuxLightBinding";
             spell.Type = SkillShotType::SkillshotLine;
-            spell.CrowdControl = CrowdControlType::Snare; // Trói tối đa 2 mục tiêu xuyên qua lính
+            spell.CrowdControl = CrowdControlType::Snare;
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.CollisionTargetLimit = 2;
             Entries.push_back(spell);
         }
         {
@@ -2304,14 +2465,26 @@ public:
             spell.MissileSpellName = "MilioQMissile";
             spell.DisplayName = "Ultra Mega Firekick (Q)";
             spell.MissileSpeed = 1200.0f;
-            spell.Radius = 60.0f; // Bán kính bóng bay ban đầu, khi nổ vùng rộng ra 200f
-            spell.Range = 1000.0f;
+            spell.Radius = 60.0f;
+            spell.Range = 1200.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "MilioQ";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::KnockBack; // Đẩy lùi mục tiêu đầu tiên và làm chậm vùng nổ phía sau
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.SecondaryRadius = 250.0f;
+            spell.EndExplosionDelay = 800;
+            spell.CollisionBounceDistance = 140.0f;
+            spell.CollisionBounceDistanceNonChampion = 340.0f;
+            spell.EndExplosionRadiusNonChampion = 275.0f;
+            spell.EndExplosionDelayNonChampion = 900;
             Entries.push_back(spell);
         }
         // ===
@@ -2390,7 +2563,10 @@ public:
             spell.SpellName = "NautilusAnchorDrag";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Stun; // Kéo mục tiêu và Nautilus lại gần nhau kèm choáng nhẹ
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::Terrain }; // Va chạm tướng hoặc tường
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::Terrain,
+                CollisionObjectType::EnemyYasuoWall }; // Va chạm mục tiêu hoặc tường
             Entries.push_back(spell);
         }
         // ===
@@ -2512,6 +2688,26 @@ public:
         // ===
         {
             SpellData spell;
+            spell.CharacterName = "Ornn";
+            spell.DangerValue = 4;
+            spell.DisplayName = "Searing Charge (E)";
+            spell.MissileSpeed = 1600.0f;
+            spell.Radius = 175.0f;
+            spell.Range = 650.0f;
+            spell.Delay = 350;
+            spell.Slot = SpellSlot::E;
+            spell.SpellName = "OrnnE";
+            spell.Type = SkillShotType::SkillshotLine;
+            spell.CrowdControl = CrowdControlType::KnockUp;
+            spell.IsDangerous = true;
+            spell.IsSpecial = true;
+            Entries.push_back(spell);
+        }
+        // ===
+
+        // ===
+        {
+            SpellData spell;
             spell.CharacterName = "Orianna";
             spell.DangerValue = 2;
             spell.MissileSpellName = "TheBall"; // Quả cầu nội tại di chuyển
@@ -2573,14 +2769,22 @@ public:
             spell.DangerValue = 4;
             spell.MissileSpellName = "PoppyRMissile";
             spell.DisplayName = "Keeper's Verdict (R Vận Sức)";
-            spell.MissileSpeed = 2000.0f;
-            spell.Radius = 100.0f;
+            spell.MissileSpeed = 2500.0f;
+            spell.Radius = 90.0f;
             spell.Range = 1200.0f;
             spell.Delay = 350;
             spell.Slot = SpellSlot::R;
             spell.SpellName = "PoppyRSpell";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::KnockUp; // Đập búa hất văng mục tiêu bay thẳng về tế đàn chính của họ
+            // The charged shockwave stops at the first champion and raises a
+            // 225-radius hammer eruption centered on that target.
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.HasEndExplosion = true;
+            spell.SecondaryRadius = 225.0f;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.EndExplosionAtUnitCenter = true;
             Entries.push_back(spell);
         }
         // ===
@@ -2758,17 +2962,53 @@ public:
         {
             SpellData spell;
             spell.CharacterName = "Samira";
-            spell.DangerValue = 1;
-            spell.MissileSpellName = "SamiraQMissile";
-            spell.DisplayName = "Flair (Q)";
-            spell.MissileSpeed = 2600.0f; // Bay rất nhanh
+            spell.DangerValue = 2;
+            spell.MissileSpellName = "SamiraQGun";
+            spell.DisplayName = "Flair (Q Shot / E-Q Explosives)";
+            spell.MissileSpeed = 2600.0f;
             spell.Radius = 60.0f;
             spell.Range = 950.0f;
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
-            spell.SpellName = "SamiraQ";
+            spell.SpellName = "SamiraQGun";
+            spell.ExtraSpellNames = { "SamiraQ" };
             spell.Type = SkillShotType::SkillshotLine;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall };
+            spell.DetectionGroup = "SamiraQ";
+            spell.IsSpecial = true;
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Samira";
+            spell.DangerValue = 2;
+            spell.DisplayName = "Flair (Q Sword Cone)";
+            spell.Radius = 65.0f;
+            spell.Range = 400.0f;
+            spell.Delay = 250;
+            spell.Slot = SpellSlot::Q;
+            spell.SpellName = "SamiraQSword";
+            spell.ExtraSpellNames = { "SamiraQBufferedSword" };
+            spell.Type = SkillShotType::SkillshotCone;
+            spell.MultipleAngle = 50.0f;
+            spell.DetectionGroup = "SamiraQ";
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Samira";
+            spell.DangerValue = 2;
+            spell.DisplayName = "Wild Rush (E Path)";
+            spell.MissileSpeed = 1600.0f;
+            spell.Radius = 150.0f;
+            spell.Range = 650.0f;
+            spell.Delay = 0;
+            spell.Slot = SpellSlot::E;
+            spell.SpellName = "SamiraE";
+            spell.Type = SkillShotType::SkillshotLine;
+            spell.IsSpecial = true;
             Entries.push_back(spell);
         }
         {
@@ -2786,13 +3026,19 @@ public:
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Stun;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions }; // Chỉ cản bởi tướng
+            spell.FixedRange = true;
+            spell.HasEndExplosion = true;
+            spell.EndExplosionAtUnitCenter = true;
+            spell.EndExplosionMinimumTravelDistance = 400.0f;
+            spell.EndExplosionDuration = 1500;
+            spell.SecondaryRadius = 400.0f;
             Entries.push_back(spell);
         }
         {
             SpellData spell;
             spell.CharacterName = "Senna";
             spell.DangerValue = 3;
-            spell.MissileSpellName = "SennaEMissile"; // Tên gói dữ liệu trói của W
+            spell.MissileSpellName = "SennaWMissile";
             spell.DisplayName = "Last Embrace (W)";
             spell.MissileSpeed = 1200.0f;
             spell.Radius = 60.0f;
@@ -2803,6 +3049,13 @@ public:
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::Snare;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.HasEndExplosion = true;
+            spell.EndExplosionRequiresUnitCollision = true;
+            spell.EndExplosionAtUnitCenter = true;
+            spell.EndExplosionFollowsUnit = true;
+            spell.EndExplosionDetonatesOnUnitDeath = true;
+            spell.EndExplosionDelay = 1000;
+            spell.SecondaryRadius = 280.0f;
             Entries.push_back(spell);
         }
         {
@@ -3003,7 +3256,9 @@ public:
             spell.SpellName = "SylasE2";
             spell.Type = SkillShotType::SkillshotLine;
             spell.CrowdControl = CrowdControlType::KnockUp;
-            spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            spell.CollisionObjects = { CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall };
             Entries.push_back(spell);
         }
         {
@@ -3217,6 +3472,7 @@ public:
             spell.ExtraMissileNames = { "VeigarQMis", "VeigarQMissile" };
             spell.Type = SkillShotType::SkillshotLine;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions }; // Tối đa trúng 2 mục tiêu
+            spell.CollisionTargetLimit = 2;
             Entries.push_back(spell);
         }
         {
@@ -3247,6 +3503,28 @@ public:
             spell.Type = SkillShotType::SkillshotLine; // Cần logic nâng cao xử lý tách góc vuông 90 độ (Q2) khi tái kích hoạt hoặc hết tầm sinh ra 2 tia phụ
             spell.CrowdControl = CrowdControlType::Slow;
             spell.CollisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "VelKoz";
+            spell.DangerValue = 3;
+            spell.MissileSpellName = "VelkozQMissileSplit";
+            spell.DisplayName = "Plasma Fission (Q Split)";
+            spell.MissileSpeed = 2100.0f;
+            spell.Radius = 45.0f;
+            spell.Range = 1100.0f;
+            spell.Delay = 250;
+            spell.Slot = SpellSlot::Q;
+            spell.SpellName = "VelkozQSplit";
+            spell.Type = SkillShotType::SkillshotLine;
+            spell.CrowdControl = CrowdControlType::Slow;
+            spell.CollisionObjects = {
+                CollisionObjectType::EnemyChampions,
+                CollisionObjectType::EnemyMinions,
+                CollisionObjectType::EnemyYasuoWall,
+            };
+            spell.FixedRange = true;
             Entries.push_back(spell);
         }
         {
@@ -3420,15 +3698,50 @@ public:
             SpellData spell;
             spell.CharacterName = "Ziggs";
             spell.DangerValue = 2;
-            spell.MissileSpellName = "ZiggsQBombs";
-            spell.DisplayName = "Bouncing Bomb (Q)";
+            spell.MissileSpellName = "ZiggsQSpell";
+            spell.DisplayName = "Bouncing Bomb (Q - First Landing)";
             spell.MissileSpeed = 1700.0f;
-            spell.Radius = 150.0f; // Bán kính nổ khi chạm mục tiêu hoặc nảy hết tầm
+            spell.Radius = 240.0f;
             spell.Range = 850.0f; // Tầm ném ban đầu, tổng tầm nảy có thể lên tới 1400
             spell.Delay = 250;
             spell.Slot = SpellSlot::Q;
             spell.SpellName = "ZiggsQ";
-            spell.Type = SkillShotType::SkillshotCircle; // Xử lý né dạng điểm rơi nảy đoạn ngắn
+            spell.Type = SkillShotType::SkillshotCircle;
+            spell.IsSpecial = true;
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Ziggs";
+            spell.DangerValue = 2;
+            spell.MissileSpellName = "ZiggsQSpell2";
+            spell.DisplayName = "Bouncing Bomb (Q - Bounce 1)";
+            spell.MissileSpeed = 1700.0f;
+            spell.Radius = 240.0f;
+            spell.Range = 850.0f;
+            spell.Delay = 250;
+            spell.Slot = SpellSlot::Q;
+            spell.SpellName = "ZiggsQBounce1";
+            spell.Type = SkillShotType::SkillshotCircle;
+            spell.IsSpecial = true;
+            spell.DontProcess = true;
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Ziggs";
+            spell.DangerValue = 2;
+            spell.MissileSpellName = "ZiggsQSpell3";
+            spell.DisplayName = "Bouncing Bomb (Q - Bounce 2)";
+            spell.MissileSpeed = 1700.0f;
+            spell.Radius = 240.0f;
+            spell.Range = 850.0f;
+            spell.Delay = 250;
+            spell.Slot = SpellSlot::Q;
+            spell.SpellName = "ZiggsQBounce2";
+            spell.Type = SkillShotType::SkillshotCircle;
+            spell.IsSpecial = true;
+            spell.DontProcess = true;
             Entries.push_back(spell);
         }
         {

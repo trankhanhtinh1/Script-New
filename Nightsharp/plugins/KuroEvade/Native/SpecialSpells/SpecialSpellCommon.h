@@ -19,6 +19,7 @@ struct ExtraSpellCast {
     Vector3 End;
     Database::SpellData Data;
     int OverrideStartTick = 0;
+    bool AllowDuplicate = false;
 };
 
 struct ProcessResult {
@@ -102,8 +103,10 @@ inline void AddExtra(ProcessResult& result,
                      const Vector3& start,
                      const Vector3& end,
                      const Database::SpellData& data,
-                     int overrideStartTick = 0) {
-    result.ExtraSpells.push_back({ start, end, data, overrideStartTick });
+                     int overrideStartTick = 0,
+                     bool allowDuplicate = false) {
+    result.ExtraSpells.push_back({
+        start, end, data, overrideStartTick, allowDuplicate });
 }
 
 inline bool ProjectOnSegment(const Vec2& point,

@@ -20,9 +20,9 @@ struct EvadeSettings {
     bool UseCurrentPath = true;
 
     bool TestOnAllies = false;
-    bool EnableCollision = false;
-    bool MinionCollision = false;
-    bool HeroCollision = false;
+    bool EnableCollision = true;
+    bool MinionCollision = true;
+    bool HeroCollision = true;
     bool YasuoCollision = true;
 
     bool EnableDrawings = true;

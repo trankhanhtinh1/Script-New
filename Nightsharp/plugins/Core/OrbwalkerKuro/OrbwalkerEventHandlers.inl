@@ -65,8 +65,21 @@ inline void OrbwalkerBase::OnGameUpdate() {
 
     // Keep processing attack events, but do not let a new orbwalker order
     // replace KuroEvade's windup hold or active dodge command.
-    if (EvadeOwnsActions(Tick())) {
+    const int now = Tick();
+    if (EvadeOwnsActions(now)) {
         ExpirePendingAttack();
+        if (menu_.CoordinateKuroEvade() &&
+            Plugins::KuroCombatCoordination::Coordinator::
+                AllowsStationaryAttacks(now)) {
+            // KuroEvade proved that standing here is safer than taking a
+            // sharp wall-side detour. Run only target selection + attack;
+            // never call Orbwalk/Move from this coordination phase.
+            const AttackableUnit stationaryTarget =
+                CanAttack() ? GetTarget() : AttackableUnit();
+            if (stationaryTarget.IsValid()) {
+                Attack(stationaryTarget);
+            }
+        }
         return;
     }
 

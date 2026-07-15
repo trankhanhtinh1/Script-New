@@ -12,7 +12,9 @@
 #include "Maokai.h"
 #include "Mordekaiser.h"
 #include "Nami.h"
+#include "Ornn.h"
 #include "Pyke.h"
+#include "Samira.h"
 #include "Seraphine.h"
 #include "Sion.h"
 #include "Sylas.h"
@@ -48,7 +50,9 @@ inline ProcessResult ProcessCast(const SDK::AIBaseClient& caster,
         Maokai::ProcessCast(context, result) ||
         Mordekaiser::ProcessCast(context, result) ||
         Nami::ProcessCast(context, result) ||
+        Ornn::ProcessCast(context, result) ||
         Pyke::ProcessCast(context, result) ||
+        Samira::ProcessCast(context, result) ||
         Seraphine::ProcessCast(context, result) ||
         Sion::ProcessCast(context, result) ||
         Sylas::ProcessCast(context, result) ||
@@ -78,6 +82,7 @@ inline void ProcessMissile(const SDK::AIBaseClient& caster,
 }
 
 inline void BeginUpdate() {
+    Samira::BeginUpdate();
     Yuumi::BeginUpdate();
 }
 
@@ -95,8 +100,20 @@ inline void EndUpdate() {
 }
 
 inline void ClearState() {
+    Samira::Clear();
     Sion::Clear();
     Yuumi::Clear();
+}
+
+inline bool HasProjectileTerminationDependents(
+        const std::string& primary) {
+    return Ziggs::HasProjectileTerminationDependents(primary);
+}
+
+inline bool IsProjectileTerminationDependent(
+        const std::string& primary,
+        const std::string& dependent) {
+    return Ziggs::IsProjectileTerminationDependent(primary, dependent);
 }
 
 } // namespace Plugins::KuroEvade::SpecialSpells

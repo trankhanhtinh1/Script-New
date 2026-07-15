@@ -9,7 +9,8 @@ enum class EvadePhase {
     Idle,
     WindupHold,
     Dodging,
-    PathRecovery
+    PathRecovery,
+    SafePositionHold
 };
 
 class Coordinator final {
@@ -51,7 +52,7 @@ public:
 
     static bool BlocksNewAttacks(int now, int handoffGraceMs) {
         if (EvadeOwnsActions(now)) {
-            return true;
+            return s_phase != EvadePhase::SafePositionHold;
         }
 
         // A short attack grace prevents a fresh attack order from replacing
@@ -64,6 +65,10 @@ public:
         return EvadeOwnsActions(now) ? s_phase : EvadePhase::Idle;
     }
 
+    static bool AllowsStationaryAttacks(int now) {
+        return IsFresh(now) && s_phase == EvadePhase::SafePositionHold;
+    }
+
     static int Generation() {
         return s_generation;
     }
@@ -73,6 +78,7 @@ public:
         case EvadePhase::WindupHold: return "finishing attack windup";
         case EvadePhase::Dodging: return "evade movement";
         case EvadePhase::PathRecovery: return "path recovery";
+        case EvadePhase::SafePositionHold: return "safe hold + attack";
         default: return "idle";
         }
     }

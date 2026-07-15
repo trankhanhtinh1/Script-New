@@ -154,6 +154,35 @@ public:
                     KuroCombatCoordination::Coordinator::PhaseName(
                         KuroCombatCoordination::Coordinator::Phase(
                             SDK::Variables::TickCount())));
+        if (m_evade.IsHoldingPosition()) {
+            ImGui::Text("Safe hold: movement locked, orbwalker attack enabled");
+        } else if (m_evade.IsWaitingForWindup()) {
+            ImGui::Text("Windup hold: %d ms (route verified)",
+                        m_evade.WindupRemainingMs());
+        }
+        const auto& livePlan = m_evade.LastPlan();
+        if (livePlan.GeneratedCandidateCount > 0) {
+            ImGui::Text("Planner: %d generated | %d gradient steps",
+                        livePlan.GeneratedCandidateCount,
+                        livePlan.GradientSteps);
+            if (livePlan.Found) {
+                ImGui::Text("Clearance: spell %.1f | wall %.1f",
+                            livePlan.Best.Clearance,
+                            livePlan.Best.WallClearance);
+                if (livePlan.Best.OuterRingExits > 0 ||
+                    livePlan.Best.InnerRingShelters > 0) {
+                    ImGui::Text("Ring route: %s",
+                        livePlan.Best.OuterRingExits > 0
+                            ? "outer exit preferred"
+                            : "inner pocket fallback");
+                }
+            }
+            if (livePlan.HasCandidate) {
+                ImGui::Text("Planned remaining threats: %d%s",
+                            livePlan.Best.PathThreatCount,
+                            livePlan.Found ? " (full evade)" : " (partial)");
+            }
+        }
         ImGui::Text("Last dodge: %s", m_lastEvent);
         if (m_benchmarkResult.Iterations > 0) {
             ImGui::Separator();
@@ -164,12 +193,43 @@ public:
                         m_benchmarkResult.AverageMicroseconds,
                         m_benchmarkResult.MinimumMicroseconds,
                         m_benchmarkResult.MaximumMicroseconds);
-            ImGui::Text("Last candidates: %d",
-                        m_benchmarkResult.LastCandidateCount);
+            ImGui::Text("Last candidates: %d ranked / %d generated",
+                        m_benchmarkResult.LastCandidateCount,
+                        m_benchmarkResult.LastGeneratedCandidateCount);
+            ImGui::Text("Coverage: %d -> %d threats | improved %d/%d",
+                        m_benchmarkResult.LastBaselineThreats,
+                        m_benchmarkResult.LastRemainingThreats,
+                        m_benchmarkResult.CoverageImprovingPlans,
+                        m_benchmarkResult.Iterations);
+            ImGui::Text("Gradient steps: avg %.2f | last %d | wall %.1f",
+                        m_benchmarkResult.AverageGradientSteps,
+                        m_benchmarkResult.LastGradientSteps,
+                        m_benchmarkResult.LastWallClearance);
+            if (m_benchmarkResult.LastOuterRingExits > 0 ||
+                m_benchmarkResult.LastInnerRingShelters > 0) {
+                ImGui::Text("Ring benchmark: outer %d | inner fallback %d",
+                            m_benchmarkResult.LastOuterRingExits,
+                            m_benchmarkResult.LastInnerRingShelters);
+            }
             ImGui::Text("Database: %d skillshots + %d evade spells | invalid %d",
                         m_benchmarkResult.SkillshotDatabaseEntries,
                         m_benchmarkResult.EvadeSpellDatabaseEntries,
                         m_benchmarkResult.InvalidDatabaseEntries);
+            ImGui::Text("Collision DB: %d profiles | %d multi-hit | %d continuation | %d wall",
+                        m_benchmarkResult.CollisionProfileEntries,
+                        m_benchmarkResult.MultiHitCollisionEntries,
+                        m_benchmarkResult.ContinuationCollisionEntries,
+                        m_benchmarkResult.ProjectileWallEntries);
+            ImGui::Text("Secondary areas: %d explosions | %d bounce | %d special",
+                        m_benchmarkResult.EndExplosionEntries,
+                        m_benchmarkResult.BouncingExplosionEntries,
+                        m_benchmarkResult.SpecialGeometryEntries);
+            ImGui::Text("Collision regression: %d/%d passed",
+                        m_benchmarkResult.CollisionRegressionPassed,
+                        m_benchmarkResult.CollisionRegressionChecks);
+            ImGui::Text("Dynamic caster regression: %d/%d passed",
+                        m_benchmarkResult.DynamicCasterRegressionPassed,
+                        m_benchmarkResult.DynamicCasterRegressionChecks);
         }
 
     }
@@ -608,6 +668,22 @@ private:
             }
         }
 
+        for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
+            if (!ally.IsValid() || ally.IsMe()) {
+                continue;
+            }
+            const std::string allyName = GetHeroCharacterName(ally);
+            if (!allyName.empty()) {
+                const std::string allyKey =
+                    KuroEvade::SpellMenuKey::Lower(allyName);
+                if (m_loadedChampions.find("ally_" + allyKey) ==
+                    m_loadedChampions.end()) {
+                    m_loadedChampions.insert("ally_" + allyKey);
+                    needRebuild = true;
+                }
+            }
+        }
+
         if (needRebuild) {
             RebuildSpellsMenu();
             RebuildEvadeSpellsMenu();
@@ -677,7 +753,9 @@ private:
             m_lastEvent, sizeof(m_lastEvent));
         const auto phase = !m_evadeIntervening
             ? KuroCombatCoordination::EvadePhase::Idle
-            : m_evade.IsWaitingForWindup()
+            : m_evade.IsHoldingPosition()
+                ? KuroCombatCoordination::EvadePhase::SafePositionHold
+                : m_evade.IsWaitingForWindup()
                 ? KuroCombatCoordination::EvadePhase::WindupHold
                 : m_evade.IsMovementBlocking()
                     ? KuroCombatCoordination::EvadePhase::PathRecovery
@@ -757,7 +835,7 @@ private:
                       m_benchmarkResult.PlansFound,
                       m_benchmarkResult.Iterations);
         NightSharpDebug::Logf(
-            "[KuroEvade][Benchmark] iterations=%d plans=%d candidates=%d avg=%.2fus min=%.2fus max=%.2fus db=%d+%d invalid=%d",
+            "[KuroEvade][Benchmark] iterations=%d plans=%d candidates=%d avg=%.2fus min=%.2fus max=%.2fus db=%d+%d invalid=%d collision=%d/%d dynamic=%d/%d profiles=%d multi=%d continuation=%d wall=%d bounce=%d explosions=%d",
             m_benchmarkResult.Iterations,
             m_benchmarkResult.PlansFound,
             m_benchmarkResult.LastCandidateCount,
@@ -766,7 +844,17 @@ private:
             m_benchmarkResult.MaximumMicroseconds,
             m_benchmarkResult.SkillshotDatabaseEntries,
             m_benchmarkResult.EvadeSpellDatabaseEntries,
-            m_benchmarkResult.InvalidDatabaseEntries);
+            m_benchmarkResult.InvalidDatabaseEntries,
+            m_benchmarkResult.CollisionRegressionPassed,
+            m_benchmarkResult.CollisionRegressionChecks,
+            m_benchmarkResult.DynamicCasterRegressionPassed,
+            m_benchmarkResult.DynamicCasterRegressionChecks,
+            m_benchmarkResult.CollisionProfileEntries,
+            m_benchmarkResult.MultiHitCollisionEntries,
+            m_benchmarkResult.ContinuationCollisionEntries,
+            m_benchmarkResult.ProjectileWallEntries,
+            m_benchmarkResult.BouncingExplosionEntries,
+            m_benchmarkResult.EndExplosionEntries);
     }
 
     static void OnRecommendedConfigChangedStatic(MenuItem* sender, void* userData) {
@@ -860,10 +948,11 @@ private:
             KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::R))));
 
         auto* collision = m_menu->AddSubMenu(new Menu("Collision", "Collision"));
-        m_minionCollisionMenu = collision->Add(new MenuBool("MinionCollision", "Minion collision", false));
-        m_heroCollisionMenu = collision->Add(new MenuBool("HeroCollision", "Hero collision", false));
-        m_yasuoCollisionMenu = collision->Add(new MenuBool("YasuoCollision", "Yasuo wall collision", true));
-        m_enableCollisionMenu = collision->Add(new MenuBool("EnableCollision", "Enabled", false));
+        m_minionCollisionMenu = collision->Add(new MenuBool("MinionCollision", "Minion collision", true));
+        m_heroCollisionMenu = collision->Add(new MenuBool("HeroCollision", "Hero collision", true));
+        m_yasuoCollisionMenu = collision->Add(new MenuBool(
+            "YasuoCollision", "Projectile barriers (Yasuo/Samira/Mel)", true));
+        m_enableCollisionMenu = collision->Add(new MenuBool("EnableCollision", "Enabled", true));
 
         auto* drawings = m_menu->AddSubMenu(new Menu("Drawings", "Drawings"));
         m_enabledColorMenu = drawings->Add(new MenuColor("EnabledColor", "Enabled spell color", 1.0f, 1.0f, 1.0f, 1.0f));
@@ -916,32 +1005,98 @@ private:
         m_spellMenuEntries = 0;
         m_spellsMenu = m_menu->AddSubMenu(new Menu("Skillshots", "Skill Shots"));
 
+        PopulateSpellMenu(m_spellsMenu);
+    }
+
+    void PopulateSpellMenu(Menu* parent) {
+        if (!parent) {
+            return;
+        }
+
         for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
             if (_stricmp(data.Runtime.ChampionName.c_str(), "AllChampions") == 0) {
-                AddSpellMenuEntry(m_spellsMenu, data);
+                AddSpellMenuEntry(parent, data);
             }
         }
 
-        std::unordered_set<std::string> addedChampions;
+        std::unordered_set<std::string> enemyChampions;
         for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
             if (!enemy.IsValid()) {
                 continue;
             }
-
             const std::string championName = GetHeroCharacterName(enemy);
-            if (championName.empty()) {
+            if (!championName.empty()) {
+                enemyChampions.insert(
+                    KuroEvade::SpellMenuKey::Lower(championName));
+            }
+        }
+        for (const std::string& loaded : m_loadedChampions) {
+            if (loaded.rfind("enemy_", 0) == 0) {
+                enemyChampions.insert(loaded.substr(6));
+            }
+        }
+
+        for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
+            const std::string champion = KuroEvade::SpellMenuKey::Lower(
+                data.Runtime.ChampionName);
+            if (enemyChampions.find(champion) != enemyChampions.end()) {
+                AddSpellMenuEntry(parent, data);
+            }
+        }
+
+        // Dynamic hostile casters use abilities whose source champion is on
+        // the player's team: Sylas steals their R, Viego possesses their Q/W/E,
+        // and Mel recreates reflected projectiles as missiles owned by herself.
+        // Add those source entries to the existing per-spell menu instead of
+        // silently falling back to unconfigurable defaults.
+        const bool enemySylas = enemyChampions.contains("sylas");
+        const bool enemyViego = enemyChampions.contains("viego");
+        const bool enemyMel = enemyChampions.contains("mel");
+        if (!enemySylas && !enemyViego && !enemyMel) {
+            return;
+        }
+
+        std::unordered_set<std::string> allyChampions;
+        const auto player = SDK::ObjectManager::Player();
+        if (player.IsValid()) {
+            const std::string name = GetHeroCharacterName(player);
+            if (!name.empty()) {
+                allyChampions.insert(KuroEvade::SpellMenuKey::Lower(name));
+            }
+        }
+        for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
+            if (!ally.IsValid()) {
                 continue;
             }
+            const std::string name = GetHeroCharacterName(ally);
+            if (!name.empty()) {
+                allyChampions.insert(KuroEvade::SpellMenuKey::Lower(name));
+            }
+        }
+        for (const std::string& loaded : m_loadedChampions) {
+            if (loaded.rfind("ally_", 0) == 0) {
+                allyChampions.insert(loaded.substr(5));
+            } else if (loaded.rfind("self_", 0) == 0) {
+                allyChampions.insert(loaded.substr(5));
+            }
+        }
 
-            const std::string championKey = KuroEvade::SpellMenuKey::Lower(championName);
-            if (!addedChampions.insert(championKey).second) {
+        for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
+            const std::string champion = KuroEvade::SpellMenuKey::Lower(
+                data.Runtime.ChampionName);
+            if (allyChampions.find(champion) == allyChampions.end()) {
                 continue;
             }
-
-            for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
-                if (_stricmp(data.Runtime.ChampionName.c_str(), championName.c_str()) == 0) {
-                    AddSpellMenuEntry(m_spellsMenu, data);
-                }
+            const bool stolenUltimate = enemySylas &&
+                data.Runtime.Slot == SDK::SpellSlot::R;
+            const bool possessedBasic = enemyViego &&
+                data.Runtime.Slot >= SDK::SpellSlot::Q &&
+                data.Runtime.Slot <= SDK::SpellSlot::E;
+            const bool reflectedProjectile = enemyMel &&
+                (!data.MissileSpellName.empty() ||
+                 !data.ExtraMissileNames.empty());
+            if (stolenUltimate || possessedBasic || reflectedProjectile) {
+                AddSpellMenuEntry(parent, data);
             }
         }
     }
@@ -1076,34 +1231,7 @@ private:
         m_spellOptions.clear();
         m_spellMenuEntries = 0;
 
-        for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
-            if (_stricmp(data.Runtime.ChampionName.c_str(), "AllChampions") == 0) {
-                AddSpellMenuEntry(m_spellsMenu, data);
-            }
-        }
-
-        std::unordered_set<std::string> addedChampions;
-        for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
-            if (!enemy.IsValid()) {
-                continue;
-            }
-
-            const std::string championName = GetHeroCharacterName(enemy);
-            if (championName.empty()) {
-                continue;
-            }
-
-            const std::string championKey = KuroEvade::SpellMenuKey::Lower(championName);
-            if (!addedChampions.insert(championKey).second) {
-                continue;
-            }
-
-            for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
-                if (_stricmp(data.Runtime.ChampionName.c_str(), championName.c_str()) == 0) {
-                    AddSpellMenuEntry(m_spellsMenu, data);
-                }
-            }
-        }
+        PopulateSpellMenu(m_spellsMenu);
     }
 
     void RebuildEvadeSpellsMenu() {
