@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMap.h"
+#include "CorePosition.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
 #include "Vector.h"
@@ -112,7 +113,7 @@ namespace detail {
         }
 
         __try {
-            const Vec3 position = Globals::Read<Vec3>(ctx.localPlayer + Offset::All::Position);
+            const Vec3 position = CorePosition::Read(ctx.localPlayer);
             if (position.IsValid() && std::isfinite(position.y)) {
                 return position.y;
             }
@@ -140,8 +141,10 @@ inline bool GetRendererSize(Vec2& out) {
     const auto& ctx = CoreRuntime::GetContext();
     if (Globals::IsValidPtr(ctx.renderer)) {
         __try {
-            const int width = Globals::Read<int>(ctx.renderer + 0xC);
-            const int height = Globals::Read<int>(ctx.renderer + 0x10);
+            const int width = Globals::Read<int>(
+                ctx.renderer + Offset::D3D::ScreenWidth);
+            const int height = Globals::Read<int>(
+                ctx.renderer + Offset::D3D::ScreenHeight);
             if (width > 0 && height > 0 && width < 20000 && height < 20000) {
                 out = { static_cast<float>(width), static_cast<float>(height) };
                 cache.rendererSize = out;

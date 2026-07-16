@@ -115,8 +115,10 @@ namespace detail {
         const auto& ctx = CoreRuntime::GetContext();
         if (Globals::IsValidPtr(ctx.renderer)) {
             __try {
-                const int width = Globals::Read<int>(ctx.renderer + 0xC);
-                const int height = Globals::Read<int>(ctx.renderer + 0x10);
+                const int width = Globals::Read<int>(
+                    ctx.renderer + Offset::D3D::ScreenWidth);
+                const int height = Globals::Read<int>(
+                    ctx.renderer + Offset::D3D::ScreenHeight);
                 if (width > 0 && height > 0 && width < 20000 && height < 20000) {
                     out = { static_cast<float>(width), static_cast<float>(height) };
                     return true;

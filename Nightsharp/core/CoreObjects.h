@@ -2,6 +2,7 @@
 
 #include "CoreAIHeroClient.h"
 #include "CoreAttackableUnit.h"
+#include "CorePosition.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
@@ -502,7 +503,7 @@ inline std::uint32_t ReadTeamValue(uintptr_t object) {
 }
 
 inline Vec3 ReadPosition(uintptr_t object) {
-    return ReadField<Vec3>(object, Offset::All::Position);
+    return CorePosition::Read(object);
 }
 
 inline float ReadBoundingRadius(uintptr_t object) {
@@ -803,7 +804,7 @@ namespace detail {
 
             snapshot.isVisible = ReadVisibleFlag(object);
             snapshot.isInvulnerable = false;
-            snapshot.position = *reinterpret_cast<const Vec3*>(object + Offset::All::Position);
+            snapshot.position = CorePosition::Read(object);
             snapshot.direction = Vec3{};
 
             const float rawRadius = *reinterpret_cast<const float*>(object + Offset::All::Radius);

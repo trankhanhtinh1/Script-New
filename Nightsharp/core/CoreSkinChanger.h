@@ -5,7 +5,7 @@
 // Safety analysis (May 07/2026):
 //   * Writes target ONLY local hero (AIHeroClient heap object) - no enemy/ally.
 //   * R3nzSkin's `AIBaseCommon::change_skin` writes BOTH:
-//       (1) hero + 0x1334  (xor_value<int32> SkinId, encrypted)
+//       (1) hero + Offset::SkinRuntime::AiBaseSkinId (xor_value<int32> SkinId, encrypted)
 //       (2) stack->base_skin.skin  (raw int32)
 //     and then calls `CharacterDataStack::update(true)`.
 //     Writing only (2) — what Nightsharp did before — leaves (1) holding the
@@ -21,15 +21,15 @@
 //   * Visual only: server stays authoritative for actual game state.
 //
 // Field layout (offset.h SkinRuntime), verified against R3nzSkin + IDA (May 2026):
-//   hero + 0x1334               : encrypted SkinId (xor_value<int32>)
-//   hero + 0x4108               : CharacterDataStack
+//   hero + SkinRuntime::AiBaseSkinId       : encrypted SkinId (xor_value<int32>)
+//   hero + SkinRuntime::CharacterDataStack : CharacterDataStack
 //   stack + 0x18                : base_skin CharacterStackData
 //     base_skin + 0x00          : model.str (const char*)
 //     base_skin + 0x08          : model.length (int32)
 //     base_skin + 0x0C          : model.capacity (int32)
 //     base_skin + 0x20          : skin id (int32)
 //     base_skin + 0x84          : gear (int8)
-//   base + 0x210F70             : CharacterDataStack::update(stack, change)
+//   base + SkinRuntime::CharacterDataStackUpdate : CharacterDataStack::update(stack, change)
 //   base + 0x22B750             : CharacterDataStack::push(this, model, skin, ...)
 // =============================================================================
 
@@ -121,7 +121,7 @@ namespace CoreSkinChanger {
         return std::strcmp(model, candidate) == 0;
     }
 
-    // Encrypted skin id write to hero + 0x1334. The game already initialised
+    // Encrypted skin id write through SkinRuntime::AiBaseSkinId. The game already initialised
     // the xor_value<int32> block at champion spawn, so we just encrypt and
     // rotate. If `isInit` is false (block not initialised) we silently
     // skip — Encrypt() returns early without writing.

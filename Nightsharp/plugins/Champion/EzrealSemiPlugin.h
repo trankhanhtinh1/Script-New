@@ -320,9 +320,7 @@ private:
         const float rawHealth = Globals::IsValidPtr(target)
             ? Globals::Read<float>(target + Offset::AttackableUnit::HP)
             : 0.0f;
-        const Vec3 rawPosition = Globals::IsValidPtr(target)
-            ? Globals::Read<Vec3>(target + Offset::All::Position)
-            : Vec3();
+        const Vec3 rawPosition = CorePosition::Read(target);
         const bool rawVisible = unit.IsVisible();
         const bool rawTargetable = Globals::IsValidPtr(target) &&
             Globals::Read<std::uint8_t>(

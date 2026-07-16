@@ -3,6 +3,7 @@
 #include "CoreAiManager.h"
 #include "CoreBuffs.h"
 #include "CoreObjectManager.h"
+#include "CorePosition.h"
 #include "CoreRuntime.h"
 #include "CoreSpellDataInst.h"
 #include "Corehook.h"
@@ -548,7 +549,7 @@ namespace detail {
         Read(object + Offset::All::Team, info.Team);
         info.IsDead = ::Core::Objects::IsDead(object);
         info.IsVisible = ::Core::Objects::ReadVisibleFlag(object);
-        Read(object + Offset::All::Position, info.Position);
+        info.Position = CorePosition::Read(object);
         CopyRuntimeStringField(
             object + Offset::All::Name,
             info.Name,
@@ -1190,7 +1191,7 @@ namespace detail {
             }
         }
 
-        // The missile/cast payload copied into MissileClient+0x2C0 still keeps
+        // The missile/cast payload copied into MissileClient+CastInfoBase still keeps
         // two legacy runtime strings. On 26.6 these are not canonical names
         // (`+0x20` resolves to "Ezreal" for Ezreal Q), so expose them for debug
         // but do not let them overwrite the SpellBook-derived name.
@@ -1378,9 +1379,9 @@ inline ObjectEventArgs DecodeObjectLifecycleEvent(const RawEventArgs& raw) {
 
 inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     // OnMissileCreate hooks the init routine before the packet has been
-    // copied into MissileClient+0x2C0, so resolve the caster from RDX+0xA0.
+    // copied into MissileClient+CastInfoBase, so resolve the caster from RDX+0xA0.
     // OnMissileDelete runs at destructor entry after that copy and resolves
-    // the same source index from MissileClient+0x360.
+    // the same source index through Offset::MissileClient::CasterIndex.
     ObjectEventArgs args{};
     args.Raw = raw;
     args.Sender = detail::ReadObject(raw.Rcx);
@@ -1545,8 +1546,7 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
     //
     // VERIFIED June/2026 from PlayerEventFilter live logs:
     //   - RCX is a SpellBookClient controller. For the player path,
-    //     RCX == `Player() + 0x3128`. Confirmed: player at 0x20AB845E010
-    //     produced RCX = 0x20AB8461138 (delta = 0x3128) in 4 separate hits.
+    //     RCX == `Player() + SpellRuntime::SpellBookOffset`.
     //   - Other RCX values correspond to enemy heroes / minions / turrets.
     //   - The function body (sub_982120) does NOT read any NetworkId field
     //     from RCX itself — it dereferences `*(QWORD*)(RCX + 0xAD8)` for
@@ -1554,7 +1554,7 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
     //     So no offset on RCX directly stores the caster NetId.
     //
     // Strategy: identify the owning hero by comparing RCX to every live
-    // hero pointer + 0x3128. The first match wins. This is O(N) over
+    // hero pointer + SpellRuntime::SpellBookOffset. The first match wins. This is O(N) over
     // heroes (≤10 in a normal game) per hook invocation and is the only
     // way that survives reset across builds.
     ProcessSpellEventArgs args{};
@@ -1566,10 +1566,11 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
         detail::FillCastInfoFields(args.CastInfo, args);
     }
 
-    // 1) Primary: RCX - 0x3128 should be a hero pointer. Validate by reading
+    // 1) Primary: RCX - SpellBookOffset should be a hero pointer. Validate by reading
     //    NetId from that candidate and resolving through ObjectManager.
-    if (raw.Rcx > 0x3128) {
-        const uintptr_t candidateHero = raw.Rcx - 0x3128;
+    if (raw.Rcx > Offset::SpellRuntime::SpellBookOffset) {
+        const uintptr_t candidateHero =
+            raw.Rcx - Offset::SpellRuntime::SpellBookOffset;
         if (detail::LooksLikeObject(candidateHero)) {
             args.Sender = detail::ReadObject(candidateHero);
         }
@@ -1734,7 +1735,7 @@ inline StopCastEventArgs DecodeStopCast(const RawEventArgs& raw) {
     // OnStopCast (sub_982430).
     //
     // Runtime behaviour observed June/2026: the hook's prologue belongs to a
-    // SpellBookClient method (`sub_982430(hero+0x3128, ...)`), but the inline
+    // SpellBookClient method (`hero + SpellRuntime::SpellBookOffset`), but the inline
     // detour is also triggered through the four vtable slots that share this
     // entry point (4 data xrefs into the spell-handler vtables). In those
     // cases RCX is one of the SpellCast/spell-instance objects in the hero's

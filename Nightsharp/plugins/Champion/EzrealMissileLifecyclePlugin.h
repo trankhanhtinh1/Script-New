@@ -2,6 +2,7 @@
 
 #include "../IPlugin.h"
 #include "../../Core/CoreRuntime.h"
+#include "../../Core/CorePosition.h"
 #include "../../Core/Globals.h"
 #include "../../Core/offset.h"
 #include "../../DebugLog.h"
@@ -406,10 +407,8 @@ private:
     }
 
     static bool ReadMissilePosition(uintptr_t missile, Vec3& out) {
-        return Globals::IsValidPtr(missile) &&
-               ReadNativeWorld(
-                   missile + Offset::MissileClient::Position,
-                   out);
+        out = CorePosition::Read(missile);
+        return IsPlausibleWorld(out);
     }
 
     static Vec3 ResolveStart(
@@ -418,10 +417,8 @@ private:
             return args.StartPosition;
         }
 
-        Vec3 position = {};
-        if (ReadNativeWorld(
-                args.Sender.Ptr + Offset::All::Position,
-                position)) {
+        const Vec3 position = CorePosition::Read(args.Sender.Ptr);
+        if (IsPlausibleWorld(position)) {
             return position;
         }
         return {};

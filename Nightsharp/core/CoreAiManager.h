@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreRuntime.h"
+#include "CorePosition.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
@@ -212,9 +213,7 @@ inline int FrameCacheKey() {
 }
 
 inline Vec3 GetObjectPosition(uintptr_t object) {
-    return Globals::IsValidPtr(object)
-        ? Globals::Read<Vec3>(object + Offset::All::Position)
-        : Vec3{};
+    return CorePosition::Read(object);
 }
 
 inline float GetMoveSpeed(uintptr_t object) {

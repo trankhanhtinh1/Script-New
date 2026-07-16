@@ -29,12 +29,12 @@ inline float AttackSpeed(const AIBaseClient& source) {
     return delay > 0.0f ? (1.0f / delay) : 0.0f;
 }
 
-// ── CharacterState flags (IDA verified: obj + ActionState1 + 0x30) ──
+// ── CharacterState flags ──
 
 inline uint32_t ReadCharacterState(const AIBaseClient& source) {
     const uintptr_t a = source.Address();
     if (!a) return 0;
-    return Globals::Read<uint32_t>(a + Offset::AttackableUnit::ActionState1 + 0x30);
+    return Globals::Read<uint32_t>(a + Offset::AttackableUnit::ActionState1);
 }
 
 inline bool CanAttack(const AIBaseClient& source) {

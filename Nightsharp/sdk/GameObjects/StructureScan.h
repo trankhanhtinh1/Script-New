@@ -121,7 +121,7 @@ inline bool ProbeStructureGuarded(uintptr_t address, StructureInfo& out) {
         // Classify by vtable (obj+0x0) FIRST. This is the safest possible read
         // and rejects every non-structure (minions/missiles/particles/effects)
         // before any deep field is ever touched -- which is what made the old
-        // name-scan crash (it read 0x68/0xCC/0x259/0x4370 on foreign objects).
+        // name-scan crash (it read object fields such as name/team/character-name on foreign objects).
         const uintptr_t vtable = Globals::Read<uintptr_t>(address);
         out.kind = ClassifyStructureVtable(vtable);
         if (out.kind == StructureKind::None) {

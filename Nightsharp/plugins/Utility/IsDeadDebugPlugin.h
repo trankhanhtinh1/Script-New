@@ -127,7 +127,7 @@ public:
 private:
     static constexpr const char* kLogPath =
         "C:\\Users\\Public\\nightsharp_isdead_debug.txt";
-    static constexpr uintptr_t kNativeIsDeadRva = 0x28DF60;
+    static constexpr uintptr_t kNativeIsDeadRva = 0x287230;
 
     struct Row {
         char relation[16] = {};
