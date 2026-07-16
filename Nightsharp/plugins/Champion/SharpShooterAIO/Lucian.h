@@ -78,6 +78,14 @@ static int Slider(Menu* menu, const char* key, int fallback = 0) {
     return item ? item->Value : fallback;
 }
 
+static bool Key(Menu* menu, const char* key, bool fallback = false) {
+    if (!menu) {
+        return fallback;
+    }
+    const auto* item = menu->Get<MenuKeyBind>(key);
+    return item ? item->Active : fallback;
+}
+
 static bool ShouldRunNow(DWORD& lastTick, DWORD intervalMs) {
     const DWORD now = GetTickCount();
     if (lastTick != 0 && now - lastTick < intervalMs) {
@@ -113,6 +121,15 @@ static AIHeroClient GetTarget(float range, DamageType damageType) {
     return selector ? selector->GetTarget(range, damageType) : AIHeroClient();
 }
 
+static bool IsUnderEnemyTurretPos(const Vector3& position) {
+    for (const auto& turret : GameObjects::EnemyTurrets()) {
+        if (turret.IsValid() && !turret.IsDead() && turret.Position().Distance(position) <= 900.0f) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static AIHeroClient GetTargetNoCollision(Spell& spell) {
     auto* selector = SDK::TargetSelector::Instance();
     return selector ? selector->GetTargetNoCollision(&spell) : AIHeroClient();
@@ -139,6 +156,59 @@ static bool IsKillable(const AIBaseClient& target, double damage) {
         return false;
     }
     return target.Health() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (wiki.leagueoflegends.com/en-us/Lucian/LoL) ──
+//    KHÔNG dùng Spell::GetDamage; dùng số cứng từ wiki + Damage::CalculateDamage.
+// Q Piercing Light (physical): base 80/115/150/185/220  (+ 100% bonus AD), no AP.
+// W Ardent Blaze   (magic)   : base 75/110/145/180/215  (+ 90% AP),        no AD.
+// R The Culling    (physical): mỗi phát 15/30/45 (+ 25% total AD) (+ 15% AP);
+//                              bắn 22 phát (base ở mọi rank; crit chance cộng thêm
+//                              tối đa +22 phát nhưng BỎ QUA để killsteal chắc ăn,
+//                              tránh phóng ult hụt). → tổng = mỗi_phát * 22.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+    const float totalAd = player.TotalAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 80.0f, 115.0f, 150.0f, 185.0f, 220.0f };
+        const float raw = base[rank - 1] + 1.00f * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::W: {
+        const int rank = W.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 75.0f, 110.0f, 145.0f, 180.0f, 215.0f };
+        const float raw = base[rank - 1] + 0.90f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float perShotBase[3] = { 15.0f, 30.0f, 45.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float perShot = perShotBase[idx] + 0.25f * totalAd + 0.15f * ap;
+        static const int shots = 22; // base 22 phát ở mọi rank (crit bổ sung, bỏ qua)
+        const float raw = perShot * static_cast<float>(shots);
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
 }
 
 // Q xuyên minion để trúng hero phía sau: tìm minion mà khi bắn xuyên (line tới
@@ -176,6 +246,8 @@ static void OnBuffRemove(const BuffEventArgs& args);
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
 static void OnAfterAttack(OrbwalkingActionArgs& args);
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args);
+static void AutoKillsteal();
+static void UseRTarget();
 static void Combo();
 static void Mixed();
 static void Clear();
@@ -189,6 +261,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("useQ", "Use Q"));
     ComboMenu->Add(new MenuBool("useW", "Use W"));
     ComboMenu->Add(new MenuBool("useE", "Use E (reposition)"));
+    ComboMenu->Add(new MenuKeyBind("forceR", "Smart R (cast on target)", SDK::Keys::T, KeyBindType::Press));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
     HarassMenu->Add(new MenuBool("useQ", "Use Q"));
@@ -206,6 +279,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (Q/W/R)"));
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (E)"));
     MiscMenu->Add(new MenuBool("antiMelee", "Use Anti-Melee (E)"));
 
@@ -227,11 +301,11 @@ static void OnGameLoad() {
 
     W = Spell(SpellSlot::W, 1000.0f);
     W.SetSkillshot(0.30f, 55.0f, 1600.0f, true, SpellType::Line);
-    W.DamageType = DamageType::Physical;
+    W.DamageType = DamageType::Magical;
 
     WNoCollision = Spell(SpellSlot::W, 1000.0f);
     WNoCollision.SetSkillshot(0.30f, 55.0f, 1600.0f, false, SpellType::Line);
-    WNoCollision.DamageType = DamageType::Physical;
+    WNoCollision.DamageType = DamageType::Magical;
 
     E = Spell(SpellSlot::E, 475.0f);
     R = Spell(SpellSlot::R, 1400.0f);
@@ -332,9 +406,17 @@ static void OnAfterAttack(OrbwalkingActionArgs&) {
     if (!player.IsValid()) {
         return;
     }
-    const Vector3 dashTarget = player.Position().Extend(Game::CursorPos(), 700.0f);
-    if (player.CountEnemyHeroesInRange(700.0f) <= 1) {
-        E.Cast(dashTarget);
+    const Vector3 dashTarget = player.Position().Extend(Game::CursorPos(), E.Range - 5.0f);
+    int enemiesAtDash = 0;
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (ValidHeroTarget(enemy) && enemy.Position().Distance(dashTarget) <= 650.0f) {
+            ++enemiesAtDash;
+        }
+    }
+    if (!SDK::NavMesh::IsWall(dashTarget) && !IsUnderEnemyTurretPos(dashTarget) && enemiesAtDash <= 1) {
+        if (E.Cast(dashTarget)) {
+            Orbwalker::ResetAutoAttackTimer();
+        }
     }
 }
 
@@ -343,9 +425,29 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     if (!player.IsValid() || player.IsDead() || player.IsRecalling()) {
         return;
     }
+
+    // R The Culling cho phép di chuyển khi bắn: tắt orbwalk attack/move và tự
+    // issue-move tới con trỏ (khớp C#). Hết buff LucianR → bật lại orbwalk.
+    if (player.HasBuff("LucianR")) {
+        Orbwalker::AttackEnabled(false);
+        Orbwalker::MoveEnabled(false);
+        CoreControl::IssueMove(Game::CursorPos(), true);
+    } else {
+        Orbwalker::AttackEnabled(true);
+        Orbwalker::MoveEnabled(true);
+    }
+
     if (Game::IsChatOpen() || player.Spellbook().IsWindingUp() || player.IsDashing()) {
         return;
     }
+
+    // ForceR keybind (Smart R): cast R lên target khi giữ phím.
+    if (Key(ComboMenu, "forceR")) {
+        UseRTarget();
+    }
+
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo/harass.
+    AutoKillsteal();
 
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
@@ -362,6 +464,69 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 
     AutoHarass();
+}
+
+// Auto killsteal: R (The Culling, tầm xa nhất 1400) → W (skillshot 1000) →
+// Q (targeted 675, xuyên-minion tới 900). Damage tính tay qua SpellDamage (wiki),
+// chỉ cast khi hạ gục được (IsKillable). Chạy mọi mode, gate bởi toggle "killsteal".
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R The Culling: directional channel, tầm 1400 (physical). Bắn nhiều phát → sát
+    // thương lớn nhất, dùng cho mục tiêu chạy xa ngoài tầm Q/W.
+    if (R.IsReady()) {
+        const auto target = GetTarget(R.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, R.Range) && IsKillable(target, SpellDamage(SpellSlot::R, target))) {
+            R.Cast(target.ServerPosition());
+            return;
+        }
+    }
+
+    // W Ardent Blaze: skillshot line 1000 (magic). Ưu tiên biến thể không collision
+    // để không bị lính chặn khi chốt hạ.
+    if (W.IsReady()) {
+        const auto target = GetTargetNoCollision(WNoCollision);
+        if (ValidHeroTarget(target, W.Range) && IsKillable(target, SpellDamage(SpellSlot::W, target))) {
+            const auto pred = WNoCollision.GetPrediction(target, true);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                WNoCollision.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // Q Piercing Light: targeted 675 (physical) — auto trúng, chắc ăn nhất trong tầm.
+    if (Q.IsReady()) {
+        const auto target = GetTarget(Q.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, Q.Range) && IsKillable(target, SpellDamage(SpellSlot::Q, target))) {
+            Q.CastOnUnit(target);
+            return;
+        }
+        // Ngoài tầm targeted nhưng trong 900: bắn xuyên minion để với tới.
+        const auto extended = GetTarget(QExtended.Range, DamageType::Physical);
+        if (ValidHeroTarget(extended, QExtended.Range) && IsKillable(extended, SpellDamage(SpellSlot::Q, extended))) {
+            CastExtendedQThroughMinion(extended);
+        }
+    }
+}
+
+// ForceR (Smart R keybind): cast R The Culling lên target hướng tới. Bản C#
+// bắn R.Cast(target.ServerPosition) khi chưa đang bắn R (không có buff LucianR).
+static void UseRTarget() {
+    const auto player = Player();
+    if (!player.IsValid() || !R.IsReady() || player.HasBuff("LucianR")) {
+        return;
+    }
+    const auto target = GetTarget(R.Range, DamageType::Physical);
+    if (ValidHeroTarget(target, R.Range)) {
+        R.Cast(target.ServerPosition());
+    }
 }
 
 static void Combo() {
@@ -382,7 +547,7 @@ static void Combo() {
             }
         } else {
             for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                if (ValidHeroTarget(enemy, Q.Range) && IsKillable(enemy, Q.GetDamage(enemy))) {
+                if (ValidHeroTarget(enemy, Q.Range) && IsKillable(enemy, SpellDamage(SpellSlot::Q, enemy))) {
                     Q.CastOnUnit(enemy);
                     break;
                 }
@@ -416,7 +581,7 @@ static void Combo() {
             }
         } else {
             for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                if (ValidHeroTarget(enemy, W.Range) && IsKillable(enemy, W.GetDamage(enemy))) {
+                if (ValidHeroTarget(enemy, W.Range) && IsKillable(enemy, SpellDamage(SpellSlot::W, enemy))) {
                     const auto pred = W.GetPrediction(enemy, true);
                     if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                         W.Cast(pred.GetCastPosition());

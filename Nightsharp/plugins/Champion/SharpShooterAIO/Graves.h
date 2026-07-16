@@ -114,7 +114,61 @@ static bool IsKillable(const AIBaseClient& target, double damage) {
         target.HasBuff("SivirShield") || target.HasBuff("ShroudofDarkness")) {
         return false;
     }
-    return target.Health() + target.PhysicalShield() < damage - 2.0;
+    return target.Health() + target.MagicalShield() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (wiki.leagueoflegends.com) — KHÔNG dùng GetDamage ──
+// Q End of the Line (physical) — total nếu 1 mục tiêu trúng cả đạn ban đầu + vụ nổ:
+//     130/200/270/340/410 (+ 120/135/150/165/180% bonus AD)
+//     (wiki tách "Initial 50/75/100/125/150 +65% bAD" và "Explosion
+//      80/125/170/215/260 +55/70/85/100/115% bAD"; dùng tổng single-target.)
+// W Smoke Screen  (magic)     : 60/110/160/210/260 (+ 60% AP)
+// R Collateral Damage (physical) — mục tiêu chính (đạn + nổ trung tâm), rank 1-3:
+//     275/425/575 (+ 150% bonus AD)   (cone giảm tới địch phụ 200/320/440 +120% bAD, không dùng)
+// Lưu ý: cơ chế bắn nhiều viên "Buckshot" (139.93%-199.92% AD theo level) là NỘI TẠI
+//        New Destiny, không phải Q — nên không tính vào SpellDamage này.
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 130.0f, 200.0f, 270.0f, 340.0f, 410.0f };
+        static const float ratio[5] = { 1.20f, 1.35f, 1.50f, 1.65f, 1.80f };
+        const float raw = base[rank - 1] + ratio[rank - 1] * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::W: {
+        const int rank = W.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 60.0f, 110.0f, 160.0f, 210.0f, 260.0f };
+        const float raw = base[rank - 1] + 0.60f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[3] = { 275.0f, 425.0f, 575.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float raw = base[idx] + 1.50f * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
 }
 
 static int ClampLevel(int level) {
@@ -244,7 +298,10 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
 
     if (Bool(ComboMenu, "useE") && E.IsReady() && HasManaForR(kEManaCost) &&
         player.CountEnemyHeroesInRange(700.0f) <= 1) {
-        E.Cast(player.Position().Extend(Game::CursorPos(), 450.0f));
+        const Vector3 dashPos = player.Position().Extend(Game::CursorPos(), E.Range - 5.0f);
+        if (!SDK::NavMesh::IsWall(dashPos) && E.Cast(dashPos)) {
+            Orbwalker::ResetAutoAttackTimer();
+        }
     }
 }
 
@@ -269,10 +326,13 @@ static void Combo() {
         }
     }
 
+    // Hoist snapshot EnemyHeroes 1 lần cho cả nhánh useW và useRKill (frame đóng băng = y hệt).
+    const auto comboHeroes = GameObjects::EnemyHeroes();
+
     // W: ưu tiên hero trong tầm nhưng ngoài tầm đánh thường.
     if (Bool(ComboMenu, "useW") && W.IsReady() && HasManaForR(kWManaCost[ClampLevel(W.Level())])) {
         AIHeroClient best;
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboHeroes) {
             if (ValidHeroTarget(enemy, W.Range) && !AutoAttack::InAutoAttackRange(enemy)) {
                 best = enemy;
                 break;
@@ -288,8 +348,9 @@ static void Combo() {
 
     if (R.IsReady()) {
         if (Bool(ComboMenu, "useRKill")) {
-            for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                if (ValidHeroTarget(enemy, R.Range) && IsKillable(enemy, R.GetDamage(enemy))) {
+            for (const auto& enemy : comboHeroes) {
+                if (ValidHeroTarget(enemy, R.Range) &&
+                    IsKillable(enemy, SpellDamage(SpellSlot::R, AIBaseClient(enemy.Handle())))) {
                     const auto pred = R.GetPrediction(enemy);
                     if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                         R.Cast(pred.GetCastPosition());
@@ -389,24 +450,28 @@ static void Killsteal() {
         if (!ValidUnit(enemy)) {
             continue;
         }
-        if (Q.IsReady() && ValidHeroTarget(enemy, Q.Range) && IsKillable(enemy, Q.GetDamage(enemy))) {
+        // R Collateral Damage: burst chính, tầm xa nhất → ưu tiên trước.
+        if (R.IsReady() && ValidHeroTarget(enemy, R.Range) &&
+            IsKillable(AIBaseClient(enemy.Handle()), SpellDamage(SpellSlot::R, AIBaseClient(enemy.Handle())))) {
+            const auto pred = R.GetPrediction(enemy);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                R.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+        if (Q.IsReady() && ValidHeroTarget(enemy, Q.Range) &&
+            IsKillable(AIBaseClient(enemy.Handle()), SpellDamage(SpellSlot::Q, AIBaseClient(enemy.Handle())))) {
             const auto pred = Q.GetPrediction(enemy);
             if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                 Q.Cast(pred.GetCastPosition());
                 return;
             }
         }
-        if (W.IsReady() && ValidHeroTarget(enemy, W.Range) && IsKillable(enemy, W.GetDamage(enemy))) {
+        if (W.IsReady() && ValidHeroTarget(enemy, W.Range) &&
+            IsKillable(AIBaseClient(enemy.Handle()), SpellDamage(SpellSlot::W, AIBaseClient(enemy.Handle())))) {
             const auto pred = W.GetPrediction(enemy);
             if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                 W.Cast(pred.GetCastPosition());
-                return;
-            }
-        }
-        if (R.IsReady() && ValidHeroTarget(enemy, R.Range) && IsKillable(enemy, R.GetDamage(enemy))) {
-            const auto pred = R.GetPrediction(enemy);
-            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                R.Cast(pred.GetCastPosition());
                 return;
             }
         }
@@ -422,6 +487,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Auto killsteal: chạy mọi mode, ưu tiên trước combo để không phí spell.
+    Killsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -435,8 +503,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     default:
         break;
     }
-
-    Killsteal();
 }
 
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args) {

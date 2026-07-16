@@ -34,6 +34,7 @@ inline Menu* MiscMenu = nullptr;
 inline Spell Q{ SpellSlot::Q, FLT_MAX };
 inline Spell W{ SpellSlot::W, 950.0f };
 inline Spell E{ SpellSlot::E, 1200.0f };
+inline Spell R{ SpellSlot::R, 850.0f };
 inline Spell Recall{ SpellSlot::Recall, FLT_MAX };
 
 inline bool Loaded = false;
@@ -128,10 +129,65 @@ static AIHeroClient GetTarget(float range, DamageType damageType) {
     return selector ? selector->GetTarget(range, damageType) : AIHeroClient();
 }
 
+// ── Damage tính tay theo wiki (leagueoflegends.com/en-us/Twitch/LoL) ──
+// KHÔNG dùng Spell::GetDamage. Chốt số ngày 2026-07-08.
+//
+// Passive Deadly Venom (TRUE, không tính trong spell damage):
+//   1/2/3/4/5 (theo cấp) (+3% AP) true/s mỗi stack, tối đa 6 stack, 6s.
+//
+// Q Ambush        : stealth self-buff, KHÔNG gây sát thương.
+// W Venom Cask    : KHÔNG gây sát thương trực tiếp. Chỉ apply Deadly Venom +
+//                   slow 30/35/40/45/50% (+6% mỗi 100 AP). => loại khỏi killsteal.
+// E Contaminate   : MIXED = physical + magic, dựa trên số stack Deadly Venom
+//                   trên target lúc bắt đầu cast:
+//     base physical/rank : 20 / 30 / 40 / 50 / 60
+//     per-stack physical : 15 / 20 / 25 / 30 / 35   (+35% bonus AD mỗi stack)
+//     per-stack magic    : 35% AP mỗi stack
+//     -> min (1 stack)  : 35/50/65/80/95    (+35% bonus AD)  (+35% AP)
+//     -> max (6 stack)  : 110/150/190/230/270 (+210% bonus AD) (+210% AP)
+//   Stack đọc từ buff "twitchdeadlyvenom" trên target (GetBuffCount), clamp 0..6.
+// R Spray and Pray: chuyển auto thành bolt xuyên (+30/45/60 bonus AD, +range),
+//                   KHÔNG có nuke cast trực tiếp. => SpellDamage = 0.
+//
+// Physical trừ giáp, magic trừ kháng phép riêng qua CalculateMixedDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float basePhys[5] = { 20.0f, 30.0f, 40.0f, 50.0f, 60.0f };
+        static const float perStackPhys[5] = { 15.0f, 20.0f, 25.0f, 30.0f, 35.0f };
+        int stacks = target.GetBuffCount("twitchdeadlyvenom");
+        if (stacks < 0) {
+            stacks = 0;
+        }
+        if (stacks > 6) {
+            stacks = 6;
+        }
+        const float s = static_cast<float>(stacks);
+        const float physRaw = basePhys[rank - 1] + s * (perStackPhys[rank - 1] + 0.35f * bonusAd);
+        const float magicRaw = s * (0.35f * ap);
+        return Damage::CalculateMixedDamage(player, target, physRaw, magicRaw);
+    }
+    default:
+        // Q/W/R không gây sát thương trực tiếp theo wiki hiện tại.
+        return 0.0f;
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
+static void AutoKillsteal();
 static void Combo();
 static void Clear();
-static void KillSteal();
 static void StealthRecall();
 static void OnUnload();
 
@@ -142,7 +198,7 @@ static bool ShouldContaminate(float range) {
             continue;
         }
         if (enemy.GetBuffCount("twitchdeadlyvenom") >= 6 ||
-            IsKillable(enemy, E.GetDamage(enemy), DamageType::Physical)) {
+            IsKillable(enemy, SpellDamage(SpellSlot::E, enemy), DamageType::Physical)) {
             return true;
         }
     }
@@ -155,6 +211,10 @@ static void BuildMenu() {
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
     ComboMenu->Add(new MenuBool("useW", "Use W"));
     ComboMenu->Add(new MenuBool("useE", "Use E (finisher)"));
+    ComboMenu->Add(new MenuBool("useEOutRange", "Use E if target escaping E range"));
+    ComboMenu->Add(new MenuSlider("eOutRangeStack", "-> if venom stacks >=", 3, 1, 6));
+    ComboMenu->Add(new MenuBool("useR", "Use R (Spray and Pray)", false));
+    ComboMenu->Add(new MenuSlider("rCount", "-> if enemies in range >=", 2, 1, 5));
 
     JungleClearMenu = MenuRoot->AddSubMenu(new Menu("Jungle Settings", "Jungle Clear"));
     JungleClearMenu->Add(new MenuBool("useW", "Use W", false));
@@ -183,6 +243,9 @@ static void OnGameLoad() {
     E = Spell(SpellSlot::E, 1200.0f);
     E.DamageType = DamageType::Physical;
 
+    R = Spell(SpellSlot::R, 850.0f);
+    R.DamageType = DamageType::Physical;
+
     Recall = Spell(SpellSlot::Recall, FLT_MAX);
 
     BuildMenu();
@@ -202,6 +265,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo (giống Corki).
+    AutoKillsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -213,7 +279,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         break;
     }
 
-    KillSteal();
     StealthRecall();
 }
 
@@ -234,6 +299,45 @@ static void Combo() {
 
     if (Bool(ComboMenu, "useE") && E.IsReady() && ShouldContaminate(E.Range)) {
         E.Cast();
+        return;
+    }
+
+    // Hoist snapshot EnemyHeroes 1 lần cho cả nhánh useEOutRange và useR (frame đóng băng = y hệt).
+    const auto comboHeroes = GameObjects::EnemyHeroes();
+
+    // E out-range escape (C# ComboUseEOutRange): con mồi dính đủ stack đang ở rìa
+    // tầm E và sẽ thoát khỏi tầm sau ~0.6s → nổ E ngay trước khi mất mục tiêu.
+    if (Bool(ComboMenu, "useEOutRange") && E.IsReady()) {
+        const int minStack = Slider(ComboMenu, "eOutRangeStack", 3);
+        for (const auto& enemy : comboHeroes) {
+            if (!ValidHeroTarget(enemy, E.Range) ||
+                enemy.GetBuffCount("twitchdeadlyvenom") < minStack) {
+                continue;
+            }
+            const float dist = enemy.DistanceToPlayer();
+            if (dist <= E.Range - 100.0f) {
+                continue; // còn sâu trong tầm, chưa cần nổ vội.
+            }
+            const auto pred = Prediction::GetPrediction(AIBaseClient(enemy.Handle()), 0.6f);
+            if (pred.GetCastPosition().Distance(Player().Position()) >= E.Range) {
+                E.Cast();
+                return;
+            }
+        }
+    }
+
+    // R Spray and Pray (C# ComboUseR): bật R khi có >= N địch trong tầm (teamfight).
+    if (Bool(ComboMenu, "useR", false) && R.IsReady()) {
+        const int need = Slider(ComboMenu, "rCount", 2);
+        int count = 0;
+        for (const auto& enemy : comboHeroes) {
+            if (ValidHeroTarget(enemy, R.Range)) {
+                ++count;
+            }
+        }
+        if (count >= need) {
+            R.Cast();
+        }
     }
 }
 
@@ -284,14 +388,17 @@ static void Clear() {
     }
 }
 
-static void KillSteal() {
+// Auto killsteal E Contaminate (no-target, tầm 1200). Damage tính tay theo wiki
+// qua SpellDamage (KHÔNG dùng GetDamage) — đã tính stack Deadly Venom trên từng
+// địch. W/R không có nuke trực tiếp nên không tham gia killsteal.
+static void AutoKillsteal() {
     if (!Bool(MiscMenu, "killsteal") || !E.IsReady()) {
         return;
     }
 
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (ValidHeroTarget(enemy, E.Range) &&
-            IsKillable(enemy, E.GetDamage(enemy), DamageType::Physical)) {
+            IsKillable(enemy, SpellDamage(SpellSlot::E, enemy), DamageType::Physical)) {
             E.Cast();
             return;
         }

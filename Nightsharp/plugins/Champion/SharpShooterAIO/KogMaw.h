@@ -37,6 +37,7 @@ inline Menu* ComboMenu = nullptr;
 inline Menu* HarassMenu = nullptr;
 inline Menu* LaneClearMenu = nullptr;
 inline Menu* JungleClearMenu = nullptr;
+inline Menu* MiscMenu = nullptr;
 
 inline Spell Q{ SpellSlot::Q, 950.0f };
 inline Spell W{ SpellSlot::W, FLT_MAX };
@@ -129,6 +130,64 @@ static bool IsKillable(const AIBaseClient& target, double calculatedDamage, Dama
     return target.Health() + HealthRegenRate(target) + shield < calculatedDamage - 2.0;
 }
 
+// ── Damage tính tay theo wiki (leagueoflegends.com) — KHÔNG dùng DamageData ──
+// Q Caustic Spittle (magic) : 80/125/170/215/260 + 90% AP
+// E Void Ooze       (magic) : 70/110/150/190/230 + 65% AP
+// R Living Artillery (magic, 3 rank):
+//     Tối thiểu : 100/140/180 + 75% bonus AD + 35/40/45% AP
+//     Tối đa    : 200/280/360 + 150% bonus AD + 70/80/90% AP
+//     Low-HP rule (wiki): sát thương tăng 0%–50% theo máu đã mất, và "100% if
+//     the target is below 40% maximum health" → khi mục tiêu dưới 40% máu tối đa
+//     thì nhân đôi (tối thiểu → tối đa). Ta dùng ngưỡng 40% để nhân đôi raw.
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+inline constexpr float kRLowHpThresholdPct = 40.0f;
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 80.0f, 125.0f, 170.0f, 215.0f, 260.0f };
+        const float raw = base[rank - 1] + 0.90f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 70.0f, 110.0f, 150.0f, 190.0f, 230.0f };
+        const float raw = base[rank - 1] + 0.65f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[3] = { 100.0f, 140.0f, 180.0f };
+        static const float apRatio[3] = { 0.35f, 0.40f, 0.45f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        float raw = base[idx] + 0.75f * bonusAd + apRatio[idx] * ap;
+        // Dưới 40% máu tối đa → nhân đôi (tối thiểu → tối đa) theo wiki.
+        if (target.HealthPercent() < kRLowHpThresholdPct) {
+            raw *= 2.0f;
+        }
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 // Còn đủ mana để cast W sau khi tiêu spellCost? (Keep Mana For W)
 static bool KeepManaForW(Menu* menu, Spell& spell) {
     if (!Bool(menu, "keepManaForW")) {
@@ -151,8 +210,22 @@ static int RCostStacks() {
     return player.IsValid() ? player.GetBuffCount(kRCostBuff) : 0;
 }
 
+// Ngưỡng máu enemy để cho phép R trong tầm AA.
+inline constexpr float kRInAaRangeHealthPct = 40.0f;
+
+// Ưu tiên đánh tay (W->E->Q) khi enemy trong tầm AA -> hạn chế R.
+// R chỉ được phép bắn khi enemy ngoài tầm AA; nếu enemy đã trong tầm AA thì
+// chỉ bắn R khi máu enemy < 40% (để kết liễu), còn lại nhường cho đòn tay.
+static bool RAllowedOnTarget(const AIBaseClient& target) {
+    if (!AutoAttack::InAutoAttackRange(target)) {
+        return true;
+    }
+    return target.HealthPercent() < kRInAaRangeHealthPct;
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
+static void AutoKillsteal();
 static void Combo();
 static void Mixed();
 static void Clear();
@@ -167,6 +240,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("useE", "Use E"));
     ComboMenu->Add(new MenuBool("useR", "Use R"));
     ComboMenu->Add(new MenuSlider("rStacks", "R Stacks Limit", 3, 1, 6));
+    ComboMenu->Add(new MenuSlider("rMana", "R If Mana > %", 40, 0, 100));
     ComboMenu->Add(new MenuBool("keepManaForW", "Keep Mana For W"));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
@@ -189,6 +263,9 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuBool("useR", "Use R"));
     JungleClearMenu->Add(new MenuSlider("rStacks", "R Stacks Limit", 1, 1, 6));
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
+
+    MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (Q/R)"));
 
     MenuRoot->Attach();
 }
@@ -235,6 +312,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     W.Range = 565.0f + 60.0f + static_cast<float>(W.Level()) * 30.0f + 65.0f;
     R.Range = 900.0f + static_cast<float>(R.Level()) * 300.0f;
 
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+    AutoKillsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -250,6 +330,45 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 }
 
+// Auto killsteal: R Living Artillery (no-collision, tầm xa nhất) → Q Caustic
+// Spittle (skillshot line). Damage tính tay theo wiki qua SpellDamage. Chỉ cast
+// khi hạ gục được. R nhân đôi sát thương với mục tiêu dưới 40% máu tối đa.
+// E Void Ooze bỏ qua killsteal: chủ yếu là slow, burst thấp, ưu tiên combo.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R Living Artillery: target no-collision, tầm động 900 + level*300.
+    if (R.IsReady()) {
+        const auto target = GetTargetNoCollision(R);
+        if (ValidHeroTarget(target, R.Range) &&
+            IsKillable(target, SpellDamage(SpellSlot::R, target), DamageType::Magical)) {
+            const auto pred = R.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                R.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // Q Caustic Spittle: skillshot line 950, collision.
+    if (Q.IsReady()) {
+        const auto target = GetTargetNoCollision(Q);
+        if (ValidHeroTarget(target, Q.Range) &&
+            IsKillable(target, SpellDamage(SpellSlot::Q, target), DamageType::Magical)) {
+            const auto pred = Q.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                Q.Cast(pred.GetCastPosition());
+            }
+        }
+    }
+}
+
 static void Combo() {
     if (!ShouldRunNow(LastComboEvalTick, 60)) {
         return;
@@ -262,8 +381,11 @@ static void Combo() {
         }
     }
 
+    // Hoist snapshot EnemyHeroes 1 lần cho cả nhánh useW và useR-finish (frame đóng băng = y hệt).
+    const auto comboHeroes = GameObjects::EnemyHeroes();
+
     if (Bool(ComboMenu, "useW") && W.IsReady()) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboHeroes) {
             if (ValidHeroTarget(enemy, W.Range)) {
                 W.Cast();
                 break;
@@ -281,10 +403,11 @@ static void Combo() {
         }
     }
 
-    if (Bool(ComboMenu, "useR") && R.IsReady() && KeepManaForW(ComboMenu, R)) {
+    if (Bool(ComboMenu, "useR") && R.IsReady() && KeepManaForW(ComboMenu, R) &&
+        ManaOkay(Slider(ComboMenu, "rMana", 40))) {
         if (RCostStacks() < Slider(ComboMenu, "rStacks", 3)) {
             const auto target = GetTarget(R.Range, DamageType::Magical);
-            if (ValidHeroTarget(target, R.Range)) {
+            if (ValidHeroTarget(target, R.Range) && RAllowedOnTarget(target)) {
                 const auto pred = R.GetPrediction(target);
                 if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                     R.Cast(pred.GetCastPosition());
@@ -292,11 +415,11 @@ static void Combo() {
             }
         } else {
             // Vượt ngưỡng stack: chỉ bắn để kết liễu.
-            for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            for (const auto& enemy : comboHeroes) {
                 if (!ValidHeroTarget(enemy, R.Range)) {
                     continue;
                 }
-                if (IsKillable(enemy, R.GetDamage(enemy), DamageType::Magical)) {
+                if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy), DamageType::Magical)) {
                     const auto pred = R.GetPrediction(enemy);
                     if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                         R.Cast(pred.GetCastPosition());
@@ -333,7 +456,7 @@ static void Mixed() {
 
     if (Bool(HarassMenu, "useR") && R.IsReady() && RCostStacks() < Slider(HarassMenu, "rStacks", 1)) {
         const auto target = GetTarget(R.Range, DamageType::Magical);
-        if (ValidHeroTarget(target, R.Range)) {
+        if (ValidHeroTarget(target, R.Range) && RAllowedOnTarget(target)) {
             const auto pred = R.GetPrediction(target, true);
             if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                 R.Cast(pred.GetCastPosition());
@@ -348,15 +471,18 @@ static void Clear() {
         return;
     }
 
+    // Hoist snapshot lane-minion (fallback EnemyMinions) 1 lần cho cả nhánh useE và useR
+    // (frame đã đóng băng nên phân giải nguồn lính = kết quả y hệt), tránh copy lại vector.
+    auto laneMinionsSnap = GameObjects::EnemyLaneMinions();
+    if (laneMinionsSnap.empty()) {
+        laneMinionsSnap = GameObjects::EnemyMinions();
+    }
+
     // Lane clear E: bắn dàn lính trên đường (>=4).
     if (Bool(LaneClearMenu, "useE", false) && E.IsReady() && ManaOkay(Slider(LaneClearMenu, "Mana", 60))) {
-        auto minions = GameObjects::EnemyLaneMinions();
-        if (minions.empty()) {
-            minions = GameObjects::EnemyMinions();
-        }
         std::vector<AIBaseClient> targets;
-        targets.reserve(minions.size());
-        for (const auto& minion : minions) {
+        targets.reserve(laneMinionsSnap.size());
+        for (const auto& minion : laneMinionsSnap) {
             if (ValidTarget(minion, E.Range)) {
                 targets.push_back(AIBaseClient(minion.Handle()));
             }
@@ -373,13 +499,9 @@ static void Clear() {
     if (Bool(LaneClearMenu, "useR", false) && R.IsReady() &&
         ManaOkay(Slider(LaneClearMenu, "Mana", 60)) &&
         RCostStacks() < Slider(LaneClearMenu, "rStacks", 1)) {
-        auto minions = GameObjects::EnemyLaneMinions();
-        if (minions.empty()) {
-            minions = GameObjects::EnemyMinions();
-        }
         std::vector<AIBaseClient> targets;
-        targets.reserve(minions.size());
-        for (const auto& minion : minions) {
+        targets.reserve(laneMinionsSnap.size());
+        for (const auto& minion : laneMinionsSnap) {
             if (ValidTarget(minion, R.Range)) {
                 targets.push_back(AIBaseClient(minion.Handle()));
             }

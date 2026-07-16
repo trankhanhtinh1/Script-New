@@ -29,6 +29,7 @@
 #include "../../../core/CoreControl.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <string>
 #include <vector>
@@ -64,6 +65,35 @@ inline int BestAxeNetworkId = 0;
 
 static AIHeroClient Player() {
     return ObjectManager::Player();
+}
+
+static std::string RuntimeObjectName(const GameObject& object) {
+    char name[128] = {};
+    if (object.IsValid() &&
+        ::Core::Objects::ReadName(object.Address(), name, static_cast<int>(sizeof(name))) && name[0]) {
+        return name;
+    }
+    return object.CharacterName();
+}
+
+static bool IsAxeReticle(const GameObject& object) {
+    std::string name = RuntimeObjectName(object);
+    std::transform(name.begin(), name.end(), name.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return name.find("draven") != std::string::npos &&
+           name.find("q_reticle_self") != std::string::npos;
+}
+
+static void TrackAxe(const GameObject& object) {
+    if (!object.IsValid() || !IsAxeReticle(object)) {
+        return;
+    }
+    const int id = object.NetworkId();
+    const auto found = std::find_if(AxeDrops.begin(), AxeDrops.end(),
+        [id](const AxeDrop& axe) { return axe.networkId == id; });
+    if (found == AxeDrops.end()) {
+        AxeDrops.push_back(AxeDrop{ id, GetTickCount() + 1200, object.Position() });
+    }
 }
 
 static bool Bool(Menu* menu, const char* key, bool fallback = true) {
@@ -120,6 +150,64 @@ static bool IsKillable(const AIBaseClient& target, double damage) {
     return target.Health() + target.PhysicalShield() < damage - 2.0;
 }
 
+// ── Damage tính tay theo wiki (leagueoflegends.com/en-us/Draven/LoL) ──
+// KHÔNG dùng Spell::GetDamage. Draven KHÔNG có tỉ lệ AP; mọi kỹ năng scale bonus AD.
+//
+// Q Spinning Axe   (physical, on-hit): 40/45/50/55/60 + 75/85/95/105/115% bonus AD
+//   → là bonus cộng thẳng vào đòn đánh thường kế tiếp (auto modifier), không phải
+//     một instance sát thương độc lập. SpellDamage(Q) trả về phần bonus của rìu.
+//     Vì vậy Q KHÔNG dùng cho killsteal độc lập (không tự bay tới địch).
+// W Blood Rush     : không sát thương (chỉ tốc chạy + tốc đánh + ghosting).
+// E Stand Aside    (physical, area)  : 75/110/145/180/215 + 50% bonus AD. Không AP ratio.
+// R Whirling Death (physical, 3 rank): 200/300/400 + 110/130/150% bonus AD MỖI LƯỢT.
+//   → rìu bay đi rồi có thể quay về (recast); "hit only once per pass" nên một mục
+//     tiêu nằm trong đường bay ăn tối đa 2 lần (đi + về) = damage-per-pass × 2.
+//     Killsteal giữ nguyên intent × 2.0. (Wiki tổng cả 2 lượt: 400/600/800
+//     + 220/260/300% bonus AD; lượt về giảm dần theo số địch trúng 100%→50%.)
+// Trả về damage đã trừ giáp qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 40.0f, 45.0f, 50.0f, 55.0f, 60.0f };
+        static const float ratio[5] = { 0.75f, 0.85f, 0.95f, 1.05f, 1.15f };
+        const float raw = base[rank - 1] + ratio[rank - 1] * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 75.0f, 110.0f, 145.0f, 180.0f, 215.0f };
+        const float raw = base[rank - 1] + 0.50f * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[3] = { 200.0f, 300.0f, 400.0f };
+        static const float ratio[3] = { 1.10f, 1.30f, 1.50f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float raw = base[idx] + ratio[idx] * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 // Số rìu đang có: buff dravenspinningattack (số charge) + reticle đang track.
 static int AxeCount() {
     const auto player = Player();
@@ -142,6 +230,7 @@ static void OnCreateObject(const GameObject& object);
 static void OnDeleteObject(const GameObject& object);
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args);
+static void AutoKillsteal();
 static void AutoCatchAxe();
 static void Combo();
 static void Mixed();
@@ -175,6 +264,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (E/R)"));
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (E)"));
     MiscMenu->Add(new MenuBool("interrupter", "Interrupter (E)"));
     MiscMenu->Add(new MenuBool("autoCatch", "Auto Catch Axe"));
@@ -220,16 +310,11 @@ static void OnCreateObject(const GameObject& object) {
     if (!Loaded || !object.IsValid()) {
         return;
     }
-    if (object.Name() == kReticleName) {
-        AxeDrops.push_back(AxeDrop{ object.NetworkId(), GetTickCount() + 1200, object.Position() });
-    }
+    TrackAxe(object);
 }
 
 static void OnDeleteObject(const GameObject& object) {
-    if (!Loaded || !object.IsValid()) {
-        return;
-    }
-    if (object.Name() != kReticleName) {
+    if (!Loaded) {
         return;
     }
     const int id = object.NetworkId();
@@ -256,8 +341,14 @@ static void AutoCatchAxe() {
     }
 
     // Cập nhật vị trí reticle đang track từ object hiện tại.
+    // Hoist snapshot AllGameObjects 1 lần (không copy lại mỗi rìu): frame đã
+    // đóng băng nên list object không đổi giữa các vòng = kết quả y hệt.
+    const auto allObjs = GameObjects::AllGameObjects();
+    for (const auto& obj : allObjs) {
+        TrackAxe(obj);
+    }
     for (auto& axe : AxeDrops) {
-        for (const auto& obj : GameObjects::AllGameObjects()) {
+        for (const auto& obj : allObjs) {
             if (obj.IsValid() && obj.NetworkId() == axe.networkId) {
                 axe.position = obj.Position();
                 break;
@@ -344,9 +435,12 @@ static void Combo() {
         return;
     }
 
+    // Hoist snapshot EnemyHeroes 1 lần cho cả nhánh useW và useR (frame đóng băng = y hệt).
+    const auto comboHeroes = GameObjects::EnemyHeroes();
+
     // W: khi có địch trong tầm đánh thường và chưa có buff tốc chạy.
     if (Bool(ComboMenu, "useW") && W.IsReady() && !player.HasBuff("dravenfurybuff")) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboHeroes) {
             if (ValidHeroTarget(enemy) && AutoAttack::InAutoAttackRange(enemy)) {
                 W.Cast();
                 break;
@@ -367,11 +461,11 @@ static void Combo() {
 
     // R: finish mục tiêu ngoài tầm đánh, killable với 2 lần R.
     if (Bool(ComboMenu, "useR") && R.IsReady()) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboHeroes) {
             if (!ValidHeroTarget(enemy, R.Range) || AutoAttack::InAutoAttackRange(enemy)) {
                 continue;
             }
-            if (IsKillable(enemy, R.GetDamage(enemy) * 2.0)) {
+            if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy) * 2.0)) {
                 const auto pred = R.GetPrediction(enemy);
                 if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                     R.Cast(pred.GetCastPosition());
@@ -471,6 +565,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+    AutoKillsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -483,6 +580,44 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         break;
     default:
         break;
+    }
+}
+
+// Auto killsteal: R (toàn cầu 2500, ×2 vì rìu đi + về) → E (đẩy, physical).
+// Q Spinning Axe là on-hit modifier, không tự bay tới địch → không dùng killsteal.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R Whirling Death: rìu bay đi + quay về ăn tối đa 2 lần → damage-per-pass × 2.
+    if (R.IsReady()) {
+        const auto target = GetTarget(R.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, R.Range) &&
+            IsKillable(target, SpellDamage(SpellSlot::R, target) * 2.0)) {
+            const auto pred = R.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                R.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // E Stand Aside: skillshot line 1000.
+    if (E.IsReady()) {
+        const auto target = GetTarget(E.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, E.Range) &&
+            IsKillable(target, SpellDamage(SpellSlot::E, target))) {
+            const auto pred = E.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                E.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
     }
 }
 

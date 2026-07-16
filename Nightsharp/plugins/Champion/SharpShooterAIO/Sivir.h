@@ -109,9 +109,55 @@ static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
     return AIHeroClient(handle);
 }
 
+// Killsteal: loại buff bất tử phổ biến rồi so máu + shield với damage tính được.
+static bool IsKillable(const AIBaseClient& target, double damage) {
+    if (!ValidUnit(target)) {
+        return false;
+    }
+    if (target.HasBuff("kindredrnodeathbuff") || target.HasBuff("Undying Rage") ||
+        target.HasBuff("JudicatorIntervention") || target.HasBuff("BansheesVeil") ||
+        target.HasBuff("SivirShield") || target.HasBuff("ShroudofDarkness")) {
+        return false;
+    }
+    return target.Health() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (leagueoflegends.com) — KHÔNG dùng DamageData ──
+// Q Boomerang Blade (physical): 60/85/110/135/160 + 70% bonus AD + 60% AP
+//   Boomerang gây damage giảm dần mỗi mục tiêu bị đánh trúng (đi ra) và có
+//   phiên bản "return" tối thiểu, nhưng cho killsteal ta dùng full first-hit.
+// W Ricochet     : on-hit bounce (sửa đòn đánh thường), không phải nuke đơn lẻ.
+// E Spell Shield : không gây damage (chỉ chặn + heal).
+// R On The Hunt  : không gây damage trực tiếp (buff tốc chạy + giảm hồi chiêu).
+// → Chỉ Q là spell killsteal. Các slot khác trả về 0.
+// Trả về damage đã trừ giáp qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        const float bonusAd = player.BonusAttackDamage();
+        const float ap = player.AP();
+        static const float base[5] = { 60.0f, 85.0f, 110.0f, 135.0f, 160.0f };
+        const float raw = base[rank - 1] + 0.70f * bonusAd + 0.60f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
 static void OnProcessSpell(const ProcessSpellEventArgs& args);
 static void OnAfterAttack(OrbwalkingActionArgs& args);
+static void AutoKillsteal();
 static void Combo();
 static void Mixed();
 static void Clear();
@@ -142,6 +188,7 @@ static void BuildMenu() {
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
     MiscMenu->Add(new MenuBool("autoQ", "Auto Q on immobile Target"));
     MiscMenu->Add(new MenuBool("autoE", "Auto E against targeted spells"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (Q)"));
 
     MenuRoot->Attach();
 }
@@ -235,6 +282,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+    AutoKillsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -250,6 +300,27 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 
     AutoQ();
+}
+
+// Auto killsteal: chỉ Q Boomerang Blade gây damage trực tiếp (skillshot line
+// 1250, physical). Tính damage tay theo wiki qua SpellDamage.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal") || !Q.IsReady()) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    const auto target = GetTarget(Q.Range, DamageType::Physical);
+    if (!ValidHeroTarget(target, Q.Range) || !IsKillable(target, SpellDamage(SpellSlot::Q, target))) {
+        return;
+    }
+    const auto pred = Q.GetPrediction(target);
+    if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+        Q.Cast(pred.GetCastPosition());
+    }
 }
 
 static void Combo() {

@@ -17,9 +17,10 @@
 //
 // Ghi chú port:
 //   * QSwitch: chỉ cast Q khi không đang cast spell, để đổi đúng dạng mong muốn.
-//   * R damage = [0,25,30,35][lvl]/100*(maxHP-HP) +
-//                ([0,25,35,45][lvl] + 0.1*bonusAD)*min(1+dist/15*0.09,10),
-//     rồi quy đổi qua CalculatePhysicalDamage (giáp).
+//   * Damage tính tay theo wiki (leagueoflegends.com/en-us/Jinx/LoL) — KHÔNG
+//     dùng GetDamage. R = base ramp theo khoảng cách 10%→100% + %HP đã mất:
+//       max 200/350/500 (+120% bonus AD), min = 10% max = 20/35/50 (+12% bonus AD),
+//       + 25/30/35% máu đã mất (không scale theo distance), quy đổi qua giáp.
 //   * R có collision check (hero chắn đường) trước khi bắn.
 //   * HitchanceSelector cho W của bản C# rút gọn thành hardcode High (tối giản 7UP).
 // ============================================================================
@@ -137,26 +138,66 @@ static bool IsKillable(const AIBaseClient& target, double damage) {
     return target.Health() + target.PhysicalShield() < damage - 2.0;
 }
 
-// Sát thương R: %HP đã mất + scale theo khoảng cách, quy đổi qua giáp.
-static double GetRDamage(const AIBaseClient& target) {
+// ── Damage tính tay theo wiki (leagueoflegends.com/en-us/Jinx/LoL) — KHÔNG dùng GetDamage ──
+// Q Switcheroo! (Fishbones): chỉ MODIFIER auto-attack (rocket = 110% total AD,
+//                            splash vật lý AoE nhỏ). KHÔNG phải nuke cast → không tính ở đây.
+// W Zap!  (physical)       : 10 / 60 / 110 / 160 / 210 (+ 140% total AD).
+//                            Skillshot line 1450 tầm xa → killsteal tốt.
+// E Flame Chompers! (magic): 90 / 140 / 190 / 240 / 290 (+ 100% AP). Root 1.5s (dmg phụ).
+// R Super Mega Death Rocket! (physical, 3 rank, toàn cầu):
+//     Ramp theo khoảng cách đã bay (10% → 100%):
+//       max 200 / 350 / 500 (+ 120% bonus AD)   ← full range
+//       min  20 /  35 /  50 (+  12% bonus AD)   ← cận (đúng 10% của max)
+//     + %HP đã mất (KHÔNG scale theo distance): 25 / 30 / 35% * (maxHP - HP).
+//     → killsteal chủ lực. Quy đổi qua CalculateDamage (giáp).
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
-        return 0.0;
+        return 0.0f;
     }
-    const int lvl = R.Level();
-    if (lvl <= 0) {
-        return 0.0;
+    const float totalAd = player.TotalAttackDamage();
+    const float bonusAd = player.BonusAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::W: {
+        const int rank = W.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 10.0f, 60.0f, 110.0f, 160.0f, 210.0f };
+        const float raw = base[rank - 1] + 1.40f * totalAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
     }
-    static const double missingPct[] = { 0.0, 25.0, 30.0, 35.0 };
-    static const double baseDmg[] = { 0.0, 25.0, 35.0, 45.0 };
-    const int idx = std::clamp(lvl, 0, 3);
-
-    const double missing = missingPct[idx] / 100.0 * (target.MaxHealth() - target.Health());
-    const double dist = player.Distance(target.ServerPosition());
-    const double distScale = std::min(1.0 + dist / 15.0 * 0.09, 10.0);
-    const double raw = missing + (baseDmg[idx] + 0.1 * player.BonusAttackDamage()) * distScale;
-
-    return player.CalculatePhysicalDamage(target, static_cast<float>(raw));
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 90.0f, 140.0f, 190.0f, 240.0f, 290.0f };
+        const float raw = base[rank - 1] + 1.00f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2; // R chỉ có 3 rank.
+        static const float maxBase[3] = { 200.0f, 350.0f, 500.0f };
+        static const float missPct[3] = { 0.25f, 0.30f, 0.35f };
+        // Ramp 10% → 100% theo khoảng cách đã bay (xấp xỉ: đạt max quanh ~1500u).
+        const float dist = player.Distance(target.ServerPosition());
+        const float factor = std::clamp(0.10f + 0.90f * (dist / 1500.0f), 0.10f, 1.00f);
+        float raw = factor * (maxBase[idx] + 1.20f * bonusAd);
+        // Bonus %HP đã mất (không scale theo distance).
+        const float missing = target.MaxHealth() - target.Health();
+        raw += missPct[idx] * missing;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
 }
 
 // Đổi dạng vũ khí: activate=true → muốn rocket; false → muốn minigun.
@@ -173,6 +214,57 @@ static void QSwitch(bool activate) {
         Q.Cast();
     } else if (!activate && hasRocket) {
         Q.Cast();
+    }
+}
+
+// ── Tầm đánh 2 dạng vũ khí ──────────────────────────────────────────────
+// Minigun: tầm gốc 525. Rocket (Fishbones): +bonus theo cấp Q.
+static float MinigunRange() {
+    return static_cast<float>(kDefaultRange); // 525
+}
+static float RocketRange() {
+    // Rocket cộng thêm tầm đánh theo rank Q (~600 rank1 → ~700 rank5).
+    return MinigunRange() + 50.0f + 25.0f * static_cast<float>(Q.Level());
+}
+
+// Nội tại minigun (jinxqramp) đạt 3 stack = tốc đánh tối đa → ưu tiên minigun.
+static bool RampMaxed() {
+    const auto player = Player();
+    return player.IsValid() && player.GetBuffCount("jinxqramp") >= 3;
+}
+
+// Điều khiển dạng vũ khí Q theo target:
+//   * target trong tầm minigun → về minigun (đang trong tầm AA, không cần rocket).
+//   * target ngoài minigun nhưng trong tầm rocket → bật rocket (đủ tầm mới bật).
+//     Ưu tiên này áp dụng cả khi ramp 3 stack: nếu địch KHÔNG trong tầm minigun
+//     (không đánh tay tới được) mà bật rocket thì địch lọt tầm → bật rocket để
+//     vẫn đánh được, thay vì giữ minigun rồi đứng không.
+//   * ramp 3 stack + target đã trong tầm minigun → giữ minigun (giữ tốc đánh nội tại).
+//   * xa hơn cả rocket        → giữ nguyên (không đổi vô ích).
+static void UpdateQWeapon(const AIHeroClient& target) {
+    if (!Q.IsReady() || Q.Level() <= 0) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid() || !ValidUnit(target)) {
+        return;
+    }
+
+    const float br = target.BoundingRadius() + player.BoundingRadius();
+    const float dist = player.Distance(target);
+    const float miniR = MinigunRange() + br;
+    const float rockR = RocketRange() + br;
+
+    if (dist <= miniR) {
+        // Địch đã trong tầm minigun (AA range) → về minigun (giữ ramp nếu có).
+        QSwitch(false);
+    } else if (dist <= rockR) {
+        // Địch ngoài tầm minigun nhưng trong tầm rocket → bật rocket để với tới.
+        // Áp dụng cả khi ramp 3 stack: đánh được quan trọng hơn giữ nội tại.
+        QSwitch(true);
+    } else if (RampMaxed()) {
+        // Xa hơn cả rocket + ramp maxed → về minigun giữ tốc đánh nội tại.
+        QSwitch(false);
     }
 }
 
@@ -211,6 +303,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs& args);
 static void OnProcessSpell(const ProcessSpellEventArgs& args);
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args);
+static void AutoKillsteal();
 static void Combo();
 static void Mixed();
 static void Clear();
@@ -223,7 +316,6 @@ static void BuildMenu() {
 
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
     ComboMenu->Add(new MenuBool("useQ", "Use Q (weapon switch)"));
-    ComboMenu->Add(new MenuSlider("rocketCount", "Switch to Rocket if enemies >=", 3, 2, 6));
     ComboMenu->Add(new MenuBool("useW", "Use W"));
     ComboMenu->Add(new MenuBool("useE", "Use E"));
     ComboMenu->Add(new MenuBool("useR", "Use R (finisher)"));
@@ -244,6 +336,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (R/W)"));
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (E)"));
     MiscMenu->Add(new MenuBool("interrupter", "Interrupter (E)"));
     MiscMenu->Add(new MenuBool("autoE", "Auto E on Immobile Target"));
@@ -304,23 +397,13 @@ static void Combo() {
         return;
     }
 
+    // Q weapon-switch: chỉ bật rocket khi target ngoài tầm minigun mà vẫn trong
+    // tầm rocket; tự về minigun khi target đã vào tầm AA hoặc ramp đủ 3 stack.
     if (Bool(ComboMenu, "useQ") && Q.IsReady()) {
-        if (player.CountEnemyHeroesInRange(2000.0f) > 0) {
-            const auto target = GetTarget(QRange() + player.BoundingRadius() + 200.0f, DamageType::Physical);
-            if (ValidHeroTarget(target)) {
-                const int switchCount = Slider(ComboMenu, "rocketCount", 3);
-                if (target.CountEnemyHeroesInRange(200.0f) + 1 >= switchCount) {
-                    QSwitch(true);
-                } else {
-                    // Nếu target ngoài tầm minigun → rocket, ngược lại minigun.
-                    const float miniRange = AutoAttack::GetRealAutoAttackRange(target);
-                    QSwitch(!Extensions::IsValidTarget(target, miniRange));
-                }
-            } else {
-                QSwitch(true);
-            }
-        } else {
-            QSwitch(false);
+        const auto target = GetTarget(RocketRange() + player.BoundingRadius() + 200.0f,
+                                      DamageType::Physical);
+        if (ValidHeroTarget(target)) {
+            UpdateQWeapon(target);
         }
     }
 
@@ -331,10 +414,13 @@ static void Combo() {
         }
     }
 
+    // Hoist snapshot EnemyHeroes 1 lần cho cả nhánh useE và useR (frame đóng băng = y hệt).
+    const auto comboHeroes = GameObjects::EnemyHeroes();
+
     if (Bool(ComboMenu, "useE") && E.IsReady()) {
         AIHeroClient best;
         float bestDist = FLT_MAX;
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboHeroes) {
             if (!ValidHeroTarget(enemy, 600.0f) || !enemy.IsMoving()) {
                 continue;
             }
@@ -354,14 +440,14 @@ static void Combo() {
     }
 
     if (Bool(ComboMenu, "useR") && R.IsReady() && WCastTick + 1060 <= GetTickCount()) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboHeroes) {
             if (enemy.IsZombie() || enemy.CountAllyHeroesInRange(500.0f) >= 2) {
                 continue;
             }
             if (player.Distance(enemy) < QRange()) {
                 continue;
             }
-            if (IsKillable(enemy, GetRDamage(enemy))) {
+            if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy))) {
                 TryCastR(enemy);
                 break;
             }
@@ -376,11 +462,11 @@ static void Mixed() {
         return;
     }
 
-    if (Bool(HarassMenu, "useQ") && Q.IsReady() && player.CountEnemyHeroesInRange(2000.0f) > 0) {
-        const auto target = GetTarget(QRange() + player.BoundingRadius() + 200.0f, DamageType::Physical);
+    if (Bool(HarassMenu, "useQ") && Q.IsReady()) {
+        const auto target = GetTarget(RocketRange() + player.BoundingRadius() + 200.0f,
+                                      DamageType::Physical);
         if (ValidHeroTarget(target)) {
-            const float miniRange = AutoAttack::GetRealAutoAttackRange(target);
-            QSwitch(!Extensions::IsValidTarget(target, miniRange));
+            UpdateQWeapon(target);
         } else {
             QSwitch(false);
         }
@@ -445,7 +531,7 @@ static void AutoR() {
         if (player.Distance(enemy) < QRange()) {
             continue;
         }
-        if (IsKillable(enemy, GetRDamage(enemy))) {
+        if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy))) {
             TryCastR(enemy);
             break;
         }
@@ -469,6 +555,49 @@ static void AutoE() {
     }
 }
 
+// Auto killsteal: chạy mọi mode, gate bằng toggle "killsteal".
+// Ưu tiên R (toàn cầu, chủ lực + bonus %HP đã mất) → W (line 1450 tầm xa).
+// Damage tính tay qua SpellDamage (wiki), KHÔNG dùng GetDamage. Chỉ cast khi hạ gục.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R Super Mega Death Rocket! — chủ lực, tầm 2500, no-collision target.
+    // Tránh tự cast lên chính mình sau W (giữ delay như AutoR) và không R khi
+    // địch quá cận (trong tầm minigun/QRange) để dành cho AA/W.
+    if (R.IsReady() && WCastTick + 1060 <= GetTickCount()) {
+        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            if (!ValidHeroTarget(enemy, R.Range) || enemy.IsZombie()) {
+                continue;
+            }
+            if (player.Distance(enemy) < QRange()) {
+                continue;
+            }
+            if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy))) {
+                TryCastR(enemy);
+                return;
+            }
+        }
+    }
+
+    // W Zap! — skillshot line 1450, collision (minion). Killsteal tầm xa.
+    if (W.IsReady()) {
+        const auto target = GetTargetNoCollision(W);
+        if (ValidHeroTarget(target, W.Range) && IsKillable(target, SpellDamage(SpellSlot::W, target))) {
+            const auto pred = W.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                W.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
     const auto player = Player();
     if (!player.IsValid() || player.IsDead()) {
@@ -477,6 +606,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     if (Game::IsChatOpen()) {
         return;
     }
+
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo (gate bằng toggle).
+    AutoKillsteal();
 
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:

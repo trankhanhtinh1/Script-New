@@ -137,14 +137,78 @@ static bool IsKillable(const AIBaseClient& target, double calculatedDamage, Dama
     return target.Health() + HealthRegenRate(target) + shield < calculatedDamage - 2.0;
 }
 
-static double TristanaEDamage(const AIBaseClient& target) {
+// ── Damage tính tay theo wiki (leagueoflegends.com) — KHÔNG dùng GetSpellDamage ──
+// Q Rapid Fire       : chỉ tăng tốc đánh (60/75/90/105/120%), KHÔNG gây damage.
+// W Rocket Jump (MAGIC):
+//     "Magic Damage: 70 / 105 / 140 / 175 / 210 (+ 100% bonus AD) (+ 50% AP)"
+// E Explosive Charge (PHYSICAL, kích nổ theo stack):
+//     base 0 stack : "60 / 85 / 110 / 135 / 160 (+ 80% bonus AD) (+ 50% AP)"
+//     mỗi stack    : "15 / 21.25 / 27.5 / 33.75 / 40 (+ 20% bonus AD) (+ 12.5% AP)"
+//     tối đa 4 stack (từ đánh thường/kỹ năng) → full 4 stack:
+//     "120 / 170 / 220 / 270 / 320 (+ 160% bonus AD) (+ 100% AP)"
+//     (60+4*15=120; 80%+4*20%=160% bonus AD; 50%+4*12.5%=100% AP — khớp wiki).
+//     Số stack đọc từ buff "tristanaecharge" (clamp 0..4); 0 stack = E cơ bản.
+// R Buster Shot (MAGIC, 3 rank):
+//     "Magic Damage: 225 / 275 / 325 (+ 70% bonus AD) (+ 100% AP)"
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
-        return 0.0;
+        return 0.0f;
     }
-    const double eDmg = player.GetSpellDamage(target, SpellSlot::E);
-    const int charges = target.GetBuffCount("tristanaecharge");
-    return eDmg * (charges * 0.30) + eDmg;
+    const float bonusAd = player.BonusAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::W: {
+        const int rank = W.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 70.0f, 105.0f, 140.0f, 175.0f, 210.0f };
+        const float raw = base[rank - 1] + 1.00f * bonusAd + 0.50f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 60.0f, 85.0f, 110.0f, 135.0f, 160.0f };
+        static const float perStack[5] = { 15.0f, 21.25f, 27.5f, 33.75f, 40.0f };
+        int stacks = target.GetBuffCount("tristanaecharge");
+        if (stacks < 0) {
+            stacks = 0;
+        }
+        if (stacks > 4) {
+            stacks = 4;
+        }
+        const float raw =
+            base[rank - 1] + 0.80f * bonusAd + 0.50f * ap +
+            static_cast<float>(stacks) *
+                (perStack[rank - 1] + 0.20f * bonusAd + 0.125f * ap);
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        // R chỉ có 3 rank — clamp index về [0,2].
+        static const float base[3] = { 225.0f, 275.0f, 325.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float raw = base[idx] + 0.70f * bonusAd + 1.00f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
+// E detonation damage: SpellDamage đã tự đọc số stack ("tristanaecharge") của mục
+// tiêu, nên chỉ cần gọi lại. Với mục tiêu đã dính đủ stack → mô hình full-stack.
+static double TristanaEDamage(const AIBaseClient& target) {
+    return static_cast<double>(SpellDamage(SpellSlot::E, target));
 }
 
 static bool WillDieByTristanaE(const AIBaseClient& target) {
@@ -155,6 +219,7 @@ static bool WillDieByTristanaE(const AIBaseClient& target) {
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
+static void OnPlayAnimation(const PlayAnimationEventArgs& args);
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
 static void OnAfterAttack(OrbwalkingActionArgs& args);
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args);
@@ -171,6 +236,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("useQ", "Use Q"));
     ComboMenu->Add(new MenuBool("useE", "Use E"));
     ComboMenu->Add(new MenuBool("useR", "Use R (finisher)"));
+    ComboMenu->Add(new MenuBool("useRE", "Use R to detonate E on grouped enemies", false));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
     HarassMenu->Add(new MenuBool("useE", "Use E"));
@@ -186,6 +252,7 @@ static void BuildMenu() {
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (R)"));
     MiscMenu->Add(new MenuBool("interrupter", "Interrupter (R)"));
     MiscMenu->Add(new MenuBool("autoETurret", "Auto E on Turret"));
+    MiscMenu->Add(new MenuBool("antiRengar", "Anti-Rengar (R on leap)", true));
 
     MenuRoot->Attach();
 }
@@ -211,8 +278,8 @@ static void OnGameLoad() {
 
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Orbwalker::OnBeforeAttack += &OnBeforeAttack;
-    Orbwalker::OnAfterAttack += &OnAfterAttack;
     Events::hook.OnGapCloser += &Gapcloser_OnGapcloser;
+    Events::hook.OnPlayAnimation += &OnPlayAnimation;
 
     Loaded = true;
     Game::Print("<font color='#00D8FF'>SharpAIO - Tristana loaded</font>");
@@ -220,12 +287,20 @@ static void OnGameLoad() {
 
 // Q Rapid Fire: bật trước khi đánh thường (combo, hoặc jungle mob khi laneclear).
 static void OnBeforeAttack(OrbwalkingActionArgs& args) {
-    if (!Loaded || !Q.IsReady()) {
+    if (!Loaded) {
         return;
     }
 
     const auto targetBase = AIBaseClient(args.Target.Handle());
     if (!ValidUnit(targetBase) || !AutoAttack::InAutoAttackRange(targetBase)) {
+        return;
+    }
+
+    if (targetBase.IsTurret() && Bool(MiscMenu, "autoETurret") && E.IsReady()) {
+        E.CastOnUnit(targetBase);
+    }
+
+    if (!Q.IsReady()) {
         return;
     }
 
@@ -242,17 +317,38 @@ static void OnBeforeAttack(OrbwalkingActionArgs& args) {
     }
 }
 
-// Auto E lên trụ địch sau khi đánh thường.
-static void OnAfterAttack(OrbwalkingActionArgs& args) {
-    if (!Loaded || !Bool(MiscMenu, "autoETurret") || !E.IsReady()) {
+// Dựng AIHeroClient từ ObjectInfo (named-field, không phụ thuộc thứ tự struct).
+static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
+    ::Core::Objects::ObjectHandle handle{};
+    handle.address = info.Ptr;
+    handle.index = info.Index;
+    handle.networkId = info.NetworkId;
+    handle.type = info.Type;
+    return AIHeroClient(handle);
+}
+
+// Anti-Rengar: Rengar nhảy (animation "Spell5") → R hất văng cắt combo lao vào.
+static void OnPlayAnimation(const PlayAnimationEventArgs& args) {
+    if (!Loaded || !Bool(MiscMenu, "antiRengar") || !R.IsReady()) {
         return;
     }
-
-    const auto targetBase = AIBaseClient(args.Target.Handle());
-    if (ValidUnit(targetBase) && targetBase.IsTurret()) {
-        E.CastOnUnit(targetBase);
+    if (std::strcmp(args.Animation, "Spell5") != 0) {
+        return;
+    }
+    const AIHeroClient sender = HeroFromInfo(args.Sender);
+    if (!sender.IsValid() || !sender.IsHero() || !sender.IsEnemy()) {
+        return;
+    }
+    if (_stricmp(sender.CharacterName().c_str(), "Rengar") != 0) {
+        return;
+    }
+    if (ValidHeroTarget(sender, R.Range)) {
+        R.CastOnUnit(AIBaseClient(sender.Handle()));
     }
 }
+
+// Auto E lên trụ địch sau khi đánh thường.
+static void OnAfterAttack(OrbwalkingActionArgs&) {}
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
     const auto player = Player();
@@ -268,6 +364,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     E.Range = castRange;
     R.Range = castRange;
 
+    // Auto killsteal: chạy đầu mỗi tick, mọi mode (ưu tiên trước combo).
+    KillSteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -281,14 +380,17 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     default:
         break;
     }
-
-    KillSteal();
 }
 
 static void Combo() {
     if (!ShouldRunNow(LastComboEvalTick, 60)) {
         return;
     }
+
+    // Snapshot 1 lần: GameObjects::EnemyHeroes() copy cả vector dưới mutex mỗi lần
+    // gọi, nên vòng lặp lồng (RE combo) và lần quét R trước đây trả nhiều bản
+    // copy/frame. Snapshot là cache đã đóng băng nên tái dùng cho kết quả y hệt.
+    const auto comboEnemies = GameObjects::EnemyHeroes();
 
     if (Bool(ComboMenu, "useE") && E.IsReady()) {
         const auto target = GetTarget(E.Range, DamageType::Physical);
@@ -297,18 +399,48 @@ static void Combo() {
         }
     }
 
+    // RE combo (C# ComboUseRE): target đã dính >=3 E-stack và đứng gần địch khác →
+    // R hất target vào cụm để E kích nổ lan (AoE). PosAfterR = đẩy ra xa 1000u theo
+    // hướng player→target; nếu có >=1 địch quanh điểm đó thì R để lan nổ.
+    if (Bool(ComboMenu, "useRE", false) && R.IsReady() && !Player().Spellbook().IsWindingUp()) {
+        for (const auto& enemy : comboEnemies) {
+            if (!ValidHeroTarget(enemy, R.Range) || enemy.GetBuffCount("tristanaecharge") < 3) {
+                continue;
+            }
+            // Chỉ khi E đủ giết (4 stack) — R chỉ để lan nổ, không phí ult vô ích.
+            const auto player = Player();
+            const double eFull = SpellDamage(SpellSlot::E, enemy) +
+                (W.IsReady() ? Damage::GetAutoAttackDamage(player, enemy) * 2.0 : 0.0);
+            if (static_cast<double>(enemy.Health()) >= eFull) {
+                continue;
+            }
+            const Vector3 posAfterR = player.Position().Extend(enemy.ServerPosition(), 1000.0f);
+            int nearby = 0;
+            for (const auto& other : comboEnemies) {
+                if (other.NetworkId() != enemy.NetworkId() && !other.IsDead() &&
+                    other.Distance(posAfterR) <= 300.0f) {
+                    ++nearby;
+                }
+            }
+            if (nearby >= 1) {
+                R.CastOnUnit(AIBaseClient(enemy.Handle()));
+                return;
+            }
+        }
+    }
+
     if (Bool(ComboMenu, "useR") && R.IsReady()) {
         // R chỉ dùng để finish: mục tiêu chết bởi R và không chết sẵn bởi E.
         AIHeroClient best;
         float bestHealth = -1.0f;
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : comboEnemies) {
             if (!ValidHeroTarget(enemy, R.Range)) {
                 continue;
             }
             if (WillDieByTristanaE(enemy)) {
                 continue;
             }
-            if (IsKillable(enemy, R.GetDamage(enemy), DamageType::Physical) &&
+            if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy), DamageType::Magical) &&
                 enemy.Health() > bestHealth) {
                 best = enemy;
                 bestHealth = enemy.Health();
@@ -360,25 +492,65 @@ static void Clear() {
     }
 }
 
+// Auto killsteal — chạy mỗi tick, mọi mode (gọi từ Game_OnUpdate), gated bởi
+// toggle "killsteal". Damage tính tay qua SpellDamage (KHÔNG dùng GetDamage).
+// Thứ tự: E (kích nổ stack, không tốn ult) → R (nuke đơn mục tiêu, chính) → W.
 static void KillSteal() {
-    if (!Bool(MiscMenu, "killsteal") || !R.IsReady()) {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
         return;
     }
 
-    AIHeroClient best;
-    float bestHealth = -1.0f;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy, R.Range) || WillDieByTristanaE(enemy)) {
-            continue;
-        }
-        if (IsKillable(enemy, R.GetDamage(enemy), DamageType::Physical) &&
-            enemy.Health() > bestHealth) {
-            best = enemy;
-            bestHealth = enemy.Health();
+    // E Explosive Charge: chỉ khi mục tiêu đã dính stack "tristanaecharge".
+    // SpellDamage tự đọc số stack → mô hình sát thương kích nổ theo stack hiện có.
+    if (E.IsReady()) {
+        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            if (!ValidHeroTarget(enemy, E.Range)) {
+                continue;
+            }
+            if (WillDieByTristanaE(enemy)) {
+                E.CastOnUnit(enemy);
+                return;
+            }
         }
     }
-    if (best.IsValid()) {
-        R.CastOnUnit(best);
+
+    // R Buster Shot (MAGIC): finisher đơn mục tiêu — ưu tiên mục tiêu máu cao nhất
+    // vẫn hạ được, bỏ qua ai đã chết chắc bởi E.
+    if (R.IsReady()) {
+        AIHeroClient best;
+        float bestHealth = -1.0f;
+        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            if (!ValidHeroTarget(enemy, R.Range) || WillDieByTristanaE(enemy)) {
+                continue;
+            }
+            if (IsKillable(enemy, SpellDamage(SpellSlot::R, enemy), DamageType::Magical) &&
+                enemy.Health() > bestHealth) {
+                best = enemy;
+                bestHealth = enemy.Health();
+            }
+        }
+        if (best.IsValid()) {
+            R.CastOnUnit(best);
+            return;
+        }
+    }
+
+    // W Rocket Jump (MAGIC): killsteal phụ khi E/R chưa sẵn hoặc chưa đủ. W là
+    // jump, cast tới vị trí mục tiêu (skillshot circle) — chỉ dùng khi hạ gục được.
+    if (W.IsReady()) {
+        for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            if (!ValidHeroTarget(enemy, W.Range)) {
+                continue;
+            }
+            if (IsKillable(enemy, SpellDamage(SpellSlot::W, enemy), DamageType::Magical)) {
+                W.Cast(enemy);
+                return;
+            }
+        }
     }
 }
 
@@ -405,8 +577,8 @@ static void OnUnload() {
 
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
     Orbwalker::OnBeforeAttack -= &OnBeforeAttack;
-    Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Events::hook.OnGapCloser -= &Gapcloser_OnGapcloser;
+    Events::hook.OnPlayAnimation -= &OnPlayAnimation;
 
     Loaded = false;
 }

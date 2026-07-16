@@ -58,6 +58,10 @@ struct TrapObj {
 };
 inline std::vector<TrapObj> MyTraps;
 
+// Combo E→W: sau khi E (net) trúng địch làm chậm, đặt W (bẫy) lên vị trí địch.
+inline int s_ePendingWNetId = 0;
+inline DWORD s_ePendingWTick = 0;
+
 static AIHeroClient Player() {
     return ObjectManager::Player();
 }
@@ -133,6 +137,83 @@ static bool IsKillable(const AIBaseClient& target, double damage) {
     return target.Health() + target.PhysicalShield() < damage - 2.0;
 }
 
+// ── Damage tính tay theo wiki (leagueoflegends.com) — KHÔNG dùng Spell::GetDamage ──
+// Q Piltover Peacemaker (Piercing Shot, physical):
+//     primary (mục tiêu đầu): 50/90/130/170/210 + 125/145/165/185/205% total AD
+//     (bị giảm khi xuyên qua nhiều mục tiêu; killsteal luôn dùng full damage lên
+//      mục tiêu đầu tiên nên tính theo primary).
+// W Yordle Snap Trap (physical): chỉ +dmg Headshot 35/80/125/170/215 + 30% bonus AD
+//     → KHÔNG phải một lần cast killsteal độc lập → bỏ qua (không tính, không wire).
+// E 90 Caliber Net (magic):   80/130/180/230/280 + 80% AP
+// R Ace in the Hole (physical, 3 rank): 300/475/650 + 100% bonus AD
+//     (còn +0–30% theo crit chance; bỏ phần crit để ước lượng thận trọng).
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+    const float totalAd = player.TotalAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 50.0f, 90.0f, 130.0f, 170.0f, 210.0f };
+        static const float ratio[5] = { 1.25f, 1.45f, 1.65f, 1.85f, 2.05f };
+        const float raw = base[rank - 1] + ratio[rank - 1] * totalAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 80.0f, 130.0f, 180.0f, 230.0f, 280.0f };
+        const float raw = base[rank - 1] + 0.80f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[3] = { 300.0f, 475.0f, 650.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float raw = base[idx] + 1.00f * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
+// R có bị hero khác (không phải target) chắn đường không? Dùng chung cho AutoR
+// (finish cô lập) và AutoKillsteal (không phí ult vào cú chặn).
+static bool RPathBlocked(const AIHeroClient& target) {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return true;
+    }
+    SDK::PredictionInput input;
+    input.Unit = player;
+    input.Delay = 0.5f;
+    input.Speed = 1500.0f;
+    input.Radius = 500.0f;
+    input.SetCollisionObjects(SDK::CollisionableObjects::Heroes);
+    const auto collisions = Collision::GetCollision({ target.ServerPosition() }, input);
+    for (const auto& unit : collisions) {
+        if (unit.NetworkId() != target.NetworkId()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Có bẫy sẵn của mình gần vị trí (<=100)?
 static bool TrapNear(const Vector3& pos) {
     for (const auto& trap : MyTraps) {
@@ -144,15 +225,18 @@ static bool TrapNear(const Vector3& pos) {
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
+static void AutoKillsteal();
 static void OnCreateObject(const GameObject& object);
 static void OnDeleteObject(const GameObject& object);
 static void OnProcessSpell(const ProcessSpellEventArgs& args);
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args);
 static void Combo();
+static void ComboEW();
 static void Mixed();
 static void Clear();
 static void AutoR();
 static void AutoW();
+static void AutoWCC();
 static void AutoAttackTrapped();
 static void OnUnload();
 
@@ -161,6 +245,8 @@ static void BuildMenu() {
 
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
     ComboMenu->Add(new MenuBool("useQ", "Use Q"));
+    ComboMenu->Add(new MenuBool("useE", "Use E (net, no-collision)"));
+    ComboMenu->Add(new MenuBool("useW", "Use W after E (trap)"));
     ComboMenu->Add(new MenuBool("useR", "Use R (isolated finish)"));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
@@ -176,7 +262,9 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (R/Q/E)"));
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (E)"));
+    MiscMenu->Add(new MenuBool("gapW", "Anti-Gapcloser (W)"));
     MiscMenu->Add(new MenuBool("interrupter", "Interrupter (W)"));
     MiscMenu->Add(new MenuBool("autoR", "Auto R on Killable Target"));
     MiscMenu->Add(new MenuBool("autoW", "Auto W on Immobile Target"));
@@ -307,7 +395,7 @@ static void Combo() {
                 Q.Cast(pred.GetCastPosition());
             } else {
                 for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                    if (ValidHeroTarget(enemy, Q.Range) && IsKillable(enemy, Q.GetDamage(enemy))) {
+                    if (ValidHeroTarget(enemy, Q.Range) && IsKillable(enemy, SpellDamage(SpellSlot::Q, enemy))) {
                         const auto pred = Q.GetPrediction(enemy);
                         if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                             Q.Cast(pred.GetCastPosition());
@@ -319,8 +407,68 @@ static void Combo() {
         }
     }
 
+    // Combo E→W: E (net, có collision check) lên địch rồi đặt bẫy W.
+    ComboEW();
+
     if (Bool(ComboMenu, "useR")) {
         AutoR();
+    }
+}
+
+// Combo E→W:
+//   1) Nếu chưa có pending: chọn target trong tầm E, chỉ cast E khi prediction
+//      KHÔNG bị minion/hero chắn (collision check). E net làm chậm địch. Ghi lại
+//      pending (netId + tick) để bước 2 đặt W đúng con mồi vừa trúng E.
+//   2) Trong cửa sổ ~700ms sau E: đặt W lên vị trí predict của chính target đó
+//      (địch đang bị chậm → bẫy arm khó né). Bỏ qua nếu đã có bẫy sẵn gần đó.
+static void ComboEW() {
+    const bool useE = Bool(ComboMenu, "useE");
+    const bool useW = Bool(ComboMenu, "useW");
+    if (!useE && !useW) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // ── Bước 2: xử lý pending đặt W sau khi E đã bay ──
+    if (useW && s_ePendingWNetId != 0) {
+        if (GetTickCount() - s_ePendingWTick > 700) {
+            s_ePendingWNetId = 0;  // quá hạn, hủy pending
+        } else if (W.IsReady()) {
+            for (const auto& enemy : GameObjects::EnemyHeroes()) {
+                if (enemy.NetworkId() != s_ePendingWNetId) {
+                    continue;
+                }
+                if (ValidHeroTarget(enemy, W.Range)) {
+                    const auto pred = W.GetPrediction(enemy);
+                    const Vector3 wPos = pred.GetCastPosition().IsValid()
+                        ? pred.GetCastPosition()
+                        : enemy.Position();
+                    if (!TrapNear(wPos)) {
+                        W.Cast(wPos);
+                    }
+                }
+                s_ePendingWNetId = 0;  // đã xử lý con mồi này
+                break;
+            }
+        }
+    }
+
+    // ── Bước 1: cast E (collision-checked) lên target rồi mở pending W ──
+    if (useE && E.IsReady() && s_ePendingWNetId == 0) {
+        const auto target = GetTarget(E.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, E.Range)) {
+            const auto pred = E.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High) &&
+                pred.CollisionObjects.empty()) {
+                if (E.Cast(pred.GetCastPosition())) {
+                    s_ePendingWNetId = target.NetworkId();
+                    s_ePendingWTick = GetTickCount();
+                }
+            }
+        }
     }
 }
 
@@ -399,17 +547,21 @@ static void AutoR() {
         return;
     }
 
-    for (const auto& target : GameObjects::EnemyHeroes()) {
+    // Snapshot 1 lần: EnemyHeroes() copy cả vector dưới mutex mỗi lần gọi, vòng
+    // lặp lồng cũ tốn 1 copy mỗi vòng ngoài (O(n^2) copy). List là snapshot cache
+    // đông cứng nên tái dùng là behavior-identical.
+    const auto enemies = GameObjects::EnemyHeroes();
+    for (const auto& target : enemies) {
         if (!ValidHeroTarget(target, R.Range) || AutoAttack::InAutoAttackRange(target)) {
             continue;
         }
-        if (!IsKillable(target, R.GetDamage(target))) {
+        if (!IsKillable(target, SpellDamage(SpellSlot::R, target))) {
             continue;
         }
 
         // Cô lập: không có địch khác quanh mình 1500 và quanh target 500.
         bool isolated = true;
-        for (const auto& other : GameObjects::EnemyHeroes()) {
+        for (const auto& other : enemies) {
             if (other.NetworkId() == target.NetworkId() || other.IsDead()) {
                 continue;
             }
@@ -423,21 +575,7 @@ static void AutoR() {
         }
 
         // Không bị hero khác chắn đường.
-        SDK::PredictionInput input;
-        input.Unit = player;
-        input.Delay = 0.5f;
-        input.Speed = 1500.0f;
-        input.Radius = 500.0f;
-        input.SetCollisionObjects(SDK::CollisionableObjects::Heroes);
-        const auto collisions = Collision::GetCollision({ target.ServerPosition() }, input);
-        bool blocked = false;
-        for (const auto& unit : collisions) {
-            if (unit.NetworkId() != target.NetworkId()) {
-                blocked = true;
-                break;
-            }
-        }
-        if (!blocked) {
+        if (!RPathBlocked(target)) {
             R.CastOnUnit(AIBaseClient(target.Handle()));
             break;
         }
@@ -463,6 +601,31 @@ static void AutoW() {
     }
 }
 
+// AutoWCC (port C# AutoWCC + Wspell): đặt bẫy W lên địch đang cast channel/
+// important spell hoặc đang bất động (Zhonya "zhonyasringshield"). Gate bởi menu
+// "interrupter". Bỏ qua nếu đã có bẫy sẵn gần đó.
+static void AutoWCC() {
+    if (!Bool(MiscMenu, "interrupter") || !W.IsReady()) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid() || player.Spellbook().IsWindingUp()) {
+        return;
+    }
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!ValidHeroTarget(enemy, W.Range)) {
+            continue;
+        }
+        if (Extensions::IsCastingInterruptableSpell(enemy, true) ||
+            enemy.HasBuff("zhonyasringshield")) {
+            if (!TrapNear(enemy.Position())) {
+                W.Cast(enemy.Position());
+            }
+            break;
+        }
+    }
+}
+
 // Auto-attack mục tiêu dính bẫy (buff caitlynyordletrapinternal).
 static void AutoAttackTrapped() {
     if (!Bool(MiscMenu, "attackTrapped") || !Orbwalker::CanAttack()) {
@@ -472,6 +635,58 @@ static void AutoAttackTrapped() {
         if (ValidHeroTarget(enemy, 1300.0f) && enemy.HasBuff("caitlynyordletrapinternal")) {
             CoreControl::IssueAttack(enemy.Address(), enemy.Position());
             break;
+        }
+    }
+}
+
+// Auto killsteal: chạy mọi mode, gated bởi toggle "killsteal".
+// R Ace in the Hole (tầm xa nhất, không bị chắn) → Q Piercing Shot → E 90 Caliber Net.
+// Damage tính tay qua SpellDamage (wiki), KHÔNG dùng Spell::GetDamage.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R Ace in the Hole: killsteal chính, targeted toàn cầu, không bị hero chắn.
+    if (R.IsReady()) {
+        for (const auto& target : GameObjects::EnemyHeroes()) {
+            if (!ValidHeroTarget(target, R.Range)) {
+                continue;
+            }
+            if (!IsKillable(target, SpellDamage(SpellSlot::R, target))) {
+                continue;
+            }
+            if (!RPathBlocked(target)) {
+                R.CastOnUnit(AIBaseClient(target.Handle()));
+                return;
+            }
+        }
+    }
+
+    // Q Piercing Shot: skillshot line 1250.
+    if (Q.IsReady()) {
+        const auto target = GetTarget(Q.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, Q.Range) && IsKillable(target, SpellDamage(SpellSlot::Q, target))) {
+            const auto pred = Q.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                Q.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // E 90 Caliber Net: skillshot line 800 (đẩy lùi bản thân).
+    if (E.IsReady()) {
+        const auto target = GetTarget(E.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, E.Range) && IsKillable(target, SpellDamage(SpellSlot::E, target))) {
+            const auto pred = E.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                E.Cast(pred.GetCastPosition());
+            }
         }
     }
 }
@@ -487,6 +702,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     if (Game::IsChatOpen()) {
         return;
     }
+
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+    AutoKillsteal();
 
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
@@ -505,6 +723,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     if (Bool(MiscMenu, "autoR")) {
         AutoR();
     }
+    AutoWCC();
     AutoW();
 
     // Dash tới con trỏ (keybind): E ngược hướng đẩy Cait tới cursor.
@@ -516,11 +735,24 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 }
 
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args) {
-    if (!Bool(MiscMenu, "gapcloser") || !E.IsReady()) {
+    const bool gapE = Bool(MiscMenu, "gapcloser");
+    const bool gapW = Bool(MiscMenu, "gapW");
+    if (!gapE && !gapW) {
         return;
     }
     const auto player = Player();
-    if (!player.IsValid() || args.End.Distance2D(player.Position()) > 200.0f) {
+    if (!player.IsValid()) {
+        return;
+    }
+    // C# GapW: địch lao gần lại (End gần hơn Start) và điểm tới trong tầm W → W chặn.
+    if (gapW && W.IsReady() && args.End.Distance2D(player.Position()) <= W.Range &&
+        args.Start.Distance2D(player.Position()) > args.End.Distance2D(player.Position())) {
+        if (!TrapNear(args.End)) {
+            W.Cast(args.End);
+            return;
+        }
+    }
+    if (!gapE || !E.IsReady() || args.End.Distance2D(player.Position()) > 200.0f) {
         return;
     }
     const auto sender = AIHeroClient(args.Sender);

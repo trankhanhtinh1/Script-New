@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "../../../SDK/SDK.h"
+#include "../../../core/CoreControl.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -41,7 +42,7 @@ inline Menu* MiscMenu = nullptr;
 
 inline Spell Q{ SpellSlot::Q, 1150.0f };
 inline Spell W{ SpellSlot::W, 5000.0f };
-inline Spell E{ SpellSlot::E, 950.0f };
+inline Spell E{ SpellSlot::E, 1000.0f };
 inline Spell R{ SpellSlot::R, 1500.0f };
 
 inline bool Loaded = false;
@@ -104,6 +105,25 @@ static AIHeroClient GetTargetNoCollision(Spell& spell) {
     return selector ? selector->GetTargetNoCollision(&spell) : AIHeroClient();
 }
 
+// C# GetBestTarget: nếu bật attackW, ưu tiên target đã dính buff oath-partner mark
+// ("kalistacoopstrikemarkally") để kích Sentinel passive; không có thì target
+// thường. Trả về hero tốt nhất trong tầm.
+static AIHeroClient GetBestTarget(float range) {
+    auto* selector = SDK::TargetSelector::Instance();
+    if (!selector) {
+        return AIHeroClient();
+    }
+    if (Bool(ComboMenu, "attackW", true)) {
+        const auto targets = selector->GetTargets(range, DamageType::Physical);
+        for (const auto& t : targets) {
+            if (t.HasBuff("kalistacoopstrikemarkally")) {
+                return t;
+            }
+        }
+    }
+    return selector->GetTarget(range, DamageType::Physical);
+}
+
 // Killable rút gọn (loại buff bất tử + so máu/shield vật lý).
 static bool IsKillable(const AIBaseClient& target, double damage) {
     if (!ValidUnit(target)) {
@@ -119,6 +139,87 @@ static bool IsKillable(const AIBaseClient& target, double damage) {
 
 static float HealthPred(const AIBaseClient& unit, int ms) {
     return unit.IsValid() ? Prediction::Health::GetPrediction(unit, ms) : 0.0f;
+}
+
+// Số spear (giáo) đang cắm trên target — quyết định damage của E Rend.
+// Buff "kalistaexpungemarker" stack theo mỗi lần AA/Q trúng (mỗi stack = 1 giáo).
+// GetBuffCount có sẵn ở AIBaseClient (SDK/Core/Objects.h). 0 giáo → E vô hại.
+static int SpearCount(const AIBaseClient& target) {
+    if (!target.IsValid()) {
+        return 0;
+    }
+    return target.GetBuffCount("kalistaexpungemarker");
+}
+
+// ── Damage tính tay theo wiki (leagueoflegends.com/en-us/Kalista/LoL) ──
+// KHÔNG dùng Spell::GetDamage — số liệu chính xác theo bảng wiki (patch hiện tại).
+//
+// Q Pierce (PHYSICAL, skillshot line):
+//     base 10 / 75 / 140 / 205 / 270  (+ 105% AD tổng)
+//
+// W Sentinel: KHÔNG có nuke trực tiếp (chỉ scout/patrol + đánh dấu Soul-Marked).
+//
+// E Rend (PHYSICAL, không target — expunge toàn bộ giáo đang cắm):
+//     Giáo đầu tiên : 5 / 15 / 25 / 35 / 45          (+ 70% AD tổng) (+ 65% AP)
+//     Mỗi giáo thêm : 7 / 14 / 21 / 28 / 35 base
+//                     (+ 20 / 27.5 / 35 / 42.5 / 50% AD tổng) (+ 50% AP)
+//     Tổng = firstSpear + (spearCount - 1) * perSpear ;  spearCount<1 → 0.
+//     (spearCount lấy từ SpearCount(target); nếu không có giáo → E không sát thương.)
+//
+// R Fate's Call: KHÔNG sát thương (cleanse + dash đồng minh gắn kết, knock-up là CC).
+//
+// Trả về damage đã trừ giáp qua Damage::CalculateDamage (DamageType::Physical).
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float totalAd = player.TotalAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 10.0f, 75.0f, 140.0f, 205.0f, 270.0f };
+        const float raw = base[rank - 1] + 1.05f * totalAd; // 105% AD tổng
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        const int spears = SpearCount(target);
+        if (spears < 1) {
+            return 0.0f; // không giáo → Rend vô hại.
+        }
+        static const float firstBase[5] = { 5.0f, 15.0f, 25.0f, 35.0f, 45.0f };
+        static const float perBase[5] = { 7.0f, 14.0f, 21.0f, 28.0f, 35.0f };
+        static const float perAdRatio[5] = { 0.20f, 0.275f, 0.35f, 0.425f, 0.50f };
+        const int idx = rank - 1;
+        // Giáo đầu: base + 70% AD + 65% AP.
+        float raw = firstBase[idx] + 0.70f * totalAd + 0.65f * ap;
+        // Mỗi giáo bổ sung.
+        const int extra = spears - 1;
+        if (extra > 0) {
+            raw += static_cast<float>(extra) *
+                (perBase[idx] + perAdRatio[idx] * totalAd + 0.50f * ap);
+        }
+        if (target.IsMinion()) {
+            const AIMinionClient minion(target.Handle());
+            if (minion.IsValid() &&
+                (minion.GetJungleType() & JungleType::Legendary) != JungleType::Unknown) {
+                raw *= 0.5f;
+            }
+        }
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f; // W/R không có sát thương trực tiếp.
+    }
 }
 
 // E Rend: cast một lần, gate 700ms chống spam (thay Spellbook.OnCastSpell).
@@ -146,6 +247,8 @@ static void BuildMenu() {
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
     ComboMenu->Add(new MenuBool("useQ", "Use Q"));
     ComboMenu->Add(new MenuBool("useE", "Use E (rend finish)"));
+    ComboMenu->Add(new MenuBool("attackW", "Prefer Soul-marked target (W passive)", true));
+    ComboMenu->Add(new MenuBool("gapAttack", "Attack minion to gap-close", false));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
     HarassMenu->Add(new MenuBool("useQ", "Use Q"));
@@ -164,7 +267,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
-    MiscMenu->Add(new MenuBool("killsteal", "Killsteal (E)"));
+    MiscMenu->Add(new MenuBool("killsteal", "Killsteal (E/Q)"));
     MiscMenu->Add(new MenuBool("mobsteal", "Mobsteal (E)"));
     MiscMenu->Add(new MenuBool("lasthitAssist", "Lasthit Assist (E)"));
     MiscMenu->Add(new MenuBool("siegeSteal", "Steal Siege/Super minion (E)"));
@@ -189,7 +292,7 @@ static void OnGameLoad() {
     Q.DamageType = DamageType::Physical;
 
     W = Spell(SpellSlot::W, 5000.0f);
-    E = Spell(SpellSlot::E, 950.0f);
+    E = Spell(SpellSlot::E, 1000.0f);
     E.DamageType = DamageType::Physical;
     R = Spell(SpellSlot::R, 1500.0f);
 
@@ -241,7 +344,7 @@ static void OnProcessSpell(const ProcessSpellEventArgs& args) {
         if (player.IsValid() && player.NetworkId() == static_cast<int>(args.Target.NetworkId) &&
             player.HealthPercent() <= 10.0f) {
             for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                if (ValidHeroTarget(enemy, E.Range) && E.GetDamage(enemy) > 0.0f) {
+                if (ValidHeroTarget(enemy, E.Range) && SpellDamage(SpellSlot::E, enemy) > 0.0f) {
                     CastE();
                     break;
                 }
@@ -259,7 +362,7 @@ static void OnNonKillableMinion(OrbwalkingActionArgs& args) {
     if (!ValidUnit(minion) || HealthPred(AIBaseClient(minion.Handle()), 250) <= 0.0f) {
         return;
     }
-    if (!IsKillable(AIBaseClient(minion.Handle()), E.GetDamage(minion))) {
+    if (!IsKillable(AIBaseClient(minion.Handle()), SpellDamage(SpellSlot::E, AIBaseClient(minion.Handle())))) {
         return;
     }
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -278,7 +381,11 @@ static void Combo() {
 
     if (Bool(ComboMenu, "useQ") && Q.IsReady() && !player.IsDashing() &&
         !player.Spellbook().IsAutoAttack()) {
-        const auto target = GetTargetNoCollision(Q);
+        // Ưu tiên target Soul-marked (attackW) nếu bật; fallback no-collision TS.
+        auto target = GetBestTarget(Q.Range);
+        if (!ValidHeroTarget(target, Q.Range)) {
+            target = GetTargetNoCollision(Q);
+        }
         if (ValidHeroTarget(target, Q.Range)) {
             Q.Cast(target);
         }
@@ -286,10 +393,32 @@ static void Combo() {
 
     if (Bool(ComboMenu, "useE") && E.IsReady()) {
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
+            // -30 giữ margin an toàn (bù pred/latency) như bản gốc.
             if (ValidHeroTarget(enemy, E.Range) && HealthPred(AIBaseClient(enemy.Handle()), 250) > 0.0f &&
-                IsKillable(enemy, E.GetDamage(enemy) - 30.0)) {
+                IsKillable(enemy, SpellDamage(SpellSlot::E, enemy) - 30.0)) {
                 CastE();
                 break;
+            }
+        }
+    }
+
+    // C# ComboGap: khi orbwalker không có target hero nhưng có địch quanh (2000),
+    // đánh con lính máu thấp nhất trong tầm AA để tiến gần (Kalista dịch chuyển
+    // theo mỗi đòn đánh → dùng AA lính làm gap-close).
+    if (Bool(ComboMenu, "gapAttack", false) && Orbwalker::CanAttack()) {
+        const auto orbTarget = Orbwalker::GetTarget();
+        if (!orbTarget.IsValid() && player.CountEnemyHeroesInRange(2000.0f) > 0) {
+            const float aaRange = AutoAttack::GetRealAutoAttackRange(player, AttackableUnit());
+            AIMinionClient best;
+            float bestHp = FLT_MAX;
+            for (const auto& minion : GameObjects::EnemyMinions()) {
+                if (ValidTarget(minion, aaRange) && minion.Health() < bestHp) {
+                    bestHp = minion.Health();
+                    best = minion;
+                }
+            }
+            if (best.IsValid()) {
+                CoreControl::IssueAttack(best.Address(), best.Position());
             }
         }
     }
@@ -328,7 +457,7 @@ static void Clear() {
         Vector3 castPos{};
         for (const auto& minion : minions) {
             if (ValidTarget(minion, Q.Range) &&
-                IsKillable(AIBaseClient(minion.Handle()), Q.GetDamage(minion))) {
+                IsKillable(AIBaseClient(minion.Handle()), SpellDamage(SpellSlot::Q, AIBaseClient(minion.Handle())))) {
                 ++killable;
                 if (!castPos.IsValid() || castPos.IsZero()) {
                     castPos = minion.ServerPosition();
@@ -346,7 +475,7 @@ static void Clear() {
         int killable = 0;
         for (const auto& minion : GameObjects::EnemyMinions()) {
             if (ValidTarget(minion, E.Range) && HealthPred(AIBaseClient(minion.Handle()), 250) > 0.0f &&
-                IsKillable(AIBaseClient(minion.Handle()), E.GetDamage(minion))) {
+                IsKillable(AIBaseClient(minion.Handle()), SpellDamage(SpellSlot::E, AIBaseClient(minion.Handle())))) {
                 ++killable;
             }
         }
@@ -383,7 +512,7 @@ static void Clear() {
         }
         if (Bool(JungleClearMenu, "useE") && E.IsReady() && ManaOkay(Slider(JungleClearMenu, "Mana", 20)) &&
             HealthPred(AIBaseClient(mob.Handle()), 250) > 0.0f &&
-            IsKillable(AIBaseClient(mob.Handle()), E.GetDamage(mob))) {
+            IsKillable(AIBaseClient(mob.Handle()), SpellDamage(SpellSlot::E, AIBaseClient(mob.Handle())))) {
             CastE();
         }
     }
@@ -395,13 +524,28 @@ static void Misc() {
         return;
     }
 
-    // Killsteal (E).
-    if (Bool(MiscMenu, "killsteal") && E.IsReady()) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (ValidHeroTarget(enemy, E.Range) && HealthPred(AIBaseClient(enemy.Handle()), 250) > 0.0f &&
-                IsKillable(enemy, E.GetDamage(enemy) - 30.0)) {
-                CastE();
-                return;
+    // Killsteal: E Rend (expunge giáo) + Q Pierce. Chạy mọi mode, gate bởi "killsteal".
+    if (Bool(MiscMenu, "killsteal")) {
+        // E Rend trước: instant, không cần pred vị trí (chỉ cần có giáo cắm sẵn).
+        if (E.IsReady()) {
+            for (const auto& enemy : GameObjects::EnemyHeroes()) {
+                // -30 giữ margin an toàn (bù pred/latency) như bản gốc.
+                if (ValidHeroTarget(enemy, E.Range) && HealthPred(AIBaseClient(enemy.Handle()), 250) > 0.0f &&
+                    IsKillable(enemy, SpellDamage(SpellSlot::E, enemy) - 30.0)) {
+                    CastE();
+                    return;
+                }
+            }
+        }
+        // Q Pierce: skillshot line, chỉ bắn khi hitchance đủ cao.
+        if (Q.IsReady() && !player.IsDashing() && !player.Spellbook().IsAutoAttack()) {
+            const auto target = GetTargetNoCollision(Q);
+            if (ValidHeroTarget(target, Q.Range) && IsKillable(target, SpellDamage(SpellSlot::Q, target))) {
+                const auto pred = Q.GetPrediction(target);
+                if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                    Q.Cast(pred.GetCastPosition());
+                    return;
+                }
             }
         }
     }
@@ -411,7 +555,7 @@ static void Misc() {
         if (Bool(MiscMenu, "mobsteal")) {
             for (const auto& mob : GameObjects::Jungle()) {
                 if (ValidTarget(mob, E.Range) && HealthPred(AIBaseClient(mob.Handle()), 500) > 0.0f &&
-                    IsKillable(AIBaseClient(mob.Handle()), E.GetDamage(mob))) {
+                    IsKillable(AIBaseClient(mob.Handle()), SpellDamage(SpellSlot::E, AIBaseClient(mob.Handle())))) {
                     CastE();
                     return;
                 }
@@ -422,7 +566,7 @@ static void Misc() {
                 if (!ValidTarget(minion, E.Range) || HealthPred(AIBaseClient(minion.Handle()), 250) <= 0.0f) {
                     continue;
                 }
-                if (!IsKillable(AIBaseClient(minion.Handle()), E.GetDamage(minion))) {
+                if (!IsKillable(AIBaseClient(minion.Handle()), SpellDamage(SpellSlot::E, AIBaseClient(minion.Handle())))) {
                     continue;
                 }
                 const std::string name = minion.CharacterName();

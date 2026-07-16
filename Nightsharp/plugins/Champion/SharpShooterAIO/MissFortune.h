@@ -116,7 +116,72 @@ static AIHeroClient GetTarget(float range, DamageType damageType) {
     return selector ? selector->GetTarget(range, damageType) : AIHeroClient();
 }
 
+// Killsteal: loại buff bất tử phổ biến rồi so máu + shield với damage tính được.
+static bool IsKillable(const AIBaseClient& target, double damage) {
+    if (!ValidUnit(target)) {
+        return false;
+    }
+    if (target.HasBuff("kindredrnodeathbuff") || target.HasBuff("Undying Rage") ||
+        target.HasBuff("JudicatorIntervention") || target.HasBuff("BansheesVeil") ||
+        target.HasBuff("SivirShield") || target.HasBuff("ShroudofDarkness")) {
+        return false;
+    }
+    return target.Health() + target.MagicalShield() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (wiki.leagueoflegends.com/Miss_Fortune) —
+//    KHÔNG dùng DamageData / GetDamage ──
+// Q Double Up  (physical)      : 20/45/70/95/120 + 100% total AD + 35% AP
+//                                (bỏ qua crit → ước lượng thận trọng cho killsteal)
+// E Make It Rain (magic, TỔNG) : 70/100/130/160/190 + 120% AP  (đây là tổng DoT
+//                                cả bãi ~2s — chỉ để tham khảo, KHÔNG dùng killsteal)
+// R Bullet Time (physical, 1 đợt): 20/30/40 + 60% total AD + 25% AP  (mỗi wave;
+//                                channel 14/16/18 wave — chỉ tính 1 wave, tham khảo)
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float totalAd = player.TotalAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 20.0f, 45.0f, 70.0f, 95.0f, 120.0f };
+        const float raw = base[rank - 1] + 1.00f * totalAd + 0.35f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float total[5] = { 70.0f, 100.0f, 130.0f, 160.0f, 190.0f };
+        const float raw = total[rank - 1] + 1.20f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float wave[3] = { 20.0f, 30.0f, 40.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float raw = wave[idx] + 0.60f * totalAd + 0.25f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
+static void AutoKillsteal();
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
 static void OnAfterAttack(OrbwalkingActionArgs& args);
 static void Combo();
@@ -153,6 +218,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (Q)"));
     MiscMenu->Add(new MenuBool("q2KillOnly", "Harass Q2 Only if Kills Unit", false));
     MiscMenu->Add(new MenuBool("loveTap", "LoveTap: new AA target for passive"));
     MiscMenu->Add(new MenuKeyBind("cancelR", "Cancel R", 'T', KeyBindType::Press));
@@ -203,6 +269,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 
     // Không cast spell khi đang channel R (giống bản C#: chặn khi có RBuff).
     if (!HasRBuff()) {
+        // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+        AutoKillsteal();
+
         switch (Orbwalker::ActiveMode()) {
         case OrbwalkingMode::Combo:
             Combo();
@@ -221,6 +290,27 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 
     HandleRCancel();
+}
+
+// Auto killsteal: chỉ Q Double Up (targeted 650, burst vật lý) đủ điều kiện.
+// E là DoT cả bãi ~2s và R là channel nhiều wave → KHÔNG dùng để killsteal
+// (E/R tính 1-đợt sẽ ước lượng sai, và cast cả channel R để KS là lãng phí).
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // Q Double Up: targeted, tầm 650. Chỉ cast khi hạ gục được.
+    if (Q.IsReady()) {
+        const auto target = GetTarget(Q.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, Q.Range) && IsKillable(target, SpellDamage(SpellSlot::Q, target))) {
+            Q.CastOnUnit(target);
+        }
+    }
 }
 
 static void Combo() {
@@ -462,8 +552,11 @@ static bool Q2Logic() {
     const float radian = 3.14159265358979323846f / 180.0f;
 
     // Ứng viên primary: lính/quái NotAlly + hero địch trong Q.Range.
+    // Hoist snapshot EnemyMinions 1 lần: dùng lại cho cả vòng build targets và
+    // vòng blocked-check bên dưới (frame đã đóng băng nên = kết quả y hệt).
+    const auto q2Minions = GameObjects::EnemyMinions();
     std::vector<AIBaseClient> targets;
-    for (const auto& minion : GameObjects::EnemyMinions()) {
+    for (const auto& minion : q2Minions) {
         if (ValidTarget(minion, Q.Range)) {
             targets.push_back(AIBaseClient(minion.Handle()));
         }
@@ -489,6 +582,14 @@ static bool Q2Logic() {
     const Vector3 playerServer = player.ServerPosition();
     const Vector3 longServer = longRangeTarget.ServerPosition();
 
+    // predict vị trí longRangeTarget (cone check). Thời gian đạn Q tới =
+    // khoảng cách / tốc độ + delay, giống bản C# (Prediction.GetPrediction).
+    // Bất biến theo target trong loop (chỉ phụ thuộc player/longRangeTarget/Q),
+    // nên tính 1 lần ngoài loop = giá trị y hệt mỗi vòng.
+    const float travelTime =
+        playerServer.Distance(longServer) / std::max(1.0f, Q.Speed) + Q.Delay;
+    const auto pred = Prediction::GetPrediction(longRangeTarget, travelTime);
+
     for (const auto& target : targets) {
         if (killOnly && !(Q.GetDamage(target) >= target.Health())) {
             continue;
@@ -496,12 +597,6 @@ static bool Q2Logic() {
 
         const Vector3 targetServer = target.ServerPosition();
         const Vector3 direction = targetServer.Extend(playerServer, -500.0f);
-
-        // predict vị trí longRangeTarget (cone check). Thời gian đạn Q tới =
-        // khoảng cách / tốc độ + delay, giống bản C# (Prediction.GetPrediction).
-        const float travelTime =
-            playerServer.Distance(longServer) / std::max(1.0f, Q.Speed) + Q.Delay;
-        const auto pred = Prediction::GetPrediction(longRangeTarget, travelTime);
 
         SDK::SectorPoly cone40(targetServer, direction, 40.0f * radian, 450.0f);
         if (cone40.IsInside(longServer) && cone40.IsInside(pred.GetUnitPosition())) {
@@ -511,7 +606,7 @@ static bool Q2Logic() {
 
             // Không có lính khác trong cone gần hơn longRangeTarget → an toàn bounce.
             bool blocked = false;
-            for (const auto& minion : GameObjects::EnemyMinions()) {
+            for (const auto& minion : q2Minions) {
                 if (!ValidTarget(minion, q2Range) || minion.NetworkId() == target.NetworkId()) {
                     continue;
                 }

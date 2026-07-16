@@ -347,6 +347,9 @@
     <ClInclude Include="Core\CoreObjects.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Core\CorePosition.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Core\CoreRuneManager.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -709,7 +712,16 @@
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Ashe.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Blitzcrank.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Brand.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Caitlyn.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Cassiopeia.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Corki.h">
@@ -718,16 +730,34 @@
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Draven.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Ezreal.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Graves.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Irelia.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Jhin.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Jinx.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Kaisa.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Kalista.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Kindred.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\KogMaw.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\LeeSin.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Lucian.h">
@@ -736,13 +766,34 @@
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\MissFortune.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Orianna.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Renata.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Samira.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Senna.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\SharpShooterAIO.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Sivir.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Syndra.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Thresh.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Tristana.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\TwistedFate.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Twitch.h">
@@ -752,6 +803,18 @@
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Vayne.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Viktor.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Xerath.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Yasuo.h">
+      <Filter>Plugins\Champion\SharpShooterAIO</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\SharpShooterAIO\Yone.h">
       <Filter>Plugins\Champion\SharpShooterAIO</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\SharpShooterAIO\Zeri.h">

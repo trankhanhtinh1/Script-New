@@ -28,6 +28,7 @@ inline Menu* ComboMenu = nullptr;
 inline Menu* HarassMenu = nullptr;
 inline Menu* LaneClearMenu = nullptr;
 inline Menu* JungleClearMenu = nullptr;
+inline Menu* MiscMenu = nullptr;
 
 inline Spell Q{ SpellSlot::Q, 825.0f };
 inline Spell W{ SpellSlot::W, 600.0f };
@@ -98,7 +99,74 @@ static int RAmmo() {
     return R.Instance().Ammo();
 }
 
+// Killsteal: loại buff bất tử phổ biến rồi so máu + shield với damage tính được.
+static bool IsKillable(const AIBaseClient& target, double damage) {
+    if (!ValidUnit(target)) {
+        return false;
+    }
+    if (target.HasBuff("kindredrnodeathbuff") || target.HasBuff("Undying Rage") ||
+        target.HasBuff("JudicatorIntervention") || target.HasBuff("BansheesVeil") ||
+        target.HasBuff("SivirShield") || target.HasBuff("ShroudofDarkness")) {
+        return false;
+    }
+    return target.Health() + target.MagicalShield() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (leagueoflegends.com) — KHÔNG dùng DamageData ──
+// Q Phosphorus Bomb (magic)          : 60/105/150/195/240 + 125% bonus AD + 100% AP
+// E Gatling Gun     (physical, 1 tick): 5/8.125/11.25/14.375/17.5 + 15% bonus AD
+// R Missile Barrage (magic):
+//     thường  : 90/170/250   + 85%  bonus AD
+//     Big One : 180/340/500  + 170% bonus AD  ← khi player có buff "mbcheck2"
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::Q: {
+        const int rank = Q.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 60.0f, 105.0f, 150.0f, 195.0f, 240.0f };
+        const float raw = base[rank - 1] + 1.25f * bonusAd + 1.00f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float tick[5] = { 5.0f, 8.125f, 11.25f, 14.375f, 17.5f };
+        const float raw = tick[rank - 1] + 0.15f * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        const bool bigOne = player.HasBuff("mbcheck2");
+        static const float normBase[3] = { 90.0f, 170.0f, 250.0f };
+        static const float bigBase[3] = { 180.0f, 340.0f, 500.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float base = bigOne ? bigBase[idx] : normBase[idx];
+        const float ratio = bigOne ? 1.70f : 0.85f;
+        const float raw = base + ratio * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
+static void AutoKillsteal();
 static void Combo();
 static void Mixed();
 static void Clear();
@@ -127,6 +195,9 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuBool("useR", "Use R"));
     JungleClearMenu->Add(new MenuSlider("keepR", "Keep R Stacks", 5, 0, 7));
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
+
+    MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (Q/E/R)"));
 
     MenuRoot->Attach();
 }
@@ -172,6 +243,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+    AutoKillsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -184,6 +258,50 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         break;
     default:
         break;
+    }
+}
+
+// Auto killsteal: R (no-collision, tầm xa nhất) → Q (skillshot) → E (cone cận).
+// Tính damage qua Spell::GetDamage (đọc DamageData). Chỉ cast khi hạ gục được.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R Missile Barrage: dùng target no-collision, tầm 1250.
+    if (R.IsReady() && RAmmo() > 0) {
+        const auto target = GetTargetNoCollision(R);
+        if (ValidHeroTarget(target, R.Range) && IsKillable(target, SpellDamage(SpellSlot::R, target))) {
+            const auto pred = R.GetPrediction(target);
+            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
+                R.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // Q Phosphorus Bomb: skillshot circle 825.
+    if (Q.IsReady()) {
+        const auto target = GetTarget(Q.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, Q.Range) && IsKillable(target, SpellDamage(SpellSlot::Q, target))) {
+            const auto pred = Q.GetPrediction(target);
+            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
+                Q.Cast(pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // E Gatling Gun: cone tự thân, cast không cần vị trí.
+    if (E.IsReady()) {
+        const auto target = GetTarget(E.Range, DamageType::Physical);
+        if (ValidHeroTarget(target, E.Range) && IsKillable(target, SpellDamage(SpellSlot::E, target))) {
+            E.Cast();
+        }
     }
 }
 

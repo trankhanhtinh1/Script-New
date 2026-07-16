@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "../../../SDK/SDK.h"
+#include "../../../core/CoreBuffs.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -102,9 +103,78 @@ static bool ManaOkay(int percent) {
     return player.IsValid() && player.ManaPercent() >= static_cast<float>(percent);
 }
 
+// Q Ranger's Focus sẵn sàng khi có buff "asheqcastready" (đủ 4 stack Focus).
+// Buff này chỉ cần TỒN TẠI là Q dùng được — không cần check netid/caster, cũng
+// không dựa vào IsActive (dùng HasBuffRaw để tránh bị loại do endTime bất thường).
+static bool QCastReady() {
+    const auto player = Player();
+    return player.IsValid() && Q.IsReady() &&
+           ::CoreBuffs::HasBuffRaw(player.Address(), "asheqcastready");
+}
+
+// Killsteal: loại buff bất tử phổ biến rồi so máu + shield với damage tính được.
+static bool IsKillable(const AIBaseClient& target, double damage) {
+    if (!ValidUnit(target)) {
+        return false;
+    }
+    if (target.HasBuff("kindredrnodeathbuff") || target.HasBuff("Undying Rage") ||
+        target.HasBuff("JudicatorIntervention") || target.HasBuff("BansheesVeil") ||
+        target.HasBuff("SivirShield") || target.HasBuff("ShroudofDarkness")) {
+        return false;
+    }
+    return target.Health() + target.MagicalShield() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (leagueoflegends.com/en-us/Ashe/LoL) — KHÔNG
+//    dùng Spell::GetDamage ──
+// Q Ranger's Focus (physical): active biến auto-attack thành flurry 5 mũi tên,
+//     mỗi mũi 22/23/24/25/26% AD (tổng flurry 110/115/120/125/130% AD; flurry
+//     đầu +1 mũi = 132/138/144/150/156% AD). Không có AP ratio. Đây KHÔNG phải
+//     nuke độc lập — sát thương đi kèm đòn đánh thường, nên không killsteal
+//     riêng được => trả 0 cho slot Q.
+// W Volley (physical, 1 mũi tên trúng 1 mục tiêu đầu tiên):
+//     base 60/95/130/165/200 + 100% total AD  (mỗi mũi chỉ trúng 1 địch).
+// R Enchanted Crystal Arrow (MAGIC, 3 rank — clamp idx như Corki R):
+//     base 200/400/600 + 120% AP.  Global 2500, no-collision => killsteal
+//     tầm xa nhất.
+// Trả về damage đã trừ giáp/kháng phép qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float ap = player.AP();
+
+    switch (slot) {
+    case SpellSlot::W: {
+        const int rank = W.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 60.0f, 95.0f, 130.0f, 165.0f, 200.0f };
+        const float raw = base[rank - 1] + 1.00f * player.BonusAttackDamage();
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    case SpellSlot::R: {
+        const int rank = R.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[3] = { 200.0f, 400.0f, 600.0f };
+        const int idx = (rank - 1 < 3) ? rank - 1 : 2;
+        const float raw = base[idx] + 1.20f * ap;
+        return Damage::CalculateDamage(player, target, DamageType::Magical, raw);
+    }
+    default:
+        // Q Ranger's Focus không killsteal độc lập (sát thương qua auto-attack).
+        return 0.0f;
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
 static void OnProcessSpell(const ProcessSpellEventArgs& args);
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args);
+static void AutoKillsteal();
 static void Combo();
 static void Mixed();
 static void Clear();
@@ -117,6 +187,7 @@ static void BuildMenu() {
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo Settings", "Combo"));
     ComboMenu->Add(new MenuBool("useQ", "Use Q"));
     ComboMenu->Add(new MenuBool("useW", "Use W"));
+    ComboMenu->Add(new MenuSlider("wMana", "W If Mana > %", 25, 0, 100));
     ComboMenu->Add(new MenuBool("useR", "Use R"));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass Settings", "Harass"));
@@ -133,6 +204,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (R/W)"));
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (R)"));
     MiscMenu->Add(new MenuBool("interrupter", "Interrupter (R)"));
     MiscMenu->Add(new MenuBool("autoR", "Auto R on immobile targets"));
@@ -177,7 +249,7 @@ static void OnProcessSpell(const ProcessSpellEventArgs& args) {
     }
 
     const auto player = Player();
-    if (!player.IsValid() || !Q.IsReady() || !player.HasBuff("asheqcastready")) {
+    if (!player.IsValid() || !QCastReady()) {
         return;
     }
 
@@ -221,6 +293,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo (giống Corki).
+    AutoKillsteal();
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -238,6 +313,43 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     AutoR();
 }
 
+// Auto killsteal: R Enchanted Crystal Arrow (global 2500, no-collision — tầm xa
+// nhất) → W Volley (skillshot line 1200). Q Ranger's Focus không killsteal độc
+// lập (sát thương đi qua auto-attack) nên không tính ở đây. Damage tính tay theo
+// wiki qua SpellDamage, chỉ cast khi IsKillable.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal")) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+
+    // R Enchanted Crystal Arrow: no-collision, tầm 2500.
+    if (R.IsReady()) {
+        const auto target = GetTarget(R.Range, DamageType::Magical);
+        if (ValidHeroTarget(target, R.Range) && IsKillable(target, SpellDamage(SpellSlot::R, target))) {
+            const auto pred = R.GetPrediction(target, true);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                CastPosition(R, pred.GetCastPosition());
+                return;
+            }
+        }
+    }
+
+    // W Volley: skillshot line 1200, collision (minion) — mỗi mũi trúng 1 địch.
+    if (W.IsReady()) {
+        const auto target = GetTargetNoCollision(W);
+        if (ValidHeroTarget(target, W.Range) && IsKillable(target, SpellDamage(SpellSlot::W, target))) {
+            const auto pred = W.GetPrediction(target);
+            if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
+                CastPosition(W, pred.GetCastPosition());
+            }
+        }
+    }
+}
+
 static void Combo() {
     if (!ShouldRunNow(LastComboEvalTick, 60)) {
         return;
@@ -248,7 +360,18 @@ static void Combo() {
         return;
     }
 
-    if (Bool(ComboMenu, "useW") && W.IsReady()) {
+    // Q Ranger's Focus: bật ngay khi buff sẵn sàng và có hero trong tầm đánh.
+    // Không đợi OnProcessSpell (event AA) vì buff có thể đủ giữa 2 đòn -> chủ
+    // động toggle để không bỏ lỡ. Q là self-cast, không endposition.
+    if (Bool(ComboMenu, "useQ") && QCastReady()) {
+        const auto qTarget = GetTarget(AutoAttack::GetRealAutoAttackRange(player),
+                                       DamageType::Physical);
+        if (ValidHeroTarget(qTarget) && AutoAttack::InAutoAttackRange(qTarget)) {
+            Q.Cast();
+        }
+    }
+
+    if (Bool(ComboMenu, "useW") && W.IsReady() && ManaOkay(Slider(ComboMenu, "wMana", 25))) {
         const auto target = GetTargetNoCollision(W);
         if (ValidHeroTarget(target, W.Range)) {
             W.Cast(target);
@@ -261,7 +384,7 @@ static void Combo() {
             const auto pred = R.GetPrediction(target, true);
             if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
                 const bool killable =
-                    R.GetDamage(target) >= target.Health() &&
+                    IsKillable(target, SpellDamage(SpellSlot::R, target)) &&
                     !AutoAttack::InAutoAttackRange(target);
                 if (killable) {
                     CastPosition(R, pred.GetCastPosition());

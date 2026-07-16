@@ -45,6 +45,15 @@ inline Spell R{ SpellSlot::R, FLT_MAX };
 
 inline bool Loaded = false;
 
+// Combo AA -> Q -> AA: OnAfterAttack fire tại cast-START của đòn AA (windup chưa
+// xong, missile chưa launch). Cast Q ngay đó sẽ hủy đòn AA -> mất sát thương.
+// Nên ta chỉ ghi "muốn Tumble sau đòn này", rồi cast Q trong Game_OnUpdate KHI
+// Orbwalker::CanMove() == true (windup đã trôi qua = đòn AA đã chắc chắn ra).
+// vaynetumble reset attack -> sau Q gọi ResetAutoAttackTimer() để AA ra ngay.
+inline bool s_pendingTumble = false;
+inline Vector3 s_pendingTumblePos{};
+inline DWORD s_pendingTumbleTick = 0;
+
 static AIHeroClient Player() {
     return ObjectManager::Player();
 }
@@ -122,7 +131,57 @@ static bool TryCondemn(const AIHeroClient& enemy) {
     return false;
 }
 
+// Killsteal: loại buff bất tử phổ biến rồi so máu + shield với damage tính được.
+static bool IsKillable(const AIBaseClient& target, double damage) {
+    if (!ValidUnit(target)) {
+        return false;
+    }
+    if (target.HasBuff("kindredrnodeathbuff") || target.HasBuff("Undying Rage") ||
+        target.HasBuff("JudicatorIntervention") || target.HasBuff("BansheesVeil") ||
+        target.HasBuff("SivirShield") || target.HasBuff("ShroudofDarkness")) {
+        return false;
+    }
+    return target.Health() + target.PhysicalShield() < damage - 2.0;
+}
+
+// ── Damage tính tay theo wiki (wiki.leagueoflegends.com) — KHÔNG dùng DamageData ──
+// E Condemn (physical):
+//     base      : 50/85/120/155/190      + 50%  bonus AD
+//     wall-slam : 75/127.5/180/232.5/285 + 75%  bonus AD (bonus khi đập tường)
+//     total     : 125/212.5/300/.../475  + 125% bonus AD
+//   → Killsteal chỉ dùng base (KHÔNG cộng wall-slam) để tránh over-estimate:
+//     E cast targeted không đảm bảo đập tường, nên chỉ tính phần chắc chắn có.
+// W Silver Bolts (true, đòn thứ 3): 6/7/8/9/10% max HP; sàn 50/65/80/95/110;
+//     vs quái cố định 140/155/170/185/200. W là passive on-hit — KHÔNG tự cast
+//     được nên KHÔNG phải spell killsteal; chỉ ghi chú số liệu ở đây.
+// Q Tumble (physical, empower đòn kế): 75/85/95/105/115% AD (+ 50% AP). Không
+//     phải nuke độc lập (buff đòn đánh kế), nên không tính vào killsteal.
+// Trả về damage đã trừ giáp qua Damage::CalculateDamage.
+static float SpellDamage(SpellSlot slot, const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 0.0f;
+    }
+    const float bonusAd = player.BonusAttackDamage();
+
+    switch (slot) {
+    case SpellSlot::E: {
+        const int rank = E.Instance().Level();
+        if (rank < 1) {
+            return 0.0f;
+        }
+        static const float base[5] = { 50.0f, 85.0f, 120.0f, 155.0f, 190.0f };
+        // Base only + 50% bonus AD — không cộng wall-slam bonus (tránh over-estimate).
+        const float raw = base[rank - 1] + 0.50f * bonusAd;
+        return Damage::CalculateDamage(player, target, DamageType::Physical, raw);
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 static void Game_OnUpdate(const GameUpdateEventArgs& args);
+static void AutoKillsteal();
 static void OnProcessSpell(const ProcessSpellEventArgs& args);
 static void OnBeforeAttack(OrbwalkingActionArgs& args);
 static void OnAfterAttack(OrbwalkingActionArgs& args);
@@ -149,6 +208,7 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuSlider("Mana", "If Mana > %", 20, 0, 100));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc Settings", "Misc"));
+    MiscMenu->Add(new MenuBool("killsteal", "Auto Killsteal (E Condemn)"));
     MiscMenu->Add(new MenuBool("gapcloser", "Anti-Gapcloser (E)", false));
     MiscMenu->Add(new MenuBool("interrupter", "Interrupter (E)"));
     MiscMenu->Add(new MenuBool("autoQonR", "Auto Q when using R"));
@@ -239,7 +299,8 @@ static void OnBeforeAttack(OrbwalkingActionArgs& args) {
     }
 }
 
-// Sau đòn đánh: Tumble reposition tới con trỏ khi ít địch quanh điểm tới.
+// Sau đòn đánh: KHÔNG cast Q ngay (sẽ hủy đòn AA đang windup). Chỉ đánh dấu
+// "muốn Tumble" theo mode; Game_OnUpdate sẽ cast Q khi đòn AA đã ra (CanMove).
 static void OnAfterAttack(OrbwalkingActionArgs& args) {
     if (!Loaded || !Q.IsReady()) {
         return;
@@ -253,31 +314,56 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
     if (!player.IsValid()) {
         return;
     }
-    const Vector3 dashPoint = player.Position().Extend(Game::CursorPos(), 700.0f);
     const OrbwalkingMode mode = Orbwalker::ActiveMode();
 
+    bool wantQ = false;
     if (mode == OrbwalkingMode::Combo) {
-        if (targetBase.IsHero() && Bool(ComboMenu, "useQ") &&
-            player.CountEnemyHeroesInRange(700.0f) <= 1) {
-            Q.Cast(Game::CursorPos());
-        }
+        wantQ = targetBase.IsHero() && Bool(ComboMenu, "useQ") &&
+            player.CountEnemyHeroesInRange(700.0f) <= 1;
     } else if (mode == OrbwalkingMode::Harass) {
-        if (targetBase.IsHero() && Bool(HarassMenu, "useQ", false) &&
+        wantQ = targetBase.IsHero() && Bool(HarassMenu, "useQ", false) &&
             ManaOkay(Slider(HarassMenu, "Mana", 60)) &&
-            player.CountEnemyHeroesInRange(700.0f) <= 1) {
-            Q.Cast(Game::CursorPos());
-        }
+            player.CountEnemyHeroesInRange(700.0f) <= 1;
     } else if (mode == OrbwalkingMode::LaneClear) {
         const bool lane = targetBase.IsMinion() && Bool(LaneClearMenu, "useQ", false) &&
             ManaOkay(Slider(LaneClearMenu, "Mana", 60)) &&
             player.CountEnemyHeroesInRange(700.0f) <= 1;
         const bool jungle = targetBase.IsMinion() && targetBase.Team() == GameObjectTeam::Neutral &&
             Bool(JungleClearMenu, "useQ") && ManaOkay(Slider(JungleClearMenu, "Mana", 20));
-        if (lane || jungle) {
-            Q.Cast(Game::CursorPos());
-        }
+        wantQ = lane || jungle;
     }
-    (void)dashPoint;
+
+    if (wantQ) {
+        s_pendingTumble = true;
+        s_pendingTumblePos = Game::CursorPos();
+        s_pendingTumbleTick = GetTickCount();
+    }
+}
+
+// Xử lý Tumble đang chờ: chỉ cast khi đòn AA đã ra (Orbwalker::CanMove() true =
+// windup xong). Sau khi cast Q -> ResetAutoAttackTimer() để đòn AA kế ra ngay
+// (vaynetumble hủy animation). Bỏ pending nếu quá hạn 600ms hoặc Q hết sẵn sàng.
+static void ProcessPendingTumble() {
+    if (!s_pendingTumble) {
+        return;
+    }
+    if (!Q.IsReady() || GetTickCount() - s_pendingTumbleTick > 600) {
+        s_pendingTumble = false;
+        return;
+    }
+    // Đợi đòn AA vừa rồi thoát windup (đã chắc chắn ra) mới Tumble.
+    if (!Orbwalker::CanMove()) {
+        return;
+    }
+    Vector3 dest = s_pendingTumblePos;
+    if (!dest.IsValid() || dest.IsZero()) {
+        dest = Game::CursorPos();
+    }
+    if (Q.Cast(dest)) {
+        s_pendingTumble = false;
+        // Q reset AA -> cho phép AA ra ngay sau khi Tumble cast, không đợi delay.
+        Orbwalker::ResetAutoAttackTimer();
+    }
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
@@ -289,12 +375,38 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Tumble đang chờ: cast Q khi đòn AA đã ra (CanMove) rồi reset AA timer.
+    ProcessPendingTumble();
+
+    // Auto killsteal: chạy mọi mode, không phụ thuộc combo.
+    AutoKillsteal();
+
     // E Condemn wall-slam trong combo.
     if (Orbwalker::ActiveMode() == OrbwalkingMode::Combo &&
         Bool(ComboMenu, "useE") && E.IsReady()) {
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
             if (ValidHeroTarget(enemy, E.Range) && TryCondemn(enemy)) {
                 break;
+            }
+        }
+    }
+}
+
+// Auto killsteal: E Condemn (targeted 700, physical) là spell gây damage trực
+// tiếp duy nhất cast được. Dùng base damage (không tính wall-slam bonus) để
+// tránh over-estimate. Tính damage tay theo wiki qua SpellDamage.
+static void AutoKillsteal() {
+    if (!Bool(MiscMenu, "killsteal") || !E.IsReady()) {
+        return;
+    }
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return;
+    }
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (ValidHeroTarget(enemy, E.Range) && IsKillable(enemy, SpellDamage(SpellSlot::E, enemy))) {
+            if (E.CastOnUnit(AIBaseClient(enemy.Handle()))) {
+                return;
             }
         }
     }
