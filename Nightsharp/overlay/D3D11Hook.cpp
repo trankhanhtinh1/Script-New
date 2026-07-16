@@ -77,10 +77,6 @@ static constexpr int kGameReadyMaxPolls = 240;
 static constexpr DWORD kSwapChainPollMs = 500;
 static constexpr int kSwapChainMaxPolls = 240;
 
-static uintptr_t g_materialRegistrySingletonFn = 0;
-static int32_t g_swapChainOffset = 0;
-static bool g_swapChainLayoutResolved = false;
-
 static bool ReadLocalPlayerForStartup(uintptr_t& outLocalPlayer) {
     outLocalPlayer = 0;
     __try {
@@ -125,205 +121,67 @@ static void WaitForHookCallsToDrain(DWORD timeoutMs = 2000) {
 }
 
 // -----------------------------------------------------------------------
-// Pattern scanning helpers
+// Swapchain acquisition via the renderer runtime object
 // -----------------------------------------------------------------------
-static uint8_t* FindPattern(const wchar_t* module, const char* sig) {
-    const auto mod = GetModuleHandleW(module);
-    if (!mod) return nullptr;
-
-    // Convert signature string to bytes (-1 = wildcard)
-    auto pattern_to_bytes = [](const char* pattern) {
-        struct { int32_t bytes[128]; int len; } result = {};
-        const char* p = pattern;
-        while (*p && result.len < 128) {
-            if (*p == ' ') { ++p; continue; }
-            if (*p == '?') {
-                ++p; if (*p == '?') ++p;
-                result.bytes[result.len++] = -1;
-                continue;
-            }
-            result.bytes[result.len++] = strtoul(p, const_cast<char**>(&p), 16);
-        }
-        return result;
-    };
-
-    auto pb = pattern_to_bytes(sig);
-
-    const auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(mod);
-    const auto nt  = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<uint8_t*>(mod) + dos->e_lfanew);
-    const auto section = IMAGE_FIRST_SECTION(nt);
-
-    const auto scanStart = reinterpret_cast<uint8_t*>(mod) + section->VirtualAddress;
-    const auto scanSize  = section->SizeOfRawData;
-
-    MEMORY_BASIC_INFORMATION mbi = {};
-    const uint8_t* nextCheck = nullptr;
-
-    for (size_t i = 0; i < scanSize - pb.len; ++i) {
-        bool found = true;
-        for (int j = 0; j < pb.len; ++j) {
-            const auto addr = scanStart + i + j;
-            if (addr >= nextCheck) {
-                if (!VirtualQuery(addr, &mbi, sizeof(mbi))) break;
-                if (mbi.Protect == PAGE_NOACCESS) {
-                    i += reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize -
-                         (reinterpret_cast<uintptr_t>(scanStart) + i);
-                    found = false;
-                    break;
-                }
-                nextCheck = static_cast<uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;
-            }
-            if (pb.bytes[j] != -1 && scanStart[i + j] != pb.bytes[j]) {
-                found = false;
-                break;
-            }
-        }
-        if (found) return &scanStart[i];
-    }
-    return nullptr;
-}
-
-static uintptr_t ResolveRelativeCall(uint8_t* addr) {
-    if (!addr || addr[0] != 0xE8) return 0;
-    return reinterpret_cast<uintptr_t>(addr) + *reinterpret_cast<int32_t*>(addr + 1) + 5;
-}
-
-// -----------------------------------------------------------------------
-// Swapchain acquisition via MaterialRegistry (R3nzSkin-style)
-// -----------------------------------------------------------------------
-static IDXGISwapChain* FindSwapChain() {
-    // Pattern: "E8 ? ? ? ? 8B 57 34 45 33 C9"
-    // CALL Riot__Renderer__MaterialRegistry__GetSingletonPtr; MOV EDX,[RDI+34]; XOR ECX,ECX
-    constexpr const char* funcSig =
-        "E8 ? ? ? ? 8B 57 34 45 33 C9";
-    auto funcAddr = FindPattern(nullptr, funcSig);
-    if (!funcAddr) {
-        NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton pattern not found");
-        return nullptr;
-    }
-
-    auto singletonFunc = ResolveRelativeCall(funcAddr);
-    if (!singletonFunc) {
-        NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton resolve failed");
-        return nullptr;
-    }
-
-    auto materialRegistry = reinterpret_cast<uintptr_t(__fastcall*)()>(singletonFunc)();
-    if (!materialRegistry) {
-        NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton returned null");
-        return nullptr;
-    }
-
-    // Pattern: "48 8D BB ? ? ? ? C6 83 ? ? ? ? ? 0F 84"
-    // LEA RDI, [RBX + field_offset]; MOV byte [RBX + other_offset], 0; JE ...
-    constexpr const char* fieldSig =
-        "48 8D BB ? ? ? ? C6 83 ? ? ? ? ? 0F 84";
-    auto fieldAddr = FindPattern(nullptr, fieldSig);
-    if (!fieldAddr) {
-        NightSharpDebug::Logf("[D3D11Hook] SwapChain field pattern not found");
-        return nullptr;
-    }
-
-    // The field offset is the 32-bit displacement in the LEA instruction
-    // LEA RDI, [RBX + disp32] → bytes: 48 8D BB disp32
-    int32_t swapChainOffset = *reinterpret_cast<int32_t*>(fieldAddr + 3);
-
-    auto swapChain = *reinterpret_cast<IDXGISwapChain**>(materialRegistry + swapChainOffset);
-    if (!swapChain) {
-        NightSharpDebug::Logf("[D3D11Hook] SwapChain pointer is null");
-        return nullptr;
-    }
-
-    NightSharpDebug::Logf("[D3D11Hook] Found swapchain at registry+0x%X = %p",
-                          swapChainOffset, (void*)swapChain);
-    return swapChain;
-}
-
-static bool ResolveSwapChainLayoutCached(bool noisy) {
-    if (g_swapChainLayoutResolved) {
-        return true;
-    }
-
-    constexpr const char* funcSig =
-        "E8 ? ? ? ? 8B 57 34 45 33 C9";
-    uint8_t* funcAddr = FindPattern(nullptr, funcSig);
-    if (!funcAddr) {
+static IDXGISwapChain* FindSwapChainFromRenderer(bool noisy = true) {
+    if (!CoreRuntime::EnsureInitialized() || !CoreRuntime::RefreshReadState()) {
         if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton pattern not found");
-        }
-        return false;
-    }
-
-    const uintptr_t singletonFunc = ResolveRelativeCall(funcAddr);
-    if (!singletonFunc) {
-        if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton resolve failed");
-        }
-        return false;
-    }
-
-    constexpr const char* fieldSig =
-        "48 8D BB ? ? ? ? C6 83 ? ? ? ? ? 0F 84";
-    uint8_t* fieldAddr = FindPattern(nullptr, fieldSig);
-    if (!fieldAddr) {
-        if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] SwapChain field pattern not found");
-        }
-        return false;
-    }
-
-    g_materialRegistrySingletonFn = singletonFunc;
-    g_swapChainOffset = *reinterpret_cast<int32_t*>(fieldAddr + 3);
-    g_swapChainLayoutResolved = true;
-    NightSharpDebug::Logf("[D3D11Hook] Swapchain layout resolved singleton=0x%p offset=0x%X",
-                          reinterpret_cast<void*>(g_materialRegistrySingletonFn),
-                          g_swapChainOffset);
-    return true;
-}
-
-static IDXGISwapChain* FindSwapChainCached(bool noisy = true) {
-    if (!ResolveSwapChainLayoutCached(noisy)) {
-        return nullptr;
-    }
-
-    uintptr_t materialRegistry = 0;
-    __try {
-        materialRegistry =
-            reinterpret_cast<uintptr_t(__fastcall*)()>(g_materialRegistrySingletonFn)();
-    }
-    __except (1) {
-        if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton call faulted");
+            NightSharpDebug::Logf("[D3D11Hook] CoreRuntime is not ready for renderer lookup");
         }
         return nullptr;
     }
 
-    if (!materialRegistry) {
+    const auto& ctx = CoreRuntime::GetContext();
+    const uintptr_t renderer = ctx.renderer;
+    const uintptr_t swapChainSlot = renderer + Offset::D3D::SwapChain;
+    if (!Globals::IsValidPtr(renderer) ||
+        !Globals::IsReadablePtr(swapChainSlot, sizeof(uintptr_t))) {
         if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] MaterialRegistry singleton returned null");
+            NightSharpDebug::Logf(
+                "[D3D11Hook] Renderer is not ready global=%p renderer=%p",
+                reinterpret_cast<void*>(ctx.rendererGlobal),
+                reinterpret_cast<void*>(renderer));
         }
         return nullptr;
     }
 
-    IDXGISwapChain* swapChain = nullptr;
-    __try {
-        swapChain =
-            *reinterpret_cast<IDXGISwapChain**>(materialRegistry + g_swapChainOffset);
-    }
-    __except (1) {
+    auto* swapChain = reinterpret_cast<IDXGISwapChain*>(
+        Globals::ReadPtr(swapChainSlot));
+    if (!swapChain ||
+        !Globals::IsReadablePtr(reinterpret_cast<uintptr_t>(swapChain), sizeof(uintptr_t))) {
         if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] SwapChain field read faulted registry=0x%p offset=0x%X",
-                                  reinterpret_cast<void*>(materialRegistry),
-                                  g_swapChainOffset);
+            NightSharpDebug::Logf(
+                "[D3D11Hook] Renderer swapchain is not ready renderer=%p slot=+0x%X ptr=%p",
+                reinterpret_cast<void*>(renderer),
+                static_cast<unsigned>(Offset::D3D::SwapChain),
+                static_cast<void*>(swapChain));
         }
         return nullptr;
     }
 
-    if (!swapChain) {
+    const uintptr_t vtable = Globals::ReadPtr(reinterpret_cast<uintptr_t>(swapChain));
+    constexpr size_t kRequiredVtableEntries = 14;
+    if (!Globals::IsReadablePtr(vtable, sizeof(uintptr_t) * kRequiredVtableEntries)) {
         if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] SwapChain pointer is null registry=0x%p offset=0x%X",
-                                  reinterpret_cast<void*>(materialRegistry),
-                                  g_swapChainOffset);
+            NightSharpDebug::Logf(
+                "[D3D11Hook] Renderer swapchain has an invalid vtable ptr=%p vtable=%p",
+                static_cast<void*>(swapChain),
+                reinterpret_cast<void*>(vtable));
+        }
+        return nullptr;
+    }
+
+    const uintptr_t presentFn = Globals::ReadPtr(
+        vtable + Offset::D3D::PresentVtableOffset);
+    const uintptr_t resizeBuffersFn = Globals::ReadPtr(
+        vtable + Offset::D3D::ResizeBuffersVtableOffset);
+    if (!Globals::IsExecutablePtr(presentFn) ||
+        !Globals::IsExecutablePtr(resizeBuffersFn)) {
+        if (noisy) {
+            NightSharpDebug::Logf(
+                "[D3D11Hook] Renderer swapchain methods are invalid present=%p resize=%p",
+                reinterpret_cast<void*>(presentFn),
+                reinterpret_cast<void*>(resizeBuffersFn));
         }
         return nullptr;
     }
@@ -335,24 +193,29 @@ static IDXGISwapChain* FindSwapChainCached(bool noisy = true) {
     }
     __except (1) {
         if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] SwapChain GetDesc faulted ptr=%p",
+            NightSharpDebug::Logf("[D3D11Hook] Renderer swapchain GetDesc faulted ptr=%p",
                                   static_cast<void*>(swapChain));
         }
         return nullptr;
     }
 
-    if (FAILED(hr)) {
+    if (FAILED(hr) || !desc.OutputWindow || !IsWindow(desc.OutputWindow)) {
         if (noisy) {
-            NightSharpDebug::Logf("[D3D11Hook] SwapChain GetDesc failed hr=0x%08lX ptr=%p",
-                                  static_cast<unsigned long>(hr),
-                                  static_cast<void*>(swapChain));
+            NightSharpDebug::Logf(
+                "[D3D11Hook] Renderer swapchain GetDesc invalid hr=0x%08lX hwnd=%p ptr=%p",
+                static_cast<unsigned long>(hr),
+                desc.OutputWindow,
+                static_cast<void*>(swapChain));
         }
         return nullptr;
     }
 
-    NightSharpDebug::Logf("[D3D11Hook] Found swapchain at registry+0x%X = %p",
-                          g_swapChainOffset,
-                          static_cast<void*>(swapChain));
+    NightSharpDebug::Logf(
+        "[D3D11Hook] Found swapchain via renderer=%p slot=+0x%X ptr=%p hwnd=%p",
+        reinterpret_cast<void*>(renderer),
+        static_cast<unsigned>(Offset::D3D::SwapChain),
+        static_cast<void*>(swapChain),
+        desc.OutputWindow);
     return swapChain;
 }
 
@@ -369,7 +232,7 @@ static IDXGISwapChain* WaitForSwapChain() {
             return nullptr;
         }
 
-        IDXGISwapChain* swapChain = FindSwapChainCached(i == 0);
+        IDXGISwapChain* swapChain = FindSwapChainFromRenderer(i == 0);
         if (swapChain) {
             if (i > 0) {
                 NightSharpDebug::Logf("[D3D11Hook] Swapchain became ready after %d sec",
@@ -426,11 +289,26 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     // several ms) on the per-tick Key()/ShouldProcessInput() hot path.
     if (msg == WM_ACTIVATEAPP) {
         ::CoreGame::SetWindowFocused(wParam != FALSE);
+        if (wParam == FALSE) {
+            NightSharpMenu::ResetMouseInputCapture();
+            NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+        }
+    } else if (msg == WM_CANCELMODE || msg == WM_KILLFOCUS) {
+        NightSharpMenu::ResetMouseInputCapture();
+        NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
     }
 
     if (NightSharpMenu::showMenu &&
         SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
         return TRUE;
+    }
+
+    // Raw mouse input bypasses the normal WM_*BUTTON messages on some game
+    // input paths.  Consume only mouse packets owned by the visible menu and
+    // still let DefWindowProc perform the required foreground-input cleanup.
+    if (msg == WM_INPUT &&
+        NightSharpMenu::ShouldCaptureRawMouseInput(hWnd, lParam)) {
+        return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
     // Let ImGui process input first
@@ -448,7 +326,9 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
             ScreenToClient(hWnd, &point);
         }
-        if (NightSharpMenu::IsPointInside(
+        if (NightSharpMenu::ShouldCaptureMouseMessage(
+                msg,
+                wParam,
                 static_cast<float>(point.x),
                 static_cast<float>(point.y))) {
             return TRUE;
@@ -462,6 +342,10 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
                 return TRUE;
             }
             NightSharpMenu::showMenu = !NightSharpMenu::showMenu;
+            if (!NightSharpMenu::showMenu) {
+                NightSharpMenu::ResetMouseInputCapture();
+                NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+            }
             return TRUE;
         }
         if (wParam == VK_F8) {

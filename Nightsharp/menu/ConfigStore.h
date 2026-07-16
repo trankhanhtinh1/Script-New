@@ -459,7 +459,11 @@ namespace ConfigStore {
             Config::ZoomHack::maxZoom           = F("ZoomHack", "maxZoom", Config::ZoomHack::maxZoom);
             Config::SkinChanger::enabled        = B("SkinChanger", "enabled", Config::SkinChanger::enabled);
             Config::StreamProtection::bypassObs = B("StreamProtection", "bypassObs", Config::StreamProtection::bypassObs);
-            Config::OverlayInput::clickThrough  = B("Overlay", "clickThrough", Config::OverlayInput::clickThrough);
+            // Older builds wrote clickThrough=1 by default even though there
+            // was no menu control to turn it back off.  That made the visible
+            // menu permanently non-interactive.  Treat the persisted value as
+            // legacy and migrate it to menu capture mode.
+            Config::OverlayInput::clickThrough  = false;
             Config::PermaShow::enabled          = B("PermaShow", "enabled", Config::PermaShow::enabled);
             const int loadedPermaWidth = I("PermaShow", "width", Config::PermaShow::width);
             // The retired NightSharp panel forced width >= 500 and stored X as

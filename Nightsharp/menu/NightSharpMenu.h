@@ -18,6 +18,7 @@
 #include "ConfigStore.h"
 #include "EnsoulSharpMenuTheme.h"
 
+#include <Windows.h>
 #include <cstdint>
 #include <cstdio>
 
@@ -41,6 +42,14 @@ namespace NightSharpMenu {
     inline float menuBoundsBottom = 0.0f;
     inline float permaShowBoundsRight = 0.0f;
     inline float permaShowBoundsBottom = 0.0f;
+    inline std::uint32_t mouseCaptureButtons = 0;
+    inline std::uint32_t rawMouseCaptureButtons = 0;
+
+    constexpr std::uint32_t MOUSE_CAPTURE_LEFT   = 1u << 0;
+    constexpr std::uint32_t MOUSE_CAPTURE_RIGHT  = 1u << 1;
+    constexpr std::uint32_t MOUSE_CAPTURE_MIDDLE = 1u << 2;
+    constexpr std::uint32_t MOUSE_CAPTURE_X1     = 1u << 3;
+    constexpr std::uint32_t MOUSE_CAPTURE_X2     = 1u << 4;
 
     constexpr float PRIMARY_W = 190.0f;
     constexpr float SECONDARY_W = 190.0f;
@@ -69,10 +78,6 @@ namespace NightSharpMenu {
     inline ImU32 COL_TEXT_DIM = IM_COL32(185, 185, 205, 255);
     inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 255);
 
-    // Core controls used by the new EnsoulSharp-style tree.  Plugin menus
-    // already attach themselves to MenuManager; these entries preserve the
-    // NightSharp settings and plugin manager that previously lived only in the
-    // old three-column renderer.
     inline SDK::UI::Menu* ensoulCoreRoot = nullptr;
     inline SDK::UI::MenuList* ensoulLanguage = nullptr;
     inline SDK::UI::MenuBool* ensoulSkinChanger = nullptr;
@@ -133,6 +138,9 @@ namespace NightSharpMenu {
         EnsoulSharpTheme::OpenColor = nullptr;
         EnsoulSharpTheme::OpenRuntime = nullptr;
         EnsoulSharpTheme::DragSliderButton = nullptr;
+        mouseCaptureButtons = 0;
+        rawMouseCaptureButtons = 0;
+        EnsoulSharpTheme::CancelRootDrag();
         EnsoulSharpTheme::SetFont(nullptr);
         SDK::UI::PermaShow::SetFont(nullptr);
     }
@@ -561,7 +569,20 @@ namespace NightSharpMenu {
             return false;
         }
 
+        // Once a press starts on the menu, retain ownership until its matching
+        // release even if the pointer leaves the last rendered hit rectangle.
+        if (mouseCaptureButtons != 0 || rawMouseCaptureButtons != 0) {
+            return true;
+        }
+
         if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
+            return true;
+        }
+
+        // Keep pointer input captured while the root column is being dragged.
+        // The external overlay otherwise becomes click-through when the cursor
+        // moves beyond the hit rectangles produced by the previous frame.
+        if (EnsoulSharpTheme::HasRootPointerCapture()) {
             return true;
         }
 
@@ -570,6 +591,145 @@ namespace NightSharpMenu {
         // EnsoulSharp PermaShow itself has no drag/click surface; its position
         // is managed by the X/Y sliders in the PermaShow settings submenu.
         return insideMenu;
+    }
+
+    inline void ResetMouseInputCapture() {
+        mouseCaptureButtons = 0;
+        rawMouseCaptureButtons = 0;
+    }
+
+    inline bool HasMouseInputCapture() {
+        return mouseCaptureButtons != 0 || rawMouseCaptureButtons != 0 ||
+               EnsoulSharpTheme::HasRootPointerCapture();
+    }
+
+    inline std::uint32_t MouseCaptureBit(UINT msg, WPARAM wParam) {
+        switch (msg) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+            return MOUSE_CAPTURE_LEFT;
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_RBUTTONDBLCLK:
+            return MOUSE_CAPTURE_RIGHT;
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+        case WM_MBUTTONDBLCLK:
+            return MOUSE_CAPTURE_MIDDLE;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+        case WM_XBUTTONDBLCLK:
+            return HIWORD(wParam) == XBUTTON1
+                ? MOUSE_CAPTURE_X1
+                : MOUSE_CAPTURE_X2;
+        default:
+            return 0;
+        }
+    }
+
+    inline bool IsMouseButtonDownMessage(UINT msg) {
+        switch (msg) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONDBLCLK:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    inline bool IsMouseButtonUpMessage(UINT msg) {
+        return msg == WM_LBUTTONUP || msg == WM_RBUTTONUP ||
+               msg == WM_MBUTTONUP || msg == WM_XBUTTONUP;
+    }
+
+    inline bool ShouldCaptureMouseMessage(
+        UINT msg,
+        WPARAM wParam,
+        float clientX,
+        float clientY) {
+        if (!showMenu) {
+            ResetMouseInputCapture();
+            return false;
+        }
+
+        const bool wasCaptured = HasMouseInputCapture();
+        const bool inside = IsPointInside(clientX, clientY);
+        const std::uint32_t button = MouseCaptureBit(msg, wParam);
+
+        if (IsMouseButtonDownMessage(msg)) {
+            if (inside && button != 0) {
+                mouseCaptureButtons |= button;
+            }
+            return inside || wasCaptured;
+        }
+
+        if (IsMouseButtonUpMessage(msg)) {
+            const bool shouldCapture = inside || wasCaptured ||
+                (button != 0 && (mouseCaptureButtons & button) != 0);
+            mouseCaptureButtons &= ~button;
+            return shouldCapture;
+        }
+
+        return inside || wasCaptured;
+    }
+
+    inline bool ShouldCaptureRawMouseInput(HWND hWnd, LPARAM lParam) {
+        if (!showMenu || !hWnd) {
+            ResetMouseInputCapture();
+            return false;
+        }
+
+        RAWINPUT input = {};
+        UINT inputSize = sizeof(input);
+        const UINT read = GetRawInputData(
+            reinterpret_cast<HRAWINPUT>(lParam),
+            RID_INPUT,
+            &input,
+            &inputSize,
+            sizeof(RAWINPUTHEADER));
+        if (read == static_cast<UINT>(-1) || read < sizeof(RAWINPUT) ||
+            input.header.dwType != RIM_TYPEMOUSE) {
+            return false;
+        }
+
+        POINT cursor = {};
+        if (!GetCursorPos(&cursor) || !ScreenToClient(hWnd, &cursor)) {
+            return HasMouseInputCapture();
+        }
+
+        const bool wasCaptured = HasMouseInputCapture();
+        const bool inside = IsPointInside(
+            static_cast<float>(cursor.x),
+            static_cast<float>(cursor.y));
+        const USHORT flags = input.data.mouse.usButtonFlags;
+
+        std::uint32_t down = 0;
+        std::uint32_t up = 0;
+        if ((flags & RI_MOUSE_LEFT_BUTTON_DOWN) != 0) down |= MOUSE_CAPTURE_LEFT;
+        if ((flags & RI_MOUSE_RIGHT_BUTTON_DOWN) != 0) down |= MOUSE_CAPTURE_RIGHT;
+        if ((flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) != 0) down |= MOUSE_CAPTURE_MIDDLE;
+        if ((flags & RI_MOUSE_BUTTON_4_DOWN) != 0) down |= MOUSE_CAPTURE_X1;
+        if ((flags & RI_MOUSE_BUTTON_5_DOWN) != 0) down |= MOUSE_CAPTURE_X2;
+        if ((flags & RI_MOUSE_LEFT_BUTTON_UP) != 0) up |= MOUSE_CAPTURE_LEFT;
+        if ((flags & RI_MOUSE_RIGHT_BUTTON_UP) != 0) up |= MOUSE_CAPTURE_RIGHT;
+        if ((flags & RI_MOUSE_MIDDLE_BUTTON_UP) != 0) up |= MOUSE_CAPTURE_MIDDLE;
+        if ((flags & RI_MOUSE_BUTTON_4_UP) != 0) up |= MOUSE_CAPTURE_X1;
+        if ((flags & RI_MOUSE_BUTTON_5_UP) != 0) up |= MOUSE_CAPTURE_X2;
+
+        if (inside) {
+            rawMouseCaptureButtons |= down;
+        }
+        const bool shouldCapture = inside || wasCaptured ||
+            (up != 0 && (rawMouseCaptureButtons & up) != 0);
+        rawMouseCaptureButtons &= ~up;
+        return shouldCapture;
     }
 
     inline bool DrawSidebarItem(ImDrawList* dl, ImVec2 pos, float w, const char* text, bool isActive, bool hasArrow = false) {
@@ -1532,6 +1692,8 @@ namespace NightSharpMenu {
         DrawPermaShowOverlay();
 
         if (!showMenu) {
+            ResetMouseInputCapture();
+            EnsoulSharpTheme::CancelRootDrag();
             menuBoundsRight = menuPosX;
             menuBoundsBottom = menuPosY;
             return;

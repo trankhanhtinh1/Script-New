@@ -678,11 +678,6 @@ void UpdateClickThroughFromMenuBounds() {
         return;
     }
 
-    if (Config::OverlayInput::clickThrough) {
-        SetClickThrough(true);
-        return;
-    }
-
     if (g_bMenuVisible == 0) {
         SetClickThrough(true);
         return;
@@ -701,7 +696,13 @@ void ToggleMenuVisible() {
     LONG visible = !g_bMenuVisible;
     InterlockedExchange(&g_bMenuVisible, visible);
     NightSharpMenu::showMenu = (visible != 0);
-    SetClickThrough(Config::OverlayInput::clickThrough || visible == 0);
+    if (visible == 0) {
+        NightSharpMenu::ResetMouseInputCapture();
+        NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+        SetClickThrough(true);
+    } else {
+        UpdateClickThroughFromMenuBounds();
+    }
 }
 
 void SyncImGuiMouse() {
@@ -715,7 +716,11 @@ void SyncImGuiMouse() {
 
     ImGuiIO& io = ImGui::GetIO();
     io.MousePos = ImVec2(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
-    const bool acceptMenuInput = g_bMenuVisible != 0 && IsTargetForeground();
+    const bool acceptMenuInput =
+        g_bMenuVisible != 0 &&
+        IsTargetForeground() &&
+        (IsClientPointOverMenu(mousePos) ||
+         NightSharpMenu::HasMouseInputCapture());
     io.MouseDown[0] = acceptMenuInput && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     io.MouseDown[1] = acceptMenuInput && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 }
@@ -726,7 +731,7 @@ void RenderStatusOnlyFrame() {
     }
 
     const bool overlayActive = MoveOverlayToTarget();
-    SetClickThrough(overlayActive ? Config::OverlayInput::clickThrough : true);
+    SetClickThrough(true);
     if (!overlayActive) {
         return;
     }
@@ -748,8 +753,13 @@ void RenderStatusOnlyFrame() {
 }
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_CANCELMODE || msg == WM_KILLFOCUS) {
+        NightSharpMenu::ResetMouseInputCapture();
+        NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+    }
+
     if (msg == WM_NCHITTEST) {
-        if (!IsTargetForeground() || Config::OverlayInput::clickThrough) {
+        if (!IsTargetForeground() || g_bMenuVisible == 0) {
             return HTTRANSPARENT;
         }
 
@@ -762,9 +772,23 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return TRUE;
     }
 
-    if (g_bMenuVisible && !Config::OverlayInput::clickThrough) {
+    if (g_bMenuVisible) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
+        }
+
+        if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+            POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
+                ScreenToClient(hWnd, &point);
+            }
+            if (NightSharpMenu::ShouldCaptureMouseMessage(
+                    msg,
+                    wParam,
+                    static_cast<float>(point.x),
+                    static_cast<float>(point.y))) {
+                return TRUE;
+            }
         }
     }
 
@@ -797,9 +821,20 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         return callOriginal();
     }
 
+    if ((msg == WM_ACTIVATEAPP && wParam == FALSE) ||
+        msg == WM_CANCELMODE || msg == WM_KILLFOCUS) {
+        NightSharpMenu::ResetMouseInputCapture();
+        NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+    }
+
     if (NightSharpMenu::showMenu &&
         SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
         return TRUE;
+    }
+
+    if (msg == WM_INPUT &&
+        NightSharpMenu::ShouldCaptureRawMouseInput(hWnd, lParam)) {
+        return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
     if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
@@ -831,7 +866,9 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
             if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
                 ScreenToClient(hWnd, &point);
             }
-            if (NightSharpMenu::IsPointInside(
+            if (NightSharpMenu::ShouldCaptureMouseMessage(
+                    msg,
+                    wParam,
                     static_cast<float>(point.x),
                     static_cast<float>(point.y))) {
                 return TRUE;
@@ -1071,8 +1108,10 @@ void Overlay::Run() {
         const bool overlayActive = MoveOverlayToTarget();
         if (overlayActive) {
             UpdateWindow(g_hOverlay);
+            UpdateClickThroughFromMenuBounds();
+        } else {
+            SetClickThrough(true);
         }
-        SetClickThrough(overlayActive ? Config::OverlayInput::clickThrough : true);
     }
 
     const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };

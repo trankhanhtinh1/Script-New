@@ -84,8 +84,9 @@ void Run() {
                                    : "overlay-manager-external");
         NightSharpDebug::Logf("[OverlayManager] Starting %s overlay", ModeName(mode));
 
+        bool modeCompleted = true;
         if (mode == Mode::Internal) {
-            D3D11Hook::Install();
+            modeCompleted = D3D11Hook::Install();
         } else {
             Overlay::Run();
         }
@@ -109,14 +110,12 @@ void Run() {
             continue;
         }
 
-        const Mode nextMode = OppositeMode(mode);
         NightSharpDebug::Logf(
-            "[OverlayManager] %s overlay exited unexpectedly; falling back to %s",
+            "[OverlayManager] %s overlay exited without an explicit switch (completed=%d); stopping",
             ModeName(mode),
-            ModeName(nextMode));
-        mode = nextMode;
-        InterlockedExchange(&g_currentMode, static_cast<LONG>(mode));
-        Sleep(kModeRestartDelayMs);
+            modeCompleted ? 1 : 0);
+        InterlockedExchange(&g_shutdownRequested, 1);
+        break;
     }
 
     InterlockedExchange(&g_running, 0);

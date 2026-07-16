@@ -21,8 +21,9 @@ inline constexpr float ContainerWidth = 200.0f;
 inline constexpr float ContainerTextOffset = 15.0f;
 inline constexpr float ContainerTextMarkOffset = 8.0f;
 inline constexpr float FontSize = 15.0f;
-inline constexpr float PositionX = 30.0f;
-inline constexpr float PositionY = 30.0f;
+inline constexpr float RootDragThreshold = 4.0f;
+inline float PositionX = 30.0f;
+inline float PositionY = 30.0f;
 
 inline constexpr ImU32 HoverColor = IM_COL32(255, 255, 255, 50);
 inline constexpr ImU32 RootContainerColor = IM_COL32(0, 0, 0, 62);
@@ -80,6 +81,23 @@ inline float BoundsRight = PositionX;
 inline float BoundsBottom = PositionY;
 inline Rect HitRects[256] = {};
 inline int HitRectCount = 0;
+inline bool RootPressActive = false;
+inline bool RootDragging = false;
+inline Menu* RootPressedMenu = nullptr;
+inline ImVec2 RootPressPosition = ImVec2(0.0f, 0.0f);
+inline ImVec2 RootDragOffset = ImVec2(0.0f, 0.0f);
+
+inline void CancelRootDrag() {
+    RootPressActive = false;
+    RootDragging = false;
+    RootPressedMenu = nullptr;
+    RootPressPosition = ImVec2(0.0f, 0.0f);
+    RootDragOffset = ImVec2(0.0f, 0.0f);
+}
+
+inline bool HasRootPointerCapture() {
+    return RootPressActive;
+}
 
 inline void SetFont(ImFont* font) {
     MenuFont = font;
@@ -771,7 +789,10 @@ inline void DrawColumn(ImDrawList* draw, Menu* menu, const ImVec2& position) {
     BorderRect(draw, panel, BorderColor);
 }
 
-inline void DrawMenu(ImDrawList* draw, Menu* menu, const Rect& row) {
+inline void DrawMenu(ImDrawList* draw,
+                     Menu* menu,
+                     const Rect& row,
+                     bool handleClick = true) {
     const int childCount = VisibleChildCount(menu);
     if (Hovered(row) && !menu->Toggled && childCount > 0) {
         FillRect(draw, row, HoverColor);
@@ -791,7 +812,7 @@ inline void DrawMenu(ImDrawList* draw, Menu* menu, const Rect& row) {
     if (menu->Toggled) {
         FillRect(draw, row, ContainerSelectedColor);
     }
-    if (Clicked(row)) {
+    if (handleClick && Clicked(row)) {
         ToggleMenu(menu);
     }
 
@@ -1092,6 +1113,91 @@ inline void PreparePopupInput() {
     }
 }
 
+inline Menu* RootMenuAt(const Rect& rootPanel, const ImVec2& point) {
+    if (!rootPanel.Contains(point)) {
+        return nullptr;
+    }
+
+    const int wantedRow = static_cast<int>(
+        (point.y - rootPanel.y) / ContainerHeight);
+    int visibleRow = 0;
+    auto& manager = MenuManager::Instance();
+    for (int i = 0; i < manager.Menus.size(); ++i) {
+        Menu* menu = manager.Menus[i];
+        if (!menu || !menu->Visible) {
+            continue;
+        }
+        if (visibleRow == wantedRow) {
+            return menu;
+        }
+        ++visibleRow;
+    }
+    return nullptr;
+}
+
+inline void UpdateRootDrag(const Rect& rootPanel) {
+    ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 mouse = io.MousePos;
+
+    if (!RootPressActive &&
+        !RegularClickBlocked &&
+        ImGui::IsMouseClicked(0) &&
+        rootPanel.Contains(mouse)) {
+        RootPressActive = true;
+        RootDragging = false;
+        RootPressedMenu = RootMenuAt(rootPanel, mouse);
+        RootPressPosition = mouse;
+        RootDragOffset = ImVec2(mouse.x - PositionX, mouse.y - PositionY);
+    }
+
+    if (!RootPressActive) {
+        return;
+    }
+
+    if (ImGui::IsMouseDown(0)) {
+        const float deltaX = mouse.x - RootPressPosition.x;
+        const float deltaY = mouse.y - RootPressPosition.y;
+        if (!RootDragging &&
+            deltaX * deltaX + deltaY * deltaY >=
+                RootDragThreshold * RootDragThreshold) {
+            RootDragging = true;
+            OpenList = nullptr;
+            OpenColor = nullptr;
+            OpenRuntime = nullptr;
+            TooltipItem = nullptr;
+        }
+
+        if (RootDragging) {
+            float nextX = std::floor(mouse.x - RootDragOffset.x);
+            float nextY = std::floor(mouse.y - RootDragOffset.y);
+            const ImVec2 display = io.DisplaySize;
+            if (display.x > 0.0f) {
+                nextX = std::clamp(
+                    nextX,
+                    0.0f,
+                    std::max(0.0f, display.x - rootPanel.w));
+            }
+            if (display.y > 0.0f) {
+                nextY = std::clamp(
+                    nextY,
+                    0.0f,
+                    std::max(0.0f, display.y - rootPanel.h));
+            }
+            PositionX = nextX;
+            PositionY = nextY;
+        }
+        return;
+    }
+
+    Menu* clickedMenu = RootPressedMenu;
+    const bool shouldToggle =
+        !RootDragging && ImGui::IsMouseReleased(0) && clickedMenu;
+    CancelRootDrag();
+    if (shouldToggle) {
+        ToggleMenu(clickedMenu);
+    }
+}
+
 inline void Render() {
     ImDrawList* draw = ImGui::GetForegroundDrawList();
     if (!draw) {
@@ -1100,8 +1206,6 @@ inline void Render() {
 
     PreparePopupInput();
     TooltipItem = nullptr;
-    BoundsRight = PositionX;
-    BoundsBottom = PositionY;
     HitRectCount = 0;
 
     auto& manager = MenuManager::Instance();
@@ -1112,10 +1216,23 @@ inline void Render() {
         }
     }
     if (rootCount <= 0) {
+        CancelRootDrag();
+        BoundsRight = PositionX;
+        BoundsBottom = PositionY;
         return;
     }
 
     const float rootWidth = RootColumnWidth();
+    const Rect rootPanelBeforeDrag{
+        PositionX,
+        PositionY,
+        rootWidth,
+        ContainerHeight * static_cast<float>(rootCount)
+    };
+    UpdateRootDrag(rootPanelBeforeDrag);
+
+    BoundsRight = PositionX;
+    BoundsBottom = PositionY;
     const Rect rootPanel{
         PositionX,
         PositionY,
@@ -1138,7 +1255,9 @@ inline void Render() {
             ContainerHeight
         };
         BorderRect(draw, row, ContainerSeparatorColor);
-        DrawMenu(draw, menu, row);
+        // Root clicks are resolved on release by UpdateRootDrag so the same
+        // surface can distinguish a normal click from a drag gesture.
+        DrawMenu(draw, menu, row, false);
         ++rowIndex;
     }
     BorderRect(draw, rootPanel, BorderColor);

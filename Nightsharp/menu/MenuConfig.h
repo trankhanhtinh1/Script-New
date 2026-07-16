@@ -17,7 +17,10 @@ namespace Config {
     }
 
     namespace OverlayInput {
-        inline bool clickThrough = true;
+        // The overlay remains transparent outside the visible menu bounds.
+        // A fully click-through menu cannot be interacted with, so menu input
+        // capture is the safe/default mode.
+        inline bool clickThrough = false;
     }
 
     namespace Language {
