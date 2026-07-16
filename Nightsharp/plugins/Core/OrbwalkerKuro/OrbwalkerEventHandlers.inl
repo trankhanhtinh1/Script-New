@@ -268,72 +268,92 @@ struct AutoAttackResetSlotEntry {
     SpellSlot Slot;
 };
 
-inline bool IsKnownAutoAttackResetSlot(const std::string& championName, int slot) {
+inline bool IsKnownAutoAttackResetSlot(
+    const std::string& championName,
+    int slot
+) {
     if (championName.empty()) {
         return false;
     }
 
-    // Keep form/weapon-specific resets in the spell-name database so a shared
-    // slot does not reset the timer in the wrong stance/form.
     static constexpr AutoAttackResetSlotEntry entries[] = {
-        { "Aatrox", SpellSlot::E },
-        { "Ashe", SpellSlot::Q },
-        { "Belveth", SpellSlot::Q },
+        { "Aatrox",     SpellSlot::E },
+        { "Ashe",       SpellSlot::Q },
+        { "Belveth",    SpellSlot::Q },
         { "Blitzcrank", SpellSlot::E },
-        { "Briar", SpellSlot::Q },
-        { "Briar", SpellSlot::W },
-        { "Camille", SpellSlot::Q },
-        { "Chogath", SpellSlot::E },
-        { "Darius", SpellSlot::W },
-        { "DrMundo", SpellSlot::E },
-        { "Ekko", SpellSlot::E },
-        { "Fiora", SpellSlot::E },
-        { "Fizz", SpellSlot::W },
-        { "Garen", SpellSlot::Q },
-        { "Graves", SpellSlot::E },
-        { "Gwen", SpellSlot::E },
-        { "Hecarim", SpellSlot::E },
-        { "Illaoi", SpellSlot::W },
-        { "Jax", SpellSlot::W },
-        { "Kassadin", SpellSlot::W },
-        { "Katarina", SpellSlot::E },
-        { "Kayle", SpellSlot::E },
-        { "Kindred", SpellSlot::Q },
-        { "Leona", SpellSlot::Q },
+        { "Briar",      SpellSlot::Q },
+        { "Briar",      SpellSlot::W },
+        { "Camille",    SpellSlot::Q },
+        { "Chogath",    SpellSlot::E },
+        { "Darius",     SpellSlot::W },
+        { "DrMundo",    SpellSlot::E },
+        { "Ekko",       SpellSlot::E },
+        { "Fiora",      SpellSlot::E },
+        { "Fizz",       SpellSlot::W },
+        { "Garen",      SpellSlot::Q },
+        { "Graves",     SpellSlot::E },
+        { "Gwen",       SpellSlot::E },
+        { "Hecarim",    SpellSlot::E },
+        { "Illaoi",     SpellSlot::W },
+        { "Jax",        SpellSlot::W },
+        { "Kaisa",      SpellSlot::R },
+        { "Kassadin",   SpellSlot::W },
+        { "Katarina",   SpellSlot::E },
+        { "Kayle",      SpellSlot::E },
+        { "Kindred",    SpellSlot::Q },
+        { "KSante",     SpellSlot::Q },
+        { "Leona",      SpellSlot::Q },
+
+        // Lucian E resets/accelerates his attack sequence directly.
         { "Lucian", SpellSlot::Q },
         { "Lucian", SpellSlot::W },
         { "Lucian", SpellSlot::E },
         { "Lucian", SpellSlot::R },
-        { "Malphite", SpellSlot::W },
-        { "MasterYi", SpellSlot::W },
+
+        { "Malphite",   SpellSlot::W },
+        { "MasterYi",   SpellSlot::W },
         { "MonkeyKing", SpellSlot::Q },
-        { "Nasus", SpellSlot::Q },
-        { "Nautilus", SpellSlot::W },
-        { "Nilah", SpellSlot::E },
-        { "Olaf", SpellSlot::W },
-        { "Pantheon", SpellSlot::W },
-        { "Kaisa", SpellSlot::R },
-        { "Quinn", SpellSlot::E },
-        { "RekSai", SpellSlot::Q },
-        { "Rell", SpellSlot::W },
-        { "Renekton", SpellSlot::W },
-        { "Rengar", SpellSlot::Q },
-        { "Riven", SpellSlot::Q },
-        { "Sejuani", SpellSlot::E },
-        { "Sett", SpellSlot::Q },
-        { "Shyvana", SpellSlot::Q },
-        { "Sivir", SpellSlot::W },
-        { "Talon", SpellSlot::Q },
-        { "Trundle", SpellSlot::Q },
-        { "Vayne", SpellSlot::Q },
-        { "Vi", SpellSlot::E },
-        { "Viego", SpellSlot::W },
-        { "Volibear", SpellSlot::Q },
-        { "XinZhao", SpellSlot::Q },
-        { "Yorick", SpellSlot::Q },
-        { "Zac", SpellSlot::Q },
-        { "Zeri", SpellSlot::E },
-        { "Zoe", SpellSlot::R },
+        { "Nasus",      SpellSlot::Q },
+        { "Nautilus",   SpellSlot::W },
+        { "Nilah",      SpellSlot::E },
+        { "Olaf",       SpellSlot::W },
+        { "Pantheon",   SpellSlot::W },
+        { "Quinn",      SpellSlot::E },
+        { "RekSai",     SpellSlot::Q },
+        { "Rell",       SpellSlot::W },
+        { "Renekton",   SpellSlot::W },
+        { "Rengar",     SpellSlot::Q },
+        { "Riven",      SpellSlot::Q },
+        { "Sejuani",    SpellSlot::E },
+        { "Sett",       SpellSlot::Q },
+        { "Shyvana",    SpellSlot::Q },
+        { "Sivir",      SpellSlot::W },
+
+        // Every normal Sylas spell grants a Petricite Burst charge.
+        { "Sylas",      SpellSlot::Q },
+        { "Sylas",      SpellSlot::W },
+        { "Sylas",      SpellSlot::E },
+        { "Sylas",      SpellSlot::R },
+
+        { "Talon",      SpellSlot::Q },
+        { "Trundle",    SpellSlot::Q },
+
+        // Entering or awakening any stance accelerates Udyr's next attacks.
+        { "Udyr",       SpellSlot::Q },
+        { "Udyr",       SpellSlot::W },
+        { "Udyr",       SpellSlot::E },
+        { "Udyr",       SpellSlot::R },
+
+        { "Vayne",      SpellSlot::Q },
+        { "Vi",         SpellSlot::E },
+        { "Viego",      SpellSlot::W },
+        { "Volibear",   SpellSlot::Q },
+        { "XinZhao",    SpellSlot::Q },
+        { "Yorick",     SpellSlot::Q },
+        { "Zaahen",     SpellSlot::Q },
+        { "Zac",        SpellSlot::Q },
+        { "Zeri",       SpellSlot::E },
+        { "Zoe",        SpellSlot::R },
     };
 
     for (const auto& entry : entries) {
@@ -342,6 +362,7 @@ inline bool IsKnownAutoAttackResetSlot(const std::string& championName, int slot
             return true;
         }
     }
+
     return false;
 }
 

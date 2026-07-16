@@ -257,7 +257,7 @@ static bool CastQ(const AIBaseClient& target, HitChance chance = HitChance::High
     }
     const auto prediction = Q.GetPrediction(target);
     if (prediction.Hitchance < chance ||
-        Collisions::HasYasuoWindWallCollision(Player().ServerPosition(), prediction.GetCastPosition())) {
+        Collisions::HasYasuoWindWallCollision(Player().Position(), prediction.GetCastPosition())) {
         return false;
     }
     return Q.Cast(prediction.GetCastPosition());

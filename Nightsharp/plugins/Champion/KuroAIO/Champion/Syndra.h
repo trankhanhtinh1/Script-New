@@ -304,7 +304,7 @@ static bool ThrowW(const AIHeroClient& target) {
     }
     const auto prediction = W.GetPrediction(target, true);
     if (prediction.Hitchance < HitChance::High ||
-        Collisions::HasYasuoWindWallCollision(Player().ServerPosition(), prediction.GetCastPosition())) {
+        Collisions::HasYasuoWindWallCollision(Player().Position(), prediction.GetCastPosition())) {
         return false;
     }
     return W.Cast(prediction.GetCastPosition());

@@ -39,7 +39,7 @@ static constexpr float kEMaxRange = 1200.0f;
 static constexpr float kELength = 700.0f;
 static constexpr float kESpeed = 1050.0f;
 static constexpr float kEWidth = 90.0f;
-static constexpr float kEAftershockWidth = 100.0f;
+static constexpr float kEAftershockWidth = 80.0f;
 static constexpr float kEAftershockDelay = 1.0f;
 static constexpr float kEAftershockSpeed = 1500.0f;
 static constexpr float kEStartMargin = 6.0f;
@@ -165,68 +165,425 @@ static bool CastE(Vector3 start, Vector3 end) {
     return E.Cast(start, end);
 }
 
-static Vector3 BuildLaserEnd(const Vector3& start,
-                             const Vector3& desiredEnd,
-                             const Vector3& targetPosition) {
-    Vector3 end = desiredEnd;
-    if (!end.IsValid() || end.IsZero() || start.Distance2D(end) < 25.0f) {
-        end = start.Extend(targetPosition, kELength);
+static bool HasEAugment() {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return false;
     }
-    if (start.Distance2D(end) > kELength) {
-        end = start.Extend(end, kELength);
+
+    if (player.HasBuff("viktoreaug") ||
+        player.HasBuff("viktorqeaug") ||
+        player.HasBuff("viktorweaug") ||
+        player.HasBuff("viktorewaug") ||
+        player.HasBuff("viktorqweaug") ||
+        player.HasBuff("ViktorEAug") ||
+        player.HasBuff("ViktorEAugment")) {
+        return true;
     }
-    return end;
+
+    // Covers patch-specific combined augment buff names without depending on
+    // one exact capitalization or Q/W/E ordering.
+    return CoreBuffs::HasActiveBuffContaining(player.Address(), "eaug");
 }
 
-static Vector3 SelectOuterEStart(const Vector3& idealStart, const AIHeroClient& target) {
-    AIBaseClient best;
-    float bestHealth = -1.0f;
-
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (enemy.Address() == target.Address() || !ValidHeroTarget(enemy, kEMaxRange) ||
-            enemy.DistanceToPlayer() >= kERange ||
-            enemy.Position().Distance2D(idealStart) > 150.0f) {
-            continue;
-        }
-        if (enemy.Health() > bestHealth) {
-            best = enemy;
-            bestHealth = enemy.Health();
-        }
+static float EHitchanceWeight(HitChance hitchance) {
+    switch (hitchance) {
+    case HitChance::Dash:
+        return 1.12f;
+    case HitChance::Immobile:
+        return 1.25f;
+    case HitChance::VeryHigh:
+        return 1.10f;
+    case HitChance::High:
+        return 1.0f;
+    case HitChance::Medium:
+        return 0.72f;
+    case HitChance::Low:
+        return 0.30f;
+    default:
+        return 0.0f;
     }
-
-    for (const auto& minion : GameObjects::EnemyMinions()) {
-        if (!ValidTarget(minion, kEMaxRange) || minion.DistanceToPlayer() >= kERange ||
-            minion.Position().Distance2D(idealStart) > 150.0f) {
-            continue;
-        }
-        if (minion.Health() > bestHealth) {
-            best = minion;
-            bestHealth = minion.Health();
-        }
-    }
-    return best.IsValid() ? best.Position() : idealStart;
 }
 
-static AIHeroClient BestSecondaryETarget(const Vector3& start, const AIHeroClient& primary) {
-    AIHeroClient result;
-    float bestHealth = -1.0f;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (enemy.Address() == primary.Address() || !ValidHeroTarget(enemy, kEMaxRange)) {
-            continue;
-        }
+static Vector2 EPredictedPosition(const AIHeroClient& target,
+                                  float delay,
+                                  float radius,
+                                  HitChance& hitchance) {
+    const auto prediction = SDK::Prediction::GetPrediction(target, delay, radius);
+    hitchance = prediction.Hitchance;
+    Vector3 position = prediction.GetUnitPosition();
+    if (!position.IsValid() || position.IsZero()) {
+        position = target.Position();
+    }
+    return position.To2D();
+}
 
-        E.From = start;
-        E.RangeCheckFrom = start;
-        E.Range = kELength;
-        const auto prediction = E.GetPrediction(enemy);
-        if (prediction.Hitchance >= HitChance::High &&
-            prediction.GetCastPosition().Distance2D(start) <= kELength * 0.9f &&
-            enemy.Health() > bestHealth) {
-            result = enemy;
-            bestHealth = enemy.Health();
-        }
+static ETargetPrediction BuildETargetPrediction(const AIHeroClient& target,
+                                                bool primary,
+                                                bool augmented) {
+    ETargetPrediction result;
+    result.Target = target;
+    result.Primary = primary;
+
+    const auto player = Player();
+    const float distance = player.IsValid()
+        ? player.Position().Distance2D(target.Position())
+        : target.DistanceToPlayer();
+    const float startDistance = std::clamp(
+        distance - kELineLead,
+        0.0f,
+        kERange - kEStartMargin);
+    const float distanceAlongRay = std::clamp(
+        distance - startDistance,
+        0.0f,
+        kELength);
+    const float firstHitDelay = 0.025f + distanceAlongRay / kESpeed;
+    const float aftershockHitDelay =
+        kEAftershockDelay + distanceAlongRay / kEAftershockSpeed;
+
+    result.InitialPosition = EPredictedPosition(
+        target,
+        firstHitDelay,
+        kEWidth,
+        result.InitialHitchance);
+    if (augmented) {
+        result.AftershockPosition = EPredictedPosition(
+            target,
+            aftershockHitDelay,
+            kEAftershockWidth,
+            result.AftershockHitchance);
+    } else {
+        result.AftershockPosition = result.InitialPosition;
+        result.AftershockHitchance = HitChance::None;
     }
     return result;
+}
+
+static void AddECandidate(std::vector<ECandidate>& candidates,
+                          const Vector2& playerPosition,
+                          const Vector2& proposedStart,
+                          const Vector2& proposedEnd) {
+    if (!std::isfinite(proposedStart.x) || !std::isfinite(proposedStart.y) ||
+        !std::isfinite(proposedEnd.x) || !std::isfinite(proposedEnd.y)) {
+        return;
+    }
+
+    const Vector2 direction = proposedEnd - proposedStart;
+    const float directionLengthSqr = direction.LengthSqr();
+    if (directionLengthSqr < 25.0f * 25.0f ||
+        proposedStart.DistanceSqr(playerPosition) >
+            (kERange - kEStartMargin) * (kERange - kEStartMargin)) {
+        return;
+    }
+
+    const Vector2 start = proposedStart;
+    const Vector2 end = start +
+        direction * (kELength / std::sqrt(directionLengthSqr));
+    for (const auto& candidate : candidates) {
+        if (candidate.Start.DistanceSqr(start) <= 14.0f * 14.0f &&
+            candidate.End.DistanceSqr(end) <= 22.0f * 22.0f) {
+            return;
+        }
+    }
+
+    ECandidate candidate;
+    candidate.Start = start;
+    candidate.End = end;
+    candidates.push_back(candidate);
+}
+
+static void AddESinglePointCandidates(std::vector<ECandidate>& candidates,
+                                      const Vector2& playerPosition,
+                                      const Vector2& point) {
+    const Vector2 offset = point - playerPosition;
+    const float distanceSqr = offset.LengthSqr();
+    if (distanceSqr < 25.0f * 25.0f) {
+        return;
+    }
+
+    const float distance = std::sqrt(distanceSqr);
+    const Vector2 direction = offset * (1.0f / distance);
+    const float startRange = kERange - kEStartMargin;
+    const float outwardStartDistance = std::clamp(
+        distance - kELineLead,
+        0.0f,
+        startRange);
+    const Vector2 outwardStart =
+        playerPosition + direction * outwardStartDistance;
+    AddECandidate(
+        candidates,
+        playerPosition,
+        outwardStart,
+        outwardStart + direction * kELength);
+
+    // Close targets can be swept in the opposite direction. This catches a
+    // second enemy behind Viktor and leaves more laser behind a retreating unit.
+    if (distance < startRange) {
+        const float reverseStartDistance = std::min(
+            startRange,
+            distance + kELineLead);
+        const Vector2 reverseStart =
+            playerPosition + direction * reverseStartDistance;
+        AddECandidate(
+            candidates,
+            playerPosition,
+            reverseStart,
+            reverseStart - direction * kELength);
+    }
+}
+
+static void AddELineThroughOrientation(std::vector<ECandidate>& candidates,
+                                       const Vector2& playerPosition,
+                                       const Vector2& first,
+                                       const Vector2& second) {
+    const Vector2 delta = second - first;
+    const float separationSqr = delta.LengthSqr();
+    if (separationSqr < 25.0f * 25.0f) {
+        return;
+    }
+
+    const float separation = std::sqrt(separationSqr);
+    const float edgeTolerance = kEWidth * 0.75f;
+    if (separation > kELength + edgeTolerance * 2.0f) {
+        return;
+    }
+
+    const Vector2 direction = delta * (1.0f / separation);
+    const Vector2 firstFromPlayer = first - playerPosition;
+    const float along = firstFromPlayer.Dot(direction);
+    const float perpendicularSqr = std::max(
+        0.0f,
+        firstFromPlayer.LengthSqr() - along * along);
+    const float startRange = kERange - kEStartMargin;
+    if (perpendicularSqr > startRange * startRange) {
+        return;
+    }
+
+    const float circleOffset = std::sqrt(
+        std::max(0.0f, startRange * startRange - perpendicularSqr));
+    const float feasibleLow = std::max(
+        -along - circleOffset,
+        separation - kELength - edgeTolerance);
+    const float feasibleHigh = std::min(
+        -along + circleOffset,
+        edgeTolerance);
+    if (feasibleLow > feasibleHigh) {
+        return;
+    }
+
+    const float startParameter = std::clamp(
+        -kELineLead,
+        feasibleLow,
+        feasibleHigh);
+    const Vector2 start = first + direction * startParameter;
+    AddECandidate(
+        candidates,
+        playerPosition,
+        start,
+        start + direction * kELength);
+}
+
+static void AddELinesThroughPoints(std::vector<ECandidate>& candidates,
+                                   const Vector2& playerPosition,
+                                   const Vector2& first,
+                                   const Vector2& second) {
+    AddELineThroughOrientation(candidates, playerPosition, first, second);
+    AddELineThroughOrientation(candidates, playerPosition, second, first);
+}
+
+static bool ELineContains(const ECandidate& candidate,
+                          const Vector2& position,
+                          float radius) {
+    return DistancePointSegmentSqr(position, candidate.Start, candidate.End) <=
+           radius * radius;
+}
+
+static void ScoreECandidate(ECandidate& candidate,
+                            const std::vector<ETargetPrediction>& targets,
+                            bool augmented) {
+    candidate.Score = 0.0f;
+    candidate.InitialHits = 0;
+    candidate.AftershockHits = 0;
+    candidate.DoubleHits = 0;
+    candidate.PrimaryInitialHit = false;
+    const float aftershockScale = augmented ? 1.0f : 0.0f;
+
+    for (const auto& target : targets) {
+        const float boundingRadius = std::clamp(
+            target.Target.BoundingRadius(),
+            25.0f,
+            80.0f);
+        const HitChance minimumInitialHitchance =
+            target.Primary ? HitChance::High : HitChance::Medium;
+        const bool initialHit =
+            target.InitialHitchance >= minimumInitialHitchance &&
+            ELineContains(
+                candidate,
+                target.InitialPosition,
+                kEWidth + boundingRadius);
+        const bool aftershockHit =
+            target.AftershockHitchance >= HitChance::Medium &&
+            ELineContains(
+                candidate,
+                target.AftershockPosition,
+                kEAftershockWidth + boundingRadius);
+
+        if (initialHit) {
+            ++candidate.InitialHits;
+            candidate.PrimaryInitialHit =
+                candidate.PrimaryInitialHit || target.Primary;
+            const float value = target.Primary ? 300.0f : 180.0f;
+            candidate.Score +=
+                value * EHitchanceWeight(target.InitialHitchance);
+        }
+        if (aftershockHit) {
+            ++candidate.AftershockHits;
+            const float value = target.Primary ? 135.0f : 85.0f;
+            candidate.Score += aftershockScale * value *
+                EHitchanceWeight(target.AftershockHitchance);
+        }
+        if (initialHit && aftershockHit) {
+            ++candidate.DoubleHits;
+            candidate.Score += aftershockScale *
+                (target.Primary ? 60.0f : 35.0f);
+        }
+    }
+
+    if (!candidate.PrimaryInitialHit) {
+        candidate.Score = -FLT_MAX;
+        return;
+    }
+
+    const int extraInitialHits = std::max(0, candidate.InitialHits - 1);
+    candidate.Score += 45.0f * static_cast<float>(
+        extraInitialHits * extraInitialHits);
+    candidate.Score += aftershockScale * 10.0f * static_cast<float>(
+        candidate.AftershockHits * candidate.AftershockHits);
+    candidate.Score += aftershockScale * 22.0f * static_cast<float>(
+        candidate.DoubleHits);
+}
+
+static std::vector<ECandidate> BuildECandidates(
+    const Vector2& playerPosition,
+    const std::vector<ETargetPrediction>& targets,
+    bool augmented) {
+    std::vector<ECandidate> candidates;
+    candidates.reserve(128);
+
+    for (const auto& target : targets) {
+        AddESinglePointCandidates(
+            candidates,
+            playerPosition,
+            target.InitialPosition);
+        if (augmented) {
+            AddESinglePointCandidates(
+                candidates,
+                playerPosition,
+                target.AftershockPosition);
+            AddELinesThroughPoints(
+                candidates,
+                playerPosition,
+                target.InitialPosition,
+                target.AftershockPosition);
+        }
+    }
+
+    const int targetCount = static_cast<int>(targets.size());
+    for (int i = 0; i < targetCount; ++i) {
+        for (int j = i + 1; j < targetCount; ++j) {
+            AddELinesThroughPoints(
+                candidates,
+                playerPosition,
+                targets[i].InitialPosition,
+                targets[j].InitialPosition);
+            if (augmented) {
+                AddELinesThroughPoints(
+                    candidates,
+                    playerPosition,
+                    targets[i].InitialPosition,
+                    targets[j].AftershockPosition);
+                AddELinesThroughPoints(
+                    candidates,
+                    playerPosition,
+                    targets[i].AftershockPosition,
+                    targets[j].InitialPosition);
+                AddELinesThroughPoints(
+                    candidates,
+                    playerPosition,
+                    targets[i].AftershockPosition,
+                    targets[j].AftershockPosition);
+            }
+        }
+    }
+
+    for (auto& candidate : candidates) {
+        ScoreECandidate(candidate, targets, augmented);
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const ECandidate& left,
+                                                       const ECandidate& right) {
+        if (left.Score != right.Score) {
+            return left.Score > right.Score;
+        }
+        if (left.InitialHits != right.InitialHits) {
+            return left.InitialHits > right.InitialHits;
+        }
+        if (left.DoubleHits != right.DoubleHits) {
+            return left.DoubleHits > right.DoubleHits;
+        }
+        return left.AftershockHits > right.AftershockHits;
+    });
+    return candidates;
+}
+
+static bool CastESingleTargetFallback(const AIHeroClient& target,
+                                      const Vector2& predictedPosition) {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return false;
+    }
+
+    const Vector2 playerPosition = player.Position().To2D();
+    const Vector2 offset = predictedPosition - playerPosition;
+    const float distanceSqr = offset.LengthSqr();
+    if (distanceSqr < 25.0f * 25.0f) {
+        return false;
+    }
+
+    const float distance = std::sqrt(distanceSqr);
+    const Vector2 direction = offset * (1.0f / distance);
+    const float startDistance = std::clamp(
+        distance - kELineLead,
+        0.0f,
+        kERange - kEStartMargin);
+    const Vector2 start2D = playerPosition + direction * startDistance;
+    Vector3 start = Vector3::From2D(start2D);
+    start.y = NavMesh::GetHeightForPosition(start);
+
+    E.From = start;
+    E.RangeCheckFrom = start;
+    E.Range = kELength;
+    E.Speed = kESpeed;
+    const auto prediction = E.GetPrediction(target);
+    if (prediction.Hitchance < HitChance::High) {
+        ResetEGeometry();
+        return false;
+    }
+
+    const Vector2 refinedOffset =
+        prediction.GetUnitPosition().To2D() - start2D;
+    const float refinedDistanceSqr = refinedOffset.LengthSqr();
+    if (refinedDistanceSqr < 25.0f * 25.0f ||
+        refinedDistanceSqr > kELength * kELength) {
+        ResetEGeometry();
+        return false;
+    }
+
+    const Vector2 end2D = start2D + refinedOffset *
+        (kELength / std::sqrt(refinedDistanceSqr));
+    Vector3 end = Vector3::From2D(end2D);
+    end.y = NavMesh::GetHeightForPosition(end);
+    ResetEGeometry();
+    return CastE(start, end);
 }
 
 static bool PredictCastE(const AIHeroClient& target) {
@@ -235,48 +592,60 @@ static bool PredictCastE(const AIHeroClient& target) {
         return false;
     }
 
-    Vector3 start;
-    Vector3 end;
-    bool canCast = false;
-    const bool inNormalRange = target.DistanceToPlayer() < kERange;
+    const bool augmented = HasEAugment();
+    std::vector<ETargetPrediction> targets;
+    targets.reserve(5);
+    targets.push_back(BuildETargetPrediction(target, true, augmented));
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (enemy.Address() == target.Address() ||
+            !ValidHeroTarget(enemy, kEMaxRange + enemy.BoundingRadius())) {
+            continue;
+        }
+        targets.push_back(BuildETargetPrediction(enemy, false, augmented));
+    }
 
-    if (inNormalRange) {
-        E.Speed = kESpeed * 0.9f;
-        E.From = target.Position().Extend(player.Position(), kELength * 0.1f);
-        E.RangeCheckFrom = player.Position();
-        E.Range = kERange;
-        const auto startPrediction = E.GetPrediction(target);
-        start = startPrediction.GetCastPosition().Distance2D(player.Position()) < kERange
-            ? startPrediction.GetCastPosition()
-            : target.Position();
+    auto candidates = BuildECandidates(
+        player.Position().To2D(),
+        targets,
+        augmented);
+    const int validationCount = std::min(
+        static_cast<int>(candidates.size()),
+        16);
+    for (int i = 0; i < validationCount; ++i) {
+        const auto& candidate = candidates[i];
+        if (!candidate.PrimaryInitialHit || candidate.Score <= -FLT_MAX * 0.5f) {
+            continue;
+        }
 
-        const auto secondary = BestSecondaryETarget(start, target);
-        const AIHeroClient endTarget = secondary.IsValid() ? secondary : target;
+        Vector3 start = Vector3::From2D(candidate.Start);
+        Vector3 end = Vector3::From2D(candidate.End);
+        start.y = NavMesh::GetHeightForPosition(start);
+        end.y = NavMesh::GetHeightForPosition(end);
         E.From = start;
         E.RangeCheckFrom = start;
         E.Range = kELength;
         E.Speed = kESpeed;
-        const auto endPrediction = E.GetPrediction(endTarget);
-        canCast = endPrediction.Hitchance >= HitChance::High;
-        end = BuildLaserEnd(start, endPrediction.GetCastPosition(), endTarget.Position());
-    } else {
-        const Vector3 idealStart = player.Position().Extend(target.Position(), kERange);
-        start = SelectOuterEStart(idealStart, target);
-        E.From = start;
-        E.RangeCheckFrom = start;
-        E.Range = kELength;
-        E.Speed = kESpeed;
-        const auto prediction = E.GetPrediction(target);
-        canCast = prediction.Hitchance >= HitChance::High;
-        end = BuildLaserEnd(start, prediction.GetCastPosition(), target.Position());
+        const auto validation = E.GetPrediction(target);
+        const float hitRadius = kEWidth + std::clamp(
+            target.BoundingRadius(),
+            25.0f,
+            80.0f);
+        if (validation.Hitchance < HitChance::High ||
+            DistancePointSegmentSqr(
+                validation.GetUnitPosition().To2D(),
+                candidate.Start,
+                candidate.End) > hitRadius * hitRadius) {
+            continue;
+        }
+
+        ResetEGeometry();
+        return CastE(start, end);
     }
 
-    if (start.Distance2D(player.Position()) > kERange + 15.0f ||
-        start.Distance2D(end) > kELength + target.BoundingRadius()) {
-        canCast = false;
-    }
     ResetEGeometry();
-    return canCast && CastE(start, end);
+    return CastESingleTargetFallback(
+        target,
+        targets.front().InitialPosition);
 }
 
 static std::vector<AIBaseClient> FarmUnits(bool jungle) {
@@ -831,7 +1200,7 @@ static void OnGameLoad() {
     R = Spell(SpellSlot::R, 700.0f);
     Q.SetTargetted(0.25f, 2000.0f);
     W.SetSkillshot(0.4f, 300.0f, FLT_MAX, false, SkillshotType::SkillshotCircle);
-    E.SetSkillshot(0.0f, 90.0f, kESpeed, false, SkillshotType::SkillshotLine);
+    E.SetSkillshot(0.0f, kEWidth, kESpeed, false, SkillshotType::SkillshotLine);
     R.SetSkillshot(0.6f, 450.0f, FLT_MAX, false, SkillshotType::SkillshotCircle);
 
     QPendingAttack = false;

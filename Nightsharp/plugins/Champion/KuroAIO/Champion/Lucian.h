@@ -233,10 +233,10 @@ static bool CastExtendedQThroughUnit(const AIHeroClient& target) {
         return false;
     }
 
-    const Vector3 start = player.ServerPosition();
+    const Vector3 start = player.Position();
     const Vector3 targetPosition = prediction.GetUnitPosition();
     for (const auto& unit : QBridgeUnits()) {
-        const Vector3 end = start.Extend(unit.ServerPosition(), ExtendedQ.Range);
+        const Vector3 end = start.Extend(unit.Position(), ExtendedQ.Range);
         SDK::RectanglePoly rectangle(start, end, ExtendedQ.Width);
         if (rectangle.IsInside(targetPosition) &&
             Q.Cast(unit) == CastStates::SuccessfullyCasted) {
@@ -410,13 +410,13 @@ static bool LaneClear() {
             if (!ValidTarget(bridge, Q.Range)) {
                 continue;
             }
-            const Vector3 end = player.ServerPosition().Extend(
-                bridge.ServerPosition(), ExtendedQ.Range);
-            SDK::RectanglePoly rectangle(player.ServerPosition(), end, ExtendedQ.Width);
+            const Vector3 end = player.Position().Extend(
+                bridge.Position(), ExtendedQ.Range);
+            SDK::RectanglePoly rectangle(player.Position(), end, ExtendedQ.Width);
             int hits = 0;
             for (const auto& minion : minions) {
                 if (ValidTarget(minion, ExtendedQ.Range) &&
-                    rectangle.IsInside(minion.ServerPosition())) {
+                    rectangle.IsInside(minion.Position())) {
                     ++hits;
                 }
             }
@@ -507,7 +507,7 @@ static bool SmartR() {
         return false;
     }
     const auto target = GetPhysicalTarget(R.Range);
-    return ValidHeroTarget(target, R.Range) && R.Cast(target.ServerPosition());
+    return ValidHeroTarget(target, R.Range) && R.Cast(target.Position());
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {

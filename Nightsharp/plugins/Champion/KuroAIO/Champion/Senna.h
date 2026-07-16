@@ -229,12 +229,12 @@ static bool CastExtendedQAt(const Vector3& desiredHitPosition, float lineWidth) 
         return false;
     }
 
-    const Vector3 start = player.ServerPosition();
+    const Vector3 start = player.Position();
     AIBaseClient bestBridge;
     float bestDistance = FLT_MAX;
 
     for (const auto& bridge : QCastTargets()) {
-        const Vector3 bridgePosition = bridge.ServerPosition();
+        const Vector3 bridgePosition = bridge.Position();
         if (bridgePosition.IsZero() || start.DistanceSqr2D(bridgePosition) <= FLT_EPSILON) {
             continue;
         }
@@ -279,7 +279,7 @@ static bool TryHealAlly(const AIHeroClient& ally) {
     if (Player().Position().DistanceSqr2D(ally.Position()) <= Q.Range * Q.Range) {
         return Q.CastOnUnit(ally);
     }
-    return CastExtendedQAt(ally.ServerPosition(), ExtraQHealWidth);
+    return CastExtendedQAt(ally.Position(), ExtraQHealWidth);
 }
 
 static std::vector<AIHeroClient> InjuredAllies(float range, float maximumHealthPercent) {
@@ -402,7 +402,7 @@ static bool TryRHeal() {
             }
         }
 
-        if (R.Cast(ally.ServerPosition())) {
+        if (R.Cast(ally.Position())) {
             return true;
         }
     }
@@ -445,7 +445,7 @@ static bool TryRExecute() {
 
         const Vector3 castPosition = prediction.GetCastPosition();
         if (Collisions::HasYasuoWindWallCollision(
-                player.ServerPosition(), castPosition, R.Width)) {
+                player.Position(), castPosition, R.Width)) {
             continue;
         }
 
@@ -619,12 +619,12 @@ static int CountMinionsOnQLine(const Vector3& lineEnd) {
     }
 
     int count = 0;
-    const Vector3 start = player.ServerPosition();
+    const Vector3 start = player.Position();
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (!ValidTarget(minion, ExtraQRange) || minion.IsJungle()) {
             continue;
         }
-        if (PointSegmentDistance2D(minion.ServerPosition(), start, lineEnd) <=
+        if (PointSegmentDistance2D(minion.Position(), start, lineEnd) <=
             ExtraQDamageWidth + minion.BoundingRadius()) {
             ++count;
         }
@@ -647,7 +647,7 @@ static bool LaneClear() {
             continue;
         }
 
-        const Vector3 lineEnd = player.ServerPosition().Extend(minion.ServerPosition(), ExtraQRange);
+        const Vector3 lineEnd = player.Position().Extend(minion.Position(), ExtraQRange);
         const int hitCount = CountMinionsOnQLine(lineEnd);
         if (hitCount > bestHitCount) {
             bestBridge = AIBaseClient(minion.Handle());
@@ -678,7 +678,7 @@ static bool JungleClear() {
     });
 
     if (Bool(JungleMenu, "UseW", true) && W.IsReady() && !monsters.empty() &&
-        W.Cast(monsters.front().ServerPosition())) {
+        W.Cast(monsters.front().Position())) {
         return true;
     }
 

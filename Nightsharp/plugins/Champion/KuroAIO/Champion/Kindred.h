@@ -129,7 +129,7 @@ static bool CanAttackFrom(const Vector3& position,
     if (ValidHeroTarget(preferredTarget)) {
         const float range = AttackRangeFrom(preferredTarget);
         return range > 0.0f &&
-               position.DistanceSqr2D(preferredTarget.ServerPosition()) <= range * range;
+               position.DistanceSqr2D(preferredTarget.Position()) <= range * range;
     }
 
     const auto orbTarget = Orbwalker::GetTarget();
@@ -243,7 +243,7 @@ static Vector3 SideDashPosition(const AIHeroClient& preferredTarget) {
     }
 
     const Vector3 origin = player.Position();
-    const Vector3 targetPosition = target.ServerPosition();
+    const Vector3 targetPosition = target.Position();
     const float dx = targetPosition.x - origin.x;
     const float dz = targetPosition.z - origin.z;
     const float length = std::sqrt(dx * dx + dz * dz);
@@ -278,7 +278,7 @@ static bool HasMeleePressure(const Vector3& position) {
         }
         const float pressureRange = enemy.AttackRange() + enemy.BoundingRadius() +
                                     player.BoundingRadius() + Q.Range * 0.75f;
-        if (position.DistanceSqr2D(enemy.ServerPosition()) <=
+        if (position.DistanceSqr2D(enemy.Position()) <=
             pressureRange * pressureRange) {
             return true;
         }
@@ -301,7 +301,7 @@ static float DashSafetyScore(const Vector3& position) {
         if (!ValidHeroTarget(enemy)) {
             continue;
         }
-        const float distance = position.Distance2D(enemy.ServerPosition());
+        const float distance = position.Distance2D(enemy.Position());
         const float attackReach = enemy.AttackRange() + enemy.BoundingRadius() +
                                   player.BoundingRadius();
         if (enemy.IsMelee()) {
@@ -323,8 +323,8 @@ static Vector3 SmartDashPosition(const AIHeroClient& target, bool emergency) {
     }
 
     const bool hasTarget = ValidHeroTarget(target);
-    const Vector3 origin = player.ServerPosition();
-    const Vector3 targetPosition = hasTarget ? target.ServerPosition() : Vector3();
+    const Vector3 origin = player.Position();
+    const Vector3 targetPosition = hasTarget ? target.Position() : Vector3();
     const float currentTargetDistance = hasTarget
         ? origin.Distance2D(targetPosition)
         : 0.0f;
@@ -557,7 +557,7 @@ static bool Combo() {
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
             if (ValidHeroTarget(enemy, W.Range) &&
                 enemy.Distance(player) <= minimumDistance &&
-                W.Cast(enemy.ServerPosition())) {
+                W.Cast(enemy.Position())) {
                 return true;
             }
         }
