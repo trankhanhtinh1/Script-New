@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -37,11 +38,36 @@ static constexpr float kERange = 525.0f;
 static constexpr float kEMaxRange = 1200.0f;
 static constexpr float kELength = 700.0f;
 static constexpr float kESpeed = 1050.0f;
+static constexpr float kEWidth = 90.0f;
+static constexpr float kEAftershockWidth = 100.0f;
+static constexpr float kEAftershockDelay = 1.0f;
+static constexpr float kEAftershockSpeed = 1500.0f;
+static constexpr float kEStartMargin = 6.0f;
+static constexpr float kELineLead = 85.0f;
 
 struct LaserFarmLocation {
     Vector2 Start = {};
     Vector2 End = {};
     int MinionsHit = 0;
+};
+
+struct ETargetPrediction {
+    AIHeroClient Target = {};
+    Vector2 InitialPosition = {};
+    Vector2 AftershockPosition = {};
+    HitChance InitialHitchance = HitChance::None;
+    HitChance AftershockHitchance = HitChance::None;
+    bool Primary = false;
+};
+
+struct ECandidate {
+    Vector2 Start = {};
+    Vector2 End = {};
+    float Score = -FLT_MAX;
+    int InitialHits = 0;
+    int AftershockHits = 0;
+    int DoubleHits = 0;
+    bool PrimaryInitialHit = false;
 };
 
 static bool ShouldRunNow(int& lastTick, int intervalMs) {

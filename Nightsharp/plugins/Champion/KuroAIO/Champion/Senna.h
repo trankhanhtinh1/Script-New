@@ -41,6 +41,8 @@ constexpr float ExtraQRange = 1300.0f;
 constexpr float ExtraQDamageWidth = 50.0f;
 constexpr float ExtraQHealWidth = 140.0f;
 constexpr int SoulLifetimeMs = 8000;
+constexpr int MinimumQAttackWaitMs = 180;
+constexpr int MaximumQAttackWaitMs = 350;
 
 static bool ValidAlly(const AIHeroClient& ally, float range = FLT_MAX) {
     const auto player = Player();
@@ -508,8 +510,62 @@ static void UpdatePassiveTarget() {
     }
 }
 
+static bool CastComboQ(const AIBaseClient& preferredTarget = AIBaseClient()) {
+    if (!Bool(ComboMenu, "UseQ", true) || !Q.IsReady()) {
+        return false;
+    }
+    if (CastNormalQ(preferredTarget)) {
+        return true;
+    }
+    return Bool(ComboMenu, "UseExtendedQ", true) && CastExtendedDamageQ();
+}
+
+static bool HasAttackableComboTarget() {
+    const auto orbTarget = Orbwalker::GetTarget();
+    if (orbTarget.IsValid() && orbTarget.IsHero()) {
+        const AIHeroClient target(orbTarget.Handle());
+        if (ValidHeroTarget(target) && AutoAttack::InAutoAttackRange(target)) {
+            return true;
+        }
+    }
+
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (ValidHeroTarget(enemy) && AutoAttack::InAutoAttackRange(enemy)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int QAttackWaitWindowMs() {
+    const int qCastTime = static_cast<int>(Q.Delay * 1000.0f);
+    const int latency = std::min(50, std::max(0, Game::Ping() / 2));
+    return std::clamp(
+        qCastTime + latency,
+        MinimumQAttackWaitMs,
+        MaximumQAttackWaitMs);
+}
+
+static bool ShouldWaitForAttackBeforeQ() {
+    if (!HasAttackableComboTarget()) {
+        return false;
+    }
+    if (Orbwalker::IsWindingUp() || Orbwalker::CanAttack()) {
+        return true;
+    }
+
+    const int cooldown = Orbwalker::AttackCooldownRemaining();
+    return cooldown > 0 && cooldown <= QAttackWaitWindowMs();
+}
+
 static void Combo() {
     if (!IsComboMode()) {
+        return;
+    }
+
+    // Preserve AA -> Q whenever the next attack is ready or only a short wait away.
+    if (Bool(ComboMenu, "UseQ", true) && Q.IsReady() &&
+        ShouldWaitForAttackBeforeQ()) {
         return;
     }
 
@@ -521,9 +577,27 @@ static void Combo() {
         return;
     }
 
-    if (!CastNormalQ() && Bool(ComboMenu, "UseExtendedQ", true)) {
-        (void)CastExtendedDamageQ();
+    (void)CastComboQ();
+}
+
+static void OnAfterAttack(OrbwalkingActionArgs& args) {
+    const auto player = Player();
+    if (!Loaded || !IsComboMode() || !Bool(ComboMenu, "UseQ", true) ||
+        !Q.IsReady() || !player.IsValid() || player.IsDead() ||
+        player.IsRecalling() || Game::IsChatOpen()) {
+        return;
     }
+
+    const AIBaseClient attacked(args.Target.Handle());
+    if (!attacked.IsValid() || !attacked.IsHero()) {
+        return;
+    }
+    const AIHeroClient target(attacked.Handle());
+    if (!ValidHeroTarget(target, ExtraQRange)) {
+        return;
+    }
+
+    (void)CastComboQ(target);
 }
 
 static void Harass() {
@@ -850,6 +924,7 @@ static void OnGameLoad() {
     InitializeSouls();
 
     Events::hook.OnGameUpdate += &Game_OnUpdate;
+    Orbwalker::OnAfterAttack += &OnAfterAttack;
     Drawing::OnDraw += &OnDraw;
     GameObjects::AddOnCreate(&OnObjectCreate);
     GameObjects::AddOnDelete(&OnObjectDelete);
@@ -864,6 +939,7 @@ static void OnUnload() {
     }
 
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
+    Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
     GameObjects::RemoveOnCreate(&OnObjectCreate);
     GameObjects::RemoveOnDelete(&OnObjectDelete);

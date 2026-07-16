@@ -452,7 +452,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         return target;
     };
 
-    SnapshotAttackTimings(player);
+    ReadAttackTimingsFromMemory(player);
 
     AttackableUnit cachedHeroTarget;
     bool heroTargetResolved = false;
@@ -682,7 +682,7 @@ inline bool OrbwalkerBase::ShouldWait() {
         return false;
     }
 
-    SnapshotAttackTimings(player);
+    ReadAttackTimingsFromMemory(player);
     const int predictionTime = static_cast<int>(
         context_.attackDelayMs * OrbwalkingDetail::kLaneClearWaitTime);
     context_.cachedShouldWait = OrbwalkingDetail::HasSoonKillableMinion(

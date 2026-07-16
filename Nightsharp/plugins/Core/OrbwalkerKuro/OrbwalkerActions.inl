@@ -91,7 +91,7 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
         return true;
     }
 
-    SnapshotAttackTimings(player);
+    ReadAttackTimingsFromMemory(player);
     const float readyAt = static_cast<float>(context_.lastAutoAttackTick) +
                           context_.attackDelayMs +
                           ChampionExtraAttackDelayMs(player) +
@@ -172,7 +172,7 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
         return false;
     }
 
-    SnapshotAttackTimings(player);
+    ReadAttackTimingsFromMemory(player);
     if (menu_.UseTreTrauLogic()) {
         // TreTrau: do not let OnDoCast/attackCastComplete unlock movement by itself.
         const float safetyBuffer = std::clamp(context_.attackWindupMs * 0.08f, 20.0f, 45.0f);
@@ -276,7 +276,7 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         ChampionRequiresDoCastBeforeMove(GameObjects::Player());
     context_.lastAttackDoCastComplete = false;
     context_.lastAttackDoCastWaitTick = context_.lastAttackRequiresDoCastBeforeMove ? now : 0;
-    SnapshotAttackTimings(GameObjects::Player());
+    ReadAttackTimingsFromMemory(GameObjects::Player());
     TryShowFakeClick(Hud::ClickType::Attack, attackTarget.Position(), now, context_.lastFakeAttackClickTick);
 
     return true;
@@ -373,7 +373,8 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
     }
 }
 
-inline int OrbwalkerBase::PendingAttackTimeoutMs() const {
+inline int OrbwalkerBase::PendingAttackTimeoutMs() {
+    ReadAttackTimingsFromMemory(GameObjects::Player());
     const int oneWayPing = static_cast<int>(OneWayPingMs());
     const int eventGrace = kPendingEventGraceMs + oneWayPing;
     const int windupGate = static_cast<int>(
@@ -381,7 +382,7 @@ inline int OrbwalkerBase::PendingAttackTimeoutMs() const {
     return std::max(eventGrace, windupGate + kAttackRetryDelayMs);
 }
 
-inline int OrbwalkerBase::DoCastMoveGateTimeoutMs() const {
+inline int OrbwalkerBase::DoCastMoveGateTimeoutMs() {
     return std::clamp(PendingAttackTimeoutMs(), 180, 550);
 }
 
@@ -428,26 +429,27 @@ inline float OrbwalkerBase::MoveSafetyMs() const {
     return context_.hasConfirmedAttack ? kMoveSafetyMs : kMoveSafetyMs + std::min(OneWayPingMs(), 15.0f);
 }
 
-inline void OrbwalkerBase::SnapshotAttackTimings(const AIHeroClient& player) {
-    const int now = Tick();
-    if (context_.timingSnapshotTick == now) {
-        return;
-    }
-    context_.timingSnapshotTick = now;
-
+inline void OrbwalkerBase::ReadAttackTimingsFromMemory(const AIHeroClient& player) {
     if (!player.IsValid() || player.IsDead()) {
         context_.attackDelayMs = kDefaultAttackDelayMs;
         context_.attackWindupMs = kDefaultAttackWindupMs;
         return;
     }
 
-    // ponytail: CoreControl already owns timing fallback/caching; SDK just consumes ms values.
-    context_.attackDelayMs = CoreControl::GetAttackDelayMs(player.Address());
-    context_.attackWindupMs = CoreControl::GetAttackWindupMs(player.Address());
+    // OrbwalkerKuro deliberately bypasses CoreControl's timing cache. A failed
+    // memory read falls back to a fixed safe default, never to a stale sample.
+    const float attackDelay = CoreControl::ReadAttackDelayFor(player.Address());
+    const float attackWindup = CoreControl::ReadAttackWindupFor(player.Address());
+    context_.attackDelayMs = attackDelay > 0.0f
+        ? attackDelay * 1000.0f
+        : kDefaultAttackDelayMs;
+    context_.attackWindupMs = attackWindup > 0.0f
+        ? attackWindup * 1000.0f
+        : kDefaultAttackWindupMs;
 }
 
 inline int OrbwalkerBase::AttackCastReadyTick(const AIHeroClient& player) {
-    SnapshotAttackTimings(player);
+    ReadAttackTimingsFromMemory(player);
     const int attackTick = context_.pendingAttack
         ? context_.pendingAttackTick
         : context_.lastAutoAttackTick;
@@ -465,7 +467,7 @@ inline int OrbwalkerBase::AttackReadyTick(const AIHeroClient& player) {
         ? context_.pendingAttackTick
         : context_.lastAutoAttackTick;
     if (attackTick > 0) {
-        SnapshotAttackTimings(player);
+        ReadAttackTimingsFromMemory(player);
         readyTick = std::max(readyTick, static_cast<int>(std::ceil(
             static_cast<float>(attackTick) +
             context_.attackDelayMs +

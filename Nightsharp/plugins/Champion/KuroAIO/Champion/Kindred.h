@@ -106,7 +106,17 @@ static bool PointUnderTurret(const Vector3& position, bool enemyTurret) {
     return false;
 }
 
-static bool CanAttackFrom(const Vector3& position) {
+static float AttackRangeFrom(const AIHeroClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !ValidHeroTarget(target)) {
+        return 0.0f;
+    }
+    return AutoAttack::GetRealAutoAttackRange(player, target) +
+           player.BoundingRadius() + 35.0f;
+}
+
+static bool CanAttackFrom(const Vector3& position,
+                          const AIHeroClient& preferredTarget = AIHeroClient()) {
     if (!Bool(DashMenu, "AAcheck", true)) {
         return true;
     }
@@ -114,6 +124,12 @@ static bool CanAttackFrom(const Vector3& position) {
     const auto player = Player();
     if (!player.IsValid()) {
         return false;
+    }
+
+    if (ValidHeroTarget(preferredTarget)) {
+        const float range = AttackRangeFrom(preferredTarget);
+        return range > 0.0f &&
+               position.DistanceSqr2D(preferredTarget.ServerPosition()) <= range * range;
     }
 
     const auto orbTarget = Orbwalker::GetTarget();
@@ -208,19 +224,26 @@ static Vector3 CursorDashPosition() {
         : Vector3();
 }
 
-static Vector3 SideDashPosition() {
+static Vector3 SideDashPosition(const AIHeroClient& preferredTarget) {
     const auto player = Player();
-    const auto orbTarget = Orbwalker::GetTarget();
-    if (!player.IsValid() || !orbTarget.IsValid()) {
+    if (!player.IsValid()) {
         return {};
     }
-    const AIBaseClient target(orbTarget.Handle());
-    if (!ValidTarget(target) || !target.IsHero()) {
+
+    AIHeroClient target = preferredTarget;
+    if (!ValidHeroTarget(target)) {
+        const auto orbTarget = Orbwalker::GetTarget();
+        if (!orbTarget.IsValid() || !orbTarget.IsHero()) {
+            return {};
+        }
+        target = AIHeroClient(orbTarget.Handle());
+    }
+    if (!ValidHeroTarget(target)) {
         return {};
     }
 
     const Vector3 origin = player.Position();
-    const Vector3 targetPosition = target.Position();
+    const Vector3 targetPosition = target.ServerPosition();
     const float dx = targetPosition.x - origin.x;
     const float dz = targetPosition.z - origin.z;
     const float length = std::sqrt(dx * dx + dz * dz);
@@ -244,50 +267,146 @@ static Vector3 SideDashPosition() {
         : left;
 }
 
-static Vector3 SafeDashPosition() {
+static bool HasMeleePressure(const Vector3& position) {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return false;
+    }
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!ValidHeroTarget(enemy) || !enemy.IsMelee()) {
+            continue;
+        }
+        const float pressureRange = enemy.AttackRange() + enemy.BoundingRadius() +
+                                    player.BoundingRadius() + Q.Range * 0.75f;
+        if (position.DistanceSqr2D(enemy.ServerPosition()) <=
+            pressureRange * pressureRange) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static float DashSafetyScore(const Vector3& position) {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return -FLT_MAX;
+    }
+
+    float score = PointUnderTurret(position, false) ? 1400.0f : 0.0f;
+    score -= static_cast<float>(CountEnemyHeroesNear(
+                 position,
+                 static_cast<float>(Slider(DashMenu, "CheckRange", 450)))) * 900.0f;
+
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!ValidHeroTarget(enemy)) {
+            continue;
+        }
+        const float distance = position.Distance2D(enemy.ServerPosition());
+        const float attackReach = enemy.AttackRange() + enemy.BoundingRadius() +
+                                  player.BoundingRadius();
+        if (enemy.IsMelee()) {
+            score += std::min(distance, 900.0f) * 1.4f;
+            if (distance < attackReach + 120.0f) {
+                score -= 1800.0f + (attackReach + 120.0f - distance) * 8.0f;
+            }
+        } else if (distance < attackReach + 50.0f) {
+            score -= (attackReach + 50.0f - distance) * 1.5f;
+        }
+    }
+    return score;
+}
+
+static Vector3 SmartDashPosition(const AIHeroClient& target, bool emergency) {
     const auto player = Player();
     if (!player.IsValid()) {
         return {};
     }
 
+    const bool hasTarget = ValidHeroTarget(target);
+    const Vector3 origin = player.ServerPosition();
+    const Vector3 targetPosition = hasTarget ? target.ServerPosition() : Vector3();
+    const float currentTargetDistance = hasTarget
+        ? origin.Distance2D(targetPosition)
+        : 0.0f;
+    const float attackRange = hasTarget ? AttackRangeFrom(target) : 0.0f;
+    const bool retreat = emergency || HasMeleePressure(origin);
+    const bool chase = hasTarget && !retreat &&
+                       currentTargetDistance > attackRange - 35.0f;
+
     constexpr float pi = 3.14159265358979323846f;
-    Vector3 best = CursorDashPosition();
-    float bestScore = FLT_MAX;
-    for (int i = 0; i < 24; ++i) {
-        const float angle = 2.0f * pi * static_cast<float>(i) / 24.0f;
+    Vector3 best = {};
+    float bestScore = -FLT_MAX;
+    for (int i = 0; i < 32; ++i) {
+        const float angle = 2.0f * pi * static_cast<float>(i) / 32.0f;
         Vector3 point{
-            player.Position().x + std::cos(angle) * Q.Range,
-            player.Position().y,
-            player.Position().z + std::sin(angle) * Q.Range
+            origin.x + std::cos(angle) * Q.Range,
+            origin.y,
+            origin.z + std::sin(angle) * Q.Range
         };
         point.y = NavMesh::GetHeightForPosition(point);
-        if (!IsGoodDashPosition(point) || !CanAttackFrom(point)) {
+        if (!IsGoodDashPosition(point) ||
+            (!emergency && !CanAttackFrom(point, target))) {
             continue;
         }
-        const float allyTurretBonus = PointUnderTurret(point, false) ? -10000.0f : 0.0f;
-        const float score = allyTurretBonus +
-            static_cast<float>(CountEnemyHeroesNear(point, 350.0f)) * 1000.0f +
-            point.Distance2D(Game::CursorPos());
-        if (score < bestScore) {
+
+        float score = DashSafetyScore(point) -
+                      point.Distance2D(Game::CursorPos()) * 0.10f;
+        if (hasTarget) {
+            const float targetDistance = point.Distance2D(targetPosition);
+            const float radialChange = targetDistance - currentTargetDistance;
+
+            if (emergency) {
+                score += radialChange * 8.0f;
+            } else {
+                float idealDistance = attackRange * 0.84f;
+                if (target.IsMelee()) {
+                    const float threatReach = target.AttackRange() +
+                                              target.BoundingRadius() +
+                                              player.BoundingRadius() + 110.0f;
+                    idealDistance = std::min(
+                        attackRange - 25.0f,
+                        std::max(attackRange * 0.78f, threatReach));
+                }
+                idealDistance = std::max(100.0f, idealDistance);
+
+                score -= std::abs(targetDistance - idealDistance) * 3.0f;
+                if (targetDistance <= attackRange) {
+                    score += 700.0f;
+                } else {
+                    score -= (targetDistance - attackRange) * 12.0f;
+                }
+
+                if (retreat) {
+                    score += radialChange * 6.0f;
+                } else if (chase) {
+                    score -= radialChange * 5.0f;
+                } else {
+                    // At a healthy range, prefer a lateral Q that preserves spacing.
+                    score -= std::abs(radialChange) * 1.25f;
+                }
+            }
+        }
+
+        if (score > bestScore) {
             bestScore = score;
             best = point;
         }
     }
-    return bestScore < FLT_MAX ? best : Vector3();
+    return best;
 }
 
-static Vector3 FindDashPosition(bool asap = false) {
+static Vector3 FindDashPosition(const AIHeroClient& target, bool asap = false) {
     Vector3 result = {};
     switch (List(DashMenu, "DashMode", 2)) {
     case 0: result = CursorDashPosition(); break;
-    case 1: result = SideDashPosition(); break;
-    default: result = SafeDashPosition(); break;
+    case 1: result = SideDashPosition(target); break;
+    default: result = SmartDashPosition(target, asap); break;
     }
 
     if (!IsGoodDashPosition(result)) {
         return {};
     }
-    if (!asap && !CanAttackFrom(result)) {
+    if (!asap && !CanAttackFrom(result, target)) {
         return {};
     }
     return result;
@@ -412,7 +531,9 @@ static bool AutoR() {
 
 static bool Combo() {
     const auto player = Player();
-    const AIHeroClient target = KindredTarget(Q.Range + 500.0f);
+    if (Orbwalker::IsWindingUp()) {
+        return false;
+    }
 
     if (Bool(ComboMenu, "CE", true) && E.IsReady()) {
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -427,15 +548,6 @@ static bool Combo() {
             if (E.CastOnUnit(enemy)) {
                 return true;
             }
-        }
-    }
-
-    if (Bool(ComboMenu, "CQ", true) && Q.IsReady() &&
-        !Orbwalker::IsWindingUp() && ValidHeroTarget(target) &&
-        AutoAttack::InAutoAttackRange(target)) {
-        const Vector3 position = FindDashPosition(false);
-        if (!position.IsZero() && Q.Cast(position)) {
-            return true;
         }
     }
 
@@ -539,6 +651,37 @@ static void OnProcessSpell(const ProcessSpellEventArgs& args) {
     }
 }
 
+static void OnAfterAttack(OrbwalkingActionArgs& args) {
+    const auto player = Player();
+    if (!Loaded || Orbwalker::ActiveMode() != OrbwalkingMode::Combo ||
+        !Bool(ComboMenu, "CQ", true) || !Q.IsReady() ||
+        !player.IsValid() || player.IsDead() || player.IsRecalling() ||
+        Game::IsChatOpen()) {
+        return;
+    }
+
+    const AIBaseClient attacked(args.Target.Handle());
+    if (attacked.IsValid() && !attacked.IsHero()) {
+        return;
+    }
+
+    AIHeroClient target = attacked.IsValid()
+        ? AIHeroClient(attacked.Handle())
+        : AIHeroClient();
+    if (!ValidHeroTarget(target)) {
+        target = KindredTarget(
+            AutoAttack::GetRealAutoAttackRange(player) + Q.Range + 150.0f);
+    }
+    if (!ValidHeroTarget(target)) {
+        return;
+    }
+
+    const Vector3 position = FindDashPosition(target, false);
+    if (!position.IsZero()) {
+        (void)Q.Cast(position);
+    }
+}
+
 static void OnGapcloser(const GapCloserEventArgs& args) {
     const auto player = Player();
     const AIHeroClient sender(args.Sender);
@@ -552,7 +695,7 @@ static void OnGapcloser(const GapCloserEventArgs& args) {
     }
     if (Bool(AntiGapMenu, "AntiGapQ", true) && Q.IsReady() &&
         ValidHeroTarget(sender, 400.0f)) {
-        const Vector3 position = FindDashPosition(true);
+        const Vector3 position = FindDashPosition(sender, true);
         if (!position.IsZero()) {
             (void)Q.Cast(position);
         }
@@ -659,7 +802,7 @@ static void BuildMenu() {
 
     DashMenu = MenuRoot->AddSubMenu(new Menu("QDash", "Dash Spell Settings"));
     DashMenu->Add(new MenuList(
-        "DashMode", "Dash mode", { "Mouse", "Side", "Safe" }, 2));
+        "DashMode", "Dash mode", { "Mouse", "Side", "Smart" }, 2));
     DashMenu->Add(new MenuSlider(
         "EnemyCheck", "Maximum enemies at dash end", 3, 1, 5));
     DashMenu->Add(new MenuSlider(
@@ -729,6 +872,7 @@ static void OnGameLoad() {
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Events::hook.OnProcessSpell += &OnProcessSpell;
     Events::hook.OnGapCloser += &OnGapcloser;
+    Orbwalker::OnAfterAttack += &OnAfterAttack;
     Drawing::OnDraw += &OnDraw;
 
     Loaded = true;
@@ -742,6 +886,7 @@ static void OnUnload() {
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
     Events::hook.OnProcessSpell -= &OnProcessSpell;
     Events::hook.OnGapCloser -= &OnGapcloser;
+    Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
     ClearForcedETarget();
     RemoveMenu();

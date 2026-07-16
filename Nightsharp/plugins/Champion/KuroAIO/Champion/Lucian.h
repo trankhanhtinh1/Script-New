@@ -184,8 +184,7 @@ static void UpdateQData() {
 
 static bool IsRChanneling() {
     const auto player = Player();
-    return player.IsValid() &&
-           (player.HasBuff("LucianR") || player.HasBuff("lucianr"));
+    return player.IsValid() && player.HasBuff("LucianR");
 }
 
 static bool UpdateRControl() {
@@ -320,53 +319,45 @@ static bool Killsteal() {
     return false;
 }
 
-static bool Combo() {
+static void MarkPassiveSpellCast() {
+    HasPassive = true;
+    LastActionTick = SDK::Variables::TickCount();
+}
+
+static bool ComboAfterAttack(const AIHeroClient& target) {
     const auto player = Player();
-    const float aaSearchRange = AutoAttack::GetRealAutoAttackRange(player) + 100.0f;
-    auto target = GetPhysicalTarget(aaSearchRange);
-    const bool targetInAaRange = ValidHeroTarget(target) && AutoAttack::InAutoAttackRange(target);
-
-    if (targetInAaRange && !HasPassive && !player.IsDashing()) {
-        const bool meleeThreat = EnemyMeleeInRange(350.0f);
-        if (Bool(ComboMenu, "UseW", true) && W.IsReady() &&
-            (!meleeThreat || !E.IsReady())) {
-            if (CastW(target, target.DistanceToPlayer() <= 425.0f, HitChance::Medium)) {
-                return true;
-            }
-        }
-
-        if (Bool(ComboMenu, "UseE", true) && E.IsReady()) {
-            float distance = E.Range;
-            if (List(ComboMenu, "EDistance", 1) == 1 && !meleeThreat) {
-                distance = 75.0f;
-            }
-            const Vector3 dash = BestDashPosition(Game::CursorPos(), distance);
-            if (CastE(dash)) {
-                return true;
-            }
-        }
-
-        if (Bool(ComboMenu, "UseQ", true) && Q.IsReady() && !E.IsReady() &&
-            Q.Cast(target) == CastStates::SuccessfullyCasted) {
-            return true;
-        }
+    if (!player.IsValid() || player.IsDead() ||
+        !ValidHeroTarget(target, W.Range)) {
         return false;
     }
 
-    if (!targetInAaRange && !HasPassive && Bool(ComboMenu, "UseE", true) && E.IsReady()) {
-        const float aaRange = AutoAttack::GetRealAutoAttackRange(player);
-        target = GetPhysicalTarget(E.Range + aaRange);
-        if (ValidHeroTarget(target, E.Range + aaRange)) {
-            const float requiredDistance = std::clamp(
-                target.DistanceToPlayer() -
-                    AutoAttack::GetRealAutoAttackRange(player, target) + 100.0f,
-                75.0f,
-                E.Range);
-            const Vector3 dash = BestDashPosition(target.ServerPosition(), requiredDistance);
-            if (CastE(dash)) {
-                return true;
-            }
+    const bool meleeThreat = EnemyMeleeInRange(350.0f);
+
+    // One spell per completed attack. E is intentionally attempted first so
+    // Lucian can reset his attack timer and reposition before the next double shot.
+    if (Bool(ComboMenu, "UseE", true) && E.IsReady() && !player.IsDashing()) {
+        float distance = E.Range;
+        if (List(ComboMenu, "EDistance", 1) == 1 && !meleeThreat) {
+            distance = 75.0f;
         }
+        const Vector3 dash = BestDashPosition(Game::CursorPos(), distance);
+        if (CastE(dash)) {
+            MarkPassiveSpellCast();
+            return true;
+        }
+    }
+
+    if (Bool(ComboMenu, "UseQ", true) && Q.IsReady() &&
+        ValidHeroTarget(target, Q.Range) &&
+        Q.Cast(target) == CastStates::SuccessfullyCasted) {
+        MarkPassiveSpellCast();
+        return true;
+    }
+
+    if (Bool(ComboMenu, "UseW", true) && W.IsReady() &&
+        CastW(target, target.DistanceToPlayer() <= 425.0f, HitChance::Medium)) {
+        MarkPassiveSpellCast();
+        return true;
     }
     return false;
 }
@@ -536,12 +527,16 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    const OrbwalkingMode mode = Orbwalker::ActiveMode();
+    if (mode == OrbwalkingMode::Combo && HasPassive) {
+        return;
+    }
+
     if (SmartR() || Killsteal()) {
         LastActionTick = now;
         return;
     }
 
-    const OrbwalkingMode mode = Orbwalker::ActiveMode();
     if (Key(HarassMenu, "AutoExtendedQ") && mode != OrbwalkingMode::Combo &&
         ManaOkay(HarassMenu, 40) && Q.IsReady() && ExtendedQLogic()) {
         LastActionTick = now;
@@ -551,7 +546,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     bool casted = false;
     switch (mode) {
     case OrbwalkingMode::Combo:
-        casted = Combo();
         break;
     case OrbwalkingMode::Harass:
         casted = Harass();
@@ -594,10 +588,25 @@ static void OnBuffRemove(const BuffEventArgs& args) {
     }
 }
 
-static void OnAfterAttack(OrbwalkingActionArgs&) {
-    if (Loaded) {
-        HasPassive = false;
+static void OnAfterAttack(OrbwalkingActionArgs& args) {
+    if (!Loaded) {
+        return;
     }
+
+    HasPassive = false;
+    const auto player = Player();
+    if (Orbwalker::ActiveMode() != OrbwalkingMode::Combo ||
+        !player.IsValid() || player.IsDead() || player.IsRecalling() ||
+        Game::IsChatOpen() || IsRChanneling()) {
+        return;
+    }
+
+    const AIBaseClient attacked(args.Target.Handle());
+    if (!attacked.IsValid() || !attacked.IsHero()) {
+        return;
+    }
+    const AIHeroClient target(attacked.Handle());
+    (void)ComboAfterAttack(target);
 }
 
 static void OnNonKillableMinion(OrbwalkingActionArgs& args) {

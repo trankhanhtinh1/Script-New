@@ -124,7 +124,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         context_.hasConfirmedAttack &&
         context_.lastAutoAttackTick > 0 &&
         now - context_.lastAttackConfirmTick <= kDuplicateAttackEventMs) {
-        SnapshotAttackTimings(GameObjects::Player());
+        ReadAttackTimingsFromMemory(GameObjects::Player());
         return;
     }
 
@@ -136,7 +136,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     context_.lastAutoAttackResetTick = 0;
     context_.hasConfirmedAttack = true;
     context_.attackCastComplete = false;
-    SnapshotAttackTimings(GameObjects::Player());
+    ReadAttackTimingsFromMemory(GameObjects::Player());
 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
     OrbwalkingActionArgs attackArgs(
@@ -165,7 +165,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
         return;
     }
 
-    SnapshotAttackTimings(GameObjects::Player());
+    ReadAttackTimingsFromMemory(GameObjects::Player());
     const int estimatedAttackStartTick = now - static_cast<int>(context_.attackWindupMs);
     const int attackStartTick = context_.pendingAttack
         ? std::max(
@@ -223,7 +223,7 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
         now - context_.pendingAttackTick > pingSafety &&
         now - context_.pendingAttackTick <= PendingAttackTimeoutMs();
 
-    SnapshotAttackTimings(GameObjects::Player());
+    ReadAttackTimingsFromMemory(GameObjects::Player());
     const int windupWindow = static_cast<int>(
         context_.attackWindupMs + MoveSafetyMs() + OneWayPingMs() + kDuplicateAttackEventMs);
     const bool stoppedWindup =

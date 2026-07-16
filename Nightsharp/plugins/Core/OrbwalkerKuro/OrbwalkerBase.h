@@ -123,8 +123,8 @@ private:
     void ClearDoCastMoveGate();
     void ClearPendingAttackState();
     void ExpirePendingAttack();
-    int PendingAttackTimeoutMs() const;
-    int DoCastMoveGateTimeoutMs() const;
+    int PendingAttackTimeoutMs();
+    int DoCastMoveGateTimeoutMs();
     float OneWayPingMs() const;
     float ChampionExtraAttackDelayMs(const AIHeroClient& player) const;
     bool ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const;
@@ -134,7 +134,7 @@ private:
     bool EvadeBlocksAttack(int now) const;
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
-    void SnapshotAttackTimings(const AIHeroClient& player);
+    void ReadAttackTimingsFromMemory(const AIHeroClient& player);
     int AttackCastReadyTick(const AIHeroClient& player);
     int AttackReadyTick(const AIHeroClient& player);
     void PushDebugConsoleLine(const char* text, int tick);
