@@ -15,6 +15,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -56,6 +57,8 @@ namespace Plugins {
             }
 
             raw->m_registryIndex = idx;
+            PluginRegistry::Plugins[idx].HasRuntimeMenuUI =
+                !std::is_same_v<decltype(&T::OnMenu), decltype(&IPlugin::OnMenu)>;
             PluginRegistry::BindRuntime(idx, raw, &PluginManager::LoadThunk,
                 &PluginManager::UnloadThunk, &PluginManager::MenuThunk,
                 &PluginManager::CanLoadThunk);

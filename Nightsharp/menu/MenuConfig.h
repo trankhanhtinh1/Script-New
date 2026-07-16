@@ -30,14 +30,16 @@ namespace Config {
         // until plugins call MenuItem::AddPermashow().
         inline bool enabled = true;
 
-        // Geometry — width/height defaults match the EnsoulSharp box.
-        inline int width = 500;
+        // EnsoulSharp stores X as the horizontal center of the panel and scales
+        // Width/IndicatorWidth by screenWidth / 1366 at draw time.
+        inline int width = 300;
         inline int indicatorWidth = 45;
 
-        // Default panel position. Dragging the panel can still change this at runtime.
-        inline int  x = 1350;
-        inline int  y = 800;
-        inline bool positionInitialized = true;
+        // The source defaults depend on the current game resolution, so the
+        // renderer initializes these once the swap-chain dimensions are known.
+        inline int  x = 0;
+        inline int  y = 0;
+        inline bool positionInitialized = false;
     }
 
 } // namespace Config

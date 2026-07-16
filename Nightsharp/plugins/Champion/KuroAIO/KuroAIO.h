@@ -7,10 +7,13 @@
 
 #include "../../IPlugin.h"
 #include "../../../SDK/SDK.h"
+#include "../../../SDK/Data/EmbeddedAssets.h"
 
+#include <climits>
 #include <string>
 
 #include "Champion/Katarina.h"
+#include "Champion/Kindred.h"
 #include "Champion/Lucian.h"
 #include "Champion/Samira.h"
 #include "Champion/Senna.h"
@@ -19,6 +22,153 @@
 #include "Champion/Viktor.h"
 #include "Champion/Yasuo/Yasuo.h"
 #include "Champion/Fiora/Fiora.h"
+
+namespace Plugins::KuroAIO::ChampionMenuTheme {
+
+struct Palette {
+    ImU32 From;
+    ImU32 To;
+    float Speed;
+};
+
+inline Palette GetPalette(const char* championName) {
+    if (_stricmp(championName, "Katarina") == 0) {
+        return { IM_COL32(255, 59, 92, 255), IM_COL32(157, 78, 221, 255), 1.05f };
+    }
+    if (_stricmp(championName, "Kindred") == 0) {
+        return { IM_COL32(245, 241, 232, 255), IM_COL32(103, 199, 235, 255), 0.82f };
+    }
+    if (_stricmp(championName, "Lucian") == 0) {
+        return { IM_COL32(116, 232, 255, 255), IM_COL32(244, 208, 111, 255), 0.95f };
+    }
+    if (_stricmp(championName, "Samira") == 0) {
+        return { IM_COL32(255, 180, 94, 255), IM_COL32(214, 40, 57, 255), 1.12f };
+    }
+    if (_stricmp(championName, "Senna") == 0) {
+        return { IM_COL32(87, 242, 192, 255), IM_COL32(138, 92, 255, 255), 0.90f };
+    }
+    if (_stricmp(championName, "Syndra") == 0) {
+        return { IM_COL32(212, 124, 255, 255), IM_COL32(108, 77, 255, 255), 1.00f };
+    }
+    if (_stricmp(championName, "TwistedFate") == 0) {
+        return { IM_COL32(255, 209, 102, 255), IM_COL32(239, 71, 111, 255), 0.88f };
+    }
+    if (_stricmp(championName, "Viktor") == 0) {
+        return { IM_COL32(82, 217, 255, 255), IM_COL32(255, 138, 61, 255), 1.04f };
+    }
+    if (_stricmp(championName, "Yasuo") == 0) {
+        return { IM_COL32(142, 235, 255, 255), IM_COL32(82, 113, 255, 255), 0.92f };
+    }
+    if (_stricmp(championName, "Fiora") == 0) {
+        return { IM_COL32(113, 196, 255, 255), IM_COL32(229, 107, 178, 255), 0.98f };
+    }
+    return { IM_COL32(255, 170, 64, 255), IM_COL32(156, 64, 255, 255), 1.0f };
+}
+
+inline SDK::UI::Menu* GetRoot(const char* championName) {
+    if (!championName || !championName[0]) {
+        return nullptr;
+    }
+    if (_stricmp(championName, "Katarina") == 0) {
+        return ::Plugins::KuroAIO::Katarina::MenuRoot;
+    }
+    if (_stricmp(championName, "Kindred") == 0) {
+        return ::Plugins::KuroAIO::Kindred::MenuRoot;
+    }
+    if (_stricmp(championName, "Lucian") == 0) {
+        return ::Plugins::KuroAIO::Lucian::MenuRoot;
+    }
+    if (_stricmp(championName, "Samira") == 0) {
+        return ::Plugins::KuroAIO::Samira::MenuRoot;
+    }
+    if (_stricmp(championName, "Senna") == 0) {
+        return ::Plugins::KuroAIO::Senna::MenuRoot;
+    }
+    if (_stricmp(championName, "Syndra") == 0) {
+        return ::Plugins::KuroAIO::Syndra::MenuRoot;
+    }
+    if (_stricmp(championName, "TwistedFate") == 0) {
+        return ::Plugins::KuroAIO::TwistedFate::MenuRoot;
+    }
+    if (_stricmp(championName, "Viktor") == 0) {
+        return ::Plugins::KuroAIO::Viktor::MenuRoot;
+    }
+    if (_stricmp(championName, "Yasuo") == 0) {
+        return ::Plugins::KuroAIO::Yasuo::MenuRoot;
+    }
+    if (_stricmp(championName, "Fiora") == 0) {
+        return ::Plugins::KuroAIO::Fiora::MenuRoot;
+    }
+    return nullptr;
+}
+
+inline void ApplyGradient(SDK::UI::Menu* menu, const Palette& palette) {
+    if (!menu) {
+        return;
+    }
+
+    menu->SetAnimatedGradientText(palette.From, palette.To, palette.Speed);
+    for (int i = 0; i < menu->Components.size(); ++i) {
+        SDK::UI::AMenuComponent* component = menu->Components[i];
+        if (component && component->IsMenu()) {
+            ApplyGradient(static_cast<SDK::UI::Menu*>(component), palette);
+        }
+    }
+}
+
+inline ImTextureID LoadChampionIcon(const char* championName) {
+    ImTextureID placeholder = SDK::UI::Icons::GetPlaceholder();
+    ImTextureID icon = SDK::UI::Icons::GetChampionSquare(championName);
+    if (icon && icon != placeholder) {
+        return icon;
+    }
+
+    std::size_t assetCount = 0;
+    const auto* assets = SDK::Data::EmbeddedAssets::ImageAssets(assetCount);
+    constexpr char championDirectory[] = "Images\\Champions\\";
+    const std::size_t championDirectoryLength = sizeof(championDirectory) - 1;
+
+    for (std::size_t i = 0; assets && i < assetCount; ++i) {
+        const auto& asset = assets[i];
+        if (!asset.Key || !asset.RelativePath || !asset.Bytes || asset.Size == 0 ||
+            asset.Size > static_cast<std::size_t>(INT_MAX) ||
+            _stricmp(asset.Key, championName) != 0 ||
+            _strnicmp(asset.RelativePath, championDirectory, championDirectoryLength) != 0) {
+            continue;
+        }
+
+        if (SDK::UI::Icons::LoadIconFromBytes(
+                asset.Key,
+                asset.Bytes,
+                static_cast<int>(asset.Size))) {
+            icon = SDK::UI::Icons::GetChampionSquare(championName);
+            return icon != placeholder ? icon : nullptr;
+        }
+        break;
+    }
+
+    return nullptr;
+}
+
+inline bool Apply(const char* championName) {
+    SDK::UI::Menu* root = GetRoot(championName);
+    if (!root) {
+        return false;
+    }
+
+    ApplyGradient(root, GetPalette(championName));
+
+    ImTextureID icon = LoadChampionIcon(championName);
+    if (!icon) {
+        root->ClearLogo();
+        return false;
+    }
+
+    root->SetLogo(icon, 24.0f, 24.0f);
+    return true;
+}
+
+} // namespace Plugins::KuroAIO::ChampionMenuTheme
 
 namespace Plugins {
 
@@ -29,6 +179,9 @@ public:
         const std::string champ = CurrentChampionName();
         if (_stricmp(champ.c_str(), "Katarina") == 0) {
             return "champion.kuroaio.katarina";
+        }
+        if (_stricmp(champ.c_str(), "Kindred") == 0) {
+            return "champion.kuroaio.kindred";
         }
         if (_stricmp(champ.c_str(), "Lucian") == 0) {
             return "champion.kuroaio.lucian";
@@ -70,6 +223,8 @@ public:
 
         if (_stricmp(champ.c_str(), "Katarina") == 0) {
             KuroAIO::Katarina::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Kindred") == 0) {
+            KuroAIO::Kindred::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Lucian") == 0) {
             KuroAIO::Lucian::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Samira") == 0) {
@@ -87,10 +242,32 @@ public:
         } else if (_stricmp(champ.c_str(), "Viktor") == 0) {
             KuroAIO::Viktor::OnGameLoad();
         }
+
+        m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(champ.c_str());
+        m_nextMenuThemeRetry = ::GetTickCount() + 1000;
+    }
+
+    void OnUpdate() override {
+        if (m_menuThemeApplied) {
+            return;
+        }
+
+        const DWORD now = ::GetTickCount();
+        if (m_nextMenuThemeRetry != 0 &&
+            static_cast<LONG>(now - m_nextMenuThemeRetry) < 0) {
+            return;
+        }
+
+        const std::string champ = CurrentChampionName();
+        if (IsSupportedChampionName(champ.c_str())) {
+            m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(champ.c_str());
+        }
+        m_nextMenuThemeRetry = now + 1000;
     }
 
     void OnUnload() override {
         KuroAIO::Katarina::OnUnload();
+        KuroAIO::Kindred::OnUnload();
         KuroAIO::Lucian::OnUnload();
         KuroAIO::Samira::OnUnload();
         KuroAIO::Senna::OnUnload();
@@ -99,12 +276,18 @@ public:
         KuroAIO::Fiora::OnUnload();
         KuroAIO::TwistedFate::OnUnload();
         KuroAIO::Viktor::OnUnload();
+        m_menuThemeApplied = false;
+        m_nextMenuThemeRetry = 0;
     }
 
 private:
+    bool m_menuThemeApplied = false;
+    DWORD m_nextMenuThemeRetry = 0;
+
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
             (_stricmp(championName, "Katarina") == 0 ||
+             _stricmp(championName, "Kindred") == 0 ||
              _stricmp(championName, "Lucian") == 0 ||
              _stricmp(championName, "Samira") == 0 ||
              _stricmp(championName, "Senna") == 0 ||
@@ -134,6 +317,9 @@ private:
         const std::string championName = CurrentChampionName();
         if (_stricmp(championName.c_str(), "Katarina") == 0) {
             return "Katarina";
+        }
+        if (_stricmp(championName.c_str(), "Kindred") == 0) {
+            return "Kindred";
         }
         if (_stricmp(championName.c_str(), "Lucian") == 0) {
             return "Lucian";

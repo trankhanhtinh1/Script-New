@@ -1024,6 +1024,17 @@ void Overlay::Run() {
         NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
     NightSharpMenu::EnsoulSharpTheme::SetFont(
         ensoulFont ? ensoulFont : io.Fonts->Fonts.back());
+    ImFontConfig permaFontConfig;
+    permaFontConfig.OversampleH = 3;
+    permaFontConfig.OversampleV = 2;
+    permaFontConfig.PixelSnapH = true;
+    ImFont* permaFont = io.Fonts->AddFontFromFileTTF(
+        "C:\\Windows\\Fonts\\tahoma.ttf",
+        16.0f,
+        &permaFontConfig,
+        NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
+    SDK::UI::PermaShow::SetFont(
+        permaFont ? permaFont : NightSharpMenu::EnsoulSharpTheme::Font());
 
     ImGui_ImplWin32_Init(g_hOverlay);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);

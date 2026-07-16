@@ -67,6 +67,7 @@ namespace SDK { namespace UI {
     class MenuKeyBind;
     class MenuList;
     class MenuButton;
+    class MenuRuntime;
     class MenuColor;
     class MenuSeparator;
     class MenuSliderButton;
@@ -83,6 +84,7 @@ namespace SDK { namespace UI {
         Color     = 7,
         Separator = 8,
         SliderBtn = 9,
+        Runtime   = 10,
     };
 
     using KeyBindType = ::SDK::KeyBindType;
@@ -101,6 +103,7 @@ namespace SDK { namespace UI {
     //       the config store can apply previously-saved values to the fresh menu.
     inline void (*g_MenuValueChangedHook)(MenuItem*) = nullptr;
     inline void (*g_MenuAttachedHook)(Menu*)        = nullptr;
+    inline void (*g_MenuSystemResetHook)()          = nullptr;
 
     // NightSharp sidebar-like chrome for functional items (MenuBool, MenuList, …).
     // Enabled by NightSharpMenu while drawing the content panel.
@@ -432,6 +435,12 @@ namespace SDK { namespace UI {
         bool   Visible          = true;
         // EnsoulSharp menus start collapsed and open one sibling branch at a time.
         bool   Toggled          = false;
+        bool   HaveCustomColor  = false;
+        ImU32  FontColor        = IM_COL32(255, 255, 255, 255);
+        bool   HaveAnimatedGradient = false;
+        ImU32  GradientColorFrom = IM_COL32(255, 170, 64, 255);
+        ImU32  GradientColorTo   = IM_COL32(156, 64, 255, 255);
+        float  GradientSpeed     = 1.0f;
 
         AMenuComponent() = default;
         AMenuComponent(const char* name, const char* displayName, const char* uniqueString = "")
@@ -440,6 +449,33 @@ namespace SDK { namespace UI {
 
         virtual MenuValueType Kind() const { return MenuValueType::None; }
         virtual bool IsMenu() const { return false; }
+
+        AMenuComponent* SetFontColor(ImU32 color) {
+            HaveCustomColor = true;
+            HaveAnimatedGradient = false;
+            FontColor = color;
+            return this;
+        }
+
+        AMenuComponent* ClearFontColor() {
+            HaveCustomColor = false;
+            return this;
+        }
+
+        AMenuComponent* SetAnimatedGradientText(ImU32 colorFrom,
+                                                ImU32 colorTo,
+                                                float speed = 1.0f) {
+            HaveAnimatedGradient = true;
+            GradientColorFrom = colorFrom;
+            GradientColorTo = colorTo;
+            GradientSpeed = speed > 0.01f ? speed : 0.01f;
+            return this;
+        }
+
+        AMenuComponent* ClearAnimatedGradientText() {
+            HaveAnimatedGradient = false;
+            return this;
+        }
 
         virtual void DrawImGui() = 0;          // render this node into the current ImGui context
         virtual void RestoreDefault() {}
@@ -518,6 +554,11 @@ namespace SDK { namespace UI {
     public:
         TinyVec<AMenuComponent*> Components;
         bool OwnsComponents = true;   // delete children in dtor
+        bool HaveLogo = false;
+        ImTextureID MenuLogo = nullptr;
+        TinyString MenuLogoKey;
+        float MenuLogoWidth = 24.0f;
+        float MenuLogoHeight = 24.0f;
 
         // Optional aggregate handler for any value change in the subtree.
         typedef void (*MenuValueChangedFn)(MenuValueChangedEventArgs args, void* ud);
@@ -540,6 +581,31 @@ namespace SDK { namespace UI {
         }
 
         bool IsMenu() const override { return true; }
+
+        Menu* SetLogo(ImTextureID texture, float width = 24.0f, float height = 24.0f) {
+            HaveLogo = texture != nullptr;
+            MenuLogo = texture;
+            MenuLogoKey = "";
+            MenuLogoWidth = width > 0.0f ? width : 24.0f;
+            MenuLogoHeight = height > 0.0f ? height : 24.0f;
+            return this;
+        }
+
+        Menu* SetLogo(const char* iconKey, float width = 24.0f, float height = 24.0f) {
+            HaveLogo = iconKey && iconKey[0];
+            MenuLogo = nullptr;
+            MenuLogoKey = iconKey ? iconKey : "";
+            MenuLogoWidth = width > 0.0f ? width : 24.0f;
+            MenuLogoHeight = height > 0.0f ? height : 24.0f;
+            return this;
+        }
+
+        Menu* ClearLogo() {
+            HaveLogo = false;
+            MenuLogo = nullptr;
+            MenuLogoKey = "";
+            return this;
+        }
 
         static Menu* Create(const char* name, const char* displayName, bool attach = true);
 
@@ -1132,6 +1198,37 @@ namespace SDK { namespace UI {
     };
 
     // ============================================================
+    // Values/MenuRuntime — compatibility leaf for legacy RuntimeMenu callbacks.
+    // The EnsoulSharp theme opens the callback in a flat, adjacent panel.
+    // New plugins should still prefer native MenuItem components.
+    // ============================================================
+    class MenuRuntime : public MenuItem {
+    public:
+        typedef void (*DrawFn)(void* userData);
+        DrawFn DrawCallback = nullptr;
+        void* DrawUserData = nullptr;
+        bool Open = false;
+        float MinimumWidth = 300.0f;
+
+        MenuRuntime(const char* name,
+                    const char* displayName,
+                    DrawFn callback,
+                    void* userData = nullptr,
+                    float minimumWidth = 300.0f,
+                    const char* uniqueString = "")
+            : MenuItem(name, displayName, uniqueString),
+              DrawCallback(callback),
+              DrawUserData(userData),
+              MinimumWidth(minimumWidth > 200.0f ? minimumWidth : 200.0f) {}
+
+        MenuValueType Kind() const override { return MenuValueType::Runtime; }
+
+        void DrawImGui() override {
+            if (DrawCallback) DrawCallback(DrawUserData);
+        }
+    };
+
+    // ============================================================
     // Values/MenuColor
     // ============================================================
     class MenuColor : public MenuItem {
@@ -1660,6 +1757,7 @@ namespace SDK {
         using MenuKeyBind = ::SDK::UI::MenuKeyBind;
         using MenuList = ::SDK::UI::MenuList;
         using MenuButton = ::SDK::UI::MenuButton;
+        using MenuRuntime = ::SDK::UI::MenuRuntime;
         using MenuColor = ::SDK::UI::MenuColor;
         using MenuSeparator = ::SDK::UI::MenuSeparator;
         using MenuSliderButton = ::SDK::UI::MenuSliderButton;
@@ -1679,6 +1777,7 @@ namespace SDK {
     using MenuKeyBind = ::SDK::UI::MenuKeyBind;
     using MenuList = ::SDK::UI::MenuList;
     using MenuButton = ::SDK::UI::MenuButton;
+    using MenuRuntime = ::SDK::UI::MenuRuntime;
     using MenuColor = ::SDK::UI::MenuColor;
     using MenuSeparator = ::SDK::UI::MenuSeparator;
     using MenuSliderButton = ::SDK::UI::MenuSliderButton;
@@ -1698,6 +1797,7 @@ namespace SDK::UI::IMenu {
     using MenuKeyBind = ::SDK::UI::MenuKeyBind;
     using MenuList = ::SDK::UI::MenuList;
     using MenuButton = ::SDK::UI::MenuButton;
+    using MenuRuntime = ::SDK::UI::MenuRuntime;
     using MenuColor = ::SDK::UI::MenuColor;
     using MenuSeparator = ::SDK::UI::MenuSeparator;
     using MenuSliderButton = ::SDK::UI::MenuSliderButton;
@@ -1709,6 +1809,7 @@ namespace SDK::UI::IMenu {
         using MenuKeyBind = ::SDK::UI::MenuKeyBind;
         using MenuList = ::SDK::UI::MenuList;
         using MenuButton = ::SDK::UI::MenuButton;
+        using MenuRuntime = ::SDK::UI::MenuRuntime;
         using MenuColor = ::SDK::UI::MenuColor;
         using MenuSeparator = ::SDK::UI::MenuSeparator;
         using MenuSliderButton = ::SDK::UI::MenuSliderButton;
@@ -1731,6 +1832,7 @@ using MenuSliderF = ::SDK::MenuSliderF;
 using MenuKeyBind = ::SDK::MenuKeyBind;
 using MenuList = ::SDK::MenuList;
 using MenuButton = ::SDK::MenuButton;
+using MenuRuntime = ::SDK::MenuRuntime;
 using MenuColor = ::SDK::MenuColor;
 using MenuSeparator = ::SDK::MenuSeparator;
 using MenuSliderButton = ::SDK::MenuSliderButton;

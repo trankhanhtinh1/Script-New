@@ -598,6 +598,32 @@ inline bool LoadIconFromBytes(const std::string& key, const std::uint8_t* png, i
     return true;
 }
 
+inline bool LoadIconFromRgba(const std::string& key,
+                             const std::uint8_t* rgba,
+                             int width,
+                             int height) {
+    if (!detail::Initialized()) {
+        Initialize();
+    }
+    if (key.empty() || !rgba || width <= 0 || height <= 0) {
+        return false;
+    }
+
+    LoadedTexture texture = CreateTextureFromRgba(rgba, width, height);
+    if (!texture.Texture) {
+        return false;
+    }
+
+    const std::string lower = detail::ToLower(key);
+    auto& cache = detail::Cache();
+    auto it = cache.find(lower);
+    if (it != cache.end()) {
+        ReleaseTexture(it->second);
+    }
+    cache[lower] = texture;
+    return true;
+}
+
 inline void Reset() {
     auto*& cache = detail::CachePtr();
     if (cache) {

@@ -202,6 +202,7 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\Fiora.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\FioraDatabase.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Kindred.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Lucian.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Senna.h" />

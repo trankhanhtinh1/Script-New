@@ -523,6 +523,9 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Kindred.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Lucian.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>

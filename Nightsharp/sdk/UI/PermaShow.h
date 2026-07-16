@@ -2,9 +2,8 @@
 /*
  * NightSharp SDK / UI / PermaShow
  *
- * Empty registry by default. Plugins push items in by calling
- * `.AddPermashow()` on a MenuItem (mirrors EnsoulSharp's
- * `MenuItem.Permashow(true, ...)` extension method).
+ * Empty registry by default. Plugins push supported MenuItems in by calling
+ * `.AddPermashow()`, mirroring EnsoulSharp's PermaShow extension.
  *
  * The actual rendering happens inside menu/NightSharpMenu.h
  * (DrawPermaShowOverlay), which iterates SDK::UI::PermaShow::Items().
@@ -28,10 +27,13 @@ namespace SDK { namespace UI { namespace PermaShow {
     constexpr int MAX_ITEMS = 64;
     inline Entry s_Items[MAX_ITEMS] = {};
     inline int   s_Count = 0;
+    inline ImFont* s_Font = nullptr;
 
     inline int Count()                  { return s_Count; }
     inline const Entry& At(int i)       { return s_Items[i]; }
     inline Entry* Items()               { return s_Items; }
+    inline void SetFont(ImFont* font)    { s_Font = font; }
+    inline ImFont* Font()                { return s_Font ? s_Font : ImGui::GetFont(); }
 
     inline void Initialize(Menu* menu = nullptr) {
         (void)menu;
@@ -46,13 +48,28 @@ namespace SDK { namespace UI { namespace PermaShow {
         return -1;
     }
 
+    inline bool IsSupported(MenuItem* item) {
+        if (!item) return false;
+        switch (item->Kind()) {
+        case MenuValueType::Boolean:
+        case MenuValueType::KeyBind:
+        case MenuValueType::List:
+        case MenuValueType::Slider:
+        case MenuValueType::SliderBtn:
+        case MenuValueType::Separator:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     // Add an item to the perma-show registry. No-op if already present.
     // `customDisplayName` overrides the item's DisplayName when provided.
     // `color` is an ImU32 (default white).
     inline void Add(MenuItem* item,
                     const char* customDisplayName = nullptr,
                     unsigned int color           = IM_COL32(255, 255, 255, 255)) {
-        if (!item || s_Count >= MAX_ITEMS) return;
+        if (!IsSupported(item) || s_Count >= MAX_ITEMS) return;
         if (IndexOf(item) >= 0) return;
 
         Entry& e = s_Items[s_Count++];

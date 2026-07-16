@@ -461,14 +461,26 @@ namespace ConfigStore {
             Config::StreamProtection::bypassObs = B("StreamProtection", "bypassObs", Config::StreamProtection::bypassObs);
             Config::OverlayInput::clickThrough  = B("Overlay", "clickThrough", Config::OverlayInput::clickThrough);
             Config::PermaShow::enabled          = B("PermaShow", "enabled", Config::PermaShow::enabled);
-            Config::PermaShow::width            = I("PermaShow", "width", Config::PermaShow::width);
-            if (Config::PermaShow::width < 500) {
-                Config::PermaShow::width = 500;
+            const int loadedPermaWidth = I("PermaShow", "width", Config::PermaShow::width);
+            // The retired NightSharp panel forced width >= 500 and stored X as
+            // its left edge. Reset that incompatible geometry once instead of
+            // interpreting the old coordinates as EnsoulSharp center-X values.
+            const bool legacyPermaGeometry = loadedPermaWidth < 100 || loadedPermaWidth > 400;
+            if (legacyPermaGeometry) {
+                Config::PermaShow::width = 300;
+                Config::PermaShow::indicatorWidth = 45;
+                Config::PermaShow::x = 0;
+                Config::PermaShow::y = 0;
+                Config::PermaShow::positionInitialized = false;
+            } else {
+                Config::PermaShow::width = loadedPermaWidth;
+                Config::PermaShow::indicatorWidth = I("PermaShow", "indicatorWidth", Config::PermaShow::indicatorWidth);
+                if (Config::PermaShow::indicatorWidth < 30) Config::PermaShow::indicatorWidth = 30;
+                if (Config::PermaShow::indicatorWidth > 90) Config::PermaShow::indicatorWidth = 90;
+                Config::PermaShow::x = I("PermaShow", "x", Config::PermaShow::x);
+                Config::PermaShow::y = I("PermaShow", "y", Config::PermaShow::y);
+                Config::PermaShow::positionInitialized = B("PermaShow", "positionInitialized", Config::PermaShow::positionInitialized);
             }
-            Config::PermaShow::indicatorWidth   = I("PermaShow", "indicatorWidth", Config::PermaShow::indicatorWidth);
-            Config::PermaShow::x                = I("PermaShow", "x", Config::PermaShow::x);
-            Config::PermaShow::y                = I("PermaShow", "y", Config::PermaShow::y);
-            Config::PermaShow::positionInitialized = B("PermaShow", "positionInitialized", Config::PermaShow::positionInitialized);
             Config::Language::index             = I("Language", "index", Config::Language::index);
         }
         g_lastCore   = CaptureCore();

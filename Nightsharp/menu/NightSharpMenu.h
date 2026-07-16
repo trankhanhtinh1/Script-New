@@ -36,9 +36,6 @@ namespace NightSharpMenu {
     inline bool isDragging = false;
     inline float dragOffX = 0.0f;
     inline float dragOffY = 0.0f;
-    inline bool permaShowDragging = false;
-    inline float permaShowDragOffX = 0.0f;
-    inline float permaShowDragOffY = 0.0f;
 
     inline float menuBoundsRight = 0.0f;
     inline float menuBoundsBottom = 0.0f;
@@ -60,9 +57,6 @@ namespace NightSharpMenu {
     inline float contentPanelW = CONTENT_MIN_W;
     inline float contentPanelBodyH = ITEM_H;
     inline int contentPanelSizeKey = -1;
-
-    // Margin from the screen edges when auto-positioning PermaShow.
-    constexpr float PERMASHOW_EDGE_MARGIN = 18.0f;
 
     inline ImU32 COL_BG = IM_COL32(8, 10, 18, 255);
     inline ImU32 COL_CONTENT_BG = IM_COL32(8, 10, 18, 255);
@@ -86,9 +80,14 @@ namespace NightSharpMenu {
     inline SDK::UI::MenuBool* ensoulZoomHack = nullptr;
     inline SDK::UI::MenuSliderF* ensoulMaxZoom = nullptr;
     inline SDK::UI::MenuBool* ensoulPermaShow = nullptr;
+    inline SDK::UI::MenuSlider* ensoulPermaX = nullptr;
+    inline SDK::UI::MenuSlider* ensoulPermaY = nullptr;
+    inline SDK::UI::MenuSlider* ensoulPermaWidth = nullptr;
+    inline SDK::UI::MenuSlider* ensoulPermaIndicatorWidth = nullptr;
     inline SDK::UI::MenuBool* ensoulBypassObs = nullptr;
     inline SDK::UI::MenuBool* ensoulProfiler = nullptr;
     inline SDK::UI::MenuBool* ensoulProfilerLog = nullptr;
+    inline SDK::UI::Menu* ensoulRuntimeMenus = nullptr;
 
     struct PluginMenuBinding {
         int registryIndex = -1;
@@ -99,8 +98,105 @@ namespace NightSharpMenu {
     inline PluginMenuBinding ensoulPluginBindings[PluginRegistry::MAX_PLUGINS] = {};
     inline int ensoulPluginBindingCount = 0;
 
+    struct RuntimeMenuBinding {
+        int registryIndex = -1;
+        SDK::UI::Menu* menu = nullptr;
+        SDK::UI::MenuRuntime* runtime = nullptr;
+    };
+
+    inline RuntimeMenuBinding ensoulRuntimeBindings[PluginRegistry::MAX_PLUGINS] = {};
+    inline int ensoulRuntimeBindingCount = 0;
+
+    inline void ResetMenuSystem() {
+        if (ensoulCoreRoot) {
+            SDK::UI::MenuManager::Instance().Remove(ensoulCoreRoot);
+            delete ensoulCoreRoot;
+        }
+        ensoulCoreRoot = nullptr;
+        ensoulLanguage = nullptr;
+        ensoulSkinChanger = nullptr;
+        ensoulSkinId = nullptr;
+        ensoulZoomHack = nullptr;
+        ensoulMaxZoom = nullptr;
+        ensoulPermaShow = nullptr;
+        ensoulPermaX = nullptr;
+        ensoulPermaY = nullptr;
+        ensoulPermaWidth = nullptr;
+        ensoulPermaIndicatorWidth = nullptr;
+        ensoulBypassObs = nullptr;
+        ensoulProfiler = nullptr;
+        ensoulProfilerLog = nullptr;
+        ensoulRuntimeMenus = nullptr;
+        ensoulPluginBindingCount = 0;
+        ensoulRuntimeBindingCount = 0;
+        EnsoulSharpTheme::OpenList = nullptr;
+        EnsoulSharpTheme::OpenColor = nullptr;
+        EnsoulSharpTheme::OpenRuntime = nullptr;
+        EnsoulSharpTheme::DragSliderButton = nullptr;
+        EnsoulSharpTheme::SetFont(nullptr);
+        SDK::UI::PermaShow::SetFont(nullptr);
+    }
+
     inline int CoreLanguageToListIndex() {
         return Config::Language::index == 2 ? 1 : 0;
+    }
+
+    inline ImVec2 GetOverlayDisplaySize();
+
+    inline void EnsureNightSharpMenuLogo() {
+        static constexpr int size = 24;
+        if (SDK::UI::Icons::HasIcon("nightsharp_menu_logo")) return;
+
+        std::uint8_t pixels[size * size * 4] = {};
+        for (int y = 0; y < size; ++y) {
+            for (int x = 0; x < size; ++x) {
+                const int index = (y * size + x) * 4;
+                const float dx = static_cast<float>(x) - 11.5f;
+                const float dy = static_cast<float>(y) - 11.5f;
+                const bool inside = dx * dx + dy * dy <= 11.5f * 11.5f;
+                if (!inside) continue;
+                const float t = static_cast<float>(x) / static_cast<float>(size - 1);
+                pixels[index + 0] = static_cast<std::uint8_t>(255.0f + (156.0f - 255.0f) * t);
+                pixels[index + 1] = static_cast<std::uint8_t>(170.0f + (64.0f - 170.0f) * t);
+                pixels[index + 2] = static_cast<std::uint8_t>(64.0f + (255.0f - 64.0f) * t);
+                pixels[index + 3] = 255;
+
+                const bool leftStroke = x >= 6 && x <= 8 && y >= 5 && y <= 18;
+                const bool rightStroke = x >= 15 && x <= 17 && y >= 5 && y <= 18;
+                const bool diagonal = y >= 5 && y <= 18 &&
+                    std::abs((x - 7) - (y - 5) * 9 / 13) <= 1;
+                if (leftStroke || rightStroke || diagonal) {
+                    pixels[index + 0] = 255;
+                    pixels[index + 1] = 255;
+                    pixels[index + 2] = 255;
+                }
+            }
+        }
+        SDK::UI::Icons::LoadIconFromRgba(
+            "nightsharp_menu_logo", pixels, size, size);
+    }
+
+    inline void DrawRuntimeMenuBridge(void* userData) {
+        const int index = static_cast<int>(reinterpret_cast<intptr_t>(userData)) - 1;
+        if (index < 0 || index >= PluginRegistry::PluginCount) return;
+        if (!PluginRegistry::Plugins[index].Loaded) return;
+        PluginRegistry::DrawPluginMenu(index);
+    }
+
+    inline void ResetPermaShowGeometry() {
+        const ImVec2 display = GetOverlayDisplaySize();
+        Config::PermaShow::width = 300;
+        Config::PermaShow::indicatorWidth = 45;
+        Config::PermaShow::x = static_cast<int>(display.x - 0.682f * display.x);
+        Config::PermaShow::y = static_cast<int>(display.y - 0.965f * display.y);
+        Config::PermaShow::positionInitialized = true;
+
+        if (ensoulPermaX) ensoulPermaX->Value = Config::PermaShow::x;
+        if (ensoulPermaY) ensoulPermaY->Value = Config::PermaShow::y;
+        if (ensoulPermaWidth) ensoulPermaWidth->Value = Config::PermaShow::width;
+        if (ensoulPermaIndicatorWidth) {
+            ensoulPermaIndicatorWidth->Value = Config::PermaShow::indicatorWidth;
+        }
     }
 
     inline void OnCoreLanguageChanged(SDK::UI::MenuItem* sender, void*) {
@@ -130,6 +226,22 @@ namespace NightSharpMenu {
     inline void OnCoreZoomChanged(SDK::UI::MenuItem* sender, void*) {
         Config::ZoomHack::maxZoom =
             static_cast<SDK::UI::MenuSliderF*>(sender)->Value;
+    }
+
+    inline void OnPermaShowGeometryChanged(SDK::UI::MenuItem* sender, void* userData) {
+        const int value = static_cast<SDK::UI::MenuSlider*>(sender)->Value;
+        switch (static_cast<int>(reinterpret_cast<intptr_t>(userData))) {
+        case 1: Config::PermaShow::x = value; break;
+        case 2: Config::PermaShow::y = value; break;
+        case 3: Config::PermaShow::width = value; break;
+        case 4: Config::PermaShow::indicatorWidth = value; break;
+        default: return;
+        }
+        Config::PermaShow::positionInitialized = true;
+    }
+
+    inline void OnPermaShowReset(SDK::UI::MenuButton*, void*) {
+        ResetPermaShowGeometry();
     }
 
     inline int PluginIndexFromUserData(void* userData) {
@@ -170,11 +282,14 @@ namespace NightSharpMenu {
     }
 
     inline void EnsureEnsoulCoreMenu() {
+        SDK::UI::g_MenuSystemResetHook = &ResetMenuSystem;
         if (ensoulCoreRoot) {
             return;
         }
 
         ensoulCoreRoot = new SDK::UI::Menu("nightsharp.core", "NightSharp", true);
+        EnsureNightSharpMenuLogo();
+        ensoulCoreRoot->SetLogo("nightsharp_menu_logo");
 
         auto* language = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("Language", "Language"));
@@ -199,15 +314,44 @@ namespace NightSharpMenu {
         ensoulMaxZoom = settings->Add(new SDK::UI::MenuSliderF(
             "MaxZoom", "Maximum Zoom", Config::ZoomHack::maxZoom, 1000.0f, 10000.0f));
         ensoulMaxZoom->ValueChanged = &OnCoreZoomChanged;
-        ensoulPermaShow = settings->Add(new SDK::UI::MenuBool(
-            "PermaShow", "PermaShow", Config::PermaShow::enabled));
+        if (!Config::PermaShow::positionInitialized) {
+            ResetPermaShowGeometry();
+        }
+        const ImVec2 display = GetOverlayDisplaySize();
+        const int displayWidth = display.x > 1.0f ? static_cast<int>(display.x) : 1;
+        const int displayHeight = display.y > 1.0f ? static_cast<int>(display.y) : 1;
+        auto* permaShow = settings->AddSubMenu(
+            new SDK::UI::Menu("PermaShow", "Permashow"));
+        ensoulPermaShow = permaShow->Add(new SDK::UI::MenuBool(
+            "Enabled", "Enable", Config::PermaShow::enabled));
         BindCoreBool(ensoulPermaShow, 3);
+        ensoulPermaX = permaShow->Add(new SDK::UI::MenuSlider(
+            "X", "Position (X)", Config::PermaShow::x, 0, displayWidth));
+        ensoulPermaX->ValueChanged = &OnPermaShowGeometryChanged;
+        ensoulPermaX->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(1));
+        ensoulPermaY = permaShow->Add(new SDK::UI::MenuSlider(
+            "Y", "Position (Y)", Config::PermaShow::y, 0, displayHeight));
+        ensoulPermaY->ValueChanged = &OnPermaShowGeometryChanged;
+        ensoulPermaY->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(2));
+        ensoulPermaWidth = permaShow->Add(new SDK::UI::MenuSlider(
+            "BorderWidth", "Width", Config::PermaShow::width, 100, 400));
+        ensoulPermaWidth->ValueChanged = &OnPermaShowGeometryChanged;
+        ensoulPermaWidth->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(3));
+        ensoulPermaIndicatorWidth = permaShow->Add(new SDK::UI::MenuSlider(
+            "IndicatorWidth", "Indicator Width",
+            Config::PermaShow::indicatorWidth, 30, 90));
+        ensoulPermaIndicatorWidth->ValueChanged = &OnPermaShowGeometryChanged;
+        ensoulPermaIndicatorWidth->ValueChangedUd =
+            reinterpret_cast<void*>(static_cast<intptr_t>(4));
+        permaShow->Add(new SDK::UI::MenuButton(
+            "Reset", "Reset to Default", "Reset", &OnPermaShowReset));
         ensoulBypassObs = settings->Add(new SDK::UI::MenuBool(
             "BypassObs", "Bypass OBS", Config::StreamProtection::bypassObs));
         BindCoreBool(ensoulBypassObs, 4);
 
         auto* debug = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("DebugInfo", "Debug Info"));
+        debug->SetFontColor(IM_COL32(120, 235, 120, 255));
         debug->Add(new SDK::UI::MenuSeparator("Build", "NightSharp " __DATE__ " " __TIME__));
         debug->Add(new SDK::UI::MenuSeparator("Theme", "EnsoulSharp default DX9 theme"));
         ensoulProfiler = debug->Add(new SDK::UI::MenuBool(
@@ -216,6 +360,18 @@ namespace NightSharpMenu {
         ensoulProfilerLog = debug->Add(new SDK::UI::MenuBool(
             "ProfilerLog", "Write profiler log", NightSharpPerf::LogEnabled));
         BindCoreBool(ensoulProfilerLog, 6);
+        auto* themeTests = debug->AddSubMenu(
+            new SDK::UI::Menu("ThemeTests", "Theme Tests"));
+        themeTests->SetLogo("nightsharp_menu_logo");
+        themeTests->Add(new SDK::UI::MenuSeparator(
+            "GradientText", "Animated Gradient Text"))
+            ->SetAnimatedGradientText(
+                IM_COL32(255, 170, 64, 255),
+                IM_COL32(156, 64, 255, 255),
+                1.0f);
+        themeTests->Add(new SDK::UI::MenuBool(
+            "CustomColor", "Custom component font color", true))
+            ->SetFontColor(IM_COL32(64, 210, 255, 255));
 
         auto* plugins = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("Plugins", "Plugins"));
@@ -251,6 +407,32 @@ namespace NightSharpMenu {
             };
         }
 
+        ensoulRuntimeMenus = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("RuntimeMenus", "Runtime Menus"));
+        ensoulRuntimeBindingCount = 0;
+        for (int i = 0;
+             i < PluginRegistry::PluginCount &&
+             ensoulRuntimeBindingCount < PluginRegistry::MAX_PLUGINS;
+             ++i) {
+            auto& plugin = PluginRegistry::Plugins[i];
+            if (!plugin.RuntimeMenu || !plugin.HasRuntimeMenuUI ||
+                !plugin.InternalId || !plugin.Name) {
+                continue;
+            }
+            auto* runtimeMenu = ensoulRuntimeMenus->AddSubMenu(
+                new SDK::UI::Menu(plugin.InternalId, plugin.Name));
+            auto* runtime = runtimeMenu->Add(new SDK::UI::MenuRuntime(
+                "RuntimePanel",
+                "Open Runtime Panel",
+                &DrawRuntimeMenuBridge,
+                reinterpret_cast<void*>(static_cast<intptr_t>(i + 1)),
+                360.0f));
+            runtimeMenu->Visible = plugin.Loaded;
+            ensoulRuntimeBindings[ensoulRuntimeBindingCount++] = {
+                i, runtimeMenu, runtime
+            };
+        }
+
         ensoulCoreRoot->Attach();
 
         // Keep NightSharp first, matching the previous menu's Core-first order.
@@ -271,6 +453,13 @@ namespace NightSharpMenu {
         ensoulZoomHack->Value = Config::ZoomHack::enabled;
         ensoulMaxZoom->Value = Config::ZoomHack::maxZoom;
         ensoulPermaShow->Value = Config::PermaShow::enabled;
+        const ImVec2 display = GetOverlayDisplaySize();
+        ensoulPermaX->MaxValue = display.x > 1.0f ? static_cast<int>(display.x) : 1;
+        ensoulPermaY->MaxValue = display.y > 1.0f ? static_cast<int>(display.y) : 1;
+        ensoulPermaX->Value = Config::PermaShow::x;
+        ensoulPermaY->Value = Config::PermaShow::y;
+        ensoulPermaWidth->Value = Config::PermaShow::width;
+        ensoulPermaIndicatorWidth->Value = Config::PermaShow::indicatorWidth;
         ensoulBypassObs->Value = Config::StreamProtection::bypassObs;
         ensoulProfiler->Value = NightSharpPerf::Enabled;
         ensoulProfilerLog->Value = NightSharpPerf::LogEnabled;
@@ -284,6 +473,21 @@ namespace NightSharpMenu {
             binding.loaded->Value = plugin.Loaded;
             binding.alwaysLoad->Value = plugin.AlwaysLoad;
         }
+        bool anyRuntimeVisible = false;
+        for (int i = 0; i < ensoulRuntimeBindingCount; ++i) {
+            auto& binding = ensoulRuntimeBindings[i];
+            if (binding.registryIndex < 0 ||
+                binding.registryIndex >= PluginRegistry::PluginCount) {
+                continue;
+            }
+            const bool visible = PluginRegistry::Plugins[binding.registryIndex].Loaded;
+            binding.menu->Visible = visible;
+            anyRuntimeVisible = anyRuntimeVisible || visible;
+            if (!visible && EnsoulSharpTheme::OpenRuntime == binding.runtime) {
+                EnsoulSharpTheme::OpenRuntime = nullptr;
+            }
+        }
+        ensoulRuntimeMenus->Visible = anyRuntimeVisible;
     }
 
     struct SidebarEntry {
@@ -341,31 +545,15 @@ namespace NightSharpMenu {
         return size;
     }
 
-    inline float GetPermaShowTotalHeight(int rows) {
-        const float padding = 8.0f;
-        const float lineHeight = ImGui::GetFontSize() * 1.35f;
-        const float titleHeight = lineHeight + 4.0f;
-        const int visibleRows = rows > 0 ? rows : 1;
-        return padding * 2.0f + titleHeight + static_cast<float>(visibleRows) * lineHeight;
-    }
-
-    inline void ClampPermaShowPosition(float width, float totalHeight) {
-        const ImVec2 display = GetOverlayDisplaySize();
-        const int maxX = MaxI(0, static_cast<int>(display.x - width));
-        const int maxY = MaxI(0, static_cast<int>(display.y - totalHeight));
-        Config::PermaShow::x = ClampI(Config::PermaShow::x, 0, maxX);
-        Config::PermaShow::y = ClampI(Config::PermaShow::y, 0, maxY);
-    }
-
-    inline void EnsurePermaShowPositionInitialized(float width, float totalHeight) {
+    inline void EnsurePermaShowPositionInitialized() {
         if (!Config::PermaShow::positionInitialized) {
-            const ImVec2 anchor = GetOverlayDisplaySize();
-            Config::PermaShow::x = static_cast<int>(anchor.x - width - PERMASHOW_EDGE_MARGIN);
-            Config::PermaShow::y = static_cast<int>(anchor.y - totalHeight - PERMASHOW_EDGE_MARGIN);
-            Config::PermaShow::positionInitialized = true;
+            ResetPermaShowGeometry();
         }
-
-        ClampPermaShowPosition(width, totalHeight);
+        const ImVec2 display = GetOverlayDisplaySize();
+        Config::PermaShow::x = ClampI(
+            Config::PermaShow::x, 0, static_cast<int>(display.x));
+        Config::PermaShow::y = ClampI(
+            Config::PermaShow::y, 0, static_cast<int>(display.y));
     }
 
     inline bool IsPointInside(float x, float y) {
@@ -379,14 +567,9 @@ namespace NightSharpMenu {
 
         const bool insideMenu = EnsoulSharpTheme::ContainsPoint(x, y);
 
-        const bool insidePermaShow =
-            Config::PermaShow::enabled &&
-            x >= static_cast<float>(Config::PermaShow::x) &&
-            x <= permaShowBoundsRight &&
-            y >= static_cast<float>(Config::PermaShow::y) &&
-            y <= permaShowBoundsBottom;
-
-        return insideMenu || insidePermaShow;
+        // EnsoulSharp PermaShow itself has no drag/click surface; its position
+        // is managed by the X/Y sliders in the PermaShow settings submenu.
+        return insideMenu;
     }
 
     inline bool DrawSidebarItem(ImDrawList* dl, ImVec2 pos, float w, const char* text, bool isActive, bool hasArrow = false) {
@@ -771,221 +954,181 @@ namespace NightSharpMenu {
     }
 
     // ----------------------------------------------------------------
-    // PermaShow row helpers — driven by the SDK::UI::PermaShow registry.
+    // EnsoulSharp PermaShow port. The source uses Config.EnsoulSharpFont
+    // (Tahoma 16), a 1.4x row height, and screenWidth / 1366 width scaling.
     // ----------------------------------------------------------------
 
-    inline void DrawPermaShowRow(ImDrawList* dl,
-                                 float x,
-                                 float width,
-                                 float indicatorWidth,
-                                 float padding,
-                                 float& currentY,
-                                 float lineHeight,
-                                 const char* label,
-                                 const char* value,
-                                 bool hasState,
-                                 bool stateOn,
-                                 ImU32 color) {
-        if (!dl || !label || !value) {
-            return;
+    inline constexpr float PermaShowFontHeight = 16.0f;
+    inline constexpr float PermaShowRowHeight = PermaShowFontHeight * 1.4f;
+    inline constexpr ImU32 PermaShowBackground = IM_COL32(0, 0, 0, 102);
+    inline constexpr ImU32 PermaShowEnabledBox = IM_COL32(0, 100, 0, 150);
+    inline constexpr ImU32 PermaShowDisabledBox = IM_COL32(139, 0, 0, 150);
+
+    struct PermaShowTextRect {
+        float left;
+        float top;
+        float right;
+        float bottom;
+    };
+
+    inline void DrawPermaShowText(ImDrawList* draw,
+                                  const char* text,
+                                  const PermaShowTextRect& rect,
+                                  ImU32 color,
+                                  bool centered) {
+        ImFont* font = SDK::UI::PermaShow::Font();
+        if (!draw || !font || !text || !text[0]) return;
+        const ImVec2 size = font->CalcTextSizeA(
+            PermaShowFontHeight, FLT_MAX, 0.0f, text);
+        float x = rect.left;
+        if (centered) {
+            x = rect.left + (rect.right - rect.left - size.x) * 0.5f;
         }
-
-        // Draw the label on the far left
-        dl->AddText(ImVec2(x + padding, currentY), color, label);
-
-        if (hasState) {
-            // Far-right aligned box width (75 pixels fits "False" beautifully)
-            const float boxWidth = 75.0f;
-            const float boxRight = x + width - padding;
-            const float boxLeft = boxRight - boxWidth;
-
-            if (boxLeft > x + padding) {
-                // Background color box: green for true, red for false
-                dl->AddRectFilled(
-                    ImVec2(boxLeft, currentY + 1.0f),
-                    ImVec2(boxRight, currentY + lineHeight - 2.0f),
-                    stateOn ? IM_COL32(0, 140, 60, 255) : IM_COL32(170, 40, 40, 255),
-                    0.0f);
-
-                // Draw status text inside the box (centered, white text color for high contrast)
-                const ImVec2 valSize = ImGui::CalcTextSize(value);
-                const float textX = boxLeft + (boxWidth - valSize.x) * 0.5f;
-                const float textY = currentY + (lineHeight - valSize.y) * 0.5f;
-                dl->AddText(ImVec2(textX, textY - 1.0f), IM_COL32(255, 255, 255, 255), value);
-            }
-        } else {
-            // Draw regular values (numeric/text/sliders) right-aligned on the far right
-            const ImVec2 valueSize = ImGui::CalcTextSize(value);
-            const float valueX = x + width - padding - valueSize.x;
-            dl->AddText(ImVec2(valueX, currentY), color, value);
-        }
-
-        currentY += lineHeight;
+        const float y = rect.top + (rect.bottom - rect.top - size.y) * 0.5f;
+        const ImVec4 clip(rect.left, rect.top, rect.right, rect.bottom);
+        draw->AddText(
+            font,
+            PermaShowFontHeight,
+            ImVec2(std::floor(x), std::floor(y)),
+            color,
+            text,
+            nullptr,
+            0.0f,
+            &clip);
     }
 
-    // Render one SDK::UI::PermaShow entry. Mirrors EnsoulSharp PermaShow's
-    // per-MenuValueType branching.
-    inline void DrawPermaShowEntry(ImDrawList* dl,
+    inline void DrawPermaShowEntry(ImDrawList* draw,
                                    const SDK::UI::PermaShow::Entry& entry,
-                                   float x,
+                                   int index,
+                                   float centerX,
+                                   float top,
                                    float width,
-                                   float indicatorWidth,
-                                   float padding,
-                                   float& currentY,
-                                   float lineHeight) {
+                                   float indicatorWidth) {
         SDK::UI::MenuItem* item = entry.Item;
-        if (!item) return;
+        if (!draw || !item) return;
 
-        ImU32 color = entry.Color;
-        const char* name = entry.DisplayName;
+        const float rowY = top + PermaShowRowHeight * static_cast<float>(index);
+        const float endX = centerX + width * 0.5f;
+        const float drawBasicX = centerX - 0.96f * (width * 0.5f);
+        const float boxX = endX - indicatorWidth;
+
+        // Match the int RawRectangle conversion in PermashowItem.UpdatePosition.
+        const PermaShowTextRect fullRect{
+            static_cast<float>(static_cast<int>(drawBasicX)),
+            static_cast<float>(static_cast<int>(rowY + PermaShowFontHeight * 0.2f)),
+            static_cast<float>(static_cast<int>(endX)),
+            static_cast<float>(static_cast<int>(rowY + PermaShowRowHeight))
+        };
+        const PermaShowTextRect boxRect{
+            static_cast<float>(static_cast<int>(boxX - indicatorWidth * 0.5f)),
+            static_cast<float>(static_cast<int>(rowY)),
+            static_cast<float>(static_cast<int>(endX + indicatorWidth * 0.5f)),
+            static_cast<float>(static_cast<int>(rowY + PermaShowRowHeight))
+        };
+
+        const auto drawStateBox = [&](bool enabled) {
+            draw->AddRectFilled(
+                ImVec2(boxX, rowY),
+                ImVec2(boxX + indicatorWidth, rowY + PermaShowRowHeight),
+                enabled ? PermaShowEnabledBox : PermaShowDisabledBox,
+                0.0f);
+        };
+        char label[192] = {};
+        char value[64] = {};
 
         switch (item->Kind()) {
         case SDK::UI::MenuValueType::Boolean: {
-            auto* b = static_cast<SDK::UI::MenuBool*>(item);
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             name, b->Value ? "True" : "False",
-                             true, b->Value, color);
-            break;
-        }
-        case SDK::UI::MenuValueType::Slider: {
-            auto* s = static_cast<SDK::UI::MenuSlider*>(item);
-            char val[24] = {};
-            std::snprintf(val, sizeof(val), "%d", s->Value);
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             name, val, false, false, color);
-            break;
-        }
-        case SDK::UI::MenuValueType::SliderF: {
-            auto* s = static_cast<SDK::UI::MenuSliderF*>(item);
-            char val[32] = {};
-            std::snprintf(val, sizeof(val), "%.2f", s->Value);
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             name, val, false, false, color);
+            auto* boolean = static_cast<SDK::UI::MenuBool*>(item);
+            drawStateBox(boolean->Value);
+            std::snprintf(label, sizeof(label), "%s:", entry.DisplayName);
+            DrawPermaShowText(draw, label, fullRect, entry.Color, false);
+            DrawPermaShowText(
+                draw, boolean->Value ? "True" : "False", boxRect, entry.Color, true);
             break;
         }
         case SDK::UI::MenuValueType::KeyBind: {
-            auto* k = static_cast<SDK::UI::MenuKeyBind*>(item);
-            char label[160] = {};
-            std::snprintf(label, sizeof(label), "%s [%s]",
-                          name, SDK::UI::MenuKeyBind::VkToText(k->Key));
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             label, k->Active ? "True" : "False",
-                             true, k->Active, color);
+            auto* keyBind = static_cast<SDK::UI::MenuKeyBind*>(item);
+            drawStateBox(keyBind->Active);
+            std::snprintf(
+                label,
+                sizeof(label),
+                "%s [%s]:",
+                entry.DisplayName,
+                SDK::UI::MenuKeyBind::VkToText(keyBind->Key));
+            DrawPermaShowText(draw, label, fullRect, entry.Color, false);
+            DrawPermaShowText(
+                draw, keyBind->Active ? "True" : "False", boxRect, entry.Color, true);
             break;
         }
         case SDK::UI::MenuValueType::List: {
-            auto* l = static_cast<SDK::UI::MenuList*>(item);
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             name, l->SelectedValue(),
-                             false, false, color);
+            auto* list = static_cast<SDK::UI::MenuList*>(item);
+            std::snprintf(label, sizeof(label), "%s:", entry.DisplayName);
+            DrawPermaShowText(draw, label, fullRect, entry.Color, false);
+            DrawPermaShowText(draw, list->SelectedValue(), boxRect, entry.Color, true);
             break;
         }
-        case SDK::UI::MenuValueType::Color: {
-            auto* c = static_cast<SDK::UI::MenuColor*>(item);
-            char val[16] = {};
-            std::snprintf(val, sizeof(val), "0x%08X", c->Value);
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             name, val, false, false, color);
+        case SDK::UI::MenuValueType::Slider: {
+            auto* slider = static_cast<SDK::UI::MenuSlider*>(item);
+            std::snprintf(label, sizeof(label), "%s:", entry.DisplayName);
+            std::snprintf(value, sizeof(value), "%d  ", slider->Value);
+            DrawPermaShowText(draw, label, fullRect, entry.Color, false);
+            DrawPermaShowText(draw, value, boxRect, entry.Color, true);
             break;
         }
+        case SDK::UI::MenuValueType::SliderBtn: {
+            auto* sliderButton = static_cast<SDK::UI::MenuSliderButton*>(item);
+            drawStateBox(sliderButton->Enabled);
+            std::snprintf(label, sizeof(label), "%s:", entry.DisplayName);
+            std::snprintf(value, sizeof(value), "%d  ", sliderButton->Value);
+            DrawPermaShowText(draw, label, fullRect, entry.Color, false);
+            DrawPermaShowText(draw, value, boxRect, entry.Color, true);
+            break;
+        }
+        case SDK::UI::MenuValueType::Separator:
+            DrawPermaShowText(draw, entry.DisplayName, fullRect, entry.Color, true);
+            break;
         default:
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             name, "", false, false, color);
             break;
         }
-    }
-
-    // Pull the bottom-right anchor for the PermaShow box. Falls back to the
-    // current ImGui display size when no main viewport is active.
-    inline ImVec2 GetPermaShowAnchor() {
-        return GetOverlayDisplaySize();
     }
 
     inline void DrawPermaShowOverlay() {
-        if (!Config::PermaShow::enabled) {
-            permaShowDragging = false;
-            permaShowBoundsRight = 0.0f;
-            permaShowBoundsBottom = 0.0f;
-            return;
-        }
-
+        permaShowBoundsRight = 0.0f;
+        permaShowBoundsBottom = 0.0f;
         const int rows = SDK::UI::PermaShow::Count();
-        ImDrawList* dl = ImGui::GetForegroundDrawList();
-        if (!dl) {
-            permaShowBoundsRight = 0.0f;
-            permaShowBoundsBottom = 0.0f;
-            return;
-        }
+        if (!Config::PermaShow::enabled || rows <= 0) return;
 
-        const float width = static_cast<float>(Config::PermaShow::width);
-        const float indicatorWidth = static_cast<float>(Config::PermaShow::indicatorWidth);
-        const float padding = 8.0f;
-        const float lineHeight = ImGui::GetFontSize() * 1.35f;
-        const float titleHeight = lineHeight + 4.0f;
-        const float totalHeight = GetPermaShowTotalHeight(rows);
+        ImDrawList* draw = ImGui::GetForegroundDrawList();
+        if (!draw) return;
 
-        // Anchor to the bottom-right corner the very first time we render,
-        // and re-anchor when the configured position is offscreen.
-        EnsurePermaShowPositionInitialized(width, totalHeight);
+        EnsurePermaShowPositionInitialized();
+        const ImVec2 display = GetOverlayDisplaySize();
+        const float xFactor = display.x / 1366.0f;
+        const float width = static_cast<float>(Config::PermaShow::width) * xFactor;
+        const float indicatorWidth =
+            static_cast<float>(Config::PermaShow::indicatorWidth) * xFactor;
+        const float centerX = static_cast<float>(Config::PermaShow::x);
+        const float top = static_cast<float>(Config::PermaShow::y);
+        const float left = centerX - width * 0.5f;
+        const float height = static_cast<float>(rows) * PermaShowRowHeight;
 
-        float x = static_cast<float>(Config::PermaShow::x);
-        float y = static_cast<float>(Config::PermaShow::y);
+        permaShowBoundsRight = left + width;
+        permaShowBoundsBottom = top + height;
+        draw->AddRectFilled(
+            ImVec2(left, top),
+            ImVec2(left + width, top + height),
+            PermaShowBackground,
+            0.0f);
 
-        if (showMenu) {
-            const ImVec2 mouse = ImGui::GetIO().MousePos;
-            const bool inHeader =
-                mouse.x >= x &&
-                mouse.x <= x + width &&
-                mouse.y >= y &&
-                mouse.y <= y + padding + titleHeight;
-
-            if (ImGui::IsMouseClicked(0) && inHeader && !isDragging) {
-                permaShowDragging = true;
-                permaShowDragOffX = mouse.x - x;
-                permaShowDragOffY = mouse.y - y;
-            }
-
-            if (!ImGui::IsMouseDown(0)) {
-                permaShowDragging = false;
-            }
-
-            if (permaShowDragging) {
-                Config::PermaShow::x = static_cast<int>(mouse.x - permaShowDragOffX);
-                Config::PermaShow::y = static_cast<int>(mouse.y - permaShowDragOffY);
-                Config::PermaShow::positionInitialized = true;
-                ClampPermaShowPosition(width, totalHeight);
-                x = static_cast<float>(Config::PermaShow::x);
-                y = static_cast<float>(Config::PermaShow::y);
-            }
-        } else {
-            permaShowDragging = false;
-        }
-
-        permaShowBoundsRight = x + width;
-        permaShowBoundsBottom = y + totalHeight;
-
-        dl->AddRectFilled(ImVec2(x, y), ImVec2(x + width, y + totalHeight), IM_COL32(18, 20, 26, 178), 0.0f);
-        dl->AddRect(ImVec2(x, y), ImVec2(x + width, y + totalHeight), COL_BORDER, 0.0f);
-        dl->AddText(ImVec2(x + padding, y + padding - 1.0f), COL_ACCENT, "PermaShow");
-
-        float currentY = y + padding + titleHeight;
-        if (rows <= 0) {
-            DrawPermaShowRow(dl, x, width, indicatorWidth, padding,
-                             currentY, lineHeight,
-                             "No PermaShow items", "", false, false, COL_TEXT_DIM);
-        } else {
-            for (int i = 0; i < rows; ++i) {
-                DrawPermaShowEntry(dl, SDK::UI::PermaShow::At(i),
-                                   x, width, indicatorWidth, padding,
-                                   currentY, lineHeight);
-            }
+        for (int i = 0; i < rows; ++i) {
+            DrawPermaShowEntry(
+                draw,
+                SDK::UI::PermaShow::At(i),
+                i,
+                centerX,
+                top,
+                width,
+                indicatorWidth);
         }
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../SDK/UI/UI.h"
+#include "../SDK/UI/Icons.h"
 #include "../imgui/imgui.h"
 
 #include <algorithm>
@@ -66,10 +67,12 @@ inline ImFont* MenuFont = nullptr;
 inline MenuList* OpenList = nullptr;
 inline MenuSliderButton* DragSliderButton = nullptr;
 inline MenuColor* OpenColor = nullptr;
+inline MenuRuntime* OpenRuntime = nullptr;
 inline Rect OpenListControl = {};
 inline Rect OpenListPopup = {};
 inline Rect OpenColorPreview = {};
 inline Rect OpenColorPicker = {};
+inline Rect RuntimeSource = {};
 inline MenuItem* TooltipItem = nullptr;
 inline Rect TooltipSource = {};
 inline bool RegularClickBlocked = false;
@@ -107,6 +110,78 @@ inline void DrawText(ImDrawList* draw,
                      const char* text) {
     if (draw && Font() && text && text[0]) {
         draw->AddText(Font(), FontSize, position, color, text);
+    }
+}
+
+inline ImU32 LerpColor(ImU32 from, ImU32 to, float amount) {
+    amount = std::clamp(amount, 0.0f, 1.0f);
+    const auto channel = [&](int shift) {
+        const float a = static_cast<float>((from >> shift) & 0xFFu);
+        const float b = static_cast<float>((to >> shift) & 0xFFu);
+        return static_cast<int>(std::lround(a + (b - a) * amount));
+    };
+    return IM_COL32(
+        channel(IM_COL32_R_SHIFT),
+        channel(IM_COL32_G_SHIFT),
+        channel(IM_COL32_B_SHIFT),
+        channel(IM_COL32_A_SHIFT));
+}
+
+inline int Utf8SequenceLength(const char* text) {
+    if (!text || !text[0]) return 0;
+    const unsigned char lead = static_cast<unsigned char>(text[0]);
+    if ((lead & 0x80u) == 0) return 1;
+    if ((lead & 0xE0u) == 0xC0u) return 2;
+    if ((lead & 0xF0u) == 0xE0u) return 3;
+    if ((lead & 0xF8u) == 0xF0u) return 4;
+    return 1;
+}
+
+inline ImU32 ComponentTextColor(const AMenuComponent* component) {
+    return component && component->HaveCustomColor
+        ? component->FontColor
+        : TextColor;
+}
+
+inline void DrawComponentText(ImDrawList* draw,
+                              const AMenuComponent* component,
+                              const ImVec2& position,
+                              const char* text) {
+    if (!component || !component->HaveAnimatedGradient || !draw || !Font() ||
+        !text || !text[0]) {
+        DrawText(draw, position, ComponentTextColor(component), text);
+        return;
+    }
+
+    const float textWidth = std::max(1.0f, TextWidth(text));
+    const float phase = std::fmod(
+        static_cast<float>(ImGui::GetTime()) * 0.22f * component->GradientSpeed,
+        1.0f);
+    float cursorX = position.x;
+    const char* cursor = text;
+    while (*cursor) {
+        int bytes = Utf8SequenceLength(cursor);
+        int available = 0;
+        while (cursor[available] && available < bytes) ++available;
+        bytes = std::max(1, available);
+        const char* end = cursor + bytes;
+        const ImVec2 glyphSize = Font()->CalcTextSizeA(
+            FontSize, FLT_MAX, 0.0f, cursor, end);
+        float wave = std::fmod(
+            phase + (cursorX - position.x + glyphSize.x * 0.5f) /
+                (textWidth * 3.0f),
+            1.0f);
+        if (wave < 0.0f) wave += 1.0f;
+        const float blend = wave <= 0.5f ? wave * 2.0f : (1.0f - wave) * 2.0f;
+        draw->AddText(
+            Font(),
+            FontSize,
+            ImVec2(cursorX, position.y),
+            LerpColor(component->GradientColorFrom, component->GradientColorTo, blend),
+            cursor,
+            end);
+        cursorX += glyphSize.x;
+        cursor = end;
     }
 }
 
@@ -211,10 +286,12 @@ inline float ComponentWidth(const AMenuComponent* component) {
     }
 
     if (component->IsMenu()) {
+        const auto* menu = static_cast<const Menu*>(component);
         width = TextWidth(component->DisplayName.c_str()) +
                 TextWidth(" ") + TextWidth(ArrowText) +
                 ContainerTextOffset * 2.0f +
-                TextWidth(ArrowText) + 5.0f;
+                TextWidth(ArrowText) + 5.0f +
+                (menu->HaveLogo ? ContainerHeight + 5.0f : 0.0f);
     }
     return std::max(ContainerWidth, std::ceil(width));
 }
@@ -334,11 +411,17 @@ inline void DrawOnOff(ImDrawList* draw,
     DrawText(draw, ImVec2(std::floor(x), CenteredTextY(row.y)), TextColor, value);
 }
 
-inline void DrawLabel(ImDrawList* draw, const Rect& row, const char* label) {
-    DrawText(
+inline void DrawLabel(ImDrawList* draw,
+                      const Rect& row,
+                      const AMenuComponent* component,
+                      const char* label,
+                      float extraOffsetX = 0.0f) {
+    DrawComponentText(
         draw,
-        ImVec2(row.x + ContainerTextOffset, CenteredTextY(row.y)),
-        TextColor,
+        component,
+        ImVec2(
+            row.x + ContainerTextOffset + extraOffsetX,
+            CenteredTextY(row.y)),
         label);
 }
 
@@ -368,7 +451,7 @@ inline float SliderFloatFromMouse(const Rect& row, float minimum, float maximum)
 }
 
 inline void DrawBool(ImDrawList* draw, MenuBool* item, const Rect& row) {
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     DrawOnOff(draw, row, item->Value);
     const Rect button{ row.x + row.w - ContainerHeight, row.y, ContainerHeight, ContainerHeight };
     if (Clicked(button)) {
@@ -388,7 +471,7 @@ inline void DrawSlider(ImDrawList* draw, MenuSlider* item, const Rect& row) {
         draw,
         Rect{ markerX, row.y, 2.0f, row.h },
         item->Interacting ? SliderActiveColor : SliderColor);
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     char value[32] = {};
     std::snprintf(value, sizeof(value), "%d", item->Value);
     DrawText(
@@ -418,7 +501,7 @@ inline void DrawSliderF(ImDrawList* draw, MenuSliderF* item, const Rect& row) {
         draw,
         Rect{ markerX, row.y, 2.0f, row.h },
         item->Interacting ? SliderActiveColor : SliderColor);
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     char value[32] = {};
     std::snprintf(value, sizeof(value), "%.2f", item->Value);
     DrawText(
@@ -444,6 +527,7 @@ inline void DrawKeyBind(ImDrawList* draw, MenuKeyBind* item, const Rect& row) {
     DrawLabel(
         draw,
         row,
+        item,
         item->Interacting ? "Press a key" : item->DisplayName.c_str());
     if (!item->Interacting) {
         char keyText[48] = {};
@@ -468,7 +552,7 @@ inline void DrawKeyBind(ImDrawList* draw, MenuKeyBind* item, const Rect& row) {
 }
 
 inline void DrawList(ImDrawList* draw, MenuList* item, const Rect& row) {
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     const float maxStringWidth = MaximumOptionWidth(item);
     const float arrowWidth = TextWidth(ArrowText) + 12.0f;
     const float controlWidth = maxStringWidth + 16.0f + arrowWidth;
@@ -512,7 +596,7 @@ inline void DrawList(ImDrawList* draw, MenuList* item, const Rect& row) {
 }
 
 inline void DrawButton(ImDrawList* draw, MenuButton* item, const Rect& row) {
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     const float textWidth = TextWidth(item->ButtonText.c_str());
     const Rect button{
         row.x + row.w - textWidth - 10.0f,
@@ -541,7 +625,7 @@ inline void DrawButton(ImDrawList* draw, MenuButton* item, const Rect& row) {
 }
 
 inline void DrawColor(ImDrawList* draw, MenuColor* item, const Rect& row) {
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     const Rect preview{
         row.x + row.w - ContainerHeight,
         row.y,
@@ -561,10 +645,10 @@ inline void DrawColor(ImDrawList* draw, MenuColor* item, const Rect& row) {
 
 inline void DrawSeparator(ImDrawList* draw, MenuSeparator* item, const Rect& row) {
     const float x = row.x + (row.w - TextWidth(item->DisplayName.c_str())) * 0.5f;
-    DrawText(
+    DrawComponentText(
         draw,
+        item,
         ImVec2(std::floor(x), CenteredTextY(row.y)),
-        TextColor,
         item->DisplayName.c_str());
     QueueTooltip(item, row);
 }
@@ -583,7 +667,7 @@ inline void DrawSliderButton(ImDrawList* draw,
         draw,
         Rect{ markerX, row.y, 2.0f, row.h },
         DragSliderButton == item ? SliderActiveColor : SliderColor);
-    DrawLabel(draw, row, item->DisplayName.c_str());
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
     char value[32] = {};
     std::snprintf(value, sizeof(value), "%d", item->Value);
     DrawText(
@@ -616,6 +700,31 @@ inline void DrawSliderButton(ImDrawList* draw,
         } else {
             DragSliderButton = nullptr;
         }
+    }
+    QueueTooltip(item, row);
+}
+
+inline void DrawRuntime(ImDrawList* draw, MenuRuntime* item, const Rect& row) {
+    if (OpenRuntime == item) {
+        FillRect(draw, row, ContainerSelectedColor);
+    } else if (Hovered(row)) {
+        FillRect(draw, row, HoverColor);
+    }
+    DrawLabel(draw, row, item, item->DisplayName.c_str());
+    DrawText(
+        draw,
+        ImVec2(
+            row.x + row.w - TextWidth(ArrowText) - ContainerTextMarkOffset,
+            CenteredTextY(row.y)),
+        TextColor,
+        ArrowText);
+    if (Clicked(row)) {
+        OpenRuntime = OpenRuntime == item ? nullptr : item;
+        OpenList = nullptr;
+        OpenColor = nullptr;
+    }
+    if (OpenRuntime == item) {
+        RuntimeSource = row;
     }
     QueueTooltip(item, row);
 }
@@ -668,7 +777,8 @@ inline void DrawMenu(ImDrawList* draw, Menu* menu, const Rect& row) {
         FillRect(draw, row, HoverColor);
     }
 
-    DrawLabel(draw, row, menu->DisplayName.c_str());
+    const float logoOffset = menu->HaveLogo ? ContainerHeight + 5.0f : 0.0f;
+    DrawLabel(draw, row, menu, menu->DisplayName.c_str(), logoOffset);
     const char* arrow = ArrowText;
     DrawText(
         draw,
@@ -687,6 +797,23 @@ inline void DrawMenu(ImDrawList* draw, Menu* menu, const Rect& row) {
 
     if (menu->Toggled && childCount > 0) {
         DrawColumn(draw, menu, ImVec2(row.x + row.w, row.y));
+    }
+
+    if (menu->HaveLogo) {
+        ImTextureID logo = menu->MenuLogo;
+        if (!logo && !menu->MenuLogoKey.empty() &&
+            SDK::UI::Icons::HasIcon(menu->MenuLogoKey.c_str())) {
+            logo = SDK::UI::Icons::GetIcon(menu->MenuLogoKey.c_str());
+        }
+        if (logo) {
+            const float logoY = row.y + (row.h - menu->MenuLogoHeight) * 0.5f;
+            draw->AddImage(
+                logo,
+                ImVec2(row.x + ContainerTextOffset, logoY),
+                ImVec2(
+                    row.x + ContainerTextOffset + menu->MenuLogoWidth,
+                    logoY + menu->MenuLogoHeight));
+        }
     }
 }
 
@@ -729,8 +856,11 @@ inline void DrawComponent(ImDrawList* draw,
         case MenuValueType::SliderBtn:
             DrawSliderButton(draw, static_cast<MenuSliderButton*>(item), row);
             break;
+        case MenuValueType::Runtime:
+            DrawRuntime(draw, static_cast<MenuRuntime*>(item), row);
+            break;
         default:
-            DrawLabel(draw, row, item->DisplayName.c_str());
+            DrawLabel(draw, row, item, item->DisplayName.c_str());
             break;
         }
     }
@@ -888,12 +1018,57 @@ inline void DrawTooltip(ImDrawList* draw) {
     };
     FillRect(draw, tooltip, RootContainerColor);
     BorderRect(draw, tooltip, BorderColor);
-    DrawText(
+    DrawComponentText(
         draw,
+        TooltipItem,
         ImVec2(tooltip.x + ContainerTextOffset, CenteredTextY(tooltip.y)),
-        TextColor,
         TooltipItem->Tooltip.c_str());
     IncludeBounds(tooltip);
+}
+
+inline void DrawRuntimePopup() {
+    if (!OpenRuntime || !OpenRuntime->DrawCallback) return;
+
+    ImGui::SetNextWindowPos(
+        ImVec2(RuntimeSource.x + RuntimeSource.w, RuntimeSource.y),
+        ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(OpenRuntime->MinimumWidth, ContainerHeight),
+        ImVec2(
+            ImGui::GetMainViewport()->Size.x * 0.8f,
+            ImGui::GetMainViewport()->Size.y * 0.8f));
+
+    char windowId[64] = {};
+    std::snprintf(windowId, sizeof(windowId), "##NightSharpRuntime_%p", OpenRuntime);
+    ImGui::PushFont(Font());
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 7.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 62.0f / 255.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.20f, 0.20f, 0.20f, 0.90f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.20f));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.39f, 0.39f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.67f, 0.67f, 0.67f, 0.78f));
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_AlwaysAutoResize;
+    if (ImGui::Begin(windowId, nullptr, flags)) {
+        OpenRuntime->DrawCallback(OpenRuntime->DrawUserData);
+        const ImVec2 pos = ImGui::GetWindowPos();
+        const ImVec2 size = ImGui::GetWindowSize();
+        IncludeBounds(Rect{ pos.x, pos.y, size.x, size.y });
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(7);
+    ImGui::PopStyleVar(6);
+    ImGui::PopFont();
 }
 
 inline void PreparePopupInput() {
@@ -971,6 +1146,7 @@ inline void Render() {
     DrawListPopup(draw);
     DrawColorPicker(draw);
     DrawTooltip(draw);
+    DrawRuntimePopup();
 }
 
 } // namespace NightSharpMenu::EnsoulSharpTheme

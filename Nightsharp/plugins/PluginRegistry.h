@@ -31,6 +31,7 @@ namespace PluginRegistry {
         bool       (*RuntimeLoad)(void*) = nullptr;
         bool       (*RuntimeUnload)(void*) = nullptr;
         void       (*RuntimeMenu)(void*) = nullptr;
+        bool         HasRuntimeMenuUI = false;
         bool       (*CanLoadFn)(void*) = nullptr;
         bool         CanLoadCached = true;
         bool         CanLoadChecked = false;

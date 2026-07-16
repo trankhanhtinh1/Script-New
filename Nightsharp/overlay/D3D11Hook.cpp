@@ -587,6 +587,17 @@ static bool InitImGui(IDXGISwapChain* swapChain) {
         NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
     NightSharpMenu::EnsoulSharpTheme::SetFont(
         ensoulFont ? ensoulFont : io.Fonts->Fonts.back());
+    ImFontConfig permaFontConfig;
+    permaFontConfig.OversampleH = 3;
+    permaFontConfig.OversampleV = 2;
+    permaFontConfig.PixelSnapH = true;
+    ImFont* permaFont = io.Fonts->AddFontFromFileTTF(
+        "C:\\Windows\\Fonts\\tahoma.ttf",
+        16.0f,
+        &permaFontConfig,
+        NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
+    SDK::UI::PermaShow::SetFont(
+        permaFont ? permaFont : NightSharpMenu::EnsoulSharpTheme::Font());
 
     g_pSwapChain = swapChain;
     HRESULT hr = g_pSwapChain->GetDevice(

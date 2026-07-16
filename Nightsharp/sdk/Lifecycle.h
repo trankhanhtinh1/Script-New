@@ -48,6 +48,9 @@ inline void Shutdown() {
     __try { ::Core::Events::Shutdown(); } __except (1) {}
     __try { ::CoreHookTest::UninstallAll(); } __except (1) {}
 
+    __try {
+        if (UI::g_MenuSystemResetHook) UI::g_MenuSystemResetHook();
+    } __except (1) {}
     __try { Data::GameData::Reset(); } __except (1) {}
     __try { UI::Icons::Reset(); } __except (1) {}
     __try { UI::PermaShow::Clear(); } __except (1) {}
