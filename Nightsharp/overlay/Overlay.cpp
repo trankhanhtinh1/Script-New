@@ -1050,17 +1050,8 @@ void Overlay::Run() {
     io.LogFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
     io.Fonts->AddFontDefault();
-    ImFontConfig ensoulFontConfig;
-    ensoulFontConfig.OversampleH = 3;
-    ensoulFontConfig.OversampleV = 2;
-    ensoulFontConfig.PixelSnapH = true;
-    ImFont* ensoulFont = io.Fonts->AddFontFromFileTTF(
-        "C:\\Windows\\Fonts\\tahoma.ttf",
-        NightSharpMenu::EnsoulSharpTheme::FontSize,
-        &ensoulFontConfig,
-        NightSharpMenu::EnsoulSharpTheme::GlyphRanges);
-    NightSharpMenu::EnsoulSharpTheme::SetFont(
-        ensoulFont ? ensoulFont : io.Fonts->Fonts.back());
+    NightSharpMenu::EnsoulSharpTheme::LoadFonts(io, NightSharpMenu::EnsoulSharpTheme::FontSize);
+
     ImFontConfig permaFontConfig;
     permaFontConfig.OversampleH = 3;
     permaFontConfig.OversampleV = 2;

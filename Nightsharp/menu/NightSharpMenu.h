@@ -94,6 +94,27 @@ namespace NightSharpMenu {
     inline SDK::UI::MenuBool* ensoulProfilerLog = nullptr;
     inline SDK::UI::Menu* ensoulRuntimeMenus = nullptr;
 
+    inline SDK::UI::MenuColor* ensoulTextColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulHoverColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulRootContainerColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulContainerSelectedColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulContainerSeparatorColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulBorderColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulEnabledColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulDisabledColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulSliderColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulSliderActiveColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulButtonColor = nullptr;
+    inline SDK::UI::MenuColor* ensoulButtonHoverColor = nullptr;
+
+    inline SDK::UI::MenuSliderF* ensoulThemeFontSize = nullptr;
+    inline SDK::UI::MenuSliderF* ensoulThemeRowHeight = nullptr;
+    inline SDK::UI::MenuSliderF* ensoulThemePanelWidth = nullptr;
+    inline SDK::UI::MenuSliderF* ensoulThemeTextPadding = nullptr;
+
+    inline SDK::UI::MenuList* ensoulFontFamily = nullptr;
+    inline SDK::UI::MenuList* ensoulThemePreset = nullptr;
+
     struct PluginMenuBinding {
         int registryIndex = -1;
         SDK::UI::MenuBool* loaded = nullptr;
@@ -132,6 +153,24 @@ namespace NightSharpMenu {
         ensoulProfiler = nullptr;
         ensoulProfilerLog = nullptr;
         ensoulRuntimeMenus = nullptr;
+        ensoulTextColor = nullptr;
+        ensoulHoverColor = nullptr;
+        ensoulRootContainerColor = nullptr;
+        ensoulContainerSelectedColor = nullptr;
+        ensoulContainerSeparatorColor = nullptr;
+        ensoulBorderColor = nullptr;
+        ensoulEnabledColor = nullptr;
+        ensoulDisabledColor = nullptr;
+        ensoulSliderColor = nullptr;
+        ensoulSliderActiveColor = nullptr;
+        ensoulButtonColor = nullptr;
+        ensoulButtonHoverColor = nullptr;
+        ensoulThemeFontSize = nullptr;
+        ensoulThemeRowHeight = nullptr;
+        ensoulThemePanelWidth = nullptr;
+        ensoulThemeTextPadding = nullptr;
+        ensoulFontFamily = nullptr;
+        ensoulThemePreset = nullptr;
         ensoulPluginBindingCount = 0;
         ensoulRuntimeBindingCount = 0;
         EnsoulSharpTheme::OpenList = nullptr;
@@ -252,6 +291,65 @@ namespace NightSharpMenu {
         ResetPermaShowGeometry();
     }
 
+    inline void OnThemeColorChanged(SDK::UI::MenuItem* sender, void* userData) {
+        auto* item = static_cast<SDK::UI::MenuColor*>(sender);
+        ImU32 color = item->Value;
+        switch (static_cast<int>(reinterpret_cast<intptr_t>(userData))) {
+        case 1: EnsoulSharpTheme::TextColor = color; break;
+        case 2: EnsoulSharpTheme::HoverColor = color; break;
+        case 3: EnsoulSharpTheme::RootContainerColor = color; break;
+        case 4: EnsoulSharpTheme::ContainerSelectedColor = color; break;
+        case 5: EnsoulSharpTheme::ContainerSeparatorColor = color; break;
+        case 6: EnsoulSharpTheme::BorderColor = color; break;
+        case 7: EnsoulSharpTheme::EnabledColor = color; break;
+        case 8: EnsoulSharpTheme::DisabledColor = color; break;
+        case 9: EnsoulSharpTheme::SliderColor = color; break;
+        case 10: EnsoulSharpTheme::SliderActiveColor = color; break;
+        case 11: EnsoulSharpTheme::ButtonColor = color; break;
+        case 12: EnsoulSharpTheme::ButtonHoverColor = color; break;
+        default: break;
+        }
+        EnsoulSharpTheme::SelectedPresetIndex = 0; // Custom
+        if (ensoulThemePreset) ensoulThemePreset->Index = 0;
+    }
+
+    inline void OnThemePresetChanged(SDK::UI::MenuItem* sender, void*) {
+        auto* item = static_cast<SDK::UI::MenuList*>(sender);
+        int index = item->Index;
+        if (index > 0) {
+            EnsoulSharpTheme::ApplyThemePreset(index);
+            if (ensoulTextColor) ensoulTextColor->Value = EnsoulSharpTheme::TextColor;
+            if (ensoulHoverColor) ensoulHoverColor->Value = EnsoulSharpTheme::HoverColor;
+            if (ensoulRootContainerColor) ensoulRootContainerColor->Value = EnsoulSharpTheme::RootContainerColor;
+            if (ensoulContainerSelectedColor) ensoulContainerSelectedColor->Value = EnsoulSharpTheme::ContainerSelectedColor;
+            if (ensoulContainerSeparatorColor) ensoulContainerSeparatorColor->Value = EnsoulSharpTheme::ContainerSeparatorColor;
+            if (ensoulBorderColor) ensoulBorderColor->Value = EnsoulSharpTheme::BorderColor;
+            if (ensoulEnabledColor) ensoulEnabledColor->Value = EnsoulSharpTheme::EnabledColor;
+            if (ensoulDisabledColor) ensoulDisabledColor->Value = EnsoulSharpTheme::DisabledColor;
+            if (ensoulSliderColor) ensoulSliderColor->Value = EnsoulSharpTheme::SliderColor;
+            if (ensoulSliderActiveColor) ensoulSliderActiveColor->Value = EnsoulSharpTheme::SliderActiveColor;
+            if (ensoulButtonColor) ensoulButtonColor->Value = EnsoulSharpTheme::ButtonColor;
+            if (ensoulButtonHoverColor) ensoulButtonHoverColor->Value = EnsoulSharpTheme::ButtonHoverColor;
+        }
+    }
+
+    inline void OnThemeSliderFChanged(SDK::UI::MenuItem* sender, void* userData) {
+        auto* item = static_cast<SDK::UI::MenuSliderF*>(sender);
+        float value = item->Value;
+        switch (static_cast<int>(reinterpret_cast<intptr_t>(userData))) {
+        case 1: EnsoulSharpTheme::FontSize = value; break;
+        case 2: EnsoulSharpTheme::ContainerHeight = value; break;
+        case 3: EnsoulSharpTheme::ContainerWidth = value; break;
+        case 4: EnsoulSharpTheme::ContainerTextOffset = value; break;
+        default: break;
+        }
+    }
+
+    inline void OnThemeFontFamilyChanged(SDK::UI::MenuItem* sender, void*) {
+        auto* item = static_cast<SDK::UI::MenuList*>(sender);
+        EnsoulSharpTheme::SelectedFontIndex = item->Index;
+    }
+
     inline int PluginIndexFromUserData(void* userData) {
         return static_cast<int>(reinterpret_cast<intptr_t>(userData)) - 1;
     }
@@ -356,6 +454,109 @@ namespace NightSharpMenu {
         ensoulBypassObs = settings->Add(new SDK::UI::MenuBool(
             "BypassObs", "Bypass OBS", Config::StreamProtection::bypassObs));
         BindCoreBool(ensoulBypassObs, 4);
+
+        auto* theme = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("ThemeStyle", "Theme Settings"));
+
+        ensoulThemePreset = theme->Add(new SDK::UI::MenuList(
+            "ThemePreset",
+            "Theme Preset",
+            { "Custom", "Default DX9", "Pitch Black", "Dark Minimal" },
+            EnsoulSharpTheme::SelectedPresetIndex));
+        ensoulThemePreset->ValueChanged = &OnThemePresetChanged;
+
+        ensoulFontFamily = theme->Add(new SDK::UI::MenuList(
+            "FontFamily",
+            "Font Family",
+            { "Tonos Mono", "Tahoma", "Arial", "Consolas", "Segoe UI" },
+            EnsoulSharpTheme::SelectedFontIndex));
+        ensoulFontFamily->ValueChanged = &OnThemeFontFamilyChanged;
+
+        auto* colors = theme->AddSubMenu(
+            new SDK::UI::Menu("Colors", "Menu Colors"));
+
+        ensoulTextColor = colors->Add(new SDK::UI::MenuColor(
+            "TextColor", "Text Color", EnsoulSharpTheme::TextColor));
+        ensoulTextColor->ValueChanged = &OnThemeColorChanged;
+        ensoulTextColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(1));
+
+        ensoulHoverColor = colors->Add(new SDK::UI::MenuColor(
+            "HoverColor", "Hover Color", EnsoulSharpTheme::HoverColor));
+        ensoulHoverColor->ValueChanged = &OnThemeColorChanged;
+        ensoulHoverColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(2));
+
+        ensoulRootContainerColor = colors->Add(new SDK::UI::MenuColor(
+            "RootContainerColor", "Background Color", EnsoulSharpTheme::RootContainerColor));
+        ensoulRootContainerColor->ValueChanged = &OnThemeColorChanged;
+        ensoulRootContainerColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(3));
+
+        ensoulContainerSelectedColor = colors->Add(new SDK::UI::MenuColor(
+            "ContainerSelectedColor", "Selected Color", EnsoulSharpTheme::ContainerSelectedColor));
+        ensoulContainerSelectedColor->ValueChanged = &OnThemeColorChanged;
+        ensoulContainerSelectedColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(4));
+
+        ensoulContainerSeparatorColor = colors->Add(new SDK::UI::MenuColor(
+            "ContainerSeparatorColor", "Separator Color", EnsoulSharpTheme::ContainerSeparatorColor));
+        ensoulContainerSeparatorColor->ValueChanged = &OnThemeColorChanged;
+        ensoulContainerSeparatorColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(5));
+
+        ensoulBorderColor = colors->Add(new SDK::UI::MenuColor(
+            "BorderColor", "Border Color", EnsoulSharpTheme::BorderColor));
+        ensoulBorderColor->ValueChanged = &OnThemeColorChanged;
+        ensoulBorderColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(6));
+
+        ensoulEnabledColor = colors->Add(new SDK::UI::MenuColor(
+            "EnabledColor", "Enabled Item Color", EnsoulSharpTheme::EnabledColor));
+        ensoulEnabledColor->ValueChanged = &OnThemeColorChanged;
+        ensoulEnabledColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(7));
+
+        ensoulDisabledColor = colors->Add(new SDK::UI::MenuColor(
+            "DisabledColor", "Disabled Item Color", EnsoulSharpTheme::DisabledColor));
+        ensoulDisabledColor->ValueChanged = &OnThemeColorChanged;
+        ensoulDisabledColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(8));
+
+        ensoulSliderColor = colors->Add(new SDK::UI::MenuColor(
+            "SliderColor", "Slider Color", EnsoulSharpTheme::SliderColor));
+        ensoulSliderColor->ValueChanged = &OnThemeColorChanged;
+        ensoulSliderColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(9));
+
+        ensoulSliderActiveColor = colors->Add(new SDK::UI::MenuColor(
+            "SliderActiveColor", "Slider Active Color", EnsoulSharpTheme::SliderActiveColor));
+        ensoulSliderActiveColor->ValueChanged = &OnThemeColorChanged;
+        ensoulSliderActiveColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(10));
+
+        ensoulButtonColor = colors->Add(new SDK::UI::MenuColor(
+            "ButtonColor", "Button Color", EnsoulSharpTheme::ButtonColor));
+        ensoulButtonColor->ValueChanged = &OnThemeColorChanged;
+        ensoulButtonColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(11));
+
+        ensoulButtonHoverColor = colors->Add(new SDK::UI::MenuColor(
+            "ButtonHoverColor", "Button Hover Color", EnsoulSharpTheme::ButtonHoverColor));
+        ensoulButtonHoverColor->ValueChanged = &OnThemeColorChanged;
+        ensoulButtonHoverColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(12));
+
+        auto* sizes = theme->AddSubMenu(
+            new SDK::UI::Menu("Sizes", "Menu Sizes"));
+
+        ensoulThemeFontSize = sizes->Add(new SDK::UI::MenuSliderF(
+            "FontSize", "Font Size", EnsoulSharpTheme::FontSize, 10.0f, 24.0f));
+        ensoulThemeFontSize->ValueChanged = &OnThemeSliderFChanged;
+        ensoulThemeFontSize->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(1));
+
+        ensoulThemeRowHeight = sizes->Add(new SDK::UI::MenuSliderF(
+            "RowHeight", "Row Height", EnsoulSharpTheme::ContainerHeight, 20.0f, 45.0f));
+        ensoulThemeRowHeight->ValueChanged = &OnThemeSliderFChanged;
+        ensoulThemeRowHeight->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(2));
+
+        ensoulThemePanelWidth = sizes->Add(new SDK::UI::MenuSliderF(
+            "PanelWidth", "Panel Width", EnsoulSharpTheme::ContainerWidth, 150.0f, 350.0f));
+        ensoulThemePanelWidth->ValueChanged = &OnThemeSliderFChanged;
+        ensoulThemePanelWidth->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(3));
+
+        ensoulThemeTextPadding = sizes->Add(new SDK::UI::MenuSliderF(
+            "TextPadding", "Text Padding", EnsoulSharpTheme::ContainerTextOffset, 5.0f, 30.0f));
+        ensoulThemeTextPadding->ValueChanged = &OnThemeSliderFChanged;
+        ensoulThemeTextPadding->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(4));
 
         auto* debug = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("DebugInfo", "Debug Info"));
@@ -471,6 +672,28 @@ namespace NightSharpMenu {
         ensoulBypassObs->Value = Config::StreamProtection::bypassObs;
         ensoulProfiler->Value = NightSharpPerf::Enabled;
         ensoulProfilerLog->Value = NightSharpPerf::LogEnabled;
+
+        if (ensoulTextColor) ensoulTextColor->Value = EnsoulSharpTheme::TextColor;
+        if (ensoulHoverColor) ensoulHoverColor->Value = EnsoulSharpTheme::HoverColor;
+        if (ensoulRootContainerColor) ensoulRootContainerColor->Value = EnsoulSharpTheme::RootContainerColor;
+        if (ensoulContainerSelectedColor) ensoulContainerSelectedColor->Value = EnsoulSharpTheme::ContainerSelectedColor;
+        if (ensoulContainerSeparatorColor) ensoulContainerSeparatorColor->Value = EnsoulSharpTheme::ContainerSeparatorColor;
+        if (ensoulBorderColor) ensoulBorderColor->Value = EnsoulSharpTheme::BorderColor;
+        if (ensoulEnabledColor) ensoulEnabledColor->Value = EnsoulSharpTheme::EnabledColor;
+        if (ensoulDisabledColor) ensoulDisabledColor->Value = EnsoulSharpTheme::DisabledColor;
+        if (ensoulSliderColor) ensoulSliderColor->Value = EnsoulSharpTheme::SliderColor;
+        if (ensoulSliderActiveColor) ensoulSliderActiveColor->Value = EnsoulSharpTheme::SliderActiveColor;
+        if (ensoulButtonColor) ensoulButtonColor->Value = EnsoulSharpTheme::ButtonColor;
+        if (ensoulButtonHoverColor) ensoulButtonHoverColor->Value = EnsoulSharpTheme::ButtonHoverColor;
+
+        if (ensoulThemeFontSize) ensoulThemeFontSize->Value = EnsoulSharpTheme::FontSize;
+        if (ensoulThemeRowHeight) ensoulThemeRowHeight->Value = EnsoulSharpTheme::ContainerHeight;
+        if (ensoulThemePanelWidth) ensoulThemePanelWidth->Value = EnsoulSharpTheme::ContainerWidth;
+        if (ensoulThemeTextPadding) ensoulThemeTextPadding->Value = EnsoulSharpTheme::ContainerTextOffset;
+
+        if (ensoulFontFamily) ensoulFontFamily->Index = EnsoulSharpTheme::SelectedFontIndex;
+        if (ensoulThemePreset) ensoulThemePreset->Index = EnsoulSharpTheme::SelectedPresetIndex;
+
         for (int i = 0; i < ensoulPluginBindingCount; ++i) {
             auto& binding = ensoulPluginBindings[i];
             if (binding.registryIndex < 0 ||

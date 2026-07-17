@@ -8,6 +8,9 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <string>
+#include <Windows.h>
+#include "TonosMonoFont.h"
 
 namespace NightSharpMenu::EnsoulSharpTheme {
 
@@ -16,27 +19,82 @@ using namespace SDK::UI;
 // Menu an unambiguous local name so MSVC does not see two equally valid types.
 using Menu = ::SDK::UI::Menu;
 
-inline constexpr float ContainerHeight = 30.0f;
-inline constexpr float ContainerWidth = 200.0f;
-inline constexpr float ContainerTextOffset = 15.0f;
-inline constexpr float ContainerTextMarkOffset = 8.0f;
-inline constexpr float FontSize = 15.0f;
+inline float ContainerHeight = 30.0f;
+inline float ContainerWidth = 200.0f;
+inline float ContainerTextOffset = 15.0f;
+inline float ContainerTextMarkOffset = 8.0f;
+inline float FontSize = 15.0f;
 inline constexpr float RootDragThreshold = 4.0f;
 inline float PositionX = 30.0f;
 inline float PositionY = 30.0f;
 
-inline constexpr ImU32 HoverColor = IM_COL32(255, 255, 255, 50);
-inline constexpr ImU32 RootContainerColor = IM_COL32(0, 0, 0, 62);
-inline constexpr ImU32 ContainerSelectedColor = IM_COL32(255, 255, 255, 125);
-inline constexpr ImU32 ContainerSeparatorColor = IM_COL32(255, 255, 255, 100);
-inline constexpr ImU32 TextColor = IM_COL32(255, 255, 255, 255);
-inline constexpr ImU32 BorderColor = IM_COL32(0, 0, 0, 255);
-inline constexpr ImU32 EnabledColor = IM_COL32(0, 100, 0, 255);
-inline constexpr ImU32 DisabledColor = IM_COL32(255, 0, 0, 255);
-inline constexpr ImU32 SliderColor = IM_COL32(50, 154, 205, 255);
-inline constexpr ImU32 SliderActiveColor = IM_COL32(255, 0, 0, 255);
-inline constexpr ImU32 ButtonColor = IM_COL32(100, 100, 100, 255);
-inline constexpr ImU32 ButtonHoverColor = IM_COL32(170, 170, 170, 200);
+inline ImU32 HoverColor = IM_COL32(255, 255, 255, 50);
+inline ImU32 RootContainerColor = IM_COL32(0, 0, 0, 62);
+inline ImU32 ContainerSelectedColor = IM_COL32(255, 255, 255, 125);
+inline ImU32 ContainerSeparatorColor = IM_COL32(255, 255, 255, 100);
+inline ImU32 TextColor = IM_COL32(255, 255, 255, 255);
+inline ImU32 BorderColor = IM_COL32(0, 0, 0, 255);
+inline ImU32 EnabledColor = IM_COL32(0, 100, 0, 255);
+inline ImU32 DisabledColor = IM_COL32(255, 0, 0, 255);
+inline ImU32 SliderColor = IM_COL32(50, 154, 205, 255);
+inline ImU32 SliderActiveColor = IM_COL32(255, 0, 0, 255);
+inline ImU32 ButtonColor = IM_COL32(100, 100, 100, 255);
+inline ImU32 ButtonHoverColor = IM_COL32(170, 170, 170, 200);
+
+inline int SelectedPresetIndex = 0; // 0 = Custom, 1 = Default DX9, 2 = Pitch Black, 3 = Dark Minimal
+
+inline void ApplyThemePreset(int index) {
+    SelectedPresetIndex = index;
+    if (index == 1) { // Default DX9
+        HoverColor = IM_COL32(255, 255, 255, 50);
+        RootContainerColor = IM_COL32(0, 0, 0, 62);
+        ContainerSelectedColor = IM_COL32(255, 255, 255, 125);
+        ContainerSeparatorColor = IM_COL32(255, 255, 255, 100);
+        TextColor = IM_COL32(255, 255, 255, 255);
+        BorderColor = IM_COL32(0, 0, 0, 255);
+        EnabledColor = IM_COL32(0, 100, 0, 255);
+        DisabledColor = IM_COL32(255, 0, 0, 255);
+        SliderColor = IM_COL32(50, 154, 205, 255);
+        SliderActiveColor = IM_COL32(255, 0, 0, 255);
+        ButtonColor = IM_COL32(100, 100, 100, 255);
+        ButtonHoverColor = IM_COL32(170, 170, 170, 200);
+    }
+    else if (index == 2) { // Pitch Black (solid black & white)
+        HoverColor = IM_COL32(50, 50, 50, 255);
+        RootContainerColor = IM_COL32(0, 0, 0, 255);
+        ContainerSelectedColor = IM_COL32(80, 80, 80, 255);
+        ContainerSeparatorColor = IM_COL32(100, 100, 100, 255);
+        TextColor = IM_COL32(255, 255, 255, 255);
+        BorderColor = IM_COL32(255, 255, 255, 255);
+        EnabledColor = IM_COL32(0, 200, 0, 255);
+        DisabledColor = IM_COL32(200, 0, 0, 255);
+        SliderColor = IM_COL32(80, 80, 80, 255);
+        SliderActiveColor = IM_COL32(255, 255, 255, 255);
+        ButtonColor = IM_COL32(60, 60, 60, 255);
+        ButtonHoverColor = IM_COL32(120, 120, 120, 255);
+    }
+    else if (index == 3) { // Dark Minimal
+        HoverColor = IM_COL32(45, 45, 45, 255);
+        RootContainerColor = IM_COL32(30, 30, 30, 255);
+        ContainerSelectedColor = IM_COL32(60, 60, 60, 255);
+        ContainerSeparatorColor = IM_COL32(50, 50, 50, 255);
+        TextColor = IM_COL32(240, 240, 240, 255);
+        BorderColor = IM_COL32(10, 10, 10, 255);
+        EnabledColor = IM_COL32(46, 204, 113, 255);
+        DisabledColor = IM_COL32(231, 76, 60, 255);
+        SliderColor = IM_COL32(52, 152, 219, 255);
+        SliderActiveColor = IM_COL32(41, 128, 185, 255);
+        ButtonColor = IM_COL32(40, 40, 40, 255);
+        ButtonHoverColor = IM_COL32(80, 80, 80, 255);
+    }
+}
+
+inline ImFont* FontTonosMono = nullptr;
+inline ImFont* FontTahoma = nullptr;
+inline ImFont* FontArial = nullptr;
+inline ImFont* FontConsolas = nullptr;
+inline ImFont* FontSegoeUI = nullptr;
+inline int SelectedFontIndex = 0; // 0 = Tonos Mono, 1 = Tahoma, 2 = Arial, 3 = Consolas, 4 = Segoe UI
 inline constexpr const char* ArrowText = "\xC2\xBB";
 inline constexpr const char* SelectedText = "\xE2\x88\x9A";
 inline constexpr ImWchar GlyphRanges[] = {
@@ -99,12 +157,63 @@ inline bool HasRootPointerCapture() {
     return RootPressActive;
 }
 
+inline std::string GetModuleDir() {
+    HMODULE hSelf = GetModuleHandleA("NightSharp.dll");
+    if (!hSelf) {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (VirtualQuery(reinterpret_cast<const void*>(&GetModuleDir), &mbi, sizeof(mbi))) {
+            hSelf = reinterpret_cast<HMODULE>(mbi.AllocationBase);
+        }
+    }
+    char path[MAX_PATH] = {};
+    if (hSelf && GetModuleFileNameA(hSelf, path, MAX_PATH)) {
+        std::string result(path);
+        const auto slash = result.find_last_of("\\/");
+        if (slash != std::string::npos) {
+            return result.substr(0, slash);
+        }
+    }
+    return "";
+}
+
 inline void SetFont(ImFont* font) {
     MenuFont = font;
 }
 
+inline void LoadFonts(ImGuiIO& io, float fontSize) {
+    ImFontConfig config;
+    config.OversampleH = 3;
+    config.OversampleV = 2;
+    config.PixelSnapH = true;
+
+    // Load Tonos Mono from memory
+    ImFontConfig tonosConfig = config;
+    tonosConfig.FontDataOwnedByAtlas = false; // Do not free static byte array memory!
+    FontTonosMono = io.Fonts->AddFontFromMemoryTTF(
+        const_cast<unsigned char*>(kTonosMonoRegularFont),
+        static_cast<int>(kTonosMonoRegularFontSize),
+        fontSize,
+        &tonosConfig,
+        GlyphRanges);
+
+    FontTahoma = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\tahoma.ttf", fontSize, &config, GlyphRanges);
+    FontArial = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", fontSize, &config, GlyphRanges);
+    FontConsolas = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolas.ttf", fontSize, &config, GlyphRanges);
+    FontSegoeUI = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", fontSize, &config, GlyphRanges);
+
+    ImFont* defFont = FontTonosMono ? FontTonosMono : (FontTahoma ? FontTahoma : io.Fonts->Fonts.back());
+    SetFont(defFont);
+}
+
 inline ImFont* Font() {
-    return MenuFont ? MenuFont : ImGui::GetFont();
+    switch (SelectedFontIndex) {
+    case 0: return FontTonosMono ? FontTonosMono : (FontTahoma ? FontTahoma : (MenuFont ? MenuFont : ImGui::GetFont()));
+    case 1: return FontTahoma ? FontTahoma : (MenuFont ? MenuFont : ImGui::GetFont());
+    case 2: return FontArial ? FontArial : (MenuFont ? MenuFont : ImGui::GetFont());
+    case 3: return FontConsolas ? FontConsolas : (MenuFont ? MenuFont : ImGui::GetFont());
+    case 4: return FontSegoeUI ? FontSegoeUI : (MenuFont ? MenuFont : ImGui::GetFont());
+    default: return MenuFont ? MenuFont : ImGui::GetFont();
+    }
 }
 
 inline float TextWidth(const char* text) {
