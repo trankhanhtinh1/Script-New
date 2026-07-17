@@ -45,4 +45,10 @@ namespace Config {
         inline bool positionInitialized = false;
     }
 
+    namespace MenuStyle {
+        // 0 = EnsoulSharp, 1 = BGX
+        inline int index = 0;
+        inline int maxItemsPerColumn = 15;
+    }
+
 } // namespace Config

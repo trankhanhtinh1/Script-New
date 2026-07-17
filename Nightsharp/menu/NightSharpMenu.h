@@ -17,12 +17,33 @@
 #include "MenuConfig.h"
 #include "ConfigStore.h"
 #include "EnsoulSharpMenuTheme.h"
+#include "BgxUbuntuFont.h"
 
 #include <Windows.h>
 #include <cstdint>
 #include <cstdio>
 
 namespace NightSharpMenu {
+
+    inline ImFont* InstallBgxFont(float sizePixels = 16.0f) {
+        ImGuiIO& io = ImGui::GetIO();
+        ImFontConfig config{};
+        config.OversampleH = 2;
+        config.OversampleV = 1;
+        config.PixelSnapH = true;
+        config.RasterizerMultiply = 1.0f;
+        config.FontDataOwnedByAtlas = false; // Do not free static memory
+
+        ImFont* font = io.Fonts->AddFontFromMemoryTTF(
+            const_cast<unsigned char*>(BgxEmbeddedFont::BgxUbuntuFont_raw_data),
+            static_cast<int>(BgxEmbeddedFont::BgxUbuntuFont_raw_size),
+            sizePixels,
+            &config,
+            io.Fonts->GetGlyphRangesVietnamese());
+        if (!font) font = io.Fonts->AddFontDefault();
+        io.FontDefault = font;
+        return font;
+    }
 
     inline bool showMenu = true;
     inline int activePrimaryIdx = -1;
@@ -114,6 +135,8 @@ namespace NightSharpMenu {
 
     inline SDK::UI::MenuList* ensoulFontFamily = nullptr;
     inline SDK::UI::MenuList* ensoulThemePreset = nullptr;
+    inline SDK::UI::MenuList* ensoulMenuStyle = nullptr;
+    inline SDK::UI::MenuSlider* ensoulMaxItemsPerColumn = nullptr;
 
     struct PluginMenuBinding {
         int registryIndex = -1;
@@ -171,6 +194,8 @@ namespace NightSharpMenu {
         ensoulThemeTextPadding = nullptr;
         ensoulFontFamily = nullptr;
         ensoulThemePreset = nullptr;
+        ensoulMenuStyle = nullptr;
+        ensoulMaxItemsPerColumn = nullptr;
         ensoulPluginBindingCount = 0;
         ensoulRuntimeBindingCount = 0;
         EnsoulSharpTheme::OpenList = nullptr;
@@ -350,6 +375,17 @@ namespace NightSharpMenu {
         EnsoulSharpTheme::SelectedFontIndex = item->Index;
     }
 
+    inline void OnMenuStyleChanged(SDK::UI::MenuItem* sender, void*) {
+        auto* item = static_cast<SDK::UI::MenuList*>(sender);
+        Config::MenuStyle::index = item->Index;
+    }
+
+    inline void OnMaxItemsPerColumnChanged(SDK::UI::MenuItem* sender, void*) {
+        auto* item = static_cast<SDK::UI::MenuSlider*>(sender);
+        Config::MenuStyle::maxItemsPerColumn = item->Value;
+        EnsoulSharpTheme::MaxItemsPerColumn = item->Value;
+    }
+
     inline int PluginIndexFromUserData(void* userData) {
         return static_cast<int>(reinterpret_cast<intptr_t>(userData)) - 1;
     }
@@ -394,6 +430,7 @@ namespace NightSharpMenu {
         }
 
         ensoulCoreRoot = new SDK::UI::Menu("nightsharp.core", "NightSharp", true);
+        EnsoulSharpTheme::MaxItemsPerColumn = Config::MenuStyle::maxItemsPerColumn;
         EnsureNightSharpMenuLogo();
         ensoulCoreRoot->SetLogo("nightsharp_menu_logo");
 
@@ -465,10 +502,28 @@ namespace NightSharpMenu {
             EnsoulSharpTheme::SelectedPresetIndex));
         ensoulThemePreset->ValueChanged = &OnThemePresetChanged;
 
+        ensoulMenuStyle = theme->Add(new SDK::UI::MenuList(
+            "MenuStyle",
+            "Menu Style",
+            { "EnsoulSharp", "BGX" },
+            Config::MenuStyle::index));
+        ensoulMenuStyle->ValueChanged = &OnMenuStyleChanged;
+
+        {
+            const float displayHeight = GetOverlayDisplaySize().y;
+            int maxAllowed = static_cast<int>(displayHeight / EnsoulSharpTheme::ContainerHeight) - 2;
+            if (maxAllowed < 10) maxAllowed = 10;
+            if (maxAllowed > 40) maxAllowed = 40;
+            ensoulMaxItemsPerColumn = theme->Add(new SDK::UI::MenuSlider(
+                "MaxItemsPerColumn", "Max Items per Column",
+                Config::MenuStyle::maxItemsPerColumn, 10, maxAllowed));
+            ensoulMaxItemsPerColumn->ValueChanged = &OnMaxItemsPerColumnChanged;
+        }
+
         ensoulFontFamily = theme->Add(new SDK::UI::MenuList(
             "FontFamily",
             "Font Family",
-            { "Tonos Mono", "Tahoma", "Arial", "Consolas", "Segoe UI" },
+            { "Tonos Mono", "Tahoma", "Arial", "Consolas", "Segoe UI", "Ubuntu" },
             EnsoulSharpTheme::SelectedFontIndex));
         ensoulFontFamily->ValueChanged = &OnThemeFontFamilyChanged;
 
@@ -693,6 +748,8 @@ namespace NightSharpMenu {
 
         if (ensoulFontFamily) ensoulFontFamily->Index = EnsoulSharpTheme::SelectedFontIndex;
         if (ensoulThemePreset) ensoulThemePreset->Index = EnsoulSharpTheme::SelectedPresetIndex;
+        if (ensoulMenuStyle) ensoulMenuStyle->Index = Config::MenuStyle::index;
+        if (ensoulMaxItemsPerColumn) ensoulMaxItemsPerColumn->Value = Config::MenuStyle::maxItemsPerColumn;
 
         for (int i = 0; i < ensoulPluginBindingCount; ++i) {
             auto& binding = ensoulPluginBindings[i];
@@ -1905,6 +1962,8 @@ namespace NightSharpMenu {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
     }
 
+    inline void RenderLegacy();
+
     inline void Render() {
         // Persist any pending menu/core changes (debounced). Runs even while the
         // menu is hidden so a change made just before hiding still flushes.
@@ -1917,20 +1976,32 @@ namespace NightSharpMenu {
         if (!showMenu) {
             ResetMouseInputCapture();
             EnsoulSharpTheme::CancelRootDrag();
+            ClearFunctionalMenuSidebarStyle();
             menuBoundsRight = menuPosX;
             menuBoundsBottom = menuPosY;
             return;
         }
 
-        // The SDK menu is rendered by the default EnsoulSharp theme: a root
-        // column at (30, 30), recursive child columns, and 30px component rows.
-        EnsoulSharpTheme::Render();
-        menuPosX = EnsoulSharpTheme::PositionX;
-        menuPosY = EnsoulSharpTheme::PositionY;
-        menuBoundsRight = EnsoulSharpTheme::BoundsRight;
-        menuBoundsBottom = EnsoulSharpTheme::BoundsBottom;
-        return;
+        if (Config::MenuStyle::index == 1) {
+            ResetMouseInputCapture();
+            EnsoulSharpTheme::CancelRootDrag();
+            RenderLegacy();
+        } else {
+            ClearFunctionalMenuSidebarStyle();
+            EnsoulSharpTheme::Render();
+            menuPosX = EnsoulSharpTheme::PositionX;
+            menuPosY = EnsoulSharpTheme::PositionY;
+            menuBoundsRight = EnsoulSharpTheme::BoundsRight;
+            menuBoundsBottom = EnsoulSharpTheme::BoundsBottom;
+        }
+    }
 
+    inline void RenderLegacy() {
+        bool pushedFont = false;
+        if (EnsoulSharpTheme::FontUbuntu) {
+            ImGui::PushFont(EnsoulSharpTheme::FontUbuntu);
+            pushedFont = true;
+        }
         constexpr int MAX_PRIMARY = 64;
         const char* primaryLabels[MAX_PRIMARY] = {};
         int primaryPluginMap[MAX_PRIMARY] = {};
@@ -2252,6 +2323,10 @@ namespace NightSharpMenu {
         PopFunctionalMenuItemStyle();
         ImGui::PopStyleVar(7);
         ImGui::PopStyleColor(14);
+
+        if (pushedFont) {
+            ImGui::PopFont();
+        }
 
         menuBoundsRight = menuPosX + PRIMARY_W + PANEL_GAP + SECONDARY_W + PANEL_GAP + contentW;
         menuBoundsBottom = menuPosY + contentH;

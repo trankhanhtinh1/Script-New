@@ -10,7 +10,10 @@
 #include <cstdio>
 #include <string>
 #include <Windows.h>
+#include <unordered_map>
+#include <vector>
 #include "TonosMonoFont.h"
+#include "BgxUbuntuFont.h"
 
 namespace NightSharpMenu::EnsoulSharpTheme {
 
@@ -90,11 +93,14 @@ inline void ApplyThemePreset(int index) {
 }
 
 inline ImFont* FontTonosMono = nullptr;
+inline ImFont* FontUbuntu = nullptr;
 inline ImFont* FontTahoma = nullptr;
 inline ImFont* FontArial = nullptr;
 inline ImFont* FontConsolas = nullptr;
 inline ImFont* FontSegoeUI = nullptr;
-inline int SelectedFontIndex = 0; // 0 = Tonos Mono, 1 = Tahoma, 2 = Arial, 3 = Consolas, 4 = Segoe UI
+inline int SelectedFontIndex = 0; // 0 = Tonos Mono, 1 = Tahoma, 2 = Arial, 3 = Consolas, 4 = Segoe UI, 5 = Ubuntu
+inline int MaxItemsPerColumn = 15;
+inline std::unordered_map<const Menu*, int> ColumnPages;
 inline constexpr const char* ArrowText = "\xC2\xBB";
 inline constexpr const char* SelectedText = "\xE2\x88\x9A";
 inline constexpr ImWchar GlyphRanges[] = {
@@ -196,6 +202,16 @@ inline void LoadFonts(ImGuiIO& io, float fontSize) {
         &tonosConfig,
         GlyphRanges);
 
+    // Load Ubuntu from memory
+    ImFontConfig ubuntuConfig = config;
+    ubuntuConfig.FontDataOwnedByAtlas = false; // Do not free static byte array memory!
+    FontUbuntu = io.Fonts->AddFontFromMemoryTTF(
+        const_cast<unsigned char*>(BgxEmbeddedFont::BgxUbuntuFont_raw_data),
+        static_cast<int>(BgxEmbeddedFont::BgxUbuntuFont_raw_size),
+        fontSize,
+        &ubuntuConfig,
+        GlyphRanges);
+
     FontTahoma = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\tahoma.ttf", fontSize, &config, GlyphRanges);
     FontArial = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", fontSize, &config, GlyphRanges);
     FontConsolas = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\consolas.ttf", fontSize, &config, GlyphRanges);
@@ -212,6 +228,7 @@ inline ImFont* Font() {
     case 2: return FontArial ? FontArial : (MenuFont ? MenuFont : ImGui::GetFont());
     case 3: return FontConsolas ? FontConsolas : (MenuFont ? MenuFont : ImGui::GetFont());
     case 4: return FontSegoeUI ? FontSegoeUI : (MenuFont ? MenuFont : ImGui::GetFont());
+    case 5: return FontUbuntu ? FontUbuntu : (MenuFont ? MenuFont : ImGui::GetFont());
     default: return MenuFont ? MenuFont : ImGui::GetFont();
     }
 }
@@ -865,26 +882,47 @@ inline void DrawColumn(ImDrawList* draw, Menu* menu, const ImVec2& position) {
         return;
     }
 
-    const int count = VisibleChildCount(menu);
-    if (count <= 0) {
+    const int totalCount = VisibleChildCount(menu);
+    if (totalCount <= 0) {
         return;
     }
+
+    std::vector<AMenuComponent*> visibleChildren;
+    for (int i = 0; i < menu->Components.size(); ++i) {
+        if (menu->Components[i] && menu->Components[i]->Visible) {
+            visibleChildren.push_back(menu->Components[i]);
+        }
+    }
+
     const float width = ChildColumnWidth(menu);
+    bool needsPaging = totalCount > MaxItemsPerColumn;
+    int displayCount = needsPaging ? MaxItemsPerColumn : totalCount;
+
     const Rect panel{
         position.x,
         position.y,
         width,
-        ContainerHeight * static_cast<float>(count)
+        ContainerHeight * static_cast<float>(displayCount)
     };
     FillRect(draw, panel, RootContainerColor);
     IncludeBounds(panel);
 
+    int pageIndex = 0;
+    if (needsPaging) {
+        pageIndex = ColumnPages[menu];
+        int itemsPerPage = MaxItemsPerColumn - 1;
+        int totalPages = (totalCount + itemsPerPage - 1) / itemsPerPage;
+        if (pageIndex < 0) pageIndex = 0;
+        if (pageIndex >= totalPages) pageIndex = totalPages - 1;
+        ColumnPages[menu] = pageIndex;
+    }
+
+    int startIndex = needsPaging ? pageIndex * (MaxItemsPerColumn - 1) : 0;
+    int endIndex = needsPaging ? std::min(totalCount, startIndex + (MaxItemsPerColumn - 1)) : totalCount;
+
     int rowIndex = 0;
-    for (int i = 0; i < menu->Components.size(); ++i) {
-        AMenuComponent* component = menu->Components[i];
-        if (!component || !component->Visible) {
-            continue;
-        }
+    for (int i = startIndex; i < endIndex; ++i) {
+        AMenuComponent* component = visibleChildren[i];
         const Rect row{
             position.x,
             position.y + static_cast<float>(rowIndex) * ContainerHeight,
@@ -895,6 +933,63 @@ inline void DrawColumn(ImDrawList* draw, Menu* menu, const ImVec2& position) {
         DrawComponent(draw, component, row);
         ++rowIndex;
     }
+
+    if (needsPaging) {
+        int itemsPerPage = MaxItemsPerColumn - 1;
+        int totalPages = (totalCount + itemsPerPage - 1) / itemsPerPage;
+
+        const Rect row{
+            position.x,
+            position.y + static_cast<float>(rowIndex) * ContainerHeight,
+            width,
+            ContainerHeight
+        };
+        BorderRect(draw, row, ContainerSeparatorColor);
+
+        if (Hovered(row)) {
+            FillRect(draw, row, HoverColor);
+        }
+
+        float btnW = 30.0f;
+        Rect leftBtn{ row.x, row.y, btnW, row.h };
+        Rect rightBtn{ row.x + row.w - btnW, row.y, btnW, row.h };
+
+        bool leftHover = Hovered(leftBtn);
+        if (leftHover) {
+            FillRect(draw, leftBtn, ContainerSelectedColor);
+            if (Clicked(leftBtn)) {
+                if (pageIndex > 0) {
+                    ColumnPages[menu] = pageIndex - 1;
+                } else {
+                    ColumnPages[menu] = totalPages - 1;
+                }
+            }
+        }
+
+        bool rightHover = Hovered(rightBtn);
+        if (rightHover) {
+            FillRect(draw, rightBtn, ContainerSelectedColor);
+            if (Clicked(rightBtn)) {
+                if (pageIndex < totalPages - 1) {
+                    ColumnPages[menu] = pageIndex + 1;
+                } else {
+                    ColumnPages[menu] = 0;
+                }
+            }
+        }
+
+        ImVec2 leftArrowSize = ImGui::GetFont()->CalcTextSizeA(FontSize, FLT_MAX, 0.0f, "<");
+        DrawText(draw, ImVec2(leftBtn.x + (leftBtn.w - leftArrowSize.x) * 0.5f, CenteredTextY(leftBtn.y)), TextColor, "<");
+
+        ImVec2 rightArrowSize = ImGui::GetFont()->CalcTextSizeA(FontSize, FLT_MAX, 0.0f, ">");
+        DrawText(draw, ImVec2(rightBtn.x + (rightBtn.w - rightArrowSize.x) * 0.5f, CenteredTextY(rightBtn.y)), TextColor, ">");
+
+        char pageText[64] = {};
+        std::snprintf(pageText, sizeof(pageText), "Page %d / %d", pageIndex + 1, totalPages);
+        ImVec2 textSize = ImGui::GetFont()->CalcTextSizeA(FontSize, FLT_MAX, 0.0f, pageText);
+        DrawText(draw, ImVec2(row.x + (row.w - textSize.x) * 0.5f, CenteredTextY(row.y)), TextColor, pageText);
+    }
+
     BorderRect(draw, panel, BorderColor);
 }
 
