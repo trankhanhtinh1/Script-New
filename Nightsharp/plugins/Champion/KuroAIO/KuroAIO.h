@@ -22,6 +22,7 @@
 #include "Champion/Viktor.h"
 #include "Champion/Yasuo/Yasuo.h"
 #include "Champion/Fiora/Fiora.h"
+#include "AI/AIChampionCatalog.h"
 
 namespace Plugins::KuroAIO::ChampionMenuTheme {
 
@@ -32,6 +33,13 @@ struct Palette {
 };
 
 inline Palette GetPalette(const char* championName) {
+    if (const auto* profile = ::Plugins::KuroAIO::AI::Catalog::Find(championName)) {
+        return {
+            static_cast<ImU32>(profile->ThemeFrom),
+            static_cast<ImU32>(profile->ThemeTo),
+            profile->ThemeSpeed
+        };
+    }
     if (_stricmp(championName, "Katarina") == 0) {
         return { IM_COL32(255, 59, 92, 255), IM_COL32(157, 78, 221, 255), 1.05f };
     }
@@ -98,6 +106,9 @@ inline SDK::UI::Menu* GetRoot(const char* championName) {
     }
     if (_stricmp(championName, "Fiora") == 0) {
         return ::Plugins::KuroAIO::Fiora::MenuRoot;
+    }
+    if (::Plugins::KuroAIO::AI::Catalog::Supports(championName)) {
+        return ::Plugins::KuroAIO::AI::Engine::MenuRoot;
     }
     return nullptr;
 }
@@ -207,6 +218,9 @@ public:
         if (_stricmp(champ.c_str(), "Viktor") == 0) {
             return "champion.kuroaio.viktor";
         }
+        if (const auto* profile = KuroAIO::AI::Catalog::Find(champ.c_str())) {
+            return profile->InternalId;
+        }
         return "champion.kuroaio";
     }
     const char* GetAuthor() const override { return "Kuro"; }
@@ -241,6 +255,8 @@ public:
             KuroAIO::TwistedFate::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Viktor") == 0) {
             KuroAIO::Viktor::OnGameLoad();
+        } else {
+            KuroAIO::AI::Catalog::Load(champ.c_str());
         }
 
         m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(champ.c_str());
@@ -276,6 +292,7 @@ public:
         KuroAIO::Fiora::OnUnload();
         KuroAIO::TwistedFate::OnUnload();
         KuroAIO::Viktor::OnUnload();
+        KuroAIO::AI::Catalog::Unload();
         m_menuThemeApplied = false;
         m_nextMenuThemeRetry = 0;
     }
@@ -295,7 +312,8 @@ private:
              _stricmp(championName, "Yasuo") == 0 ||
              _stricmp(championName, "Fiora") == 0 ||
              _stricmp(championName, "TwistedFate") == 0 ||
-             _stricmp(championName, "Viktor") == 0);
+             _stricmp(championName, "Viktor") == 0 ||
+             KuroAIO::AI::Catalog::Supports(championName));
     }
 
     static std::string CurrentChampionName() {
@@ -344,6 +362,9 @@ private:
         }
         if (_stricmp(championName.c_str(), "Viktor") == 0) {
             return "Viktor";
+        }
+        if (const auto* profile = KuroAIO::AI::Catalog::Find(championName.c_str())) {
+            return profile->ChampionName;
         }
         return nullptr;
     }
