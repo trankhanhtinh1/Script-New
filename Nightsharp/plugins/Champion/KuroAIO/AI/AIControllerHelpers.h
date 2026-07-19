@@ -14,6 +14,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
+#include <vector>
 
 namespace Plugins::KuroAIO::AI::ControllerHelpers {
 
@@ -27,12 +29,95 @@ inline int Now() {
     return SDK::Variables::TickCount();
 }
 
+// Controllers attach different champion meaning to an enemy spell window,
+// but the bounded record lookup/expiry reuse is identical. Record is expected
+// to expose NetworkId, CommittedUntil and HardCrowdControlSpentUntil; any
+// additional champion fields remain untouched and controller-owned.
+template <typename Record, std::size_t Capacity>
+inline Record* FindEnemyCastWindow(
+    std::array<Record, Capacity>& records,
+    int networkId,
+    bool create = false) {
+    if (networkId == 0) return nullptr;
+    for (auto& record : records) {
+        if (record.NetworkId == networkId) return &record;
+    }
+    if (!create) return nullptr;
+    const int now = Now();
+    for (auto& record : records) {
+        if (record.NetworkId == 0 ||
+            (record.CommittedUntil < now &&
+             record.HardCrowdControlSpentUntil < now)) {
+            record = {};
+            record.NetworkId = networkId;
+            return &record;
+        }
+    }
+    return nullptr;
+}
+
+template <typename Record>
+inline bool EnemyCastWindowCommitted(const Record* record) {
+    return record && record->CommittedUntil >= Now();
+}
+
+template <typename Record>
+inline bool EnemyCastWindowHardCrowdControlSpent(const Record* record) {
+    return record && record->HardCrowdControlSpentUntil >= Now();
+}
+
+template <typename Record, std::size_t Capacity>
+inline const Record* EnemyCastWindowById(
+    const std::array<Record, Capacity>& records,
+    int networkId) {
+    if (networkId == 0) return nullptr;
+    for (const auto& record : records) {
+        if (record.NetworkId == networkId) return &record;
+    }
+    return nullptr;
+}
+
+template <typename Record, std::size_t Capacity>
+inline bool EnemyCastWindowCommitted(
+    const std::array<Record, Capacity>& records,
+    int networkId) {
+    return EnemyCastWindowCommitted(
+        EnemyCastWindowById(records, networkId));
+}
+
+template <typename Record, std::size_t Capacity>
+inline bool EnemyCastWindowHardCrowdControlSpent(
+    const std::array<Record, Capacity>& records,
+    int networkId) {
+    return EnemyCastWindowHardCrowdControlSpent(
+        EnemyCastWindowById(records, networkId));
+}
+
+// Pure record lookup used by geometry planners whose test records expose an
+// Id and Valid bit. It avoids cloning a linear scan for each spell shape.
+template <typename Record>
+inline const Record* FindValidRecordById(
+    const std::vector<Record>& records,
+    int id) {
+    for (const auto& record : records) {
+        if (record.Id == id && record.Valid) return &record;
+    }
+    return nullptr;
+}
+
 inline float CurrentResource(float maximum = FLT_MAX) {
     const auto player = ObjectManager::Player();
     if (!player.IsValid()) return 0.0f;
     return std::min(
         std::max(0.0f, player.Mana()),
         std::max(0.0f, maximum));
+}
+
+// Champion controllers frequently need the local player's normalized mana
+// for their own policy thresholds. Keep the player lookup and invalid-player
+// fallback in one place; each controller still owns the actual threshold.
+inline float PlayerManaPercent() {
+    return Engine::ManaPercent(ObjectManager::Player());
 }
 
 inline bool PlayerMobilityLocked() {
@@ -50,8 +135,7 @@ inline float AutoAttackRange(const AIBaseClient& target,
                              float bonusRange = 0.0f) {
     const auto player = ObjectManager::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
-    return player.AttackRange() + player.BoundingRadius() +
-           target.BoundingRadius() + std::max(0.0f, bonusRange);
+    return player.AttackRange() + target.BoundingRadius() + std::max(0.0f, bonusRange);
 }
 
 inline bool InAutoAttackRange(const AIBaseClient& target,
@@ -72,6 +156,15 @@ inline bool CaptureAfterAttack(const SDK::OrbwalkingActionArgs& args,
     return true;
 }
 
+// Before-attack and after-attack callbacks expose the same neutral target/tick
+// payload. Keep separate names for auditable call sites while sharing the
+// capture semantics rather than cloning them in individual controllers.
+inline bool CaptureBeforeAttack(const SDK::OrbwalkingActionArgs& args,
+                                int& targetNetworkId,
+                                int& attackTick) {
+    return CaptureAfterAttack(args, targetNetworkId, attackTick);
+}
+
 // Record only the neutral facts common to local basic-attack callbacks.
 // What the attack means (passive consumption, a weave window, an empowered
 // hit, and so on) remains the owning champion controller's responsibility.
@@ -88,6 +181,38 @@ inline bool CaptureLocalAutoAttack(
     return true;
 }
 
+template <int* TargetNetworkId, int* CaptureTick>
+inline void CaptureLocalAutoAttackEvent(
+    const SDK::Events::ProcessSpellEventArgs& args) {
+    (void)CaptureLocalAutoAttack(args, *TargetNetworkId, *CaptureTick);
+}
+
+template <int* TargetNetworkId, int* CaptureTick>
+inline void CaptureAfterAttackEvent(SDK::OrbwalkingActionArgs& args) {
+    (void)CaptureAfterAttack(args, *TargetNetworkId, *CaptureTick);
+}
+
+template <void (*UpdateState)(
+              const SDK::Events::BuffEventArgs&, bool),
+          bool Added>
+inline void ForwardBuffStateEvent(
+    const SDK::Events::BuffEventArgs& args) {
+    UpdateState(args, Added);
+}
+
+template <void (*OnLocal)(
+              const SDK::Events::ProcessSpellEventArgs&),
+          void (*OnOther)(
+              const SDK::Events::ProcessSpellEventArgs&)>
+inline void DispatchLocalOrOtherSpellEvent(
+    const SDK::Events::ProcessSpellEventArgs& args) {
+    if (IsLocalPlayer(args.Sender)) {
+        OnLocal(args);
+    } else {
+        OnOther(args);
+    }
+}
+
 inline bool SpellEnabled(int index, Mode mode) {
     return Engine::MenuSpellEnabled(Engine::MenuForMode(mode), index, true);
 }
@@ -100,6 +225,53 @@ inline bool RuntimeNameContains(int index, const char* token) {
 inline bool NameEquals(const char* left, const char* right) {
     return left && right && left[0] && right[0] &&
            _stricmp(left, right) == 0;
+}
+
+inline bool TextContainsAny(
+    const char* value,
+    std::initializer_list<const char*> tokens) {
+    if (!value) return false;
+    for (const char* token : tokens) {
+        if (token && token[0] && Engine::TextContains(value, token)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool AnyTextContains(
+    std::initializer_list<const char*> values,
+    std::initializer_list<const char*> tokens) {
+    for (const char* value : values) {
+        if (TextContainsAny(value, tokens)) return true;
+    }
+    return false;
+}
+
+inline bool HasAnyBuff(
+    const AIBaseClient& unit,
+    std::initializer_list<const char*> names) {
+    if (!unit.IsValid()) return false;
+    for (const char* name : names) {
+        if (name && name[0] && unit.HasBuff(name)) return true;
+    }
+    return false;
+}
+
+// Buff-alias telemetry often exposes the same stack manager under mixed-case
+// or legacy names. Keep only the champion vocabulary at call sites and share
+// the validity/max-count plumbing here.
+inline int MaximumBuffCount(
+    const AIBaseClient& unit,
+    std::initializer_list<const char*> names) {
+    if (!unit.IsValid()) return 0;
+    int maximum = 0;
+    for (const char* name : names) {
+        if (name && name[0]) {
+            maximum = std::max(maximum, unit.GetBuffCount(name));
+        }
+    }
+    return maximum;
 }
 
 inline int SpellRank(int index) {
@@ -122,10 +294,56 @@ inline float SpellCost(int index) {
     return std::isfinite(cost) && cost > 0.0f ? cost : 0.0f;
 }
 
+inline bool SpellInstanceContains(
+    const SDK::SpellDataInstClient& spell,
+    const char* token) {
+    return spell.IsValid() && token && token[0] &&
+        (Engine::TextContains(spell.Name().c_str(), token) ||
+         Engine::TextContains(spell.ScriptName().c_str(), token) ||
+         Engine::TextContains(spell.IconName().c_str(), token));
+}
+
+inline bool HeroHasSummonerSpellToken(const AIHeroClient& hero,
+                                      const char* token) {
+    if (!hero.IsValid() || !token || !token[0]) return false;
+    const auto first = hero.Spellbook().GetSpell(
+        SDK::SpellSlot::Summoner1);
+    const auto second = hero.Spellbook().GetSpell(
+        SDK::SpellSlot::Summoner2);
+    return SpellInstanceContains(first, token) ||
+           SpellInstanceContains(second, token);
+}
+
+inline bool HeroHasSmite(const AIHeroClient& hero) {
+    return HeroHasSummonerSpellToken(hero, "smite");
+}
+
 inline AIHeroClient HeroByNetworkId(int networkId) {
     return networkId != 0
         ? Engine::EnemyByNetworkId(networkId)
         : AIHeroClient{};
+}
+
+// Unlike HeroByNetworkId, these raw lookups deliberately retain hidden,
+// untargetable and transitional heroes. Event reconciliation and protected-
+// ally state often need identity after gameplay-valid target selection ends.
+inline AIHeroClient RawEnemyHeroByNetworkId(int networkId) {
+    if (networkId == 0) return {};
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (static_cast<int>(enemy.NetworkId()) == networkId) return enemy;
+    }
+    return {};
+}
+
+inline AIHeroClient RawAllyHeroByNetworkId(int networkId) {
+    if (networkId == 0) return {};
+    const auto player = ObjectManager::Player();
+    if (player.IsValid() &&
+        static_cast<int>(player.NetworkId()) == networkId) return player;
+    for (const auto& ally : GameObjects::AllyHeroes()) {
+        if (static_cast<int>(ally.NetworkId()) == networkId) return ally;
+    }
+    return {};
 }
 
 inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
@@ -149,6 +367,79 @@ inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
     return best;
 }
 
+inline bool HasEnemyChampionNear(float range) {
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (Engine::ValidEnemy(enemy, range)) return true;
+    }
+    return false;
+}
+
+inline int CountAlliedFollowup(const Vector3& position,
+                               float range,
+                               bool includePlayer = false) {
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid() || !position.IsValid()) return 0;
+    const float rangeSqr = std::max(0.0f, range) *
+                           std::max(0.0f, range);
+    int count = 0;
+    for (const auto& ally : GameObjects::AllyHeroes()) {
+        if (!Engine::ValidAlly(ally) ||
+            (!includePlayer && ally.NetworkId() == player.NetworkId()) ||
+            ally.Position().DistanceSqr2D(position) > rangeSqr) {
+            continue;
+        }
+        ++count;
+    }
+    return count;
+}
+
+// Champion-neutral estimate of which ally is most expensive to leave
+// unprotected. Controllers still decide what constitutes a threat and which
+// spell can peel it; this helper only avoids cloning the same damage/range/HP
+// ranking loop in every support or vanguard.
+inline float AllyProtectionPriority(const AIHeroClient& ally) {
+    if (!Engine::ValidAlly(ally)) return -FLT_MAX;
+    const float offense = std::max(
+        ally.TotalAttackDamage() * 0.85f,
+        ally.AP() * 0.62f);
+    const float rangeValue =
+        std::max(0.0f, ally.AttackRange() - 175.0f) * 0.22f;
+    const float vulnerability =
+        (100.0f - ally.HealthPercent()) * 1.35f;
+    return offense + rangeValue + vulnerability;
+}
+
+inline AIHeroClient SelectProtectionAlly(
+    float searchRange,
+    int recentlyTargetedNetworkId = 0,
+    int recentlyTargetedUntilTick = 0,
+    float nearbyThreatWeight = 240.0f,
+    float targetedWeight = 520.0f) {
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return {};
+    AIHeroClient best{};
+    float bestScore = -FLT_MAX;
+    for (const auto& ally : GameObjects::AllyHeroes()) {
+        if (!Engine::ValidAlly(ally, searchRange) ||
+            ally.NetworkId() == player.NetworkId()) {
+            continue;
+        }
+        float score = AllyProtectionPriority(ally) +
+            static_cast<float>(Engine::CountEnemiesAt(
+                ally.Position(), 700.0f)) * nearbyThreatWeight;
+        if (static_cast<int>(ally.NetworkId()) ==
+                recentlyTargetedNetworkId &&
+            Now() <= recentlyTargetedUntilTick) {
+            score += targetedWeight;
+        }
+        if (score > bestScore) {
+            best = ally;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
 // Spell-shield state is champion-neutral. Controllers still decide whether
 // consuming it is worthwhile and append their own parry/untargetable states.
 inline bool HasSpellShieldOrImmunity(const AIBaseClient& target) {
@@ -161,6 +452,19 @@ inline bool HasSpellShieldOrImmunity(const AIBaseClient& target) {
          target.HasBuff("BlackShield") ||
          target.HasBuff("BansheesVeil") ||
          target.HasBuff("EdgeOfNight"));
+}
+
+inline bool IsCommonUntargetableOrImmune(const AIBaseClient& target) {
+    return !target.IsValid() || target.IsDead() ||
+           target.IsInvulnerable() || !target.IsTargetable() ||
+           SDK::HasBuffOfType(target, SDK::BuffType::SpellImmunity) ||
+           SDK::HasBuffOfType(target, SDK::BuffType::Invulnerability) ||
+           target.HasBuff("FioraW") ||
+           target.HasBuff("VladimirSanguinePool") ||
+           target.HasBuff("FizzE") || target.HasBuff("FizzEIcon") ||
+           target.HasBuff("EliseSpiderE") ||
+           target.HasBuff("zhonyasringshield") ||
+           target.HasBuff("BardRStasis") || target.HasBuff("KayleR");
 }
 
 inline bool NearTerrain(const Vector3& position,
@@ -197,6 +501,39 @@ inline bool ValidHostileUnit(const AIBaseClient& unit,
            player.Position().Distance2D(unit.Position()) <= range;
 }
 
+// Cast-range validation differs from a center-to-center proximity query by
+// the target's gameplay radius.  Lane and jungle controllers should share
+// this exact rule instead of cloning a local ValidFarmUnit wrapper.
+inline bool ValidHostileUnitInGameplayRange(const AIBaseClient& unit,
+                                            float range) {
+    const auto player = ObjectManager::Player();
+    return unit.IsValid() && !unit.IsDead() && unit.IsEnemy() &&
+           unit.IsTargetable() && player.IsValid() &&
+           player.Position().Distance2D(unit.Position()) <=
+               range + unit.BoundingRadius();
+}
+
+inline bool HasNearbyJungleTarget(float range) {
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return false;
+    for (const auto& monster : GameObjects::Jungle()) {
+        if (monster.IsValid() && !monster.IsDead() &&
+            monster.IsTargetable() &&
+            player.Position().Distance2D(monster.Position()) <= range) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool ObjectEventIsAllied(
+    const SDK::Events::ObjectEventArgs& args) {
+    const auto player = ObjectManager::Player();
+    return player.IsValid() &&
+        (args.Sender.Team == 0 ||
+         args.Sender.Team == static_cast<std::uint32_t>(player.Team()));
+}
+
 inline bool IsEpicMonster(const AIBaseClient& unit) {
     if (!unit.IsValid()) return false;
     const AIMinionClient monster(unit.Address());
@@ -206,11 +543,85 @@ inline bool IsEpicMonster(const AIBaseClient& unit) {
            type == SDK::JungleType::Epic;
 }
 
+// Nearby epic-objective presence is a champion-neutral map observation.
+// Controllers retain all setup, contest and spell-commit policy locally.
+inline bool HasNearbyEpicMonster(float range) {
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return false;
+    for (const auto& monster : GameObjects::Jungle()) {
+        if (monster.IsValid() && !monster.IsDead() &&
+            IsEpicMonster(monster) &&
+            player.Position().Distance2D(monster.Position()) <= range) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Siege and super minions are the shared high-value lane bodies used by
+// formation, execute and wave-preservation policies.  Keep the SDK flag
+// interpretation here so full controllers do not each clone it.
+inline bool IsLargeLaneMinion(const AIMinionClient& minion) {
+    if (!minion.IsValid()) return false;
+    const MinionTypes type = minion.GetMinionType();
+    return HasFlag(type, MinionTypes::Siege) ||
+           HasFlag(type, MinionTypes::Super);
+}
+
+inline AIMinionClient SelectJungleTarget(
+    float range,
+    float currentHealthWeight = 0.15f,
+    float epicBonus = 100000.0f) {
+    const auto player = ObjectManager::Player();
+    AIMinionClient best{};
+    if (!player.IsValid()) return best;
+    float bestScore = -FLT_MAX;
+    for (const auto& monster : GameObjects::Jungle()) {
+        if (!monster.IsValid() || monster.IsDead() ||
+            !monster.IsTargetable() ||
+            player.Position().Distance2D(monster.Position()) > range) {
+            continue;
+        }
+        float score = monster.MaxHealth() +
+                      monster.Health() * currentHealthWeight;
+        if (IsEpicMonster(monster)) score += epicBonus;
+        if (score > bestScore) {
+            best = monster;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
+inline bool Ready(int index) {
+    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
+           Engine::RuntimeSpells[index]->IsReady();
+}
+
+inline bool HasCurrentResource(float amount) {
+    return CurrentResource() + 0.5f >= std::max(0.0f, amount);
+}
+
+inline float ReadySpellResource(std::initializer_list<int> indices) {
+    float total = 0.0f;
+    for (const int index : indices) {
+        if (index >= 0 && index < 4 && Ready(index)) {
+            total += SpellCost(index);
+        }
+    }
+    return total;
+}
+
+inline bool HasResourceFor(std::initializer_list<int> indices,
+                           float reserve = 0.0f) {
+    return HasCurrentResource(
+        ReadySpellResource(indices) + std::max(0.0f, reserve));
+}
+
 inline bool CastThrottleReady(int index,
                               int defaultHumanizerMs,
                               int fastFollowupMs = -1) {
-    if (index < 0 || index >= 4 || !Engine::RuntimeSpells[index] ||
-        !Engine::RuntimeSpells[index]->IsReady()) {
+    if (!Ready(index)) {
         return false;
     }
     const int minimum = fastFollowupMs >= 0
@@ -220,6 +631,12 @@ inline bool CastThrottleReady(int index,
     const int now = SDK::Variables::TickCount();
     return Engine::LastActionTick <= 0 ||
            now - Engine::LastActionTick >= minimum;
+}
+
+// Shared responsive policy for champions whose recast/arrival branches need
+// a zero-delay follow-up while ordinary casts still use the 38 ms baseline.
+inline bool CastThrottleReady(int index, bool fastFollowup = false) {
+    return CastThrottleReady(index, 38, fastFollowup ? 0 : -1);
 }
 
 inline Vector3 PredictPosition(const AIBaseClient& target, float delaySeconds) {
@@ -237,6 +654,111 @@ inline Vector3 PredictPosition(const AIBaseClient& target, float delaySeconds) {
         : target.Position();
 }
 
+inline bool CursorDirectionAgrees(const Vector3& destination,
+                                  float minimumDot = -0.08f) {
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return false;
+    const Vector3 desired = SharedGeometry::Direction2D(
+        player.Position(), destination);
+    const Vector3 cursor = SharedGeometry::Direction2D(
+        player.Position(), Game::CursorPos());
+    return desired.IsZero() || cursor.IsZero() ||
+           desired.Dot(cursor) >= minimumDot;
+}
+
+inline bool PredictionAtLeast(const SDK::PredictionOutput& prediction,
+                              SDK::HitChance chance) {
+    return static_cast<int>(prediction.Hitchance) >=
+           static_cast<int>(chance);
+}
+
+// Projectile denial is champion-neutral geometry. Controllers still decide
+// whether a missile is worth casting, while this helper centralizes the
+// shared validity and wall-collision query.
+inline bool ProjectileWallBlocks(const Vector3& source,
+                                 const Vector3& destination,
+                                 float missileRadius) {
+    return source.IsValid() && destination.IsValid() &&
+           !source.IsZero() && !destination.IsZero() &&
+           SDK::Collision::HasProjectileWallCollision(
+               source, destination, std::max(0.0f, missileRadius));
+}
+
+inline bool ProjectileWallBlocksFromPlayer(const Vector3& destination,
+                                           float missileRadius) {
+    const auto player = ObjectManager::Player();
+    return player.IsValid() && ProjectileWallBlocks(
+        player.Position(), destination, missileRadius);
+}
+
+// Some endpoint spells detonate at the first projectile-intercept barrier
+// instead of being deleted. The SDK exposes a segment predicate but no common
+// contact point, so bisect the monotone path prefix once here rather than
+// cloning Yasuo/Samira/Mel-specific scans in champion controllers.
+inline bool ProjectileWallFirstContact(const Vector3& source,
+                                       const Vector3& destination,
+                                       float missileRadius,
+                                       Vector3& contact,
+                                       int iterations = 18) {
+    contact = {};
+    if (!ProjectileWallBlocks(source, destination, missileRadius)) {
+        return false;
+    }
+    const Vector3 delta = destination - source;
+    float clearPrefix = 0.0f;
+    float blockedPrefix = 1.0f;
+    for (int step = 0; step < std::clamp(iterations, 8, 26); ++step) {
+        const float middle = (clearPrefix + blockedPrefix) * 0.5f;
+        const Vector3 probe = source + delta * middle;
+        if (ProjectileWallBlocks(source, probe, missileRadius)) {
+            blockedPrefix = middle;
+        } else {
+            clearPrefix = middle;
+        }
+    }
+    contact = source + delta * blockedPrefix;
+    contact.y = destination.y;
+    return contact.IsValid() && !contact.IsZero();
+}
+
+inline bool ProjectileWallFirstContactFromPlayer(
+    const Vector3& destination,
+    float missileRadius,
+    Vector3& contact,
+    int iterations = 18) {
+    const auto player = ObjectManager::Player();
+    return player.IsValid() && ProjectileWallFirstContact(
+        player.Position(), destination, missileRadius,
+        contact, iterations);
+}
+
+inline bool SpellEventNameContains(
+    const SDK::Events::ProcessSpellEventArgs& args,
+    const char* token) {
+    return Engine::TextContains(args.SpellName, token) ||
+           Engine::TextContains(args.ScriptName, token) ||
+           Engine::TextContains(args.PayloadSpellName, token);
+}
+
+inline bool SpellEventNameContainsAny(
+    const SDK::Events::ProcessSpellEventArgs& args,
+    std::initializer_list<const char*> tokens) {
+    for (const char* token : tokens) {
+        if (token && token[0] && SpellEventNameContains(args, token)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool SpellSlotOrEventNameContainsAny(
+    const SDK::Events::ProcessSpellEventArgs& args,
+    SDK::SpellSlot slot,
+    std::initializer_list<const char*> tokens) {
+    return args.Slot == static_cast<int>(slot) ||
+           SpellEventNameContainsAny(args, tokens);
+}
+
 inline bool ChampionIs(const AIHeroClient& target, const char* name) {
     return target.IsValid() && name && name[0] &&
            _stricmp(target.CharacterName().c_str(), name) == 0;
@@ -247,6 +769,20 @@ inline bool EnemySpellReady(const AIHeroClient& target, SDK::SpellSlot slot) {
     const auto spell = target.Spellbook().GetSpell(slot);
     return spell.IsValid() && spell.Level() > 0 &&
            spell.RemainingCooldown(Game::Time()) <= 0.08f;
+}
+
+inline bool EnemyFlashReady(const AIHeroClient& target) {
+    if (!target.IsValid()) return false;
+    for (const SDK::SpellSlot slot : {
+             SDK::SpellSlot::Summoner1, SDK::SpellSlot::Summoner2 }) {
+        const auto spell = target.Spellbook().GetSpell(slot);
+        if (spell.IsValid() &&
+            Engine::TextContains(spell.Name().c_str(), "flash") &&
+            spell.RemainingCooldown(Game::Time()) <= 0.08f) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Common anti-dash zones.  This is a danger query, not a claim that every
@@ -478,6 +1014,18 @@ inline bool CaptureGapcloser(
     return true;
 }
 
+template <int* TargetNetworkId,
+          Vector3* Endpoint,
+          int* ExpireTick,
+          int NearbyEndpointRange,
+          int LifetimeMs>
+inline void CaptureGapcloserEvent(
+    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
+    (void)CaptureGapcloser(
+        args, *TargetNetworkId, *Endpoint, *ExpireTick,
+        static_cast<float>(NearbyEndpointRange), LifetimeMs);
+}
+
 inline int RemainingMilliseconds(float endTime,
                                  int fallbackMs,
                                  int minimumMs,
@@ -486,6 +1034,12 @@ inline int RemainingMilliseconds(float endTime,
         ? static_cast<int>((endTime - Game::Time()) * 1000.0f)
         : fallbackMs;
     return std::clamp(raw, minimumMs, maximumMs);
+}
+
+inline int BuffExpireTick(const SDK::Events::BuffEventArgs& args,
+                          int fallbackMs) {
+    return Now() + RemainingMilliseconds(
+        args.EndTime, fallbackMs, 80, std::max(5000, fallbackMs * 2));
 }
 
 // Interruptable events expose the same target/lifetime facts to every
@@ -501,6 +1055,18 @@ inline void CaptureInterruptable(
     targetNetworkId = static_cast<int>(args.NetworkId);
     expireTick = Now() + RemainingMilliseconds(
         args.EndTime, fallbackMs, minimumMs, maximumMs);
+}
+
+template <int* TargetNetworkId,
+          int* ExpireTick,
+          int FallbackMs = 900,
+          int MinimumMs = 250,
+          int MaximumMs = 5000>
+inline void CaptureInterruptableEvent(
+    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
+    CaptureInterruptable(
+        args, *TargetNetworkId, *ExpireTick,
+        FallbackMs, MinimumMs, MaximumMs);
 }
 
 } // namespace Plugins::KuroAIO::AI::ControllerHelpers

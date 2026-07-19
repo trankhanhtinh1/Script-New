@@ -19,9 +19,8 @@ using namespace Geometry;
 using ControllerHelpers::AnalyzeEnemyCast;
 using ControllerHelpers::AutoAttackRange;
 using ControllerHelpers::CaptureAfterAttack;
-using ControllerHelpers::CaptureGapcloser;
-using ControllerHelpers::CaptureInterruptable;
 using ControllerHelpers::CaptureLocalAutoAttack;
+using ControllerHelpers::CastThrottleReady;
 using ControllerHelpers::CurrentResource;
 using ControllerHelpers::HasReadyDashHazardAt;
 using ControllerHelpers::HasSpellShieldOrImmunity;
@@ -33,6 +32,7 @@ using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
+using ControllerHelpers::Ready;
 using ControllerHelpers::RemainingMilliseconds;
 using ControllerHelpers::RuntimeNameContains;
 using ControllerHelpers::SpellEnabled;
@@ -190,16 +190,6 @@ inline constexpr int kWBraceMs = 500;
 inline constexpr int kWShieldMs = 1500;
 inline constexpr int kRCastMs = 700;
 inline constexpr int kRSuppressAndStunMs = 1250;
-
-inline bool CastThrottleReady(int index, bool fastFollowup = false) {
-    return ControllerHelpers::CastThrottleReady(
-        index, 38, fastFollowup ? 0 : -1);
-}
-
-inline bool Ready(int index) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady();
-}
 
 inline bool HasEnergy(float amount, float reserve = 0.0f) {
     return CurrentResource(200.0f) + 0.5f >=
@@ -1070,12 +1060,8 @@ inline bool TryHarass(const AIHeroClient& target) {
     return false;
 }
 
-inline AIHeroClient ClosestPursuer(const AIHeroClient& fallback) {
-    return NearestEnemyToPlayer(fallback, 1000.0f);
-}
-
 inline bool TryFlee(const AIHeroClient& fallback) {
-    const AIHeroClient pursuer = ClosestPursuer(fallback);
+    const AIHeroClient pursuer = NearestEnemyToPlayer(fallback, 1000.0f);
     CurrentPosture = Posture::Escape;
     const auto player = ObjectManager::Player();
     if (!player.IsValid()) return false;
@@ -1102,29 +1088,10 @@ inline bool TryFlee(const AIHeroClient& fallback) {
     return false;
 }
 
-inline AIMinionClient BestJungleTarget() {
-    const auto player = ObjectManager::Player();
-    AIMinionClient best{};
-    float bestScore = -FLT_MAX;
-    for (const auto& monster : GameObjects::Jungle()) {
-        if (!monster.IsValid() || monster.IsDead() ||
-            !monster.IsTargetable() ||
-            player.Position().Distance2D(monster.Position()) > 720.0f) {
-            continue;
-        }
-        float score = monster.MaxHealth() + monster.Health() * 0.15f;
-        if (IsEpicMonster(monster)) score += 100000.0f;
-        if (score > bestScore) {
-            best = monster;
-            bestScore = score;
-        }
-    }
-    return best;
-}
-
 inline bool TryJungle() {
     if (!Bool(FarmMenu, "JungleAbilities", true)) return false;
-    const AIMinionClient monster = BestJungleTarget();
+    const AIMinionClient monster =
+        ControllerHelpers::SelectJungleTarget(720.0f, 0.15f);
     if (!monster.IsValid()) return false;
     const AIBaseClient unit(monster.Address());
     const auto player = ObjectManager::Player();
@@ -1683,19 +1650,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEnd,
-        GapcloserExpireTick, 520.0f, 850);
-}
-
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick, 950, 140, 2200);
-}
-
 inline const char* PostureName(Posture posture) {
     switch (posture) {
     case Posture::Space: return "space";
@@ -2126,8 +2080,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBuffUpdate = &OnBuffUpdate;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser =
+        &ControllerHelpers::CaptureGapcloserEvent<
+            &GapcloserTargetId, &GapcloserEnd,
+            &GapcloserExpireTick, 520, 850>;
+    controller.OnInterruptable =
+        &ControllerHelpers::CaptureInterruptableEvent<
+            &InterruptTargetId, &InterruptExpireTick, 950, 140, 2200>;
     return controller;
 }();
 

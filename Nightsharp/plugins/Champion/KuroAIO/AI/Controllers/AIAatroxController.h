@@ -16,7 +16,6 @@ namespace Plugins::KuroAIO::AI::Controllers::Aatrox {
 
 using namespace Geometry;
 using ControllerHelpers::CaptureAfterAttack;
-using ControllerHelpers::CaptureInterruptable;
 using ControllerHelpers::CaptureLocalAutoAttack;
 using ControllerHelpers::ChampionIs;
 using ControllerHelpers::EnemySpellReady;
@@ -1081,12 +1080,6 @@ inline void OnGapcloser(
     GapcloserTick = SDK::Variables::TickCount();
 }
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick, 900, 250, 5000);
-}
-
 inline void DrawQGeometry() {
     if (!IsQWindup() || QCastDirection.IsZero()) return;
     const auto player = ObjectManager::Player();
@@ -1301,7 +1294,9 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable =
+        &ControllerHelpers::CaptureInterruptableEvent<
+            &InterruptTargetId, &InterruptExpireTick>;
     return controller;
 }();
 

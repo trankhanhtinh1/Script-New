@@ -13,11 +13,10 @@ inline Vec3 Read(uintptr_t object) {
         return {};
     }
 
-    return {
-        Globals::Read<float>(object + Offset::All::PositionX),
-        Globals::Read<float>(object + Offset::All::PositionY),
-        Globals::Read<float>(object + Offset::All::PositionZ),
-    };
+    const float x = Globals::Read<float>(object + Offset::All::PositionX);
+    const float y = Globals::Read<float>(object + Offset::All::PositionY);
+    const float z = Globals::Read<float>(object + Offset::All::PositionZ);
+    return { x, y, z };
 }
 
 } // namespace CorePosition

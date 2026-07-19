@@ -1,6 +1,6 @@
 # KuroAIO AI champion coverage manifest
 
-Manifest date: 2026-07-17  
+Manifest date: 2026-07-18
 Game baseline: League of Legends 26.14 / CommunityDragon 16.14  
 Live roster count: **173**
 
@@ -19,7 +19,7 @@ These champions stay on their original KuroAIO route and are never added to the 
 
 `Fiora, Katarina, Kindred, Lucian, Samira, Senna, Syndra, TwistedFate, Viktor, Yasuo`
 
-## Completed AI one-trick controllers (6)
+## Completed AI one-trick controllers (18)
 
 | Champion | Controller | Published scenarios | Pure test | Release build |
 |---|---|---:|---|---|
@@ -29,14 +29,26 @@ These champions stay on their original KuroAIO route and are never added to the 
 | Akshan | `AIAkshanController.h` | 69 | `akshan_geometry_test.cpp` | Pass |
 | Alistar | `AIAlistarController.h` | 78 | `alistar_geometry_test.cpp` | Pass |
 | Ambessa | `AIAmbessaController.h` | 110 | `ambessa_geometry_test.cpp` | Pass |
+| Amumu | `AIAmumuController.h` | 143 | `amumu_geometry_test.cpp` | Pass |
+| Anivia | `AIAniviaController.h` | 170 | `anivia_geometry_test.cpp` | Pass |
+| Annie | `AIAnnieController.h` | 239 | `annie_geometry_test.cpp` | Pass |
+| Aphelios | `AIApheliosController.h` | 305 | `aphelios_geometry_test.cpp` | Pass |
+| Ashe | `AIAsheController.h` | 141 | `ashe_geometry_test.cpp` | Pass |
+| Aurelion Sol | `AIAurelionSolController.h` | 176 | `aurelionsol_geometry_test.cpp` | Pass |
+| Aurora | `AIAuroraController.h` | 161 | `aurora_geometry_test.cpp` | Pass |
+| Azir | `AIAzirController.h` | 166 | `azir_geometry_test.cpp` + Orbwalker soldier test | Pass |
+| Bard | `AIBardController.h` | 135 | `bard_geometry_test.cpp` | Pass |
+| Bel'Veth | `AIBelvethController.h` | 195 | `belveth_geometry_test.cpp` | Pass |
+| Blitzcrank | `AIBlitzcrankController.h` | 167 | `blitzcrank_geometry_test.cpp` | Pass |
+| Ryze | `AIRyzeController.h` | 205 | `ryze_geometry_test.cpp` | Pass |
 
-## Research/implementation queue (157)
+## Research/implementation queue (145)
 
-The queue is alphabetical so coverage can be mechanically diffed against the live roster:
+The queue order is the required implementation order supplied by the user; completed champions are removed only from the front without re-sorting the remainder:
 
-`Amumu, Anivia, Annie, Aphelios, Ashe, AurelionSol, Aurora, Azir, Bard, Belveth, Blitzcrank, Brand, Braum, Briar, Caitlyn, Camille, Cassiopeia, Chogath, Corki, Darius, Diana, Draven, DrMundo, Ekko, Elise, Evelynn, Ezreal, FiddleSticks, Fizz, Galio, Gangplank, Garen, Gnar, Gragas, Graves, Gwen, Hecarim, Heimerdinger, Hwei, Illaoi, Irelia, Ivern, Janna, JarvanIV, Jax, Jayce, Jhin, Jinx, Kaisa, Kalista, Karma, Karthus, Kassadin, Kayle, Kayn, Kennen, Khazix, Kled, KogMaw, KSante, Leblanc, LeeSin, Leona, Lillia, Lissandra, Locke, Lulu, Lux, Malphite, Malzahar, Maokai, MasterYi, Mel, Milio, MissFortune, MonkeyKing, Mordekaiser, Morgana, Naafiri, Nami, Nasus, Nautilus, Neeko, Nidalee, Nilah, Nocturne, Nunu, Olaf, Orianna, Ornn, Pantheon, Poppy, Pyke, Qiyana, Quinn, Rakan, Rammus, RekSai, Rell, Renata, Renekton, Rengar, Riven, Rumble, Ryze, Sejuani, Seraphine, Sett, Shaco, Shen, Shyvana, Singed, Sion, Sivir, Skarner, Smolder, Sona, Soraka, Swain, Sylas, TahmKench, Taliyah, Talon, Taric, Teemo, Thresh, Tristana, Trundle, Tryndamere, Twitch, Udyr, Urgot, Varus, Vayne, Veigar, Velkoz, Vex, Vi, Viego, Vladimir, Volibear, Warwick, Xayah, Xerath, XinZhao, Yone, Yorick, Yunara, Yuumi, Zaahen, Zac, Zed, Zeri, Ziggs, Zilean, Zoe, Zyra`
+`Taliyah, Qiyana, Sylas, Yone, Cassiopeia, Jayce, Gnar, KSante, Jax, Rumble, LeeSin, Corki, Ezreal, Yunara, XinZhao, JarvanIV, Vi, Naafiri, Pantheon, Nocturne, Irelia, Leblanc, Viego, Gwen, Camille, Orianna, Hwei, Mel, Caitlyn, Varus, Xayah, Kaisa, Zeri, Kalista, Ziggs, Gragas, Poppy, Skarner, Renekton, Sion, MonkeyKing, Trundle, Galio, Nidalee, Riven, Gangplank, Locke, Zaahen, RekSai, Pyke, Rakan, Neeko, Vayne, Tristana, Jhin, Sivir, Smolder, Draven, Jinx, KogMaw, MissFortune, Zoe, Lissandra, Vex, Kennen, Ornn, Olaf, Kled, Mordekaiser, Garen, Darius, Ekko, Diana, Fizz, Kayn, Khazix, Rengar, Talon, Zed, Evelynn, Shaco, Briar, Hecarim, Lillia, Graves, Elise, FiddleSticks, Karthus, Vladimir, Kassadin, Kayle, Swain, Heimerdinger, Velkoz, Xerath, Veigar, Malzahar, Brand, Lux, Nilah, Twitch, Quinn, Tryndamere, Shyvana, Udyr, Volibear, Warwick, Sett, Urgot, Yorick, Illaoi, Singed, Teemo, Nasus, DrMundo, Chogath, Malphite, Rammus, Nunu, MasterYi, Maokai, Sejuani, Zac, Shen, Ivern, Thresh, Nautilus, Rell, Leona, Braum, Renata, Seraphine, Karma, Morgana, Zyra, Lulu, Nami, Milio, Janna, Zilean, Taric, TahmKench, Sona, Soraka, Yuumi`
 
-Next champion: **Amumu**.
+Next champion: **Taliyah**.
 
 ## Required research packet per queued champion
 

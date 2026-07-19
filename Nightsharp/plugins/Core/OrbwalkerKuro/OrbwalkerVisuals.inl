@@ -108,6 +108,37 @@ inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
     }
 }
 
+inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
+    if (!OrbwalkingDetail::IsAzirPlayer(player) || !Drawing::IsEnabled()) {
+        return;
+    }
+
+    bool hasCommandableSoldier = false;
+    for (const auto& soldier : OrbwalkingDetail::GetAzirSandSoldiers(player)) {
+        if (!OrbwalkingDetail::IsCommandableAzirSandSoldier(player, soldier)) {
+            continue;
+        }
+        hasCommandableSoldier = true;
+        Drawing::DrawCircle(
+            soldier.Position(),
+            AzirSoldierSupport::kPrimaryAttackRange,
+            0xFFE1B84Bu,
+            1.75f,
+            64);
+        Drawing::DrawLine(
+            player.Position(), soldier.Position(), 0x889E7D2Du, 1.0f);
+    }
+
+    if (hasCommandableSoldier) {
+        Drawing::DrawCircle(
+            player.Position(),
+            AzirSoldierSupport::kCommandRadius,
+            0x667A5C20u,
+            1.0f,
+            72);
+    }
+}
+
 inline void OrbwalkerBase::TryShowFakeClick(Hud::ClickType type,
                                             const Vector3& position,
                                             int now,

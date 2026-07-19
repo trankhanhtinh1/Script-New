@@ -7,12 +7,38 @@
 #include "Profiles/AIAkshan.h"
 #include "Profiles/AIAlistar.h"
 #include "Profiles/AIAmbessa.h"
+#include "Profiles/AIAmumu.h"
+#include "Profiles/AIAnivia.h"
+#include "Profiles/AIAnnie.h"
+#include "Profiles/AIAphelios.h"
+#include "Profiles/AIAshe.h"
+#include "Profiles/AIAurelionSol.h"
+#include "Profiles/AIAurora.h"
+#include "Profiles/AIAzir.h"
+#include "Profiles/AIBard.h"
+#include "Profiles/AIBelveth.h"
+#include "Profiles/AIBlitzcrank.h"
+#include "Profiles/AIRyze.h"
+#include "Profiles/AITaliyah.h"
 #include "Controllers/AIAatroxController.h"
 #include "Controllers/AIAhriController.h"
 #include "Controllers/AIAkaliController.h"
 #include "Controllers/AIAkshanController.h"
 #include "Controllers/AIAlistarController.h"
 #include "Controllers/AIAmbessaController.h"
+#include "Controllers/AIAmumuController.h"
+#include "Controllers/AIAniviaController.h"
+#include "Controllers/AIAnnieController.h"
+#include "Controllers/AIApheliosController.h"
+#include "Controllers/AIAsheController.h"
+#include "Controllers/AIAurelionSolController.h"
+#include "Controllers/AIAuroraController.h"
+#include "Controllers/AIAzirController.h"
+#include "Controllers/AIBardController.h"
+#include "Controllers/AIBelvethController.h"
+#include "Controllers/AIBlitzcrankController.h"
+#include "Controllers/AIRyzeController.h"
+#include "Controllers/AITaliyahController.h"
 
 #include <array>
 #include <cstring>
@@ -24,13 +50,28 @@ struct ChampionEntry {
     const ChampionController* Controller = nullptr;
 };
 
-inline constexpr std::array<ChampionEntry, 6> AllChampions = {
+inline constexpr std::array<ChampionEntry, 19> AllChampions = {
     ChampionEntry{ &Profiles::Aatrox, &Controllers::Aatrox::Controller },
     ChampionEntry{ &Profiles::Ahri, &Controllers::Ahri::Controller },
     ChampionEntry{ &Profiles::Akali, &Controllers::Akali::Controller },
     ChampionEntry{ &Profiles::Akshan, &Controllers::Akshan::Controller },
     ChampionEntry{ &Profiles::Alistar, &Controllers::Alistar::Controller },
     ChampionEntry{ &Profiles::Ambessa, &Controllers::Ambessa::Controller },
+    ChampionEntry{ &Profiles::Amumu, &Controllers::Amumu::Controller },
+    ChampionEntry{ &Profiles::Anivia, &Controllers::Anivia::Controller },
+    ChampionEntry{ &Profiles::Annie, &Controllers::Annie::Controller },
+    ChampionEntry{ &Profiles::Aphelios, &Controllers::Aphelios::Controller },
+    ChampionEntry{ &Profiles::Ashe, &Controllers::Ashe::Controller },
+    ChampionEntry{ &Profiles::AurelionSol,
+                   &Controllers::AurelionSol::Controller },
+    ChampionEntry{ &Profiles::Aurora, &Controllers::Aurora::Controller },
+    ChampionEntry{ &Profiles::Azir, &Controllers::Azir::Controller },
+    ChampionEntry{ &Profiles::Bard, &Controllers::Bard::Controller },
+    ChampionEntry{ &Profiles::Belveth, &Controllers::Belveth::Controller },
+    ChampionEntry{ &Profiles::Blitzcrank,
+                   &Controllers::Blitzcrank::Controller },
+    ChampionEntry{ &Profiles::Ryze, &Controllers::Ryze::Controller },
+    ChampionEntry{ &Profiles::Taliyah, &Controllers::Taliyah::Controller },
 };
 
 inline const ChampionEntry* FindEntry(const char* championName) {

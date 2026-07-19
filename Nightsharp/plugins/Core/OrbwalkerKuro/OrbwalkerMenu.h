@@ -25,6 +25,7 @@ public:
     int AARangeFadeWidth() const { return SliderValue(aaRangeFadeWidth_, 200); }
     int AARangeFadeOpacityPercent() const { return SliderValue(aaRangeFadeOpacityPercent_, 70); }
     bool DrawAARangeEnemy() const { return BoolValue(drawAARangeEnemy_, false); }
+    bool DrawAzirSoldierRanges() const { return BoolValue(drawAzirSoldierRanges_, true); }
     bool DrawExtraHoldPosition() const { return BoolValue(drawExtraHoldPosition_, false); }
     bool DrawKillableMinion() const { return BoolValue(drawKillableMinion_, false); }
     bool DrawKillableMinionFade() const { return BoolValue(drawKillableMinionFade_, false); }
@@ -118,6 +119,8 @@ private:
             aaRangeFadeOpacityPercent_ = drawingsMenu_->Add(new MenuSlider(
                 "aaRangeFadeOpacityPercent", "AA Range Max Opacity (%)", 70, 0, 100));
             drawAARangeEnemy_ = drawingsMenu_->Add(new MenuBool("drawAARangeEnemy", "Auto-Attack Range Enemy", false));
+            drawAzirSoldierRanges_ = drawingsMenu_->Add(new MenuBool(
+                "drawAzirSoldierRanges", "Azir Sand Soldier Ranges", true));
             drawExtraHoldPosition_ = drawingsMenu_->Add(new MenuBool("drawExtraHoldPosition", "Extra Hold Position", false));
             drawKillableMinion_ = drawingsMenu_->Add(new MenuBool("drawKillableMinion", "Killable Minions", false));
             drawKillableMinionFade_ = drawingsMenu_->Add(new MenuBool("drawKillableMinionFade", "Killable Minions Fade Effect", false));
@@ -182,6 +185,7 @@ private:
     MenuSlider* aaRangeFadeWidth_ = nullptr;
     MenuSlider* aaRangeFadeOpacityPercent_ = nullptr;
     MenuBool* drawAARangeEnemy_ = nullptr;
+    MenuBool* drawAzirSoldierRanges_ = nullptr;
     MenuBool* drawExtraHoldPosition_ = nullptr;
     MenuBool* drawKillableMinion_ = nullptr;
     MenuBool* drawKillableMinionFade_ = nullptr;

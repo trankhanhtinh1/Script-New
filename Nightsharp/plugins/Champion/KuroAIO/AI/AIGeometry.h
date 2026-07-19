@@ -7,11 +7,23 @@
 #include "../../../../core/Vector.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 
 namespace Plugins::KuroAIO::AI::SharedGeometry {
 
 inline constexpr float kPi = 3.14159265358979323846f;
+
+// Rank-indexed live data appears in nearly every champion geometry file.
+// Clamp and index it once here so controllers do not grow subtly different
+// off-by-one handling for unlearned or malformed spell ranks.
+template <typename Value, std::size_t N>
+inline Value RankValue(const std::array<Value, N>& values, int rank) {
+    static_assert(N > 0, "RankValue requires at least one entry");
+    return values[static_cast<std::size_t>(
+        std::clamp(rank, 0, static_cast<int>(N) - 1))];
+}
 
 inline float Cross2D(const Vec3& left, const Vec3& right) {
     return left.x * right.z - left.z * right.x;
@@ -62,5 +74,41 @@ inline SegmentProjection ProjectPointToSegment2D(const Vec3& point,
     return { t, point.Distance2D(closest), closest };
 }
 
-} // namespace Plugins::KuroAIO::AI::SharedGeometry
+// Solve the first contact between two circles moving at constant relative
+// velocity in the X/Z plane. Projectile champions still own their cast delay,
+// travel segment, endpoint and lollipop semantics; this neutral quadratic is
+// shared so every first-body solver does not grow a subtly different root and
+// malformed-input policy.
+inline bool SolveMovingCircleContactTime2D(const Vec3& relativePosition,
+                                           const Vec3& relativeVelocity,
+                                           float combinedRadius,
+                                           float maximumSeconds,
+                                           float& resultSeconds) {
+    resultSeconds = 0.0f;
+    if (!std::isfinite(combinedRadius) ||
+        !std::isfinite(maximumSeconds) || maximumSeconds < 0.0f) {
+        return false;
+    }
+    const float radius = std::max(0.0f, combinedRadius);
+    const float c = relativePosition.LengthSqr2D() - radius * radius;
+    if (c <= 0.0f) return true;
 
+    const float a = relativeVelocity.LengthSqr2D();
+    if (a <= 0.0001f || !std::isfinite(a)) return false;
+    const float b = 2.0f * relativePosition.Dot(relativeVelocity);
+    const float discriminant = b * b - 4.0f * a * c;
+    if (discriminant < 0.0f || !std::isfinite(discriminant)) return false;
+
+    const float root = std::sqrt(discriminant);
+    const float first = (-b - root) / (2.0f * a);
+    const float second = (-b + root) / (2.0f * a);
+    const float candidate = first >= 0.0f ? first : second;
+    if (candidate < 0.0f || candidate > maximumSeconds ||
+        !std::isfinite(candidate)) {
+        return false;
+    }
+    resultSeconds = candidate;
+    return true;
+}
+
+} // namespace Plugins::KuroAIO::AI::SharedGeometry

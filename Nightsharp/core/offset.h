@@ -184,6 +184,9 @@ namespace DrawingMatrixRuntime {
     constexpr auto ProjMatrixRelative = 0x40;
 } // namespace DrawingMatrixRuntime
 
+// Renderer object layout. These are relative fields/vtable slots rather than
+// patch-specific module RVAs, so they remain shared by the renderer readers
+// and the internal D3D11 hook.
 namespace D3D {
     // Verified via Renderer constructor sub_13BA0E0:
     //   qword_1FB4310 = renderer; *(renderer+0x1E0)=device;

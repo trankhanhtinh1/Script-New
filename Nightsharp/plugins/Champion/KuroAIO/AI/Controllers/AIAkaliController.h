@@ -16,8 +16,6 @@ namespace Plugins::KuroAIO::AI::Controllers::Akali {
 
 using namespace Geometry;
 using ControllerHelpers::CaptureAfterAttack;
-using ControllerHelpers::CaptureInterruptable;
-using ControllerHelpers::CaptureLocalAutoAttack;
 using ControllerHelpers::ChampionIs;
 using ControllerHelpers::CurrentResource;
 using ControllerHelpers::EnemySpellReady;
@@ -185,8 +183,8 @@ inline bool HasPassiveWeapon() {
 
 inline bool HasPassiveRingBuff() {
     const auto player = ObjectManager::Player();
-    return player.IsValid() &&
-           (player.HasBuff("AkaliPZoneGround") || player.HasBuff("akalipzoneground"));
+    return ControllerHelpers::HasAnyBuff(
+        player, { "AkaliPZoneGround", "akalipzoneground" });
 }
 
 inline bool HasStealthShroudBuff() {
@@ -1062,13 +1060,9 @@ inline bool TryHarass(const AIHeroClient& target) {
     return false;
 }
 
-inline AIHeroClient FindNearestThreat(const AIHeroClient& fallback) {
-    return NearestEnemyToPlayer(fallback, 1300.0f);
-}
-
 inline bool TryFlee(const AIHeroClient& fallback) {
     const auto player = ObjectManager::Player();
-    const AIHeroClient threat = FindNearestThreat(fallback);
+    const AIHeroClient threat = NearestEnemyToPlayer(fallback, 1300.0f);
     if (TryDefensiveW(threat, Mode::Flee)) return true;
     if (ESecondCastAvailable() && CurrentEMark == EMarkKind::Shroud &&
         TryE2(threat, Mode::Flee)) return true;
@@ -1329,7 +1323,7 @@ inline void RefreshState() {
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     RefreshState();
     CurrentPosture = DeterminePosture(selected);
-    const AIHeroClient threat = FindNearestThreat(selected);
+    const AIHeroClient threat = NearestEnemyToPlayer(selected, 1300.0f);
 
     // Safety responses outrank damage branches.  A fleeing one-trick Akali
     // must retain the player-owned movement and choose a safe E/R route first.
@@ -1428,10 +1422,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
 }
 
-inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
-    (void)CaptureLocalAutoAttack(args, LastAutoTargetId, LastAutoTick);
-}
-
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     const int now = SDK::Variables::TickCount();
     if (IsLocalPlayer(args.Sender)) {
@@ -1524,20 +1514,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
             ActiveSequence = Sequence::None;
         }
     }
-}
-
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)ControllerHelpers::CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEnd,
-        GapcloserExpireTick, 475.0f, 750);
-}
-
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    // Akali has no reliable hard interrupt; retain the event only as a
-    // commitment signal for E/R safety rather than falsely claiming one.
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick, 900, 250, 5000);
 }
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
@@ -1854,14 +1830,23 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnDoCast = &OnDoCast;
+    controller.OnDoCast =
+        &ControllerHelpers::CaptureLocalAutoAttackEvent<
+            &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
     controller.OnBuffUpdate = &OnBuffUpdate;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser =
+        &ControllerHelpers::CaptureGapcloserEvent<
+            &GapcloserTargetId, &GapcloserEnd,
+            &GapcloserExpireTick, 475, 750>;
+    // Akali has no reliable hard interrupt; retain the event only as a
+    // commitment signal for E/R safety rather than claiming an interrupt.
+    controller.OnInterruptable =
+        &ControllerHelpers::CaptureInterruptableEvent<
+            &InterruptTargetId, &InterruptExpireTick>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     controller.OnMissileCreate = &OnMissileCreate;

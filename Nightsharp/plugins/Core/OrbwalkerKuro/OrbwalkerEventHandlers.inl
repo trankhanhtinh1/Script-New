@@ -112,8 +112,16 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
 
     const bool hadPendingAttack = context_.pendingAttack;
+    const auto player = GameObjects::Player();
+    const bool isAzirSoldierAttack =
+        OrbwalkingDetail::IsAzirSoldierAttackEvent(args) ||
+        OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender);
     const int attackStartTick = hadPendingAttack
-        ? std::max(context_.pendingAttackTick + static_cast<int>(OneWayPingMs()), now)
+        ? (isAzirSoldierAttack
+            ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
+            : std::max(
+                context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
+                now))
         : now;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
@@ -124,7 +132,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         context_.hasConfirmedAttack &&
         context_.lastAutoAttackTick > 0 &&
         now - context_.lastAttackConfirmTick <= kDuplicateAttackEventMs) {
-        ReadAttackTimingsFromMemory(GameObjects::Player());
+        ReadAttackTimingsFromMemory(player);
         return;
     }
 
@@ -136,7 +144,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     context_.lastAutoAttackResetTick = 0;
     context_.hasConfirmedAttack = true;
     context_.attackCastComplete = false;
-    ReadAttackTimingsFromMemory(GameObjects::Player());
+    ReadAttackTimingsFromMemory(player);
 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
     OrbwalkingActionArgs attackArgs(
@@ -369,10 +377,16 @@ inline bool IsKnownAutoAttackResetSlot(
 } // namespace OrbwalkingDetail
 
 inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const {
-    if (!Events::IsLocalPlayer(args.Sender)) {
-        return false;
+    const auto player = GameObjects::Player();
+    if (Events::IsLocalPlayer(args.Sender)) {
+        return args.IsAutoAttack ||
+               (OrbwalkingDetail::IsAzirPlayer(player) &&
+                OrbwalkingDetail::IsAzirSoldierAttackEvent(args));
     }
-    return args.IsAutoAttack;
+
+    return OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender) &&
+           (args.IsAutoAttack ||
+            OrbwalkingDetail::IsAzirSoldierAttackEvent(args));
 }
 
 inline bool OrbwalkerBase::IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const {
@@ -402,11 +416,15 @@ inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::Obje
 }
 
 inline bool OrbwalkerBase::IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const {
-    if (!Events::IsLocalPlayer(args.Source)) {
-        return false;
+    const auto player = GameObjects::Player();
+    if (Events::IsLocalPlayer(args.Source)) {
+        return IsAutoAttack(args.SpellName) || IsAutoAttack(args.MissileName) ||
+               (OrbwalkingDetail::IsAzirPlayer(player) &&
+                OrbwalkingDetail::IsAzirSoldierAttackMissileName(args));
     }
 
-    return IsAutoAttack(args.SpellName) || IsAutoAttack(args.MissileName);
+    return OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Source) &&
+           OrbwalkingDetail::IsAzirSoldierAttackMissileName(args);
 }
 
 inline void OrbwalkerBase::OnDraw() {
@@ -421,6 +439,9 @@ inline void OrbwalkerBase::OnDraw() {
 
     if (menu_.DrawAARange()) {
         DrawAutoAttackRangeFade(player);
+    }
+    if (menu_.DrawAzirSoldierRanges()) {
+        DrawAzirSoldierRanges(player);
     }
 
     if (menu_.DrawExtraHoldPosition()) {
@@ -452,15 +473,15 @@ inline void OrbwalkerBase::OnDraw() {
         return;
     }
 
-    const float range = GetRealAutoAttackRange(player) * 2.0f;
-    const float rangeSqr = range * range;
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (!OrbwalkingDetail::IsValidMinionTarget(minion) ||
-            player.Position().DistanceSqr2D(minion.Position()) > rangeSqr) {
+            !OrbwalkingDetail::IsTargetWithinCurrentAttackRange(
+                player, AttackableUnit(minion.Handle()), 2.0f)) {
             continue;
         }
 
-        const float damage = Damage::GetAutoAttackDamage(player, minion);
+        const float damage =
+            OrbwalkingDetail::GetCurrentAutoAttackDamage(player, minion);
         if (damage <= 0.0f) {
             continue;
         }

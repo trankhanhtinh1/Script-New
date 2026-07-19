@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AzirSoldierSupport.h"
 #include "OrbwalkerContext.h"
 #include "OrbwalkerEventBus.h"
 #include "OrbwalkerMenu.h"
@@ -144,6 +145,7 @@ private:
     bool EnsureFakeCursorTexture();
     void DrawFakeCursorFallback(ImDrawList* draw, const Vec2& position, float size) const;
     void DrawAutoAttackRangeFade(const AIHeroClient& player);
+    void DrawAzirSoldierRanges(const AIHeroClient& player);
     void DrawFakeCursor();
     void DrawFakeVisuals();
 
@@ -184,6 +186,7 @@ inline float GetRealAutoAttackRange(const AttackableUnit& target) {
 } // namespace OrbwalkerKuro
 
 #include "OrbwalkerLifecycle.inl"
+#include "OrbwalkerAzir.inl"
 #include "OrbwalkerTargeting.inl"
 #include "OrbwalkerActions.inl"
 #include "OrbwalkerVisuals.inl"

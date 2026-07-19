@@ -16,9 +16,6 @@
 namespace Plugins::KuroAIO::AI::Controllers::Ahri {
 
 using namespace Geometry;
-using ControllerHelpers::CaptureAfterAttack;
-using ControllerHelpers::CaptureInterruptable;
-using ControllerHelpers::CaptureLocalAutoAttack;
 using ControllerHelpers::ChampionIs;
 using ControllerHelpers::EnemySpellReady;
 using ControllerHelpers::IsLocalPlayer;
@@ -357,25 +354,27 @@ inline Posture DeterminePosture(const AIHeroClient& selected) {
 }
 
 inline bool IsQMissileName(const char* spellName, const char* missileName) {
-    return Engine::TextContains(missileName, "AhriOrbMissile") ||
-           Engine::TextContains(missileName, "AhriQMissile") ||
-           Engine::TextContains(missileName, "AhriOrbReturn") ||
-           Engine::TextContains(missileName, "AhriQReturnMissile") ||
-           Engine::TextContains(spellName, "AhriOrbofDeception") ||
-           Engine::TextContains(spellName, "AhriQReturn");
+    return ControllerHelpers::TextContainsAny(missileName, {
+               "AhriOrbMissile", "AhriQMissile", "AhriOrbReturn",
+               "AhriQReturnMissile",
+           }) ||
+           ControllerHelpers::TextContainsAny(spellName, {
+               "AhriOrbofDeception", "AhriQReturn",
+           });
 }
 
 inline bool IsQReturnName(const char* spellName, const char* missileName) {
-    return Engine::TextContains(missileName, "return") ||
-           Engine::TextContains(spellName, "return") ||
-           Engine::TextContains(spellName, "OrbofDeception2");
+    return ControllerHelpers::TextContainsAny(
+               missileName, { "return" }) ||
+           ControllerHelpers::TextContainsAny(
+               spellName, { "return", "OrbofDeception2" });
 }
 
 inline bool IsCharmMissileName(const char* spellName, const char* missileName) {
-    return Engine::TextContains(missileName, "AhriSeduce") ||
-           Engine::TextContains(missileName, "AhriEMissile") ||
-           Engine::TextContains(spellName, "AhriSeduce") ||
-           Engine::TextContains(spellName, "AhriE");
+    return ControllerHelpers::TextContainsAny(
+               missileName, { "AhriSeduce", "AhriEMissile" }) ||
+           ControllerHelpers::TextContainsAny(
+               spellName, { "AhriSeduce", "AhriE" });
 }
 
 inline void RefreshTrackedMissiles() {
@@ -1261,10 +1260,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
 }
 
-inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
-    (void)CaptureLocalAutoAttack(args, LastAutoTargetId, LastAutoTick);
-}
-
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     const int now = SDK::Variables::TickCount();
     if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "AhriTumble")) {
@@ -1330,23 +1325,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
         // passes.  This is the narrow exception to normal AA preservation.
         args.Process = false;
     }
-}
-
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
-}
-
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)ControllerHelpers::CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEnd,
-        GapcloserExpireTick, 475.0f, 720);
-}
-
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick, 900, 250, 5000);
 }
 
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
@@ -1624,14 +1602,23 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnDoCast = &OnDoCast;
+    controller.OnDoCast =
+        &ControllerHelpers::CaptureLocalAutoAttackEvent<
+            &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
     controller.OnBuffUpdate = &OnBuffUpdate;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnAfterAttack =
+        &ControllerHelpers::CaptureAfterAttackEvent<
+            &LastAutoTargetId, &LastAutoTick>;
+    controller.OnGapcloser =
+        &ControllerHelpers::CaptureGapcloserEvent<
+            &GapcloserTargetId, &GapcloserEnd,
+            &GapcloserExpireTick, 475, 720>;
+    controller.OnInterruptable =
+        &ControllerHelpers::CaptureInterruptableEvent<
+            &InterruptTargetId, &InterruptExpireTick>;
     controller.OnMissileCreate = &OnMissileCreate;
     controller.OnMissileDelete = &OnMissileDelete;
     return controller;

@@ -843,6 +843,23 @@ inline bool ControllerCastPosition(int index, const Vector3& position) {
     return false;
 }
 
+inline bool ControllerCastVector(int index,
+                                 const Vector3& start,
+                                 const Vector3& end) {
+    if (index < 0 || index >= 4 || !RuntimeSpells[index] ||
+        !start.IsValid() || start.IsZero() ||
+        !end.IsValid() || end.IsZero() ||
+        start.DistanceSqr2D(end) <= 0.001f) {
+        return false;
+    }
+    ArmControllerCast(index);
+    if (RuntimeSpells[index]->Cast(start, end)) {
+        return MarkSuccessfulCast(index);
+    }
+    CancelControllerCast(index);
+    return false;
+}
+
 inline bool ControllerCastSelf(int index) {
     if (index < 0 || index >= 4 || !RuntimeSpells[index]) {
         return false;

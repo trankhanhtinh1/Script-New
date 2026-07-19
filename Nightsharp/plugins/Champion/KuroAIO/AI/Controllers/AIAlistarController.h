@@ -17,11 +17,11 @@ namespace Plugins::KuroAIO::AI::Controllers::Alistar {
 using namespace Geometry;
 using ControllerHelpers::AnalyzeEnemyCast;
 using ControllerHelpers::CaptureAfterAttack;
-using ControllerHelpers::CaptureGapcloser;
-using ControllerHelpers::CaptureInterruptable;
 using ControllerHelpers::CaptureLocalAutoAttack;
+using ControllerHelpers::CountAlliedFollowup;
 using ControllerHelpers::CurrentResource;
 using ControllerHelpers::HasReadyDashHazardAt;
+using ControllerHelpers::HasResourceFor;
 using ControllerHelpers::HasSpellShieldOrImmunity;
 using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::IsLocalPlayer;
@@ -31,6 +31,7 @@ using ControllerHelpers::Now;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::RemainingMilliseconds;
+using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::SpellCost;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellRank;
@@ -174,17 +175,6 @@ inline bool CastThrottleReady(int index, bool fastFollowup = false) {
         index, 42, fastFollowup ? 0 : -1);
 }
 
-inline bool HasManaFor(std::initializer_list<int> spellIndices) {
-    float required = 0.0f;
-    for (const int index : spellIndices) {
-        if (index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-            Engine::RuntimeSpells[index]->IsReady()) {
-            required += SpellCost(index);
-        }
-    }
-    return CurrentResource() + 0.5f >= required;
-}
-
 inline bool TargetDisplacementImmune(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return true;
     // Narrow live-buff list.  W still stuns several displacement-immune casts,
@@ -213,55 +203,9 @@ inline bool TargetRejectsHeadbutt(const AIHeroClient& target) {
            TargetDisplacementImmune(target);
 }
 
-inline int CountFollowupAllies(const Vector3& position,
-                               float range = 850.0f) {
-    const auto player = ObjectManager::Player();
-    int count = 0;
-    const float rangeSqr = range * range;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
-        if (!Engine::ValidAlly(ally) ||
-            static_cast<int>(ally.NetworkId()) == player.NetworkId() ||
-            ally.Position().DistanceSqr2D(position) > rangeSqr) {
-            continue;
-        }
-        ++count;
-    }
-    return count;
-}
-
-inline float CarryValue(const AIHeroClient& ally) {
-    if (!Engine::ValidAlly(ally)) return -FLT_MAX;
-    const float offense = std::max(
-        ally.TotalAttackDamage() * 0.85f,
-        ally.AP() * 0.62f);
-    const float rangeValue = std::max(0.0f, ally.AttackRange() - 175.0f) * 0.22f;
-    const float vulnerability = (100.0f - ally.HealthPercent()) * 1.35f;
-    return offense + rangeValue + vulnerability;
-}
-
 inline AIHeroClient SelectProtectedAlly() {
-    const auto player = ObjectManager::Player();
-    AIHeroClient best{};
-    float bestScore = -FLT_MAX;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
-        if (!Engine::ValidAlly(ally, 1600.0f) ||
-            static_cast<int>(ally.NetworkId()) == player.NetworkId()) {
-            continue;
-        }
-        float score = CarryValue(ally);
-        const int nearby = Engine::CountEnemiesAt(ally.Position(), 700.0f);
-        score += static_cast<float>(nearby) * 240.0f;
-        if (static_cast<int>(ally.NetworkId()) ==
-                static_cast<int>(TargetedAllyThreatId) &&
-            Now() <= TargetedAllyThreatUntil) {
-            score += 520.0f;
-        }
-        if (score > bestScore) {
-            best = ally;
-            bestScore = score;
-        }
-    }
-    return best;
+    return SelectProtectionAlly(
+        1600.0f, TargetedAllyThreatId, TargetedAllyThreatUntil);
 }
 
 inline float PeelThreatScore(const AIHeroClient& enemy,
@@ -657,7 +601,7 @@ inline bool CastW(const AIBaseClient& target,
     }
     if (bufferQ && (!Engine::RuntimeSpells[0] ||
                     !Engine::RuntimeSpells[0]->IsReady() ||
-                    !SpellEnabled(0, mode) || !HasManaFor({ 0, 1 }))) {
+                    !SpellEnabled(0, mode) || !HasResourceFor({ 0, 1 }))) {
         return false;
     }
 
@@ -831,7 +775,7 @@ inline bool EngageSafetyAllows(const AIHeroClient& target) {
     if (IsUnderEnemyTurret(target.Position())) {
         const bool allowed = Bool(Engine::ComboMenu, "AllowTurretDive", false);
         if (!allowed || (!RActive && !UltimateReady()) ||
-            CountFollowupAllies(target.Position(), 900.0f) <= 0) {
+            CountAlliedFollowup(target.Position(), 900.0f) <= 0) {
             return false;
         }
     }
@@ -841,14 +785,14 @@ inline bool EngageSafetyAllows(const AIHeroClient& target) {
 inline bool CanStandardEngage(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target, kWRange + 80.0f) ||
         TargetRejectsHeadbutt(target) || !EngageSafetyAllows(target) ||
-        !HasManaFor({ 0, 1, 2 })) {
+        !HasResourceFor({ 0, 1, 2 })) {
         return false;
     }
     if (Bool(RoleMenu, "DoNotOverlapCC", true) &&
         Engine::IsHardCrowdControlled(target) && !target.IsDashing()) {
         return false;
     }
-    const int followup = CountFollowupAllies(target.Position(), 875.0f);
+    const int followup = CountAlliedFollowup(target.Position(), 875.0f);
     return followup >= Slider(RoleMenu, "MinimumFollowup", 1) ||
            SoloKillable(target);
 }
@@ -1285,9 +1229,8 @@ inline void RefreshState() {
                              player.HasBuff("alistareattack");
     if (liveE) EActive = true;
     EAttackReady = liveEAttack || EObservedStacks >= 5;
-    const int buffStacks = std::max(
-        player.GetBuffCount("AlistarE"),
-        player.GetBuffCount("alistarE"));
+    const int buffStacks = ControllerHelpers::MaximumBuffCount(
+        player, { "AlistarE", "alistarE" });
     if (buffStacks > 0) EObservedStacks = std::clamp(buffStacks, 0, 5);
     if (EActive && buffStacks <= 0 && ECastTick > 0) {
         bool contact = false;
@@ -1321,8 +1264,8 @@ inline void RefreshState() {
     if (RActive && now > RCastTick + kRDurationMs + 250) RActive = false;
 
     PassiveStacks = std::clamp(
-        std::max(player.GetBuffCount("AlistarPassiveStacks"),
-                 player.GetBuffCount("alistarpassivestacks")),
+        ControllerHelpers::MaximumBuffCount(
+            player, { "AlistarPassiveStacks", "alistarpassivestacks" }),
         0, 7);
 
     if (WDashActive && !player.IsDashing() &&
@@ -1433,7 +1376,7 @@ inline bool ManualWShouldBuffer(const AIHeroClient& target) {
             static_cast<float>(Slider(HeadbuttMenu, "InsecMinimumGain", 260))) {
         return false;
     }
-    return CountFollowupAllies(target.Position(), 875.0f) >= 1 ||
+    return CountAlliedFollowup(target.Position(), 875.0f) >= 1 ||
            SoloKillable(target);
 }
 
@@ -1675,19 +1618,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
         ClearForcedStunTarget();
         ActiveSequence = Sequence::None;
     }
-}
-
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEnd,
-        GapcloserExpireTick, 500.0f, 800);
-}
-
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick, 900, 120, 2200);
 }
 
 inline const char* PostureName(Posture posture) {
@@ -2014,8 +1944,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBuffUpdate = &OnBuffUpdate;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser =
+        &ControllerHelpers::CaptureGapcloserEvent<
+            &GapcloserTargetId, &GapcloserEnd,
+            &GapcloserExpireTick, 500, 800>;
+    controller.OnInterruptable =
+        &ControllerHelpers::CaptureInterruptableEvent<
+            &InterruptTargetId, &InterruptExpireTick, 900, 120, 2200>;
     return controller;
 }();
 

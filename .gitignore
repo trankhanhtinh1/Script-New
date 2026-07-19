@@ -36,3 +36,4 @@ Nightsharp/mybuild.bat
 bin/
 obj/
 *.bak
+Nightsharp/PredictedInputCache_NightSharp_Release_x64.dat

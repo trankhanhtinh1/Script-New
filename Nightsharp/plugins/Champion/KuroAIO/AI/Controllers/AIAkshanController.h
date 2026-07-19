@@ -19,7 +19,6 @@ using namespace Geometry;
 using ControllerHelpers::AnalyzeEnemyCast;
 using ControllerHelpers::AutoAttackRange;
 using ControllerHelpers::CaptureAfterAttack;
-using ControllerHelpers::CaptureInterruptable;
 using ControllerHelpers::CurrentResource;
 using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::InAutoAttackRange;
@@ -266,17 +265,13 @@ inline bool SafePoint(const Vector3& position,
 }
 
 inline int PassiveStacks(const AIBaseClient& target) {
-    if (!target.IsValid()) return 0;
-    return std::max(
-        target.GetBuffCount("AkshanPassiveDebuff"),
-        target.GetBuffCount("akshanpassivedebuff"));
+    return ControllerHelpers::MaximumBuffCount(
+        target, { "AkshanPassiveDebuff", "akshanpassivedebuff" });
 }
 
 inline int ScoundrelStacks(const AIHeroClient& target) {
-    if (!target.IsValid()) return 0;
-    return std::max(
-        target.GetBuffCount("AkshanWHuntMark"),
-        target.GetBuffCount("akshanwhuntmark"));
+    return ControllerHelpers::MaximumBuffCount(
+        target, { "AkshanWHuntMark", "akshanwhuntmark" });
 }
 
 inline bool HasPriorityMark(const AIBaseClient& target) {
@@ -439,17 +434,16 @@ inline Posture DeterminePosture(const AIHeroClient& selected) {
 }
 
 inline bool IsQMissileName(const char* spellName, const char* missileName) {
-    return Engine::TextContains(missileName, "AkshanQMissile") ||
-           Engine::TextContains(missileName, "AkshanQMis") ||
-           Engine::TextContains(spellName, "AkshanQMissile") ||
-           Engine::TextContains(spellName, "AkshanQ");
+    return ControllerHelpers::TextContainsAny(
+               missileName, { "AkshanQMissile", "AkshanQMis" }) ||
+           ControllerHelpers::TextContainsAny(
+               spellName, { "AkshanQMissile", "AkshanQ" });
 }
 
 inline bool IsQReturnName(const char* spellName, const char* missileName) {
-    return Engine::TextContains(missileName, "AkshanQMissileReturn") ||
-           Engine::TextContains(missileName, "return") ||
-           Engine::TextContains(spellName, "AkshanQMissileReturn") ||
-           Engine::TextContains(spellName, "return");
+    return ControllerHelpers::AnyTextContains(
+        { spellName, missileName },
+        { "AkshanQMissileReturn", "return" });
 }
 
 inline void RefreshTrackedQ() {
@@ -1527,10 +1521,6 @@ inline AIHeroClient ResolveCombatTarget(const AIHeroClient& selected) {
     return Engine::SelectTarget(5000.0f);
 }
 
-inline AIHeroClient FindNearestThreat(const AIHeroClient& fallback) {
-    return NearestEnemyToPlayer(fallback, 1400.0f);
-}
-
 inline float ShortCombatDamage(const AIHeroClient& target,
                                int expectedEShots = 0,
                                bool includeR = false) {
@@ -1698,7 +1688,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 }
 
 inline bool TryFlee(const AIHeroClient& fallback) {
-    AIHeroClient threat = FindNearestThreat(fallback);
+    AIHeroClient threat = NearestEnemyToPlayer(fallback, 1400.0f);
     if (EHookAttached()) return StartPlannedSwing();
     if (ESwinging()) return DismountSwing(threat, Now() >= PlannedDismountTick);
     if (Engine::ValidEnemy(threat) && EFirstCastReady() &&
@@ -1869,9 +1859,8 @@ inline bool HasWCamouflageBuff() {
 
 inline bool HasRChannelBuff() {
     const auto player = ObjectManager::Player();
-    return player.IsValid() &&
-        (player.HasBuff("AkshanR") ||
-         player.HasBuff("AkshanRChannel"));
+    return ControllerHelpers::HasAnyBuff(
+        player, { "AkshanR", "AkshanRChannel" });
 }
 
 inline void ClearSwingState() {
@@ -2270,14 +2259,6 @@ inline void OnGapcloser(
             GapcloserExpireTick, 500.0f, 760)) {
         IncomingHardCCUntil = std::max(IncomingHardCCUntil, Now() + 420);
     }
-}
-
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    // Akshan has no hard interrupt.  The channel is still a high-value
-    // commitment window for Q/E/R, but the controller never pretends to CC it.
-    CaptureInterruptable(
-        args, CommittedEnemyId, CommittedEnemyUntil, 900, 250, 5000);
 }
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
@@ -2716,7 +2697,11 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    // Akshan has no hard interrupt.  The channel is still a high-value
+    // commitment window for Q/E/R, but the controller never pretends to CC it.
+    controller.OnInterruptable =
+        &ControllerHelpers::CaptureInterruptableEvent<
+            &CommittedEnemyId, &CommittedEnemyUntil, 900, 250, 5000>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     controller.OnMissileCreate = &OnMissileCreate;
