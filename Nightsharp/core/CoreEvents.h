@@ -3,7 +3,6 @@
 #include "CoreAiManager.h"
 #include "CoreBuffs.h"
 #include "CoreObjectManager.h"
-#include "CorePosition.h"
 #include "CoreRuntime.h"
 #include "CoreSpellDataInst.h"
 #include "Corehook.h"
@@ -549,7 +548,7 @@ namespace detail {
         Read(object + Offset::All::Team, info.Team);
         info.IsDead = ::Core::Objects::IsDead(object);
         info.IsVisible = ::Core::Objects::ReadVisibleFlag(object);
-        info.Position = CorePosition::Read(object);
+        Read(object + Offset::All::Position, info.Position);
         CopyRuntimeStringField(
             object + Offset::All::Name,
             info.Name,

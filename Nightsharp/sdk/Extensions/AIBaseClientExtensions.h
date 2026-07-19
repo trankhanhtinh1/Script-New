@@ -34,7 +34,7 @@ inline float AttackSpeed(const AIBaseClient& source) {
 inline uint32_t ReadCharacterState(const AIBaseClient& source) {
     const uintptr_t a = source.Address();
     if (!a) return 0;
-    return Globals::Read<uint32_t>(a + Offset::AttackableUnit::ActionState1);
+    return Globals::Read<uint32_t>(a + Offset::AttackableUnit::CharacterState);
 }
 
 inline bool CanAttack(const AIBaseClient& source) {

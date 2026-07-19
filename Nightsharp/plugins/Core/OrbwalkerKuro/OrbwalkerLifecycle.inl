@@ -10,7 +10,7 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     Events::AddOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::AddOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
-    Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
+    // Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Events::AddOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
     Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
     Drawing::AddOnAlwaysDraw(&OrbwalkerBase::OnDebugDrawStatic);
@@ -99,7 +99,7 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::RemoveOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
-    Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
+    // Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Events::RemoveOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
     Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
     Drawing::RemoveOnAlwaysDraw(&OrbwalkerBase::OnDebugDrawStatic);

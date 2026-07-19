@@ -339,7 +339,7 @@ namespace detail {
         }
 
         __try {
-            const Vec3 position = CorePosition::Read(ctx.localPlayer);
+            const Vec3 position = Globals::Read<Vec3>(ctx.localPlayer + Offset::All::Position);
             if (position.IsValid() && std::isfinite(position.y)) {
                 return position.y;
             }

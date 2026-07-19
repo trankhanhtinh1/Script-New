@@ -344,8 +344,10 @@ static Vector3 SmartDashPosition(const AIHeroClient& target, bool emergency) {
             origin.z + std::sin(angle) * Q.Range
         };
         point.y = NavMesh::GetHeightForPosition(point);
+        const bool isKiting = hasTarget && point.Distance2D(targetPosition) > currentTargetDistance;
+        const bool enforceAA = Bool(DashMenu, "AAcheck", true) && !retreat && !isKiting;
         if (!IsGoodDashPosition(point) ||
-            (!emergency && !CanAttackFrom(point, target))) {
+            (!emergency && enforceAA && !CanAttackFrom(point, target))) {
             continue;
         }
 
@@ -406,8 +408,14 @@ static Vector3 FindDashPosition(const AIHeroClient& target, bool asap = false) {
     if (!IsGoodDashPosition(result)) {
         return {};
     }
-    if (!asap && !CanAttackFrom(result, target)) {
-        return {};
+    if (!asap) {
+        const auto player = Player();
+        const bool retreat = HasMeleePressure(player.Position());
+        const bool isKiting = result.Distance2D(target.Position()) > player.Position().Distance2D(target.Position());
+        const bool enforceAA = Bool(DashMenu, "AAcheck", true) && !retreat && !isKiting;
+        if (enforceAA && !CanAttackFrom(result, target)) {
+            return {};
+        }
     }
     return result;
 }
@@ -533,6 +541,17 @@ static bool Combo() {
     const auto player = Player();
     if (Orbwalker::IsWindingUp()) {
         return false;
+    }
+
+    if (Bool(ComboMenu, "CQ", true) && Q.IsReady()) {
+        const float aaRange = AutoAttack::GetRealAutoAttackRange(player);
+        const auto target = GetPhysicalTarget(aaRange + Q.Range);
+        if (ValidHeroTarget(target) && !AutoAttack::InAutoAttackRange(target)) {
+            const Vector3 dashPos = player.Position().Extend(target.Position(), Q.Range);
+            if (IsGoodDashPosition(dashPos) && Q.Cast(dashPos)) {
+                return true;
+            }
+        }
     }
 
     if (Bool(ComboMenu, "CE", true) && E.IsReady()) {
@@ -676,7 +695,11 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
         return;
     }
 
-    const Vector3 position = FindDashPosition(target, false);
+    Vector3 position = FindDashPosition(target, false);
+    if (position.IsZero()) {
+        position = Game::CursorPos();
+    }
+
     if (!position.IsZero()) {
         (void)Q.Cast(position);
     }

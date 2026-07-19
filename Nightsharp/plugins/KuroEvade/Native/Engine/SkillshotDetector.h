@@ -829,18 +829,46 @@ private:
         return nullptr;
     }
 
+    static bool IsUtilityName(const char* name) {
+        if (!name || !name[0]) {
+            return false;
+        }
+        return ContainsInsensitive(name, "summoner") || ContainsInsensitive(name, "item");
+    }
+
     static const Database::SpellData* FindProcessSpellData(
         const SDK::Events::ProcessSpellEventArgs& args) {
+        if (args.IsAutoAttack ||
+            IsBasicAttackName(args.SpellName) ||
+            IsBasicAttackName(args.PayloadSpellName) ||
+            IsBasicAttackName(args.ScriptName) ||
+            IsBasicAttackName(args.SpellSlotName) ||
+            IsBasicAttackName(args.MissileName) ||
+            IsBasicAttackName(args.PayloadMissileName)) {
+            return nullptr;
+        }
+
         const char* names[] = {
             args.SpellName,
             args.PayloadSpellName,
             args.ScriptName,
-            args.SpellSlotName,
             args.MissileName,
             args.PayloadMissileName,
         };
+
+        bool utilitySpell = false;
         for (const char* name : names) {
-            if (!name || !name[0] || IsBasicAttackName(name)) {
+            if (name && name[0] && IsUtilityName(name)) {
+                utilitySpell = true;
+                break;
+            }
+        }
+
+        for (const char* name : names) {
+            if (!name || !name[0]) {
+                continue;
+            }
+            if (utilitySpell && !IsUtilityName(name)) {
                 continue;
             }
             if (const auto* data = FindBySpellName(name);
@@ -852,6 +880,25 @@ private:
                 return data;
             }
         }
+
+        const bool validSlot = args.Slot >= 0 && args.Slot <= 3;
+        const bool validCast = (args.CastPosition.IsValid() && !args.CastPosition.IsZero()) ||
+                               (args.EndPosition.IsValid() && !args.EndPosition.IsZero());
+        const bool safeFallback = validSlot && validCast && args.PayloadSpellName[0] &&
+                                  !args.IsAutoAttack && args.TargetNetworkId == 0 &&
+                                  args.TargetIndex <= 0 &&
+                                  !IsBasicAttackName(args.SpellName) &&
+                                  !IsUtilityName(args.SpellName) &&
+                                  !IsUtilityName(args.ScriptName) &&
+                                  !IsUtilityName(args.MissileName);
+
+        if (safeFallback && args.SpellSlotName[0]) {
+            if (const auto* data = FindBySpellName(args.SpellSlotName);
+                data && !data->DontProcess) {
+                return data;
+            }
+        }
+
         return nullptr;
     }
 

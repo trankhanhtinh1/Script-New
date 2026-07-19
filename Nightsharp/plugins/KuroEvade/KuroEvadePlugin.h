@@ -994,7 +994,7 @@ private:
         m_enabledMenu->ValueChangedUd = this;
         m_enabledMenu->AddPermashow("Evade");
         m_onlyDangerousMenu = m_menu->Add(new MenuKeyBind(
-            "OnlyDangerous", "Dodge only dangerous", VK_SPACE,
+            "OnlyDangerous", "Dodge only dangerous", 0,
             KeyBindType::Press, false));
         m_onlyDangerousMenu->AddPermashow();
         m_menu->Attach();

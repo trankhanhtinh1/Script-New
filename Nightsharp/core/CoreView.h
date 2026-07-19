@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMap.h"
-#include "CorePosition.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
 #include "Vector.h"
@@ -113,7 +112,7 @@ namespace detail {
         }
 
         __try {
-            const Vec3 position = CorePosition::Read(ctx.localPlayer);
+            const Vec3 position = Globals::Read<Vec3>(ctx.localPlayer + Offset::All::Position);
             if (position.IsValid() && std::isfinite(position.y)) {
                 return position.y;
             }

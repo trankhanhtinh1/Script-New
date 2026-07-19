@@ -836,7 +836,7 @@ public:
     Vector3 Position() const {
         const uintptr_t a = Address();
         if (!a) return {};
-        return CorePosition::Read(a);
+        return *reinterpret_cast<const Vector3*>(a + Offset::All::Position);
     }
 
     Vector3 Direction() const {

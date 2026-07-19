@@ -2,7 +2,6 @@
 
 #include "../IPlugin.h"
 #include "../../Core/CoreCastSpell.h"
-#include "../../Core/CorePosition.h"
 #include "../../Core/CoreRuntime.h"
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
@@ -216,7 +215,7 @@ protected:
             return 0;
         }
 
-        const Vec3 playerPos = CorePosition::Read(player);
+        const Vec3 playerPos = Globals::Read<Vec3>(player + Offset::All::Position);
         const std::uint8_t playerTeam =
             Globals::Read<std::uint8_t>(player + Offset::All::Team);
 
@@ -294,7 +293,7 @@ protected:
             const std::uint32_t objectIndex =
                 Globals::Read<std::uint32_t>(hero + Offset::All::Index);
 
-            const Vec3 heroPos = CorePosition::Read(hero);
+            const Vec3 heroPos = Globals::Read<Vec3>(hero + Offset::All::Position);
             if (!heroPos.IsValid() || heroPos.IsZero()) {
                 /*
                 Appendf(
@@ -428,7 +427,7 @@ protected:
             return 0;
         }
 
-        const Vec3 playerPos = CorePosition::Read(ctx.localPlayer);
+        const Vec3 playerPos = Globals::Read<Vec3>(ctx.localPlayer + Offset::All::Position);
         const std::uint8_t playerTeam = Globals::Read<std::uint8_t>(
             ctx.localPlayer + Offset::All::Team);
         const float rangeSq = range > 0.0f
@@ -453,7 +452,7 @@ protected:
                 hero + Offset::All::Team);
             const float health = Globals::Read<float>(
                 hero + Offset::AttackableUnit::HP);
-            const Vec3 position = CorePosition::Read(hero);
+            const Vec3 position = Globals::Read<Vec3>(hero + Offset::All::Position);
             if ((playerTeam != 0 && team == playerTeam) ||
                 health <= 0.0f ||
                 !position.IsValid() ||

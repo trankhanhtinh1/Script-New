@@ -92,10 +92,11 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     const bool isAttack = IsLocalAutoAttack(args);
     const bool isAttackReset = IsLocalAutoAttackReset(args);
 
-    // A slot/name can identify the reset spell, but an empowered AA may carry
-    // that same slot/name.  Record the AA instead of resetting it away.
     if (isAttackReset && !isAttack) {
-        ResetAutoAttackTimer();
+        const int now = Tick();
+        if (now - context_.lastAutoAttackResetTick >= 150) {
+            ResetAutoAttackTimer();
+        }
         return;
     }
 
@@ -160,7 +161,10 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const bool isAttackReset = IsLocalAutoAttackReset(args);
     if (!isAttack) {
         if (isAttackReset) {
-            ResetAutoAttackTimer();
+            const int now = Tick();
+            if (now - context_.lastAutoAttackResetTick >= 150) {
+                ResetAutoAttackTimer();
+            }
         }
         return;
     }

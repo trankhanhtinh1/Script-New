@@ -916,7 +916,7 @@ namespace SpellBookLayout {
         constexpr uint8_t SmallJungle      = 0x0;
         constexpr uint8_t NormalJungle      = 0x1;
         constexpr uint8_t LargeJungle      = 0x2;
-    
+
         constexpr uint8_t Dragon        = 0x3;
         constexpr uint8_t RiftHerald    = 0x4;
         constexpr uint8_t ElderDragon   = 0x5;
@@ -1018,6 +1018,7 @@ namespace SpellBookLayout {
         constexpr auto ActionStateBase = 0x1450;
         constexpr auto ActionState1    = 0x1480;
         constexpr auto ActionState2    = 0x14A8;
+        constexpr auto CharacterState  = ActionState1 + 0x30;
     } // namespace AttackableUnit
 
     namespace AIHeroClient {

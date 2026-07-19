@@ -2,7 +2,6 @@
 
 #include "CoreBypass.h"
 #include "CoreEvadeState.h"
-#include "CorePosition.h"
 #include "CoreRuntime.h"
 #include "CoreValidation.h"
 #include "Globals.h"
@@ -434,7 +433,8 @@ namespace CoreCastSpell {
                 return false;
             }
 
-            g_lastTrace.startPosition = CorePosition::Read(g_lastTrace.localPlayer);
+            g_lastTrace.startPosition =
+                Globals::Read<Vec3>(g_lastTrace.localPlayer + Offset::All::Position);
 
             g_lastTrace.spellbook =
                 g_lastTrace.localPlayer + Offset::SpellRuntime::SpellBookOffset;
@@ -551,7 +551,8 @@ namespace CoreCastSpell {
 
                 g_lastTrace.targetNetworkId =
                     Globals::Read<std::uint32_t>(target + Offset::All::NetworkId);
-                g_lastTrace.endPosition = CorePosition::Read(target);
+                g_lastTrace.endPosition =
+                    Globals::Read<Vec3>(target + Offset::All::Position);
 
                 if (g_lastTrace.targetNetworkId == 0 ||
                     g_lastTrace.targetNetworkId == 0xFFFFFFFFu) {
@@ -730,7 +731,8 @@ namespace CoreCastSpell {
                 Globals::Read<std::uint32_t>(target + Offset::All::NetworkId);
             g_lastTrace.targetObjectIndex =
                 Globals::Read<std::uint32_t>(target + Offset::All::Index);
-            g_lastTrace.endPosition = CorePosition::Read(target);
+            g_lastTrace.endPosition =
+                Globals::Read<Vec3>(target + Offset::All::Position);
 
             if (g_lastTrace.targetNetworkId == 0 ||
                 g_lastTrace.targetNetworkId == 0xFFFFFFFFu ||

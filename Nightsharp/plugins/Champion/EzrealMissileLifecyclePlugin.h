@@ -2,7 +2,6 @@
 
 #include "../IPlugin.h"
 #include "../../Core/CoreRuntime.h"
-#include "../../Core/CorePosition.h"
 #include "../../Core/Globals.h"
 #include "../../Core/offset.h"
 #include "../../DebugLog.h"
@@ -407,7 +406,7 @@ private:
     }
 
     static bool ReadMissilePosition(uintptr_t missile, Vec3& out) {
-        out = CorePosition::Read(missile);
+        out = Globals::Read<Vec3>(missile + Offset::All::Position);
         return IsPlausibleWorld(out);
     }
 
@@ -417,7 +416,7 @@ private:
             return args.StartPosition;
         }
 
-        const Vec3 position = CorePosition::Read(args.Sender.Ptr);
+        const Vec3 position = Globals::Read<Vec3>(args.Sender.Ptr + Offset::All::Position);
         if (IsPlausibleWorld(position)) {
             return position;
         }

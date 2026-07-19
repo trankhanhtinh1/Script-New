@@ -135,45 +135,7 @@ inline int ParseItemId(const char* text) {
     return value;
 }
 
-inline bool FormatItemId(int value, char* out, int maxOut) {
-    if (!out || maxOut <= 1) {
-        return false;
-    }
-    out[0] = 0;
-    if (value <= 0) {
-        return false;
-    }
-
-    char reversed[16] = {};
-    int count = 0;
-    while (value > 0 && count < static_cast<int>(sizeof(reversed))) {
-        reversed[count++] = static_cast<char>('0' + value % 10);
-        value /= 10;
-    }
-    if (value != 0 || count >= maxOut) {
-        return false;
-    }
-
-    for (int i = 0; i < count; ++i) {
-        out[i] = reversed[count - i - 1];
-    }
-    out[count] = 0;
-    return true;
-}
-
 inline int GetItemIdFromInfo(uintptr_t info) {
-    if (!Globals::IsValidPtr(info)) {
-        return 0;
-    }
-
-    const int itemId = Globals::Read<int>(
-        info + Offset::ItemRuntime::DataItemId);
-    if (itemId > 0 && itemId <= 999999) {
-        return itemId;
-    }
-
-    // Preserve the previous inline-string reader as a safe fallback for
-    // transient/legacy item-data objects.
     char text[16] = {};
     return ReadItemIdText(info, text, static_cast<int>(sizeof(text)))
         ? ParseItemId(text)
@@ -236,13 +198,8 @@ inline ItemSlot ReadSlot(uintptr_t object, int slotIndex) {
 
     out.infoPtr = GetItemInfo(object, slotIndex);
     if (out.infoPtr) {
-        out.id = GetItemIdFromInfo(out.infoPtr);
-        if (out.id > 0) {
-            FormatItemId(
-                out.id,
-                out.idText,
-                static_cast<int>(sizeof(out.idText)));
-        }
+        ReadItemIdText(out.infoPtr, out.idText, static_cast<int>(sizeof(out.idText)));
+        out.id = ParseItemId(out.idText);
     }
     return out;
 }
