@@ -881,24 +881,6 @@ private:
             }
         }
 
-        const bool validSlot = args.Slot >= 0 && args.Slot <= 3;
-        const bool validCast = (args.CastPosition.IsValid() && !args.CastPosition.IsZero()) ||
-                               (args.EndPosition.IsValid() && !args.EndPosition.IsZero());
-        const bool safeFallback = validSlot && validCast && args.PayloadSpellName[0] &&
-                                  !args.IsAutoAttack && args.TargetNetworkId == 0 &&
-                                  args.TargetIndex <= 0 &&
-                                  !IsBasicAttackName(args.SpellName) &&
-                                  !IsUtilityName(args.SpellName) &&
-                                  !IsUtilityName(args.ScriptName) &&
-                                  !IsUtilityName(args.MissileName);
-
-        if (safeFallback && args.SpellSlotName[0]) {
-            if (const auto* data = FindBySpellName(args.SpellSlotName);
-                data && !data->DontProcess) {
-                return data;
-            }
-        }
-
         return nullptr;
     }
 
@@ -953,8 +935,7 @@ private:
             }
         }
 
-        const std::string champion = EvadeUtils::GetObjectCharacterName(caster);
-        return FindUniqueByChampionAndSlot(champion.c_str(), slot);
+        return nullptr;
     }
 
     static bool RegexMatch(const std::string& text, const std::string& pattern) {

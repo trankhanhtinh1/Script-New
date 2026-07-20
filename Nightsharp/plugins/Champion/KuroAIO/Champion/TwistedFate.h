@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -605,7 +605,7 @@ static void BuildMenu() {
     DrawMenu->Add(new MenuBool("DrawR", "Draw R range", false));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc", "Misc Settings"));
-    MiscMenu->Add(new MenuBool("AutoQCC", "Auto Q crowd-controlled targets", true));
+    MiscMenu->Add(new MenuBool("AutoQCC", "Auto Q on CC targets", true));
     MiscMenu->Add(new MenuBool("GoldAfterGate", "Auto Gold Card after Gate", true));
 
     MenuRoot->Attach();

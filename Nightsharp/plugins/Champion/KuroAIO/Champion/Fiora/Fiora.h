@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Helper/KuroAIOCommon.h"
 #include "../../../../../SDK/SDK.h"
@@ -1544,7 +1544,7 @@ static void BuildMenu() {
     SelectedModeMenu->Add(new MenuSlider("SelectedRange", "Selected Range", 1000, 300, 1000));
     SelectedModeMenu->Add(new MenuBool("SelectedOrbwalktoPassive", "Orbwalk to Passive", true));
     SelectedModeMenu->Add(new MenuBool("SelectedUnderTower", "Under Tower", false));
-    SelectedModeMenu->Add(new MenuBool("SelectedSwitchIfNoSelected", "Switch to Optional if no target", true));
+    SelectedModeMenu->Add(new MenuBool("SelectedSwitchIfNoSelected", "Switch mode if no target", true));
 
     LaneClearMenu = MenuRoot->AddSubMenu(new Menu("LaneClear", "Lane Clear"));
     LaneClearMenu->Add(new MenuBool("UseELClear", "E Enable", true));

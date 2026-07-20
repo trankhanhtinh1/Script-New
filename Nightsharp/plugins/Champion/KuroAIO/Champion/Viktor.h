@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -1123,7 +1123,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuSlider("RTicks", "Extra R damage ticks", 3, 1, 6));
     ComboMenu->Add(new MenuSlider("RHits", "R minimum enemies", 3, 1, 5));
     ComboMenu->Add(new MenuBool("FollowR", "Auto follow with R", true));
-    ComboMenu->Add(new MenuBool("ConserveR", "Conserve R when another spell can kill", true));
+    ComboMenu->Add(new MenuBool("ConserveR", "Save R if other spell kills", true));
 
     RBlacklistMenu = ComboMenu->AddSubMenu(new Menu("RBlacklist", "R Blacklist"));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -1155,11 +1155,11 @@ static void BuildMenu() {
     KillstealMenu->Add(new MenuBool("UseE", "Use E", true));
 
     MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc", "Misc Settings"));
-    MiscMenu->Add(new MenuBool("DisableAA", "Disable normal attacks in Combo", false));
+    MiscMenu->Add(new MenuBool("DisableAA", "Disable AA in Combo", false));
     MiscMenu->Add(new MenuSlider("DisableAALevel", "Disable attacks from level", 12, 1, 18));
-    MiscMenu->Add(new MenuBool("InterruptW", "Use W to interrupt dangerous spells", true));
-    MiscMenu->Add(new MenuBool("InterruptR", "Use R to interrupt dangerous spells", true));
-    MiscMenu->Add(new MenuBool("AutoWCC", "Auto W crowd-controlled targets", true));
+    MiscMenu->Add(new MenuBool("InterruptW", "W to interrupt spells", true));
+    MiscMenu->Add(new MenuBool("InterruptR", "R to interrupt spells", true));
+    MiscMenu->Add(new MenuBool("AutoWCC", "Auto W on CC targets", true));
     MiscMenu->Add(new MenuBool("AntiGap", "Use W against gapclosers", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));

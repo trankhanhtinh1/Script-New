@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -801,7 +801,7 @@ static void BuildMenu() {
         "Use R",
         { "Always", "Combo Only", "Disabled" },
         0))->Permashow();
-    RMenu->Add(new MenuBool("RHealAlly", "Use R to Save Low Health Allies", true));
+    RMenu->Add(new MenuBool("RHealAlly", "R to save low HP allies", true));
     RMenu->Add(new MenuSlider("RHealHealth", "Ally Health <= %", 15, 0, 100));
     RMenu->Add(new MenuSlider("RHealEnemies", "Nearby Enemies >=", 1, 0, 5));
     RMenu->Add(new MenuBool("RHealthPrediction", "Use Health Prediction", true));

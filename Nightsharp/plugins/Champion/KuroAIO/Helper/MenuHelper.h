@@ -3,6 +3,8 @@
 #include "../../../../SDK/SDK.h"
 
 #include <algorithm>
+#include <string>
+#include <cctype>
 
 namespace Plugins::KuroAIO {
 

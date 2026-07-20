@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -975,7 +975,7 @@ static void BuildMenu() {
     RMenu = MenuRoot->AddSubMenu(new Menu("Rstg", "R Settings"));
     RMenu->Add(new MenuKeyBind("RCombo", "R Combo toggle Key", SDK::Keys::A, KeyBindType::Toggle))->Permashow();
     RMenu->Add(new MenuKeyBind("NeverCancelR", "Never Canceling R", SDK::Keys::Z, KeyBindType::Toggle))->Permashow();
-    RMenu->Add(new MenuBool("UseRIfKs", "Accept R combo if target Can kill"));
+    RMenu->Add(new MenuBool("UseRIfKs", "R combo on killable"));
     RMenu->Add(new MenuSlider("RCount", "R Target in range", 3, 1, 5));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Drawstg", "Draw Settings"));

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -706,7 +706,7 @@ static void BuildMenu() {
     RMenu->Add(new MenuBool("UseR", "Use R", true));
     RMenu->Add(new MenuSlider("MinimumHealth", "Minimum target health for R", 0, 0, 500));
     RMenu->Add(new MenuSlider("MinimumSpheres", "Minimum spheres for fast R", 5, 3, 6));
-    RMenu->Add(new MenuBool("FastOnlyKill", "Fast R only when combo can kill", true));
+    RMenu->Add(new MenuBool("FastOnlyKill", "Fast R on killable combo", true));
 
     RBlacklistMenu = MenuRoot->AddSubMenu(new Menu("RBlacklist", "R Blacklist"));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -729,10 +729,10 @@ static void BuildMenu() {
     HarassMenu->Add(new MenuBool("UseE", "Use E with existing spheres", true));
 
     AAMenu = MenuRoot->AddSubMenu(new Menu("AA", "Normal Attack Settings"));
-    AAMenu->Add(new MenuBool("DisableAA", "Disable normal attacks in Combo", false));
+    AAMenu->Add(new MenuBool("DisableAA", "Disable AA in Combo", false));
     AAMenu->Add(new MenuSlider("Level", "Disable attacks from level", 6, 1, 18));
-    AAMenu->Add(new MenuBool("EnableCooldown", "Enable attacks when all spells are unavailable", true));
-    AAMenu->Add(new MenuBool("EnableLowMana", "Enable attacks below 20 percent mana", true));
+    AAMenu->Add(new MenuBool("EnableCooldown", "AA if spells unavailable", true));
+    AAMenu->Add(new MenuBool("EnableLowMana", "AA below 20% mana", true));
 
     LaneMenu = MenuRoot->AddSubMenu(new Menu("LaneClear", "Lane Clear Settings"));
     LaneMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 50, 0, 100));
