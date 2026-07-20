@@ -221,15 +221,56 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         // gọi sau sẽ wipe log của các block PEB scrub bên dưới.
         ResetLogFile();
 
-        // PEB.BeingDebugged = 0 — Packman checks IsDebuggerPresent
+        // PEB scrub — clear debugger artifacts trước khi Packman init.
+        //
+        // PEB layout (Win10/11 x64 — stable từ Win7 x64, OS-dependent không game-dependent):
+        //   +0x02  BeingDebugged   (BYTE)   — IsDebuggerPresent
+        //   +0x30  ProcessHeap     (PVOID)  — pointer tới _HEAP
+        //   +0xBC  NtGlobalFlag    (DWORD)  — debugger set FLG_HEAP_* bits
+        //
+        // _HEAP layout (Win10/11 x64):
+        //   +0x14  Flags           (DWORD)  — HEAP_GROWABLE | HEAP_TAIL_CHECKING | ...
+        //   +0x18  ForceFlags      (DWORD)  — forced heap flags
+        //
+        // Khi debugger attach: NtGlobalFlag |= 0x70, HeapFlags |= 0x02, ForceFlags |= 0x01.
+        // Packman check các field này → zero tất cả.
         {
             auto* peb = reinterpret_cast<uint8_t*>(__readgsqword(0x60));
             if (peb) {
+                // PEB.BeingDebugged = 0
                 uint8_t& beingDebugged = peb[2];
-                const uint8_t old = beingDebugged;
+                const uint8_t oldBD = beingDebugged;
                 beingDebugged = 0;
-                DbgLogFmt("[PEB] BeingDebugged cleared: old=%u new=0 peb=%p\r\n",
-                          (unsigned)old, (void*)peb);
+
+                // PEB.NtGlobalFlag = 0
+                DWORD& ntGlobalFlag = *reinterpret_cast<DWORD*>(peb + 0xBC);
+                const DWORD oldGF = ntGlobalFlag;
+                ntGlobalFlag = 0;
+
+                // ProcessHeap->Flags = 0, ProcessHeap->ForceFlags = 0
+                PVOID processHeap = *reinterpret_cast<PVOID*>(peb + 0x30);
+                DWORD oldHeapFlags = 0, oldHeapForceFlags = 0;
+                if (processHeap) {
+                    __try {
+                        DWORD* heapFlags = reinterpret_cast<DWORD*>(
+                            reinterpret_cast<uint8_t*>(processHeap) + 0x14);
+                        DWORD* heapForceFlags = reinterpret_cast<DWORD*>(
+                            reinterpret_cast<uint8_t*>(processHeap) + 0x18);
+                        oldHeapFlags = *heapFlags;
+                        oldHeapForceFlags = *heapForceFlags;
+                        *heapFlags = 0;
+                        *heapForceFlags = 0;
+                    } __except (EXCEPTION_EXECUTE_HANDLER) {
+                        DbgLogFmt("[PEB] Heap scrub SEH exception (heap=%p)\r\n", processHeap);
+                        processHeap = nullptr;
+                    }
+                }
+
+                DbgLogFmt("[PEB] BeingDebugged: old=%u new=0\r\n", (unsigned)oldBD);
+                DbgLogFmt("[PEB] NtGlobalFlag: old=0x%X new=0\r\n", (unsigned)oldGF);
+                DbgLogFmt("[PEB] HeapFlags: old=0x%X new=0  ForceFlags: old=0x%X new=0  heap=%p\r\n",
+                          (unsigned)oldHeapFlags, (unsigned)oldHeapForceFlags, processHeap);
+                DbgLogFmt("[PEB] PEB=%p\r\n", (void*)peb);
             } else {
                 DbgLogFmt("[PEB] Failed to read PEB from GS:0x60\r\n");
             }
@@ -239,6 +280,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         // (ResetLogFile đã gọi ở đầu DllMain để không wipe log PEB scrub)
         DirectSyscall::InitAll();
         DirectSyscall::DumpSyscallTable();
+
+        // HW Breakpoint Detection — check + clear DR0-DR7 trên thread chính
+        // Phải gọi SAU InitAll (cần NtGetContextThreadDirect/NtSetContextThreadDirect)
+        HwBpDetect::CheckAndClear();
+
+        // Thread Info Audit — query ThreadStartAddress + ThreadHideFromDebugger
+        // qua direct syscall (bypass Packman NtQueryInformationThread hook)
+        ThreadInfoAudit::Audit();
+
         ResetDeferredCRCInstallShutdown();
         HANDLE hCrc = CoreBypass::CreateThreadSpoofed(DeferredCRCInstallThread, nullptr);
         if (hCrc) {
@@ -257,6 +307,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             DbgLogFmt("[PEB] HideAndErase: unlinked %d/3 list(s) for module=%p\r\n",
                       nUnlinked, hModule);
         }
+
+        // Memory Region Audit — quét tất cả regions, tìm MEM_PRIVATE executable
+        // (anti-cheat detection surface). Chạy SAU khi tất cả alloc + PebHide done.
+        MemRegionAudit::Audit();
+
+        // Stack Walk Audit — capture call stack, check return addresses có trỏ
+        // vào NightSharp module (unlinked) không. Read-only, 100% safe.
+        StackAudit::Audit(hModule);
         break;
     }
     case DLL_PROCESS_DETACH:

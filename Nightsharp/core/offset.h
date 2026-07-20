@@ -981,7 +981,7 @@ namespace SpellBookLayout {
         constexpr auto PositionX           = Position;
         constexpr auto PositionY           = 0x260;
         constexpr auto PositionZ           = 0x264;
-        constexpr auto Visible             = 0x308;   // GameObject visible flag.
+        constexpr auto Visible             = 0x2E8;   // GameObject visible flag.
         constexpr auto IsInvulnerable      = 0x5A0;   // Legacy/debug only; IsInvulnerable is native/buff logic, not this byte.
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
         // pointer on 26.6 (sub_9F18FE constructor / sub_9F18A0 destructor pair

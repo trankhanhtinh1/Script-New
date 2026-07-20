@@ -174,6 +174,7 @@ using NtGetCtxFn   = LONG(NTAPI*)(HANDLE, PCONTEXT);
 using NtCreateThreadExFn = LONG(NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, HANDLE,
     LPTHREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PVOID);
 using NtSetInfoThreadFn = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG);
+using NtQueryInfoThreadFn = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
 
 // ── Syscall entry table ──────────────────────────────────────────────────────
 // Mỗi entry: tên function (cho resolve), SSN fallback (verify từ IDA ntdll),
@@ -200,6 +201,7 @@ inline SyscallEntry g_syscalls[] = {
     { NS_HASH("NtGetContextThread"),     "NtGetContextThread",     0x0F3, nullptr, nullptr, -1 },
     { NS_HASH("NtCreateThreadEx"),       "NtCreateThreadEx",       0x0C2, nullptr, nullptr, -1 },
     { NS_HASH("NtSetInformationThread"), "NtSetInformationThread", 0x00D, nullptr, nullptr, -1 },
+    { NS_HASH("NtQueryInformationThread"),"NtQueryInformationThread",0x025, nullptr, nullptr, -1 },
 };
 
 enum SyscallIdx : size_t {
@@ -214,7 +216,8 @@ enum SyscallIdx : size_t {
     IDX_GETCTX        = 8,
     IDX_CREATETHREADEX= 9,
     IDX_SETINFOTHREAD = 10,
-    SYSCALL_COUNT     = 11,
+    IDX_QUERYINFOTHREAD= 11,
+    SYSCALL_COUNT     = 12,
 };
 
 // Compile-time hash-collision guard cho g_syscalls[]. Nếu 2 entry cùng hash,
@@ -228,6 +231,8 @@ static_assert(NS_HASH("NtSetContextThread")     != NS_HASH("NtGetContextThread")
 static_assert(NS_HASH("NtCreateThreadEx")       != NS_HASH("NtSuspendThread"),      "hash collision");
 static_assert(NS_HASH("NtSetInformationThread") != NS_HASH("NtCreateThreadEx"),     "hash collision");
 static_assert(NS_HASH("NtSetInformationThread") != NS_HASH("NtSetContextThread"),   "hash collision");
+static_assert(NS_HASH("NtQueryInformationThread")!= NS_HASH("NtSetInformationThread"),"hash collision");
+static_assert(NS_HASH("NtQueryInformationThread")!= NS_HASH("NtCreateThreadEx"),     "hash collision");
 
 // ── Backward compat globals (giữ API cũ cho CRCBypass) ───────────────────────
 inline void*         g_protectStub = nullptr;
@@ -694,6 +699,20 @@ inline LONG NtSetInformationThreadDirect(HANDLE thread, ULONG infoClass,
     return fn(thread, infoClass, info, infoLen);
 }
 
+// NtQueryInformationThread (SSN 0x0E) — Packman hook (runtime: 90 FF 25...).
+// Query thread info trực tiếp kernel, bypass hook.
+// ThreadInfoClass quan trọng:
+//   0x00 = ThreadBasicInformation (TEB, PID, TID, start address)
+//   0x11 = ThreadHideFromDebugger (check if thread đã hide)
+//   0x1E = ThreadStartAddress (start routine address)
+inline LONG NtQueryInformationThreadDirect(HANDLE thread, ULONG infoClass,
+                                           PVOID info, ULONG infoLen,
+                                           PULONG retLen) {
+    if (!InitSyscall(IDX_QUERYINFOTHREAD)) return -1;
+    auto fn = reinterpret_cast<NtQueryInfoThreadFn>(g_syscalls[IDX_QUERYINFOTHREAD].fn);
+    return fn(thread, infoClass, info, infoLen, retLen);
+}
+
 // ── Stealth Sleep (dùng NtDelayExecution direct, bypass Packman hook) ────────
 inline void StealthSleep(DWORD ms) {
     LARGE_INTEGER delay;
@@ -777,6 +796,327 @@ inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
 }
 
 } // namespace DirectSyscall
+
+// ── Hardware Breakpoint Detection ────────────────────────────────────────────
+// Packman có thể set HW breakpoint (DR0-DR3) trên code/data của NightSharp
+// để monitor hoạt động. Module này:
+//   1) Đọc DR0-DR7 qua NtGetContextThreadDirect (bypass Packman NtGetContextThread hook)
+//   2) Nếu DR0-DR3 != 0 và DR7 có enable bit → có HW BP → log + clear
+//   3) Clear bằng NtSetContextThreadDirect (bypass Packman NtSetContextThread hook)
+//
+// CONTEXT_DEBUG_REGISTERS: chỉ đọc/ghi DR0-DR7, không đụng GP regs → an toàn.
+// Chỉ check thread hiện tại (DLL load trên thread chính của game).
+
+namespace HwBpDetect {
+
+inline volatile LONG g_checked = 0;
+inline volatile LONG g_detected = 0;
+
+// Bit layout DR7 (x64):
+//   Bits 0-1:   L0/G0 (local/global enable DR0)
+//   Bits 2-3:   L1/G1 (DR1)
+//   Bits 4-5:   L2/G2 (DR2)
+//   Bits 6-7:   L3/G3 (DR3)
+//   Bit 8:      LE (local exact)
+//   Bit 9:      GE (global exact)
+//   Bit 10:     reserved
+//   Bits 16-31: conditions per DR (R/W + length)
+// Nếu bất kỳ L0/G0/L1/G1/L2/G2/L3/G3 = 1 → có HW BP active.
+
+inline bool CheckAndClear() {
+    if (InterlockedCompareExchange(&g_checked, 1, 0) != 0) return false;
+
+    CONTEXT ctx = {};
+    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+    // Đọc context thread hiện tại qua direct syscall (bypass Packman hook)
+    LONG status = DirectSyscall::NtGetContextThreadDirect(GetCurrentThread(), &ctx);
+    if (status < 0) {
+        DbgLogFmt("[HWBP] NtGetContextThreadDirect FAIL status=0x%X\r\n", (unsigned)status);
+        // Fallback: GetThreadContext user-mode (có thể bị Packman intercept)
+        if (!GetThreadContext(GetCurrentThread(), &ctx)) {
+            DbgLogFmt("[HWBP] GetThreadContext fallback FAIL gle=%lu\r\n", GetLastError());
+            return false;
+        }
+        DbgLogFmt("[HWBP] GetThreadContext fallback OK (may be intercepted)\r\n");
+    }
+
+    // Check DR0-DR3 + DR7 enable bits
+    const uintptr_t dr[] = { ctx.Dr0, ctx.Dr1, ctx.Dr2, ctx.Dr3 };
+    const DWORD dr7 = static_cast<DWORD>(ctx.Dr7);
+    // Enable mask: L0|G0|L1|G1|L2|G2|L3|G3 = bits 0-7
+    const DWORD enableMask = 0xFF;
+
+    bool detected = false;
+    int activeBp = 0;
+    for (int i = 0; i < 4; ++i) {
+        // DRi active nếu DRi != 0 VÀ enable bit tương ứng trong DR7 set
+        bool enL = (dr7 >> (i * 2))     & 1;  // Li
+        bool enG = (dr7 >> (i * 2 + 1)) & 1;  // Gi
+        if (dr[i] != 0 && (enL || enG)) {
+            detected = true;
+            ++activeBp;
+            DbgLogFmt("[HWBP] DR%d = 0x%llX ACTIVE (L=%d G=%d)\r\n",
+                      i, (unsigned long long)dr[i], (int)enL, (int)enG);
+        }
+    }
+    DbgLogFmt("[HWBP] DR7=0x%X  active=%d  detected=%d\r\n",
+              (unsigned)dr7, activeBp, (int)detected);
+
+    if (!detected) {
+        DbgLogFmt("[HWBP] No hardware breakpoints detected\r\n");
+        return false;
+    }
+
+    InterlockedExchange(&g_detected, 1);
+
+    // Clear DR0-DR3 + DR7 để neutralize HW BP
+    ctx.Dr0 = 0;
+    ctx.Dr1 = 0;
+    ctx.Dr2 = 0;
+    ctx.Dr3 = 0;
+    ctx.Dr7 = 0;
+    // Dr6 là status register, clear luôn
+    ctx.Dr6 = 0;
+
+    status = DirectSyscall::NtSetContextThreadDirect(GetCurrentThread(), &ctx);
+    if (status < 0) {
+        DbgLogFmt("[HWBP] NtSetContextThreadDirect FAIL status=0x%X — trying fallback\r\n",
+                  (unsigned)status);
+        if (!SetThreadContext(GetCurrentThread(), &ctx)) {
+            DbgLogFmt("[HWBP] SetThreadContext fallback FAIL gle=%lu\r\n", GetLastError());
+            return true; // vẫn report detected
+        }
+    }
+    DbgLogFmt("[HWBP] Cleared DR0-DR3+DR7 (neutralized %d HW BP)\r\n", activeBp);
+    return true;
+}
+
+} // namespace HwBpDetect
+
+// ── Thread Info Audit ────────────────────────────────────────────────────────
+// Query thread info qua direct syscall (bypass Packman NtQueryInformationThread hook).
+// Verify:
+//   1) ThreadStartAddress (0x1E) — start address có bị leak vào unlinked module không
+//   2) ThreadHideFromDebugger (0x11) — flag đã set hay chưa
+// Chỉ audit (read-only), không thay đổi gì.
+
+namespace ThreadInfoAudit {
+
+inline void Audit() {
+    HANDLE h = GetCurrentThread();
+
+    // ThreadHideFromDebugger (0x11) — SET-ONLY info class, không query được.
+    // Chỉ log rằng ta đã set nó (via NtSetInformationThreadDirect) trên worker threads.
+    DbgLogFmt("[THAUD] ThreadHideFromDebugger: set-only class, skip query (set on worker threads)\r\n");
+
+    // ThreadQuerySetWin32StartAddress (0x1F) — query start address của thread
+    PVOID startAddr = nullptr;
+    ULONG retLen = 0;
+    LONG s2 = DirectSyscall::NtQueryInformationThreadDirect(
+        h, 0x1F, &startAddr, sizeof(startAddr), &retLen);
+    DbgLogFmt("[THAUD] ThreadStartAddress(0x1F): status=0x%X addr=%p\r\n",
+              (unsigned)s2, startAddr);
+
+    // ThreadBasicInformation (0x00) — TEB, PID, TID
+    struct THREAD_BASIC_INFORMATION {
+        PVOID ExitStatus;
+        PVOID TebBase;
+        struct { HANDLE UniqueProcess; HANDLE UniqueThread; } ClientId;
+        PVOID AffinityMask;
+        LONG Priority;
+        LONG BasePriority;
+    };
+    THREAD_BASIC_INFORMATION tbi = {};
+    retLen = 0;
+    LONG s3 = DirectSyscall::NtQueryInformationThreadDirect(
+        h, 0x00, &tbi, sizeof(tbi), &retLen);
+    DbgLogFmt("[THAUD] ThreadBasicInfo: status=0x%X TEB=%p PID=%lu TID=%lu\r\n",
+              (unsigned)s3, tbi.TebBase,
+              (unsigned long)(uintptr_t)tbi.ClientId.UniqueProcess,
+              (unsigned long)(uintptr_t)tbi.ClientId.UniqueThread);
+}
+
+} // namespace ThreadInfoAudit
+
+// ── Memory Region Audit ──────────────────────────────────────────────────────
+// Quét memory regions từ trong process bằng NtQueryVirtualMemoryDirect
+// (bypass Packman NtQueryVirtualMemory hook).
+// Tìm MEM_PRIVATE + PAGE_EXECUTE regions — anti-cheat detection surface.
+// NightSharp nên dùng AllocSectionRWX (MEM_MAPPED) cho code regions.
+// Log warning nếu phát hiện MEM_PRIVATE executable regions.
+
+namespace MemRegionAudit {
+
+inline void Audit() {
+    // MEMORY_BASIC_INFORMATION: Type = MEM_PRIVATE(0x20000) | MEM_MAPPED(0x40000) | MEM_IMAGE(0x1000000)
+    // Protect: PAGE_EXECUTE(0x10) | PAGE_EXECUTE_READ(0x20) | PAGE_EXECUTE_READWRITE(0x40) | PAGE_EXECUTE_WRITECOPY(0x80)
+    const DWORD EXEC_MASK = 0xF0; // PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY
+
+    SYSTEM_INFO si = {};
+    GetSystemInfo(&si);
+    uintptr_t addr = reinterpret_cast<uintptr_t>(si.lpMinimumApplicationAddress);
+    const uintptr_t maxAddr = reinterpret_cast<uintptr_t>(si.lpMaximumApplicationAddress);
+
+    int privateExec = 0;
+    int mappedExec = 0;
+    int imageExec = 0;
+    int totalRegions = 0;
+    int nightsharpRegions = 0;
+
+    DbgLogFmt("[MEMAUD] Scanning %p-%p...\r\n", (void*)addr, (void*)maxAddr);
+
+    while (addr < maxAddr) {
+        MEMORY_BASIC_INFORMATION mbi = {};
+        SIZE_T ret = 0;
+        LONG status = DirectSyscall::NtQueryVirtualMemoryDirect(
+            GetCurrentProcess(), reinterpret_cast<PVOID>(addr),
+            0 /*MemoryBasicInformation*/, &mbi, sizeof(mbi), &ret);
+
+        if (status < 0 || ret == 0) {
+            // Skip region — advance by page size
+            addr += si.dwPageSize;
+            continue;
+        }
+
+        ++totalRegions;
+
+        if (mbi.State == MEM_COMMIT && (mbi.Protect & EXEC_MASK)) {
+            const bool isPrivate = (mbi.Type == MEM_PRIVATE);
+            const bool isMapped  = (mbi.Type == MEM_MAPPED);
+            const bool isImage   = (mbi.Type == MEM_IMAGE);
+
+            if (isPrivate) {
+                ++privateExec;
+                // Log MEM_PRIVATE executable regions — potential detection surface
+                DbgLogFmt("[MEMAUD] MEM_PRIVATE EXEC: base=%p size=0x%zX prot=0x%X\r\n",
+                          (void*)addr, (size_t)mbi.RegionSize, (unsigned)mbi.Protect);
+            } else if (isMapped) {
+                ++mappedExec;
+            } else if (isImage) {
+                ++imageExec;
+            }
+        }
+
+        addr += mbi.RegionSize;
+    }
+
+    DbgLogFmt("[MEMAUD] Total=%d  PrivateExec=%d  MappedExec=%d  ImageExec=%d\r\n",
+              totalRegions, privateExec, mappedExec, imageExec);
+
+    if (privateExec > 0) {
+        DbgLogFmt("[MEMAUD] WARNING: %d MEM_PRIVATE executable regions detected — anti-cheat can scan these\r\n",
+                  privateExec);
+    } else {
+        DbgLogFmt("[MEMAUD] OK: no MEM_PRIVATE executable regions\r\n");
+    }
+}
+
+} // namespace MemRegionAudit
+
+// ── Stack Walk Audit ─────────────────────────────────────────────────────────
+// Capture current call stack, check return addresses có trỏ vào NightSharp
+// module (unlinked từ PEB) không. Nếu có → Packman có thể detect khi walk stack.
+// Read-only audit, 100% safe — không modify stack.
+//
+// Packman import RtlLookupFunctionEntry + RtlVirtualUnwind (trong anti-cheat
+// functions sub_2C3B7D, sub_2C5791). Nếu Packman walk stack khi hooked Nt*
+// function được gọi, return address trỏ vào NightSharp code → detect.
+//
+// NightSharp đã dùng direct syscall → không gọi qua hooked functions.
+// Nhưng khi NightSharp code gọi Windows API thông thường, return address
+// vẫn trỏ vào unlinked module.
+
+namespace StackAudit {
+
+inline volatile LONG g_audited = 0;
+
+// Lưu module range của NightSharp để check
+struct ModuleRange {
+    uintptr_t base;
+    size_t    size;
+};
+
+inline void Audit(HMODULE nightsharpModule) {
+    if (InterlockedCompareExchange(&g_audited, 1, 0) != 0) return;
+    if (!nightsharpModule) {
+        DbgLogFmt("[STACKAUD] No module handle, skip\r\n");
+        return;
+    }
+
+    // Lấy NightSharp module range — dùng VirtualQuery + PE header
+    // (không phụ thuộc PEB loader list, hoạt động sau PebHide)
+    MEMORY_BASIC_INFORMATION mbi = {};
+    if (VirtualQuery(nightsharpModule, &mbi, sizeof(mbi)) != sizeof(mbi)) {
+        DbgLogFmt("[STACKAUD] VirtualQuery FAIL gle=%lu\r\n", GetLastError());
+        return;
+    }
+    const uintptr_t nsBase = reinterpret_cast<uintptr_t>(mbi.AllocationBase);
+    // Đọc SizeOfImage từ PE header
+    auto* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(nsBase);
+    auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(nsBase + dosHeader->e_lfanew);
+    const size_t nsSize = ntHeaders->OptionalHeader.SizeOfImage;
+    const uintptr_t nsEnd = nsBase + nsSize;
+    DbgLogFmt("[STACKAUD] NightSharp module: %p-%p (size=0x%zX)\r\n",
+              (void*)nsBase, (void*)nsEnd, nsSize);
+
+    // Capture stack back trace — RtlCaptureStackBackTrace là safe, read-only
+    // Capture tối đa 32 frames (đủ cho DllMain call chain)
+    const int MAX_FRAMES = 32;
+    void* frames[MAX_FRAMES] = {};
+    USHORT captured = RtlCaptureStackBackTrace(0, MAX_FRAMES, frames, nullptr);
+
+    DbgLogFmt("[STACKAUD] Captured %u frames\r\n", (unsigned)captured);
+
+    int nsFrames = 0;
+    int otherFrames = 0;
+    int unknownFrames = 0;
+
+    for (USHORT i = 0; i < captured; ++i) {
+        const uintptr_t addr = reinterpret_cast<uintptr_t>(frames[i]);
+
+        // Check nếu addr thuộc NightSharp module range
+        if (addr >= nsBase && addr < nsEnd) {
+            ++nsFrames;
+            DbgLogFmt("[STACKAUD]   #%02d NS_MODULE  %p (RVA=0x%llX)\r\n",
+                      i, (void*)addr, (unsigned long long)(addr - nsBase));
+        } else {
+            // Check thuộc module nào khác
+            MEMORY_BASIC_INFORMATION mbi = {};
+            if (VirtualQuery(reinterpret_cast<void*>(addr), &mbi, sizeof(mbi)) == sizeof(mbi)) {
+                if (mbi.Type == MEM_IMAGE) {
+                    ++otherFrames;
+                    // Lấy module name
+                    char modName[MAX_PATH] = {};
+                    GetModuleFileNameA(reinterpret_cast<HMODULE>(mbi.AllocationBase),
+                                       modName, MAX_PATH);
+                    const char* baseName = strrchr(modName, '\\');
+                    baseName = baseName ? baseName + 1 : modName;
+                    DbgLogFmt("[STACKAUD]   #%02d %-12s %p\r\n", i, baseName, (void*)addr);
+                } else {
+                    ++unknownFrames;
+                    DbgLogFmt("[STACKAUD]   #%02d UNKNOWN     %p (type=0x%X prot=0x%X)\r\n",
+                              i, (void*)addr, (unsigned)mbi.Type, (unsigned)mbi.Protect);
+                }
+            } else {
+                ++unknownFrames;
+                DbgLogFmt("[STACKAUD]   #%02d UNMAPPED   %p\r\n", i, (void*)addr);
+            }
+        }
+    }
+
+    DbgLogFmt("[STACKAUD] Summary: NS=%d Other=%d Unknown=%d\r\n",
+              nsFrames, otherFrames, unknownFrames);
+
+    if (nsFrames > 0) {
+        DbgLogFmt("[STACKAUD] WARNING: %d return addresses point to NightSharp module — Packman can detect via stack walk\r\n",
+                  nsFrames);
+    } else {
+        DbgLogFmt("[STACKAUD] OK: no return addresses in NightSharp module\r\n");
+    }
+}
+
+} // namespace StackAudit
 
 // ── CRC Bypass ───────────────────────────────────────────────────────────────
 
