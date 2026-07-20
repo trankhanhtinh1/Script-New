@@ -18,6 +18,7 @@
 #include "overlay/OverlayManager.h"
 
 #include "Core/PackmanHook.h"
+#include "Core/CoreBypass.h"
 #include "Core/PebHide.h"
 #pragma comment(lib, "psapi.lib")
 
@@ -186,7 +187,7 @@ static void StartOverlayWorker(HMODULE module) {
         return;
     }
 
-    HANDLE hThread = CreateThread(nullptr, 0, OverlayWorker, module, 0, nullptr);
+    HANDLE hThread = CoreBypass::CreateThreadSpoofed(OverlayWorker, module);
     if (hThread) {
         CloseHandle(hThread);
         NightSharpDebug::Logf("[NightSharp] Overlay worker thread created");
@@ -239,7 +240,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         DirectSyscall::InitAll();
         DirectSyscall::DumpSyscallTable();
         ResetDeferredCRCInstallShutdown();
-        HANDLE hCrc = CreateThread(nullptr, 0, DeferredCRCInstallThread, nullptr, 0, nullptr);
+        HANDLE hCrc = CoreBypass::CreateThreadSpoofed(DeferredCRCInstallThread, nullptr);
         if (hCrc) {
             g_crcThread = hCrc;
         }

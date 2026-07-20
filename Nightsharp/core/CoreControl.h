@@ -201,8 +201,11 @@ inline int GetPing() {
     CoreRuntime::RefreshReadState();
     if (ctx.getPingFn && Globals::IsValidPtr(ctx.netInstance)) {
         using FnGetPing = int(__fastcall*)(uintptr_t);
+        const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
         __try {
-            const int ping = reinterpret_cast<FnGetPing>(ctx.getPingFn)(ctx.netInstance);
+            const int ping = Globals::IsValidPtr(trampoline)
+                ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnGetPing>(ctx.getPingFn), ctx.netInstance)
+                : reinterpret_cast<FnGetPing>(ctx.getPingFn)(ctx.netInstance);
             if (ping > 0 && ping < 5000) {
                 ctx.cachedPing = ping;
                 return ping;
@@ -220,8 +223,11 @@ inline float ReadAttackDelayFor(uintptr_t object) {
     }
 
     using FnAttackDelay = float(__fastcall*)(uintptr_t);
+    const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
-        const float value = reinterpret_cast<FnAttackDelay>(ctx.getAttackDelayFn)(object);
+        const float value = Globals::IsValidPtr(trampoline)
+            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnAttackDelay>(ctx.getAttackDelayFn), object)
+            : reinterpret_cast<FnAttackDelay>(ctx.getAttackDelayFn)(object);
         return IsSaneSeconds(value) ? value : 0.0f;
     } __except (1) {
         return 0.0f;
@@ -244,8 +250,11 @@ inline uintptr_t GetAttackWindupProfileRoot(uintptr_t object) {
     }
 
     using FnGetAttackProfile = uintptr_t(__fastcall*)(uintptr_t);
+    const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
-        return reinterpret_cast<FnGetAttackProfile>(profileFn)(object);
+        return Globals::IsValidPtr(trampoline)
+            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnGetAttackProfile>(profileFn), object)
+            : reinterpret_cast<FnGetAttackProfile>(profileFn)(object);
     } __except (1) {
         return 0;
     }
@@ -276,8 +285,11 @@ inline float ReadAttackWindupFor(uintptr_t object, int attackId) {
     }
 
     using FnAttackWindup = float(__fastcall*)(uintptr_t, int);
+    const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
-        const float value = reinterpret_cast<FnAttackWindup>(ctx.getAttackWindupFn)(object, attackId);
+        const float value = Globals::IsValidPtr(trampoline)
+            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnAttackWindup>(ctx.getAttackWindupFn), object, attackId)
+            : reinterpret_cast<FnAttackWindup>(ctx.getAttackWindupFn)(object, attackId);
         return IsSaneSeconds(value) ? value : 0.0f;
     } __except (1) {
         return 0.0f;

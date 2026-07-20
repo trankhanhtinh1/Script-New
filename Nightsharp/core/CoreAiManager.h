@@ -1,9 +1,11 @@
 #pragma once
 
+#include "CoreBypass.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
+#include "spoof/spoofcall.h"
 #include "../imgui/imgui.h"
 
 #include <algorithm>
@@ -161,9 +163,11 @@ namespace detail {
 
     inline uintptr_t ResolveManagerSeh(uintptr_t object, uintptr_t function) {
         using GetAiManagerFn = uintptr_t(__fastcall*)(uintptr_t);
+        const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
         __try {
-            const uintptr_t manager =
-                reinterpret_cast<GetAiManagerFn>(function)(object);
+            const uintptr_t manager = Globals::IsValidPtr(trampoline)
+                ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<GetAiManagerFn>(function), object)
+                : reinterpret_cast<GetAiManagerFn>(function)(object);
             return Globals::IsValidPtr(manager) ? manager : 0;
         }
         __except (1) {

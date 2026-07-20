@@ -4,6 +4,7 @@
 #include "Globals.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
+#include "../DebugLog.h"
 
 #include <Windows.h>
 #include <cstdint>
@@ -42,7 +43,14 @@ namespace CoreBypass {
     };
 
     inline bool ForEachExecutableSection(bool (*callback)(const uint8_t* start, size_t size, uintptr_t sectionBase, void* user), void* user) {
-        const auto base = CoreRuntime::GetContext().moduleBase;
+        uintptr_t base = CoreRuntime::GetContext().moduleBase;
+        if (!base) {
+            if (!Globals::Init()) {
+                return false;
+            }
+            base = Globals::base;
+            CoreRuntime::g_ctx.moduleBase = base;
+        }
         if (!base || !callback) {
             return false;
         }
@@ -137,8 +145,16 @@ namespace CoreBypass {
         return CoreRuntime::GetContext().detectionWatcher2;
     }
 
+    inline bool g_spoofTrampolineLogged = false;
+
     inline uintptr_t ResolveSpoofTrampoline() {
         if (CoreRuntime::GetContext().spoofTrampoline) {
+            if (!g_spoofTrampolineLogged) {
+                g_spoofTrampolineLogged = true;
+                NightSharpDebug::Logf(
+                    "[SpoofTrampoline] cached=0x%llX — all native calls use spoof_call",
+                    static_cast<unsigned long long>(CoreRuntime::GetContext().spoofTrampoline));
+            }
             return CoreRuntime::GetContext().spoofTrampoline;
         }
 
@@ -146,7 +162,116 @@ namespace CoreBypass {
         if (ForEachExecutableSection(&SpoofTrampolinePatternCallback, &search)) {
             CoreRuntime::g_ctx.spoofTrampoline = search.result;
         }
+
+        if (!g_spoofTrampolineLogged) {
+            g_spoofTrampolineLogged = true;
+            if (CoreRuntime::GetContext().spoofTrampoline) {
+                NightSharpDebug::Logf(
+                    "[SpoofTrampoline] resolved at 0x%llX (pattern FF 23) — all native calls use spoof_call",
+                    static_cast<unsigned long long>(CoreRuntime::GetContext().spoofTrampoline));
+            } else {
+                NightSharpDebug::Logf(
+                    "[SpoofTrampoline] pattern FF 23 NOT found — all native calls use DIRECT call (no spoof)");
+            }
+        }
         return CoreRuntime::GetContext().spoofTrampoline;
+    }
+
+    // ── ThreadBeginTrampoline ────────────────────────────────────────────────────
+    // Pattern: FF E1 C3 = jmp rcx; ret
+    // When used as CreateThread start address, RCX = thread param (per x64 ABI).
+    // jmp rcx → jumps to param (ThreadBeginWrapper).
+    // ThreadStartAddress (anti-cheat NtQueryInformationThread) = gadget in game
+    // module, NOT NightSharp DLL.
+    inline bool ThreadBeginTrampolinePatternCallback(const uint8_t* start, size_t size, uintptr_t sectionBase, void* user) {
+        auto* ctx = reinterpret_cast<PatternSearchCtx*>(user);
+        if (!ctx) return false;
+
+        for (size_t i = 0; i + 2 < size; ++i) {
+            if (start[i] == 0xFF && start[i + 1] == 0xE1 && start[i + 2] == 0xC3) {
+                ctx->result = sectionBase + i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline bool g_threadBeginTrampolineLogged = false;
+
+    inline uintptr_t ResolveThreadBeginTrampoline() {
+        if (CoreRuntime::GetContext().threadBeginTrampoline) {
+            if (!g_threadBeginTrampolineLogged) {
+                g_threadBeginTrampolineLogged = true;
+                NightSharpDebug::Logf(
+                    "[ThreadBeginTrampoline] cached=0x%llX — thread start addresses spoofed",
+                    static_cast<unsigned long long>(CoreRuntime::GetContext().threadBeginTrampoline));
+            }
+            return CoreRuntime::GetContext().threadBeginTrampoline;
+        }
+
+        PatternSearchCtx search = {};
+        if (ForEachExecutableSection(&ThreadBeginTrampolinePatternCallback, &search)) {
+            CoreRuntime::g_ctx.threadBeginTrampoline = search.result;
+        }
+
+        if (!g_threadBeginTrampolineLogged) {
+            g_threadBeginTrampolineLogged = true;
+            if (CoreRuntime::GetContext().threadBeginTrampoline) {
+                NightSharpDebug::Logf(
+                    "[ThreadBeginTrampoline] resolved at 0x%llX (pattern FF E1 C3) — thread start addresses spoofed",
+                    static_cast<unsigned long long>(CoreRuntime::GetContext().threadBeginTrampoline));
+            } else {
+                NightSharpDebug::Logf(
+                    "[ThreadBeginTrampoline] pattern FF E1 C3 NOT found — thread start addresses NOT spoofed");
+            }
+        }
+        return CoreRuntime::GetContext().threadBeginTrampoline;
+    }
+
+    // ── Thread begin wrapper ─────────────────────────────────────────────────────
+    // Thread starts at gadget (jmp rcx) with RCX = ThreadBeginWrapper address.
+    // jmp rcx → ThreadBeginWrapper → reads g_pendingThreadBegin → calls routine(param).
+    // No race: NightSharp creates threads sequentially in DllMain.
+    struct ThreadBeginEntry {
+        LPTHREAD_START_ROUTINE routine;
+        PVOID param;
+    };
+
+    inline ThreadBeginEntry g_pendingThreadBegin = {};
+
+    inline DWORD WINAPI ThreadBeginWrapper(LPVOID /*ignored*/) {
+        const auto routine = g_pendingThreadBegin.routine;
+        const auto param = g_pendingThreadBegin.param;
+        g_pendingThreadBegin = {};
+        if (routine) {
+            return routine(param);
+        }
+        return 0;
+    }
+
+    // CreateThread with spoofed start address.
+    // ThreadStartAddress = gadget in game module (anti-cheat sees game module).
+    // Fallback: direct CreateThread if trampoline not found.
+    inline HANDLE CreateThreadSpoofed(LPTHREAD_START_ROUTINE routine, PVOID param) {
+        const auto trampoline = ResolveThreadBeginTrampoline();
+        if (!Globals::IsValidPtr(trampoline)) {
+            return CreateThread(nullptr, 0, routine, param, 0, nullptr);
+        }
+
+        g_pendingThreadBegin = { routine, param };
+
+        HANDLE h = CreateThread(
+            nullptr, 0,
+            reinterpret_cast<LPTHREAD_START_ROUTINE>(trampoline),
+            reinterpret_cast<LPVOID>(ThreadBeginWrapper),
+            0, nullptr);
+
+        if (!h) {
+            g_pendingThreadBegin = {};
+            return CreateThread(nullptr, 0, routine, param, 0, nullptr);
+        }
+
+        return h;
     }
 
     inline bool MainloopCheck() {
