@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "DebugLog.h"
+#include "Core/CoreBypass.h"
 
 #pragma comment(lib, "Dbghelp.lib")
 
@@ -668,7 +669,7 @@ inline void StartGuard() {
     if (InterlockedCompareExchange(&g_guardRunning, 1, 0) != 0) {
         return;
     }
-    g_guardThread = CreateThread(nullptr, 0, &FilterGuardThread, nullptr, 0, nullptr);
+    g_guardThread = CoreBypass::CreateThreadSpoofed(&FilterGuardThread, nullptr);
     if (!g_guardThread) {
         InterlockedExchange(&g_guardRunning, 0);
         NightSharpDebug::Logf(

@@ -1,10 +1,12 @@
 #pragma once
 
+#include "CoreBypass.h"
 #include "CoreMap.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
+#include "spoof/spoofcall.h"
 #include "../DebugLog.h"
 
 #include <Windows.h>
@@ -302,8 +304,11 @@ inline int GetPing() {
     }
 
     using GetPingFn = int(__fastcall*)(uintptr_t);
+    const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
-        const int ping = reinterpret_cast<GetPingFn>(ctx.getPingFn)(ctx.netInstance);
+        const int ping = Globals::IsValidPtr(trampoline)
+            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<GetPingFn>(ctx.getPingFn), ctx.netInstance)
+            : reinterpret_cast<GetPingFn>(ctx.getPingFn)(ctx.netInstance);
         if (ping > 0 && ping < 5000) {
             ctx.cachedPing = ping;
             return ping;
@@ -548,8 +553,13 @@ inline bool Print(const char* text, bool /*triggerEvent*/ = true, std::uint32_t 
             using DisplayChatFn = void(__fastcall*)(uintptr_t, const char*, int);
             const auto fn = reinterpret_cast<DisplayChatFn>(
                 ctx.moduleBase + Offset::GameRuntime::PrintChat);
+            const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
             __try {
-                fn(container, text, static_cast<int>(flags));
+                if (Globals::IsValidPtr(trampoline)) {
+                    spoof_call(reinterpret_cast<void*>(trampoline), fn, container, text, static_cast<int>(flags));
+                } else {
+                    fn(container, text, static_cast<int>(flags));
+                }
                 return true;
             }
             __except (1) {}

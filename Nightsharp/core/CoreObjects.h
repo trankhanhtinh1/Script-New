@@ -2,9 +2,11 @@
 
 #include "CoreAIHeroClient.h"
 #include "CoreAttackableUnit.h"
+#include "CoreBypass.h"
 #include "Globals.h"
 #include "Vector.h"
 #include "offset.h"
+#include "spoof/spoofcall.h"
 
 #include <algorithm>
 #include <cctype>
@@ -441,7 +443,10 @@ inline bool TryCallObjectFloatVFunc(uintptr_t object, uintptr_t vtableOffset, fl
         }
 
         const auto fn = reinterpret_cast<ObjectFloatVFunc>(fnAddress);
-        out = fn(object);
+        const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
+        out = Globals::IsValidPtr(trampoline)
+            ? spoof_call(reinterpret_cast<void*>(trampoline), fn, object)
+            : fn(object);
         return IsSaneFloat(out, 0.0f, 10000.0f);
     }
     __except (1) {
@@ -464,7 +469,10 @@ inline bool TryCallObjectFloatFunction(uintptr_t object, uintptr_t rva, float& o
             return false;
         }
 
-        out = fn(object);
+        const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
+        out = Globals::IsValidPtr(trampoline)
+            ? spoof_call(reinterpret_cast<void*>(trampoline), fn, object)
+            : fn(object);
         return IsSaneFloat(out, 0.0f, 10000.0f);
     }
     __except (1) {

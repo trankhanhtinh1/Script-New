@@ -31,6 +31,8 @@
 #include <cstdarg>
 #include <cstring>
 
+#include "CoreBypass.h"
+
 #pragma warning(disable: 4996)
 
 // ── Logging ──────────────────────────────────────────────────────────────────
@@ -716,10 +718,14 @@ inline void DumpSyscallTable() {
 // đi qua ntdll đều bị trap. Wrapper này gọi NtCreateThreadEx trực tiếp qua
 // syscall stub, bỏ qua entry ntdll. Nếu fail, fallback CreateThread thường.
 inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
+    const auto trampoline = CoreBypass::ResolveThreadBeginTrampoline();
+    const bool hasTrampoline = Globals::IsValidPtr(trampoline);
+
     if (!InitSyscall(IDX_CREATETHREADEX)) {
-        // Fallback: CreateThread thường (sẽ đi qua Packman hook, nhưng
-        // vẫn hoạt động nếu Packman chỉ log chứ không block).
-        HANDLE h = CreateThread(nullptr, 0, routine, param, 0, nullptr);
+        // Fallback: CreateThread (với trampoline nếu có)
+        HANDLE h = hasTrampoline
+            ? CoreBypass::CreateThreadSpoofed(routine, param)
+            : CreateThread(nullptr, 0, routine, param, 0, nullptr);
         if (h) {
             NtSetInformationThreadDirect(h, 0x11 /*ThreadHideFromDebugger*/, nullptr, 0);
             DbgLog("[SYS] CreateThreadDirect: fallback CreateThread OK\r\n");
@@ -728,13 +734,23 @@ inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
     }
     auto fn = reinterpret_cast<NtCreateThreadExFn>(g_syscalls[IDX_CREATETHREADEX].fn);
     HANDLE hThread = nullptr;
+
+    LPTHREAD_START_ROUTINE startRoutine = routine;
+    PVOID startArg = param;
+
+    if (hasTrampoline) {
+        CoreBypass::g_pendingThreadBegin = { routine, param };
+        startRoutine = reinterpret_cast<LPTHREAD_START_ROUTINE>(trampoline);
+        startArg = reinterpret_cast<PVOID>(CoreBypass::ThreadBeginWrapper);
+    }
+
     LONG status = fn(
         &hThread,
         THREAD_ALL_ACCESS,
         nullptr,               // ObjectAttributes
         GetCurrentProcess(),
-        routine,
-        param,
+        startRoutine,
+        startArg,
         0,                     // CreateFlags (CREATE_SUSPENDED=0 → chạy ngay)
         0,                     // ZeroBits
         0,                     // StackSize (default)
@@ -744,13 +760,18 @@ inline HANDLE CreateThreadDirect(LPTHREAD_START_ROUTINE routine, PVOID param) {
     if (status >= 0 && hThread) {
         // Module F: ẩn thread khỏi debugger enumeration.
         NtSetInformationThreadDirect(hThread, 0x11 /*ThreadHideFromDebugger*/, nullptr, 0);
-        DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx OK (handle=%p, status=0x%X)\r\n",
-                  hThread, (unsigned)status);
+        DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx OK (handle=%p, status=0x%X) %s\r\n",
+                  hThread, (unsigned)status, hasTrampoline ? "spoofed" : "direct");
         return hThread;
+    }
+    if (hasTrampoline) {
+        CoreBypass::g_pendingThreadBegin = {};
     }
     DbgLogFmt("[SYS] CreateThreadDirect: NtCreateThreadEx FAIL status=0x%X — fallback CreateThread\r\n",
               (unsigned)status);
-    HANDLE hRetry = CreateThread(nullptr, 0, routine, param, 0, nullptr);
+    HANDLE hRetry = hasTrampoline
+        ? CoreBypass::CreateThreadSpoofed(routine, param)
+        : CreateThread(nullptr, 0, routine, param, 0, nullptr);
     if (hRetry) NtSetInformationThreadDirect(hRetry, 0x11 /*ThreadHideFromDebugger*/, nullptr, 0);
     return hRetry;
 }

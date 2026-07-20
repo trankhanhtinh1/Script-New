@@ -59,6 +59,7 @@ namespace CoreRuntime {
         uintptr_t getAiManagerFn = 0;
         uintptr_t detectionWatcher2 = 0;
         uintptr_t spoofTrampoline = 0;
+        uintptr_t threadBeginTrampoline = 0;
 
         uintptr_t localPlayer = 0;
         uintptr_t objectManager = 0;
