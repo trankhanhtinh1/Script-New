@@ -125,6 +125,8 @@ void operator delete[](void* ptr, size_t, std::align_val_t al) noexcept {
 static volatile LONG g_workerStarted = 0;
 static volatile LONG g_selfUnloading = 0;
 static HANDLE g_crcThread = nullptr;
+static HANDLE g_shutdownEvent = nullptr;
+static HMODULE g_hModule = nullptr;
 
 static void StopDeferredCRCThread() {
     RequestDeferredCRCInstallShutdown();
@@ -209,124 +211,141 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK NextHook(int code, WPARAM wPar
 // ========================================================================
 // DllMain
 // ========================================================================
+// ========================================================================
+// NightSharpWorker — all init logic moved here from DllMain
+// Spoofed start address (game module) + ThreadHideFromDebugger
+// ========================================================================
+static DWORD WINAPI NightSharpWorker(LPVOID param) {
+    HMODULE hModule = reinterpret_cast<HMODULE>(param);
+
+    NightSharpDebug::CrashReporter::Install(hModule);
+    NightSharpDebug::Phase("worker-attach");
+    NightSharpDebug::Logf("[NightSharp] NightSharpWorker entered module=%p", hModule);
+
+    // PHẢI gọi ResetLogFile TRƯỚC mọi DbgLog
+    ResetLogFile();
+
+    // PEB scrub — clear debugger artifacts trước khi Packman init.
+    {
+        auto* peb = reinterpret_cast<uint8_t*>(__readgsqword(0x60));
+        if (peb) {
+            uint8_t& beingDebugged = peb[2];
+            const uint8_t oldBD = beingDebugged;
+            beingDebugged = 0;
+
+            DWORD& ntGlobalFlag = *reinterpret_cast<DWORD*>(peb + 0xBC);
+            const DWORD oldGF = ntGlobalFlag;
+            ntGlobalFlag = 0;
+
+            PVOID processHeap = *reinterpret_cast<PVOID*>(peb + 0x30);
+            DWORD oldHeapFlags = 0, oldHeapForceFlags = 0;
+            if (processHeap) {
+                __try {
+                    DWORD* heapFlags = reinterpret_cast<DWORD*>(
+                        reinterpret_cast<uint8_t*>(processHeap) + 0x14);
+                    DWORD* heapForceFlags = reinterpret_cast<DWORD*>(
+                        reinterpret_cast<uint8_t*>(processHeap) + 0x18);
+                    oldHeapFlags = *heapFlags;
+                    oldHeapForceFlags = *heapForceFlags;
+                    *heapFlags = 0;
+                    *heapForceFlags = 0;
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                    DbgLogFmt("[PEB] Heap scrub SEH exception (heap=%p)\r\n", processHeap);
+                    processHeap = nullptr;
+                }
+            }
+
+            DbgLogFmt("[PEB] BeingDebugged: old=%u new=0\r\n", (unsigned)oldBD);
+            DbgLogFmt("[PEB] NtGlobalFlag: old=0x%X new=0\r\n", (unsigned)oldGF);
+            DbgLogFmt("[PEB] HeapFlags: old=0x%X new=0  ForceFlags: old=0x%X new=0  heap=%p\r\n",
+                      (unsigned)oldHeapFlags, (unsigned)oldHeapForceFlags, processHeap);
+            DbgLogFmt("[PEB] PEB=%p\r\n", (void*)peb);
+        } else {
+            DbgLogFmt("[PEB] Failed to read PEB from GS:0x60\r\n");
+        }
+    }
+
+    // PackmanHook: init syscalls + deferred CRC bypass install
+    DirectSyscall::InitAll();
+    DirectSyscall::DumpSyscallTable();
+
+    // Module 3: Set ThreadHideFromDebugger on worker thread (direct syscall)
+    // Phải gọi SAU InitAll (cần IDX_SETINFOTHREAD init)
+    DirectSyscall::NtSetInformationThreadDirect(
+        GetCurrentThread(), 0x11, nullptr, 0);
+    DbgLogFmt("[THAUD] ThreadHideFromDebugger set on worker thread\r\n");
+
+    // HW Breakpoint Detection
+    HwBpDetect::CheckAndClear();
+
+    // Thread Info Audit
+    ThreadInfoAudit::Audit();
+
+    ResetDeferredCRCInstallShutdown();
+    HANDLE hCrc = CoreBypass::CreateThreadSpoofed(DeferredCRCInstallThread, nullptr);
+    if (hCrc) {
+        g_crcThread = hCrc;
+    }
+
+    StartOverlayWorker(hModule);
+
+    // PEB Ldr Unlink — gọi CUỐI, sau khi overlay worker + CRC thread đã spawn
+    {
+        const int nUnlinked = PebHide::HideAndErase(hModule);
+        DbgLogFmt("[PEB] HideAndErase: unlinked %d/3 list(s) for module=%p\r\n",
+                  nUnlinked, hModule);
+    }
+
+    // Memory Region Audit
+    MemRegionAudit::Audit();
+
+    // Stack Walk Audit
+    StackAudit::Audit(hModule);
+
+    // Wait for shutdown signal
+    if (g_shutdownEvent) {
+        WaitForSingleObject(g_shutdownEvent, INFINITE);
+    }
+    return 0;
+}
+
+// ========================================================================
+// DllMain — minimal: set ThreadHideFromDebugger + spawn spoofed worker
+// Stack walk in DllMain sees only 1 NS frame (this function).
+// ========================================================================
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     switch (reason) {
     case DLL_PROCESS_ATTACH: {
         DisableThreadLibraryCalls(hModule);
-        NightSharpDebug::CrashReporter::Install(hModule);
-        NightSharpDebug::Phase("dll-attach");
-        NightSharpDebug::Logf("[NightSharp] DllMain attach module=%p", hModule);
 
-        // PHẢI gọi ResetLogFile TRƯỚC mọi DbgLog — nó xóa+tạo lại file, nếu
-        // gọi sau sẽ wipe log của các block PEB scrub bên dưới.
-        ResetLogFile();
+        g_hModule = hModule;
+        g_shutdownEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-        // PEB scrub — clear debugger artifacts trước khi Packman init.
-        //
-        // PEB layout (Win10/11 x64 — stable từ Win7 x64, OS-dependent không game-dependent):
-        //   +0x02  BeingDebugged   (BYTE)   — IsDebuggerPresent
-        //   +0x30  ProcessHeap     (PVOID)  — pointer tới _HEAP
-        //   +0xBC  NtGlobalFlag    (DWORD)  — debugger set FLG_HEAP_* bits
-        //
-        // _HEAP layout (Win10/11 x64):
-        //   +0x14  Flags           (DWORD)  — HEAP_GROWABLE | HEAP_TAIL_CHECKING | ...
-        //   +0x18  ForceFlags      (DWORD)  — forced heap flags
-        //
-        // Khi debugger attach: NtGlobalFlag |= 0x70, HeapFlags |= 0x02, ForceFlags |= 0x01.
-        // Packman check các field này → zero tất cả.
-        {
-            auto* peb = reinterpret_cast<uint8_t*>(__readgsqword(0x60));
-            if (peb) {
-                // PEB.BeingDebugged = 0
-                uint8_t& beingDebugged = peb[2];
-                const uint8_t oldBD = beingDebugged;
-                beingDebugged = 0;
-
-                // PEB.NtGlobalFlag = 0
-                DWORD& ntGlobalFlag = *reinterpret_cast<DWORD*>(peb + 0xBC);
-                const DWORD oldGF = ntGlobalFlag;
-                ntGlobalFlag = 0;
-
-                // ProcessHeap->Flags = 0, ProcessHeap->ForceFlags = 0
-                PVOID processHeap = *reinterpret_cast<PVOID*>(peb + 0x30);
-                DWORD oldHeapFlags = 0, oldHeapForceFlags = 0;
-                if (processHeap) {
-                    __try {
-                        DWORD* heapFlags = reinterpret_cast<DWORD*>(
-                            reinterpret_cast<uint8_t*>(processHeap) + 0x14);
-                        DWORD* heapForceFlags = reinterpret_cast<DWORD*>(
-                            reinterpret_cast<uint8_t*>(processHeap) + 0x18);
-                        oldHeapFlags = *heapFlags;
-                        oldHeapForceFlags = *heapForceFlags;
-                        *heapFlags = 0;
-                        *heapForceFlags = 0;
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {
-                        DbgLogFmt("[PEB] Heap scrub SEH exception (heap=%p)\r\n", processHeap);
-                        processHeap = nullptr;
-                    }
-                }
-
-                DbgLogFmt("[PEB] BeingDebugged: old=%u new=0\r\n", (unsigned)oldBD);
-                DbgLogFmt("[PEB] NtGlobalFlag: old=0x%X new=0\r\n", (unsigned)oldGF);
-                DbgLogFmt("[PEB] HeapFlags: old=0x%X new=0  ForceFlags: old=0x%X new=0  heap=%p\r\n",
-                          (unsigned)oldHeapFlags, (unsigned)oldHeapForceFlags, processHeap);
-                DbgLogFmt("[PEB] PEB=%p\r\n", (void*)peb);
-            } else {
-                DbgLogFmt("[PEB] Failed to read PEB from GS:0x60\r\n");
-            }
+        // Spawn spoofed worker thread — all logic moves here
+        // DllMain returns immediately → stack has only 1 NS frame
+        HANDLE hWorker = CoreBypass::CreateThreadSpoofed(NightSharpWorker, hModule);
+        if (hWorker) {
+            CloseHandle(hWorker);
         }
-
-        // PackmanHook: init syscalls + deferred CRC bypass install
-        // (ResetLogFile đã gọi ở đầu DllMain để không wipe log PEB scrub)
-        DirectSyscall::InitAll();
-        DirectSyscall::DumpSyscallTable();
-
-        // HW Breakpoint Detection — check + clear DR0-DR7 trên thread chính
-        // Phải gọi SAU InitAll (cần NtGetContextThreadDirect/NtSetContextThreadDirect)
-        HwBpDetect::CheckAndClear();
-
-        // Thread Info Audit — query ThreadStartAddress + ThreadHideFromDebugger
-        // qua direct syscall (bypass Packman NtQueryInformationThread hook)
-        ThreadInfoAudit::Audit();
-
-        ResetDeferredCRCInstallShutdown();
-        HANDLE hCrc = CoreBypass::CreateThreadSpoofed(DeferredCRCInstallThread, nullptr);
-        if (hCrc) {
-            g_crcThread = hCrc;
-        }
-
-        StartOverlayWorker(hModule);
-
-        // Module E — PEB Ldr Unlink. Gọi CUỐI, sau khi overlay worker
-        // + deferred CRC thread đã spawn (không cần module lookup nữa).
-        // Sau lệnh này: GetModuleHandleW(L"KiteMod.dll") trả nullptr,
-        // EnumProcessModulesEx không list module, string "KiteMod" bị xóa
-        // khỏi UNICODE_STRING trong LDR_DATA_TABLE_ENTRY.
-        {
-            const int nUnlinked = PebHide::HideAndErase(hModule);
-            DbgLogFmt("[PEB] HideAndErase: unlinked %d/3 list(s) for module=%p\r\n",
-                      nUnlinked, hModule);
-        }
-
-        // Memory Region Audit — quét tất cả regions, tìm MEM_PRIVATE executable
-        // (anti-cheat detection surface). Chạy SAU khi tất cả alloc + PebHide done.
-        MemRegionAudit::Audit();
-
-        // Stack Walk Audit — capture call stack, check return addresses có trỏ
-        // vào NightSharp module (unlinked) không. Read-only, 100% safe.
-        StackAudit::Audit(hModule);
         break;
     }
     case DLL_PROCESS_DETACH:
         if (reserved == nullptr) {
             NightSharpDebug::Phase("dll-detach");
             NightSharpDebug::Logf("[NightSharp] DllMain detach");
+            if (g_shutdownEvent) {
+                SetEvent(g_shutdownEvent);
+            }
             if (InterlockedCompareExchange(&g_selfUnloading, 0, 0) == 0) {
                 ShutdownNightSharpRuntime();
             }
             NightSharpDebug::CrashReporter::StopGuard();
             NightSharpDebug::CrashBridge::Uninstall();
             NightSharpDebug::CrashReporter::Uninstall();
+            if (g_shutdownEvent) {
+                CloseHandle(g_shutdownEvent);
+                g_shutdownEvent = nullptr;
+            }
         }
         break;
     default:

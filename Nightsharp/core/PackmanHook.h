@@ -175,6 +175,8 @@ using NtCreateThreadExFn = LONG(NTAPI*)(PHANDLE, ACCESS_MASK, PVOID, HANDLE,
     LPTHREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PVOID);
 using NtSetInfoThreadFn = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG);
 using NtQueryInfoThreadFn = LONG(NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+using NtCreateSectionFn = LONG(NTAPI*)(PHANDLE, ACCESS_MASK, PVOID*, PLARGE_INTEGER, ULONG, ULONG, HANDLE);
+using NtMapViewOfSectionFn = LONG(NTAPI*)(HANDLE, HANDLE, PVOID*, ULONG_PTR, SIZE_T, PLARGE_INTEGER, PSIZE_T, DWORD, ULONG, ULONG);
 
 // ── Syscall entry table ──────────────────────────────────────────────────────
 // Mỗi entry: tên function (cho resolve), SSN fallback (verify từ IDA ntdll),
@@ -202,6 +204,8 @@ inline SyscallEntry g_syscalls[] = {
     { NS_HASH("NtCreateThreadEx"),       "NtCreateThreadEx",       0x0C2, nullptr, nullptr, -1 },
     { NS_HASH("NtSetInformationThread"), "NtSetInformationThread", 0x00D, nullptr, nullptr, -1 },
     { NS_HASH("NtQueryInformationThread"),"NtQueryInformationThread",0x025, nullptr, nullptr, -1 },
+    { NS_HASH("NtCreateSection"),       "NtCreateSection",       0x055, nullptr, nullptr, -1 },
+    { NS_HASH("NtMapViewOfSection"),    "NtMapViewOfSection",    0x028, nullptr, nullptr, -1 },
 };
 
 enum SyscallIdx : size_t {
@@ -217,7 +221,9 @@ enum SyscallIdx : size_t {
     IDX_CREATETHREADEX= 9,
     IDX_SETINFOTHREAD = 10,
     IDX_QUERYINFOTHREAD= 11,
-    SYSCALL_COUNT     = 12,
+    IDX_CREATESECTION  = 12,
+    IDX_MAPVIEWSECTION = 13,
+    SYSCALL_COUNT     = 14,
 };
 
 // Compile-time hash-collision guard cho g_syscalls[]. Nếu 2 entry cùng hash,
@@ -233,6 +239,9 @@ static_assert(NS_HASH("NtSetInformationThread") != NS_HASH("NtCreateThreadEx"), 
 static_assert(NS_HASH("NtSetInformationThread") != NS_HASH("NtSetContextThread"),   "hash collision");
 static_assert(NS_HASH("NtQueryInformationThread")!= NS_HASH("NtSetInformationThread"),"hash collision");
 static_assert(NS_HASH("NtQueryInformationThread")!= NS_HASH("NtCreateThreadEx"),     "hash collision");
+static_assert(NS_HASH("NtCreateSection")       != NS_HASH("NtMapViewOfSection"),    "hash collision");
+static_assert(NS_HASH("NtCreateSection")       != NS_HASH("NtQueryInformationThread"),"hash collision");
+static_assert(NS_HASH("NtMapViewOfSection")    != NS_HASH("NtQueryInformationThread"),"hash collision");
 
 // ── Backward compat globals (giữ API cũ cho CRCBypass) ───────────────────────
 inline void*         g_protectStub = nullptr;
@@ -463,13 +472,59 @@ inline void* PickSyscallGadget() {
     return g_syscallGadgets[(size_t)(r % g_gadgetCount)];
 }
 
-// ── AllocSectionRWX (Module MM) ──────────────────────────────────────────────
-// CreateFileMapping(INVALID_HANDLE_VALUE) → anonymous section backed by
-// pagefile. MapViewOfFile → region hiện MEM_MAPPED thay vì MEM_PRIVATE khi
-// NtQueryVirtualMemory (anti-cheat filter MEM_PRIVATE+PAGE_EXECUTE_* miss).
-// Section handle được CloseHandle nhưng view giữ mapping alive qua kernel refcount.
+// ── AllocSectionRWX (Module MM + Module 2 upgrade) ───────────────────────────
+// V2: NtCreateSection + NtMapViewOfSection qua direct syscall (bypass Packman hook).
+// Region hiện MEM_MAPPED (0x40000) thay vì MEM_PRIVATE (0x20000).
+// Anti-cheat scan MEM_PRIVATE+PAGE_EXECUTE sẽ miss.
 inline void* AllocSectionRWX(SIZE_T size) {
     if (size == 0) return nullptr;
+
+    // V2 path: direct syscall NtCreateSection + NtMapViewOfSection
+    // Check nếu syscalls đã được init (fn != nullptr)
+    if (g_syscalls[IDX_CREATESECTION].fn && g_syscalls[IDX_MAPVIEWSECTION].fn) {
+        HANDLE hSection = nullptr;
+        LARGE_INTEGER sectionSize;
+        sectionSize.QuadPart = static_cast<LONGLONG>(size);
+
+        auto createFn = reinterpret_cast<NtCreateSectionFn>(g_syscalls[IDX_CREATESECTION].fn);
+        LONG s1 = createFn(
+            &hSection,                 // SectionHandle
+            SECTION_ALL_ACCESS,        // DesiredAccess
+            nullptr,                   // ObjectAttributes
+            &sectionSize,              // MaximumSize
+            PAGE_EXECUTE_READWRITE,    // SectionPageProtection
+            SEC_COMMIT,                // AllocationAttributes (pagefile-backed)
+            nullptr);                  // FileHandle (anonymous)
+        if (s1 < 0 || !hSection) {
+            DbgLogFmt("[ALLOC] NtCreateSection FAIL status=0x%X\r\n", (unsigned)s1);
+        } else {
+            PVOID baseAddr = nullptr;
+            SIZE_T viewSize = 0;
+            auto mapFn = reinterpret_cast<NtMapViewOfSectionFn>(g_syscalls[IDX_MAPVIEWSECTION].fn);
+            LONG s2 = mapFn(
+                hSection,              // SectionHandle
+                GetCurrentProcess(),   // ProcessHandle
+                &baseAddr,             // BaseAddress
+                0,                     // ZeroBits
+                size,                  // CommitSize
+                nullptr,               // SectionOffset
+                &viewSize,             // ViewSize
+                1,                     // InheritDisposition (ViewShare)
+                0,                     // AllocationType
+                PAGE_EXECUTE_READWRITE // Win32Protect
+            );
+            CloseHandle(hSection);     // view giữ section alive qua kernel refcount
+
+            if (s2 < 0 || !baseAddr) {
+                DbgLogFmt("[ALLOC] NtMapViewOfSection FAIL status=0x%X\r\n", (unsigned)s2);
+            } else {
+                return baseAddr;
+            }
+        }
+    }
+
+    // Fallback: Win32 CreateFileMappingA + MapViewOfFile (old V1 path)
+    DbgLogFmt("[ALLOC] V2 path failed, falling back to V1 (CreateFileMapping)\r\n");
     HANDLE hMap = CreateFileMappingA(
         INVALID_HANDLE_VALUE, nullptr,
         PAGE_EXECUTE_READWRITE, 0, static_cast<DWORD>(size), nullptr);
@@ -477,7 +532,7 @@ inline void* AllocSectionRWX(SIZE_T size) {
     void* view = MapViewOfFile(hMap,
         FILE_MAP_EXECUTE | FILE_MAP_WRITE | FILE_MAP_READ,
         0, 0, size);
-    CloseHandle(hMap); // view giữ section alive qua kernel refcount
+    CloseHandle(hMap);
     return view;
 }
 
@@ -566,12 +621,24 @@ inline bool InitSyscall(size_t idx) {
 }
 
 // ── InitAll: khởi tạo tất cả syscall stub cùng lúc ────────────────────────────
+// Init NtCreateSection + NtMapViewOfSection FIRST để AllocSectionRWX V2 path
+// hoạt động cho 12 stubs còn lại (chicken-and-egg fix).
 inline bool InitAll() {
     DbgLogFmt("[SYS] InitAll: initializing %zu syscall stubs...\r\n", (size_t)SYSCALL_COUNT);
-    EnumerateSyscallGadgets();  // NEW: cache gadgets trước khi build stub
+    EnumerateSyscallGadgets();
     bool ok = true;
-    for (size_t i = 0; i < SYSCALL_COUNT; ++i)
+
+    // Phase 1: Init section syscalls first (their own stubs use V1 fallback)
+    if (!InitSyscall(IDX_CREATESECTION))  ok = false;
+    if (!InitSyscall(IDX_MAPVIEWSECTION)) ok = false;
+    DbgLogFmt("[SYS] InitAll: section syscalls ready, V2 path active\r\n");
+
+    // Phase 2: Init remaining stubs (AllocSectionRWX now uses V2 → MEM_MAPPED)
+    for (size_t i = 0; i < SYSCALL_COUNT; ++i) {
+        if (i == IDX_CREATESECTION || i == IDX_MAPVIEWSECTION) continue;
         if (!InitSyscall(i)) ok = false;
+    }
+
     DbgLogFmt("[SYS] InitAll: %s (%zu/%zu OK)\r\n",
               ok ? "ALL OK" : "PARTIAL FAIL",
               ok ? (size_t)SYSCALL_COUNT : (size_t)0, (size_t)SYSCALL_COUNT);
