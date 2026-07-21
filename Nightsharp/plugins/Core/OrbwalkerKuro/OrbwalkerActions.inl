@@ -220,69 +220,6 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     return static_cast<float>(now) + pingLead + extraWindup >= readyAt;
 }
 
-// Champions whose auto-attack projectile is broken by Yasuo wind wall.
-// Mirrors SDK OrbwalkerBase::WindWallBrokenChampions — kept in sync so the
-// Kuro orbwalker matches SDK attack gating against Yasuo / Samira / Mel walls.
-inline const char* const* WindWallBrokenChampions() {
-    static const char* values[] = {
-        "annie","twistedfate","leblanc","urgot","vladimir","fiddlesticks","ryze",
-        "sivir","soraka","teemo","tristana","missfortune","ashe","morgana",
-        "zilean","twitch","karthus","anivia","sona","janna","corki","karma",
-        "veigar","swain","caitlyn","orianna","brand","vayne","cassiopeia",
-        "heimerdinger","ezreal","kennen","kogmaw","lux","xerath","ahri","graves",
-        "varus","viktor","lulu","ziggs","draven","quinn","syndra","aurelionsol",
-        "zoe","zyra","kaisa","taliyah","jhin","kindred","jinx","lucian","yuumi",
-        "thresh","kalista","xayah","aphelios","bard","ivern","nami","velkoz",
-        "lissandra","malzahar", nullptr
-    };
-    return values;
-}
-
-// Champions with conditional ranged form: only probe wall when in ranged form.
-inline const char* const* SpecialWindWallChampions() {
-    static const char* values[] = {
-        "kayle","elise","nidalee","jayce","gnar","azir","neeko", nullptr
-    };
-    return values;
-}
-
-inline bool OrbwalkerBase::CanAttackWithWindWall(const AttackableUnit& target) const {
-    if (!target.IsValid()) {
-        return false;
-    }
-    if (!menu_.YasuoWallCheck()) {
-        return true;
-    }
-
-    const auto player = GameObjects::Player();
-    if (!player.IsValid()) {
-        return false;
-    }
-
-    const std::string name = ::SDK::OrbwalkingDetail::ToLower(player.CharacterName());
-    bool shouldCheck = ::SDK::OrbwalkingDetail::Contains(WindWallBrokenChampions(), name);
-    if (!shouldCheck && ::SDK::OrbwalkingDetail::Contains(SpecialWindWallChampions(), name)) {
-        shouldCheck =
-            (name == "kayle" && player.AttackRange() >= 530.0f) ||
-            (name == "elise" && !player.IsMelee()) ||
-            (name == "nidalee" && !player.IsMelee()) ||
-            (name == "jayce" && !player.IsMelee()) ||
-            (name == "gnar" && !player.IsMelee()) ||
-            (name == "neeko" && !player.HasBuff("neekowpassiveready"));
-    }
-
-    if (!shouldCheck) {
-        return true;
-    }
-
-    // HasProjectileWallCollision covers Yasuo / Samira / Mel barriers; the
-    // YasuoWallTracker source is the same one YasuoWallDebugPlugin renders.
-    return !Collisions::HasProjectileWallCollision(
-        player.ServerPosition(),
-        target.Position(),
-        0.0f);
-}
-
 inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     ExpirePendingAttack();
     const auto player = GameObjects::Player();
@@ -294,9 +231,6 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
     if (!CanAttack()) {
-        return false;
-    }
-    if (!CanAttackWithWindWall(target)) {
         return false;
     }
 

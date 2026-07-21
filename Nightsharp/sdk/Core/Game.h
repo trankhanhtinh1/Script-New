@@ -436,33 +436,13 @@ namespace detail {
         }
 
         __try {
-            const uintptr_t globals[] = {
-                ctx.cursorInstanceGlobal,
-                ctx.cursorInstanceGlobal + sizeof(uintptr_t)
-            };
-
-            for (uintptr_t global : globals) {
-                const uintptr_t maybePtr = Globals::Read<uintptr_t>(global);
-                if (Globals::IsValidPtr(maybePtr)) {
-                    const Vec3 value = Globals::Read<Vec3>(maybePtr);
-                    if (IsPlausibleWorldVec3(value)) {
-                        out = value;
-                        return true;
-                    }
-
-                    const Vec2 screen = Globals::Read<Vec2>(maybePtr + 0x2C);
-                    Vec3 projected{};
-                    if (ScreenToWorldOnPlane(screen, PlayerPlaneY(), projected)) {
-                        out = projected;
-                        return true;
-                    }
-                }
-
-                const Vec3 direct = Globals::Read<Vec3>(global);
-                if (IsPlausibleWorldVec3(direct)) {
-                    out = direct;
-                    return true;
-                }
+            // Patch 15.x (verified IDA 13337): cursorInstanceGlobal points
+            // directly to the cursor world Vec3 (qword_1F76630 = x,y;
+            // dword_1F76638 = z). Read it directly — no pointer chase.
+            const Vec3 direct = Globals::Read<Vec3>(ctx.cursorInstanceGlobal);
+            if (IsPlausibleWorldVec3(direct)) {
+                out = direct;
+                return true;
             }
         } __except (1) {
             out = {};
