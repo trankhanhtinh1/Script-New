@@ -109,7 +109,7 @@ public:
             const auto player = SDK::ObjectManager::Player();
             if (player.IsValid()) {
                 KuroEvade::SpellDrawer::DrawRoute(
-                    player.ServerPosition().To2D(),
+                    player.Position().To2D(),
                     m_evade.MoveTarget(),
                     RouteColor(),
                     m_evade.IsWaitingForWindup());
@@ -598,7 +598,7 @@ private:
 
         KuroEvade::EvadeSettings visualSettings = settings;
 
-        const Vec2 heroPos = player.ServerPosition().To2D();
+        const Vec2 heroPos = player.Position().To2D();
         const float boundingRadius = player.BoundingRadius();
         const float moveSpeed = std::max(50.0f, player.MoveSpeed());
         const float directWindow = 1200.0f;
@@ -709,7 +709,7 @@ private:
         m_currentDangerousThreat = false;
         m_currentDangerLevel = 0;
         if (player.IsValid()) {
-            const Vec2 position = player.ServerPosition().To2D();
+            const Vec2 position = player.Position().To2D();
             for (const auto& skillshot : m_detector.Skillshots()) {
                 if (!skillshot ||
                     !KuroEvade::SourceEvader::ShouldConsider(skillshot, settings) ||
@@ -725,7 +725,7 @@ private:
         }
         std::vector<Vec2> observedPath;
         if (player.IsValid()) {
-            observedPath.push_back(player.ServerPosition().To2D());
+            observedPath.push_back(player.Position().To2D());
             for (const Vec3& point : player.Path()) {
                 const Vec2 value = point.To2D();
                 if (!value.IsZero() &&

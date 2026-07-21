@@ -109,7 +109,7 @@ public:
             if (!active) {
                 continue;
             }
-            const Vec2 center = barrier.ServerPosition().To2D();
+            const Vec2 center = barrier.Position().To2D();
             if (!center.IsZero() &&
                 center.Distance(point) <= radius +
                     std::max(0.0f, projectileRadius)) {
@@ -329,7 +329,7 @@ public:
                 return;
             }
 
-            Vec2 position = unit.ServerPosition().To2D();
+            Vec2 position = unit.Position().To2D();
             const auto waypoints3 = unit.GetWaypoints();
             std::vector<Vec2> waypoints;
             if (waypoints3.size() >= 2 && unit.MoveSpeed() > 0.0f) {
@@ -430,9 +430,9 @@ public:
         if (has(SDK::CollisionableObjects::Walls)) {
             float height = 0.0f;
             if (skillshot.Native->Caster.IsValid()) {
-                height = skillshot.Native->Caster.ServerPosition().y;
+                height = skillshot.Native->Caster.Position().y;
             } else if (SDK::ObjectManager::Player().IsValid()) {
-                height = SDK::ObjectManager::Player().ServerPosition().y;
+                height = SDK::ObjectManager::Player().Position().y;
             }
             const bool cacheMatches = skillshot.TerrainCollisionCached &&
                 skillshot.TerrainCollisionPathStart.DistanceSqr(pathStart) <=
@@ -741,7 +741,7 @@ public:
                 !HasAnyBuff(barrier, buffNames)) {
                 continue;
             }
-            const Vec2 center = barrier.ServerPosition().To2D();
+            const Vec2 center = barrier.Position().To2D();
             Vec2 contact;
             float distance = FLT_MAX;
             if (FirstCircleContact(

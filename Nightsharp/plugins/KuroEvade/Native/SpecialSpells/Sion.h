@@ -48,7 +48,7 @@ struct Sion {
 
         skillshot.SData.MissileSpeed = std::max(1, static_cast<int>(caster.MoveSpeed()));
         skillshot.StartTime = now - skillshot.SData.Delay;
-        skillshot.StartPosition = caster.ServerPosition().To2D();
+        skillshot.StartPosition = caster.Position().To2D();
         skillshot.EndPosition = skillshot.StartPosition + direction * 1000.0f;
         RefreshLineGeometry(skillshot);
         return true;

@@ -200,10 +200,10 @@ public:
         if (!player.IsValid()) {
             return plan;
         }
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         const float radius = std::max(1.0f, player.BoundingRadius());
         const float speed = std::max(50.0f, player.MoveSpeed());
-        const float height = player.ServerPosition().y;
+        const float height = player.Position().y;
         const float navigationProbeDistance = std::max(140.0f, radius + 100.0f);
         const SourceGeometry::NavigationProbe heroNavigation =
             SourceGeometry::ProbeNavigation(
@@ -318,9 +318,9 @@ public:
         if (!player.IsValid()) {
             return {};
         }
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         const float radius = std::max(1.0f, player.BoundingRadius());
-        const float height = player.ServerPosition().y;
+        const float height = player.Position().y;
         const SourceGeometry::NavigationProbe heroNavigation =
             SourceGeometry::ProbeNavigation(
                 hero, height, std::max(140.0f, radius + 100.0f));

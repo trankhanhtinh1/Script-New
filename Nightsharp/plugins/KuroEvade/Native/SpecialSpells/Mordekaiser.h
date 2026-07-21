@@ -10,7 +10,7 @@ struct Mordekaiser {
             return false;
         }
 
-        const Vec2 casterPos = context.Caster.ServerPosition().To2D();
+        const Vec2 casterPos = context.Caster.Position().To2D();
         const float pullStartDistance = std::min(700.0f, context.End.Distance(casterPos));
         const Vec2 pullOuter = casterPos + (context.End - casterPos).Normalized() * pullStartDistance;
         const Vec2 spellStart = pullOuter + (pullOuter - casterPos).Normalized() * 255.0f;

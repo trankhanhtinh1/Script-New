@@ -88,7 +88,7 @@ public:
         }
 
         const auto player = SDK::ObjectManager::Player();
-        const float height = player.IsValid() ? player.ServerPosition().y : 0.0f;
+        const float height = player.IsValid() ? player.Position().y : 0.0f;
         Vec2 fromScreen;
         Vec2 toScreen;
         if (!SDK::Drawing::WorldToScreen(Vec3::From2D(from, height), fromScreen) ||
@@ -199,7 +199,7 @@ private:
         }
 
         const auto player = SDK::ObjectManager::Player();
-        const float height = player.IsValid() ? player.ServerPosition().y : 0.0f;
+        const float height = player.IsValid() ? player.Position().y : 0.0f;
         std::array<ImVec2, kMaxPoints> screens = {};
         std::array<bool, kMaxPoints> visible = {};
         const int count = ProjectPath(skillshot, screens, visible, height);
@@ -271,7 +271,7 @@ private:
         }
 
         const auto player = SDK::ObjectManager::Player();
-        const float height = player.IsValid() ? player.ServerPosition().y : 0.0f;
+        const float height = player.IsValid() ? player.Position().y : 0.0f;
         const bool irrelevant = info.State == SpellVisualState::Irrelevant;
         const ImU32 base = BaseColor(info.State, style);
         const int fillOpacity = irrelevant

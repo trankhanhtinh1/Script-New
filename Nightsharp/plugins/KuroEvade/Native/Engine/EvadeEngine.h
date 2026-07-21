@@ -57,7 +57,7 @@ public:
         m_windupRemainingMs = 0;
         m_canFinishCurrentAttack = false;
 
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         const float radius = std::max(1.0f, player.BoundingRadius());
         const float speed = std::max(50.0f, player.MoveSpeed());
         // Cursor is always the planner goal. FocusOnEvade only reduces its
@@ -340,7 +340,7 @@ public:
         // unchanged target at 90 ms to reduce command noise and visible zigzag.
         if (targetChanged || now - m_lastActionTick >= 90) {
             if (CoreControl::IssueMove(
-                    Vec3::From2D(m_moveTarget, player.ServerPosition().y), true)) {
+                    Vec3::From2D(m_moveTarget, player.Position().y), true)) {
                 m_lastIssuedTarget = m_moveTarget;
                 m_lastActionTick = now;
                 lastDodgeTick = now;
@@ -369,7 +369,7 @@ public:
             return false;
         }
 
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         if (m_holdingPosition ||
             (m_waitingForWindup && m_windupRemainingMs > 0)) {
             // Do not let another script/orbwalker issue a move that cancels an
@@ -463,12 +463,12 @@ private:
         if (!cursor.IsZero() && cursor.IsValid()) return cursor;
         const std::vector<Vec3> path = player.Path();
         if (!path.empty() && !path.back().IsZero()) return path.back().To2D();
-        return player.ServerPosition().To2D();
+        return player.Position().To2D();
     }
 
     static std::vector<Vec2> BuildPath(const SDK::AIHeroClient& player,
                                        const Vec2& fallback) {
-        std::vector<Vec2> result{ player.ServerPosition().To2D() };
+        std::vector<Vec2> result{ player.Position().To2D() };
         for (const Vec3& point : player.Path()) {
             const Vec2 value = point.To2D();
             if (!value.IsZero() && result.back().DistanceSqr(value) > 4.0f) {
@@ -599,7 +599,7 @@ private:
             return false;
         }
 
-        const float height = player.ServerPosition().y;
+        const float height = player.Position().y;
         const SourceGeometry::NavigationProbe wall =
             SourceGeometry::ProbeNavigation(
                 hero, height, std::max(140.0f, radius + 100.0f));
@@ -698,12 +698,12 @@ private:
             if (elapsed > 1000) ClearBlockedCommand();
             return;
         }
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         if (!SourceEvader::PathIsDangerous(
                 hero, m_blockedMovePos, std::max(50.0f, player.MoveSpeed()),
                 player.BoundingRadius(), skillshots, settings) &&
             CoreControl::IssueMove(
-                Vec3::From2D(m_blockedMovePos, player.ServerPosition().y), true)) {
+                Vec3::From2D(m_blockedMovePos, player.Position().y), true)) {
             ClearBlockedCommand();
         }
     }

@@ -698,7 +698,7 @@ public:
         Vec2 desired = !m_endPoint.IsZero()
             ? m_endPoint
             : SDK::Game::CursorPos().To2D();
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         if (desired.IsZero() || !desired.IsValid()) {
             desired = hero;
         }
@@ -775,7 +775,7 @@ private:
             start = SDK::Game::CursorPos().To2D();
         }
         if (end.IsZero()) {
-            end = player.ServerPosition().To2D();
+            end = player.Position().To2D();
         }
         if (start.DistanceSqr(end) < 100.0f * 100.0f) {
             start = end + Vec2(800.0f, 0.0f);

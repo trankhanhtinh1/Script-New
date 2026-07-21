@@ -14,7 +14,7 @@ inline bool ProcessCast(const CastContext& context, ProcessResult& result) {
     }
 
     const Vec2 start = context.Start.IsZero()
-        ? context.Caster.ServerPosition().To2D()
+        ? context.Caster.Position().To2D()
         : context.Start;
     const Vec2 direction = SafeDirection(start, context.End, context.Caster);
     constexpr float dashRange = 650.0f;
@@ -22,7 +22,7 @@ inline bool ProcessCast(const CastContext& context, ProcessResult& result) {
     constexpr float shockwaveRadius = 360.0f;
     constexpr float dashSpeed = 1600.0f;
     const float height = context.Caster.IsValid()
-        ? context.Caster.ServerPosition().y
+        ? context.Caster.Position().y
         : context.Start3.y;
 
     // Ornn's centre travels at most 650 units, but terrain up to 150 units

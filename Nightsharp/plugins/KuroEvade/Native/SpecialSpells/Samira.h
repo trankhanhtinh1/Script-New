@@ -47,7 +47,7 @@ inline bool ProcessCast(const CastContext& context, ProcessResult& result) {
     const int now = SDK::Variables::TickCount();
     if (EqualsSpell(context.Source, "SamiraE")) {
         const Vec2 start = context.Start.IsZero()
-            ? context.Caster.ServerPosition().To2D()
+            ? context.Caster.Position().To2D()
             : context.Start;
         const Vec2 direction = SafeDirection(start, context.End, context.Caster);
         constexpr float dashRange = 650.0f;
@@ -57,7 +57,7 @@ inline bool ProcessCast(const CastContext& context, ProcessResult& result) {
         state.Start = start;
         state.End = start + direction * dashRange;
         state.Height = context.Caster.IsValid()
-            ? context.Caster.ServerPosition().y
+            ? context.Caster.Position().y
             : context.Start3.y;
         state.StartTick = startTick;
         state.EndTick = startTick + std::max(0, context.Source.Delay) +

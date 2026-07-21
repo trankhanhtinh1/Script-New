@@ -28,7 +28,7 @@ struct Syndra {
 
         const Vec2 pushStart = context.Start;
         const Vec2 pushEnd = context.Start + context.Direction * 800.0f;
-        const Vec2 casterPos = context.Caster.ServerPosition().To2D();
+        const Vec2 casterPos = context.Caster.Position().To2D();
         auto addPushedSphere = [&](const Vector3& spherePos, float radius) {
             Vec2 projection;
             if (!ProjectOnSegment(spherePos.To2D(), pushStart, pushEnd, projection) ||
@@ -53,7 +53,7 @@ struct Syndra {
                 ? static_cast<float>(context.Source.Runtime.Radius)
                 : 100.0f;
 
-            const float distFromCaster = spherePos.Distance(context.Caster.ServerPosition());
+            const float distFromCaster = spherePos.Distance(context.Caster.Position());
             pushed.Runtime.Delay = 250 + std::clamp(static_cast<int>((distFromCaster / speed) * 1000.0f), 0, 500);
             pushed.Runtime.MissileSpeed = static_cast<int>(speed);
             pushed.Runtime.Range = static_cast<int>(range);

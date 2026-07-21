@@ -366,7 +366,7 @@ public:
                     collisionTarget = FindImpactUnit(*skillshot, impact);
                 }
                 if (collisionTarget.IsValid()) {
-                    const Vec2 center = collisionTarget.ServerPosition().To2D();
+                    const Vec2 center = collisionTarget.Position().To2D();
                     skillshot->CollisionKind = SourceCollisionKind::Unit;
                     skillshot->CollisionStopped = true;
                     skillshot->CollisionHitCount = std::max(
@@ -590,7 +590,7 @@ private:
                 unit.NetworkId() == skillshot.Native->Caster.NetworkId()) {
                 return;
             }
-            const Vec2 center = unit.ServerPosition().To2D();
+            const Vec2 center = unit.Position().To2D();
             if (center.IsZero() || !center.IsValid()) {
                 return;
             }
@@ -711,7 +711,7 @@ private:
             return;
         }
         if (skillshot.Data.EndExplosionFollowsUnit) {
-            const Vec2 center = target.ServerPosition().To2D();
+            const Vec2 center = target.Position().To2D();
             if (!center.IsZero() && center.IsValid()) {
                 skillshot.CollisionUnitCenter = center;
             }
@@ -973,7 +973,7 @@ private:
         if (!raw.IsZero()) {
             return raw;
         }
-        return caster.IsValid() ? caster.ServerPosition().To2D() : Vec2();
+        return caster.IsValid() ? caster.Position().To2D() : Vec2();
     }
 
     static Vec2 ResolveDirection(const SDK::AIBaseClient& caster,
@@ -986,7 +986,7 @@ private:
         if (direction.IsZero()) {
             const auto player = SDK::ObjectManager::Player();
             if (player.IsValid()) {
-                direction = (player.ServerPosition().To2D() - start).Normalized();
+                direction = (player.Position().To2D() - start).Normalized();
             }
         }
         return direction.IsZero() ? Vec2(1.0f, 0.0f) : direction;
@@ -1080,7 +1080,7 @@ private:
         const float range = static_cast<float>(std::max(1, source.Runtime.Range));
         const auto player = SDK::ObjectManager::Player();
         if (!source.HasTrap && player.IsValid() &&
-            player.ServerPosition().To2D().Distance(start) > range + 1200.0f) {
+            player.Position().To2D().Distance(start) > range + 1200.0f) {
             return {};
         }
 
@@ -1245,7 +1245,7 @@ private:
         }
         SDK::Skillshot& native = *skillshot.Native;
         if (skillshot.Data.FollowCaster && native.Caster.IsValid()) {
-            const Vec2 position = native.Caster.ServerPosition().To2D();
+            const Vec2 position = native.Caster.Position().To2D();
             if (SDK::IsCircleSpellType(native.SData.SpellType)) {
                 native.EndPosition = position;
             } else {
@@ -1271,7 +1271,7 @@ private:
         }
         if (native.SData.MissileFollowsCaster && native.Caster.IsValid() &&
             native.Caster.IsVisible()) {
-            native.EndPosition = native.Caster.ServerPosition().To2D();
+            native.EndPosition = native.Caster.Position().To2D();
             native.Direction = (native.EndPosition - native.StartPosition).Normalized();
             skillshot.OriginalEnd = native.EndPosition;
             skillshot.CollisionEnd = native.EndPosition;

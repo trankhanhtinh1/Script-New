@@ -544,7 +544,7 @@ public:
         if (!Native || !hero.IsValid()) {
             return false;
         }
-        const Vec2 heroPos = hero.ServerPosition().To2D();
+        const Vec2 heroPos = hero.Position().To2D();
         const float speed = std::max(50.0f, hero.MoveSpeed());
         float distanceOutside = 0.0f;
         if (IsLine()) {
@@ -695,7 +695,7 @@ public:
         if (!Native || !unit.IsValid()) {
             return false;
         }
-        const Vec2 position = unit.ServerPosition().To2D();
+        const Vec2 position = unit.Position().To2D();
         if (IsLine() && IsFiniteMissile()) {
             const int now = SDK::Variables::TickCount();
             const int untilImpact = std::max(0, ImpactTick() - now);

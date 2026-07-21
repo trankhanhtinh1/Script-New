@@ -202,8 +202,8 @@ public:
                     ? data->MaxRange
                     : player.GetSpell(slot).CastRange();
                 range = range > 0.0f ? range : 800.0f;
-                if (player.ServerPosition().To2D().Distance(
-                        ally.ServerPosition().To2D()) >
+                if (player.Position().To2D().Distance(
+                        ally.Position().To2D()) >
                     range + ally.BoundingRadius()) {
                     continue;
                 }
@@ -360,7 +360,7 @@ private:
             const SDK::AIHeroClient& player,
             const Vec2& bestPosition,
             Vec2& outPosition) {
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         Vec2 direction = (bestPosition - hero).Normalized();
         if (direction.IsZero()) {
             direction = (SDK::Game::CursorPos().To2D() - hero).Normalized();
@@ -389,7 +389,7 @@ private:
             ? hero - direction * distance
             : hero + direction * distance;
         return !outPosition.IsZero() && SourceGeometry::IsNavigable(
-            outPosition, player.ServerPosition().y);
+            outPosition, player.Position().y);
     }
 
     static int CountBlinkThreats(
@@ -434,14 +434,14 @@ private:
             const Vec2& landing,
             const SourceSkillshotList& skillshots,
             const EvadeSettings& settings) {
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         const int delay = DelayMs(data);
         const bool travelsPath = data.EvadeTypeValue == EvadeType::Dash ||
             (data.CastTypeValue == CastType::Target && data.Speed > 0.0f &&
              !IsSelfProtectiveTarget(data));
         if (travelsPath) {
             if (!SourceGeometry::SegmentIsNavigable(
-                    hero, landing, player.ServerPosition().y, 25.0f)) {
+                    hero, landing, player.Position().y, 25.0f)) {
                 return INT_MAX;
             }
             const float dashSpeed = data.Speed > 0.0f
@@ -470,7 +470,7 @@ private:
         }
 
         int protectable = 0;
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         for (const SourceSkillshotPtr& skillshot : incomingThreats) {
             if (!SourceEvader::ShouldConsider(skillshot, settings) ||
                 !skillshot->ContainsStatic(
@@ -502,7 +502,7 @@ private:
             int baselineThreats,
             const SourceSkillshotList& incomingThreats,
             const EvadeSettings& settings) {
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         const int window = std::clamp(
             DelayMs(data) + std::max(0, SDK::Game::Ping()) / 2 + 100,
             150, 900);
@@ -560,7 +560,7 @@ private:
                 continue;
             }
             best = std::min(best, CountBlinkThreats(
-                player, minion.ServerPosition().To2D(), DelayMs(data),
+                player, minion.Position().To2D(), DelayMs(data),
                 skillshots, settings));
         }
         return best;
@@ -579,10 +579,10 @@ private:
             bool wardJump,
             const AllyShieldResolver& allyShieldResolver) {
         if (data.EvadeTypeValue == EvadeType::MovementSpeedBuff) {
-            const Vec2 hero = player.ServerPosition().To2D();
+            const Vec2 hero = player.Position().To2D();
             if (bestPosition.IsZero() ||
                 !SourceGeometry::SegmentIsNavigable(
-                    hero, bestPosition, player.ServerPosition().y, 25.0f)) {
+                    hero, bestPosition, player.Position().y, 25.0f)) {
                 return baselineThreats;
             }
             return SourceEvader::CountPathThreats(
@@ -725,7 +725,7 @@ private:
                     (ContainsInsensitive(objectName, "Ekko") ||
                      ContainsInsensitive(characterName, "Ekko")) &&
                     CountBlinkThreats(
-                        player, minion.ServerPosition().To2D(), DelayMs(data),
+                        player, minion.Position().To2D(), DelayMs(data),
                         skillshots, settings) <= maxRemainingThreats) {
                     return player.Spellbook().CastSpell(slot);
                 }
@@ -773,14 +773,14 @@ private:
             return false;
         }
         return player.Spellbook().CastSpell(
-            slot, Vec3::From2D(position, player.ServerPosition().y));
+            slot, Vec3::From2D(position, player.Position().y));
     }
 
     static bool CastWindWall(SDK::SpellSlot slot,
                              const SDK::AIHeroClient& player,
                              const SourceSkillshotList& skillshots,
                              const EvadeSettings& settings) {
-        const Vec2 hero = player.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
         const SourceSkillshot* closest = nullptr;
         float hitTime = FLT_MAX;
         for (const SourceSkillshotPtr& skillshot : skillshots) {
@@ -804,7 +804,7 @@ private:
         }
         return !direction.IsZero() && player.Spellbook().CastSpell(
             slot, Vec3::From2D(hero + direction * 100.0f,
-                               player.ServerPosition().y));
+                               player.Position().y));
     }
 
     static bool CastTarget(const Database::EvadeSpellData& data,
@@ -841,7 +841,7 @@ private:
                            int& outRemainingThreats) {
         if (IsSelfProtectiveTarget(data)) {
             outTarget = SDK::AIBaseClient(player.Handle());
-            outLanding = player.ServerPosition().To2D();
+            outLanding = player.Position().To2D();
             outRemainingThreats = 0;
             return outTarget.IsValid();
         }
@@ -861,7 +861,7 @@ private:
                 ? static_cast<float>(data.MaxRange)
                 : player.GetSpell(data.Slot).CastRange();
             range = range > 0.0f ? range : 700.0f;
-            if (player.ServerPosition().To2D().Distance(unit.ServerPosition().To2D()) <=
+            if (player.Position().To2D().Distance(unit.Position().To2D()) <=
                 range + unit.BoundingRadius() + 75.0f) {
                 candidates.push_back(unit);
             }
@@ -901,7 +901,7 @@ private:
         for (const SDK::AIBaseClient& unit : candidates) {
             const Vec2 landing = LandingPosition(data, player, unit);
             if (!SourceGeometry::IsNavigable(
-                    landing, player.ServerPosition().y)) {
+                    landing, player.Position().y)) {
                 continue;
             }
             const int remaining = CountDisplacementThreats(
@@ -925,8 +925,8 @@ private:
     static Vec2 LandingPosition(const Database::EvadeSpellData& data,
                                 const SDK::AIHeroClient& player,
                                 const SDK::AIBaseClient& target) {
-        const Vec2 hero = player.ServerPosition().To2D();
-        const Vec2 position = target.ServerPosition().To2D();
+        const Vec2 hero = player.Position().To2D();
+        const Vec2 position = target.Position().To2D();
         Vec2 direction = (position - hero).Normalized();
         if (direction.IsZero()) {
             direction = player.Direction().To2D().Normalized();
@@ -944,7 +944,7 @@ private:
 
     static bool MoveTo(const SDK::AIHeroClient& player, const Vec2& position) {
         return !position.IsZero() && CoreControl::IssueMove(
-            Vec3::From2D(position, player.ServerPosition().y), true);
+            Vec3::From2D(position, player.Position().y), true);
     }
 
     static bool ContainsInsensitive(const std::string& text,
