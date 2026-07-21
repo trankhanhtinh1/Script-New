@@ -26,41 +26,119 @@ inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
         return;
     }
 
-    // Build a world-space annulus, then project every vertex.  This keeps the
-    // fill on the ground plane instead of turning it into a flat screen circle.
+    const int now = Tick();
+    const bool ready = CanAttack();
+    const bool windingUp = IsWindingUp();
+
+    // Determine target state weights (one-hot state vector)
+    const float targetWindup = windingUp ? 1.0f : 0.0f;
+    const float targetReady = (!windingUp && ready) ? 1.0f : 0.0f;
+    const float targetCooldown = (!windingUp && !ready) ? 1.0f : 0.0f;
+
+    // Time delta for smooth frame-to-frame crossfade
+    float dt = 0.016f;
+    if (context_.visualLastDrawTick > 0 && now > context_.visualLastDrawTick) {
+        dt = std::clamp(static_cast<float>(now - context_.visualLastDrawTick) / 1000.0f, 0.001f, 0.1f);
+    }
+    context_.visualLastDrawTick = now;
+
+    // Smooth lerp factor (~120ms transition speed for seamless state cross-fading)
+    const float lerpFactor = std::clamp(dt * 8.5f, 0.02f, 1.0f);
+
+    context_.visualWindupWeight += (targetWindup - context_.visualWindupWeight) * lerpFactor;
+    context_.visualReadyWeight += (targetReady - context_.visualReadyWeight) * lerpFactor;
+    context_.visualCooldownWeight += (targetCooldown - context_.visualCooldownWeight) * lerpFactor;
+
+    const float totalWeight = context_.visualWindupWeight + context_.visualReadyWeight + context_.visualCooldownWeight;
+    const float wWindup = totalWeight > 0.0001f ? context_.visualWindupWeight / totalWeight : targetWindup;
+    const float wReady = totalWeight > 0.0001f ? context_.visualReadyWeight / totalWeight : targetReady;
+    const float wCooldown = totalWeight > 0.0001f ? context_.visualCooldownWeight / totalWeight : targetCooldown;
+
+    // Compute raw attack progress
+    float rawAttackProgress = 1.0f;
+    if (windingUp) {
+        const int attackTick = context_.pendingAttack ? context_.pendingAttackTick : context_.lastAutoAttackTick;
+        if (attackTick > 0 && context_.attackWindupMs > 0.0f) {
+            const float elapsed = static_cast<float>(now - attackTick);
+            rawAttackProgress = std::clamp(elapsed / context_.attackWindupMs, 0.0f, 1.0f);
+        } else {
+            rawAttackProgress = 0.5f;
+        }
+    } else if (!ready) {
+        const int attackTick = context_.pendingAttack ? context_.pendingAttackTick : context_.lastAutoAttackTick;
+        if (attackTick > 0) {
+            ReadAttackTimingsFromMemory(player);
+            const float totalDelay = context_.attackDelayMs +
+                                     ChampionExtraAttackDelayMs(player) +
+                                     AttackSafetyMs();
+            if (totalDelay > 0.0f) {
+                const float elapsed = static_cast<float>(now - attackTick);
+                rawAttackProgress = std::clamp(elapsed / totalDelay, 0.0f, 1.0f);
+            }
+        }
+    }
+
+    // Smoothly interpolate progress position for continuous radial wave movement
+    context_.visualSmoothProgress += (rawAttackProgress - context_.visualSmoothProgress) * lerpFactor;
+    const float attackProgress = std::clamp(context_.visualSmoothProgress, 0.0f, 1.0f);
+
     constexpr int kSegments = 64;
-    constexpr int kRings = 12;
+    constexpr int kRings = 16;
     constexpr int kVerticesPerRing = kSegments + 1;
     constexpr int kVertexCount = (kRings + 1) * kVerticesPerRing;
     constexpr int kIndexCount = kRings * kSegments * 6;
     ImVec2 vertices[kVertexCount] = {};
     ImU32 colors[kVertexCount] = {};
 
-    unsigned char r = 255, g = 255, b = 255;
-    if (IsWindingUp()) {
-        // Attack winding up (orange-red)
-        r = 255;
-        g = 80;
-        b = 0;
-    } else if (CanAttack()) {
-        // Can attack (vibrant green)
-        r = 0;
-        g = 255;
-        b = 100;
-    } else {
-        // Cooldown (sleek light-blue/cyan)
-        r = 150;
-        g = 200;
-        b = 255;
-    }
-
     const Vector3 center = player.Position();
     const float innerRadius = std::max(0.0f, outerRadius - fadeWidth);
+
     for (int ring = 0; ring <= kRings; ++ring) {
-        const float progress = static_cast<float>(ring) / static_cast<float>(kRings);
-        const float radius = innerRadius + fadeWidth * progress;
-        const int alpha = static_cast<int>(std::lround(static_cast<float>(maxAlpha) * progress));
-        const ImU32 color = IM_COL32(r, g, b, alpha);
+        const float ringProgress = static_cast<float>(ring) / static_cast<float>(kRings);
+        const float radius = innerRadius + fadeWidth * ringProgress;
+
+        // 1. Windup state parameters (Amber/Orange energy flow)
+        const float waveWindup = 0.5f + 0.5f * std::sin(static_cast<float>(now) * 0.012f - ringProgress * 4.0f);
+        const float rWindup = 255.0f;
+        const float gWindup = std::max(0.0f, 200.0f - 140.0f * ringProgress);
+        const float bWindup = 10.0f;
+        const float aWindup = (0.35f + 0.65f * ringProgress) * (0.85f + 0.15f * waveWindup);
+
+        // 2. Ready state parameters (Vibrant Emerald/Neon Green with soft pulse)
+        const float pulseReady = 0.5f + 0.5f * std::sin(static_cast<float>(now) * 0.005f - ringProgress * 3.0f);
+        const float rReady = 0.0f;
+        const float gReady = 200.0f + 55.0f * ringProgress;
+        const float bReady = 160.0f - 40.0f * ringProgress;
+        const float aReady = ringProgress * (0.85f + 0.15f * pulseReady);
+
+        // 3. Cooldown state parameters (Expanding gradient wave from inside to outside)
+        const float wavePos = attackProgress;
+        const float dist = ringProgress - wavePos;
+        const float crest = std::max(0.0f, 1.0f - std::abs(dist) * 4.5f);
+        const float t = std::clamp((wavePos - ringProgress) * 4.0f + 0.5f, 0.0f, 1.0f);
+
+        const float targetR = (1.0f - t) * 70.0f + t * 0.0f;
+        const float targetG = (1.0f - t) * 130.0f + t * (200.0f + 55.0f * ringProgress);
+        const float targetB = (1.0f - t) * 240.0f + t * (160.0f - 40.0f * ringProgress);
+
+        const float rCooldown = std::min(255.0f, targetR + crest * 90.0f);
+        const float gCooldown = std::min(255.0f, targetG + crest * 90.0f);
+        const float bCooldown = std::min(255.0f, targetB + crest * 90.0f);
+        const float aCooldown = std::clamp(ringProgress * (0.5f + 0.5f * t) + crest * 0.35f, 0.0f, 1.0f);
+
+        // Weighted blend across all 3 states for perfectly smooth transition
+        const float r = wWindup * rWindup + wReady * rReady + wCooldown * rCooldown;
+        const float g = wWindup * gWindup + wReady * gReady + wCooldown * gCooldown;
+        const float b = wWindup * bWindup + wReady * bReady + wCooldown * bCooldown;
+        const float alphaFactor = wWindup * aWindup + wReady * aReady + wCooldown * aCooldown;
+
+        const int alpha = static_cast<int>(
+            std::lround(static_cast<float>(maxAlpha) * std::clamp(alphaFactor, 0.0f, 1.0f)));
+        const ImU32 color = IM_COL32(
+            static_cast<unsigned char>(std::clamp(r, 0.0f, 255.0f)),
+            static_cast<unsigned char>(std::clamp(g, 0.0f, 255.0f)),
+            static_cast<unsigned char>(std::clamp(b, 0.0f, 255.0f)),
+            alpha);
 
         for (int segment = 0; segment <= kSegments; ++segment) {
             const float angle =

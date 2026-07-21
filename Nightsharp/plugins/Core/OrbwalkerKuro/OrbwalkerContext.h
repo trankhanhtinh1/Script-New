@@ -4,10 +4,17 @@
 #include "../../../sdk/UI/Icons.h"
 
 #include <string>
+#include <vector>
 
 namespace OrbwalkerKuro {
 
 using namespace ::SDK;
+
+struct ProcessSpellLogEntry {
+    int processTick = 0;
+    std::string spellName;
+    uint32_t targetNetworkId = 0;
+};
 
 struct OrbwalkerDebugConsoleLine {
     char text[kOrbwalkerDebugConsoleLineLength] = {};
@@ -15,6 +22,7 @@ struct OrbwalkerDebugConsoleLine {
 };
 
 struct OrbwalkerRuntimeContext {
+    std::vector<ProcessSpellLogEntry> pendingProcessSpellList;
     AttackableUnit forceTarget = {};
     AttackableUnit lastTarget = {};
     AttackableUnit laneClearMinion = {};
@@ -52,6 +60,11 @@ struct OrbwalkerRuntimeContext {
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
+    float visualWindupWeight = 0.0f;
+    float visualReadyWeight = 1.0f;
+    float visualCooldownWeight = 0.0f;
+    float visualSmoothProgress = 1.0f;
+    int visualLastDrawTick = 0;
 
     int debugConsoleNextLine = 0;
     int debugConsoleLineCount = 0;

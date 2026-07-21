@@ -691,4 +691,19 @@ inline AttackableUnit OrbwalkerBase::ResolveAttackTarget(const Events::ProcessSp
     return {};
 }
 
+inline AttackableUnit OrbwalkerBase::ResolveAttackTarget(const Events::ObjectEventArgs& args) const {
+    if (args.Target.IsValid()) {
+        return AttackableUnit(args.Target.Ptr);
+    }
+    if (args.TargetNetworkId != 0 && args.TargetNetworkId != 0xFFFFFFFFu) {
+        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+            static_cast<int>(args.TargetNetworkId));
+    }
+    if (context_.pendingAttackTargetNetworkId != 0) {
+        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+            context_.pendingAttackTargetNetworkId);
+    }
+    return {};
+}
+
 } // namespace OrbwalkerKuro

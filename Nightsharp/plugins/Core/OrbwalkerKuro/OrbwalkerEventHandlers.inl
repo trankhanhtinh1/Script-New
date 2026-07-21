@@ -47,8 +47,6 @@ inline void OrbwalkerBase::OnDebugDrawStatic() {
     }
 }
 
-// OrbProbe (TEMP accumulator profiler) is defined in OrbwalkerActions.inl —
-// included before this file — so it is available here too.
 inline void OrbwalkerBase::OnGameUpdate() {
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
@@ -63,19 +61,34 @@ inline void OrbwalkerBase::OnGameUpdate() {
         return;
     }
 
-    // Keep processing attack events, but do not let a new orbwalker order
-    // replace KuroEvade's windup hold or active dodge command.
     const int now = Tick();
+
+    while (!context_.pendingProcessSpellList.empty()) {
+        if (now - context_.pendingProcessSpellList.front().processTick > 1000) {
+            auto expired = context_.pendingProcessSpellList.front();
+            context_.pendingProcessSpellList.erase(context_.pendingProcessSpellList.begin());
+
+            char logMsg[224];
+            std::snprintf(logMsg, sizeof(logMsg),
+                "[EVENT_LOG][EXPIRED] Tick:%d | OnProcessSpell Expired (>1000ms without OnDoCast) | Spell:'%s' | TargetNetID:0x%X",
+                now, expired.spellName.c_str(), expired.targetNetworkId);
+            DebugPrint(logMsg);
+            ::OutputDebugStringA(logMsg);
+            ::OutputDebugStringA("\n");
+        } else {
+            break;
+        }
+    }
+
     if (EvadeOwnsActions(now)) {
         ExpirePendingAttack();
         if (menu_.CoordinateKuroEvade() &&
             Plugins::KuroCombatCoordination::Coordinator::
                 AllowsStationaryAttacks(now)) {
-            // KuroEvade proved that standing here is safer than taking a
-            // sharp wall-side detour. Run only target selection + attack;
-            // never call Orbwalk/Move from this coordination phase.
+
             const AttackableUnit stationaryTarget =
                 CanAttack() ? GetTarget() : AttackableUnit();
+
             if (stationaryTarget.IsValid()) {
                 Attack(stationaryTarget);
             }
@@ -105,6 +118,22 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
 
     const int now = Tick();
+
+    // Log ADD event to list
+    ProcessSpellLogEntry logEntry;
+    logEntry.processTick = now;
+    logEntry.spellName = args.SpellName ? args.SpellName : "";
+    logEntry.targetNetworkId = args.TargetNetworkId;
+    context_.pendingProcessSpellList.push_back(logEntry);
+
+    char logMsg[224];
+    std::snprintf(logMsg, sizeof(logMsg),
+        "[EVENT_LOG][ADD] Tick:%d | OnProcessSpell | Spell:'%s' | TargetNetID:0x%X | QueueSize:%zu",
+        now, logEntry.spellName.c_str(), logEntry.targetNetworkId, context_.pendingProcessSpellList.size());
+    DebugPrint(logMsg);
+    ::OutputDebugStringA(logMsg);
+    ::OutputDebugStringA("\n");
+
     if (!context_.pendingAttack &&
         context_.lastAutoAttackResetTick > 0 &&
         now - context_.lastAutoAttackResetTick >= 0 &&
@@ -189,6 +218,30 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     }
 
     const int now = Tick();
+
+    // Log REMOVE event from list
+    if (!context_.pendingProcessSpellList.empty()) {
+        auto entry = context_.pendingProcessSpellList.front();
+        context_.pendingProcessSpellList.erase(context_.pendingProcessSpellList.begin());
+
+        int delayMs = now - entry.processTick;
+        char logMsg[224];
+        std::snprintf(logMsg, sizeof(logMsg),
+            "[EVENT_LOG][REMOVE] Tick:%d | OnDoCast | Spell:'%s' | TargetNetID:0x%X | ProcessTick:%d (Delay:%dms) | QueueSize:%zu",
+            now, entry.spellName.c_str(), entry.targetNetworkId, entry.processTick, delayMs, context_.pendingProcessSpellList.size());
+        DebugPrint(logMsg);
+        ::OutputDebugStringA(logMsg);
+        ::OutputDebugStringA("\n");
+    } else {
+        char logMsg[224];
+        std::snprintf(logMsg, sizeof(logMsg),
+            "[EVENT_LOG][REMOVE_FAIL] Tick:%d | OnDoCast (No preceding OnProcessSpell in list!) | Spell:'%s' | TargetNetID:0x%X",
+            now, args.SpellName ? args.SpellName : "", args.TargetNetworkId);
+        DebugPrint(logMsg);
+        ::OutputDebugStringA(logMsg);
+        ::OutputDebugStringA("\n");
+    }
+
     if (!context_.pendingAttack &&
         context_.lastAutoAttackResetTick > 0 &&
         now - context_.lastAutoAttackResetTick >= 0 &&
@@ -226,7 +279,20 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
         context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
     }
 
+<<<<<<< Updated upstream
     CheckAfterAttack();
+=======
+    if (context_.lastAutoAttackTick > 0) {
+        const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
+        OrbwalkingActionArgs afterArgs(
+            OrbwalkingType::AfterAttack,
+            eventTarget,
+            eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+            "Kuro");
+        OrbwalkingDetail::FireAfterAttack(afterArgs);
+        context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+    }
+>>>>>>> Stashed changes
 }
 
 inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
@@ -280,6 +346,29 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
 }
 
 inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) {
+    if (!IsLocalAutoAttackMissile(args)) {
+        return;
+    }
+
+    const AttackableUnit target = ResolveAttackTarget(args);
+    if (target.IsValid()) {
+        context_.lastTarget = target;
+    }
+
+    context_.pendingAttack = false;
+    context_.pendingAttackTick = 0;
+    context_.pendingAttackTargetNetworkId = 0;
+    context_.hasConfirmedAttack = true;
+    context_.attackCastComplete = true;
+
+    const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
+    OrbwalkingActionArgs afterArgs(
+        OrbwalkingType::AfterAttack,
+        eventTarget,
+        eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+        "Kuro");
+    OrbwalkingDetail::FireAfterAttack(afterArgs);
+    context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
 }
 
 namespace OrbwalkingDetail {

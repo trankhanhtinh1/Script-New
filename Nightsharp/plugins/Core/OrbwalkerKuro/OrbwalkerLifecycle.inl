@@ -39,6 +39,7 @@ inline void OrbwalkerBase::ClearPendingAttackState() {
     context_.pendingAttack = false;
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
+    context_.pendingProcessSpellList.clear();
     ClearDoCastMoveGate();
 }
 

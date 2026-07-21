@@ -121,6 +121,7 @@ private:
     bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
     bool IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
+    AttackableUnit ResolveAttackTarget(const Events::ObjectEventArgs& args) const;
     void ClearDoCastMoveGate();
     void ClearPendingAttackState();
     void ExpirePendingAttack();

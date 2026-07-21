@@ -498,8 +498,6 @@ inline void OrbwalkerBase::ReadAttackTimingsFromMemory(const AIHeroClient& playe
         return;
     }
 
-    // OrbwalkerKuro deliberately bypasses CoreControl's timing cache. A failed
-    // memory read falls back to a fixed safe default, never to a stale sample.
     const float attackDelay = CoreControl::ReadAttackDelayFor(player.Address());
     const float attackWindup = CoreControl::ReadAttackWindupFor(player.Address());
     context_.attackDelayMs = attackDelay > 0.0f
