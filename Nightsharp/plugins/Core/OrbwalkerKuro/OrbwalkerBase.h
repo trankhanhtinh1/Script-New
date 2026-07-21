@@ -11,6 +11,7 @@
 #include "../../../sdk/Enumerations/SpellSlot.h"
 #include "../../../sdk/Events/Events.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
+#include "../../../sdk/Math/Collision.h"
 #include "../../../sdk/Math/HealthPrediction.h"
 #include "../../../sdk/UI/Drawing.h"
 #include "../../../sdk/UI/Icons.h"
@@ -130,6 +131,12 @@ private:
     float ChampionExtraAttackDelayMs(const AIHeroClient& player) const;
     bool ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const;
     bool ChampionCanAttack(const AIHeroClient& player) const;
+    // Mirrors SDK OrbwalkerBase::CanAttackWithWindWall: returns false when the
+    // active champion's auto-attack would be blocked by an active Yasuo wind
+    // wall (or a Samira/Mel projectile barrier). Ranged champions in the
+    // WindWallBroken/Special lists are checked; melee and unlisted champions
+    // skip the probe. Gate is the "Yasuo Wall Check" menu toggle.
+    bool CanAttackWithWindWall(const AttackableUnit& target) const;
     bool EvadeOwnsActions(int now) const;
     bool EvadeBlocksMovement(int now) const;
     bool EvadeBlocksAttack(int now) const;

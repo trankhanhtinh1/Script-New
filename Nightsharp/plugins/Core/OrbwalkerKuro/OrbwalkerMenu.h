@@ -59,6 +59,11 @@ public:
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
     bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
+    // Yasuo Wall Check mirrors SDK OrbwalkerBase "YasuoWallCheck": when true and
+    // the active champion's auto-attack is a projectile blocked by Yasuo wind
+    // wall, the orbwalker suppresses the attack order instead of firing into
+    // the wall. See NightSharp Spell Collision Guide for the collision contract.
+    bool YasuoWallCheck() const { return BoolValue(yasuoWallCheck_, true); }
 
     OrbwalkingMode ActiveMode() const {
         if (!Enabled() || Game::IsChatOpen() || Game::IsShopOpen()) {
@@ -165,6 +170,7 @@ private:
             attackBarrels_ = advancedMenu_->Add(new MenuBool("attackBarrels", "Barrels", false));
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
             attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
+            yasuoWallCheck_ = advancedMenu_->Add(new MenuBool("yasuoWallCheck", "Yasuo Wall Check", true));
 
         }
 
@@ -215,6 +221,7 @@ private:
     MenuBool* attackBarrels_ = nullptr;
     MenuBool* attackClones_ = nullptr;
     MenuBool* attackSpecialMinions_ = nullptr;
+    MenuBool* yasuoWallCheck_ = nullptr;
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;
