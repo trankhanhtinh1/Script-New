@@ -81,10 +81,10 @@ public:
                           row.maxHealth);
             std::snprintf(line2,
                           sizeof(line2),
-                          "SDKDead=%d HPDead=%d NativeDead=%d %s",
+                          "SDKDead=%d Alive=%d DB=0x%02X %s",
                           row.sdkDead ? 1 : 0,
-                          row.hpDead ? 1 : 0,
-                          row.nativeDeadAvailable && row.nativeDead ? 1 : 0,
+                          row.isAliveNative ? 1 : 0,
+                          static_cast<unsigned>(row.deadByteRaw),
                           row.context);
 
             SDK::Drawing::DrawText(screen.x - 46.0f, screen.y - 76.0f, color, line1);
@@ -97,7 +97,7 @@ public:
                     static_cast<unsigned>(Offset::AttackableUnit::HP),
                     static_cast<unsigned>(Offset::AttackableUnit::IsTargetable),
                     static_cast<unsigned>(Offset::AttackableUnit::TargetableFlags));
-        ImGui::Text("Native IsDead RVA: 0x%X", static_cast<unsigned>(kNativeIsDeadRva));
+        ImGui::Text("Dead field offset: 0x%X", static_cast<unsigned>(Offset::All::Dead));
         ImGui::Text("Log: %s", kLogPath);
 
         ImGui::Checkbox("Auto refresh", &autoRefresh_);
@@ -111,7 +111,6 @@ public:
         }
 
         ImGui::SliderInt("Refresh ms", &refreshMs_, 50, 1000);
-        ImGui::Checkbox("Unsafe: call native IsDead function", &useNativeDeadFn_);
         ImGui::Checkbox("Draw on champion", &drawOnChampion_);
         ImGui::Checkbox("Draw only suspicious rows", &drawOnlySuspicious_);
         ImGui::Checkbox("Log to file", &logToFile_);
@@ -127,8 +126,6 @@ public:
 private:
     static constexpr const char* kLogPath =
         "C:\\Users\\Public\\nightsharp_isdead_debug.txt";
-    static constexpr uintptr_t kNativeIsDeadRva = 0x287230;
-
     struct Row {
         char relation[16] = {};
         char name[64] = {};
@@ -142,9 +139,8 @@ private:
         float distanceToPlayer = 0.0f;
         Vec3 position = {};
         bool sdkDead = false;
-        bool hpDead = false;
-        bool nativeDead = false;
-        bool nativeDeadAvailable = false;
+        bool isAliveNative = false;
+        std::uint8_t deadByteRaw = 0;
         bool zombie = false;
         bool visible = false;
         bool targetable = false;
@@ -159,7 +155,6 @@ private:
     };
 
     bool autoRefresh_ = true;
-    bool useNativeDeadFn_ = false;
     bool drawOnChampion_ = true;
     bool drawOnlySuspicious_ = false;
     bool logToFile_ = false;
@@ -195,7 +190,7 @@ private:
         if (row.targetSelectorTarget || row.orbwalkerTarget || row.lastCastTarget) {
             return 0xFFFFD24Au;
         }
-        return row.sdkDead || row.hpDead || row.nativeDead ? 0xFFB0B0B0u : 0xFF50FF70u;
+        return row.sdkDead ? 0xFFB0B0B0u : 0xFF50FF70u;
     }
 
     static std::uint8_t ReadU8(uintptr_t address) {
@@ -220,29 +215,6 @@ private:
         } __except (1) {
             return 0;
         }
-    }
-
-    static bool CallNativeIsDead(uintptr_t object, bool& available) {
-        available = false;
-        if (!Globals::IsValidPtr(object) || !CoreRuntime::EnsureInitialized()) {
-            return false;
-        }
-
-        const uintptr_t fn = CoreRuntime::ResolveRva(kNativeIsDeadRva);
-        if (!Globals::IsExecutablePtr(fn)) {
-            return false;
-        }
-
-        using FnIsDead = bool(__fastcall*)(uintptr_t);
-        bool result = false;
-        __try {
-            result = reinterpret_cast<FnIsDead>(fn)(object);
-            available = true;
-        } __except (1) {
-            available = false;
-            result = false;
-        }
-        return result;
     }
 
     static void CopyText(char* out, std::size_t outSize, const char* text) {
@@ -326,10 +298,8 @@ private:
         }
 
         row.sdkDead = hero.IsDead();
-        row.hpDead = row.health <= 0.0f;
-        if (useNativeDeadFn_) {
-            row.nativeDead = CallNativeIsDead(address, row.nativeDeadAvailable);
-        }
+        row.isAliveNative = !::Core::Objects::IsDead(address);
+        row.deadByteRaw = ReadU8(address + Offset::All::Dead);
         row.zombie = hero.IsZombie();
         row.visible = hero.IsVisible();
         row.targetable = hero.IsTargetable();
@@ -354,15 +324,11 @@ private:
             AppendContext(row.context, sizeof(row.context), "Cast");
         }
 
-        const bool nativeDead = row.nativeDeadAvailable && row.nativeDead;
-        const bool deadMismatch =
-            row.sdkDead != row.hpDead ||
-            (row.nativeDeadAvailable && row.sdkDead != row.nativeDead);
         const bool selectedDead =
             (row.targetSelectorTarget || row.orbwalkerTarget || row.lastCastTarget) &&
-            (row.sdkDead || row.hpDead || nativeDead) &&
+            row.sdkDead &&
             !row.zombie;
-        row.suspicious = deadMismatch || selectedDead;
+        row.suspicious = selectedDead;
 
         rows_.push_back(row);
     }
@@ -440,9 +406,10 @@ private:
             ImGui::TextColored(row.suspicious
                                    ? ImVec4(1.0f, 0.25f, 0.25f, 1.0f)
                                    : ImVec4(0.82f, 0.86f, 0.90f, 1.0f),
-                               "%s %-16s net=%u idx=%u team=%d %s",
+                               "%s %-16s addr=0x%llX net=%u idx=%u team=%d %s",
                                row.relation,
                                row.name,
+                               static_cast<unsigned long long>(row.address),
                                row.networkId,
                                row.index,
                                row.team,
@@ -454,18 +421,9 @@ private:
             ImGui::Text("  SDKDead=");
             ImGui::SameLine();
             ImGui::TextColored(BoolColor(row.sdkDead), "%s", BoolText(row.sdkDead));
-            ImGui::SameLine(145.0f);
-            ImGui::Text("HPDead=");
-            ImGui::SameLine();
-            ImGui::TextColored(BoolColor(row.hpDead), "%s", BoolText(row.hpDead));
-            ImGui::SameLine(275.0f);
-            ImGui::Text("NativeDead=");
-            ImGui::SameLine();
-            if (row.nativeDeadAvailable) {
-                ImGui::TextColored(BoolColor(row.nativeDead), "%s", BoolText(row.nativeDead));
-            } else {
-                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.45f, 1.0f), "unavailable");
-            }
+            ImGui::Text("  IsAliveNative=%s  DeadByteRaw=0x%02X",
+                        BoolText(row.isAliveNative),
+                        static_cast<unsigned>(row.deadByteRaw));
             ImGui::Text("  Zombie=%s  ValidTarget=%s  Visible=%s  Targetable=%s raw=%u flags=0x%08X  Invulnerable=%s",
                         BoolText(row.zombie),
                         BoolText(row.validTarget),
@@ -523,9 +481,8 @@ private:
                 << " hp=" << row.health
                 << "/" << row.maxHealth
                 << " sdkDead=" << BoolText(row.sdkDead)
-                << " hpDead=" << BoolText(row.hpDead)
-                << " nativeDead="
-                << (row.nativeDeadAvailable ? BoolText(row.nativeDead) : "unavailable")
+                << " isAliveNative=" << BoolText(row.isAliveNative)
+                << " deadByteRaw=0x" << std::hex << static_cast<unsigned>(row.deadByteRaw) << std::dec
                 << " zombie=" << BoolText(row.zombie)
                 << " validTarget=" << BoolText(row.validTarget)
                 << " visible=" << BoolText(row.visible)

@@ -892,12 +892,6 @@ inline bool IsPredictionTargetUsable(const AIBaseClient& unit) {
         return false;
     }
 
-    const float health = unit.Health();
-    const float maxHealth = unit.MaxHealth();
-    if (maxHealth > 0.0f && health <= 0.0f) {
-        return false;
-    }
-
     return true;
 }
 
