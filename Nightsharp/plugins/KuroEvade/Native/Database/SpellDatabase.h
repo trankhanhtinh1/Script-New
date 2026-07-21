@@ -3274,6 +3274,36 @@ public:
             spell.Type = SkillShotType::SkillshotCircle;
             Entries.push_back(spell);
         }
+        {
+            SpellData spell;
+            spell.CharacterName = "Syndra";
+            spell.DangerValue = 3;
+            spell.DisplayName = "Scatter the Weak (E)";
+            spell.MissileSpeed = 2000.0f;
+            spell.Radius = 100.0f;
+            spell.Range = 1250.0f;
+            spell.Delay = 250;
+            spell.Slot = SpellSlot::E;
+            spell.SpellName = "SyndraE";
+            spell.ExtraSpellNames = { "syndrae5" };
+            spell.Type = SkillShotType::SkillshotLine;
+            spell.CrowdControl = CrowdControlType::Stun;
+            Entries.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.CharacterName = "Syndra";
+            spell.DangerValue = 2;
+            spell.DisplayName = "Force of Will (W)";
+            spell.MissileSpeed = 1450.0f;
+            spell.Radius = 210.0f;
+            spell.Range = 950.0f;
+            spell.Delay = 250;
+            spell.Slot = SpellSlot::W;
+            spell.SpellName = "SyndraWCast";
+            spell.Type = SkillShotType::SkillshotCircle;
+            Entries.push_back(spell);
+        }
 
         // ==========================================
         // CHỮ T

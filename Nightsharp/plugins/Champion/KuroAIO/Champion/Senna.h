@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -853,10 +853,10 @@ static void BuildMenu() {
     JungleMenu->Add(new MenuBool("UseW", "Use W", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", true));
-    DrawMenu->Add(new MenuBool("DrawExtendedQ", "Draw Extended Q Range", true));
-    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", true));
-    DrawMenu->Add(new MenuBool("DrawSouls", "Draw Soul Timers", true));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", false));
+    DrawMenu->Add(new MenuBool("DrawExtendedQ", "Draw Extended Q Range", false));
+    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", false));
+    DrawMenu->Add(new MenuBool("DrawSouls", "Draw Soul Timers", false));
 
     MenuRoot->Attach();
 }

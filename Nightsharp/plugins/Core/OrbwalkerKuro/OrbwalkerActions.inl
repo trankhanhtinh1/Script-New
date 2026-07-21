@@ -99,6 +99,32 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     return static_cast<float>(now) + extraWindup >= readyAt;
 }
 
+inline void OrbwalkerBase::CheckAfterAttack() {
+    if (context_.lastAutoAttackTick <= 0) {
+        return;
+    }
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) {
+        return;
+    }
+    ReadAttackTimingsFromMemory(player);
+    const int now = Tick();
+    const int windupEnd = context_.lastAutoAttackTick + static_cast<int>(context_.attackWindupMs);
+    if (now >= windupEnd) {
+        context_.attackCastComplete = true;
+        if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
+            context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+            const AttackableUnit eventTarget = context_.lastTarget.IsValid() ? context_.lastTarget : AttackableUnit();
+            OrbwalkingActionArgs afterArgs(
+                OrbwalkingType::AfterAttack,
+                eventTarget,
+                eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+                "Kuro");
+            OrbwalkingDetail::FireAfterAttack(afterArgs);
+        }
+    }
+}
+
 inline bool OrbwalkerBase::CanMove() { return CanMove(0.0f, false); }
 
 inline bool OrbwalkerBase::IsAutoAttacking() {
@@ -107,6 +133,7 @@ inline bool OrbwalkerBase::IsAutoAttacking() {
 
 inline bool OrbwalkerBase::IsWindingUp() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return false;
@@ -122,11 +149,13 @@ inline bool OrbwalkerBase::IsWindingUp() {
 
 inline bool OrbwalkerBase::IsAttackCastComplete() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     return context_.lastAutoAttackTick > 0 && context_.attackCastComplete;
 }
 
 inline int OrbwalkerBase::AttackCastDelayRemaining() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return 0;
@@ -140,6 +169,7 @@ inline int OrbwalkerBase::AttackCastDelayRemaining() {
 
 inline int OrbwalkerBase::NextAttackReadyTick() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     const auto player = GameObjects::Player();
     if (!context_.attackEnabled || !player.IsValid() || player.IsDead()) {
         return 0;
@@ -155,6 +185,7 @@ inline int OrbwalkerBase::AttackCooldownRemaining() {
 inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) {
     (void)disableMissileCheck;
     ExpirePendingAttack();
+    CheckAfterAttack();
     const int now = Tick();
     if (EvadeBlocksMovement(now) || !context_.moveEnabled ||
         now < context_.allPauseTick || now < context_.movePauseTick) {
@@ -201,6 +232,38 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
 
         ClearDoCastMoveGate();
     }
+    // Akshan Passive 2-Hit Double Shot movement gate
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+        const int passiveMode = menu_.AkshanPassiveMode(); // 0 = Always 2-Hit, 1 = Always 1-Hit, 2 = Smart
+        if (context_.isAkshanSecondShotPending) {
+            const int elapsed = now - context_.pendingAkshanSecondShotTick;
+            if (elapsed >= 0 && elapsed <= 500) {
+                if (passiveMode == 1) {
+                    context_.isAkshanSecondShotPending = false;
+                } else if (passiveMode == 2 && context_.activeMode == OrbwalkingMode::Flee) {
+                    context_.isAkshanSecondShotPending = false;
+                } else {
+                    const auto target = context_.lastTarget;
+                    if (target.IsValid() && target.IsDead()) {
+                        context_.isAkshanSecondShotPending = false;
+                    } else {
+                        return false; // Hold movement unconditionally until 2nd shot fires!
+                    }
+                }
+            } else {
+                context_.isAkshanSecondShotPending = false;
+            }
+        }
+
+        if (context_.isAkshanSecondShotActive) {
+            const float secondShotWindup = context_.attackWindupMs * 0.48f + MoveSafetyMs();
+            if (static_cast<float>(now - context_.lastAutoAttackTick) < secondShotWindup) {
+                return false; // Waiting for second shot windup
+            }
+            context_.isAkshanSecondShotActive = false;
+        }
+    }
+
     if (!pending && context_.attackCastComplete) {
         return true;
     }

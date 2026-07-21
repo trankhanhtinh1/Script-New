@@ -1893,11 +1893,11 @@ inline void BuildMenu(Menu* root) {
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick visual coaching"));
-    CoachMenu->Add(new MenuBool("DrawQ1", "Draw Q1 body/edge", true));
-    CoachMenu->Add(new MenuBool("DrawQ2", "Draw Q2 first-target plan", true));
-    CoachMenu->Add(new MenuBool("DrawDash", "Draw Step endpoint", true));
-    CoachMenu->Add(new MenuBool("DrawR", "Draw R line/landing", true));
-    CoachMenu->Add(new MenuBool("DrawState", "Draw energy/branch", true));
+    CoachMenu->Add(new MenuBool("DrawQ1", "Draw Q1 body/edge", false));
+    CoachMenu->Add(new MenuBool("DrawQ2", "Draw Q2 first-target plan", false));
+    CoachMenu->Add(new MenuBool("DrawDash", "Draw Step endpoint", false));
+    CoachMenu->Add(new MenuBool("DrawR", "Draw R line/landing", false));
+    CoachMenu->Add(new MenuBool("DrawState", "Draw energy/branch", false));
 }
 
 inline void OnLoad() {

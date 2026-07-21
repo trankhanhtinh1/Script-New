@@ -724,8 +724,8 @@ static void BuildMenu() {
     KeyMenu->Add(new MenuKeyBind("ComboEQFlash", "Combo EQ Flash", SDK::Keys::H, KeyBindType::Toggle))->Permashow();
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("YasuoDraw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q"));
-    DrawMenu->Add(new MenuBool("DrawE", "Draw E"));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q", false));
+    DrawMenu->Add(new MenuBool("DrawE", "Draw E", false));
     DrawMenu->Add(new MenuBool("DrawR", "Draw R", false));
 
     MenuRoot->Add(new MenuBool("reset", "Reset Yasuo", false));

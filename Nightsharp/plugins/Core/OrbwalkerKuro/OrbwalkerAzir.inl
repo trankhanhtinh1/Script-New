@@ -20,46 +20,24 @@ inline bool IsAzirPlayer(const AIHeroClient& player) {
            AzirSoldierSupport::IsAzirChampionName(player.CharacterName());
 }
 
-inline bool IsAzirSandSoldier(const AIMinionClient& minion) {
-    return minion.IsValid() &&
-           (AzirSoldierSupport::IsSandSoldierName(minion.CharacterName()) ||
-            AzirSoldierSupport::IsSandSoldierName(minion.Name()));
+inline bool IsAzirSandSoldier(const GameObject& obj) {
+    return obj.IsValid() &&
+           (AzirSoldierSupport::IsSandSoldierName(obj.CharacterName()) ||
+            AzirSoldierSupport::IsSandSoldierName(obj.Name()));
 }
 
 inline AzirSoldierSupport::Point2 PlanarPoint(const Vector3& position) {
     return { position.x, position.z };
 }
 
-inline const std::vector<AIMinionClient>& GetAzirSandSoldiers(
+inline const std::vector<GameObject>& GetAzirSandSoldiers(
     const AIHeroClient& player
 ) {
-    auto& cache = AzirSoldierCache();
-    const int now = Game::TickCount();
-    const int playerNetworkId = player.IsValid() ? player.NetworkId() : 0;
-    if (cache.tick == now && cache.playerNetworkId == playerNetworkId) {
-        return cache.soldiers;
-    }
-
-    cache.tick = now;
-    cache.playerNetworkId = playerNetworkId;
-    cache.soldiers.clear();
-    if (!IsAzirPlayer(player) || player.IsDead()) {
-        return cache.soldiers;
-    }
-
-    const GameObjectTeam playerTeam = player.Team();
-    for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
-        if (!minion.IsValid() || minion.IsDead() ||
-            minion.Team() != playerTeam || !IsAzirSandSoldier(minion)) {
-            continue;
-        }
-        cache.soldiers.push_back(minion);
-    }
-    return cache.soldiers;
+    return AzirSoldierSupport::GetAzirSandSoldiers(player);
 }
 
 inline bool IsCommandableAzirSandSoldier(const AIHeroClient& player,
-                                         const AIMinionClient& soldier) {
+                                         const GameObject& soldier) {
     return IsAzirPlayer(player) && soldier.IsValid() && !soldier.IsDead() &&
            soldier.Team() == player.Team() && IsAzirSandSoldier(soldier) &&
            AzirSoldierSupport::IsCommandable(
@@ -209,7 +187,6 @@ inline bool IsOwnedAzirSoldierSender(
     const ::Core::Events::ObjectInfo& sender
 ) {
     if (!IsAzirPlayer(player) || !sender.IsValid() ||
-        sender.Type != ::Core::Objects::ObjectType::AIMinionClient ||
         sender.Team != static_cast<std::uint32_t>(player.Team()) ||
         (!AzirSoldierSupport::IsSandSoldierName(sender.CharacterName) &&
          !AzirSoldierSupport::IsSandSoldierName(sender.Name))) {

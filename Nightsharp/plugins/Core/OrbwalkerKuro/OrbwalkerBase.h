@@ -124,6 +124,7 @@ private:
     void ClearDoCastMoveGate();
     void ClearPendingAttackState();
     void ExpirePendingAttack();
+    void CheckAfterAttack();
     int PendingAttackTimeoutMs();
     int DoCastMoveGateTimeoutMs();
     float OneWayPingMs() const;
@@ -158,7 +159,7 @@ inline float GetRealAutoAttackRange(const AIBaseClient& sender, const Attackable
         return 0.0f;
     }
 
-    float result = sender.AttackRange();
+    float result = sender.AttackRange() + sender.BoundingRadius();
     if (target.IsValid() && !target.IsDead()) {
         const AIBaseClient targetBase(target.Handle());
         if (sender.CharacterName() == "Caitlyn" &&

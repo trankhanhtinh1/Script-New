@@ -2622,17 +2622,17 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick state visualization"));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q range/target", true));
+        "DrawQ", "Draw Q range/target", false));
     CoachMenu->Add(new MenuBool(
-        "DrawW", "Draw W cone origin", true));
+        "DrawW", "Draw W cone origin", false));
     CoachMenu->Add(new MenuBool(
-        "DrawR", "Draw R range/circle", true));
+        "DrawR", "Draw R range/circle", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPet", "Draw Tibbers state", true));
+        "DrawPet", "Draw Tibbers state", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPeel", "Draw ally/diver", true));
+        "DrawPeel", "Draw ally/diver", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "State: stack, landing race,", true));
+        "DrawState", "State: stack, landing race,", false));
 }
 
 inline void OnLoad() {

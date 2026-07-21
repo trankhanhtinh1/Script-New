@@ -852,6 +852,8 @@ inline bool CastVolley(const VolleyPlan& plan,
         LastWCastTick = Now();
         LastWPurpose = plan.Purpose;
         LastVolleyPlan = plan;
+        const int ping = std::clamp(static_cast<int>(SDK::Game::Ping()), 0, 100);
+        Orbwalker::SetAttackPauseTime(250 + ping);
         if (plan.PrimaryId != 0) {
             SetFrost(plan.PrimaryId, plan.ImpactTick + 2000, false);
         }
@@ -1462,6 +1464,39 @@ inline bool TryComboArrow(const AIHeroClient& target) {
     return CastArrow(plan, target, Mode::Combo, false);
 }
 
+inline bool TryComboFocus(const AIHeroClient& selected) {
+    if (!Ready(0) || FocusActive) return false;
+    if (!Bool(FocusMenu, "Combo", true)) return false;
+
+    // Rule 1: Must NOT be winding up an auto attack
+    if (Orbwalker::IsWindingUp()) return false;
+
+    // Rule 2: If attack is ready, DO NOT cast Q (priority to auto attack)
+    if (Orbwalker::CanAttack()) return false;
+
+    // Rule 3: Must have a valid target in AA range
+    AIHeroClient target = selected;
+    if (!Engine::ValidEnemy(target, ControllerHelpers::AutoAttackRange(target))) {
+        target = NearestEnemyToPlayer(selected, 650.0f);
+    }
+    if (!Engine::ValidEnemy(target, ControllerHelpers::AutoAttackRange(target))) {
+        return false;
+    }
+
+    const Vector3 cursorPos = Game::CursorPos();
+    if (Engine::ControllerCastPosition(0, cursorPos) || Engine::ControllerCastSelf(0)) {
+        LastQCastTick = Now();
+        FocusStacks = 0;
+        FocusReadyConfirmed = false;
+        FocusActive = true;
+        FocusActiveUntil = Now() + 4000;
+        ActiveSequence = Sequence::AutoFocusReset;
+        return true;
+    }
+
+    return false;
+}
+
 inline bool TryCombo(const AIHeroClient& selected) {
     if (!Engine::ValidEnemy(selected)) return false;
     const float distance = ObjectManager::Player().Position().Distance2D(
@@ -1469,6 +1504,9 @@ inline bool TryCombo(const AIHeroClient& selected) {
     const bool committed = distance <= 760.0f || IsFrosted(selected) ||
                            Engine::IsHardCrowdControlled(selected);
     if (!committed && TryComboArrow(selected)) return true;
+
+    // Priority Q cast when not winding up, not attack ready, and target in range
+    if (TryComboFocus(selected)) return true;
 
     if (Ready(1) && Bool(VolleyMenu, "Combo", true)) {
         const WPurpose purpose = LastRCastTick > 0 &&
@@ -1612,6 +1650,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 
     if (TryManualScout()) return true;
     if (TryManualArrow(selected)) return true;
+    if (mode == Mode::Combo && TryComboFocus(selected)) return true;
     if (TryFocusReset(mode)) return true;
     if (TryInterrupt()) return true;
     if (TryAntiGapcloser()) return true;
@@ -1776,6 +1815,12 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     LastAutoTick = LastAfterAttackTick;
     const AIBaseClient target = UnitByNetworkId(LastAfterAttackTargetId);
     if (target.IsValid() && target.IsHero()) LastCombatTick = LastAfterAttackTick;
+    if (LastKnownMode == Mode::Combo) {
+        AIHeroClient heroTarget = target.IsValid() && target.IsHero()
+            ? AIHeroClient(target.Handle())
+            : AIHeroClient();
+        if (TryComboFocus(heroTarget)) return;
+    }
     (void)TryFocusReset(LastKnownMode);
 }
 
@@ -2114,17 +2159,17 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick geometry and state visualization"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw attack and Volley ranges", true));
+        "DrawRanges", "Draw attack and Volley ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawVolley", "Draw Volley rays", true));
+        "DrawVolley", "Draw Volley rays", false));
     CoachMenu->Add(new MenuBool(
-        "DrawHawkshot", "Draw latest scout route and", true));
+        "DrawHawkshot", "Draw latest scout route and", false));
     CoachMenu->Add(new MenuBool(
-        "DrawArrow", "Draw R path/explosion", true));
+        "DrawArrow", "Draw R path/explosion", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPeel", "Draw protected ally and diver", true));
+        "DrawPeel", "Draw protected ally and diver", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture/Focus/R", true));
+        "DrawState", "Draw posture/Focus/R", false));
 }
 
 inline void OnLoad() {

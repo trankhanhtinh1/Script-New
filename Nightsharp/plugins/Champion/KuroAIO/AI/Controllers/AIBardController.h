@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -2633,19 +2633,19 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "Bard one-trick geometry and state"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw Q/W/E cast ranges", true));
+        "DrawRanges", "Draw Q/W/E cast ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q shackle", true));
+        "DrawQ", "Draw Q shackle", false));
     CoachMenu->Add(new MenuBool(
-        "DrawShrines", "Draw shrine charge state", true));
+        "DrawShrines", "Draw shrine charge state", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPortal", "Draw portal entry/exit", true));
+        "DrawPortal", "Draw portal entry/exit", false));
     CoachMenu->Add(new MenuBool(
-        "DrawR", "Draw the last evaluated R", true));
+        "DrawR", "Draw the last evaluated R", false));
     CoachMenu->Add(new MenuBool(
-        "DrawProtectedAlly", "Mark protected carry", true));
+        "DrawProtectedAlly", "Mark protected carry", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture/seq, chimes", true));
+        "DrawState", "Draw posture/seq, chimes", false));
 }
 
 inline void OnLoad() {

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -2652,17 +2652,17 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "Five-gun state and one-trick timing visualization"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw Q/attack ranges", true));
+        "DrawRanges", "Draw Q/attack ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawMarks", "Draw Calibrum/Gravitum", true));
+        "DrawMarks", "Draw Calibrum/Gravitum", false));
     CoachMenu->Add(new MenuBool(
-        "DrawSentries", "Draw sentry/off-hand", true));
+        "DrawSentries", "Draw sentry/off-hand", false));
     CoachMenu->Add(new MenuBool(
-        "DrawUltimate", "Draw last R path/first-hit", true));
+        "DrawUltimate", "Draw last R path/first-hit", false));
     CoachMenu->Add(new MenuBool(
-        "DrawReturn", "Draw the active Crescendum", true));
+        "DrawReturn", "Draw the active Crescendum", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw pair, queue, ammo,", true));
+        "DrawState", "Draw pair, queue, ammo,", false));
 }
 
 inline void OnLoad() {

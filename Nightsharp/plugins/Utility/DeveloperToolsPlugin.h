@@ -45,11 +45,17 @@ public:
         bool isDown = (GetAsyncKeyState('P') & 0x8000) != 0;
         if (isDown && !pKeyPressedLast_) {
             const Vec3 cursorPos = SDK::Game::CursorPos();
-            float closestDist = 999999.0f;
-            SDK::GameObject closestObj;
+            const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
+            const int now = SDK::Variables::TickCount();
+
+            std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
+            int count = 0;
 
             for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
                 if (!obj.IsValid()) continue;
+
+                const Vec3 pos = obj.Position();
+                if (pos.DistanceSqr(cursorPos) >= rangeSqr) continue;
 
                 std::string name = GetObjectName(obj);
                 std::string charName = GetObjectCharacterName(obj);
@@ -60,35 +66,32 @@ public:
                     continue;
                 }
 
-                float dist = obj.Position().Distance(cursorPos);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestObj = obj;
-                }
-            }
+                std::string typeStr = ObjectTypeToString(obj.Type());
+                std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
+                std::string teamStr = TeamToString(obj);
+                std::string statusStr = StatusToString(obj);
 
-            if (closestObj.IsValid() && closestDist <= static_cast<float>(maxRange_)) {
-                std::string name = GetObjectName(closestObj);
-                std::string charName = GetObjectCharacterName(closestObj);
-                std::string typeStr = ObjectTypeToString(closestObj.Type());
-                std::uint32_t netId = static_cast<std::uint32_t>(closestObj.NetworkId());
-                
                 float age = 0.0f;
                 auto it = trackedObjectTicks_.find(netId);
                 if (it != trackedObjectTicks_.end()) {
-                    age = static_cast<float>(SDK::Variables::TickCount() - it->second) / 1000.0f;
+                    age = static_cast<float>(now - it->second) / 1000.0f;
                 }
 
-                char copyBuf[512];
-                std::snprintf(copyBuf, sizeof(copyBuf),
-                              "Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Age: %.1fs | Position: (%.1f, %.1f, %.1f)",
-                              name.c_str(), charName.c_str(), netId,
-                              static_cast<unsigned long long>(closestObj.Address()),
-                              typeStr.c_str(), age,
-                              closestObj.Position().x, closestObj.Position().y, closestObj.Position().z);
+                char lineBuf[512];
+                std::snprintf(lineBuf, sizeof(lineBuf),
+                              "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
+                              ++count, name.c_str(), charName.c_str(), netId,
+                              static_cast<unsigned long long>(obj.Address()),
+                              typeStr.c_str(), teamStr.c_str(), statusStr.c_str(), age,
+                              pos.x, pos.y, pos.z);
+                copyText += lineBuf;
+            }
 
-                ImGui::SetClipboardText(copyBuf);
-                SDK::Orbwalker::DebugPrint("[Dev] Copied to Clipboard: %s", name.c_str());
+            if (count > 0) {
+                ImGui::SetClipboardText(copyText.c_str());
+                SDK::Orbwalker::DebugPrint("[Dev] Copied ALL %d objects in table to Clipboard!", count);
+            } else {
+                SDK::Orbwalker::DebugPrint("[Dev] No objects in range to copy!");
             }
         }
         pKeyPressedLast_ = isDown;
@@ -317,13 +320,49 @@ public:
             return;
         }
 
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Hotkey Hint: Hover an object and press key 'P' to copy its details.");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Hotkey Hint: Press key 'P' to copy ALL objects in table below to Clipboard.");
 
-        if (ImGui::BeginTable("OnScreenObjectsTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300))) {
+        if (ImGui::Button("Copy Entire Table to Clipboard (Key 'P')")) {
+            std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
+            int count = 0;
+            const int now = SDK::Variables::TickCount();
+            for (const auto& obj : activeObjects) {
+                std::string name = GetObjectName(obj);
+                std::string charName = GetObjectCharacterName(obj);
+                std::string typeStr = ObjectTypeToString(obj.Type());
+                std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
+                std::string teamStr = TeamToString(obj);
+                std::string statusStr = StatusToString(obj);
+
+                float age = 0.0f;
+                auto it = trackedObjectTicks_.find(netId);
+                if (it != trackedObjectTicks_.end()) {
+                    age = static_cast<float>(now - it->second) / 1000.0f;
+                }
+
+                const Vec3 pos = obj.Position();
+                char lineBuf[512];
+                std::snprintf(lineBuf, sizeof(lineBuf),
+                              "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
+                              ++count, name.c_str(), charName.c_str(), netId,
+                              static_cast<unsigned long long>(obj.Address()),
+                              typeStr.c_str(), teamStr.c_str(), statusStr.c_str(), age,
+                              pos.x, pos.y, pos.z);
+                copyText += lineBuf;
+            }
+            if (count > 0) {
+                ImGui::SetClipboardText(copyText.c_str());
+                SDK::Orbwalker::DebugPrint("[Dev] Copied ALL %d objects in table to Clipboard!", count);
+            }
+        }
+
+        if (ImGui::BeginTable("OnScreenObjectsTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300))) {
             ImGui::TableSetupColumn("Name");
             ImGui::TableSetupColumn("CharName");
             ImGui::TableSetupColumn("NetId");
             ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Team");
+            ImGui::TableSetupColumn("Status");
             ImGui::TableSetupColumn("Dist to Mouse");
             ImGui::TableSetupColumn("Age (s)");
             ImGui::TableSetupColumn("Action");
@@ -334,6 +373,8 @@ public:
                 std::string name = GetObjectName(obj);
                 std::string charName = GetObjectCharacterName(obj);
                 std::string typeStr = ObjectTypeToString(obj.Type());
+                std::string teamStr = TeamToString(obj);
+                std::string statusStr = StatusToString(obj);
                 float dist = obj.Position().Distance(cursorPos);
 
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
@@ -353,6 +394,10 @@ public:
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(typeStr.c_str());
                 ImGui::TableNextColumn();
+                ImGui::TextUnformatted(teamStr.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(statusStr.c_str());
+                ImGui::TableNextColumn();
                 ImGui::Text("%.1f", dist);
                 ImGui::TableNextColumn();
                 ImGui::Text("%.1fs", age);
@@ -361,8 +406,8 @@ public:
                 char btnId[64];
                 std::snprintf(btnId, sizeof(btnId), "Log##%u", netId);
                 if (ImGui::Button(btnId)) {
-                    SDK::Orbwalker::DebugPrint("[Dev] Name: %s | CharName: %s | NetId: %u | Age: %.1fs",
-                                               name.c_str(), charName.c_str(), netId, age);
+                    SDK::Orbwalker::DebugPrint("[Dev] Name: %s | CharName: %s | NetId: %u | Team: %s | Status: %s | Age: %.1fs",
+                                               name.c_str(), charName.c_str(), netId, teamStr.c_str(), statusStr.c_str(), age);
                 }
             }
             ImGui::EndTable();
@@ -430,6 +475,38 @@ private:
 
         range = Globals::Read<float>(resource + 0x478); // Offset::SpellDataResourceLayout::ResCastRange
         speed = Globals::Read<float>(resource + 0x518); // Offset::SpellDataResourceLayout::ResMissileSpeed
+    }
+
+    static std::string TeamToString(const SDK::GameObject& obj) {
+        if (!obj.IsValid()) return "Unknown";
+        if (obj.IsAlly()) return "Ally";
+        if (obj.IsEnemy()) return "Enemy";
+        const auto team = obj.Team();
+        if (team == SDK::GameObjectTeam::Neutral) return "Neutral";
+        if (team == SDK::GameObjectTeam::Order) return "Blue (100)";
+        if (team == SDK::GameObjectTeam::Chaos) return "Red (200)";
+        return "Unknown";
+    }
+
+    static std::string StatusToString(const SDK::GameObject& obj) {
+        std::string status;
+        if (obj.IsDead()) status += "Dead";
+        else status += "Alive";
+
+        if (!obj.IsVisible()) status += ", Fog";
+        if (!obj.IsTargetable()) status += ", Untargetable";
+        if (obj.IsInvulnerable()) status += ", Invulnerable";
+
+        if (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) {
+            SDK::AIBaseClient ai(obj.Handle());
+            if (ai.IsValid()) {
+                char hpBuf[64];
+                std::snprintf(hpBuf, sizeof(hpBuf), ", HP:%.0f/%.0f(%.0f%%)",
+                              ai.Health(), ai.MaxHealth(), ai.HealthPercent());
+                status += hpBuf;
+            }
+        }
+        return status;
     }
 
     static std::string ObjectTypeToString(::Core::Objects::ObjectType type) {

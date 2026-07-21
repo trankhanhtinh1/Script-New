@@ -23,8 +23,8 @@ bool Near(float left, float right, float epsilon = 0.001f) {
 
 int main() {
     Require(IsAzirChampionName("AZIR") &&
-                IsSandSoldierName("AzirSoldier") &&
-                !IsSandSoldierName("AzirSoldierRMissile"),
+                IsSandSoldierName("Azir_Base_P_Soldier_Ring") &&
+                !IsSandSoldierName("AzirRSolider"),
             "champion and live W soldier aliases must stay distinct from R missiles");
     Require(IsSoldierAttackSpellName("AzirBasicAttackSoldier") &&
                 IsSoldierAttackSpellName("azirsoldierbasicattack") &&

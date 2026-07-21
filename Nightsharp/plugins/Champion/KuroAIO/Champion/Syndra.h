@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -753,12 +753,12 @@ static void BuildMenu() {
     KillstealMenu->Add(new MenuSlider("MinimumHealth", "Minimum target health for R", 0, 0, 500));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q range", true));
-    DrawMenu->Add(new MenuBool("DrawQE", "Draw Q + E range", true));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q range", false));
+    DrawMenu->Add(new MenuBool("DrawQE", "Draw Q + E range", false));
     DrawMenu->Add(new MenuBool("DrawW", "Draw W range", false));
     DrawMenu->Add(new MenuBool("DrawE", "Draw E range", false));
-    DrawMenu->Add(new MenuBool("DrawR", "Draw R range", true));
-    DrawMenu->Add(new MenuBool("DrawSpheres", "Draw sphere timers", true));
+    DrawMenu->Add(new MenuBool("DrawR", "Draw R range", false));
+    DrawMenu->Add(new MenuBool("DrawSpheres", "Draw sphere timers", false));
 
     MenuRoot->Attach();
 }

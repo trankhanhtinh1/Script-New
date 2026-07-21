@@ -115,26 +115,55 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
 
     bool hasCommandableSoldier = false;
     for (const auto& soldier : OrbwalkingDetail::GetAzirSandSoldiers(player)) {
-        if (!OrbwalkingDetail::IsCommandableAzirSandSoldier(player, soldier)) {
+        if (!soldier.IsValid() || soldier.IsDead()) {
             continue;
         }
-        hasCommandableSoldier = true;
+
+        const bool isCommandable = OrbwalkingDetail::IsCommandableAzirSandSoldier(player, soldier);
+        const Vector3 pos = soldier.Position();
+
+        // 1. Draw Ring right at soldier base position
+        const float ringRadius = soldier.BoundingRadius() > 0.0f ? soldier.BoundingRadius() : 50.0f;
+        const ImU32 ringColor = isCommandable ? 0xFF00FFFFu : 0x88888888u; // Gold-Cyan ring when active, gray when out of range
         Drawing::DrawCircle(
-            soldier.Position(),
-            AzirSoldierSupport::kPrimaryAttackRange,
-            0xFFE1B84Bu,
-            1.75f,
-            64);
-        Drawing::DrawLine(
-            player.Position(), soldier.Position(), 0x889E7D2Du, 1.0f);
+            pos,
+            ringRadius,
+            ringColor,
+            2.5f,
+            32);
+
+        if (isCommandable) {
+            hasCommandableSoldier = true;
+
+            // 2. Draw Auto-Attack Range around soldier (375 range)
+            Drawing::DrawCircle(
+                pos,
+                AzirSoldierSupport::kPrimaryAttackRange,
+                0xFF00E5FFu, // Gold/Cyan AA range
+                2.0f,
+                64);
+
+            // 3. Draw tether line from Azir to soldier
+            Drawing::DrawLine(
+                player.Position(), pos, 0xAA00E5FFu, 1.5f);
+        } else {
+            // Out of command range (dimmed circle)
+            Drawing::DrawCircle(
+                pos,
+                AzirSoldierSupport::kPrimaryAttackRange,
+                0x55888888u,
+                1.0f,
+                32);
+        }
     }
 
+    // 4. Draw Azir W tether command radius (660 range) around Azir
     if (hasCommandableSoldier) {
         Drawing::DrawCircle(
             player.Position(),
             AzirSoldierSupport::kCommandRadius,
-            0x667A5C20u,
-            1.0f,
+            0x4400E5FFu,
+            1.25f,
             72);
     }
 }

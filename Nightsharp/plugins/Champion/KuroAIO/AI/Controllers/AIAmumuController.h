@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -2352,17 +2352,17 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick visual coaching"));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q range, first", true));
+        "DrawQ", "Draw Q range, first", false));
     CoachMenu->Add(new MenuBool(
         "DrawAura", "Draw W and E effect radii", false));
     CoachMenu->Add(new MenuBool(
-        "DrawR", "Draw R radius/target", true));
+        "DrawR", "Draw R radius/target", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPeel", "Draw ally/diver", true));
+        "DrawPeel", "Draw ally/diver", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture/ammo state", true));
+        "DrawState", "Draw posture/ammo state", false));
     CoachMenu->Add(new MenuBool(
-        "DrawRFlashWindow", "Draw R->Flash window", true));
+        "DrawRFlashWindow", "Draw R->Flash window", false));
 }
 
 inline void OnLoad() {

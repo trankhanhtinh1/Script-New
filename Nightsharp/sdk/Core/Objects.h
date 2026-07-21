@@ -482,12 +482,22 @@ namespace StaticStringCache {
     constexpr int kMaxIndex = 10000;
     struct Entry {
         bool valid        = false;
-        std::string characterName;  // populated only for AIHeroClient
-        std::string name;
+        std::string characterName;  // populated once for heroes/minions/structures
+        std::string name;           // populated once for units
         uint32_t    team       = 0;
         int         minionClass = 0;
     };
     inline Entry entries[kMaxIndex] = {};
+
+    inline Entry* GetMutable(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
+        return &entries[index];
+    }
+
+    inline const Entry* Get(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
+        return entries[index].valid ? &entries[index] : nullptr;
+    }
 
     inline void Populate(uintptr_t address, uint32_t index,
                          ::Core::Objects::ObjectType type) {
@@ -495,23 +505,30 @@ namespace StaticStringCache {
         Entry& e = entries[index];
         e.valid = true;
 
-        // characterName — read once, only for heroes (cheap for 10 objects total)
-        if (type == ::Core::Objects::ObjectType::AIHeroClient ||
+        if (e.characterName.empty() && (
+            type == ::Core::Objects::ObjectType::AIHeroClient ||
             type == ::Core::Objects::ObjectType::AIMinionClient ||
             type == ::Core::Objects::ObjectType::AITurretClient ||
             type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-            type == ::Core::Objects::ObjectType::HQClient) {
+            type == ::Core::Objects::ObjectType::HQClient)) {
             char charBuf[96] = {};
             if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
                 e.characterName = charBuf;
         }
 
-        // team — static for a unit's entire lifetime
-        e.team = ::Core::Objects::ReadTeamValue(address);
+        if (e.name.empty()) {
+            char nameBuf[96] = {};
+            if (::Core::Objects::ReadName(address, nameBuf, static_cast<int>(sizeof(nameBuf))))
+                e.name = nameBuf;
+        }
 
-        // minionClass — replicated once at creation
-        if (type == ::Core::Objects::ObjectType::AIMinionClient ||
-            type == ::Core::Objects::ObjectType::NeutralMinionCampClient) {
+        if (e.team == 0) {
+            e.team = ::Core::Objects::ReadTeamValue(address);
+        }
+
+        if (e.minionClass == 0 && (
+            type == ::Core::Objects::ObjectType::AIMinionClient ||
+            type == ::Core::Objects::ObjectType::NeutralMinionCampClient)) {
             e.minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(address));
         }
     }
@@ -519,11 +536,6 @@ namespace StaticStringCache {
     inline void Clear(uint32_t index) {
         if (index >= static_cast<uint32_t>(kMaxIndex)) return;
         entries[index] = {};
-    }
-
-    inline const Entry* Get(uint32_t index) {
-        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
-        return entries[index].valid ? &entries[index] : nullptr;
     }
 } // namespace StaticStringCache
 
@@ -676,8 +688,17 @@ public:
     }
 
     GameObjectTeam Team() const {
-        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && sc->team != 0) {
+                return ObjectDetail::MapTeam(sc->team);
+            }
+            const uintptr_t a = Address();
+            if (!a) return GameObjectTeam::Unknown;
+            sc->team = ::Core::Objects::ReadTeamValue(a);
+            sc->valid = true;
             return ObjectDetail::MapTeam(sc->team);
+        }
         const uintptr_t a = Address();
         if (!a) return GameObjectTeam::Unknown;
         return ObjectDetail::MapTeam(::Core::Objects::ReadTeamValue(a));
@@ -744,31 +765,17 @@ public:
     }
 
     bool IsEnemy() const {
-        uint32_t myTeam = 0;
-        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
-            myTeam = sc->team;
-        else {
-            const uintptr_t a = Address();
-            if (!a) return false;
-            myTeam = ::Core::Objects::ReadTeamValue(a);
-        }
-        if (myTeam == 0) return false;
+        const GameObjectTeam myTeam = Team();
+        if (myTeam == GameObjectTeam::Unknown) return false;
         const uint32_t playerTeam = CachedPlayerTeam();
-        return playerTeam != 0 && playerTeam != myTeam;
+        return playerTeam != 0 && playerTeam != static_cast<uint32_t>(myTeam);
     }
 
     bool IsAlly() const {
-        uint32_t myTeam = 0;
-        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
-            myTeam = sc->team;
-        else {
-            const uintptr_t a = Address();
-            if (!a) return false;
-            myTeam = ::Core::Objects::ReadTeamValue(a);
-        }
-        if (myTeam == 0) return false;
+        const GameObjectTeam myTeam = Team();
+        if (myTeam == GameObjectTeam::Unknown) return false;
         const uint32_t playerTeam = CachedPlayerTeam();
-        return playerTeam != 0 && playerTeam == myTeam;
+        return playerTeam != 0 && playerTeam == static_cast<uint32_t>(myTeam);
     }
 
     bool IsMe() const {
@@ -849,21 +856,19 @@ public:
     // Returns empty string if the cache hasn't been populated yet (rare —
     // only possible if the object existed before script injection).
     const std::string& Name() const {
-        auto* sc = const_cast<StaticStringCache::Entry*>(StaticStringCache::Get(static_cast<uint32_t>(handle_.index)));
-        if (sc && !sc->name.empty()) return sc->name;
-
-        const uintptr_t a = Address();
-        if (Globals::IsValidPtr(a)) {
-            char nameBuf[96] = {};
-            if (::Core::Objects::ReadName(a, nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-                if (sc) {
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && !sc->name.empty()) return sc->name;
+            const uintptr_t a = Address();
+            if (Globals::IsValidPtr(a)) {
+                char nameBuf[96] = {};
+                if (::Core::Objects::ReadName(a, nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
                     sc->name = nameBuf;
+                    sc->valid = true;
                     return sc->name;
                 }
-                thread_local std::string tempName;
-                tempName = nameBuf;
-                return tempName;
             }
+            if (!sc->name.empty()) return sc->name;
         }
 
         static const std::string kEmpty;
@@ -871,25 +876,23 @@ public:
     }
 
     const std::string& CharacterName() const {
-        auto* sc = const_cast<StaticStringCache::Entry*>(StaticStringCache::Get(static_cast<uint32_t>(handle_.index)));
-        if (sc && !sc->characterName.empty()) return sc->characterName;
-
-        const uintptr_t a = Address();
-        if (Globals::IsValidPtr(a)) {
-            char charBuf[96] = {};
-            if (::Core::Objects::ReadCharacterName(a, charBuf, sizeof(charBuf)) && charBuf[0]) {
-                if (sc) {
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && !sc->characterName.empty()) return sc->characterName;
+            const uintptr_t a = Address();
+            if (Globals::IsValidPtr(a)) {
+                char charBuf[96] = {};
+                if (::Core::Objects::ReadCharacterName(a, charBuf, sizeof(charBuf)) && charBuf[0]) {
                     sc->characterName = charBuf;
+                    sc->valid = true;
                     return sc->characterName;
                 }
                 if (Globals::IsValidPtr(CoreRuntime::g_ctx.localPlayer) && a == CoreRuntime::g_ctx.localPlayer) {
                     s_cachedChampionName = charBuf;
                     return s_cachedChampionName;
                 }
-                thread_local std::string tempName;
-                tempName = charBuf;
-                return tempName;
             }
+            if (!sc->characterName.empty()) return sc->characterName;
         }
 
         static const std::string kEmpty;
@@ -987,10 +990,19 @@ public:
             return false;
         }
 
-        // minionClass == Pet covers all summoned pets — no name read needed.
-        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index))) {
-            return static_cast<::Core::Objects::MinionClass>(sc->minionClass) ==
-                   ::Core::Objects::MinionClass::Pet;
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && sc->minionClass != 0) {
+                return static_cast<::Core::Objects::MinionClass>(sc->minionClass) ==
+                       ::Core::Objects::MinionClass::Pet;
+            }
+            const uintptr_t a = Address();
+            if (a) {
+                sc->minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(a));
+                sc->valid = true;
+                return static_cast<::Core::Objects::MinionClass>(sc->minionClass) ==
+                       ::Core::Objects::MinionClass::Pet;
+            }
         }
         return false;
     }
@@ -1541,8 +1553,19 @@ public:
     }
 
     ::Core::Objects::MinionClass GetMinionClass() const {
-        if (const auto* sc = StaticStringCache::Get(static_cast<uint32_t>(handle_.index)))
-            return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && sc->minionClass != 0) {
+                return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
+            }
+            const uintptr_t a = Address();
+            if (a) {
+                sc->minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(a));
+                sc->valid = true;
+                return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
+            }
+            return ::Core::Objects::MinionClass::Unset;
+        }
         const uintptr_t a = Address();
         return a ? ::Core::Objects::ReadMinionClass(a) : ::Core::Objects::MinionClass::Unset;
     }

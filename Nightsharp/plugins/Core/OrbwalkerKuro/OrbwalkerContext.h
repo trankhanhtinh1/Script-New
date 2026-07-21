@@ -36,6 +36,7 @@ struct OrbwalkerRuntimeContext {
     int lastAfterAttackStartTick = 0;
     int lastAttackDoCastWaitTick = 0;
     int lastAutoAttackResetTick = 0;
+    int pendingAkshanSecondShotTick = 0;
     int lastFakeMoveClickTick = 0;
     int lastFakeAttackClickTick = 0;
     int fakeClickExpireTick = 0;
@@ -62,6 +63,8 @@ struct OrbwalkerRuntimeContext {
     bool attackCastComplete = false;
     bool lastAttackRequiresDoCastBeforeMove = false;
     bool lastAttackDoCastComplete = false;
+    bool isAkshanSecondShotPending = false;
+    bool isAkshanSecondShotActive = false;
     bool fakeCursorScreenValid = false;
     bool fakeCursorTextureLoadTried = false;
     bool cachedShouldWait = false;

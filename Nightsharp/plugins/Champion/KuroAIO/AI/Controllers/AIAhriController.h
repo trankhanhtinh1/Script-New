@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -380,6 +380,11 @@ inline bool IsCharmMissileName(const char* spellName, const char* missileName) {
 inline void RefreshTrackedMissiles() {
     const auto player = ObjectManager::Player();
     if (!player.IsValid()) return;
+    static int lastScanTick = 0;
+    const int now = SDK::Variables::TickCount();
+    if (now - lastScanTick < 33 && QMissileNetworkId != 0) return;
+    lastScanTick = now;
+
     bool foundQ = false;
     bool foundE = false;
     for (const auto& missile : GameObjects::Missiles()) {
@@ -392,13 +397,12 @@ inline void RefreshTrackedMissiles() {
             QReturning = IsQReturnName(spellName.c_str(), missileName.c_str());
             QMissileNetworkId = missile.NetworkId();
             QMissilePosition = missile.Position();
-            QLastSeenTick = SDK::Variables::TickCount();
+            QLastSeenTick = now;
         } else if (IsCharmMissileName(spellName.c_str(), missileName.c_str())) {
             foundE = true;
             EMissileNetworkId = missile.NetworkId();
         }
     }
-    const int now = SDK::Variables::TickCount();
     if (!foundQ && QActive && QLastSeenTick > 0 && now - QLastSeenTick > 180 &&
         QCastTick > 0 && now - QCastTick > 500) {
         QActive = false;
@@ -581,8 +585,8 @@ inline std::size_t BuildRushCandidates(std::array<Vector3, 64>& candidates,
     constexpr float pi = 3.14159265358979323846f;
     for (int ring = 0; ring < 2; ++ring) {
         const float radius = ring == 0 ? kRDashRange : 270.0f;
-        for (int i = 0; i < 24; ++i) {
-            const float angle = 2.0f * pi * static_cast<float>(i) / 24.0f;
+        for (int i = 0; i < 8; ++i) {
+            const float angle = 2.0f * pi * static_cast<float>(i) / 8.0f;
             AddRushCandidate(candidates, count, {
                 player.Position().x + std::cos(angle) * radius,
                 player.Position().y,
@@ -1033,7 +1037,9 @@ inline FarmLine BestQFarmLine(const std::vector<AIBaseClient>& units,
                               bool lastHitOnly) {
     FarmLine best{};
     const auto player = ObjectManager::Player();
-    for (const auto& candidate : units) {
+    const std::size_t maxCandidates = std::min<std::size_t>(units.size(), 6);
+    for (std::size_t c = 0; c < maxCandidates; ++c) {
+        const auto& candidate = units[c];
         if (!candidate.IsValid() || candidate.IsDead()) continue;
         const Vector3 candidatePrediction = PredictPosition(candidate, 0.25f);
         const Vector3 direction = Direction2D(player.Position(), candidatePrediction);
@@ -1487,10 +1493,10 @@ inline void BuildMenu(Menu* root) {
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "AhriCoach", "One-trick visual coaching"));
-    CoachMenu->Add(new MenuBool("DrawOrbPath", "Draw Q orb path", true));
-    CoachMenu->Add(new MenuBool("DrawRedirect", "Draw Q redirect dest", true));
-    CoachMenu->Add(new MenuBool("DrawRush", "Draw last R dest", true));
-    CoachMenu->Add(new MenuBool("DrawState", "Draw posture/Q/R", true));
+    CoachMenu->Add(new MenuBool("DrawOrbPath", "Draw Q orb path", false));
+    CoachMenu->Add(new MenuBool("DrawRedirect", "Draw Q redirect dest", false));
+    CoachMenu->Add(new MenuBool("DrawRush", "Draw last R dest", false));
+    CoachMenu->Add(new MenuBool("DrawState", "Draw posture/Q/R", false));
 }
 
 inline void OnLoad() {

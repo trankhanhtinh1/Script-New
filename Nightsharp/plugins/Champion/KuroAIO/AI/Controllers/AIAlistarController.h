@@ -1795,12 +1795,12 @@ inline void BuildMenu(Menu* root) {
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick visual coaching"));
-    CoachMenu->Add(new MenuBool("DrawQ", "Draw Pulverize radius", true));
-    CoachMenu->Add(new MenuBool("DrawKnockback", "Draw W landing", true));
-    CoachMenu->Add(new MenuBool("DrawInsec", "Draw reposition/W goal", true));
-    CoachMenu->Add(new MenuBool("DrawPeel", "Mark ally/diver", true));
-    CoachMenu->Add(new MenuBool("DrawEStun", "Mark empow-AA target", true));
-    CoachMenu->Add(new MenuBool("DrawState", "Draw state/branch", true));
+    CoachMenu->Add(new MenuBool("DrawQ", "Draw Pulverize radius", false));
+    CoachMenu->Add(new MenuBool("DrawKnockback", "Draw W landing", false));
+    CoachMenu->Add(new MenuBool("DrawInsec", "Draw reposition/W goal", false));
+    CoachMenu->Add(new MenuBool("DrawPeel", "Mark ally/diver", false));
+    CoachMenu->Add(new MenuBool("DrawEStun", "Mark empow-AA target", false));
+    CoachMenu->Add(new MenuBool("DrawState", "Draw state/branch", false));
 }
 
 inline void OnLoad() {

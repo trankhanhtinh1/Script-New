@@ -82,6 +82,13 @@ inline FivePointAim BestFivePointAim(const Vec3& source,
                                      float targetRadius) {
     const Vec3 direct = Direction2D(source, targetPosition);
     if (direct.IsZero()) return {};
+
+    const ConeHit directHit = FivePointHit(source, direct, targetPosition, targetRadius);
+    const float dist = source.Distance2D(targetPosition);
+    if (directHit.Hits && dist <= 500.0f + std::max(0.0f, targetRadius)) {
+        return { direct, directHit, 0.0f };
+    }
+
     constexpr float rotations[] = {
         0.0f,
         9.5f * kPi / 180.0f,
@@ -89,18 +96,17 @@ inline FivePointAim BestFivePointAim(const Vec3& source,
         6.0f * kPi / 180.0f,
         -6.0f * kPi / 180.0f,
     };
-    FivePointAim best{};
-    float bestUtility = -1.0f;
+    FivePointAim best{ direct, directHit, 0.0f };
+    float bestUtility = directHit.Hits ? directHit.Score : -1.0f;
     for (float rotation : rotations) {
+        if (rotation == 0.0f) continue;
         const Vec3 candidate = Rotate2D(direct, rotation);
         const ConeHit hit = FivePointHit(
             source, candidate, targetPosition, targetRadius);
         if (!hit.Hits) continue;
         float utility = hit.Score;
-        if (hit.TipSlow) utility += 0.24f;
-        // Prefer the direct knife when both casts are equally reliable; only
-        // expose a corner when it buys range or tip slow.
-        utility -= std::fabs(rotation) * 0.12f;
+        if (hit.TipSlow) utility += 0.08f;
+        utility -= std::fabs(rotation) * 2.0f;
         if (utility > bestUtility) {
             bestUtility = utility;
             best = { candidate, hit, rotation };

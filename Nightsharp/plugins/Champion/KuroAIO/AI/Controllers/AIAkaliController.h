@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -440,12 +440,14 @@ inline bool CastQ(const AIHeroClient& target,
     }
     const auto player = ObjectManager::Player();
     const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
-    const Vector3 predicted = prediction.GetUnitPosition().IsValid() &&
-        !prediction.GetUnitPosition().IsZero()
-        ? prediction.GetUnitPosition()
-        : PredictPosition(target, 0.22f);
+    const Vector3 predicted = prediction.GetCastPosition().IsValid() &&
+        !prediction.GetCastPosition().IsZero()
+        ? prediction.GetCastPosition()
+        : (prediction.GetUnitPosition().IsValid() && !prediction.GetUnitPosition().IsZero()
+            ? prediction.GetUnitPosition()
+            : PredictPosition(target, 0.22f));
     const auto aim = BestFivePointAim(player.Position(), predicted, target.BoundingRadius());
-    if (!aim.Hit.Hits || aim.Direction.IsZero()) return false;
+    if (aim.Direction.IsZero()) return false;
     const bool locked = Engine::IsHardCrowdControlled(target) ||
                         static_cast<int>(target.NetworkId()) == EMarkTargetId;
     SDK::HitChance minimum = guaranteed || locked
@@ -1699,11 +1701,11 @@ inline void BuildMenu(Menu* root) {
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "AkaliCoach", "Live passive, shroud, E, and R route coaching"));
-    CoachMenu->Add(new MenuBool("DrawPassiveRing", "Draw confirmed passive ring", true));
-    CoachMenu->Add(new MenuBool("DrawShroud", "Draw tracked Shroud center", true));
-    CoachMenu->Add(new MenuBool("DrawEBackflip", "Draw E1 backflip dest", true));
-    CoachMenu->Add(new MenuBool("DrawRRoute", "Draw R1/R2 destinations", true));
-    CoachMenu->Add(new MenuBool("DrawState", "Draw energy/state", true));
+    CoachMenu->Add(new MenuBool("DrawPassiveRing", "Draw confirmed passive ring", false));
+    CoachMenu->Add(new MenuBool("DrawShroud", "Draw tracked Shroud center", false));
+    CoachMenu->Add(new MenuBool("DrawEBackflip", "Draw E1 backflip dest", false));
+    CoachMenu->Add(new MenuBool("DrawRRoute", "Draw R1/R2 destinations", false));
+    CoachMenu->Add(new MenuBool("DrawState", "Draw energy/state", false));
 }
 
 inline void OnLoad() {

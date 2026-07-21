@@ -407,10 +407,9 @@ inline void RefreshSoldiers() {
     const auto player = ObjectManager::Player();
     if (!player.IsValid()) return;
     const int now = Now();
-    for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
-        if (!minion.IsValid() || minion.IsDead() ||
-            minion.Team() != player.Team() ||
-            !IsSandSoldierName(minion.CharacterName(), minion.Name())) {
+    const auto& soldiers = SoldierRules::GetAzirSandSoldiers(player);
+    for (const auto& minion : soldiers) {
+        if (!minion.IsValid() || minion.IsDead() || minion.Team() != player.Team()) {
             continue;
         }
         SoldierRecord* record = FindSoldierRecord(
@@ -463,13 +462,15 @@ inline std::vector<Soldier> BuildSoldiers(bool commandableOnly = true) {
     return result;
 }
 
-inline AIMinionClient LiveSoldier(int networkId) {
+inline GameObject LiveSoldier(int networkId) {
     if (networkId == 0) return {};
-    for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
-        if (minion.IsValid() && !minion.IsDead() &&
-            static_cast<int>(minion.NetworkId()) == networkId &&
-            IsSandSoldierName(minion.CharacterName(), minion.Name())) {
-            return minion;
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return {};
+    const auto& soldiers = SoldierRules::GetAzirSandSoldiers(player);
+    for (const auto& obj : soldiers) {
+        if (obj.IsValid() && !obj.IsDead() &&
+            static_cast<int>(obj.NetworkId()) == networkId) {
+            return obj;
         }
     }
     return {};
@@ -703,17 +704,24 @@ inline WPlan BuildWPlan(const AIHeroClient& target,
             }
         }
     } else if (Engine::ValidEnemy(target)) {
+        const Vector3 currentPos = target.Position();
         const Vector3 predicted = PredictPosition(target, kWCastSeconds);
+        const Vector3 midPos = (currentPos + predicted) * 0.5f;
         const Vector3 retreat = RetreatDirection(target);
+
+        // 1. Direct on current target position
         candidates.push_back(ClampCast(
-            player.Position(), predicted + retreat * 110.0f,
-            kWSpawnRange));
+            player.Position(), currentPos, kWSpawnRange));
+        // 2. Midpoint between current and predicted target position (optimal overlap)
+        candidates.push_back(ClampCast(
+            player.Position(), midPos, kWSpawnRange));
+        // 3. Predicted target position
         candidates.push_back(ClampCast(
             player.Position(), predicted, kWSpawnRange));
-        const Vector3 toward = SharedGeometry::Direction2D(
-            player.Position(), predicted);
-        if (!toward.IsZero()) {
-            candidates.push_back(player.Position() + toward * 470.0f);
+        // 4. Short lead on retreat direction (50u instead of 110u)
+        if (!retreat.IsZero()) {
+            candidates.push_back(ClampCast(
+                player.Position(), currentPos + retreat * 50.0f, kWSpawnRange));
         }
     }
     if (farm) {
@@ -750,10 +758,15 @@ inline WPlan BuildWPlan(const AIHeroClient& target,
             }
         }
         bool coverage = false;
+        bool doubleCoverage = false;
         if (Engine::ValidEnemy(target)) {
-            coverage = candidate.Distance2D(
-                PredictPosition(target, kWCastSeconds)) <=
-                SoldierRules::kPrimaryAttackRange + target.BoundingRadius();
+            const float currentDist = candidate.Distance2D(target.Position());
+            const float predDist = candidate.Distance2D(PredictPosition(target, kWCastSeconds));
+            const float maxAttackDist = SoldierRules::kPrimaryAttackRange + target.BoundingRadius() - 15.0f; // 15u safety buffer
+            const bool coversCurrent = currentDist <= maxAttackDist;
+            const bool coversPredicted = predDist <= maxAttackDist;
+            coverage = coversCurrent || coversPredicted;
+            doubleCoverage = coversCurrent && coversPredicted;
         }
         const bool nearTurret = NearEnemyTurret(candidate, -100.0f);
         WPlacementContext context{};
@@ -782,6 +795,7 @@ inline WPlan BuildWPlan(const AIHeroClient& target,
             purpose != WPurpose::ShuffleAnchor) continue;
         float score = static_cast<float>(farmHits) * 95.0f +
             (coverage ? 510.0f : 0.0f) +
+            (doubleCoverage ? 250.0f : 0.0f) +
             (context.CursorAgrees ? 90.0f : -150.0f) +
             (existingAnchor ? 75.0f : 0.0f) -
             (nearTurret ? 100.0f : 0.0f) -
@@ -1046,7 +1060,24 @@ inline RPlan BuildRPlan(const AIHeroClient& target,
         candidates.push_back(player.Position() +
             SharedGeometry::Rotate2D(base, -0.18f) * kRCastDistance);
     }
-    const Vector3 allies = AlliedCentroid(target.Position(), 1500.0f);
+    const float raw = RRawDamage(rank, player.AP());
+    const bool lethal = target.Health() <=
+        player.CalculateMagicDamage(target, raw) + 5.0f;
+    const bool frontToBack = CurrentSoldierAttackers(target) > 0 &&
+        Engine::CountEnemiesAt(player.Position(), 500.0f) <= 1;
+    const bool targetSpellShield = HasSpellShieldOrImmunity(target);
+    const bool targetFlashReady = EnemyFlashReady(target);
+    const bool targetDashReady = HasReadyEscape(target);
+    const bool keyCCSpent = EnemyCrowdControlSpent(
+        static_cast<int>(target.NetworkId())) ||
+        Engine::IsHardCrowdControlled(target);
+    const bool playerLow = player.HealthPercent() <=
+        Slider(TacticsMenu, "DefensiveHealth", 42);
+    const bool threatCommitted = EnemyCommitted(
+        static_cast<int>(target.NetworkId())) ||
+        GapcloserTargetId == static_cast<int>(target.NetworkId());
+    const Vector3 alliedCentroid = AlliedCentroid(player.Position(), 1100.0f);
+
     for (const Vector3& candidate : candidates) {
         const Vector3 direction = SharedGeometry::Direction2D(
             player.Position(), candidate);
@@ -1058,14 +1089,9 @@ inline RPlan BuildRPlan(const AIHeroClient& target,
         const bool landingSafe = LandingSafeForR(target, direction);
         REvaluation evaluation = EvaluateR(
             player.Position(), candidate, rank, units,
-            static_cast<int>(target.NetworkId()), allies,
+            static_cast<int>(target.NetworkId()), alliedCentroid,
             followup, landingSafe);
         if (!evaluation.Valid) continue;
-        const float raw = RRawDamage(rank, player.AP());
-        const bool lethal = target.Health() <=
-            player.CalculateMagicDamage(target, raw) + 5.0f;
-        const bool frontToBack = CurrentSoldierAttackers(target) > 0 &&
-            Engine::CountEnemiesAt(player.Position(), 500.0f) <= 1;
         const bool hasExit = WCharges() > 0 ||
             evaluation.AlliedFollowup >= 2 ||
             (player.HealthPercent() >= 72.0f &&
@@ -1076,17 +1102,12 @@ inline RPlan BuildRPlan(const AIHeroClient& target,
         context.Purpose = purpose;
         context.RReady = true;
         context.PlayerAttackWindingUp = Orbwalker::IsWindingUp();
-        context.TargetSpellShield = HasSpellShieldOrImmunity(target);
-        context.TargetFlashReady = EnemyFlashReady(target);
-        context.TargetDashReady = HasReadyEscape(target);
-        context.KeyCrowdControlSpent = EnemyCrowdControlSpent(
-            static_cast<int>(target.NetworkId())) ||
-            Engine::IsHardCrowdControlled(target);
-        context.PlayerLow = player.HealthPercent() <=
-            Slider(TacticsMenu, "DefensiveHealth", 42);
-        context.ThreatCommitted = EnemyCommitted(
-            static_cast<int>(target.NetworkId())) ||
-            GapcloserTargetId == static_cast<int>(target.NetworkId());
+        context.TargetSpellShield = targetSpellShield;
+        context.TargetFlashReady = targetFlashReady;
+        context.TargetDashReady = targetDashReady;
+        context.KeyCrowdControlSpent = keyCCSpent;
+        context.PlayerLow = playerLow;
+        context.ThreatCommitted = threatCommitted;
         context.EndpointEnemyTurret = Engine::UnderEnemyTurret(
             player.Position()) && !defensive;
         context.EndpointTerrain = SDK::NavMesh::IsWall(landing);
@@ -1152,9 +1173,9 @@ inline bool CastEPlan(const EPlan& plan,
                       bool reactive = false) {
     if (!plan.Valid || !Ready(2) ||
         !CastThrottleReady(2, reactive)) return false;
-    const AIMinionClient anchor = LiveSoldier(plan.AnchorId);
+    const GameObject anchor = LiveSoldier(plan.AnchorId);
     if (!anchor.IsValid() || anchor.IsDead()) return false;
-    if (Engine::ControllerCastUnit(2, anchor)) {
+    if (Engine::ControllerCastUnit(2, AIBaseClient(anchor.Handle()))) {
         LastEPlan = plan;
         LastEPurpose = plan.Purpose;
         LastECastTick = Now();
@@ -1684,10 +1705,12 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
             HasSpellShieldOrImmunity(target)) continue;
         const float shieldedHealth = target.Health() + target.AllShield();
         if (Ready(0) && SpellEnabled(0, Mode::Automatic)) {
-            const QPlan q = BuildQPlan(target, QPurpose::KillSecure);
-            if (q.Valid && q.Evaluation.PrimaryHit &&
-                player.CalculateMagicDamage(target, q.RawDamage) >=
-                    shieldedHealth && CastQPlan(q, true)) return true;
+            const float qDamage = player.CalculateMagicDamage(
+                target, QRawDamage(SpellRank(0), player.AP()));
+            if (qDamage >= shieldedHealth) {
+                const QPlan q = BuildQPlan(target, QPurpose::KillSecure);
+                if (q.Valid && q.Evaluation.PrimaryHit && CastQPlan(q, true)) return true;
+            }
         }
         if (Ready(2) && SpellEnabled(2, Mode::Automatic)) {
             const float eDamage = player.CalculateMagicDamage(
@@ -1728,10 +1751,16 @@ inline bool TryOpenSoldierTrade(const AIHeroClient& target,
 inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
     if (TryAutomaticShuffle(target)) return true;
-    const auto player = ObjectManager::Player();
-    const int id = static_cast<int>(target.NetworkId());
-    const int attackers = CurrentSoldierAttackers(target);
 
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return false;
+
+    const int id = static_cast<int>(target.NetworkId());
+    const float dist = player.Position().Distance2D(target.Position());
+    const int attackers = CurrentSoldierAttackers(target);
+    const auto soldiers = BuildSoldiers();
+
+    // 1. Multi-Target R
     if (Ready(3) && Bool(RMenu, "MultiTarget", true) &&
         Engine::CountEnemiesAt(target.Position(), 460.0f) >=
             Slider(RMenu, "MinimumHits", 2)) {
@@ -1739,43 +1768,84 @@ inline bool TryCombo(const AIHeroClient& target) {
         if (CastRPlan(r)) return true;
     }
 
-    if (attackers > 0) {
-        if (TryLateQ(target, QPurpose::ExtendDps)) return true;
-        // The player's orbwalker now owns the soldier attack command.  Hold
-        // the spell window while the target remains inside live coverage.
-        return false;
-    }
+    // 2. W Placement (Soldier Spawning & Long-Range W-Q Setup)
+    if (WAvailable() && SpellEnabled(1, Mode::Combo) && !Orbwalker::IsWindingUp()) {
+        const Vector3 targetPos = PredictPosition(target, 0.20f);
 
-    if (Ready(0) && !BuildSoldiers().empty() &&
-        SpellEnabled(0, Mode::Combo)) {
-        const QPlan q = BuildQPlan(target, QPurpose::ReacquireTarget);
-        if (q.Valid && q.Evaluation.FuturePrimaryAttackers > 0 &&
-            !q.EscapeAnchorLost && CastQPlan(q)) {
-            StartSequence(Sequence::ExtendedSoldierDps,
-                          SequencePhase::RecoverDps,
-                          id, 0, 700);
-            return true;
+        // Case A: Target in direct W range + attack reach (525 + 375 = ~900 range)
+        if (dist <= kWSpawnRange + 375.0f) {
+            // Place W if target not currently covered by soldiers, or if we have 2 W charges for max DPS
+            if (attackers == 0 || (WCharges() >= 2 && attackers < 2)) {
+                const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+                if (Engine::ControllerCastPosition(1, castPos)) {
+                    LastWCastTick = Now();
+                    PendingWPosition = castPos;
+                    PendingAnchorUntil = Now() + 900;
+                    return true;
+                }
+            }
+        }
+        // Case B: Long-range W-Q Poke/Engage (525 < dist <= 1100 and Q is ready!)
+        else if (dist <= 1100.0f && Ready(0) && SpellEnabled(0, Mode::Combo)) {
+            const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+            if (Engine::ControllerCastPosition(1, castPos)) {
+                LastWCastTick = Now();
+                PendingWPosition = castPos;
+                PendingAnchorUntil = Now() + 900;
+                return true;
+            }
         }
     }
 
-    if (TryOpenSoldierTrade(target, Mode::Combo)) return true;
+    // 3. Q Repositioning & AA Reset (Conquering Sands)
+    if (Ready(0) && !soldiers.empty() && SpellEnabled(0, Mode::Combo)) {
+        const Vector3 targetPos = PredictPosition(target, 0.25f);
+        const float targetDistFromPlayer = player.Position().Distance2D(targetPos);
 
-    if (Ready(2) && Bool(EMenu, "CollisionRefund", true) &&
-        EnemyCommitted(id) && player.HealthPercent() >= 58.0f &&
-        CountAlliedFollowup(target.Position(), 950.0f) > 0) {
-        const EPlan e = BuildEPlan(target, EPurpose::CollisionRefund);
-        if (CastEPlan(e)) {
-            StartSequence(Sequence::CollisionRefund,
-                          e.NeedsQ ? SequencePhase::AwaitQBuffer
-                                   : SequencePhase::RecoverDps,
-                          id, e.AnchorId, 1100);
-            PendingQPosition = e.RedirectPosition;
-            return true;
+        // Q can reach target if target is within Q range (800) + soldier attack range (375)
+        if (targetDistFromPlayer <= kQCastRange + 375.0f) {
+            bool shouldQ = false;
+
+            // Condition 1: Target is outside current soldier attack range
+            if (attackers == 0) {
+                shouldQ = true;
+            }
+            // Condition 2: AA-Q Reset (Just finished auto-attack, reset animation!)
+            else if (!Orbwalker::CanAttack() && !Orbwalker::IsWindingUp()) {
+                shouldQ = true;
+            }
+            // Condition 3: Target is running away / escaping
+            else if (dist > 550.0f || !RetreatDirection(target).IsZero()) {
+                shouldQ = true;
+            }
+
+            if (shouldQ) {
+                const Vector3 retreat = RetreatDirection(target);
+                const Vector3 qCastPos = ClampCast(player.Position(), targetPos + retreat * 50.0f, kQCastRange);
+                if (Engine::ControllerCastPosition(0, qCastPos)) {
+                    LastQCastTick = Now();
+                    return true;
+                }
+            }
         }
     }
 
-    if (Ready(3) && Bool(RMenu, "Pick", true) &&
-        target.HealthPercent() <= 34.0f &&
+    // 4. E Collision / Gapclose Finisher
+    if (Ready(2) && Bool(EMenu, "CollisionRefund", true) && !soldiers.empty()) {
+        if (target.HealthPercent() <= 35.0f || player.HealthPercent() >= 55.0f) {
+            const EPlan e = BuildEPlan(target, EPurpose::CollisionRefund);
+            if (e.Valid && CastEPlan(e)) {
+                StartSequence(Sequence::CollisionRefund,
+                              e.NeedsQ ? SequencePhase::AwaitQBuffer : SequencePhase::RecoverDps,
+                              id, e.AnchorId, 1100);
+                PendingQPosition = e.RedirectPosition;
+                return true;
+            }
+        }
+    }
+
+    // 5. R Finisher / Pick
+    if (Ready(3) && Bool(RMenu, "Pick", true) && target.HealthPercent() <= 35.0f &&
         CountAlliedFollowup(target.Position(), 950.0f) > 0) {
         const RPlan r = BuildRPlan(target, RPurpose::Pick);
         if (CastRPlan(r)) return true;
@@ -1785,25 +1855,38 @@ inline bool TryCombo(const AIHeroClient& target) {
 
 inline bool TryHarass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) ||
-        PlayerManaPercent() < Slider(QMenu, "HarassMana", 52)) {
+        PlayerManaPercent() < Slider(QMenu, "HarassMana", 40)) {
         return false;
     }
+    const auto player = ObjectManager::Player();
+    if (!player.IsValid()) return false;
+
+    const float dist = player.Position().Distance2D(target.Position());
     const int attackers = CurrentSoldierAttackers(target);
-    if (attackers > 0) {
-        return TryLateQ(target, QPurpose::LateTrade);
-    }
-    if (Ready(0) && !BuildSoldiers().empty() &&
-        SpellEnabled(0, Mode::Harass)) {
-        const QPlan q = BuildQPlan(target, QPurpose::ReacquireTarget);
-        if (q.Valid && q.Evaluation.FuturePrimaryAttackers > 0 &&
-            !q.EscapeAnchorLost && CastQPlan(q)) {
-            StartSequence(Sequence::WAutoQAuto,
-                          SequencePhase::RecoverDps,
-                          static_cast<int>(target.NetworkId()), 0, 650);
-            return true;
+    const auto soldiers = BuildSoldiers();
+
+    if (WAvailable() && SpellEnabled(1, Mode::Harass) && !Orbwalker::IsWindingUp()) {
+        if (dist <= kWSpawnRange + 375.0f && attackers == 0) {
+            const Vector3 targetPos = PredictPosition(target, 0.20f);
+            const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+            if (Engine::ControllerCastPosition(1, castPos)) {
+                LastWCastTick = Now();
+                return true;
+            }
         }
     }
-    return TryOpenSoldierTrade(target, Mode::Harass);
+
+    if (Ready(0) && !soldiers.empty() && SpellEnabled(0, Mode::Harass)) {
+        const Vector3 targetPos = PredictPosition(target, 0.25f);
+        if (attackers == 0 || (!Orbwalker::CanAttack() && !Orbwalker::IsWindingUp())) {
+            const Vector3 qCastPos = ClampCast(player.Position(), targetPos, kQCastRange);
+            if (Engine::ControllerCastPosition(0, qCastPos)) {
+                LastQCastTick = Now();
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 inline bool TryFarm(Mode mode) {
@@ -1914,7 +1997,10 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastKnownMode = mode;
     RefreshRuntimeState();
     AIHeroClient target = Engine::ValidEnemy(selected)
-        ? selected : NearestEnemyToPlayer({}, 1550.0f);
+        ? selected : Engine::SelectTarget(1250.0f);
+    if (!Engine::ValidEnemy(target)) {
+        target = NearestEnemyToPlayer({}, 1550.0f);
+    }
     CurrentPosture = DeterminePosture(mode, target);
 
     if (TryManualShuffle()) return true;
@@ -2466,17 +2552,17 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick state and geometry visualization"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw W/soldier/Q ranges", true));
+        "DrawRanges", "Draw W/soldier/Q ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawSoldiers", "Draw soldier zones", true));
+        "DrawSoldiers", "Draw soldier zones", false));
     CoachMenu->Add(new MenuBool(
-        "DrawQFormation", "Draw every selected Q endpoint", true));
+        "DrawQFormation", "Draw every selected Q endpoint", false));
     CoachMenu->Add(new MenuBool(
-        "DrawDrift", "Draw E anchor and E-Q endpoint", true));
+        "DrawDrift", "Draw E anchor and E-Q endpoint", false));
     CoachMenu->Add(new MenuBool(
-        "DrawR", "Draw R push/wall", true));
+        "DrawR", "Draw R push/wall", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture/seq, ammo", true));
+        "DrawState", "Draw posture/seq, ammo", false));
 }
 
 inline void OnLoad() {

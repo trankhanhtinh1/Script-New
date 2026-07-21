@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // ============================================================================
 // KuroAIO shared champion intelligence runtime.
@@ -1665,7 +1665,7 @@ inline void OnDraw() {
     for (int index = 0; index < 4; ++index) {
         char key[16] = {};
         _snprintf_s(key, sizeof(key), _TRUNCATE, "Draw%s", SlotName(index));
-        if (!Bool(DrawMenu, key, index == 0) || !RuntimeSpells[index]) {
+        if (!Bool(DrawMenu, key, false) || !RuntimeSpells[index]) {
             continue;
         }
         const float range = RuntimeSpells[index]->CurrentRange();
@@ -1674,14 +1674,14 @@ inline void OnDraw() {
         }
     }
 
-    if (Bool(DrawMenu, "DrawTarget", true)) {
+    if (Bool(DrawMenu, "DrawTarget", false)) {
         const auto target = SelectTarget();
         if (target.IsValid()) {
             Drawing::DrawCircle(target.Position(), 85.0f, 0xFFFFFFFFu, 2.0f, 48);
         }
     }
 
-    if (Bool(DrawMenu, "DrawPlan", true)) {
+    if (Bool(DrawMenu, "DrawPlan", false)) {
         Vec2 screen = {};
         if (Drawing::WorldToScreen(player.Position(), screen) && screen.IsValid()) {
             const ComboPlan* plan = PlanForMode(CurrentMode());
@@ -1776,10 +1776,10 @@ inline void BuildMenu() {
         char label[48] = {};
         _snprintf_s(key, sizeof(key), _TRUNCATE, "Draw%s", SlotName(index));
         _snprintf_s(label, sizeof(label), _TRUNCATE, "Draw %s range", SlotName(index));
-        DrawMenu->Add(new MenuBool(key, label, index == 0));
+        DrawMenu->Add(new MenuBool(key, label, false));
     }
-    DrawMenu->Add(new MenuBool("DrawTarget", "Draw target", true));
-    DrawMenu->Add(new MenuBool("DrawPlan", "Draw plan", true));
+    DrawMenu->Add(new MenuBool("DrawTarget", "Draw target", false));
+    DrawMenu->Add(new MenuBool("DrawPlan", "Draw plan", false));
 
     if (ActiveController && ActiveController->BuildMenu) {
         ActiveController->BuildMenu(MenuRoot);

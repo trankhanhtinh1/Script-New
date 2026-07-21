@@ -59,6 +59,7 @@ public:
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
     bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
+    int AkshanPassiveMode() const { return ListValue(akshanPassiveMode_, 0); }
 
     OrbwalkingMode ActiveMode() const {
         if (!Enabled() || Game::IsChatOpen() || Game::IsShopOpen()) {
@@ -166,6 +167,11 @@ private:
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
             attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
 
+            advancedMenu_->Add(new MenuSeparator("separatorAkshan", "Akshan Passive"));
+            akshanPassiveMode_ = advancedMenu_->Add(new MenuList(
+                "akshanPassiveMode", "Akshan Passive",
+                { "Always 2-Hit", "Always 1-Hit", "Smart" }, 0));
+
         }
 
         menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
@@ -215,6 +221,7 @@ private:
     MenuBool* attackBarrels_ = nullptr;
     MenuBool* attackClones_ = nullptr;
     MenuBool* attackSpecialMinions_ = nullptr;
+    MenuList* akshanPassiveMode_ = nullptr;
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -1217,10 +1217,10 @@ inline void BuildMenu(Menu* root) {
         "NoFarmE", "E is saved during lane clear"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("AatroxCoach", "Drawings"));
-    CoachMenu->Add(new MenuBool("DrawSweetspot", "Draw Q sweetspots", true));
-    CoachMenu->Add(new MenuBool("DrawCorrection", "Draw planned E", true));
-    CoachMenu->Add(new MenuBool("DrawW", "Draw W pull zone", true));
-    CoachMenu->Add(new MenuBool("DrawState", "Draw combo state", true));
+    CoachMenu->Add(new MenuBool("DrawSweetspot", "Draw Q sweetspots", false));
+    CoachMenu->Add(new MenuBool("DrawCorrection", "Draw planned E", false));
+    CoachMenu->Add(new MenuBool("DrawW", "Draw W pull zone", false));
+    CoachMenu->Add(new MenuBool("DrawState", "Draw combo state", false));
 }
 
 inline void OnLoad() {

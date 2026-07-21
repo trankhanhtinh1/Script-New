@@ -89,19 +89,14 @@ static bool UnderEnemyTurret(const Vector3& position) {
 
 static bool SafeDashPosition(const Vector3& position) {
     const auto player = Player();
-    if (!player.IsValid() || position.IsZero() ||
-        player.Position().Distance2D(position) > E.Range + 10.0f ||
-        NavMesh::IsWall(position) ||
-        NavMesh::IsWallBetween(player.Position(), position, 45.0f)) {
+    if (!player.IsValid() || position.IsZero()) {
         return false;
     }
-
-    if (!player.IsUnderEnemyTurret() && UnderEnemyTurret(position)) {
+    const float dist = player.Position().Distance2D(position);
+    if (dist > E.Range + 30.0f || NavMesh::IsWall(position)) {
         return false;
     }
-
-    const int currentEnemies = CountEnemyHeroesNear(player.Position(), 600.0f);
-    return CountEnemyHeroesNear(position, 600.0f) <= std::max(1, currentEnemies);
+    return true;
 }
 
 static Vector3 BestDashPosition(const Vector3& desiredPosition, float distance = -1.0f) {
@@ -115,47 +110,107 @@ static Vector3 BestDashPosition(const Vector3& desiredPosition, float distance =
         30.0f,
         E.Range);
     const Vector3 origin = player.Position();
-    Vector3 direction = desiredPosition - origin;
+    Vector3 targetPos = desiredPosition;
+    if (targetPos.IsZero() || targetPos.Distance2D(origin) <= 1.0f) {
+        targetPos = Game::CursorPos();
+    }
+
+    Vector3 direction = targetPos - origin;
     const float directionLength = std::sqrt(direction.x * direction.x + direction.z * direction.z);
     if (directionLength <= 0.001f) {
         return {};
     }
+    direction.x /= directionLength;
+    direction.z /= directionLength;
+
+    Vector3 exactCandidate{
+        origin.x + direction.x * dashDistance,
+        origin.y,
+        origin.z + direction.z * dashDistance
+    };
+    exactCandidate.y = NavMesh::GetHeightForPosition(exactCandidate);
+    if (SafeDashPosition(exactCandidate)) {
+        return exactCandidate;
+    }
 
     const float baseAngle = std::atan2(direction.z, direction.x);
-    constexpr float pi = 3.14159265358979323846f;
-    Vector3 best = {};
-    float bestScore = -FLT_MAX;
+    static const float angleOffsets[] = {
+        0.2618f, -0.2618f, 0.5236f, -0.5236f, 0.7854f, -0.7854f,
+        1.0472f, -1.0472f, 1.3090f, -1.3090f, 1.5708f, -1.5708f
+    };
 
-    for (int step = 0; step < 24; ++step) {
-        const float angle = baseAngle + static_cast<float>(step) * (2.0f * pi / 24.0f);
+    for (float offset : angleOffsets) {
+        const float angle = baseAngle + offset;
         Vector3 candidate{
             origin.x + std::cos(angle) * dashDistance,
             origin.y,
             origin.z + std::sin(angle) * dashDistance
         };
         candidate.y = NavMesh::GetHeightForPosition(candidate);
-        if (!SafeDashPosition(candidate)) {
-            continue;
-        }
-
-        const float directionPenalty = candidate.Distance2D(desiredPosition);
-        const float safety = NearestEnemyDistance(candidate);
-        const float enemyPenalty = static_cast<float>(CountEnemyHeroesNear(candidate, 600.0f)) * 500.0f;
-        const float score = safety * 0.55f - directionPenalty - enemyPenalty;
-        if (score > bestScore) {
-            bestScore = score;
-            best = candidate;
+        if (SafeDashPosition(candidate)) {
+            return candidate;
         }
     }
 
-    return best;
+    if (!NavMesh::IsWall(exactCandidate)) {
+        return exactCandidate;
+    }
+
+    return {};
+}
+
+static void MarkPassiveSpellCast() {
+    HasPassive = true;
+    LastActionTick = SDK::Variables::TickCount();
+}
+
+static bool CastECombo() {
+    if (!E.IsReady() || Player().IsDashing()) {
+        return false;
+    }
+    const auto player = Player();
+    float distance = E.Range;
+    if (List(ComboMenu, "EDistance", 1) == 1) {
+        distance = 75.0f;
+    }
+
+    const Vector3 cursor = Game::CursorPos();
+    Vector3 dashTarget = player.Position().Extend(cursor, distance);
+    dashTarget.y = NavMesh::GetHeightForPosition(dashTarget);
+
+    if (NavMesh::IsWall(dashTarget)) {
+        Vector3 alt = BestDashPosition(cursor, distance);
+        if (!alt.IsZero()) {
+            dashTarget = alt;
+        }
+    }
+
+    if (dashTarget.IsZero() || NavMesh::IsWall(dashTarget)) {
+        return false;
+    }
+
+    if (E.Cast(dashTarget)) {
+        Orbwalker::ResetAutoAttackTimer();
+        MarkPassiveSpellCast();
+        return true;
+    }
+    return false;
 }
 
 static bool CastE(const Vector3& position) {
-    if (!E.IsReady() || position.IsZero() || !SafeDashPosition(position)) {
+    if (!E.IsReady() || position.IsZero()) {
         return false;
     }
-    return E.Cast(position);
+    const Vector3 targetPos = SafeDashPosition(position) ? position : BestDashPosition(position);
+    if (targetPos.IsZero() || NavMesh::IsWall(targetPos)) {
+        return false;
+    }
+    if (E.Cast(targetPos)) {
+        Orbwalker::ResetAutoAttackTimer();
+        MarkPassiveSpellCast();
+        return true;
+    }
+    return false;
 }
 
 static void UpdateQData() {
@@ -319,32 +374,15 @@ static bool Killsteal() {
     return false;
 }
 
-static void MarkPassiveSpellCast() {
-    HasPassive = true;
-    LastActionTick = SDK::Variables::TickCount();
-}
-
 static bool ComboAfterAttack(const AIHeroClient& target) {
     const auto player = Player();
-    if (!player.IsValid() || player.IsDead() ||
-        !ValidHeroTarget(target, W.Range)) {
+    if (!player.IsValid() || player.IsDead()) {
         return false;
     }
 
-    const bool meleeThreat = EnemyMeleeInRange(350.0f);
-
-    // One spell per completed attack. E is intentionally attempted first so
-    // Lucian can reset his attack timer and reposition before the next double shot.
-    if (Bool(ComboMenu, "UseE", true) && E.IsReady() && !player.IsDashing()) {
-        float distance = E.Range;
-        if (List(ComboMenu, "EDistance", 1) == 1 && !meleeThreat) {
-            distance = 75.0f;
-        }
-        const Vector3 dash = BestDashPosition(Game::CursorPos(), distance);
-        if (CastE(dash)) {
-            MarkPassiveSpellCast();
-            return true;
-        }
+    // E -> Q -> W priority
+    if (Bool(ComboMenu, "UseE", true) && CastECombo()) {
+        return true;
     }
 
     if (Bool(ComboMenu, "UseQ", true) && Q.IsReady() &&
@@ -359,6 +397,43 @@ static bool ComboAfterAttack(const AIHeroClient& target) {
         MarkPassiveSpellCast();
         return true;
     }
+
+    return false;
+}
+
+static bool Combo() {
+    const auto player = Player();
+    if (!player.IsValid() || player.IsDead() || Orbwalker::IsWindingUp()) {
+        return false;
+    }
+
+    auto target = GetPhysicalTarget(E.Range + 550.0f);
+
+    // E -> Q -> W priority: ALWAYS use E first in combo if ready
+    if (Bool(ComboMenu, "UseE", true) && E.IsReady() && !HasPassive && !player.IsDashing()) {
+        if (CastECombo()) {
+            return true;
+        }
+    }
+
+    if (!ValidHeroTarget(target)) {
+        return false;
+    }
+
+    if (Bool(ComboMenu, "UseQ", true) && Q.IsReady() && !HasPassive &&
+        ValidHeroTarget(target, Q.Range) &&
+        Q.Cast(target) == CastStates::SuccessfullyCasted) {
+        MarkPassiveSpellCast();
+        return true;
+    }
+
+    if (Bool(ComboMenu, "UseW", true) && W.IsReady() && !HasPassive &&
+        ValidHeroTarget(target, W.Range) &&
+        CastW(target, false, HitChance::Medium)) {
+        MarkPassiveSpellCast();
+        return true;
+    }
+
     return false;
 }
 
@@ -546,6 +621,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     bool casted = false;
     switch (mode) {
     case OrbwalkingMode::Combo:
+        casted = Combo();
         break;
     case OrbwalkingMode::Harass:
         casted = Harass();
@@ -602,11 +678,18 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
     }
 
     const AIBaseClient attacked(args.Target.Handle());
-    if (!attacked.IsValid() || !attacked.IsHero()) {
+    if (!attacked.IsValid()) {
         return;
     }
-    const AIHeroClient target(attacked.Handle());
-    (void)ComboAfterAttack(target);
+    AIHeroClient target;
+    if (attacked.IsHero()) {
+        target = AIHeroClient(attacked.Handle());
+    } else {
+        target = GetPhysicalTarget(1200.0f);
+    }
+    if (ValidHeroTarget(target)) {
+        (void)ComboAfterAttack(target);
+    }
 }
 
 static void OnNonKillableMinion(OrbwalkingActionArgs& args) {
@@ -700,7 +783,7 @@ static void BuildMenu() {
     AntiGapMenu->Add(new MenuBool("UseE", "Use E", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("ExtendedQ", "Draw Extended Q range", true));
+    DrawMenu->Add(new MenuBool("ExtendedQ", "Draw Extended Q range", false));
     DrawMenu->Add(new MenuBool("Q", "Draw Q range", false));
     DrawMenu->Add(new MenuBool("W", "Draw W range", false));
 

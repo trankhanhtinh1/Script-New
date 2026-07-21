@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -387,10 +387,16 @@ inline float ConservativeComboDamage(const AIHeroClient& target,
 
 inline bool IsQMissileName(const char* spellName,
                            const char* missileName) {
-    return ControllerHelpers::TextContainsAny(
-               missileName, { "FlashFrost", "cryo_FlashFrost" }) ||
-           ControllerHelpers::TextContainsAny(
-               spellName, { "FlashFrostSpell", "FlashFrost" });
+    if (!spellName) return false;
+    // Reject basic attacks explicitly
+    if (ControllerHelpers::TextContainsAny(spellName, { "BasicAttack", "Attack", "Crit" }) ||
+        (missileName && ControllerHelpers::TextContainsAny(missileName, { "BasicAttack", "Attack", "Crit" }))) {
+        return false;
+    }
+    // Exact spell name match ONLY (zero fallback or fuzzy matching)
+    return NameEquals(spellName, "FlashFrostSpell") ||
+           NameEquals(spellName, "FlashFrost") ||
+           (missileName && (NameEquals(missileName, "FlashFrostSpell") || NameEquals(missileName, "FlashFrost")));
 }
 
 inline bool IsQDetonateName(const char* spellName) {
@@ -446,6 +452,11 @@ inline void RefreshTrackedQ() {
         if (QDirection.IsZero()) {
             QDirection = Direction2D(QOrigin, QCastEnd);
         }
+    }
+
+    if (!found && !QMissileObserved && QCastTick <= 0) {
+        ClearQState();
+        return;
     }
 
     if (QActive && !found && !QMissileObserved && QCastTick > 0) {
@@ -2790,17 +2801,17 @@ inline void BuildMenu(Menu* root) {
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "One-trick state visualization"));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q path/missile", true));
+        "DrawQ", "Draw Q path/missile", false));
     CoachMenu->Add(new MenuBool(
-        "DrawWall", "Draw last W segment", true));
+        "DrawWall", "Draw last W segment", false));
     CoachMenu->Add(new MenuBool(
-        "DrawStorm", "Draw R range/radius", true));
+        "DrawStorm", "Draw R range/radius", false));
     CoachMenu->Add(new MenuBool(
         "DrawChill", "Draw Chill schedule", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPeel", "Draw ally/diver", true));
+        "DrawPeel", "Draw ally/diver", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw state/seq, Q/E/R and", true));
+        "DrawState", "Draw state/seq, Q/E/R and", false));
 }
 
 inline void OnLoad() {

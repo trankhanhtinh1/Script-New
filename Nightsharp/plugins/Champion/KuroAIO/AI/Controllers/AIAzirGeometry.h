@@ -833,14 +833,19 @@ struct ShuffleGate {
 };
 
 inline bool MayStartShuffle(const ShuffleGate& gate) {
-    if ((!gate.ManualKey && !gate.AutomaticEnabled) || !gate.TargetValid ||
-        !gate.WReadyOrAnchor || !gate.EReady || !gate.QReady ||
-        !gate.RReady || !gate.CursorAgrees || !gate.AlliedFollowup ||
+    if (!gate.TargetValid || !gate.WReadyOrAnchor || !gate.EReady ||
+        !gate.QReady || !gate.RReady) {
+        return false;
+    }
+    // Manual key override: player explicitly pressed the shuffle hotkey!
+    if (gate.ManualKey) {
+        return true;
+    }
+    if (!gate.AutomaticEnabled || !gate.CursorAgrees || !gate.AlliedFollowup ||
         !gate.ExitAvailable || gate.TurretRisk || gate.TerrainRisk) {
         return false;
     }
-    if (gate.FrontToBackDpsAvailable &&
-        !gate.MultiTargetOpportunity && !gate.ManualKey) return false;
+    if (gate.FrontToBackDpsAvailable && !gate.MultiTargetOpportunity) return false;
     if ((gate.TargetFlashReady || gate.TargetDashReady) &&
         !gate.KeyCrowdControlSpent && !gate.MultiTargetOpportunity) {
         return false;

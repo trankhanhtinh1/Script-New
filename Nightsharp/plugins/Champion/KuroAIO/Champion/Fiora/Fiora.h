@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../../Helper/KuroAIOCommon.h"
 #include "../../../../../SDK/SDK.h"
@@ -1563,10 +1563,10 @@ static void BuildMenu() {
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Drawings"));
     DrawMenu->Add(new MenuBool("DrawQ", "Draw Q", false));
     DrawMenu->Add(new MenuBool("DrawW", "Draw W", false));
-    DrawMenu->Add(new MenuBool("DrawOptionalRange", "Draw Optional Range", true));
-    DrawMenu->Add(new MenuBool("DrawSelectedRange", "Draw Selected Range", true));
-    DrawMenu->Add(new MenuBool("DrawPriorityRange", "Draw Priority Range", true));
-    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Target", true));
+    DrawMenu->Add(new MenuBool("DrawOptionalRange", "Draw Optional Range", false));
+    DrawMenu->Add(new MenuBool("DrawSelectedRange", "Draw Selected Range", false));
+    DrawMenu->Add(new MenuBool("DrawPriorityRange", "Draw Priority Range", false));
+    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Target", false));
     DrawMenu->Add(new MenuBool("DrawVitals", "Draw Vitals", false));
 
     EvadeTargetMenu = MenuRoot->AddSubMenu(new Menu("EvadeTarget", "Evade Targeted Missile"));

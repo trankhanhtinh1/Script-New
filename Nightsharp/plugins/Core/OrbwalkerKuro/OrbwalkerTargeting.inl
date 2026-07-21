@@ -14,8 +14,7 @@ inline bool IsValidAttackTarget(const AIHeroClient& player,
     if (!player.IsValid() || !target.IsValid()) {
         return false;
     }
-    if ((!target.IsEnemy() && target.Team() != GameObjectTeam::Neutral) ||
-        (!target.IsZombie() && target.IsDead())) {
+    if ((!target.IsEnemy() && target.Team() != GameObjectTeam::Neutral) || (!target.IsZombie() && target.IsDead())) {
         return false;
     }
     if (!target.IsVisible() || !target.IsTargetable() || target.IsInvulnerable()) {
@@ -279,28 +278,22 @@ inline AttackableUnit GetKillableMinion(const AIHeroClient& player,
 
 inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
     if (auto* selector = TargetSelector::Instance()) {
-        const auto hero = selector->GetTarget(-1.0f, DamageType::True);
+        const auto targets = selector->GetTargets(FLT_MAX, DamageType::True);
+        for (const auto& hero : targets) {
+            const AttackableUnit target(hero.Handle());
+            if (IsValidCurrentAttackTarget(player, target)) {
+                return target;
+            }
+        }
+    }
+
+    for (const auto& hero : GameObjects::EnemyHeroes()) {
         const AttackableUnit target(hero.Handle());
         if (IsValidCurrentAttackTarget(player, target)) {
             return target;
         }
     }
-
-    AttackableUnit best;
-    float bestDistance = FLT_MAX;
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
-        const AttackableUnit target(hero.Handle());
-        if (!IsValidCurrentAttackTarget(player, target)) {
-            continue;
-        }
-
-        const float distance = player.Distance(target);
-        if (distance < bestDistance) {
-            best = target;
-            bestDistance = distance;
-        }
-    }
-    return best;
+    return {};
 }
 
 inline bool HasEnemyHeroNearAutoAttackRange(const AIHeroClient& player) {

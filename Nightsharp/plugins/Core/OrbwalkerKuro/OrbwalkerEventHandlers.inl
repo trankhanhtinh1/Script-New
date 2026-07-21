@@ -147,6 +147,25 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     context_.attackCastComplete = false;
     ReadAttackTimingsFromMemory(player);
 
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+        std::string spellNameStr = args.SpellName;
+        for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+        const bool isAkshanSecondAttack =
+            spellNameStr.find("akshanpassive") != std::string::npos ||
+            spellNameStr.find("akshanpattack") != std::string::npos;
+        if (isAkshanSecondAttack) {
+            context_.isAkshanSecondShotPending = false;
+            context_.isAkshanSecondShotActive = true;
+            context_.lastAutoAttackTick = now;
+        } else if (isAttack) {
+            const int passiveMode = menu_.AkshanPassiveMode();
+            if (passiveMode == 0 || passiveMode == 2) {
+                context_.isAkshanSecondShotPending = true;
+                context_.pendingAkshanSecondShotTick = now;
+            }
+        }
+    }
+
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
     OrbwalkingActionArgs attackArgs(
         OrbwalkingType::OnAttack,
@@ -195,7 +214,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     context_.lastAttackConfirmTick = now;
     context_.lastAutoAttackResetTick = 0;
     context_.hasConfirmedAttack = true;
-    context_.attackCastComplete = true;
+    context_.attackCastComplete = false;
     if (context_.lastAttackRequiresDoCastBeforeMove) {
         context_.lastAttackDoCastComplete = true;
         context_.lastAttackDoCastWaitTick = 0;
@@ -207,17 +226,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
         context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
     }
 
-    if (context_.lastAutoAttackTick > 0 &&
-        context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
-        const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
-        OrbwalkingActionArgs afterArgs(
-            OrbwalkingType::AfterAttack,
-            eventTarget,
-            eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-            "Kuro");
-        OrbwalkingDetail::FireAfterAttack(afterArgs);
-        context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
-    }
+    CheckAfterAttack();
 }
 
 inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
@@ -383,8 +392,16 @@ inline bool IsKnownAutoAttackResetSlot(
 inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const {
     const auto player = GameObjects::Player();
     if (Events::IsLocalPlayer(args.Sender)) {
-        return args.IsAutoAttack ||
-               (OrbwalkingDetail::IsAzirPlayer(player) &&
+        if (args.IsAutoAttack) return true;
+        if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+            std::string sName = args.SpellName;
+            for (auto& c : sName) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+            if (sName.find("akshanpassive") != std::string::npos ||
+                sName.find("akshanpattack") != std::string::npos) {
+                return true;
+            }
+        }
+        return (OrbwalkingDetail::IsAzirPlayer(player) &&
                 OrbwalkingDetail::IsAzirSoldierAttackEvent(args));
     }
 
@@ -443,8 +460,10 @@ inline void OrbwalkerBase::OnDraw() {
 
     if (menu_.DrawAARange()) {
         DrawAutoAttackRangeFade(player);
-    }
-    if (menu_.DrawAzirSoldierRanges()) {
+        if (OrbwalkingDetail::IsAzirPlayer(player)) {
+            DrawAzirSoldierRanges(player);
+        }
+    } else if (menu_.DrawAzirSoldierRanges()) {
         DrawAzirSoldierRanges(player);
     }
 

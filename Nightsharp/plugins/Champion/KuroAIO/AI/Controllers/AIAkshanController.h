@@ -2516,13 +2516,13 @@ inline void BuildMenu(Menu* root) {
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "AkshanCoach", "Live return, swing, blocker, and Scoundrel coaching"));
-    CoachMenu->Add(new MenuBool("DrawQ", "Draw tracked Q leg", true));
+    CoachMenu->Add(new MenuBool("DrawQ", "Draw tracked Q leg", false));
     CoachMenu->Add(new MenuBool(
-        "DrawQReturnCoach", "Draw return-Q align", true));
-    CoachMenu->Add(new MenuBool("DrawSwing", "Draw E anchor/E3", true));
-    CoachMenu->Add(new MenuBool("DrawR", "Draw R line and first blocker", true));
-    CoachMenu->Add(new MenuBool("DrawScoundrel", "Highlight Scoundrel", true));
-    CoachMenu->Add(new MenuBool("DrawState", "Draw one-trick state machine", true));
+        "DrawQReturnCoach", "Draw return-Q align", false));
+    CoachMenu->Add(new MenuBool("DrawSwing", "Draw E anchor/E3", false));
+    CoachMenu->Add(new MenuBool("DrawR", "Draw R line and first blocker", false));
+    CoachMenu->Add(new MenuBool("DrawScoundrel", "Highlight Scoundrel", false));
+    CoachMenu->Add(new MenuBool("DrawState", "Draw one-trick state machine", false));
 }
 
 inline void OnLoad() {

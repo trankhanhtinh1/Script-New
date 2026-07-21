@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../Helper/KuroAIOCommon.h"
 
@@ -979,8 +979,8 @@ static void BuildMenu() {
     RMenu->Add(new MenuSlider("RCount", "R Target in range", 3, 1, 5));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Drawstg", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawDaggers", "Draw Daggers"));
-    DrawMenu->Add(new MenuBool("DrawQRange", "Draw Q Range"));
+    DrawMenu->Add(new MenuBool("DrawDaggers", "Draw Daggers", false));
+    DrawMenu->Add(new MenuBool("DrawQRange", "Draw Q Range", false));
 
     MenuRoot->Attach();
 }

@@ -43,11 +43,26 @@ struct Syndra {
             }
 
             Database::SpellData pushed = context.Source;
-            pushed.Runtime.Delay = static_cast<int>(
-                spherePos.Distance(context.Caster.ServerPosition()) /
-                std::max(1.0f, static_cast<float>(context.Source.Runtime.MissileSpeed)) * 1000.0f);
+            const float speed = context.Source.Runtime.MissileSpeed > 100.0f
+                ? static_cast<float>(context.Source.Runtime.MissileSpeed)
+                : 2000.0f;
+            const float range = context.Source.Runtime.Range > 100.0f
+                ? static_cast<float>(context.Source.Runtime.Range)
+                : 1250.0f;
+            const float sphereRadius = context.Source.Runtime.Radius > 10.0f
+                ? static_cast<float>(context.Source.Runtime.Radius)
+                : 100.0f;
+
+            const float distFromCaster = spherePos.Distance(context.Caster.ServerPosition());
+            pushed.Runtime.Delay = 250 + std::clamp(static_cast<int>((distFromCaster / speed) * 1000.0f), 0, 500);
+            pushed.Runtime.MissileSpeed = static_cast<int>(speed);
+            pushed.Runtime.Range = static_cast<int>(range);
+            pushed.Runtime.Radius = static_cast<int>(sphereRadius);
+            pushed.Type = Database::SkillShotType::SkillshotLine;
+            pushed.DangerValue = 3;
+
             const Vector3 spellEnd = From2D(
-                casterPos + direction * static_cast<float>(context.Source.Runtime.Range),
+                casterPos + direction * range,
                 spherePos.y);
             AddExtra(result, spherePos, spellEnd, pushed);
         };
@@ -77,10 +92,11 @@ private:
     }
 
     static bool IsSphere(const SDK::AIMinionClient& minion) {
-        return minion.IsValid() &&
-               !minion.IsDead() &&
-               minion.IsEnemy() &&
-               ToLower(EvadeUtils::GetObjectCharacterName(minion)) == "syndrasphere";
+        if (!minion.IsValid() || minion.IsDead() || !minion.IsEnemy()) {
+            return false;
+        }
+        const std::string name = minion.CharacterName();
+        return _stricmp(name.c_str(), "syndrasphere") == 0;
     }
 
     static void CleanupSpots() {

@@ -813,10 +813,10 @@ static void BuildMenu() {
     JungleMenu->Add(new MenuSlider("Jmana", "Minimum mana percent", 40, 0, 100));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DQ", "Draw Q", true));
-    DrawMenu->Add(new MenuBool("DW", "Draw W trigger distance", true));
-    DrawMenu->Add(new MenuBool("DE", "Draw E", true));
-    DrawMenu->Add(new MenuBool("DR", "Draw R", true));
+    DrawMenu->Add(new MenuBool("DQ", "Draw Q", false));
+    DrawMenu->Add(new MenuBool("DW", "Draw W trigger distance", false));
+    DrawMenu->Add(new MenuBool("DE", "Draw E", false));
+    DrawMenu->Add(new MenuBool("DR", "Draw R", false));
 
     AntiGapMenu = MenuRoot->AddSubMenu(
         new Menu("AntiGapcloser", "Anti-Gapcloser Settings"));

@@ -997,9 +997,7 @@ private:
                            const Vec2& start,
                            const Vec2& primary,
                            const Vec2& secondary) {
-        Vec2 end = SDK::IsCircleSpellType(data.Runtime.SpellType) && !secondary.IsZero()
-            ? secondary
-            : primary;
+        Vec2 end = !primary.IsZero() ? primary : secondary;
         if (end.IsZero()) {
             end = secondary;
         }
