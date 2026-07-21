@@ -2,6 +2,7 @@
 
 #include "../IPlugin.h"
 #include "../../Core/CoreCastSpell.h"
+#include "../../Core/CoreObjects.h"
 #include "../../Core/CoreRuntime.h"
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
@@ -287,7 +288,7 @@ protected:
                 Globals::Read<std::uint8_t>(hero + Offset::All::Team);
             const float health =
                 Globals::Read<float>(hero + Offset::AttackableUnit::HP);
-            const bool hpDead = health <= 0.0f;
+            const bool dead = ::Core::Objects::IsDead(hero);
             const std::uint32_t networkId =
                 Globals::Read<std::uint32_t>(hero + Offset::All::NetworkId);
             const std::uint32_t objectIndex =
@@ -297,13 +298,13 @@ protected:
             if (!heroPos.IsValid() || heroPos.IsZero()) {
                 /*
                 Appendf(
-                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u hpDead=%d hp=%.1f pos=%.1f %.1f %.1f skip=invalid-position\r\n",
+                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=%d hp=%.1f pos=%.1f %.1f %.1f skip=invalid-position\r\n",
                     DebugPrefix(),
                     i,
                     static_cast<unsigned long long>(hero),
                     networkId,
                     static_cast<unsigned>(team),
-                    hpDead ? 1 : 0,
+                    dead ? 1 : 0,
                     health,
                     heroPos.x,
                     heroPos.y,
@@ -312,10 +313,10 @@ protected:
                 continue;
             }
 
-            if (hpDead) {
+            if (dead) {
                 /*
                 Appendf(
-                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u hpDead=1 hp=%.1f pos=%.1f %.1f %.1f skip=hp-dead\r\n",
+                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=1 hp=%.1f pos=%.1f %.1f %.1f skip=hp-dead\r\n",
                     DebugPrefix(),
                     i,
                     static_cast<unsigned long long>(hero),
@@ -335,13 +336,13 @@ protected:
             if (enforcePlayerRange && distFromPlayerSq > maxFromPlayerSq) {
                 /*
                 Appendf(
-                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u hpDead=%d hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f skip=out-of-test-range\r\n",
+                    "[%s] target-candidate index=%d ptr=0x%llX net=%u team=%u dead=%d hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f skip=out-of-test-range\r\n",
                     DebugPrefix(),
                     i,
                     static_cast<unsigned long long>(hero),
                     networkId,
                     static_cast<unsigned>(team),
-                    hpDead ? 1 : 0,
+                    dead ? 1 : 0,
                     health,
                     heroPos.x,
                     heroPos.y,
@@ -376,7 +377,7 @@ protected:
 
             /*
             Appendf(
-                "[%s] target-candidate index=%d ptr=0x%llX objIndex=0x%X net=%u team=%u enemy=%d hudMatch=%d hpDead=%d hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f distCursor=%.1f\r\n",
+                "[%s] target-candidate index=%d ptr=0x%llX objIndex=0x%X net=%u team=%u enemy=%d hudMatch=%d dead=%d hp=%.1f pos=%.1f %.1f %.1f distPlayer=%.1f distCursor=%.1f\r\n",
                 DebugPrefix(),
                 i,
                 static_cast<unsigned long long>(hero),
@@ -385,7 +386,7 @@ protected:
                 static_cast<unsigned>(team),
                 differentTeam ? 1 : 0,
                 hudMatch ? 1 : 0,
-                hpDead ? 1 : 0,
+                dead ? 1 : 0,
                 health,
                 heroPos.x,
                 heroPos.y,

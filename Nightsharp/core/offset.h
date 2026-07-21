@@ -656,7 +656,7 @@ namespace SpellBookLayout {
     //     AIBaseClientLayout::NetId       -> All::NetId         (0xCC)
     //     AIBaseClientLayout::Team        -> All::Team          (0x259, uint8)
     //     AIBaseClientLayout::Position    -> All::Position      (0x25C)
-    //     AIBaseClientLayout::IsDead      -> derived from AttackableUnit::HP/MaxHP
+    //     AIBaseClientLayout::IsDead      -> All::Dead (0x11B, byte flag)
     //     AIBaseClientLayout::Health      -> AttackableUnit::HP (0x1080)
     //     AIBaseClientLayout::MaxHealth   -> AttackableUnit::MaxHP (0x10A8)
     //     AIBaseClientLayout::Mana        -> AIHeroClient::MP     (0x360)
@@ -666,7 +666,7 @@ namespace SpellBookLayout {
     //
     // The old 0x250 "dead" byte was proven wrong in runtime logs. Any downstream code that
     // still references `AIBaseClientLayout::*` needs to be migrated to the
-    // verified namespaces.
+    // dedicated runtime IsDead offset.
 
     // AiManager field offsets are relative to the inner pointer returned by
     // NavGridRuntime::GetAiManager (RVA 0x27EF30). IDA confirms that function
@@ -954,10 +954,12 @@ namespace SpellBookLayout {
     // `AIHeroClient` = champion-only fields (adds on top of AttackableUnit).
     //
     // These three namespaces are the CANONICAL source for per-object field
-    // offsets. Death state is intentionally not listed here because the old
-    // obj+0x250 field is not a valid dead flag on the current client. Use
-    // Core::Objects::IsDead() or SDK GameObject::IsDead(), both of which derive
-    // death from attackable-unit health.
+    // offsets. The dead state is queried by Core::Objects::IsDead() via the
+    // native IsAlive RVA (ControlRuntime::IsAlive = 0x2B0CE0), inverted.
+    // Do NOT call the native IsDead RVA (0x287230) — it decrypts an
+    // encrypted blob and crashes the game on 26.6. All::Dead (0x11B) is
+    // kept as a diagnostic field only; it is NOT authoritative across
+    // spawn/respawn transitions.
     namespace All {
         constexpr auto Index               = 0x20;    // GetID/sub_371690 -> obj+0x20; slot-array lookup sub_54EF60 keys (index & 0xFFFF) and validates obj+0x20
         constexpr auto Team                = 0x239;  // byte team index
@@ -981,7 +983,8 @@ namespace SpellBookLayout {
         constexpr auto PositionX           = Position;
         constexpr auto PositionY           = 0x260;
         constexpr auto PositionZ           = 0x264;
-        constexpr auto Visible             = 0x308;   // GameObject visible flag.
+        constexpr auto Dead                = 0x11B; //tìm thủ công qua CE
+        constexpr auto Visible             = 0x2E8;   // GameObject visible flag. tìm thủ công qua CE
         constexpr auto IsInvulnerable      = 0x5A0;   // Legacy/debug only; IsInvulnerable is native/buff logic, not this byte.
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
         // pointer on 26.6 (sub_9F18FE constructor / sub_9F18A0 destructor pair

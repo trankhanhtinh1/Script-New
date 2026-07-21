@@ -1381,17 +1381,25 @@ static void CastQ(AIBaseClient target) {
         return;
     }
     const auto wShadow = WShadow();
-    if (wShadow.IsValid() && target.Distance(wShadow.Position()) <= 900.0f &&
-        target.Distance(player.Position()) > 450.0f) {
-        const auto shadowpred = Q.GetPrediction(target);
+
+    // Try shadow first: independent of player distance — only requires shadow to be
+    // valid and target within Q range of the shadow.  Use Q.Cast(pos) directly to
+    // bypass CastUnit's ValidTarget range check (which measures from player, not
+    // from the shadow, and would incorrectly block the cast when player is far away).
+    if (wShadow.IsValid() && target.Distance(wShadow.Position()) <= Q.Range) {
         Q.UpdateSourcePosition(wShadow.Position(), wShadow.Position());
+        const auto shadowpred = Q.GetPrediction(target);
         if (HitchanceAtLeast(shadowpred.Hitchance, HitChance::Medium)) {
-            CastUnit(Q, target, "cast-Q-shadow");
+            Q.Cast(shadowpred.GetCastPosition());
+            return;
         }
-    } else {
+    }
+
+    // Fallback: cast from player when target is within player's Q range.
+    if (target.Distance(player.Position()) <= Q.Range) {
         Q.UpdateSourcePosition(player.Position(), player.Position());
         const auto normalpred = Q.GetPrediction(target);
-        if (normalpred.GetCastPosition().Distance(player.Position()) < 900.0f &&
+        if (normalpred.GetCastPosition().Distance(player.Position()) < Q.Range &&
             HitchanceAtLeast(normalpred.Hitchance, HitChance::Medium)) {
             CastUnit(Q, target, "cast-Q");
         }

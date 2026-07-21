@@ -602,18 +602,39 @@ inline JungleRuntimeType ReadJungleRuntimeType(uintptr_t object) {
 
 inline bool IsDead(uintptr_t object) {
     if (!Globals::IsValidPtr(object)) {
-        return false;
+        return true;
     }
 
-    const float health = ReadField<float>(object, Offset::AttackableUnit::HP);
-    const float maxHealth = ReadField<float>(object, Offset::AttackableUnit::MaxHP);
-    if (!IsSaneFloat(health, -100000.0f, 1000000.0f) ||
-        !IsSaneFloat(maxHealth, 0.0f, 1000000.0f) ||
-        maxHealth <= 0.0f) {
-        return false;
-    }
+    // Use the native IsAlive RVA (0x2B0CE0) and invert the result.
+    //
+    // Pattern match `E8 ? ? ? ? 84 C0 74 ? 48 8B 83 ? ? ? ? 48 8D 8B`
+    // found at sub_E48C50 (targetable check), which calls IsAlive natively.
+    //
+    // IsAlive decompiles (sub_2B0CE0):
+    //   bool IsAlive(_QWORD *a1) {
+    //       return (*(unsigned __int8 (__fastcall **)(_QWORD *))(*a1 + 312LL))(a1)
+    //           && !(*(unsigned __int8 (__fastcall **)(_QWORD *))(a1[81] + 16LL))(a1 + 81);
+    //   }
+    //
+    // IMPORTANT: call DIRECTLY without spoof_call. The spoof trampoline was
+    // suspected to be the crash cause on 26.6 — testing direct invocation.
+    //
+    // Do NOT call native IsDead (0x287230) — it decrypts an encrypted blob
+    // and crashes the game on 26.6.
+    using IsAliveFn = unsigned __int8(__fastcall*)(uintptr_t);
 
-    return health <= 0.0f;
+    __try {
+        const auto fn = RuntimeFunction<IsAliveFn>(Offset::ControlRuntime::IsAlive);
+        if (!fn) {
+            return true;
+        }
+
+        const unsigned __int8 alive = fn(object);
+        return alive == 0;
+    }
+    __except (1) {
+        return true;
+    }
 }
 
 inline bool IsJungleMonster(uintptr_t object) {

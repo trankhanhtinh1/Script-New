@@ -791,9 +791,7 @@ public:
     bool IsDead() const {
         const uintptr_t a = Address();
         if (!a) return false;
-        // GameObject doesn't have Health(), read directly using the known offset for now
-        float hp = *reinterpret_cast<const float*>(a + Offset::AttackableUnit::HP);
-        return hp <= 0.0f;
+        return ::Core::Objects::IsDead(a);
     }
 
     bool IsVisible() const {
