@@ -240,7 +240,10 @@ namespace CoreRuntime {
         g_ctx.shopInstance = ReadGlobalPtr(g_ctx.shopInstanceGlobal);
         g_ctx.openWindowsArray = ReadGlobalPtr(g_ctx.openWindowsArrayGlobal);
         g_ctx.openWindowsCount = Globals::Read<uint32_t>(g_ctx.openWindowsCountGlobal);
-        g_ctx.cursorInstance = ReadGlobalPtr(g_ctx.cursorInstanceGlobal);
+        // cursorInstanceGlobal now points directly to a Vec3 (cursor world pos),
+        // not a pointer — do NOT ReadGlobalPtr it. Use ctx.cursorInstanceGlobal
+        // directly in Game::ReadCursorGlobals.
+        g_ctx.cursorInstance = 0;
         g_ctx.mouseScreenVec2 = ReadGlobalPtr(g_ctx.mouseScreenVec2Global);
         g_ctx.hudInstance = ReadGlobalPtr(g_ctx.hudInstanceGlobal);
         g_ctx.viewPort = ReadGlobalPtr(g_ctx.viewPortGlobal);

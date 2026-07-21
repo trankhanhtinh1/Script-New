@@ -78,8 +78,16 @@ namespace GameRuntime {
     constexpr auto OpenWindowsArray = 0x1FB2A88;
     constexpr auto OpenWindowsCount = 0x1FB2A90;
     constexpr auto MySpellState = 0x1F066A0;
-    constexpr auto CursorPosRaw = 0x1F75578;
-    // Global MouseInput pointer. sub_5999D0 reads screen X/Y from +0x0C/+0x10.
+    // Cursor world position (Vec3: x,y as qword + z as dword = 12 bytes).
+    // Verified on IDA 13337 (current dump): 4+ constructors use this as the
+    // canonical cursor world pos source — sub_1F18A0 (UnderMouseObject struct),
+    // sub_258980, sub_259140, sub_BF7D0, sub_BF810, sub_BF880 all copy
+    // qword_1F76630 (x,y) + dword_1F76638 (z) as the cursor position.
+    // Old 0x1F75578 was a 24-byte zero buffer — wrong since patch 15.x.
+    constexpr auto CursorPosRaw = 0x1F76630;
+    // Global MouseInput pointer. sub_5AC6F0 reads screen X/Y from +0x0C/+0x10.
+    // Verified still valid on IDA 13337 (current dump): 3/4 pattern matches
+    // (48 8B 0D ?? ?? ?? ?? E8 ...) resolve to qword_1ED9F70.
     constexpr auto MouseScreenVec2 = 0x1ED9F70;
     constexpr auto GetPing = 0x6D1680;
     constexpr auto GetMapID = 0x27E900;

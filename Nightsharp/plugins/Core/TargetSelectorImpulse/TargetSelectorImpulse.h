@@ -42,7 +42,9 @@ public:
         menu_->Add(new SDK::MenuList(
             modeKey_.c_str(),
             "TS Mode",
-            std::vector<std::string>{"Smart AD/AP", "Lowest Health", "Most Priority"},
+            std::vector<std::string>{
+                "Smart AD/AP", "Lowest Health", "Most Priority",
+                "Near Mouse", "Near Hero"},
             0));
         Resume();
     }
@@ -156,6 +158,14 @@ public:
             return MinTarget(list, [this](const SDK::AIHeroClient& target) {
                 return static_cast<float>(GetPriority(target));
             });
+        case 3:
+            return MinTarget(list, [](const SDK::AIHeroClient& target) {
+                return target.Distance(SDK::Game::CursorPosRaw());
+            });
+        case 4:
+            return MinTarget(list, [](const SDK::AIHeroClient& target) {
+                return target.Distance(SDK::GameObjects::Player());
+            });
         default:
             return {};
         }
@@ -206,6 +216,14 @@ public:
         case 2:
             return MinTarget(source, [this](const SDK::AIHeroClient& target) {
                 return static_cast<float>(GetPriority(target));
+            });
+        case 3:
+            return MinTarget(source, [](const SDK::AIHeroClient& target) {
+                return target.Distance(SDK::Game::CursorPosRaw());
+            });
+        case 4:
+            return MinTarget(source, [](const SDK::AIHeroClient& target) {
+                return target.Distance(SDK::GameObjects::Player());
             });
         default:
             return {};
@@ -278,6 +296,18 @@ public:
         case 2:
             std::sort(source.begin(), source.end(), [this](const auto& a, const auto& b) {
                 return GetPriority(a) > GetPriority(b);
+            });
+            break;
+        case 3: {
+            const auto cursor = SDK::Game::CursorPosRaw();
+            std::sort(source.begin(), source.end(), [&cursor](const auto& a, const auto& b) {
+                return a.Distance(cursor) < b.Distance(cursor);
+            });
+            break;
+        }
+        case 4:
+            std::sort(source.begin(), source.end(), [](const auto& a, const auto& b) {
+                return a.Distance(SDK::GameObjects::Player()) < b.Distance(SDK::GameObjects::Player());
             });
             break;
         }
