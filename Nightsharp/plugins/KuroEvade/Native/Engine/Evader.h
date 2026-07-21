@@ -441,7 +441,7 @@ private:
                     direction = SourceGeometry::Perpendicular(skillshot->Direction());
                 }
                 const float distance = skillshot->RawRadius() + radius +
-                    settings.SkillShotsExtraRadius + 10.0f;
+                    settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance + 15.0f;
                 out.push_back(projection + direction * distance);
                 // The opposite analytical root is cheap and is essential when
                 // the nearest side is sealed by terrain.
@@ -453,19 +453,19 @@ private:
                     direction = Vec2(1.0f, 0.0f);
                 }
                 out.push_back(center + direction *
-                    (skillshot->RawRadius() + radius + settings.SkillShotsExtraRadius + 10.0f));
+                    (skillshot->RawRadius() + radius + settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance + 15.0f));
             } else if (skillshot->IsRing()) {
                 const Vec2 center = skillshot->End();
                 Vec2 direction = (hero - center).Normalized();
                 if (direction.IsZero()) direction = Vec2(1.0f, 0.0f);
                 const float padding = radius +
-                    static_cast<float>(std::max(0, settings.SkillShotsExtraRadius));
+                    static_cast<float>(std::max(0, settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance));
                 const float ringWidth = static_cast<float>(
                     std::max(0, skillshot->Native->SData.RingRadius));
                 const float outer = skillshot->RawRadius() + ringWidth +
-                    padding + 10.0f;
+                    padding + 15.0f;
                 const float inner = std::max(
-                    0.0f, skillshot->RawRadius() - ringWidth - padding - 10.0f);
+                    0.0f, skillshot->RawRadius() - ringWidth - padding - 15.0f);
                 out.push_back(center + direction * outer);
                 if (inner > 10.0f) {
                     out.push_back(center + direction * inner);

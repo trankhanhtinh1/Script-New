@@ -175,7 +175,7 @@ public:
     float EffectiveRadius(const EvadeSettings& settings,
                           float unitRadius = 0.0f) const {
         return RawRadius() + std::max(0.0f, unitRadius) +
-            static_cast<float>(std::max(0, settings.SkillShotsExtraRadius));
+            static_cast<float>(std::max(0, settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance));
     }
 
     // A projectile-intercepting wall truncates a line missile because the
@@ -243,7 +243,7 @@ public:
                              float unitRadius = 0.0f) const {
         const float radius = EndExplosionBaseRadius();
         return radius + std::max(0.0f, unitRadius) +
-            static_cast<float>(std::max(0, settings.SkillShotsExtraRadius));
+            static_cast<float>(std::max(0, settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance));
     }
 
     float EndExplosionBaseRadius() const {
@@ -274,7 +274,7 @@ public:
                               float unitRadius,
                               const EvadeSettings& settings) const {
         const float padding = std::max(0.0f, unitRadius) +
-            static_cast<float>(std::max(0, settings.SkillShotsExtraRadius));
+            static_cast<float>(std::max(0, settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance));
         return EndExplosionSignedPenetration(point, padding) >= 0.0f;
     }
 
@@ -492,7 +492,7 @@ public:
         }
         if (IsRing()) {
             const float distance = point.Distance(Native->EndPosition);
-            const float padding = unitRadius + settings.SkillShotsExtraRadius;
+            const float padding = unitRadius + settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance;
             const float outer = RawRadius() +
                 static_cast<float>(Native->SData.RingRadius) + padding;
             const float inner = std::max(0.0f,
@@ -502,7 +502,7 @@ public:
 
         const auto polygon = PolygonPoints();
         return SourceGeometry::DistanceToPolygon(point, polygon) <=
-            std::max(0.0f, unitRadius + settings.SkillShotsExtraRadius);
+            std::max(0.0f, unitRadius + settings.SkillShotsExtraRadius + settings.ExtraEvadeDistance);
     }
 
     float HitTime(const Vec2& point,
