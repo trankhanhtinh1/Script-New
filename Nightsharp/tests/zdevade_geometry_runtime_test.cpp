@@ -258,9 +258,9 @@ int main() {
     const int lineActiveTick =
         lineThreat.startTick + lineThreat.Delay();
 
-    ExpectNear("central threat safety padding is ten",
-               kThreatSafetyPadding,
-               10.0f);
+    ExpectNear("line threat safety padding is six",
+               kLineThreatSafetyPadding,
+               6.0f);
     ExpectNear("line authored radius remains physical collision radius",
                lineThreat.AuthoredRadius(),
                50.0f);
@@ -272,7 +272,7 @@ int main() {
                50.0f);
     ExpectNear("line effective radius adds padding once",
                lineThreat.Radius(),
-               60.0f);
+               56.0f);
     ExpectTrue("line effective padding contains authored-outside point",
                EvadeGeometry::ContainsAt(
                    lineThreat,
@@ -280,14 +280,14 @@ int main() {
                    0.0f,
                    0.0f,
                    lineActiveTick));
-    ExpectTrue("line effective padding stops after exactly ten",
+    ExpectTrue("line effective padding stops after exactly six",
                !EvadeGeometry::ContainsAt(
                    lineThreat,
-                   Vec2(500.0f, 60.01f),
+                   Vec2(500.0f, 56.01f),
                    0.0f,
                    0.0f,
                    lineActiveTick));
-    ExpectNear("line exit target shifts by exactly ten",
+    ExpectNear("line exit target shifts by exactly six",
                ExitCenterDistance(
                    lineThreat.Radius(),
                    35.0f,
@@ -298,7 +298,16 @@ int main() {
                        35.0f,
                        17.0f,
                        4.0f),
-               kThreatSafetyPadding);
+               kLineThreatSafetyPadding);
+
+    SpellData lineExplosionSpell = lineSpell;
+    lineExplosionSpell.hasEndExplosion = true;
+    lineExplosionSpell.secondaryRadius = 80.0f;
+    Threat lineExplosionThreat =
+        ZDEvadeTest::MakeThreat(lineExplosionSpell);
+    ExpectNear("line end explosion keeps authored circular radius",
+               lineExplosionThreat.EndExplosionRadius(),
+               80.0f);
 
     bool onSegment = false;
     Vec2 projection;
@@ -511,9 +520,9 @@ int main() {
     ExpectNear("circle authored radius remains raw",
                circleThreat.AuthoredRadius(),
                100.0f);
-    ExpectNear("circle effective radius adds padding once",
+    ExpectNear("circle effective radius stays authored",
                circleThreat.Radius(),
-               110.0f);
+               100.0f);
 
     ExpectNear("circle impact timing",
                static_cast<float>(
@@ -525,10 +534,10 @@ int main() {
     ExpectTrue("circle excludes point outside radius",
                !EvadeGeometry::ContainsAt(
                    circleThreat, Vec2(511.0f, 0.0f), 0.0f, 0.0f, 1250));
-    ExpectTrue("circle includes point in ten-unit safety shell",
-               EvadeGeometry::ContainsAt(
+    ExpectTrue("circle excludes point outside authored radius",
+               !EvadeGeometry::ContainsAt(
                    circleThreat, Vec2(505.0f, 0.0f), 0.0f, 0.0f, 1250));
-    ExpectNear("circle exit target shifts by exactly ten",
+    ExpectNear("circle exit target adds no fixed safety padding",
                EvadeGeometry::ClosestCircleExit(
                    circleThreat,
                    Vec2(800.0f, 0.0f),
@@ -539,7 +548,7 @@ int main() {
                        0.0f,
                        0.0f,
                        0.0f),
-               kThreatSafetyPadding);
+               0.0f);
 
     SpellData safetyRingSpell =
         ZDEvadeTest::MakeSpell(ZDSpellType::Ring);
@@ -552,36 +561,49 @@ int main() {
     ExpectNear("ring authored inner radius remains raw",
                safetyRing.AuthoredInnerRadius(),
                100.0f);
-    ExpectNear("ring effective inner radius contracts by ten",
+    ExpectNear("ring effective inner radius stays authored",
                safetyRing.InnerRadius(),
-               90.0f);
-    ExpectNear("ring effective outer radius expands by ten",
+               100.0f);
+    ExpectNear("ring effective outer radius stays authored",
                safetyRing.Radius(),
-               210.0f);
-    ExpectTrue("ring safety band widens inward",
-               EvadeGeometry::ContainsAt(
+               200.0f);
+    ExpectTrue("ring excludes inside authored inner radius",
+               !EvadeGeometry::ContainsAt(
                    safetyRing,
                    safetyRing.endPos + Vec2(95.0f, 0.0f),
                    0.0f,
                    0.0f,
                    1000));
-    ExpectTrue("ring safety band widens outward",
-               EvadeGeometry::ContainsAt(
+    ExpectTrue("ring excludes outside authored outer radius",
+               !EvadeGeometry::ContainsAt(
                    safetyRing,
                    safetyRing.endPos + Vec2(205.0f, 0.0f),
                    0.0f,
                    0.0f,
                    1000));
-    ExpectTrue("ring remains safe beyond widened band",
+    ExpectTrue("ring contains its authored band",
+               EvadeGeometry::ContainsAt(
+                   safetyRing,
+                   safetyRing.endPos + Vec2(100.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   1000) &&
+               EvadeGeometry::ContainsAt(
+                   safetyRing,
+                   safetyRing.endPos + Vec2(200.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   1000));
+    ExpectTrue("ring remains safe beyond authored band",
                !EvadeGeometry::ContainsAt(
                    safetyRing,
-                   safetyRing.endPos + Vec2(89.0f, 0.0f),
+                   safetyRing.endPos + Vec2(99.0f, 0.0f),
                    0.0f,
                    0.0f,
                    1000) &&
                !EvadeGeometry::ContainsAt(
                    safetyRing,
-                   safetyRing.endPos + Vec2(211.0f, 0.0f),
+                   safetyRing.endPos + Vec2(201.0f, 0.0f),
                    0.0f,
                    0.0f,
                    1000));
@@ -589,9 +611,9 @@ int main() {
     SpellData clampedRingSpell = safetyRingSpell;
     clampedRingSpell.innerRadius = 5.0f;
     Threat clampedRing = ZDEvadeTest::MakeThreat(clampedRingSpell);
-    ExpectNear("ring effective inner radius clamps at zero",
+    ExpectNear("ring small inner radius stays authored",
                clampedRing.InnerRadius(),
-               0.0f);
+               5.0f);
 
     ExpectTrue("tick addition clamps positive overflow",
                SaturatingTickAdd(INT_MAX, 1) == INT_MAX);
@@ -707,9 +729,9 @@ int main() {
         ExpectNear("Swain Q authored radius remains database metadata",
                    swainThreat.AuthoredRadius(),
                    725.0f);
-        ExpectNear("Swain Q effective radius adds safety padding",
+        ExpectNear("Swain Q cone radius stays authored",
                    swainThreat.Radius(),
-                   725.0f + kThreatSafetyPadding);
+                   725.0f);
         ExpectTrue("Swain Q excludes behind-caster point",
                    !EvadeGeometry::ContainsAt(
                        swainThreat, Vec2(-100.0f, 0.0f), 0.0f, 0.0f, activeTick));
@@ -727,21 +749,28 @@ int main() {
     ExpectNear("cone authored edge padding remains raw",
                paddedConeThreat.AuthoredConeEdgePadding(),
                5.0f);
-    ExpectNear("cone effective edge padding adds ten",
+    ExpectNear("cone effective edge padding stays authored",
                paddedConeThreat.ConeEdgePadding(),
-               15.0f);
+               5.0f);
     ExpectNear("cone authored range remains unchanged",
                paddedConeThreat.Range(),
                100.0f);
     ExpectNear("cone authored angle remains unchanged",
                paddedConeThreat.Angle(),
                60.0f);
-    ExpectTrue("cone edge padding expands sector boundary",
+    ExpectTrue("cone authored edge padding expands sector boundary",
                EvadeGeometry::ContainsAt(
                    paddedConeThreat, Vec2(104.0f, 0.0f), 0.0f, 0.0f, paddedConeTick));
-    ExpectTrue("cone radius does not expand beyond effective edge padding",
+    ExpectTrue("cone radius does not expand beyond authored edge padding",
                !EvadeGeometry::ContainsAt(
-                   paddedConeThreat, Vec2(116.0f, 0.0f), 0.0f, 0.0f, paddedConeTick));
+                   paddedConeThreat, Vec2(106.0f, 0.0f), 0.0f, 0.0f, paddedConeTick));
+
+    SpellData arcSpell = ZDEvadeTest::MakeSpell(ZDSpellType::Arc);
+    arcSpell.radius = 90.0f;
+    Threat arcThreat = ZDEvadeTest::MakeThreat(arcSpell);
+    ExpectNear("arc effective radius stays authored",
+               arcThreat.Radius(),
+               90.0f);
 
     SpellData invalidCone = ZDEvadeTest::MakeSpell(ZDSpellType::Cone);
     invalidCone.coneAngleDegrees = 0.0f;
@@ -1684,9 +1713,9 @@ int main() {
     ExpectNear("explosion authored radius remains raw",
                sweptExplosion.AuthoredEndExplosionRadius(),
                50.0f);
-    ExpectNear("explosion effective radius adds ten",
+    ExpectNear("explosion effective radius stays authored",
                sweptExplosion.EndExplosionRadius(),
-               60.0f);
+               50.0f);
     EvadeSettings sweptExplosionSettings = blinkSettings;
     sweptExplosionSettings.inputDelayMs = 0.0f;
     sweptExplosionSettings.pathStep = 4.0f;
@@ -1715,13 +1744,10 @@ int main() {
                    sweptExplosionCrossing.endpointDanger == 0);
     ExpectTrue("continuous explosion reports negative clearance",
                sweptExplosionCrossing.minimumClearance < 0.0f);
-    ExpectNear("continuous explosion reports analytical first contact",
+    ExpectNear("continuous explosion reports authored-radius first contact",
                sweptExplosionCrossing.firstCollisionTimeMs,
-               static_cast<float>(
-                   TickDifference(
-                       sweptExplosion.EndExplosionStartTick(),
-                       blinkNow)),
-               0.2f);
+               49.505f,
+               0.02f);
     ExpectTrue("continuous explosion contributes exact exposure",
                sweptExplosionCrossing.dangerExposureMs > 4.0f);
 
@@ -1745,7 +1771,7 @@ int main() {
                !tangentExplosionCrossing.pathSafe);
     ExpectNear("tangent explosion clearance is exact",
                tangentExplosionCrossing.minimumClearance,
-               -kThreatSafetyPadding,
+               0.0f,
                0.02f);
 
     Threat walkingEndpointExplosion = makeExplosion(blinkEndpoint, 1401);
@@ -1867,7 +1893,7 @@ int main() {
                !fractionalTangent.strictSafe);
     ExpectNear("fractional high-speed tangent keeps exact radius",
                fractionalTangent.minimumClearance,
-               -kThreatSafetyPadding,
+               -kLineThreatSafetyPadding,
                0.02f);
 
     SpellData graceCircleSpell =

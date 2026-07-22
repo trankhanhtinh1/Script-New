@@ -12,7 +12,7 @@
 
 namespace ZDEvade {
 
-inline constexpr float kThreatSafetyPadding = 10.0f;
+inline constexpr float kLineThreatSafetyPadding = 6.0f;
 
 inline int ClampTick(std::int64_t tick) {
     return static_cast<int>(std::clamp(
@@ -196,7 +196,12 @@ struct Threat {
         return AuthoredRadius();
     }
     float Radius() const {
-        return data ? AuthoredRadius() + kThreatSafetyPadding : 0.0f;
+        return data
+            ? AuthoredRadius() +
+                (data->spellType == ZDSpellType::Line
+                    ? kLineThreatSafetyPadding
+                    : 0.0f)
+            : 0.0f;
     }
     float AuthoredInnerRadius() const {
         return data && std::isfinite(data->innerRadius)
@@ -205,9 +210,7 @@ struct Threat {
     }
     float RawInnerRadius() const { return AuthoredInnerRadius(); }
     float InnerRadius() const {
-        return data
-            ? std::max(0.0f, AuthoredInnerRadius() - kThreatSafetyPadding)
-            : 0.0f;
+        return data ? AuthoredInnerRadius() : 0.0f;
     }
     float Range() const { return data ? std::max(0.0f, data->range) : 0.0f; }
     float Speed() const {
@@ -251,9 +254,7 @@ struct Threat {
     }
     float RawConeEdgePadding() const { return AuthoredConeEdgePadding(); }
     float ConeEdgePadding() const {
-        return data
-            ? AuthoredConeEdgePadding() + kThreatSafetyPadding
-            : 0.0f;
+        return data ? AuthoredConeEdgePadding() : 0.0f;
     }
     bool HasValidConeAngle() const {
         const float angle = Angle();
@@ -287,10 +288,7 @@ struct Threat {
         return AuthoredEndExplosionRadius();
     }
     float EndExplosionRadius() const {
-        const float authored = AuthoredEndExplosionRadius();
-        return authored > 0.0f
-            ? authored + kThreatSafetyPadding
-            : 0.0f;
+        return AuthoredEndExplosionRadius();
     }
     bool HasEndExplosionArea() const {
         if (!data || !data->hasEndExplosion ||

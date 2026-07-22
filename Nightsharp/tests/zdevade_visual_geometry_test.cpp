@@ -523,8 +523,11 @@ int main() {
     }
     ExpectNear("line drawing uses effective radius",
                effectiveLineLateralExtent,
-               preLaunchLine.Radius() * capCircumscription,
+               56.0f * capCircumscription,
                0.01f);
+    ExpectNear("line visual radius includes six-unit safety padding",
+               preLaunchLine.Radius(),
+               56.0f);
     ExpectNear("line authored collision radius remains uninflated",
                preLaunchLine.AuthoredRadius(),
                50.0f);
@@ -538,10 +541,10 @@ int main() {
         ThreatVisualGeometry::Circle(
             effectiveCircle.endPos,
             effectiveCircle.Radius());
-    ExpectNear("circle drawing uses effective radius",
+    ExpectNear("circle drawing keeps authored radius",
                effectiveCirclePath.points[0].Distance(
                    effectiveCircle.endPos),
-               110.0f);
+               100.0f);
 
     SpellData effectiveRingData =
         ZDEvadeTest::MakeSpell(ZDSpellType::Ring);
@@ -557,14 +560,14 @@ int main() {
         ThreatVisualGeometry::Circle(
             effectiveRing.endPos,
             effectiveRing.InnerRadius());
-    ExpectNear("ring drawing expands outer radius",
+    ExpectNear("ring drawing keeps authored outer radius",
                effectiveRingOuter.points[0].Distance(
                    effectiveRing.endPos),
-               210.0f);
-    ExpectNear("ring drawing contracts inner radius",
+               200.0f);
+    ExpectNear("ring drawing keeps authored inner radius",
                effectiveRingInner.points[0].Distance(
                    effectiveRing.endPos),
-               90.0f);
+               100.0f);
 
     SpellData effectiveConeData =
         ZDEvadeTest::MakeSpell(ZDSpellType::Cone);
@@ -597,6 +600,9 @@ int main() {
                effectiveCone.Range() +
                    effectiveCone.ConeEdgePadding(),
                0.01f);
+    ExpectNear("cone drawing keeps authored edge padding",
+               effectiveCone.ConeEdgePadding(),
+               5.0f);
     ExpectNear("cone range remains authored",
                effectiveCone.Range(),
                100.0f);
@@ -931,11 +937,10 @@ int main() {
         ThreatVisualGeometry::Circle(
             retainedExplosion.EndExplosionCenter(),
             retainedExplosion.EndExplosionRadius());
-    ExpectNear("explosion drawing uses effective radius",
+    ExpectNear("line explosion drawing keeps authored circular radius",
                retainedExplosionPath.points[0].Distance(
                    retainedExplosion.EndExplosionCenter()),
-               retainedExplosion.AuthoredEndExplosionRadius() +
-                   kThreatSafetyPadding);
+               retainedExplosion.AuthoredEndExplosionRadius());
 
     const LockedTargetVisualDispatch safeTarget =
         GetLockedTargetVisualDispatch(true, 65.0f);
