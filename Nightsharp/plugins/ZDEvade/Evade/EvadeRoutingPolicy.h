@@ -2,21 +2,55 @@
 
 #include "../../../Core/CoreNavGrid.h"
 #include "../../../Core/Vector.h"
+#include "../Detection/Threat.h"
 #include "../EvadeSpells/EvadeSpellData.h"
 #include "EvadeMath.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cfloat>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
+#include <string>
+#include <tuple>
 #include <vector>
 
 namespace ZDEvade {
 
-inline constexpr float kDefaultEndpointMargin = 10.0f;
+inline constexpr float kDefaultEndpointMargin = 18.0f;
+inline constexpr int kEndpointMarginMenuDefault =
+    static_cast<int>(kDefaultEndpointMargin);
+inline constexpr int kEndpointMarginMenuMinimum = 0;
+inline constexpr int kEndpointMarginMenuMaximum = 30;
+inline constexpr char kEndpointMarginMenuPersistenceId[] = "exitMarginV4";
 inline constexpr float kNumericalOutwardEpsilon = 0.25f;
 inline constexpr float kZeroRadiusNavValidationEpsilon = 0.001f;
+inline constexpr float kDeferredResumeReachTolerance = 12.0f;
+inline constexpr float kMinimumHeroRadius = 10.0f;
+
+inline float SanitizeHeroRadius(float boundingRadius) {
+    return std::isfinite(boundingRadius)
+        ? std::max(kMinimumHeroRadius, boundingRadius)
+        : kMinimumHeroRadius;
+}
+
+inline float EndpointReachTolerance(float endpointMargin) {
+    const float margin = std::isfinite(endpointMargin)
+        ? std::max(0.0f, endpointMargin)
+        : kDefaultEndpointMargin;
+    return std::clamp(margin * 0.5f, 2.0f, 4.0f);
+}
+
+inline bool IsMoveTargetReached(float distance,
+                                float tolerance,
+                                bool exactDanger) {
+    return !exactDanger &&
+        std::isfinite(distance) &&
+        std::isfinite(tolerance) &&
+        distance <= std::max(0.0f, tolerance);
+}
 
 struct SweptCircleGridGeometry {
     float minX = 0.0f;
@@ -214,6 +248,91 @@ inline bool IsObservedRouteUnsafe(
     if (!evaluation.valid || !evaluation.walkable)
         return navInterventionArmed;
     return !evaluation.pathSafe || !evaluation.endpointSafe;
+}
+
+struct ActionableAcquisitionInput {
+    bool controllerOwnsMovement = false;
+    bool exactDanger = false;
+    bool pathAcquisitionDanger = false;
+    bool directDanger = false;
+    bool unsafeThreatPath = false;
+    bool verifiedSuppressingHold = false;
+    int threatSerial = -1;
+    int handledAcquisitionSerial = -1;
+};
+
+struct FirstActionableAcquisitionPolicy {
+    bool firstActionableAcquisition = false;
+    bool suppressForVerifiedHold = false;
+    bool forceReplan = false;
+    bool skipComfortHold = false;
+    bool skipWindupPreservation = false;
+    bool stopImmediatelyWithoutPlan = false;
+    bool recordSerialAfterProcessing = false;
+    int moveMinimumIntervalMs = 20;
+    int noPlanRetryDelayMs = 0;
+};
+
+inline FirstActionableAcquisitionPolicy
+DecideFirstActionableAcquisition(
+    const ActionableAcquisitionInput& input) {
+    const bool actionable =
+        input.exactDanger ||
+        input.pathAcquisitionDanger ||
+        input.directDanger ||
+        input.unsafeThreatPath;
+    const bool first =
+        !input.controllerOwnsMovement &&
+        actionable &&
+        input.threatSerial != input.handledAcquisitionSerial;
+    if (!first) return {};
+
+    FirstActionableAcquisitionPolicy result;
+    result.firstActionableAcquisition = true;
+    result.suppressForVerifiedHold =
+        input.verifiedSuppressingHold;
+    result.forceReplan = !result.suppressForVerifiedHold;
+    result.skipComfortHold = !result.suppressForVerifiedHold;
+    result.skipWindupPreservation =
+        !result.suppressForVerifiedHold;
+    result.stopImmediatelyWithoutPlan =
+        !result.suppressForVerifiedHold;
+    result.recordSerialAfterProcessing = true;
+    return result;
+}
+
+enum class AcquisitionFrameAction {
+    None,
+    Suppress,
+    Plan,
+    Move,
+    Stop,
+};
+
+struct AcquisitionActionSequence {
+    std::array<AcquisitionFrameAction, 2> actions = {
+        AcquisitionFrameAction::None,
+        AcquisitionFrameAction::None,
+    };
+    std::size_t count = 0;
+};
+
+inline AcquisitionActionSequence DecideAcquisitionActionSequence(
+    const FirstActionableAcquisitionPolicy& policy,
+    bool validPlan) {
+    AcquisitionActionSequence result;
+    if (!policy.firstActionableAcquisition) return result;
+    if (policy.suppressForVerifiedHold) {
+        result.actions[0] = AcquisitionFrameAction::Suppress;
+        result.count = 1;
+        return result;
+    }
+    result.actions[0] = AcquisitionFrameAction::Plan;
+    result.actions[1] = validPlan
+        ? AcquisitionFrameAction::Move
+        : AcquisitionFrameAction::Stop;
+    result.count = 2;
+    return result;
 }
 
 inline float SegmentCellAabbDistance(const Vec2& from,
@@ -603,6 +722,23 @@ enum class LockedRouteSafety {
     StrictSafe,
 };
 
+inline bool CandidateHasRequiredStartEnvelopeExit(
+    bool startsInThreat,
+    bool exitedStartEnvelope) {
+    return !startsInThreat || exitedStartEnvelope;
+}
+
+inline bool ShouldRetainRefreshedPendingTarget(
+    bool pendingEpochValid,
+    bool pendingThreatSetValid,
+    bool pendingBranchValid,
+    LockedRouteSafety safety) {
+    return pendingEpochValid &&
+        pendingThreatSetValid &&
+        pendingBranchValid &&
+        safety != LockedRouteSafety::Unsafe;
+}
+
 struct LockedRouteValidationInput {
     ThreatCoverage coverage;
     ThreatCoverage baselineCoverage;
@@ -613,22 +749,27 @@ struct LockedRouteValidationInput {
     bool hardMoveFailure = false;
     bool strictSafe = false;
     float temporalResolutionMs = 25.0f;
+    bool startsInThreat = false;
+    bool exitedStartEnvelope = false;
 };
 
 struct LockedRouteValidation {
     bool hardValid = false;
+    bool reached = false;
     LockedRouteSafety safety = LockedRouteSafety::Unsafe;
 };
 
 inline LockedRouteValidation ClassifyLockedRoute(
     const LockedRouteValidationInput& input) {
     LockedRouteValidation result;
+    result.reached = input.reached;
     result.hardValid =
         input.hasLock &&
         input.evaluationValid &&
         input.walkable &&
-        !input.reached &&
-        !input.hardMoveFailure;
+        !input.hardMoveFailure &&
+        (!input.startsInThreat ||
+         input.exitedStartEnvelope);
     if (!result.hardValid) return result;
     if (input.strictSafe) {
         result.safety = LockedRouteSafety::StrictSafe;
@@ -641,15 +782,53 @@ inline LockedRouteValidation ClassifyLockedRoute(
     return result;
 }
 
+struct LockedEndpointValidationInput {
+    ThreatCoverage baselineCoverage;
+    bool hasLock = false;
+    bool storedWalkable = false;
+    float targetDistance = FLT_MAX;
+    float reachTolerance = 0.0f;
+    float temporalResolutionMs = 25.0f;
+    bool startsInThreat = false;
+    bool exitedStartEnvelope = false;
+};
+
+inline LockedRouteValidation ClassifyLockedEndpointBoundary(
+    const LockedEndpointValidationInput& input) {
+    const bool reached =
+        input.hasLock &&
+        input.storedWalkable &&
+        IsMoveTargetReached(
+            input.targetDistance,
+            input.reachTolerance,
+            false);
+    if (!reached) return {};
+    return ClassifyLockedRoute({
+        input.baselineCoverage,
+        input.baselineCoverage,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        input.temporalResolutionMs,
+        input.startsInThreat,
+        input.exitedStartEnvelope,
+    });
+}
+
 inline int DegradationCommitWindowMs(int targetLockMs) {
     return std::clamp(targetLockMs, 90, 160);
 }
 
-inline constexpr float kRouteTargetReachDistance = 18.0f;
-
-inline bool IsRouteTargetReached(float distance) {
-    return std::isfinite(distance) &&
-        distance < kRouteTargetReachDistance;
+inline bool IsRouteTargetReached(float distance,
+                                 float endpointMargin,
+                                 bool exactDanger) {
+    return IsMoveTargetReached(
+        distance,
+        EndpointReachTolerance(endpointMargin),
+        exactDanger);
 }
 
 enum class UnavoidableAction {
@@ -669,6 +848,10 @@ struct UnavoidableDecisionInput {
     bool candidateWalkable = false;
     bool candidateStrictSafe = false;
     bool candidateMakesProgress = false;
+    bool candidateStartsInThreat = false;
+    bool candidateExitedStartEnvelope = false;
+    bool candidateEnteredNewThreat = false;
+    bool candidateReenteredDanger = false;
     bool fallbackLockActive = false;
     bool lockValid = false;
     bool lockWalkable = false;
@@ -699,7 +882,12 @@ inline UnavoidableDecision DecideUnavoidableAction(
     const bool candidateUsable =
         input.candidateAvailable &&
         input.candidateValid &&
-        input.candidateWalkable;
+        input.candidateWalkable &&
+        CandidateHasRequiredStartEnvelopeExit(
+            input.candidateStartsInThreat,
+            input.candidateExitedStartEnvelope) &&
+        !input.candidateEnteredNewThreat &&
+        !input.candidateReenteredDanger;
     if (candidateUsable && input.candidateStrictSafe) {
         result.action = UnavoidableAction::MoveFallback;
         return result;
@@ -749,6 +937,7 @@ inline bool ShouldPromoteFallbackEvaluation(bool fallbackState,
 struct StableRouteMetrics {
     ThreatCoverage coverage;
     bool strictSafe = false;
+    bool exitedStartEnvelope = false;
     float minimumClearance = 0.0f;
     float timeMarginMs = 0.0f;
     float exitDistance = 0.0f;
@@ -756,6 +945,41 @@ struct StableRouteMetrics {
     float cursorDistance = 0.0f;
     float turretPenalty = 0.0f;
 };
+
+inline constexpr float kCommittedFallbackDistanceImprovement = 20.0f;
+
+inline bool ShouldReplaceCommittedFallback(
+    const StableRouteMetrics& current,
+    const StableRouteMetrics& proposed,
+    bool samePhysicalSide,
+    float temporalResolutionMs = 25.0f) {
+    if (!samePhysicalSide ||
+        current.strictSafe ||
+        !proposed.exitedStartEnvelope ||
+        !ThreatCoverageNoWorseAtResolution(
+            proposed.coverage,
+            current.coverage,
+            temporalResolutionMs)) {
+        return false;
+    }
+    if (!current.exitedStartEnvelope)
+        return std::isfinite(proposed.exitDistance);
+    if (!std::isfinite(proposed.exitDistance))
+        return false;
+    if (!std::isfinite(current.exitDistance))
+        return true;
+    if (proposed.exitDistance +
+            kCommittedFallbackDistanceImprovement <=
+        current.exitDistance) {
+        return true;
+    }
+    return std::fabs(
+               proposed.exitDistance -
+               current.exitDistance) <= 0.5f &&
+        proposed.travelDistance +
+            kCommittedFallbackDistanceImprovement <=
+        current.travelDistance;
+}
 
 namespace StabilityBranch {
 inline constexpr int Unknown = 0;
@@ -822,6 +1046,612 @@ inline std::uint64_t StableThreatSetFingerprint(
     mix(std::numeric_limits<std::uint64_t>::max());
     mix(static_cast<std::uint64_t>(uninitializedCount));
     return fingerprint;
+}
+
+inline constexpr int kSemanticThreatEpisodeWindowMs = 180;
+inline constexpr float kSemanticThreatDirectionDot = 0.995f;
+inline constexpr float kSemanticThreatStartTolerance = 160.0f;
+inline constexpr float kSemanticThreatLaneTolerance = 60.0f;
+inline constexpr float kSemanticThreatEndTolerance = 200.0f;
+
+inline bool SemanticSpellNameEqual(const Threat& left,
+                                   const Threat& right) {
+    const std::string& leftName = left.SpellName();
+    const std::string& rightName = right.SpellName();
+    if (leftName.size() != rightName.size()) return false;
+    for (std::size_t index = 0; index < leftName.size(); ++index) {
+        unsigned char leftValue =
+            static_cast<unsigned char>(leftName[index]);
+        unsigned char rightValue =
+            static_cast<unsigned char>(rightName[index]);
+        if (leftValue >= 'A' && leftValue <= 'Z')
+            leftValue = static_cast<unsigned char>(
+                leftValue - 'A' + 'a');
+        if (rightValue >= 'A' && rightValue <= 'Z')
+            rightValue = static_cast<unsigned char>(
+                rightValue - 'A' + 'a');
+        if (leftValue != rightValue) return false;
+    }
+    return true;
+}
+
+inline bool SameSemanticThreatEpisode(const Threat& left,
+                                      const Threat& right) {
+    if (left.expired ||
+        right.expired ||
+        left.casterNetworkId != right.casterNetworkId ||
+        !SemanticSpellNameEqual(left, right) ||
+        left.Type() != right.Type() ||
+        std::llabs(
+            static_cast<long long>(left.startTick) -
+            static_cast<long long>(right.startTick)) >
+            kSemanticThreatEpisodeWindowMs) {
+        return false;
+    }
+    if (left.slot >= 0 &&
+        right.slot >= 0 &&
+        left.slot != right.slot) {
+        return false;
+    }
+    if (left.projectileLaneKey != 0 &&
+        right.projectileLaneKey != 0 &&
+        left.projectileLaneKey != right.projectileLaneKey) {
+        return false;
+    }
+    if ((left.projectileLaneKey == 0 ||
+         right.projectileLaneKey == 0) &&
+        left.projectileIndex >= 0 &&
+        right.projectileIndex >= 0 &&
+        left.projectileIndex != right.projectileIndex) {
+        return false;
+    }
+
+    const Vec2 leftDirection = left.direction.Normalized();
+    const Vec2 rightDirection = right.direction.Normalized();
+    if (leftDirection.IsZero() ||
+        rightDirection.IsZero() ||
+        leftDirection.Dot(rightDirection) <
+            kSemanticThreatDirectionDot) {
+        return false;
+    }
+    const Vec2 startDelta = right.startPos - left.startPos;
+    if (!left.startPos.IsValid() ||
+        !right.startPos.IsValid() ||
+        startDelta.LengthSqr() >
+            kSemanticThreatStartTolerance *
+                kSemanticThreatStartTolerance) {
+        return false;
+    }
+    const Vec2 laneNormal(-leftDirection.y, leftDirection.x);
+    if (std::fabs(startDelta.Dot(laneNormal)) >
+        kSemanticThreatLaneTolerance) {
+        return false;
+    }
+    const bool endpointCompatible =
+        left.endPos.IsValid() &&
+        right.endPos.IsValid() &&
+        left.endPos.DistanceSqr(right.endPos) <=
+            kSemanticThreatEndTolerance *
+                kSemanticThreatEndTolerance;
+    if (left.projectileIndex < 0 ||
+        right.projectileIndex < 0) {
+        return endpointCompatible;
+    }
+    return left.Type() == ZDSpellType::Line ||
+        endpointCompatible;
+}
+
+inline std::vector<std::vector<std::size_t>>
+BuildSemanticThreatGroups(
+    const std::vector<Threat>& threats) {
+    std::vector<std::size_t> active;
+    active.reserve(threats.size());
+    for (std::size_t index = 0; index < threats.size(); ++index) {
+        if (!threats[index].expired)
+            active.push_back(index);
+    }
+    std::sort(
+        active.begin(),
+        active.end(),
+        [&](std::size_t leftIndex, std::size_t rightIndex) {
+            const Threat& left = threats[leftIndex];
+            const Threat& right = threats[rightIndex];
+            const Vec2 leftDirection =
+                left.direction.Normalized();
+            const Vec2 rightDirection =
+                right.direction.Normalized();
+            return std::tuple(
+                left.casterNetworkId,
+                left.SpellName(),
+                left.slot,
+                left.projectileLaneKey,
+                left.projectileIndex,
+                left.startTick,
+                std::atan2(leftDirection.y, leftDirection.x),
+                left.startPos.x,
+                left.startPos.y,
+                left.endPos.x,
+                left.endPos.y) <
+                std::tuple(
+                    right.casterNetworkId,
+                    right.SpellName(),
+                    right.slot,
+                    right.projectileLaneKey,
+                    right.projectileIndex,
+                    right.startTick,
+                    std::atan2(
+                        rightDirection.y,
+                        rightDirection.x),
+                    right.startPos.x,
+                    right.startPos.y,
+                    right.endPos.x,
+                    right.endPos.y);
+        });
+
+    std::vector<std::vector<std::size_t>> groups;
+    for (const std::size_t candidate : active) {
+        auto compatibleGroup = std::find_if(
+            groups.begin(),
+            groups.end(),
+            [&](const std::vector<std::size_t>& group) {
+                return std::all_of(
+                    group.begin(),
+                    group.end(),
+                    [&](std::size_t member) {
+                        return SameSemanticThreatEpisode(
+                            threats[member],
+                            threats[candidate]);
+                    });
+            });
+        if (compatibleGroup == groups.end()) {
+            groups.push_back({candidate});
+        } else {
+            compatibleGroup->push_back(candidate);
+        }
+    }
+    return groups;
+}
+
+inline std::size_t SemanticThreatGroupCount(
+    const std::vector<Threat>& threats) {
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> logicalLanes;
+    std::vector<Threat> legacy;
+    for (const Threat& threat : threats) {
+        if (threat.expired) continue;
+        if (threat.logicalCastEpisodeId != 0) {
+            logicalLanes.emplace_back(
+                threat.logicalCastEpisodeId,
+                threat.projectileLaneKey != 0
+                    ? threat.projectileLaneKey
+                    : static_cast<std::uint64_t>(
+                        static_cast<std::uint32_t>(
+                            threat.projectileIndex)));
+        } else {
+            legacy.push_back(threat);
+        }
+    }
+    std::sort(logicalLanes.begin(), logicalLanes.end());
+    logicalLanes.erase(
+        std::unique(
+            logicalLanes.begin(),
+            logicalLanes.end()),
+        logicalLanes.end());
+    return logicalLanes.size() +
+        BuildSemanticThreatGroups(legacy).size();
+}
+
+inline std::uint64_t StableSemanticThreatSetFingerprint(
+    const std::vector<Threat>& threats) {
+    constexpr std::uint64_t offset = 1469598103934665603ull;
+    constexpr std::uint64_t prime = 1099511628211ull;
+    const auto mixValue = [&](std::uint64_t& hash,
+                              std::uint64_t value) {
+        hash ^= value;
+        hash *= prime;
+    };
+    std::vector<std::uint64_t> groups;
+    std::vector<Threat> legacy;
+    std::vector<std::pair<std::uint64_t, std::uint64_t>> logicalLanes;
+    for (const Threat& threat : threats) {
+        if (threat.expired) continue;
+        if (threat.logicalCastEpisodeId != 0) {
+            logicalLanes.emplace_back(
+                threat.logicalCastEpisodeId,
+                threat.projectileLaneKey != 0
+                    ? threat.projectileLaneKey
+                    : static_cast<std::uint64_t>(
+                        static_cast<std::uint32_t>(
+                            threat.projectileIndex)));
+        } else {
+            legacy.push_back(threat);
+        }
+    }
+    std::sort(logicalLanes.begin(), logicalLanes.end());
+    logicalLanes.erase(
+        std::unique(
+            logicalLanes.begin(),
+            logicalLanes.end()),
+        logicalLanes.end());
+    for (const auto& logicalLane : logicalLanes) {
+        std::uint64_t group = offset;
+        mixValue(group, 0x4C4F474943414C45ull);
+        mixValue(group, logicalLane.first);
+        mixValue(group, logicalLane.second);
+        groups.push_back(group);
+    }
+    for (const std::vector<std::size_t>& members :
+         BuildSemanticThreatGroups(legacy)) {
+        if (members.empty()) continue;
+        const Threat& threat = legacy[members.front()];
+        std::uint64_t group = offset;
+        mixValue(group, threat.casterNetworkId);
+        for (unsigned char value : threat.SpellName()) {
+            if (value >= 'A' && value <= 'Z')
+                value = static_cast<unsigned char>(
+                    value - 'A' + 'a');
+            mixValue(group, value);
+        }
+        mixValue(group, std::numeric_limits<std::uint64_t>::max());
+        mixValue(
+            group,
+            static_cast<std::uint64_t>(
+                static_cast<std::uint32_t>(threat.slot)));
+        mixValue(
+            group,
+            static_cast<std::uint64_t>(threat.Type()));
+        std::uint64_t laneKey = 0;
+        int laneIndex = -1;
+        for (const std::size_t member : members) {
+            if (legacy[member].projectileLaneKey != 0) {
+                laneKey = legacy[member].projectileLaneKey;
+                break;
+            }
+            if (legacy[member].projectileIndex >= 0) {
+                laneIndex = legacy[member].projectileIndex;
+                break;
+            }
+        }
+        mixValue(
+            group,
+            laneKey != 0
+                ? laneKey
+                : static_cast<std::uint64_t>(
+                    static_cast<std::uint32_t>(laneIndex)));
+        const auto quantize = [](float value, float quantum) {
+            if (!std::isfinite(value)) return std::int64_t{0};
+            return static_cast<std::int64_t>(
+                std::llround(
+                    static_cast<double>(value) /
+                    static_cast<double>(quantum)));
+        };
+        mixValue(
+            group,
+            static_cast<std::uint64_t>(
+                static_cast<std::int64_t>(
+                    std::llround(
+                        static_cast<double>(threat.startTick) /
+                        kSemanticThreatEpisodeWindowMs))));
+        mixValue(
+            group,
+            static_cast<std::uint64_t>(
+                quantize(
+                    threat.startPos.x,
+                    kSemanticThreatStartTolerance * 2.0f)));
+        mixValue(
+            group,
+            static_cast<std::uint64_t>(
+                quantize(
+                    threat.startPos.y,
+                    kSemanticThreatStartTolerance * 2.0f)));
+        const Vec2 direction = threat.direction.Normalized();
+        const float directionQuantum = std::max(
+            0.01f,
+            std::acos(kSemanticThreatDirectionDot) * 2.0f);
+        mixValue(
+            group,
+            static_cast<std::uint64_t>(
+                quantize(
+                    std::atan2(direction.y, direction.x),
+                    directionQuantum)));
+        if ((laneKey == 0 && laneIndex < 0) ||
+            threat.Type() != ZDSpellType::Line) {
+            mixValue(
+                group,
+                static_cast<std::uint64_t>(
+                    quantize(
+                        threat.endPos.x,
+                        kSemanticThreatEndTolerance * 2.0f)));
+            mixValue(
+                group,
+                static_cast<std::uint64_t>(
+                    quantize(
+                        threat.endPos.y,
+                        kSemanticThreatEndTolerance * 2.0f)));
+        }
+        groups.push_back(group);
+    }
+    std::sort(groups.begin(), groups.end());
+    std::uint64_t fingerprint = offset;
+    mixValue(fingerprint, groups.size());
+    for (const std::uint64_t group : groups)
+        mixValue(fingerprint, group);
+    return fingerprint;
+}
+
+inline constexpr float kCommittedRouteDirectionDot = 0.0f;
+
+struct CommittedRouteIdentity {
+    std::uint64_t threatSetFingerprint = 0;
+    int sourceThreatId = -1;
+    int stabilityBranchKey = StabilityBranch::Unknown;
+    Vec2 normalizedDirection = {};
+    std::uint64_t manualEpoch = 0;
+    bool active = false;
+};
+
+enum class CommittedRouteAction {
+    Clear,
+    KeepCommitted,
+    ReleaseReachedBranch,
+    ProposeSameBranch,
+    ProposeSameDirectionExtension,
+    ProposeBranchSwitch,
+};
+
+struct CommittedRoutePolicyInput {
+    CommittedRouteIdentity commitment;
+    std::uint64_t threatSetFingerprint = 0;
+    std::uint64_t manualEpoch = 0;
+    bool threatSetEmpty = false;
+    bool currentHardValid = false;
+    bool currentNoWorse = false;
+    bool currentReached = false;
+    bool candidateAvailable = false;
+    bool candidateStartsInThreat = false;
+    bool candidateExitedStartEnvelope = false;
+    int candidateSourceThreatId = -1;
+    int candidateStabilityBranchKey = StabilityBranch::Unknown;
+    Vec2 candidateDirection = {};
+    bool candidateSyntheticExtension = false;
+    bool reachedExtensionEvaluated = false;
+};
+
+struct CommittedRouteDecision {
+    CommittedRouteIdentity commitment;
+    CommittedRouteAction action =
+        CommittedRouteAction::KeepCommitted;
+    bool continuePlannerPipeline = false;
+};
+
+enum class ReachedCommitmentEscalation {
+    UseAlternateWalking,
+    TryEvadeSpell,
+    NoPlanSafety,
+};
+
+inline ReachedCommitmentEscalation
+DecideReachedCommitmentEscalation(
+    bool alternateWalkingAvailable,
+    bool evadeSpellEnabled,
+    bool evadeSpellAvailable) {
+    if (alternateWalkingAvailable)
+        return ReachedCommitmentEscalation::UseAlternateWalking;
+    return evadeSpellEnabled && evadeSpellAvailable
+        ? ReachedCommitmentEscalation::TryEvadeSpell
+        : ReachedCommitmentEscalation::NoPlanSafety;
+}
+
+inline bool SameCommittedRouteBranch(
+    const CommittedRouteIdentity& commitment,
+    int sourceThreatId,
+    int stabilityBranchKey,
+    const Vec2& direction) {
+    const Vec2 normalized = direction.Normalized();
+    const bool sameSourceSide =
+        commitment.stabilityBranchKey !=
+            StabilityBranch::Unknown ||
+        commitment.sourceThreatId == sourceThreatId;
+    return commitment.active &&
+        !commitment.normalizedDirection.IsZero() &&
+        !normalized.IsZero() &&
+        sameSourceSide &&
+        commitment.stabilityBranchKey == stabilityBranchKey &&
+        commitment.normalizedDirection.Dot(normalized) >
+            kCommittedRouteDirectionDot;
+}
+
+inline float CommittedRouteExtensionDistance(
+    float heroRadius,
+    float endpointMargin,
+    float ringStep,
+    float maxSearchRadius) {
+    const float radius = std::clamp(
+        std::isfinite(heroRadius) ? heroRadius : 0.0f,
+        10.0f,
+        500.0f);
+    const float margin = std::clamp(
+        std::isfinite(endpointMargin) ? endpointMargin : 0.0f,
+        0.0f,
+        500.0f);
+    const float step = std::clamp(
+        std::isfinite(ringStep) ? ringStep : 0.0f,
+        20.0f,
+        500.0f);
+    const float minimum = radius + margin +
+        kNumericalOutwardEpsilon;
+    const float hardUpper = std::max(minimum, 420.0f);
+    const float maximum = std::clamp(
+        std::isfinite(maxSearchRadius)
+            ? maxSearchRadius
+            : minimum,
+        minimum,
+        hardUpper);
+    return std::clamp(
+        radius + std::max(margin, step) * 2.0f,
+        minimum,
+        maximum);
+}
+
+inline Vec2 BuildCommittedRouteExtensionTarget(
+    const Vec2& hero,
+    const CommittedRouteIdentity& commitment,
+    float heroRadius,
+    float endpointMargin,
+    float ringStep,
+    float maxSearchRadius) {
+    if (!hero.IsValid() ||
+        hero.IsZero() ||
+        !commitment.active ||
+        commitment.normalizedDirection.IsZero()) {
+        return {};
+    }
+    return hero + commitment.normalizedDirection *
+        CommittedRouteExtensionDistance(
+            heroRadius,
+            endpointMargin,
+            ringStep,
+            maxSearchRadius);
+}
+
+inline CommittedRouteDecision DecideCommittedRoute(
+    const CommittedRoutePolicyInput& input) {
+    CommittedRouteDecision result;
+    result.commitment = input.commitment;
+    if (input.threatSetEmpty) {
+        result.commitment = {};
+        result.action = CommittedRouteAction::Clear;
+        return result;
+    }
+
+    const Vec2 candidateDirection =
+        input.candidateDirection.Normalized();
+    const bool candidateUsable =
+        input.candidateAvailable &&
+        CandidateHasRequiredStartEnvelopeExit(
+            input.candidateStartsInThreat,
+            input.candidateExitedStartEnvelope) &&
+        !candidateDirection.IsZero();
+    if (!input.commitment.active) {
+        result.action = candidateUsable
+            ? CommittedRouteAction::ProposeBranchSwitch
+            : CommittedRouteAction::KeepCommitted;
+        return result;
+    }
+
+    const bool sameManualEpoch =
+        input.commitment.manualEpoch == input.manualEpoch;
+    const bool sameThreatSet =
+        input.commitment.threatSetFingerprint ==
+            input.threatSetFingerprint;
+    const bool sameBranch = candidateUsable &&
+        SameCommittedRouteBranch(
+            input.commitment,
+            input.candidateSourceThreatId,
+            input.candidateStabilityBranchKey,
+            candidateDirection);
+
+    if (!sameManualEpoch) {
+        result.action = candidateUsable
+            ? CommittedRouteAction::ProposeBranchSwitch
+            : CommittedRouteAction::KeepCommitted;
+        return result;
+    }
+
+    if (!sameThreatSet) {
+        if (input.currentHardValid && input.currentNoWorse) {
+            result.commitment.threatSetFingerprint =
+                input.threatSetFingerprint;
+            if (input.currentReached) {
+                if (sameBranch &&
+                    input.candidateSyntheticExtension) {
+                    result.action =
+                        CommittedRouteAction::
+                            ProposeSameDirectionExtension;
+                } else if (input.reachedExtensionEvaluated) {
+                    result.commitment = {};
+                    result.action =
+                        CommittedRouteAction::
+                            ReleaseReachedBranch;
+                    result.continuePlannerPipeline = true;
+                }
+            } else {
+                result.action =
+                    CommittedRouteAction::KeepCommitted;
+            }
+            return result;
+        }
+        if (candidateUsable) {
+            result.action = sameBranch
+                ? CommittedRouteAction::ProposeSameBranch
+                : CommittedRouteAction::ProposeBranchSwitch;
+        }
+        return result;
+    }
+
+    if (input.currentHardValid) {
+        if (input.currentReached) {
+            if (sameBranch &&
+                input.candidateSyntheticExtension) {
+                result.action =
+                    CommittedRouteAction::
+                        ProposeSameDirectionExtension;
+            } else if (input.reachedExtensionEvaluated) {
+                result.commitment = {};
+                result.action =
+                    CommittedRouteAction::
+                        ReleaseReachedBranch;
+                result.continuePlannerPipeline = true;
+            }
+        } else if (input.currentNoWorse) {
+            result.action =
+                CommittedRouteAction::KeepCommitted;
+        } else {
+            result.action = sameBranch
+                ? CommittedRouteAction::ProposeSameBranch
+                : CommittedRouteAction::KeepCommitted;
+        }
+        return result;
+    }
+
+    if (candidateUsable) {
+        result.action = sameBranch
+            ? CommittedRouteAction::ProposeSameBranch
+            : CommittedRouteAction::ProposeBranchSwitch;
+    }
+    return result;
+}
+
+inline CommittedRouteIdentity CommitProposedRoute(
+    const CommittedRouteDecision& decision,
+    const CommittedRoutePolicyInput& input) {
+    if (decision.action !=
+            CommittedRouteAction::ProposeSameBranch &&
+        decision.action !=
+            CommittedRouteAction::ProposeSameDirectionExtension &&
+        decision.action !=
+            CommittedRouteAction::ProposeBranchSwitch) {
+        return decision.commitment;
+    }
+    if (decision.action ==
+        CommittedRouteAction::ProposeSameDirectionExtension) {
+        return decision.commitment;
+    }
+    const Vec2 direction = input.candidateDirection.Normalized();
+    if (!input.candidateAvailable ||
+        !CandidateHasRequiredStartEnvelopeExit(
+            input.candidateStartsInThreat,
+            input.candidateExitedStartEnvelope) ||
+        direction.IsZero()) {
+        return decision.commitment;
+    }
+    return {
+        input.threatSetFingerprint,
+        input.candidateSourceThreatId,
+        input.candidateStabilityBranchKey,
+        direction,
+        input.manualEpoch,
+        true,
+    };
 }
 
 struct ContinuousChallengerState {
@@ -1370,6 +2200,79 @@ enum class MoveIntentSource {
     Controller,
 };
 
+struct ExternalMoveRouteEvaluation {
+    bool valid = false;
+    bool walkable = false;
+    bool pathSafe = false;
+    bool endpointSafe = false;
+    bool strictSafe = false;
+    bool reenteredDanger = false;
+    bool enteredNewThreat = false;
+    bool startsInThreat = false;
+    bool coverageNoWorseThanHold = false;
+    bool makesExitProgress = false;
+};
+
+struct ExternalMoveDecisionInput {
+    MoveIntentSource source = MoveIntentSource::ObservedPath;
+    bool controllerOwnsMovement = false;
+    bool actionableThreatContext = false;
+    ExternalMoveRouteEvaluation route;
+};
+
+struct ExternalMoveDecision {
+    bool allowNative = false;
+    bool consume = false;
+    bool adoptGoal = false;
+    bool discardBlockedIntent = false;
+};
+
+inline bool ExternalMoveRouteHasActionableThreat(
+    const ExternalMoveRouteEvaluation& route) {
+    return route.valid &&
+        route.walkable &&
+        (!route.pathSafe ||
+         !route.endpointSafe ||
+         !route.strictSafe ||
+         route.reenteredDanger ||
+         route.enteredNewThreat);
+}
+
+inline ExternalMoveDecision DecideExternalMove(
+    const ExternalMoveDecisionInput& input) {
+    if (input.source == MoveIntentSource::Controller ||
+        !input.actionableThreatContext) {
+        return {true, false, false, false};
+    }
+
+    const bool commonSafety =
+        input.route.valid &&
+        input.route.walkable &&
+        input.route.endpointSafe &&
+        !input.route.reenteredDanger &&
+        !input.route.enteredNewThreat;
+    const bool safeOutwardRoute = input.route.startsInThreat
+        ? commonSafety &&
+            input.route.coverageNoWorseThanHold &&
+            input.route.makesExitProgress
+        : commonSafety &&
+            input.route.pathSafe &&
+            input.route.strictSafe;
+    if (!safeOutwardRoute) {
+        return {false, true, false, true};
+    }
+
+    const bool controlledOrb =
+        input.controllerOwnsMovement &&
+        input.source == MoveIntentSource::Orbwalker;
+    return {
+        !controlledOrb,
+        controlledOrb,
+        true,
+        false,
+    };
+}
+
 enum class ThreatFreeDecisionSite {
     Update,
     MoveRequest,
@@ -1413,6 +2316,12 @@ struct TargetCommitDecision {
     bool retainCommitted = false;
     bool retryProposed = false;
 };
+
+inline bool ShouldClearPendingTargetForExactCommitment(
+    bool retainExactCommittedTarget,
+    bool pendingRetry) {
+    return retainExactCommittedTarget && !pendingRetry;
+}
 
 inline TargetCommitDecision DecideTargetCommit(
     MoveIssueResult result,
@@ -1825,6 +2734,9 @@ struct FallbackRouteRank {
     int pathDanger = 0;
     float dangerExposureMs = 0.0f;
     bool reenteredDanger = false;
+    bool enteredNewThreat = false;
+    bool requiresStartEnvelopeExit = false;
+    bool exitedStartEnvelope = false;
     float firstCollisionTimeMs = FLT_MAX;
     float timeMarginMs = 0.0f;
     float exitDistance = 0.0f;
@@ -1852,6 +2764,23 @@ inline bool PreferFallbackRoute(const FallbackRouteRank& left,
         return left.dangerExposureMs < right.dangerExposureMs;
     if (left.reenteredDanger != right.reenteredDanger)
         return !left.reenteredDanger;
+    if (left.enteredNewThreat != right.enteredNewThreat)
+        return !left.enteredNewThreat;
+    const bool compareStartEnvelopeExit =
+        left.requiresStartEnvelopeExit &&
+        right.requiresStartEnvelopeExit;
+    if (compareStartEnvelopeExit &&
+        left.exitedStartEnvelope != right.exitedStartEnvelope) {
+        return left.exitedStartEnvelope;
+    }
+    if (compareStartEnvelopeExit &&
+        left.exitedStartEnvelope &&
+        right.exitedStartEnvelope) {
+        if (RankDifferent(left.exitDistance, right.exitDistance))
+            return left.exitDistance < right.exitDistance;
+        if (RankDifferent(left.travelDistance, right.travelDistance))
+            return left.travelDistance < right.travelDistance;
+    }
     if (RankDifferent(
             left.firstCollisionTimeMs,
             right.firstCollisionTimeMs)) {
@@ -1859,6 +2788,10 @@ inline bool PreferFallbackRoute(const FallbackRouteRank& left,
     }
     if (RankDifferent(left.timeMarginMs, right.timeMarginMs))
         return left.timeMarginMs > right.timeMarginMs;
+    if (left.requiresStartEnvelopeExit !=
+        right.requiresStartEnvelopeExit) {
+        return !left.requiresStartEnvelopeExit;
+    }
     if (RankDifferent(left.exitDistance, right.exitDistance))
         return left.exitDistance < right.exitDistance;
     if (RankDifferent(left.travelDistance, right.travelDistance))

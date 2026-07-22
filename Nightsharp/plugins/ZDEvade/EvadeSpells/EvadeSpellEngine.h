@@ -289,7 +289,7 @@ private:
             int now) {
         std::vector<const Threat*> result;
         const Vec2 heroPos = player.ServerPosition().To2D();
-        const float radius = std::max(10.0f, player.BoundingRadius());
+        const float radius = SanitizeHeroRadius(player.BoundingRadius());
         for (const auto& threat : threats) {
             if (threat.IsExpiredAt(now)) continue;
             if (EvadeGeometry::ThreatensPointNowOrAtFutureImpact(
@@ -397,7 +397,7 @@ private:
             IsNamed(data, "Witchcap", "Witchcap");
         int protectedThreats = 0;
         const Vec2 heroPos = player.ServerPosition().To2D();
-        const float radius = std::max(10.0f, player.BoundingRadius());
+        const float radius = SanitizeHeroRadius(player.BoundingRadius());
         for (const Threat* threat : incoming) {
             if (!threat) continue;
             const int impact = EvadeGeometry::ImpactTickAt(*threat, heroPos);
@@ -479,7 +479,7 @@ private:
                 player.ServerPosition().To2D(),
                 SDK::Game::CursorPos().To2D(),
                 player.ServerPosition().y,
-                std::max(10.0f, player.BoundingRadius()),
+                SanitizeHeroRadius(player.BoundingRadius()),
                 SDK::Variables::TickCount(),
                 CastDelay(data),
                 settings,

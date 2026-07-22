@@ -49,6 +49,9 @@ private:
         pendingTarget = {};
         pendingTargetState = EvadeControllerState::Assessing;
         pendingTargetManualEpoch = 0;
+        pendingTargetThreatSetFingerprint = 0;
+        pendingTargetSyntheticExtension = false;
+        pendingTargetRetryPending = false;
         lastPlan = {};
         lastThreatSerial = -1;
         lastPlanTick = 0;
@@ -56,6 +59,7 @@ private:
         hasPlannedThreatSetFingerprint = false;
         noPlanRetry = {};
         continuousChallenger = {};
+        committedRoute = {};
         lastTargetSwitchTick = 0;
         degradationCommitUntilTick = 0;
         releaseControlUntilTick = 0;
@@ -64,6 +68,8 @@ private:
         manualRequestGeneration = 0;
         releaseMoveRequestGeneration = 0;
         lockedManualEpoch = 0;
+        handledAcquisitionSerial = -1;
+        acquisitionMoveRetryPending = false;
         waitingForWindup = false;
         holdingPosition = false;
         releaseHolding = false;
@@ -105,7 +111,7 @@ public:
         const Vec2 currentIntentGoal = moveIntents.HasGoal()
             ? moveIntents.Goal().Position()
             : SDK::Game::CursorPos().To2D();
-        const float heroRadius = std::max(10.0f, player.BoundingRadius());
+        const float heroRadius = SanitizeHeroRadius(player.BoundingRadius());
         const float moveSpeed = std::max(50.0f, player.MoveSpeed());
         const bool releaseControlActive =
             state != EvadeControllerState::Idle;
@@ -179,14 +185,25 @@ public:
                     currentRoute.pathSafe,
                     currentRoute.endpointSafe,
                 };
-                unsafeCurrentPath = IsObservedRouteUnsafe(
-                    observedPath.size(),
-                    observedEvaluation,
-                    navInterventionArmed);
+                const ExternalMoveRouteEvaluation observedMoveRoute = {
+                    currentRoute.valid,
+                    currentRoute.walkable,
+                    currentRoute.pathSafe,
+                    currentRoute.endpointSafe,
+                    currentRoute.strictSafe,
+                    currentRoute.reenteredDanger,
+                    currentRoute.enteredNewThreat,
+                };
                 actionableObservedRouteThreat =
-                    IsObservedThreatRouteUnsafe(
+                    observedPath.size() >= 2 &&
+                    ExternalMoveRouteHasActionableThreat(
+                        observedMoveRoute);
+                unsafeCurrentPath =
+                    IsObservedRouteUnsafe(
                         observedPath.size(),
-                        observedEvaluation);
+                        observedEvaluation,
+                        navInterventionArmed) ||
+                    actionableObservedRouteThreat;
                 observedNativeRoute = currentRoute;
                 nativeRouteAvailable =
                     currentRoute.valid &&
@@ -222,19 +239,36 @@ public:
                     currentRoute.pathSafe,
                     currentRoute.endpointSafe,
                 };
-                unsafeCurrentPath = IsObservedRouteUnsafe(
-                    observedPath.size(),
-                    heldEvaluation,
-                    navInterventionArmed);
+                const ExternalMoveRouteEvaluation heldMoveRoute = {
+                    currentRoute.valid,
+                    currentRoute.walkable,
+                    currentRoute.pathSafe,
+                    currentRoute.endpointSafe,
+                    currentRoute.strictSafe,
+                    currentRoute.reenteredDanger,
+                    currentRoute.enteredNewThreat,
+                };
+                const bool heldRouteThreat =
+                    observedPath.size() >= 2 &&
+                    ExternalMoveRouteHasActionableThreat(
+                        heldMoveRoute);
+                unsafeCurrentPath =
+                    IsObservedRouteUnsafe(
+                        observedPath.size(),
+                        heldEvaluation,
+                        navInterventionArmed) ||
+                    heldRouteThreat;
                 actionableObservedRouteThreat =
                     actionableObservedRouteThreat ||
-                    IsObservedThreatRouteUnsafe(
-                        observedPath.size(),
-                        heldEvaluation);
+                    heldRouteThreat;
             }
         }
         const bool actionableThreatContext =
             navInterventionArmed || actionableObservedRouteThreat;
+        if (actionableThreatContext &&
+            moveIntents.HasDeferred()) {
+            moveIntents.Clear();
+        }
         const ThreatFreeActionDecision threatFreeUpdate =
             DecideThreatFreeAction(
                 actionableThreatContext,
@@ -283,7 +317,10 @@ public:
             locked.valid &&
             locked.strictSafe &&
             !locked.position.IsZero() &&
-            IsRouteTargetReached(heroPos.Distance(locked.position));
+            IsRouteTargetReached(
+                heroPos.Distance(locked.position),
+                config.planner.endpointBuffer,
+                exactDanger);
         ReleaseHysteresisInput hysteresisInput;
         hysteresisInput.controlActive = releaseControlActive;
         hysteresisInput.pathAcquisitionDanger =
@@ -342,6 +379,28 @@ public:
                 spellHoldActive,
                 observedInvulnerable,
                 observedUntargetable);
+        const FirstActionableAcquisitionPolicy acquisition =
+            DecideFirstActionableAcquisition({
+                command.ControlActive(),
+                exactDanger,
+                pathAcquisitionDanger,
+                directDanger,
+                actionableObservedRouteThreat,
+                verifiedSuppressingHold,
+                serial,
+                handledAcquisitionSerial,
+            });
+        AcquisitionSerialCommit acquisitionSerialCommit = {
+            &handledAcquisitionSerial,
+            serial,
+            acquisition.recordSerialAfterProcessing,
+        };
+        if (acquisition.firstActionableAcquisition) {
+            releaseControlUntilTick = 0;
+            noPlanRetry = {};
+            continuousChallenger = {};
+            acquisitionMoveRetryPending = false;
+        }
         if (releaseControlUntilTick > now) {
             ReleaseDecisionInput cooldownDecision;
             cooldownDecision.currentThreatSerial = serial;
@@ -388,65 +447,83 @@ public:
         }
         releaseHolding = false;
 
-        if (unsafeCurrentPath && !moveIntents.HasDeferred()) {
-            const Vec2 pathEnd = player.PathEnd().To2D();
-            if (pathEnd.IsValid() && !pathEnd.IsZero()) {
-                const bool matchesCommandTarget =
-                    command.ControlActive() &&
-                    !command.LastTarget().IsZero() &&
-                    pathEnd.DistanceSqr(command.LastTarget()) <= 3600.0f;
-                const bool matchesLockedTarget =
-                    !locked.position.IsZero() &&
-                    pathEnd.DistanceSqr(locked.position) <= 6400.0f;
-                if (!matchesCommandTarget && !matchesLockedTarget) {
-                    moveIntents.Record(
-                        pathEnd,
-                        MoveIntentSource::ObservedPath,
-                        now,
-                        moveRequestGeneration,
-                        true);
-                }
-            }
-        }
+        if (unsafeCurrentPath)
+            moveIntents.Clear();
 
         const Vec2 plannerGoal = moveIntents.HasDeferred()
             ? moveIntents.Deferred().Position()
             : moveIntents.HasGoal()
                 ? moveIntents.Goal().Position()
                 : SDK::Game::CursorPos().To2D();
+        const Vec2 lockedTarget = locked.position;
         CandidateEvaluation currentLocked;
-        const bool lockedHardValid = ValidateLocked(
+        const LockedRouteValidation lockedValidation =
+            ValidateLocked(
             player,
             threats,
             config,
             now,
+            baselineCoverage,
+            routeTemporalResolutionMs,
             &currentLocked);
-        const Vec2 lockedTarget = locked.position;
-        const LockedRouteValidation lockedValidation =
-            ClassifyLockedRoute({
-                CoverageOf(currentLocked),
-                baselineCoverage,
-                locked.valid,
-                lockedHardValid && currentLocked.valid,
-                currentLocked.walkable,
-                !lockedTarget.IsZero() &&
-                    IsRouteTargetReached(
-                        heroPos.Distance(lockedTarget)),
-                false,
-                currentLocked.strictSafe,
-                routeTemporalResolutionMs,
-            });
+        const bool lockedHardValid =
+            lockedValidation.hardValid;
         const bool lockedSafetyValid =
             lockedValidation.safety != LockedRouteSafety::Unsafe;
+        const bool lockedPhysicallyReached =
+            lockedValidation.reached;
+        CommittedRoutePolicyInput validationCommitmentInput;
+        validationCommitmentInput.commitment = committedRoute;
+        validationCommitmentInput.threatSetFingerprint =
+            threatSetFingerprint;
+        validationCommitmentInput.manualEpoch =
+            manualRequestGeneration;
+        validationCommitmentInput.threatSetEmpty = threats.empty();
+        validationCommitmentInput.currentHardValid =
+            lockedHardValid;
+        validationCommitmentInput.currentNoWorse =
+            lockedSafetyValid;
+        validationCommitmentInput.currentReached =
+            lockedPhysicallyReached;
+        committedRoute = DecideCommittedRoute(
+            validationCommitmentInput).commitment;
+        const bool enforceCommittedBranch =
+            committedRoute.active &&
+            committedRoute.threatSetFingerprint ==
+                threatSetFingerprint &&
+            committedRoute.manualEpoch ==
+                manualRequestGeneration &&
+            lockedHardValid;
+        const bool retainExactCommittedTarget =
+            enforceCommittedBranch &&
+            lockedSafetyValid &&
+            !lockedPhysicallyReached;
         if (!lockedSafetyValid ||
             lockedManualEpoch != manualRequestGeneration) {
             continuousChallenger = {};
+        }
+        if (enforceCommittedBranch)
+            continuousChallenger = {};
+        if (ShouldClearPendingTargetForExactCommitment(
+                retainExactCommittedTarget,
+                pendingTargetRetryPending)) {
+            ClearPendingTarget();
         }
         bool pendingTargetUsable = false;
         if (pendingTarget.valid) {
             const Vec2 proposedPosition = pendingTarget.position;
             const bool pendingEpochValid =
                 pendingTargetManualEpoch == manualRequestGeneration;
+            const bool pendingThreatSetValid =
+                pendingTargetThreatSetFingerprint ==
+                    threatSetFingerprint;
+            const bool pendingBranchValid =
+                !enforceCommittedBranch ||
+                SameCommittedRouteBranch(
+                    committedRoute,
+                    pendingTarget.sourceThreatId,
+                    pendingTarget.stabilityBranchKey,
+                    proposedPosition - heroPos);
             CandidateEvaluation refreshedPending =
                 EvadeGeometry::EvaluateCandidate(
                     proposedPosition,
@@ -476,14 +553,20 @@ public:
                     refreshedPending.valid,
                     refreshedPending.walkable,
                     IsRouteTargetReached(
-                        heroPos.Distance(proposedPosition)),
+                        heroPos.Distance(proposedPosition),
+                        config.planner.endpointBuffer,
+                        exactDanger),
                     false,
                     refreshedPending.strictSafe,
                     routeTemporalResolutionMs,
+                    refreshedPending.startThreatIdentities.Size() > 0,
+                    refreshedPending.exitedStartEnvelope,
                 });
-            if (pendingEpochValid &&
-                pendingValidation.safety !=
-                    LockedRouteSafety::Unsafe) {
+            if (ShouldRetainRefreshedPendingTarget(
+                    pendingEpochValid,
+                    pendingThreatSetValid,
+                    pendingBranchValid,
+                    pendingValidation.safety)) {
                 pendingTarget = refreshedPending;
                 pendingTargetUsable =
                     pendingTarget.strictSafe ||
@@ -561,8 +644,7 @@ public:
                 lockedValidation.hardValid,
                 currentLocked.pathSafe && currentLocked.timingSafe,
                 currentLocked.endpointSafe,
-                IsRouteTargetReached(
-                    heroPos.Distance(locked.position)),
+                lockedPhysicallyReached,
             };
         commitment.replanTimerExpired =
             lastPlanTick == 0 ||
@@ -605,7 +687,9 @@ public:
                     player,
                     resumeDestination,
                     config.moveIntervalMs,
-                    config.moveRefreshMs);
+                    config.moveRefreshMs,
+                    kDeferredResumeReachTolerance,
+                    false);
                 if (resumeResult == MoveIssueResult::Issued ||
                     resumeResult == MoveIssueResult::AlreadyFollowing) {
                     moveIntents.CompleteDeferredResume();
@@ -651,10 +735,12 @@ public:
             lastThreatSerial,
             manualRequestGeneration,
             noPlanRetry);
-        const bool shouldReplan = !committedStrictLock &&
-            !promotedFallback &&
-            !pendingTargetUsable &&
-            planningDue;
+        const bool shouldReplan = acquisition.forceReplan ||
+            (!promotedFallback &&
+             !pendingTargetUsable &&
+             (planningDue || lockedPhysicallyReached));
+        bool releasedReachedBranch = false;
+        bool reachedAlternateAvailable = false;
 
         const bool fallbackLockWasActive =
             state == EvadeControllerState::FallbackEvade;
@@ -675,7 +761,129 @@ public:
             lastPlannedThreatSetFingerprint =
                 threatSetFingerprint;
             hasPlannedThreatSetFingerprint = true;
-            if (plan.found && lockedSafetyValid) {
+            bool outerCommitmentApplied = false;
+            bool outerCommitmentProposes = false;
+            bool outerCommitmentSyntheticExtension = false;
+            if (enforceCommittedBranch) {
+                const CommittedRouteIdentity enforcedIdentity =
+                    committedRoute;
+                const CommittedBranchCandidate branchChoice =
+                    FindCommittedBranchCandidate(
+                        plan,
+                        currentLocked,
+                        baselineCoverage,
+                        player,
+                        plannerGoal,
+                        threats,
+                        config,
+                        now,
+                        lockedPhysicallyReached);
+                const CandidateEvaluation& branchCandidate =
+                    branchChoice.evaluation;
+                const bool sameCommittedPhysicalSide =
+                    branchCandidate.valid &&
+                    SameCommittedRouteBranch(
+                        committedRoute,
+                        branchCandidate.sourceThreatId,
+                        branchCandidate.stabilityBranchKey,
+                        branchCandidate.position - heroPos);
+                const bool shortenCommittedFallback =
+                    !currentLocked.strictSafe &&
+                    ShouldReplaceCommittedFallback(
+                        StableMetrics(currentLocked),
+                        StableMetrics(branchCandidate),
+                        sameCommittedPhysicalSide,
+                        routeTemporalResolutionMs);
+                CommittedRoutePolicyInput outerInput;
+                outerInput.commitment = committedRoute;
+                outerInput.threatSetFingerprint =
+                    threatSetFingerprint;
+                outerInput.manualEpoch =
+                    manualRequestGeneration;
+                outerInput.currentHardValid =
+                    lockedHardValid;
+                outerInput.currentNoWorse =
+                    lockedSafetyValid &&
+                    !shortenCommittedFallback;
+                outerInput.currentReached =
+                    lockedPhysicallyReached;
+                outerInput.candidateAvailable =
+                    branchCandidate.valid &&
+                    branchCandidate.walkable &&
+                    CandidateHasRequiredStartEnvelopeExit(
+                        branchCandidate.startThreatIdentities.Size() > 0,
+                        branchCandidate.exitedStartEnvelope);
+                outerInput.candidateStartsInThreat =
+                    branchCandidate.startThreatIdentities.Size() > 0;
+                outerInput.candidateExitedStartEnvelope =
+                    branchCandidate.exitedStartEnvelope;
+                outerInput.candidateSourceThreatId =
+                    branchCandidate.sourceThreatId;
+                outerInput.candidateStabilityBranchKey =
+                    branchCandidate.stabilityBranchKey;
+                outerInput.candidateDirection =
+                    branchCandidate.position - heroPos;
+                outerInput.candidateSyntheticExtension =
+                    branchChoice.syntheticExtension;
+                outerInput.reachedExtensionEvaluated =
+                    branchChoice.extensionAttempted;
+                const CommittedRouteDecision outerDecision =
+                    DecideCommittedRoute(outerInput);
+                committedRoute = outerDecision.commitment;
+                outerCommitmentProposes =
+                    outerDecision.action ==
+                        CommittedRouteAction::ProposeSameBranch ||
+                    outerDecision.action ==
+                        CommittedRouteAction::
+                            ProposeSameDirectionExtension;
+                outerCommitmentSyntheticExtension =
+                    outerDecision.action ==
+                    CommittedRouteAction::
+                        ProposeSameDirectionExtension;
+                releasedReachedBranch =
+                    outerDecision.action ==
+                        CommittedRouteAction::
+                            ReleaseReachedBranch;
+                if (releasedReachedBranch) {
+                    const CandidateEvaluation alternate =
+                        FindAlternateBranchCandidate(
+                            plan,
+                            enforcedIdentity,
+                            baselineCoverage,
+                            player,
+                            config);
+                    reachedAlternateAvailable =
+                        alternate.valid &&
+                        alternate.walkable;
+                    if (reachedAlternateAvailable) {
+                        plan.selected = alternate;
+                        plan.found = true;
+                        plan.strictSafe =
+                            alternate.strictSafe;
+                    } else {
+                        plan = {};
+                    }
+                } else if (outerCommitmentProposes) {
+                    plan.selected = branchCandidate;
+                    plan.found = true;
+                    plan.strictSafe =
+                        branchCandidate.strictSafe;
+                } else {
+                    plan.selected = currentLocked;
+                    plan.selected.position = lockedTarget;
+                    plan.found = lockedHardValid;
+                    plan.strictSafe =
+                        plan.found &&
+                        currentLocked.strictSafe;
+                }
+                outerCommitmentApplied =
+                    !releasedReachedBranch;
+                continuousChallenger = {};
+            }
+            if (!outerCommitmentApplied &&
+                !releasedReachedBranch &&
+                plan.found &&
+                lockedSafetyValid) {
                 const bool sameManualEpoch =
                     lockedManualEpoch == manualRequestGeneration;
                 const bool targetLockActive = sameManualEpoch &&
@@ -695,7 +903,8 @@ public:
                         player,
                         plannerGoal,
                         threats,
-                        config);
+                        config,
+                        exactDanger);
                 }
                 plan.found = plan.selected.valid && plan.selected.walkable;
                 plan.strictSafe = plan.found && plan.selected.strictSafe;
@@ -721,8 +930,17 @@ public:
                     plan.selected,
                     baselineRoute,
                     config.planner);
+            unavoidableInput.candidateStartsInThreat =
+                plan.selected.startThreatIdentities.Size() > 0;
+            unavoidableInput.candidateExitedStartEnvelope =
+                plan.selected.exitedStartEnvelope;
+            unavoidableInput.candidateEnteredNewThreat =
+                plan.selected.enteredNewThreat;
+            unavoidableInput.candidateReenteredDanger =
+                plan.selected.reenteredDanger;
             unavoidableInput.fallbackLockActive =
-                fallbackLockWasActive;
+                fallbackLockWasActive &&
+                !releasedReachedBranch;
             unavoidableInput.lockCoverage =
                 CoverageOf(currentLocked);
             unavoidableInput.lockValid = lockedHardValid;
@@ -731,7 +949,9 @@ public:
             unavoidableInput.lockReached =
                 !locked.position.IsZero() &&
                 IsRouteTargetReached(
-                    heroPos.Distance(locked.position));
+                    heroPos.Distance(locked.position),
+                    config.planner.endpointBuffer,
+                    exactDanger);
             unavoidableInput.currentManualEpoch =
                 manualRequestGeneration;
             unavoidableInput.lockManualEpoch =
@@ -739,7 +959,55 @@ public:
             const UnavoidableDecision unavoidable =
                 DecideUnavoidableAction(unavoidableInput);
             bool commitPlanInPlace = false;
-            if (unavoidable.retainLockedFallback) {
+            if (outerCommitmentApplied) {
+                continuousChallenger = {};
+                const bool targetChanged =
+                    outerCommitmentProposes &&
+                    (!locked.valid ||
+                     locked.position.DistanceSqr(
+                         plan.selected.position) > 0.25f);
+                if (targetChanged) {
+                    pendingTarget = plan.selected;
+                    pendingTargetManualEpoch =
+                        manualRequestGeneration;
+                    pendingTargetThreatSetFingerprint =
+                        threatSetFingerprint;
+                    pendingTargetSyntheticExtension =
+                        outerCommitmentSyntheticExtension;
+                    pendingTargetRetryPending = false;
+                    pendingTargetState = plan.strictSafe
+                        ? rerouteRequired
+                            ? EvadeControllerState::ReroutingPath
+                            : EvadeControllerState::StrictEvade
+                        : EvadeControllerState::FallbackEvade;
+                    pendingTargetUsable =
+                        pendingTarget.strictSafe ||
+                        config.leastDangerFallback;
+                    state = stateBeforePlanning;
+                } else {
+                    const Vec2 retainedTarget =
+                        outerCommitmentProposes
+                        ? plan.selected.position
+                        : lockedTarget;
+                    locked = outerCommitmentProposes
+                        ? plan.selected
+                        : currentLocked;
+                    locked.position = retainedTarget;
+                    lockedManualEpoch =
+                        manualRequestGeneration;
+                    plan.selected = locked;
+                    plan.found = locked.valid &&
+                        locked.walkable;
+                    plan.strictSafe =
+                        plan.found && locked.strictSafe;
+                    state = plan.strictSafe
+                        ? rerouteRequired
+                            ? EvadeControllerState::ReroutingPath
+                            : EvadeControllerState::StrictEvade
+                        : EvadeControllerState::FallbackEvade;
+                    commitPlanInPlace = true;
+                }
+            } else if (unavoidable.retainLockedFallback) {
                 continuousChallenger = {};
                 const Vec2 retainedTarget = locked.position;
                 locked = currentLocked;
@@ -753,14 +1021,33 @@ public:
                 unavoidable.action ==
                     UnavoidableAction::MoveFallback &&
                 plan.found) {
+                const bool committedIdentityChanged =
+                    committedRoute.active &&
+                    !SameCommittedRouteBranch(
+                        committedRoute,
+                        plan.selected.sourceThreatId,
+                        plan.selected.stabilityBranchKey,
+                        plan.selected.position - heroPos);
+                const bool committedTargetChanged =
+                    committedRoute.active &&
+                    locked.position.DistanceSqr(
+                        plan.selected.position) > 0.25f;
+                const bool committedThreatSetChanged =
+                    committedRoute.active &&
+                    committedRoute.threatSetFingerprint !=
+                        threatSetFingerprint;
                 const bool switched = !locked.valid ||
+                    committedIdentityChanged ||
+                    committedTargetChanged ||
+                    committedThreatSetChanged ||
                     locked.position.DistanceSqr(plan.selected.position) >
                         config.planner.targetSwitchDistance *
                         config.planner.targetSwitchDistance;
                 if (switched) {
                     const bool requiresHysteresis =
                         RequiresContinuousSwitchHysteresis(
-                            lockedSafetyValid,
+                            lockedSafetyValid &&
+                                !releasedReachedBranch,
                             plan.strictSafe &&
                                 !currentLocked.strictSafe,
                             HasDiscreteThreatCoverageImprovement(
@@ -803,6 +1090,10 @@ public:
                         pendingTarget = plan.selected;
                         pendingTargetManualEpoch =
                             manualRequestGeneration;
+                        pendingTargetThreatSetFingerprint =
+                            threatSetFingerprint;
+                        pendingTargetSyntheticExtension = false;
+                        pendingTargetRetryPending = false;
                         pendingTargetState = plan.strictSafe
                             ? rerouteRequired
                                 ? EvadeControllerState::ReroutingPath
@@ -828,7 +1119,8 @@ public:
                 }
             } else {
                 continuousChallenger = {};
-                if (lockedSafetyValid) {
+                if (lockedSafetyValid &&
+                    !releasedReachedBranch) {
                     locked = currentLocked;
                     locked.position = lockedTarget;
                     state = stateBeforePlanning;
@@ -847,6 +1139,14 @@ public:
             lastPlan.selected = locked;
             lastPlan.found = true;
             lastPlan.strictSafe = locked.strictSafe;
+        }
+
+        if (releasedReachedBranch &&
+            !reachedAlternateAvailable) {
+            ClearPendingTarget();
+            locked = {};
+            lastPlan = {};
+            state = EvadeControllerState::Assessing;
         }
 
         const bool retainedFallbackLock =
@@ -872,13 +1172,27 @@ public:
                   locked,
                   baselineRoute,
                   config.planner)));
+        const bool outerCommittedHardRoute =
+            committedRoute.active &&
+            committedRoute.threatSetFingerprint ==
+                threatSetFingerprint &&
+            committedRoute.manualEpoch ==
+                manualRequestGeneration &&
+            lockedHardValid &&
+            lockedSafetyValid &&
+            locked.valid &&
+            locked.walkable;
         const bool hasUsableCommittedPlan =
             config.walkingEnabled &&
             !moveIntents.BlocksControllerTarget() &&
             lastPlan.found &&
             locked.valid &&
             locked.walkable &&
+            CandidateHasRequiredStartEnvelopeExit(
+                locked.startThreatIdentities.Size() > 0,
+                locked.exitedStartEnvelope) &&
             (committedStrictLock ||
+             outerCommittedHardRoute ||
              retainedFallbackLock ||
              newlyAdmissibleLock) &&
             (locked.strictSafe || config.leastDangerFallback);
@@ -887,7 +1201,10 @@ public:
             !moveIntents.BlocksControllerTarget() &&
             pendingTargetUsable &&
             pendingTarget.valid &&
-            pendingTarget.walkable;
+            pendingTarget.walkable &&
+            CandidateHasRequiredStartEnvelopeExit(
+                pendingTarget.startThreatIdentities.Size() > 0,
+                pendingTarget.exitedStartEnvelope);
         bool hasUsableLockedPlan =
             hasUsableCommittedPlan ||
             hasUsablePendingPlan;
@@ -896,17 +1213,27 @@ public:
         if (shouldReplan) {
             noPlanRetry = hasUsableLockedPlan
                 ? NoPlanRetrySchedule{}
-                : ScheduleNoPlanRetry(
-                    now,
-                    baselineRoute.firstCollisionTimeMs,
-                    config.planner.minimumTimeMarginMs,
-                    serial,
-                    manualRequestGeneration);
+                : acquisition.firstActionableAcquisition
+                    ? NoPlanRetrySchedule{
+                        true,
+                        SaturatingTickAdd(
+                            now,
+                            acquisition.noPlanRetryDelayMs),
+                        serial,
+                        manualRequestGeneration,
+                    }
+                    : ScheduleNoPlanRetry(
+                        now,
+                        baselineRoute.firstCollisionTimeMs,
+                        config.planner.minimumTimeMarginMs,
+                        serial,
+                        manualRequestGeneration);
         } else if (hasUsableLockedPlan) {
             noPlanRetry = {};
         }
         const bool pathDanger = unsafeCurrentPath || rerouteRequired;
         if (config.walkingEnabled &&
+            !acquisition.skipComfortHold &&
             !hasUsablePendingPlan &&
             !baselineUsesNative &&
             ShouldHoldPosition(
@@ -938,7 +1265,8 @@ public:
         const int windupRemaining = SDK::Orbwalker::IsAutoAttacking()
             ? std::max(0, SDK::Orbwalker::AttackCastDelayRemaining())
             : 0;
-        if (windupRemaining > 0 &&
+        if (!acquisition.skipWindupPreservation &&
+            windupRemaining > 0 &&
             hasUsableLockedPlan &&
             actionRoute.strictSafe) {
             const int windupLatency = std::clamp(
@@ -978,7 +1306,11 @@ public:
                 config.evadeSpellMarginThresholdMs ||
             actionRoute.minimumClearance <
                 std::max(0.0f, config.planner.preferredClearance * 0.5f);
-        if (endangered && config.evadeSpellsEnabled && weakWalkingPlan) {
+        if (endangered &&
+            config.evadeSpellsEnabled &&
+            weakWalkingPlan &&
+            !(acquisition.firstActionableAcquisition &&
+              !hasUsableLockedPlan)) {
             if (!command.BeginControl()) return;
             const EvadeSpellCastResult spell = spellEngine.TryUse(
                 player,
@@ -989,6 +1321,7 @@ public:
                 config.evadeSpellRules);
             if (spell.casted) {
                 ClearPendingTarget();
+                committedRoute = {};
                 locked = spell.destination;
                 locked.source = PlannerCandidateSource::EvadeSpell;
                 locked.strictSafe = true;
@@ -1004,7 +1337,9 @@ public:
         }
 
         if (!hasUsableLockedPlan) {
-            if (baselineUsesNative) {
+            acquisitionMoveRetryPending = false;
+            if (baselineUsesNative &&
+                !acquisition.stopImmediatelyWithoutPlan) {
                 holdingPosition = false;
                 HandleRelease();
                 return;
@@ -1027,21 +1362,72 @@ public:
 
         if (!command.BeginControl()) return;
         const bool issuingPendingTarget = hasUsablePendingPlan;
+        const bool emergencyMoveCadence =
+            acquisition.firstActionableAcquisition ||
+            acquisitionMoveRetryPending ||
+            pendingTargetRetryPending;
         const MoveIssueResult moveResult = command.MoveTo(
             player,
             actionRoute.position,
-            config.moveIntervalMs,
-            config.moveRefreshMs);
+            emergencyMoveCadence
+                ? acquisition.moveMinimumIntervalMs
+                : config.moveIntervalMs,
+            config.moveRefreshMs,
+            EndpointReachTolerance(config.planner.endpointBuffer),
+            exactDanger);
+        if (emergencyMoveCadence) {
+            acquisitionMoveRetryPending =
+                moveResult == MoveIssueResult::Throttled;
+        }
         if (issuingPendingTarget) {
             const TargetCommitDecision targetCommit =
                 DecideTargetCommit(
                     moveResult,
-                    lockedSafetyValid);
+                    lockedHardValid &&
+                        committedRoute.active);
             if (targetCommit.commitProposed) {
                 const CandidateEvaluation acceptedTarget =
                     pendingTarget;
                 const EvadeControllerState acceptedState =
                     pendingTargetState;
+                CommittedRoutePolicyInput acceptedInput;
+                acceptedInput.commitment = committedRoute;
+                acceptedInput.threatSetFingerprint =
+                    pendingTargetThreatSetFingerprint;
+                acceptedInput.manualEpoch =
+                    pendingTargetManualEpoch;
+                acceptedInput.candidateAvailable =
+                    CandidateHasRequiredStartEnvelopeExit(
+                        acceptedTarget.startThreatIdentities.Size() > 0,
+                        acceptedTarget.exitedStartEnvelope);
+                acceptedInput.candidateStartsInThreat =
+                    acceptedTarget.startThreatIdentities.Size() > 0;
+                acceptedInput.candidateExitedStartEnvelope =
+                    acceptedTarget.exitedStartEnvelope;
+                acceptedInput.candidateSourceThreatId =
+                    acceptedTarget.sourceThreatId;
+                acceptedInput.candidateStabilityBranchKey =
+                    acceptedTarget.stabilityBranchKey;
+                acceptedInput.candidateDirection =
+                    acceptedTarget.position - heroPos;
+                acceptedInput.candidateSyntheticExtension =
+                    pendingTargetSyntheticExtension;
+                CommittedRouteDecision acceptedDecision;
+                acceptedDecision.commitment = committedRoute;
+                acceptedDecision.action =
+                    pendingTargetSyntheticExtension
+                    ? CommittedRouteAction::
+                        ProposeSameDirectionExtension
+                    : SameCommittedRouteBranch(
+                        committedRoute,
+                        acceptedTarget.sourceThreatId,
+                        acceptedTarget.stabilityBranchKey,
+                        acceptedInput.candidateDirection)
+                    ? CommittedRouteAction::ProposeSameBranch
+                    : CommittedRouteAction::ProposeBranchSwitch;
+                committedRoute = CommitProposedRoute(
+                    acceptedDecision,
+                    acceptedInput);
                 locked = acceptedTarget;
                 lockedManualEpoch = pendingTargetManualEpoch;
                 lastPlan.selected = locked;
@@ -1053,6 +1439,7 @@ public:
                 ClearPendingTarget();
                 hasUsableLockedPlan = true;
             } else if (targetCommit.retryProposed) {
+                pendingTargetRetryPending = true;
                 hasUsableLockedPlan =
                     targetCommit.retainCommitted &&
                     hasUsableCommittedPlan;
@@ -1070,6 +1457,7 @@ public:
             }
         } else if (MoveResultInvalidatesLock(moveResult)) {
             locked.valid = false;
+            committedRoute = {};
             lastPlanTick = 0;
             hasUsableLockedPlan = false;
             command.StopUnsafeMovement();
@@ -1119,7 +1507,7 @@ public:
             now);
         const Vec2 heroPos = player.ServerPosition().To2D();
         const float heroRadius =
-            std::max(10.0f, player.BoundingRadius());
+            SanitizeHeroRadius(player.BoundingRadius());
         const bool controllerOwnsMovement =
             command.ControlActive() || IsEvading();
         const bool pathAcquisitionDanger =
@@ -1176,16 +1564,59 @@ public:
                 config.planner,
                 threats);
         }
-        const ObservedRouteEvaluation requestRoute = {
-            hasValidDestination,
-            movement.valid,
-            movement.walkable,
-            movement.pathSafe,
-            movement.endpointSafe,
-        };
+        const CandidateEvaluation stationaryHold =
+            EvadeGeometry::EvaluateStationaryCandidate(
+                heroPos,
+                destination,
+                player.ServerPosition().y,
+                heroRadius,
+                now,
+                config.planner,
+                threats);
+        const bool startsInThreat =
+            movement.startThreatIdentities.Size() > 0;
+        const bool coverageNoWorseThanHold =
+            ThreatCoverageNoWorseAtResolution(
+                CoverageOf(movement),
+                CoverageOf(stationaryHold),
+                std::max(
+                    25.0f,
+                    config.planner.temporalStepMs)) &&
+            movement.dangerExposureMs <=
+                stationaryHold.dangerExposureMs + 0.01f;
+        const bool makesExitProgress =
+            startsInThreat &&
+            movement.exitedStartEnvelope &&
+            movement.endpointSafe &&
+            std::isfinite(movement.exitDistance) &&
+            movement.exitDistance <= movement.travelDistance + 0.5f;
+        ExternalMoveRouteEvaluation requestRoute;
+        requestRoute.valid = movement.valid;
+        requestRoute.walkable = movement.walkable;
+        requestRoute.pathSafe = movement.pathSafe;
+        requestRoute.endpointSafe = movement.endpointSafe;
+        requestRoute.strictSafe = movement.strictSafe;
+        requestRoute.reenteredDanger =
+            movement.reenteredDanger;
+        requestRoute.enteredNewThreat =
+            movement.enteredNewThreat;
+        requestRoute.startsInThreat = startsInThreat;
+        requestRoute.coverageNoWorseThanHold =
+            coverageNoWorseThanHold;
+        requestRoute.makesExitProgress =
+            makesExitProgress;
         const bool actionableThreatContext =
             navInterventionArmed ||
-            IsObservedThreatRouteUnsafe(2, requestRoute);
+            ExternalMoveRouteHasActionableThreat(requestRoute);
+        const ExternalMoveDecision moveDecision =
+            DecideExternalMove({
+                source,
+                controllerOwnsMovement,
+                actionableThreatContext,
+                requestRoute,
+            });
+        const bool consumeRequest =
+            moveDecision.consume || !moveDecision.allowNative;
         const ThreatFreeActionDecision threatFreeMove =
             DecideThreatFreeAction(
                 actionableThreatContext,
@@ -1199,17 +1630,20 @@ public:
             waitingForWindup = false;
             if (threatFreeMove.releaseControl)
                 HandleRelease();
-            return !threatFreeMove.allowNativeInput;
+            return consumeRequest;
+        }
+        if (moveDecision.discardBlockedIntent) {
+            moveIntents.Clear();
+            return consumeRequest;
         }
 
-        if (!hasValidDestination) {
-            return source == MoveIntentSource::Manual &&
-                controllerOwnsMovement;
-        }
+        if (!hasValidDestination || !moveDecision.adoptGoal)
+            return consumeRequest;
         if (source == MoveIntentSource::Orbwalker &&
             moveIntents.HasManual()) {
             if (moveIntents.IsManualEcho(destination, now))
-                return moveIntents.Manual().SafetyBlocked();
+                return consumeRequest ||
+                    moveIntents.Manual().SafetyBlocked();
             return true;
         }
         if (source == MoveIntentSource::ObservedPath &&
@@ -1227,8 +1661,10 @@ public:
             nextGenerations.moveRequestGeneration;
         manualRequestGeneration =
             nextGenerations.manualRequestGeneration;
-        if (source == MoveIntentSource::Manual)
+        if (source == MoveIntentSource::Manual) {
+            acquisitionMoveRetryPending = false;
             ClearPendingTarget();
+        }
         if (releaseControlUntilTick > now) {
             ReleaseDecisionInput cooldownDecision;
             cooldownDecision.currentThreatSerial =
@@ -1246,7 +1682,7 @@ public:
             route.evaluated = true;
             route.valid = movement.valid;
             route.walkable = movement.walkable;
-            route.strictSafe = movement.strictSafe;
+            route.strictSafe = moveDecision.adoptGoal;
             const MoveIntentRecordResult manualResult =
                 moveIntents.RecordManual(
                     destination,
@@ -1262,19 +1698,14 @@ public:
             return manualResult == MoveIntentRecordResult::Deferred ||
                 manualResult == MoveIntentRecordResult::Blocked;
         }
-        const bool unsafe = movement.valid && movement.walkable &&
-            (!movement.pathSafe || !movement.endpointSafe);
-        const bool safetyBlocked = unsafe ||
-            holdingPosition ||
-            releaseHolding ||
-            waitingForWindup;
         const MoveIntentRecordResult recordResult = moveIntents.Record(
             destination,
             source,
             now,
             moveRequestGeneration,
-            safetyBlocked);
-        return recordResult == MoveIntentRecordResult::Deferred;
+            false);
+        return consumeRequest ||
+            recordResult == MoveIntentRecordResult::Deferred;
     }
 
 private:
@@ -1286,6 +1717,9 @@ private:
     EvadeControllerState pendingTargetState =
         EvadeControllerState::Assessing;
     std::uint64_t pendingTargetManualEpoch = 0;
+    std::uint64_t pendingTargetThreatSetFingerprint = 0;
+    bool pendingTargetSyntheticExtension = false;
+    bool pendingTargetRetryPending = false;
     PlannerResult lastPlan;
     int lastThreatSerial = -1;
     int lastPlanTick = 0;
@@ -1293,6 +1727,7 @@ private:
     bool hasPlannedThreatSetFingerprint = false;
     NoPlanRetrySchedule noPlanRetry;
     ContinuousChallengerState continuousChallenger;
+    CommittedRouteIdentity committedRoute;
     int lastTargetSwitchTick = 0;
     int degradationCommitUntilTick = 0;
     int spellHoldUntilTick = 0;
@@ -1304,10 +1739,23 @@ private:
     std::uint64_t manualRequestGeneration = 0;
     std::uint64_t releaseMoveRequestGeneration = 0;
     std::uint64_t lockedManualEpoch = 0;
+    int handledAcquisitionSerial = -1;
+    bool acquisitionMoveRetryPending = false;
     bool waitingForWindup = false;
     bool holdingPosition = false;
     bool releaseHolding = false;
     MoveIntentState moveIntents;
+
+    struct AcquisitionSerialCommit {
+        int* handledSerial = nullptr;
+        int serial = -1;
+        bool pending = false;
+
+        ~AcquisitionSerialCommit() {
+            if (pending && handledSerial)
+                *handledSerial = serial;
+        }
+    };
 
     static std::vector<Threat> FilterThreats(const std::vector<Threat>& input,
                                              int minimumDanger,
@@ -1336,11 +1784,7 @@ private:
 
     static std::uint64_t ThreatFingerprintOf(
         const std::vector<Threat>& threats) {
-        std::vector<int> ids;
-        ids.reserve(threats.size());
-        for (const Threat& threat : threats)
-            ids.push_back(threat.id);
-        return StableThreatSetFingerprint(ids);
+        return StableSemanticThreatSetFingerprint(threats);
     }
 
     static std::vector<Vec2> BuildCurrentPath(const SDK::AIHeroClient& player,
@@ -1374,14 +1818,24 @@ private:
         const CandidateEvaluation& candidate,
         const CandidateEvaluation& baseline,
         const EvadeSettings& settings) {
+        (void)settings;
         if (!candidate.valid ||
             !candidate.walkable ||
-            candidate.travelDistance < 1.0f) {
+            candidate.travelDistance < 1.0f ||
+            candidate.enteredNewThreat ||
+            candidate.reenteredDanger) {
             return false;
         }
-        const float baselineExit = std::isfinite(baseline.exitDistance)
+        if (candidate.startThreatIdentities.Size() > 0 &&
+            !candidate.exitedStartEnvelope) {
+            return false;
+        }
+        const float baselineExit =
+            (baseline.startThreatIdentities.Size() == 0 ||
+             baseline.exitedStartEnvelope) &&
+                std::isfinite(baseline.exitDistance)
             ? baseline.exitDistance
-            : settings.maxSearchRadius;
+            : std::numeric_limits<float>::infinity();
         return std::isfinite(candidate.exitDistance) &&
             candidate.exitDistance + 0.5f < baselineExit;
     }
@@ -1391,6 +1845,7 @@ private:
         return {
             CoverageOf(evaluation),
             evaluation.strictSafe,
+            evaluation.exitedStartEnvelope,
             evaluation.minimumClearance,
             evaluation.timeMarginMs,
             evaluation.exitDistance,
@@ -1398,6 +1853,203 @@ private:
             evaluation.cursorDistance,
             evaluation.turretPenalty,
         };
+    }
+
+    struct CommittedBranchCandidate {
+        CandidateEvaluation evaluation;
+        bool syntheticExtension = false;
+        bool extensionAttempted = false;
+    };
+
+    CandidateEvaluation FindAlternateBranchCandidate(
+        const PlannerResult& plan,
+        const CommittedRouteIdentity& releasedIdentity,
+        const ThreatCoverage& baselineCoverage,
+        const SDK::AIHeroClient& player,
+        const EvadeRuntimeConfig& config) const {
+        CandidateEvaluation best;
+        const Vec2 hero = player.ServerPosition().To2D();
+        const float temporalResolutionMs = std::max(
+            25.0f,
+            config.planner.temporalStepMs);
+        for (const CandidateEvaluation& candidate :
+             plan.candidates) {
+            if (!candidate.valid ||
+                !candidate.walkable ||
+                !CandidateHasRequiredStartEnvelopeExit(
+                    candidate.startThreatIdentities.Size() > 0,
+                    candidate.exitedStartEnvelope) ||
+                candidate.position.IsZero() ||
+                (!candidate.strictSafe &&
+                 !config.leastDangerFallback) ||
+                (!candidate.strictSafe &&
+                 !ThreatCoverageNoWorseAtResolution(
+                     CoverageOf(candidate),
+                     baselineCoverage,
+                     temporalResolutionMs)) ||
+                SameCommittedRouteBranch(
+                    releasedIdentity,
+                    candidate.sourceThreatId,
+                    candidate.stabilityBranchKey,
+                    candidate.position - hero) ||
+                IsMoveTargetReached(
+                    hero.Distance(candidate.position),
+                    EndpointReachTolerance(
+                        config.planner.endpointBuffer),
+                    false)) {
+                continue;
+            }
+            const bool better =
+                !best.valid ||
+                (candidate.strictSafe && !best.strictSafe) ||
+                (candidate.strictSafe == best.strictSafe &&
+                 (MateriallyImprovesThreatCoverage(
+                      CoverageOf(candidate),
+                      CoverageOf(best),
+                      temporalResolutionMs) ||
+                  (EquivalentThreatCoverageAtResolution(
+                       CoverageOf(candidate),
+                       CoverageOf(best),
+                       temporalResolutionMs) &&
+                   candidate.travelDistance <
+                       best.travelDistance)));
+            if (better) best = candidate;
+        }
+        return best;
+    }
+
+    CommittedBranchCandidate FindCommittedBranchCandidate(
+        const PlannerResult& plan,
+        const CandidateEvaluation& current,
+        const ThreatCoverage& baselineCoverage,
+        const SDK::AIHeroClient& player,
+        const Vec2& goal,
+        const std::vector<Threat>& threats,
+        const EvadeRuntimeConfig& config,
+        int now,
+        bool reached) const {
+        CommittedBranchCandidate result;
+        const Vec2 hero = player.ServerPosition().To2D();
+        const auto consider = [&](const CandidateEvaluation& candidate,
+                                  bool syntheticExtension) {
+            if (!candidate.valid ||
+                !candidate.walkable ||
+                !CandidateHasRequiredStartEnvelopeExit(
+                    candidate.startThreatIdentities.Size() > 0,
+                    candidate.exitedStartEnvelope) ||
+                candidate.position.IsZero() ||
+                (!candidate.strictSafe &&
+                 !config.leastDangerFallback) ||
+                !SameCommittedRouteBranch(
+                    committedRoute,
+                    candidate.sourceThreatId,
+                    candidate.stabilityBranchKey,
+                    candidate.position - hero)) {
+                return;
+            }
+            const float temporalResolutionMs = std::max(
+                25.0f,
+                config.planner.temporalStepMs);
+            if (!candidate.strictSafe &&
+                !ThreatCoverageNoWorseAtResolution(
+                    CoverageOf(candidate),
+                    baselineCoverage,
+                    temporalResolutionMs)) {
+                return;
+            }
+            if (reached &&
+                IsMoveTargetReached(
+                    hero.Distance(candidate.position),
+                    EndpointReachTolerance(
+                        config.planner.endpointBuffer),
+                    false)) {
+                return;
+            }
+            const CandidateEvaluation& best =
+                result.evaluation;
+            const bool equivalentCoverage =
+                best.valid &&
+                EquivalentThreatCoverageAtResolution(
+                    CoverageOf(candidate),
+                    CoverageOf(best),
+                    temporalResolutionMs);
+            const bool betterTrueExit =
+                equivalentCoverage &&
+                candidate.exitedStartEnvelope &&
+                (!best.exitedStartEnvelope ||
+                 candidate.exitDistance + 0.5f <
+                     best.exitDistance);
+            const bool equalTrueExit =
+                equivalentCoverage &&
+                candidate.exitedStartEnvelope ==
+                    best.exitedStartEnvelope &&
+                (!candidate.exitedStartEnvelope ||
+                 std::fabs(
+                     candidate.exitDistance -
+                     best.exitDistance) <= 0.5f);
+            const bool better =
+                !best.valid ||
+                (candidate.strictSafe && !best.strictSafe) ||
+                (candidate.strictSafe == best.strictSafe &&
+                 (MateriallyImprovesThreatCoverage(
+                      CoverageOf(candidate),
+                      CoverageOf(best),
+                      std::max(
+                          25.0f,
+                          config.planner.temporalStepMs)) ||
+                  betterTrueExit ||
+                  (equalTrueExit &&
+                   candidate.travelDistance <
+                       best.travelDistance)));
+            if (better) {
+                result.evaluation = candidate;
+                result.syntheticExtension =
+                    syntheticExtension;
+            }
+        };
+        if (!reached) {
+            for (const CandidateEvaluation& candidate :
+                 plan.candidates) {
+                consider(candidate, false);
+            }
+            return result;
+        }
+        result.extensionAttempted = true;
+        if (committedRoute.normalizedDirection.IsZero())
+            return result;
+
+        const float heroRadius =
+            SanitizeHeroRadius(player.BoundingRadius());
+        const Vec2 extensionTarget =
+            BuildCommittedRouteExtensionTarget(
+                hero,
+                committedRoute,
+                heroRadius,
+                config.planner.endpointBuffer,
+                config.planner.ringStep,
+                config.planner.maxSearchRadius);
+        if (extensionTarget.IsZero()) return result;
+        CandidateEvaluation extension =
+            EvadeGeometry::EvaluateCandidate(
+                extensionTarget,
+                current.source,
+                committedRoute.sourceThreatId,
+                hero,
+                goal,
+                player.ServerPosition().y,
+                std::max(50.0f, player.MoveSpeed()),
+                heroRadius,
+                now,
+                config.planner,
+                threats);
+        extension.sourceThreatId =
+            committedRoute.sourceThreatId;
+        extension.stabilityBranchKey =
+            committedRoute.stabilityBranchKey;
+        extension.enemyDistance = current.enemyDistance;
+        extension.turretPenalty = current.turretPenalty;
+        consider(extension, true);
+        return result;
     }
 
     CandidateEvaluation SelectStableTarget(
@@ -1408,14 +2060,17 @@ private:
         const SDK::AIHeroClient& player,
         const Vec2& goal,
         const std::vector<Threat>& threats,
-        const EvadeRuntimeConfig& config) const {
+        const EvadeRuntimeConfig& config,
+        bool exactDanger) const {
         CandidateEvaluation chosen = proposed;
         if (!current.valid || !current.walkable || current.position.IsZero())
             return chosen;
         const Vec2 hero = player.ServerPosition().To2D();
-        const float radius = std::max(10.0f, player.BoundingRadius());
+        const float radius = SanitizeHeroRadius(player.BoundingRadius());
         if (IsRouteTargetReached(
-                hero.Distance(current.position))) {
+                hero.Distance(current.position),
+                config.planner.endpointBuffer,
+                exactDanger)) {
             return chosen;
         }
         const Vec2 oldDirection = (current.position - hero).Normalized();
@@ -1532,17 +2187,69 @@ private:
         return sharpDetour || crampedExit || headsIntoWall;
     }
 
-    bool ValidateLocked(const SDK::AIHeroClient& player,
-                        const std::vector<Threat>& threats,
-                        const EvadeRuntimeConfig& config,
-                        int now,
-                        CandidateEvaluation* evaluationOut) const {
-        if (!locked.valid || !locked.walkable || locked.position.IsZero()) return false;
-        if (IsRouteTargetReached(
-                player.ServerPosition().To2D().Distance(
-                    locked.position))) {
-            return false;
+    LockedRouteValidation ValidateLocked(
+        const SDK::AIHeroClient& player,
+        const std::vector<Threat>& threats,
+        const EvadeRuntimeConfig& config,
+        int now,
+        const ThreatCoverage& baselineCoverage,
+        float temporalResolutionMs,
+        CandidateEvaluation* evaluationOut) const {
+        const bool hasValidLock =
+            locked.valid &&
+            locked.position.IsValid() &&
+            !locked.position.IsZero();
+        const float targetDistance = hasValidLock
+            ? player.ServerPosition().To2D().Distance(
+                locked.position)
+            : FLT_MAX;
+        const LockedRouteValidation endpointValidation =
+            ClassifyLockedEndpointBoundary({
+                baselineCoverage,
+                hasValidLock,
+                locked.walkable,
+                targetDistance,
+                EndpointReachTolerance(
+                    config.planner.endpointBuffer),
+                temporalResolutionMs,
+                locked.startThreatIdentities.Size() > 0,
+                locked.exitedStartEnvelope,
+            });
+        if (endpointValidation.reached) {
+            CandidateEvaluation current;
+            current.position = locked.position;
+            current.source = locked.source;
+            current.sourceThreatId =
+                locked.sourceThreatId;
+            current.stabilityBranchKey =
+                locked.stabilityBranchKey;
+            current.valid = true;
+            current.walkable = true;
+            current.endpointDanger =
+                baselineCoverage.endpointDanger;
+            current.pathDanger =
+                baselineCoverage.pathDanger;
+            current.maxDanger =
+                baselineCoverage.maxDanger;
+            current.collisionCount =
+                baselineCoverage.collisionCount;
+            current.firstCollisionTimeMs =
+                baselineCoverage.firstCollisionTimeMs;
+            current.dangerExposureMs =
+                baselineCoverage.dangerExposureMs;
+            current.summedExposureDanger =
+                baselineCoverage.summedExposureDanger;
+            current.travelDistance = targetDistance;
+            current.arrivalTimeMs = 0.0f;
+            current.enemyDistance = locked.enemyDistance;
+            current.turretPenalty = locked.turretPenalty;
+            current.rejectReason =
+                PlannerRejectReason::None;
+            if (evaluationOut) *evaluationOut = current;
+            return endpointValidation;
         }
+        if (!hasValidLock || !locked.walkable)
+            return endpointValidation;
         const bool followsLockedPath = player.HasPath() &&
             player.PathEnd().To2D().Distance(locked.position) <= 80.0f;
         const std::vector<Vec2> currentPath = followsLockedPath
@@ -1556,7 +2263,7 @@ private:
                 SDK::Game::CursorPos().To2D(),
                 player.ServerPosition().y,
                 std::max(50.0f, player.MoveSpeed()),
-                std::max(10.0f, player.BoundingRadius()),
+                SanitizeHeroRadius(player.BoundingRadius()),
                 now,
                 config.planner,
                 threats,
@@ -1570,7 +2277,7 @@ private:
                 SDK::Game::CursorPos().To2D(),
                 player.ServerPosition().y,
                 std::max(50.0f, player.MoveSpeed()),
-                std::max(10.0f, player.BoundingRadius()),
+                SanitizeHeroRadius(player.BoundingRadius()),
                 now,
                 config.planner,
                 threats);
@@ -1579,13 +2286,28 @@ private:
         CarryStabilityBranchKey(current, locked);
         current.position = locked.position;
         if (evaluationOut) *evaluationOut = current;
-        return current.valid && current.walkable;
+        return ClassifyLockedRoute({
+            CoverageOf(current),
+            baselineCoverage,
+            true,
+            current.valid,
+            current.walkable,
+            false,
+            false,
+            current.strictSafe,
+            temporalResolutionMs,
+            current.startThreatIdentities.Size() > 0,
+            current.exitedStartEnvelope,
+        });
     }
 
     void ClearPendingTarget() {
         pendingTarget = {};
         pendingTargetState = EvadeControllerState::Assessing;
         pendingTargetManualEpoch = 0;
+        pendingTargetThreatSetFingerprint = 0;
+        pendingTargetSyntheticExtension = false;
+        pendingTargetRetryPending = false;
         continuousChallenger = {};
     }
 
@@ -1595,9 +2317,11 @@ private:
         command.EndControl();
         state = EvadeControllerState::Idle;
         locked = {};
+        committedRoute = {};
         ClearPendingTarget();
         lastPlan = {};
         noPlanRetry = {};
+        acquisitionMoveRetryPending = false;
         lastPlannedThreatSetFingerprint = 0;
         hasPlannedThreatSetFingerprint = false;
         lockedManualEpoch = 0;
@@ -1613,12 +2337,14 @@ private:
         command.EndControl();
         state = EvadeControllerState::Idle;
         locked = {};
+        committedRoute = {};
         ClearPendingTarget();
         lastPlan = {};
         lastPlanTick = 0;
         lastPlannedThreatSetFingerprint = 0;
         hasPlannedThreatSetFingerprint = false;
         noPlanRetry = {};
+        acquisitionMoveRetryPending = false;
         lockedManualEpoch = 0;
         lastTargetSwitchTick = 0;
         degradationCommitUntilTick = 0;

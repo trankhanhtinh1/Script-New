@@ -190,6 +190,8 @@ public:
 private:
     struct MissileObservation {
         int threatId = -1;
+        std::uint32_t networkId = 0;
+        std::uintptr_t objectIdentity = 0;
         Vec2 position = {};
         Vec2 endPosition = {};
         int tick = 0;
@@ -201,6 +203,7 @@ private:
         Vec2 unitCenter = {};
         ZDCollisionKind kind = ZDCollisionKind::None;
         int networkId = 0;
+        std::uintptr_t unitObjectIdentity = 0;
     };
 
     struct SpecialCastProfile {
@@ -226,6 +229,10 @@ private:
 
     static inline SRWLOCK admissionLock = SRWLOCK_INIT;
     static inline ThreatAdmissionCounters admissionCounters = {};
+    static inline constexpr std::size_t kLogicalEpisodeCapacity = 128;
+    static inline SRWLOCK logicalEpisodeLock = SRWLOCK_INIT;
+    static inline LogicalCastEpisodeResolver<
+        kLogicalEpisodeCapacity> logicalCastEpisodes = {};
     static inline SRWLOCK storeLock = SRWLOCK_INIT;
     static inline std::vector<Threat> threats;
     static inline int nextThreatId = 1;
@@ -254,6 +261,10 @@ private:
         AcquireSRWLockExclusive(&admissionLock);
         ResetThreatAdmissionCounters(admissionCounters);
         ReleaseSRWLockExclusive(&admissionLock);
+
+        AcquireSRWLockExclusive(&logicalEpisodeLock);
+        logicalCastEpisodes.Reset();
+        ReleaseSRWLockExclusive(&logicalEpisodeLock);
 
         AcquireSRWLockExclusive(&storeLock);
         threats.clear();
@@ -688,6 +699,40 @@ private:
             direction.x * sine + direction.y * cosine).Normalized();
     }
 
+    static int ResolveProjectileLaneIndex(
+        const SpellData& data,
+        const Vec2& episodeDirection,
+        const Vec2& projectileDirection) {
+        const int projectileCount = data.spellType == ZDSpellType::Line
+            ? std::clamp(data.multipleNumber, 1, 15)
+            : 1;
+        if (projectileCount <= 1 ||
+            episodeDirection.IsZero() ||
+            projectileDirection.IsZero()) {
+            return -1;
+        }
+        const float centerIndex =
+            static_cast<float>(projectileCount - 1) * 0.5f;
+        int bestIndex = -1;
+        float bestDot = -1.0f;
+        for (int index = 0; index < projectileCount; ++index) {
+            const float angleOffset =
+                (static_cast<float>(index) - centerIndex) *
+                data.multipleAngle;
+            const float dot = RotateDirection(
+                episodeDirection,
+                angleOffset).Dot(
+                    projectileDirection.Normalized());
+            if (dot > bestDot) {
+                bestDot = dot;
+                bestIndex = index;
+            }
+        }
+        return bestDot >= kLogicalLaneDirectionDot
+            ? bestIndex
+            : -1;
+    }
+
     static Threat* FindDuplicateLocked(const Threat& candidate) {
         return FindNormalizedCastDuplicate(threats, candidate);
     }
@@ -697,6 +742,61 @@ private:
         const bool admitted = AdmitThreatData(data, admissionCounters);
         ReleaseSRWLockExclusive(&admissionLock);
         return admitted;
+    }
+
+    static std::uint64_t ResolveLogicalCastEpisode(
+        const SpellData* data,
+        std::uint32_t casterNetworkId,
+        int slot,
+        int episodeTick,
+        int observationTick,
+        const Vec2& start,
+        const Vec2& end,
+        const Vec2& direction,
+        Vec2* episodeDirectionOut = nullptr,
+        bool projectileObservation = false,
+        bool* matchedExistingOut = nullptr,
+        std::uint64_t* projectileLaneKeyOut = nullptr) {
+        LogicalCastEpisodeObservation observation;
+        observation.casterNetworkId = casterNetworkId;
+        observation.data = data;
+        observation.slot = slot;
+        observation.episodeTick = episodeTick;
+        observation.observationTick = observationTick;
+        observation.start = start;
+        observation.end = end;
+        observation.direction = direction;
+        observation.projectileObservation =
+            projectileObservation;
+        AcquireSRWLockExclusive(&logicalEpisodeLock);
+        const std::uint64_t result =
+            logicalCastEpisodes.Resolve(
+                observation,
+                episodeDirectionOut,
+                matchedExistingOut,
+                projectileLaneKeyOut);
+        ReleaseSRWLockExclusive(&logicalEpisodeLock);
+        return result;
+    }
+
+    static std::uint64_t ResolveLogicalProjectileLaneKey(
+        std::uint64_t logicalCastEpisodeId,
+        const Vec2& authoredInitialWorldDirection,
+        int projectileIndex = -1) {
+        AcquireSRWLockExclusive(&logicalEpisodeLock);
+        const std::uint64_t result =
+            logicalCastEpisodes.ResolveLaneKey(
+                logicalCastEpisodeId,
+                authoredInitialWorldDirection,
+                projectileIndex);
+        ReleaseSRWLockExclusive(&logicalEpisodeLock);
+        return result;
+    }
+
+    static void PruneLogicalCastEpisodes(int now) {
+        AcquireSRWLockExclusive(&logicalEpisodeLock);
+        logicalCastEpisodes.Prune(now);
+        ReleaseSRWLockExclusive(&logicalEpisodeLock);
     }
 
     static int AddOrUpdateThreat(const Threat& candidate) {
@@ -809,6 +909,16 @@ private:
             bounce.castIdentity = args.CastInfo;
             bounce.casterNetworkId = args.Sender.NetworkId;
             bounce.slot = static_cast<int>(ZDSpellSlot::Q);
+            bounce.logicalCastEpisodeId =
+                ResolveLogicalCastEpisode(
+                    data,
+                    bounce.casterNetworkId,
+                    bounce.slot,
+                    bounce.startTick,
+                    SDK::Variables::TickCount(),
+                    bounce.startPos,
+                    bounce.endPos,
+                    bounce.direction);
             bounce.observedSpeed = std::max(1.0f, distance * 1000.0f / 480.0f);
             AddOrUpdateThreat(bounce);
         };
@@ -911,6 +1021,16 @@ private:
         const int projectileCount = data->spellType == ZDSpellType::Line
             ? std::clamp(data->multipleNumber, 1, 15)
             : 1;
+        const std::uint64_t logicalCastEpisodeId =
+            ResolveLogicalCastEpisode(
+                data,
+                args.Sender.NetworkId,
+                static_cast<int>(data->spellKey),
+                castTick,
+                now,
+                start,
+                end,
+                baseDirection);
         const float centerIndex = static_cast<float>(projectileCount - 1) * 0.5f;
         for (int index = 0; index < projectileCount; ++index) {
             const float angleOffset =
@@ -932,8 +1052,19 @@ private:
                 *threat.data, start, threat.endPos, threat.startTick, 0,
                 special.delay);
             threat.castIdentity = args.CastInfo;
+            threat.logicalCastEpisodeId =
+                logicalCastEpisodeId;
+            threat.projectileLaneKey =
+                ResolveLogicalProjectileLaneKey(
+                    logicalCastEpisodeId,
+                    threat.direction,
+                    index);
             threat.casterNetworkId = args.Sender.NetworkId;
             threat.slot = static_cast<int>(data->spellKey);
+            threat.projectileIndex =
+                StableProjectileLaneIndex(
+                    projectileCount,
+                    index);
             AddOrUpdateThreat(threat);
         }
         AddZiggsBounceThreats(*data, args, start, end, baseDirection, castTick);
@@ -1100,17 +1231,60 @@ private:
                     *aftershock, delayed.startPos, delayed.endPos, delayed.startTick, 0);
                 delayed.casterNetworkId = casterNetworkId;
                 delayed.slot = static_cast<int>(ZDSpellSlot::E);
+                delayed.logicalCastEpisodeId =
+                    ResolveLogicalCastEpisode(
+                        aftershock,
+                        delayed.casterNetworkId,
+                        delayed.slot,
+                        delayed.startTick,
+                        now,
+                        delayed.startPos,
+                        delayed.endPos,
+                        delayed.direction);
                 AddOrUpdateThreat(delayed);
             }
         }
         const std::uint32_t missileNetworkId = static_cast<std::uint32_t>(missile.NetworkId());
+        const std::uintptr_t missileObjectIdentity = missile.Address();
         Vec2 observedHead = missile.Position().To2D();
         if (!HasUsablePosition(observedHead)) observedHead = start;
+        Vec2 episodeDirection;
+        bool matchedRecentEpisode = false;
+        std::uint64_t projectileLaneKey = 0;
+        const std::uint64_t logicalCastEpisodeId =
+            ResolveLogicalCastEpisode(
+                data,
+                casterNetworkId,
+                static_cast<int>(data->spellKey),
+                WrappingTickAdd(
+                    launchTick,
+                    -std::max(0, data->spellDelay)),
+                now,
+                start,
+                end,
+                direction,
+                &episodeDirection,
+                true,
+                &matchedRecentEpisode,
+                &projectileLaneKey);
+        const int projectileIndex =
+            matchedRecentEpisode
+            ? ResolveProjectileLaneIndex(
+                *data,
+                episodeDirection,
+                direction)
+            : -1;
         int changedId = -1;
         AcquireSRWLockExclusive(&storeLock);
         for (const auto& existing : threats) {
-            if (!existing.expired && existing.missileBound &&
-                existing.missileNetworkId == missileNetworkId) {
+            if (missileNetworkId != 0 &&
+                !existing.expired &&
+                existing.missileBound &&
+                MatchesMissileEpisode(
+                    existing.missileNetworkId,
+                    existing.missileObjectIdentity,
+                    missileNetworkId,
+                    missileObjectIdentity)) {
                 ReleaseSRWLockExclusive(&storeLock);
                 return;
             }
@@ -1118,9 +1292,16 @@ private:
         Threat* best = nullptr;
         float bestScore = -2.0f;
         for (auto& existing : threats) {
-            if (existing.expired || existing.missileBound) continue;
+            if (existing.expired || existing.missileBound ||
+                existing.projectileTerminated)
+                continue;
             if (existing.casterNetworkId != casterNetworkId) continue;
             if (existing.SpellName() != data->spellName) continue;
+            if (existing.logicalCastEpisodeId != 0 &&
+                logicalCastEpisodeId != 0 &&
+                existing.logicalCastEpisodeId !=
+                    logicalCastEpisodeId)
+                continue;
             const MissileBindKey castKey = {
                 existing.casterNetworkId,
                 existing.castIdentity,
@@ -1128,18 +1309,23 @@ private:
                 existing.direction,
                 existing.startTick,
                 existing.data ? existing.data->spellDelay : existing.Delay(),
-                existing.Delay()
+                existing.Delay(),
+                existing.slot,
+                existing.startPos,
+                existing.AuthoredEnd()
             };
             const MissileBindObservation observation = {
                 casterNetworkId,
                 args.CastIdentity,
                 reinterpret_cast<std::uintptr_t>(data),
                 direction,
-                now
+                now,
+                static_cast<int>(data->spellKey),
+                start,
+                end
             };
-            if (!CanBindMissile(castKey, observation)) continue;
-            const float dot = DirectionDot(existing.direction, direction);
-            const float score = dot - existing.startPos.Distance(start) / 10000.0f;
+            const float score = MissileBindScore(castKey, observation);
+            if (!std::isfinite(score)) continue;
             if (score > bestScore) {
                 bestScore = score;
                 best = &existing;
@@ -1158,12 +1344,22 @@ private:
                     bound.endTick = CalculateThreatEndTick(
                         *bound.data, start, end, bound.startTick, launchTick);
                     bound.missileNetworkId = missileNetworkId;
+                    bound.missileObjectIdentity = missileObjectIdentity;
                     bound.observedHead = observedHead;
                     bound.observedTick = now;
                     bound.observedSpeed = data->projectileSpeed;
                     bound.positionUncertainty = 0.0f;
                     if (bound.castIdentity == 0)
                         bound.castIdentity = args.CastIdentity;
+                    if (bound.logicalCastEpisodeId == 0)
+                        bound.logicalCastEpisodeId =
+                            logicalCastEpisodeId;
+                    if (bound.projectileLaneKey == 0)
+                        bound.projectileLaneKey =
+                            projectileLaneKey;
+                    if (bound.projectileIndex < 0)
+                        bound.projectileIndex =
+                            projectileIndex;
                     ++bound.revision;
                 });
             changedId = best->id;
@@ -1181,8 +1377,15 @@ private:
             threat.endTick = CalculateThreatEndTick(
                 *threat.data, start, end, threat.startTick, launchTick);
             threat.castIdentity = args.CastIdentity;
+            threat.logicalCastEpisodeId =
+                logicalCastEpisodeId;
+            threat.projectileLaneKey =
+                projectileLaneKey;
             threat.casterNetworkId = casterNetworkId;
+            threat.slot = static_cast<int>(data->spellKey);
+            threat.projectileIndex = projectileIndex;
             threat.missileNetworkId = missileNetworkId;
+            threat.missileObjectIdentity = missileObjectIdentity;
             threat.observedHead = observedHead;
             threat.observedTick = now;
             threat.observedSpeed = data->projectileSpeed;
@@ -1336,19 +1539,42 @@ private:
         const float contactDistance = std::clamp(
             centerDistance - entryOffset, 0.0f, from.Distance(authoredEnd));
         const Vec2 contact = from + routeDirection * contactDistance;
-        events.push_back({contactDistance, contact, position,
-                          ZDCollisionKind::Unit, unit.NetworkId()});
+        events.push_back({
+            contactDistance,
+            contact,
+            position,
+            ZDCollisionKind::Unit,
+            unit.NetworkId(),
+            unit.Address()
+        });
         const Vec2 fullDirection = (authoredEnd - threat.startPos).Normalized();
         pending.emplace_back(unit.NetworkId(), std::clamp(
             (contact - threat.startPos).Dot(fullDirection),
             0.0f, threat.startPos.Distance(authoredEnd)));
     }
 
-    static bool ResolveCollision(Threat& threat, bool& geometryChanged) {
+    static bool ResolveCollision(Threat& threat,
+                                 int now,
+                                 bool& geometryChanged) {
         geometryChanged = false;
+        const auto clearPredictionAndReturn = [&]() {
+            geometryChanged =
+                ClearPredictedCollisionMetadata(threat);
+            return geometryChanged;
+        };
         if (!threat.data || threat.persistent || threat.projectileTerminated ||
             threat.Type() != ZDSpellType::Line ||
-            threat.data->collisionObjects.empty()) return false;
+            threat.data->collisionObjects.empty())
+            return clearPredictionAndReturn();
+        const bool liveBoundPrediction =
+            !ShouldCommitPredictedCollision(
+                threat.missileBound,
+                threat.projectileTerminated);
+        if (liveBoundPrediction &&
+            !CanRefreshLiveBoundCollisionPrediction(
+                threat,
+                now))
+            return clearPredictionAndReturn();
         const Vec2 authoredEnd = threat.AuthoredEnd();
         const Vec2 fullDirection = (authoredEnd - threat.startPos).Normalized();
         const Vec2 from = threat.missileBound && HasUsablePosition(threat.observedHead)
@@ -1356,14 +1582,15 @@ private:
             : threat.startPos;
         const Vec2 routeDirection = (authoredEnd - from).Normalized();
         if (!HasUsablePosition(from) || !HasUsablePosition(authoredEnd) ||
-            fullDirection.IsZero() || routeDirection.IsZero()) return false;
+            fullDirection.IsZero() || routeDirection.IsZero())
+            return clearPredictionAndReturn();
 
         const int targetLimit = threat.CollisionTargetLimit();
         const float currentProgress = std::clamp(
             (ProjectOnSegment(from, threat.startPos, authoredEnd) - threat.startPos)
                 .Dot(fullDirection),
             0.0f, threat.startPos.Distance(authoredEnd));
-        if (targetLimit > 1) {
+        if (!liveBoundPrediction && targetLimit > 1) {
             for (const auto& pending : threat.pendingUnitCollisions) {
                 if (pending.second > currentProgress + 6.0f) continue;
                 if (std::find(threat.consumedCollisionUnits.begin(),
@@ -1379,7 +1606,10 @@ private:
         std::vector<CollisionEvent> events;
         std::vector<std::pair<int, float>> pending;
         std::unordered_set<int> visited;
-        const float projectileRadius = std::max(0.0f, threat.Radius());
+        // Collision prediction models the authored projectile body. The
+        // global evade safety padding belongs only to danger geometry.
+        const float projectileRadius =
+            std::max(0.0f, threat.ProjectileCollisionRadius());
         if (HasCollisionObject(*threat.data, ZDCollisionObjectType::EnemyMinions)) {
             for (const auto& minion : SDK::GameObjects::AllyMinions())
                 AddUnitCollision(SDK::AIBaseClient(minion.Handle()), threat, from,
@@ -1391,12 +1621,22 @@ private:
                                  visited, events, pending);
         }
         if (HasCollisionObject(*threat.data, ZDCollisionObjectType::EnemyChampions)) {
-            const int playerId = SDK::ObjectManager::Player().NetworkId();
+            const auto player = SDK::ObjectManager::Player();
+            if (player.IsValid())
+                AddUnitCollision(
+                    SDK::AIBaseClient(player.Handle()),
+                    threat,
+                    from,
+                    authoredEnd,
+                    routeDirection,
+                    projectileRadius,
+                    visited,
+                    events,
+                    pending);
             for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
                 const SDK::AIBaseClient unit(hero.Handle());
-                if (unit.NetworkId() != playerId)
-                    AddUnitCollision(unit, threat, from, authoredEnd, routeDirection,
-                                     projectileRadius, visited, events, pending);
+                AddUnitCollision(unit, threat, from, authoredEnd, routeDirection,
+                                 projectileRadius, visited, events, pending);
             }
         }
 
@@ -1458,14 +1698,17 @@ private:
             });
         std::sort(pending.begin(), pending.end(),
             [](const auto& left, const auto& right) { return left.second < right.second; });
-        threat.pendingUnitCollisions = std::move(pending);
+        if (!liveBoundPrediction)
+            threat.pendingUnitCollisions = std::move(pending);
 
         CollisionEvent stop;
         bool stopped = false;
-        int unitHits = targetLimit > 1
+        int unitHits = !liveBoundPrediction && targetLimit > 1
             ? static_cast<int>(threat.consumedCollisionUnits.size())
             : 0;
-        if (unitHits >= targetLimit && !threat.lastConsumedCollisionPoint.IsZero()) {
+        if (!liveBoundPrediction &&
+            unitHits >= targetLimit &&
+            !threat.lastConsumedCollisionPoint.IsZero()) {
             stop = {threat.startPos.Distance(threat.lastConsumedCollisionPoint),
                     threat.lastConsumedCollisionPoint, {}, ZDCollisionKind::Unit, 0};
             stopped = true;
@@ -1481,6 +1724,21 @@ private:
             }
         }
 
+        if (liveBoundPrediction) {
+            geometryChanged =
+                RefreshLiveBoundCollisionPrediction(
+                    threat,
+                    stopped ? stop.kind : ZDCollisionKind::None,
+                    stopped ? stop.networkId : 0,
+                    stopped ? stop.unitCenter : Vec2(),
+                    stopped ? stop.point : Vec2(),
+                    now,
+                    stopped ? stop.unitObjectIdentity : 0);
+            return true;
+        }
+
+        const bool predictionCleared =
+            ClearPredictedCollisionMetadata(threat);
         const Vec2 nextEnd = stopped ? stop.point : authoredEnd;
         const ZDCollisionKind nextKind = stopped ? stop.kind : ZDCollisionKind::None;
         const Vec2 nextUnitCenter = stopped && stop.kind == ZDCollisionKind::Unit
@@ -1489,7 +1747,8 @@ private:
         const int nextUnitNetworkId = stopped && stop.kind == ZDCollisionKind::Unit
             ? stop.networkId
             : 0;
-        geometryChanged = threat.endPos.DistanceSqr(nextEnd) > 1.0f ||
+        geometryChanged = predictionCleared ||
+            threat.endPos.DistanceSqr(nextEnd) > 1.0f ||
             threat.collisionKind != nextKind ||
             threat.collisionUnitCenter.DistanceSqr(nextUnitCenter) > 1.0f ||
             threat.collisionUnitNetworkId != nextUnitNetworkId ||
@@ -1499,7 +1758,9 @@ private:
         threat.collisionKind = nextKind;
         threat.collisionUnitCenter = nextUnitCenter;
         threat.collisionUnitNetworkId = nextUnitNetworkId;
+        threat.collisionUnitObjectIdentity = 0;
         threat.collisionStopped = stopped;
+        threat.collisionUnitTargetAuthoritative = false;
         threat.collisionHitCount = unitHits;
         if (!stopped || stop.kind != ZDCollisionKind::Unit) {
             threat.collisionExplosionCenter = {};
@@ -1517,7 +1778,7 @@ private:
     }
 
     static void UpdateCollisions(int now) {
-        if (TickDifference(
+        if (WrappingTickDifference(
                 now,
                 lastCollisionTick.load(std::memory_order_acquire)) < 50) return;
         lastCollisionTick.store(now, std::memory_order_release);
@@ -1530,7 +1791,7 @@ private:
         for (auto& snapshot : snapshots) {
             const int revision = snapshot.revision;
             bool geometryChanged = false;
-            if (!ResolveCollision(snapshot, geometryChanged)) continue;
+            if (!ResolveCollision(snapshot, now, geometryChanged)) continue;
             AcquireSRWLockExclusive(&storeLock);
             const auto found = std::find_if(threats.begin(), threats.end(),
                 [id = snapshot.id](const Threat& threat) { return threat.id == id; });
@@ -1550,6 +1811,7 @@ private:
         for (const auto& threat : threats) {
             if (!threat.expired && threat.projectileTerminated && threat.data &&
                 threat.collisionUnitNetworkId != 0 &&
+                threat.collisionUnitTargetAuthoritative &&
                 (threat.data->endExplosionFollowsUnit ||
                  threat.data->endExplosionDetonatesOnUnitDeath))
                 snapshots.push_back(threat);
@@ -1560,30 +1822,24 @@ private:
         for (const auto& snapshot : snapshots) {
             const auto target = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
                 snapshot.collisionUnitNetworkId);
-            if (!target.IsValid()) continue;
+            if (!target.IsValid() ||
+                !MatchesAttachedUnitIdentity(
+                    snapshot.collisionUnitTargetAuthoritative,
+                    snapshot.collisionUnitObjectIdentity,
+                    target.Address()))
+                continue;
             const Vec2 center = target.ServerPosition().To2D();
             AcquireSRWLockExclusive(&storeLock);
             const auto found = std::find_if(threats.begin(), threats.end(),
                 [id = snapshot.id](const Threat& threat) { return threat.id == id; });
             if (found != threats.end() && !found->expired &&
                 found->revision == snapshot.revision) {
-                bool changed = false;
-                if (found->data->endExplosionFollowsUnit && HasUsablePosition(center) &&
-                    found->collisionUnitCenter.DistanceSqr(center) > 1.0f) {
-                    found->collisionUnitCenter = center;
-                    if (!found->collisionExplosionCenter.IsZero())
-                        found->collisionExplosionCenter = center;
-                    changed = true;
-                }
-                if (found->data->endExplosionDetonatesOnUnitDeath && target.IsDead() &&
-                    now < found->EndExplosionStartTick()) {
-                    found->collisionEndExplosionDelay = 0;
-                    found->projectileTerminationTick = now;
-                    found->endTick = SaturatingTickAdd(
-                        now, std::max(
-                            found->ExtraEndTime(), found->EndExplosionDuration()));
-                    changed = true;
-                }
+                const bool changed =
+                    UpdateAttachedUnitExplosion(
+                        *found,
+                        center,
+                        target.IsDead(),
+                        now);
                 if (changed) {
                     ++found->revision;
                     changedIds.push_back(found->id);
@@ -1594,34 +1850,19 @@ private:
         for (int id : changedIds) MarkChanged(id);
     }
 
-    static SDK::AIBaseClient FindImpactUnit(const Threat& threat, const Vec2& impact) {
-        if (!threat.data || !HasUsablePosition(impact)) return {};
-        SDK::AIBaseClient best;
-        float bestGap = FLT_MAX;
-        const auto consider = [&](const SDK::AIBaseClient& unit) {
-            if (!unit.IsValid() || unit.NetworkId() == 0 ||
-                unit.NetworkId() == static_cast<int>(threat.casterNetworkId)) return;
-            const Vec2 center = unit.ServerPosition().To2D();
-            if (!HasUsablePosition(center)) return;
-            const float gap = impact.Distance(center) -
-                              std::max(0.0f, unit.BoundingRadius());
-            if (gap > threat.Radius() + 45.0f || gap >= bestGap) return;
-            best = unit;
-            bestGap = gap;
-        };
-        if (HasCollisionObject(*threat.data, ZDCollisionObjectType::EnemyChampions)) {
-            for (const auto& hero : SDK::GameObjects::AllyHeroes())
-                consider(SDK::AIBaseClient(hero.Handle()));
-            const auto player = SDK::ObjectManager::Player();
-            if (player.IsValid()) consider(SDK::AIBaseClient(player.Handle()));
-        }
-        if (HasCollisionObject(*threat.data, ZDCollisionObjectType::EnemyMinions)) {
-            for (const auto& minion : SDK::GameObjects::AllyMinions())
-                consider(SDK::AIBaseClient(minion.Handle()));
-            for (const auto& minion : SDK::GameObjects::Jungle())
-                consider(SDK::AIBaseClient(minion.Handle()));
-        }
-        return best;
+    static std::size_t ActiveMissileEpisodeOwnerCountLocked(
+            std::uint32_t missileNetworkId) {
+        return static_cast<std::size_t>(std::count_if(
+            threats.begin(),
+            threats.end(),
+            [missileNetworkId](const Threat& threat) {
+                return !threat.expired &&
+                    UsesMissileLifecycle(
+                        threat.Type(),
+                        threat.missileBound) &&
+                    !threat.projectileTerminated &&
+                    threat.missileNetworkId == missileNetworkId;
+            }));
     }
 
     static void OnMissileDelete(const SDK::Events::ObjectEventArgs& args) {
@@ -1630,15 +1871,29 @@ private:
             ? args.MissileNetworkId
             : args.Sender.NetworkId;
         if (deletedId == 0) return;
+        const std::uintptr_t deletedObjectIdentity = args.Sender.Ptr;
         const int now = SDK::Variables::TickCount();
         std::vector<Threat> snapshots;
         AcquireSRWLockShared(&storeLock);
+        const std::size_t activeNetworkIdOwnerCount =
+            ActiveMissileEpisodeOwnerCountLocked(deletedId);
+        if (!ShouldAcceptMissileDeleteOwnership(
+                deletedObjectIdentity,
+                activeNetworkIdOwnerCount)) {
+            ReleaseSRWLockShared(&storeLock);
+            return;
+        }
         for (const auto& threat : threats) {
-            if (MatchesMissileLifecycle(
-                    threat.Type(),
+            if (UsesMissileLifecycle(
+                    threat.Type(), threat.missileBound) &&
+                ShouldFinalizeMissileDelete(
                     threat.missileBound,
+                    threat.projectileTerminated,
                     threat.missileNetworkId,
-                    deletedId))
+                    threat.missileObjectIdentity,
+                    deletedId,
+                    deletedObjectIdentity,
+                    activeNetworkIdOwnerCount))
                 snapshots.push_back(threat);
         }
         ReleaseSRWLockShared(&storeLock);
@@ -1647,44 +1902,166 @@ private:
         for (auto& snapshot : snapshots) {
             const int revision = snapshot.revision;
             Vec2 impact = args.Sender.Position.To2D();
+            const bool hasAuthoritativeDeleteImpact =
+                HasUsablePosition(impact);
             if (!HasUsablePosition(impact)) impact = snapshot.observedHead;
             if (!HasUsablePosition(impact)) impact = snapshot.endPos;
             const Vec2 intendedEnd = snapshot.AuthoredEnd();
+            const ZDCollisionKind predictedCollisionKind =
+                snapshot.predictedCollisionKind;
+            const Vec2 predictedUnitImpact =
+                snapshot.predictedCollisionPoint;
+            const int predictedUnitNetworkId =
+                snapshot.predictedCollisionUnitNetworkId;
+            const std::uintptr_t predictedUnitObjectIdentity =
+                snapshot.predictedCollisionUnitObjectIdentity;
+            const int predictedCollisionTick =
+                snapshot.predictedCollisionTick;
+            const bool predictionMatchesMissileEpisode =
+                MatchesMissileEpisode(
+                    snapshot.predictedCollisionMissileNetworkId,
+                    snapshot.predictedCollisionMissileObjectIdentity,
+                    deletedId,
+                    deletedObjectIdentity);
+            const bool allowsUnitCollision =
+                snapshot.data &&
+                (HasCollisionObject(
+                     *snapshot.data,
+                     ZDCollisionObjectType::EnemyChampions) ||
+                 HasCollisionObject(
+                     *snapshot.data,
+                     ZDCollisionObjectType::EnemyMinions));
             const bool terminatedBeforeEnd = HasUsablePosition(impact) &&
                 HasUsablePosition(intendedEnd) &&
-                impact.Distance(intendedEnd) > std::max(90.0f, snapshot.Radius() * 0.5f);
+                impact.Distance(intendedEnd) >
+                    std::max(
+                        90.0f,
+                        snapshot.AuthoredRadius() * 0.5f);
             if (HasUsablePosition(impact)) snapshot.endPos = impact;
 
+            snapshot.collisionKind = ZDCollisionKind::None;
+            snapshot.collisionStopped = false;
+            snapshot.collisionHitCount = 0;
+            snapshot.collisionUnitNetworkId = 0;
+            snapshot.collisionUnitObjectIdentity = 0;
+            snapshot.collisionUnitCenter = {};
+            snapshot.collisionExplosionCenter = {};
+            snapshot.collisionEndExplosionRadius = 0.0f;
+            snapshot.collisionEndExplosionDelay = -1;
+            snapshot.collisionUnitTargetAuthoritative = false;
             SDK::AIBaseClient collisionTarget;
+            const bool explicitTarget =
+                args.TargetNetworkId != 0 || args.Target.IsValid();
+            const bool predictedUnitMatch =
+                ShouldClassifyDeleteAsUnitCollision(
+                    explicitTarget,
+                    predictedCollisionKind,
+                    predictedUnitNetworkId,
+                    predictedUnitImpact,
+                    predictedCollisionTick,
+                    now,
+                    predictionMatchesMissileEpisode,
+                    allowsUnitCollision,
+                    hasAuthoritativeDeleteImpact
+                        ? impact
+                        : Vec2());
+            ClearPredictedCollisionMetadata(snapshot);
             if (args.TargetNetworkId != 0)
                 collisionTarget = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
                     static_cast<int>(args.TargetNetworkId));
             if (!collisionTarget.IsValid() && args.Target.IsValid())
                 collisionTarget = SDK::AIBaseClient(args.Target.Ptr, args.Target.Type);
-            if (!collisionTarget.IsValid()) collisionTarget = FindImpactUnit(snapshot, impact);
-            if (args.TargetNetworkId != 0 || args.Target.IsValid() || collisionTarget.IsValid()) {
-                snapshot.collisionKind = ZDCollisionKind::Unit;
-                snapshot.collisionStopped = true;
-                snapshot.collisionHitCount = std::max(1, snapshot.collisionHitCount);
-                snapshot.collisionUnitCenter = collisionTarget.IsValid()
+            const int explicitMetadataUnitNetworkId =
+                args.TargetNetworkId != 0
+                ? static_cast<int>(args.TargetNetworkId)
+                : static_cast<int>(args.Target.NetworkId);
+            const std::uintptr_t explicitMetadataUnitObjectIdentity =
+                args.Target.Ptr;
+            const Vec2 explicitUnitCenter =
+                collisionTarget.IsValid()
+                ? collisionTarget.ServerPosition().To2D()
+                : Vec2();
+            const bool explicitUnitAttached =
+                collisionTarget.IsValid() &&
+                ShouldAttachExplicitUnitAtDelete(
+                    explicitTarget,
+                    explicitMetadataUnitNetworkId,
+                    explicitMetadataUnitObjectIdentity,
+                    collisionTarget.NetworkId(),
+                    collisionTarget.Address(),
+                    explicitUnitCenter);
+            Vec2 attachedUnitCenter;
+            bool targetlessUnitAttached = false;
+            if (!explicitTarget &&
+                predictedUnitMatch &&
+                predictedUnitNetworkId != 0) {
+                collisionTarget =
+                    SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+                        predictedUnitNetworkId);
+                attachedUnitCenter = collisionTarget.IsValid()
                     ? collisionTarget.ServerPosition().To2D()
-                    : args.Target.Position.To2D();
-                if (!HasUsablePosition(snapshot.collisionUnitCenter))
-                    snapshot.collisionUnitCenter = impact;
-                const int targetId = collisionTarget.IsValid()
+                    : Vec2();
+                const bool resolvedUnitAllowed =
+                    collisionTarget.IsValid() &&
+                    snapshot.data &&
+                    ((collisionTarget.IsHero() &&
+                      HasCollisionObject(
+                          *snapshot.data,
+                          ZDCollisionObjectType::EnemyChampions)) ||
+                     (collisionTarget.IsMinion() &&
+                      HasCollisionObject(
+                          *snapshot.data,
+                          ZDCollisionObjectType::EnemyMinions)));
+                const bool supportsAttachedUnitLifecycle =
+                    snapshot.data &&
+                    (snapshot.data->endExplosionFollowsUnit ||
+                     snapshot.data->endExplosionDetonatesOnUnitDeath);
+                targetlessUnitAttached =
+                    ShouldAttachPredictedUnitAtDelete(
+                        predictedUnitNetworkId,
+                        collisionTarget.IsValid()
+                            ? collisionTarget.NetworkId()
+                            : 0,
+                        predictedUnitObjectIdentity,
+                        collisionTarget.IsValid()
+                            ? collisionTarget.Address()
+                            : 0,
+                        collisionTarget.IsValid(),
+                        collisionTarget.IsValid() &&
+                            collisionTarget.IsDead(),
+                        resolvedUnitAllowed,
+                        supportsAttachedUnitLifecycle,
+                        attachedUnitCenter,
+                        impact);
+            }
+            if (predictedUnitMatch) {
+                const int targetId = explicitTarget &&
+                        collisionTarget.IsValid()
                     ? collisionTarget.NetworkId()
                     : args.TargetNetworkId != 0
                         ? static_cast<int>(args.TargetNetworkId)
-                        : static_cast<int>(args.Target.NetworkId);
-                snapshot.collisionUnitNetworkId = targetId;
-                if (targetId != 0 &&
-                    std::find(snapshot.consumedCollisionUnits.begin(),
-                              snapshot.consumedCollisionUnits.end(), targetId) ==
-                        snapshot.consumedCollisionUnits.end())
-                    snapshot.consumedCollisionUnits.push_back(targetId);
+                        : args.Target.NetworkId != 0
+                            ? static_cast<int>(args.Target.NetworkId)
+                            : predictedUnitNetworkId;
+                ConfirmDeleteUnitCollision(
+                    snapshot,
+                    targetId,
+                    impact,
+                    explicitUnitAttached ||
+                        targetlessUnitAttached,
+                    explicitUnitAttached
+                        ? explicitUnitCenter
+                        : targetlessUnitAttached
+                        ? attachedUnitCenter
+                        : Vec2(),
+                    explicitUnitAttached
+                        ? collisionTarget.Address()
+                        : targetlessUnitAttached
+                            ? collisionTarget.Address()
+                            : 0);
                 if (snapshot.data && snapshot.data->endExplosionDetonatesOnUnitDeath &&
-                    (args.Target.IsDead ||
-                     (collisionTarget.IsValid() && collisionTarget.IsDead())))
+                    explicitUnitAttached &&
+                    collisionTarget.IsDead())
                     snapshot.collisionEndExplosionDelay = 0;
             } else if (snapshot.data && HasUsablePosition(impact)) {
                 const Vec3 world = Vec3::From2D(impact, args.Sender.Position.y);
@@ -1697,7 +2074,7 @@ private:
                     for (const auto& wall : SDK::YasuoWallTracker::ActiveWalls()) {
                         if (impact.Distance(ProjectOnSegment(
                                 impact, wall.start.To2D(), wall.end.To2D())) <=
-                            snapshot.Radius() + 100.0f) {
+                            snapshot.AuthoredRadius() + 100.0f) {
                             snapshot.collisionKind = ZDCollisionKind::ProjectileWall;
                             snapshot.collisionStopped = true;
                             break;
@@ -1709,8 +2086,8 @@ private:
             snapshot.projectileTerminated = true;
             snapshot.projectileTerminationTick = now;
             snapshot.missileMissingSinceTick = -1;
+            snapshot.missilePositionUnavailable = false;
             snapshot.missileBound = false;
-            snapshot.missileNetworkId = 0;
             const bool hasEndExplosion =
                 snapshot.HasEndExplosionArea();
             const bool retain = RetainProjectileTermination(
@@ -1733,8 +2110,17 @@ private:
             AcquireSRWLockExclusive(&storeLock);
             const auto found = std::find_if(threats.begin(), threats.end(),
                 [id = snapshot.id](const Threat& threat) { return threat.id == id; });
-            if (found != threats.end() && found->missileBound &&
-                found->missileNetworkId == deletedId) {
+            const std::size_t finalActiveNetworkIdOwnerCount =
+                ActiveMissileEpisodeOwnerCountLocked(deletedId);
+            if (found != threats.end() &&
+                ShouldFinalizeMissileDelete(
+                    found->missileBound,
+                    found->projectileTerminated,
+                    found->missileNetworkId,
+                    found->missileObjectIdentity,
+                    deletedId,
+                    deletedObjectIdentity,
+                    finalActiveNetworkIdOwnerCount)) {
                 snapshot.revision = std::max(revision, found->revision) + 1;
                 *found = std::move(snapshot);
                 changedIds.push_back(found->id);
@@ -1758,7 +2144,12 @@ private:
     }
 
     static void RefreshMissileObservations(int now) {
-        std::vector<std::pair<int, std::uint32_t>> tracked;
+        struct TrackedMissile {
+            int threatId = -1;
+            std::uint32_t networkId = 0;
+            std::uintptr_t objectIdentity = 0;
+        };
+        std::vector<TrackedMissile> tracked;
         AcquireSRWLockShared(&storeLock);
         tracked.reserve(threats.size());
         for (const auto& threat : threats) {
@@ -1766,22 +2157,54 @@ private:
                 UsesMissileLifecycle(
                     threat.Type(), threat.missileBound) &&
                 threat.missileNetworkId != 0)
-                tracked.emplace_back(threat.id, threat.missileNetworkId);
+                tracked.push_back({
+                    threat.id,
+                    threat.missileNetworkId,
+                    threat.missileObjectIdentity
+                });
         }
         ReleaseSRWLockShared(&storeLock);
+        if (!ShouldEnumerateMissileManager(tracked.size())) return;
 
-        std::unordered_set<std::uint32_t> validMissileIds;
-        validMissileIds.reserve(tracked.size());
+        std::vector<TrackedMissile> observedEpisodes;
+        observedEpisodes.reserve(tracked.size());
         std::vector<MissileObservation> observations;
         observations.reserve(tracked.size());
-        for (const auto& entry : tracked) {
-            const auto missile = SDK::ObjectManager::GetUnitByNetworkId<SDK::MissileClient>(
-                static_cast<int>(entry.second));
+        // Enumerate the Core missile manager directly. Constructing the known
+        // manager entries as MissileClient avoids generic type-cache filtering.
+        std::uintptr_t missileEntries[8192] = {};
+        const int missileCount =
+            ::Core::ObjectManager::EnumerateMissiles(
+                missileEntries,
+                static_cast<int>(std::size(missileEntries)));
+        for (int missileIndex = 0;
+             missileIndex < missileCount;
+             ++missileIndex) {
+            const SDK::MissileClient missile(
+                missileEntries[missileIndex]);
             if (!missile.IsValid()) continue;
-            validMissileIds.insert(entry.second);
-            const Vec2 position = missile.Position().To2D();
-            if (!HasUsablePosition(position)) continue;
-            observations.push_back({entry.first, position, missile.EndPosition().To2D(), now});
+            const std::uint32_t networkId =
+                static_cast<std::uint32_t>(missile.NetworkId());
+            const std::uintptr_t objectIdentity = missile.Address();
+            for (const auto& trackedEntry : tracked) {
+                if (!MatchesObservedMissileEpisode(
+                        trackedEntry.networkId,
+                        trackedEntry.objectIdentity,
+                        networkId,
+                        objectIdentity))
+                    continue;
+                observedEpisodes.push_back(trackedEntry);
+                const Vec2 position = missile.Position().To2D();
+                if (!HasUsablePosition(position)) continue;
+                observations.push_back({
+                    trackedEntry.threatId,
+                    networkId,
+                    objectIdentity,
+                    position,
+                    missile.EndPosition().To2D(),
+                    now
+                });
+            }
         }
 
         std::vector<int> changedIds;
@@ -1792,25 +2215,68 @@ private:
                     threat.Type(), threat.missileBound) ||
                 threat.missileNetworkId == 0)
                 continue;
-            const bool missileObserved =
-                validMissileIds.find(threat.missileNetworkId) !=
-                validMissileIds.end();
-            if (missileObserved) {
-                threat.missileMissingSinceTick = -1;
-                continue;
+            const bool missileObserved = std::any_of(
+                observedEpisodes.begin(),
+                observedEpisodes.end(),
+                [&](const TrackedMissile& observed) {
+                    return observed.threatId == threat.id &&
+                        MatchesObservedMissileEpisode(
+                            threat.missileNetworkId,
+                            threat.missileObjectIdentity,
+                            observed.networkId,
+                            observed.objectIdentity);
+                });
+            const bool positionUsable = std::any_of(
+                observations.begin(),
+                observations.end(),
+                [&](const MissileObservation& observation) {
+                    return observation.threatId == threat.id &&
+                        MatchesObservedMissileEpisode(
+                            threat.missileNetworkId,
+                            threat.missileObjectIdentity,
+                            observation.networkId,
+                            observation.objectIdentity);
+                });
+            const bool startedMissing =
+                !missileObserved &&
+                threat.missileMissingSinceTick < 0;
+            const MissileEvidenceStateUpdate evidence =
+                ResolveMissileEvidenceState(
+                    missileObserved,
+                    positionUsable,
+                    threat.missileMissingSinceTick,
+                    threat.missilePositionUnavailable,
+                    now);
+            threat.missileMissingSinceTick =
+                evidence.missingSinceTick;
+            threat.missilePositionUnavailable =
+                evidence.positionUnavailable;
+            if (evidence.stateChanged) {
+                ++threat.revision;
+                changedIds.push_back(threat.id);
             }
-            if (threat.missileMissingSinceTick < 0) {
-                threat.missileMissingSinceTick = now;
+            if (missileObserved)
                 continue;
-            }
+            if (startedMissing)
+                continue;
+            const int evidenceAnchorTick = threat.observedTick != 0
+                ? threat.observedTick
+                : threat.launchTick;
+            const MissileEvidenceWindow evidenceWindow =
+                ResolveMissileEvidenceWindow(
+                    evidenceAnchorTick,
+                    threat.RemainingTravelDurationMs());
             if (!ShouldTerminateMissingMissile(
                     threat.missileBound,
                     threat.projectileTerminated,
                     false,
                     threat.missileMissingSinceTick,
+                    evidenceWindow.deadlineTick,
                     now))
                 continue;
 
+            const int terminationTick =
+                evidenceWindow.terminationTick;
             threat.endPos = TerminatedProjectileEnd(
                 threat.Type(),
                 threat.missileBound,
@@ -1818,25 +2284,46 @@ private:
                 threat.observedHead);
             threat.projectileTerminated = true;
             threat.missingMissileTermination = true;
-            threat.projectileTerminationTick = now;
+            threat.projectileTerminationTick = terminationTick;
             threat.missileMissingSinceTick = -1;
+            threat.missilePositionUnavailable = false;
             threat.missileBound = false;
-            threat.missileNetworkId = 0;
+            // Evidence loss is not collision evidence. Retain only terminal
+            // hazards whose database configuration does not require impact.
+            threat.collisionKind = ZDCollisionKind::None;
+            threat.collisionStopped = false;
+            threat.collisionHitCount = 0;
+            threat.collisionUnitNetworkId = 0;
+            threat.collisionUnitObjectIdentity = 0;
+            threat.collisionUnitCenter = {};
+            threat.collisionExplosionCenter = {};
+            threat.collisionUnitTargetAuthoritative = false;
+            threat.collisionEndExplosionRadius = 0.0f;
+            threat.collisionEndExplosionDelay = -1;
+            threat.pendingUnitCollisions.clear();
+            threat.consumedCollisionUnits.clear();
+            threat.ClearPredictedCollision();
             const bool hasEndExplosion =
                 threat.HasEndExplosionArea();
             const bool retain = RetainProjectileTermination(
                 threat.Type(),
                 threat.ExtraEndTime(),
                 hasEndExplosion);
-            threat.expired = !retain;
+            int terminalHazardEndTick = terminationTick;
             if (retain) {
-                const int linger = ThreatLifecycleLinger(
-                    threat.ExtraEndTime(),
-                    hasEndExplosion,
-                    threat.EndExplosionDelay(),
-                    threat.EndExplosionDuration());
-                threat.endTick = SaturatingTickAdd(now, linger);
+                terminalHazardEndTick = std::max(
+                    SaturatingTickAdd(
+                        terminationTick,
+                        threat.ExtraEndTime()),
+                    hasEndExplosion
+                        ? threat.EndExplosionEndTick()
+                        : terminationTick);
+                threat.endTick = terminalHazardEndTick;
             }
+            threat.expired = !retain ||
+                ShouldExpireMissingTerminationAt(
+                    now,
+                    terminalHazardEndTick);
             ++threat.revision;
             changedIds.push_back(threat.id);
         }
@@ -1844,7 +2331,14 @@ private:
             const auto found = std::find_if(
                 threats.begin(),
                 threats.end(),
-                [&](const Threat& threat) { return threat.id == observation.threatId; });
+                [&](const Threat& threat) {
+                    return threat.id == observation.threatId &&
+                        MatchesObservedMissileEpisode(
+                            threat.missileNetworkId,
+                            threat.missileObjectIdentity,
+                            observation.networkId,
+                            observation.objectIdentity);
+                });
             if (found == threats.end() || found->expired ||
                 !found->missileBound || found->projectileTerminated)
                 continue;
@@ -1852,19 +2346,29 @@ private:
             const std::int64_t elapsed =
                 TickDifference(observation.tick, found->observedTick);
             if (yuumiRoute && found->observedTick > 0 && elapsed <= 100) continue;
-            const Vec2 previousHead = found->observedHead;
-            const Vec2 movement = observation.position - previousHead;
-            const Vec2 predicted = found->HeadAtTick(observation.tick);
             const bool steering =
                 found->RouteMode() == MissileRouteMode::Steering;
-            const Vec2 routeDirection = ObservationRouteDirection(
+            const Vec2 previousHead = found->observedHead;
+            const Vec2 acceptedPosition = MonotonicMissileHead(
+                previousHead,
+                observation.position,
+                found->direction,
+                !steering);
+            const Vec2 movement = acceptedPosition - previousHead;
+            const Vec2 predicted = found->HeadAtTick(observation.tick);
+            const MissileRouteObservationUpdate routeUpdate =
+                ResolveMissileRouteObservationUpdate(
+                found->RouteMode(),
                 found->direction,
                 found->startPos,
-                observation.position,
+                found->AuthoredEnd(),
+                found->endPos,
+                acceptedPosition,
                 observation.endPosition,
                 movement,
-                steering,
-                yuumiRoute);
+                yuumiRoute,
+                found->collisionStopped);
+            const Vec2 routeDirection = routeUpdate.direction.Normalized();
             if (found->observedTick > 0 && elapsed >= 5 && elapsed <= 250) {
                 found->observedSpeed = FilteredProjectedSpeed(
                     found->observedSpeed,
@@ -1873,54 +2377,43 @@ private:
                     static_cast<float>(elapsed));
             }
             const float correction = predicted.IsValid()
-                ? predicted.Distance(observation.position)
+                ? predicted.Distance(acceptedPosition)
                 : 0.0f;
             found->positionUncertainty = std::clamp(
                 found->positionUncertainty * 0.8f + correction * 0.2f,
                 0.0f,
                 80.0f);
-            bool geometryChanged = false;
-            if (yuumiRoute) {
-                if (!routeDirection.IsZero()) {
-                    const Vec2 routeEnd = observation.position + routeDirection * 500.0f;
-                    geometryChanged =
-                        found->AuthoredEnd().DistanceSqr(routeEnd) > 1.0f ||
-                        found->direction.DistanceSqr(routeDirection) > 0.0001f;
-                    found->endPos = routeEnd;
-                    found->authoredEndPos = routeEnd;
-                    found->direction = routeDirection;
+            const bool geometryChanged = routeUpdate.geometryChanged;
+            if (steering && geometryChanged) {
+                found->ClearPredictedCollision();
+                found->direction = routeUpdate.direction;
+                found->authoredEndPos = routeUpdate.authoredEnd;
+                found->endPos = routeUpdate.effectiveEnd;
+                if (yuumiRoute) {
                     found->collisionUnitCenter = {};
                     found->collisionExplosionCenter = {};
                     found->collisionKind = ZDCollisionKind::None;
                     found->collisionUnitNetworkId = 0;
+                    found->collisionUnitObjectIdentity = 0;
                     found->collisionStopped = false;
+                    found->collisionUnitTargetAuthoritative = false;
                     found->collisionHitCount = 0;
                     found->pendingUnitCollisions.clear();
                 }
-            } else if (HasUsablePosition(observation.endPosition) &&
-                       observation.position.Distance(observation.endPosition) > 1.0f) {
-                if (!routeDirection.IsZero()) {
-                    geometryChanged = found->AuthoredEnd().DistanceSqr(
-                        observation.endPosition) > 1.0f ||
-                        found->direction.DistanceSqr(routeDirection) > 0.0001f;
-                    found->authoredEndPos = observation.endPosition;
-                    if (!found->collisionStopped) found->endPos = observation.endPosition;
-                    found->direction = routeDirection;
-                }
-            } else if (steering && !routeDirection.IsZero() &&
-                       found->direction.DistanceSqr(routeDirection) > 0.0001f) {
-                found->direction = routeDirection;
-                geometryChanged = true;
             }
-            found->observedHead = observation.position;
+            found->observedHead = acceptedPosition;
             found->observedTick = observation.tick;
             found->missileMissingSinceTick = -1;
-            const int linger = ThreatLifecycleLinger(
-                found->ExtraEndTime(),
-                found->HasEndExplosionArea(),
-                found->EndExplosionDelay(),
-                found->EndExplosionDuration());
-            found->endTick = SaturatingTickAdd(found->ArrivalTick(), linger);
+            found->missilePositionUnavailable = false;
+            if (steering) {
+                const int linger = ThreatLifecycleLinger(
+                    found->ExtraEndTime(),
+                    found->HasEndExplosionArea(),
+                    found->EndExplosionDelay(),
+                    found->EndExplosionDuration());
+                found->endTick =
+                    SaturatingTickAdd(found->ArrivalTick(), linger);
+            }
             ++found->revision;
             if (geometryChanged) changedIds.push_back(found->id);
         }
@@ -1935,6 +2428,7 @@ private:
         DrainPendingCasts();
 
         const int now = SDK::Variables::TickCount();
+        PruneLogicalCastEpisodes(now);
         RefreshMissileObservations(now);
         UpdateSpecialThreats(now);
         UpdateCollisions(now);

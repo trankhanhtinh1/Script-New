@@ -876,7 +876,8 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
     }
 
-    SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
+    const bool processInput =
+        SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
 
     // Block keybind activation while the chat box is open (typing must not
     // toggle keybinds or hold the combo key).
@@ -884,6 +885,7 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
 
     SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 
+    if (!processInput) return TRUE;
     return callOriginal();
 }
 

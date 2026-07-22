@@ -12,6 +12,8 @@
 
 namespace ZDEvade {
 
+inline constexpr float kThreatSafetyPadding = 10.0f;
+
 inline int ClampTick(std::int64_t tick) {
     return static_cast<int>(std::clamp(
         tick,
@@ -128,13 +130,20 @@ struct Threat {
     Vec2 collisionUnitCenter = {};
     Vec2 collisionExplosionCenter = {};
     Vec2 lastConsumedCollisionPoint = {};
+    Vec2 predictedCollisionUnitCenter = {};
+    Vec2 predictedCollisionPoint = {};
     int startTick = 0;
     int launchTick = 0;
     int endTick = 0;
     std::uintptr_t castIdentity = 0;
+    std::uint64_t logicalCastEpisodeId = 0;
+    std::uint64_t projectileLaneKey = 0;
     std::uint32_t casterNetworkId = 0;
     std::uint32_t missileNetworkId = 0;
+    std::uintptr_t missileObjectIdentity = 0;
+    std::uintptr_t collisionUnitObjectIdentity = 0;
     int slot = -1;
+    int projectileIndex = -1;
     Vec2 observedHead = {};
     int observedTick = 0;
     float observedSpeed = 0.0f;
@@ -145,13 +154,21 @@ struct Threat {
     int collisionEndExplosionDelay = -1;
     int collisionHitCount = 0;
     int collisionUnitNetworkId = 0;
+    int predictedCollisionUnitNetworkId = 0;
+    int predictedCollisionTick = -1;
     int projectileTerminationTick = 0;
     int missileMissingSinceTick = -1;
+    bool missilePositionUnavailable = false;
     int trapObjectId = 0;
     ZDCollisionKind collisionKind = ZDCollisionKind::None;
+    ZDCollisionKind predictedCollisionKind = ZDCollisionKind::None;
+    std::uint32_t predictedCollisionMissileNetworkId = 0;
+    std::uintptr_t predictedCollisionMissileObjectIdentity = 0;
+    std::uintptr_t predictedCollisionUnitObjectIdentity = 0;
     std::vector<std::pair<int, float>> pendingUnitCollisions;
     std::vector<int> consumedCollisionUnits;
     bool collisionStopped = false;
+    bool collisionUnitTargetAuthoritative = false;
     bool projectileTerminated = false;
     bool missingMissileTermination = false;
     bool persistent = false;
@@ -159,9 +176,38 @@ struct Threat {
     bool expired = false;
 
     bool HasData() const { return data != nullptr; }
-    float Radius() const { return data ? std::max(0.0f, data->radius) : 0.0f; }
+    void ClearPredictedCollision() {
+        predictedCollisionKind = ZDCollisionKind::None;
+        predictedCollisionUnitNetworkId = 0;
+        predictedCollisionUnitCenter = {};
+        predictedCollisionPoint = {};
+        predictedCollisionTick = -1;
+        predictedCollisionMissileNetworkId = 0;
+        predictedCollisionMissileObjectIdentity = 0;
+        predictedCollisionUnitObjectIdentity = 0;
+    }
+    float AuthoredRadius() const {
+        return data && std::isfinite(data->radius)
+            ? std::max(0.0f, data->radius)
+            : 0.0f;
+    }
+    float RawRadius() const { return AuthoredRadius(); }
+    float ProjectileCollisionRadius() const {
+        return AuthoredRadius();
+    }
+    float Radius() const {
+        return data ? AuthoredRadius() + kThreatSafetyPadding : 0.0f;
+    }
+    float AuthoredInnerRadius() const {
+        return data && std::isfinite(data->innerRadius)
+            ? std::clamp(data->innerRadius, 0.0f, AuthoredRadius())
+            : 0.0f;
+    }
+    float RawInnerRadius() const { return AuthoredInnerRadius(); }
     float InnerRadius() const {
-        return data ? std::clamp(data->innerRadius, 0.0f, Radius()) : 0.0f;
+        return data
+            ? std::max(0.0f, AuthoredInnerRadius() - kThreatSafetyPadding)
+            : 0.0f;
     }
     float Range() const { return data ? std::max(0.0f, data->range) : 0.0f; }
     float Speed() const {
@@ -198,9 +244,15 @@ struct Threat {
     }
     int ExtraEndTime() const { return data ? std::max(0, data->extraEndTime) : 0; }
     float Angle() const { return data ? data->coneAngleDegrees : 0.0f; }
-    float ConeEdgePadding() const {
+    float AuthoredConeEdgePadding() const {
         return data && std::isfinite(data->coneEdgePadding)
             ? std::max(0.0f, data->coneEdgePadding)
+            : 0.0f;
+    }
+    float RawConeEdgePadding() const { return AuthoredConeEdgePadding(); }
+    float ConeEdgePadding() const {
+        return data
+            ? AuthoredConeEdgePadding() + kThreatSafetyPadding
             : 0.0f;
     }
     bool HasValidConeAngle() const {
@@ -227,12 +279,22 @@ struct Threat {
     int EndExplosionDuration() const {
         return data ? EffectiveEndExplosionDuration(*data) : 0;
     }
-    float EndExplosionRadius() const {
+    float AuthoredEndExplosionRadius() const {
         if (collisionEndExplosionRadius > 0.0f) return collisionEndExplosionRadius;
         return data ? std::max(0.0f, data->secondaryRadius) : 0.0f;
     }
+    float RawEndExplosionRadius() const {
+        return AuthoredEndExplosionRadius();
+    }
+    float EndExplosionRadius() const {
+        const float authored = AuthoredEndExplosionRadius();
+        return authored > 0.0f
+            ? authored + kThreatSafetyPadding
+            : 0.0f;
+    }
     bool HasEndExplosionArea() const {
-        if (!data || !data->hasEndExplosion || EndExplosionRadius() <= 0.0f) return false;
+        if (!data || !data->hasEndExplosion ||
+            AuthoredEndExplosionRadius() <= 0.0f) return false;
         if (collisionKind == ZDCollisionKind::ProjectileWall &&
             !data->endExplosionOnProjectileWall) return false;
         const float travel = startPos.Distance(
@@ -241,7 +303,6 @@ struct Threat {
                 : endPos);
         if (travel + 0.01f < std::max(0.0f, data->endExplosionMinimumTravelDistance))
             return false;
-        if (missingMissileTermination) return true;
         if (data->endExplosionRequiresUnitCollision)
             return collisionStopped && collisionKind == ZDCollisionKind::Unit;
         if (data->endExplosionRequiresCollision)
@@ -329,7 +390,9 @@ struct Threat {
         return SaturatingTickAdd(ArrivalTick(), EndExplosionDelay());
     }
     int EndExplosionEndTick() const {
-        return SaturatingTickAdd(EndExplosionStartTick(), EndExplosionDuration());
+        return SaturatingTickAdd(
+            EndExplosionStartTick(),
+            std::max(100, EndExplosionDuration()));
     }
     int MovingLineTerminalActiveEndTick() const {
         const int terminalLinger = std::max(80, ExtraEndTime());
@@ -338,9 +401,95 @@ struct Threat {
             SaturatingTickAdd(ArrivalTick(), terminalLinger));
     }
 
+    int BodyActivationTick() const {
+        if (Type() == ZDSpellType::Circular && HasTravelSpeed())
+            return ArrivalTick();
+        return missileBound && launchTick > 0
+            ? launchTick
+            : SaturatingTickAdd(startTick, Delay());
+    }
+
+    bool HasBodyStartedAt(int tick) const {
+        return tick >= BodyActivationTick();
+    }
+
+    bool IsCastBodyPendingAt(int tick) const {
+        if (!HasValidGeometry() || data->noProcess || expired ||
+            missileBound || projectileTerminated ||
+            tick < startTick || HasBodyStartedAt(tick))
+            return false;
+        return persistent || !TickAfter(tick, endTick);
+    }
+
+    bool IsBodyActiveAt(int tick) const {
+        if (!HasValidGeometry() || expired) return false;
+        if (missileBound && !projectileTerminated)
+            return HasBodyStartedAt(tick);
+        if (projectileTerminated) {
+            return Type() == ZDSpellType::Circular &&
+                projectileTerminationTick > 0 &&
+                ExtraEndTime() > 0 &&
+                tick >= projectileTerminationTick &&
+                !TickAfter(
+                    tick,
+                    SaturatingTickAdd(
+                        projectileTerminationTick,
+                        ExtraEndTime()));
+        }
+        if (Type() == ZDSpellType::Line && HasTravelSpeed()) {
+            return HasBodyStartedAt(tick) &&
+                (persistent ||
+                 !TickAfter(tick, MovingLineTerminalActiveEndTick()));
+        }
+        if (!persistent &&
+            TickAfter(tick, SaturatingTickAdd(endTick, 100)))
+            return false;
+        const int activation = BodyActivationTick();
+        const int persistence = std::max(100, ExtraEndTime());
+        return tick >= activation &&
+            (persistent ||
+             !TickAfter(tick, SaturatingTickAdd(activation, persistence)));
+    }
+
+    bool IsEndExplosionActiveAt(int tick) const {
+        if (expired || !HasEndExplosionArea()) return false;
+        if (missileBound && !projectileTerminated) return false;
+        return tick >= EndExplosionStartTick() &&
+            (persistent || !TickAfter(tick, EndExplosionEndTick()));
+    }
+
     bool HasTravelSpeed() const {
         const float speed = Speed();
         return data && std::isfinite(speed) && speed > 1.0f && speed < 100000.0f;
+    }
+    int RemainingTravelDurationMs() const {
+        if (!missileBound || projectileTerminated ||
+            !HasTravelSpeed() ||
+            observedTick == 0 ||
+            !observedHead.IsValid() ||
+            observedHead.IsZero())
+            return std::numeric_limits<int>::max();
+        const Vec2 routeEnd = AuthoredEnd();
+        if (!routeEnd.IsValid() || routeEnd.IsZero())
+            return std::numeric_limits<int>::max();
+        Vec2 routeDirection = direction.Normalized();
+        if (!routeDirection.IsValid() || routeDirection.IsZero())
+            routeDirection = (routeEnd - observedHead).Normalized();
+        if (!routeDirection.IsValid() || routeDirection.IsZero())
+            return std::numeric_limits<int>::max();
+        const double remainingDistance = std::max(
+            0.0,
+            static_cast<double>(
+                (routeEnd - observedHead).Dot(routeDirection)));
+        const double duration = std::ceil(
+            1000.0 * remainingDistance /
+            static_cast<double>(Speed()));
+        if (!std::isfinite(duration) ||
+            duration < 0.0 ||
+            duration >= static_cast<double>(
+                std::numeric_limits<int>::max()))
+            return std::numeric_limits<int>::max();
+        return static_cast<int>(duration);
     }
 
     Vec2 HeadAtTick(int tick) const {
@@ -350,6 +499,13 @@ struct Threat {
             Type() == ZDSpellType::Circular && missileBound;
         if (Type() != ZDSpellType::Line && !movingCircular) return startPos;
         if (!HasTravelSpeed()) return startPos;
+        if (missileBound &&
+            (missileMissingSinceTick >= 0 ||
+             missilePositionUnavailable)) {
+            return observedHead.IsValid() && !observedHead.IsZero()
+                ? observedHead
+                : startPos;
+        }
         const Vec2 routeEnd = movingCircular ? AuthoredEnd() : endPos;
         Vec2 routeDirection = direction.Normalized();
         if (observedTick > 0 && observedHead.IsValid() && !observedHead.IsZero()) {
@@ -404,6 +560,7 @@ struct Threat {
 
     bool IsExpiredAt(int tick) const {
         if (expired) return true;
+        if (missileBound && !projectileTerminated) return false;
         if (persistent) return false;
         const int expiryTick = SaturatingTickAdd(endTick, 250);
         return TickAfter(tick, expiryTick) ||

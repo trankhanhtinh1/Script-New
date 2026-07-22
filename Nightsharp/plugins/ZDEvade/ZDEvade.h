@@ -21,6 +21,8 @@
 #include "Evade/EvadeController.h"
 #include "Database/SpellData.h"
 #include "Database/SpellDatabase.h"
+#include "Visual/TargetVisualDispatch.h"
+#include "Visual/ThreatRenderer.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -92,48 +94,7 @@ public:
 
         if (DrawSpells()) {
             for (const auto& threat : threats) {
-                const int danger = threat.Danger();
-                std::uint32_t color = 0xFFFF8800;
-                if (danger >= 4) color = 0xFFFF0000;
-                else if (danger >= 3) color = 0xFFFF4400;
-                else if (danger >= 2) color = 0xFFFFFF00;
-
-                if (threat.Type() == ZDEvade::ZDSpellType::Line) {
-                    const Vec2 start = threat.HeadAtTick(now);
-                    const Vec2 perpendicular(-threat.direction.y, threat.direction.x);
-                    const Vec2 startLeft = start + perpendicular * threat.Radius();
-                    const Vec2 startRight = start - perpendicular * threat.Radius();
-                    const Vec2 endLeft = threat.endPos + perpendicular * threat.Radius();
-                    const Vec2 endRight = threat.endPos - perpendicular * threat.Radius();
-                    SDK::Drawing::DrawLine(Vec3::From2D(startLeft, planeY), Vec3::From2D(endLeft, planeY), color, 2.0f);
-                    SDK::Drawing::DrawLine(Vec3::From2D(startRight, planeY), Vec3::From2D(endRight, planeY), color, 2.0f);
-                    SDK::Drawing::DrawLine(Vec3::From2D(startLeft, planeY), Vec3::From2D(startRight, planeY), color, 2.0f);
-                    SDK::Drawing::DrawLine(Vec3::From2D(endLeft, planeY), Vec3::From2D(endRight, planeY), color, 2.0f);
-                    SDK::Drawing::DrawText(Vec3::From2D(start, planeY), threat.SpellName().c_str(), color, true);
-                } else if (threat.Type() == ZDEvade::ZDSpellType::Circular) {
-                    SDK::Drawing::DrawCircle(Vec3::From2D(threat.endPos, planeY), threat.Radius(), color, 2.0f);
-                    SDK::Drawing::DrawText(Vec3::From2D(threat.endPos, planeY), threat.SpellName().c_str(), color, true);
-                } else if (threat.Type() == ZDEvade::ZDSpellType::Ring) {
-                    SDK::Drawing::DrawCircle(Vec3::From2D(threat.endPos, planeY), threat.Radius(), color, 2.0f);
-                    SDK::Drawing::DrawCircle(Vec3::From2D(threat.endPos, planeY), threat.InnerRadius(), color, 2.0f);
-                    SDK::Drawing::DrawText(Vec3::From2D(threat.endPos, planeY), threat.SpellName().c_str(), color, true);
-                } else if (threat.Type() == ZDEvade::ZDSpellType::Cone) {
-                    const float halfAngle = threat.Angle() * 0.5f * 3.14159265358979323846f / 180.0f;
-                    const Vec2 left = threat.startPos + ZDEvade::EvadeGeometry::Rotate(threat.direction, halfAngle) * threat.Range();
-                    const Vec2 right = threat.startPos + ZDEvade::EvadeGeometry::Rotate(threat.direction, -halfAngle) * threat.Range();
-                    SDK::Drawing::DrawLine(Vec3::From2D(threat.startPos, planeY), Vec3::From2D(left, planeY), color, 2.0f);
-                    SDK::Drawing::DrawLine(Vec3::From2D(threat.startPos, planeY), Vec3::From2D(right, planeY), color, 2.0f);
-                    SDK::Drawing::DrawLine(Vec3::From2D(left, planeY), Vec3::From2D(right, planeY), color, 2.0f);
-                } else {
-                    SDK::Drawing::DrawCircle(Vec3::From2D(threat.endPos, planeY), std::max(threat.Radius(), 80.0f), color, 2.0f);
-                }
-                if (threat.HasEndExplosionArea()) {
-                    SDK::Drawing::DrawCircle(
-                        Vec3::From2D(threat.EndExplosionCenter(), planeY),
-                        threat.EndExplosionRadius(),
-                        color,
-                        2.0f);
-                }
+                ZDEvade::ThreatRenderer::Draw(threat, now, planeY);
             }
         }
 
@@ -149,9 +110,21 @@ public:
         }
 
         if (renderState.locked.valid) {
-            const std::uint32_t color = renderState.locked.strictSafe ? 0xFF00FF66 : 0xFFFF3300;
-            SDK::Drawing::DrawCircle(Vec3::From2D(renderState.locked.position, planeY), 48.0f, color, 3.0f);
-            SDK::Drawing::DrawLine(player.ServerPosition(), Vec3::From2D(renderState.locked.position, planeY), color, 2.0f);
+            const ZDEvade::LockedTargetVisualDispatch targetVisual =
+                ZDEvade::GetLockedTargetVisualDispatch(
+                    renderState.locked.strictSafe,
+                    player.BoundingRadius());
+            // The locked marker is the hero's target footprint, not skill padding.
+            SDK::Drawing::DrawCircle(
+                Vec3::From2D(renderState.locked.position, planeY),
+                targetVisual.footprintRadius,
+                targetVisual.color,
+                3.0f);
+            SDK::Drawing::DrawLine(
+                player.ServerPosition(),
+                Vec3::From2D(renderState.locked.position, planeY),
+                targetVisual.color,
+                2.0f);
         }
     }
 
@@ -296,7 +269,9 @@ private:
         config.replanIntervalMs = m_replanIntervalMenu ? m_replanIntervalMenu->Value : 70;
         config.fallbackReplanIntervalMs = std::max(25, config.replanIntervalMs / 2);
         config.planner.endpointBuffer = static_cast<float>(
-            m_endpointBufferMenu ? m_endpointBufferMenu->Value : 10);
+            m_endpointBufferMenu
+                ? m_endpointBufferMenu->Value
+                : ZDEvade::kEndpointMarginMenuDefault);
         config.planner.pathBuffer = static_cast<float>(m_pathBufferMenu ? m_pathBufferMenu->Value : 8);
         config.planner.releaseBuffer = static_cast<float>(m_releaseBufferMenu ? m_releaseBufferMenu->Value : 48);
         config.planner.inputDelayMs = static_cast<float>(m_inputDelayMenu ? m_inputDelayMenu->Value : 55) +
@@ -383,7 +358,12 @@ private:
 
         auto* safety = m_menu->AddSubMenu(new Menu("safety", "Safety and Timing"));
         m_endpointBufferMenu = safety->Add(
-            new MenuSlider("exitMarginV2", "Model Edge Exit Margin", 10, 0, 30));
+            new MenuSlider(
+                ZDEvade::kEndpointMarginMenuPersistenceId,
+                "Model Edge Exit Margin",
+                ZDEvade::kEndpointMarginMenuDefault,
+                ZDEvade::kEndpointMarginMenuMinimum,
+                ZDEvade::kEndpointMarginMenuMaximum));
         m_pathBufferMenu = safety->Add(new MenuSlider("pathBuffer", "Path Buffer", 8, 0, 100));
         m_releaseBufferMenu = safety->Add(new MenuSlider(
             "releaseBuffer", "Release Control Margin", 48, 0, 140));

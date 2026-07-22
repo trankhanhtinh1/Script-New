@@ -20,6 +20,10 @@ $RequiredSuites = @(
     @{
         Source = "zdevade_detector_policy_test.cpp"
         Name = "ZDEVADE DETECTOR POLICY"
+    },
+    @{
+        Source = "zdevade_visual_geometry_test.cpp"
+        Name = "ZDEVADE VISUAL GEOMETRY"
     }
 )
 

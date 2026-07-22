@@ -1,5 +1,7 @@
 #include <cmath>
 #include <cstdio>
+#include <limits>
+#include <string_view>
 #include <vector>
 
 #include "tests/ZDEvadeTestSupport.h"
@@ -22,18 +24,96 @@ int main() {
                kNumericalOutwardEpsilon > 0.0f);
     ExpectTrue("numerical outward epsilon remains within one unit",
                kNumericalOutwardEpsilon <= 1.0f);
+    ExpectNear("default endpoint margin is eighteen",
+               kDefaultEndpointMargin,
+               18.0f);
+    ExpectTrue("menu endpoint default shares the policy constant",
+               kEndpointMarginMenuDefault == kDefaultEndpointMargin &&
+                   kEndpointMarginMenuMinimum == 0 &&
+                   kEndpointMarginMenuMaximum == 30);
+    ExpectTrue("endpoint persistence key is versioned for new default",
+               std::string_view(kEndpointMarginMenuPersistenceId) ==
+                   "exitMarginV4");
+    ExpectNear("hero radius sanitizer preserves actual footprint",
+               SanitizeHeroRadius(65.0f),
+               65.0f);
+    ExpectNear("hero radius sanitizer clamps undersized footprint",
+               SanitizeHeroRadius(0.0f),
+               kMinimumHeroRadius);
+    ExpectNear("hero radius sanitizer rejects negative footprint",
+               SanitizeHeroRadius(-65.0f),
+               kMinimumHeroRadius);
+    ExpectNear("hero radius sanitizer rejects nonfinite footprint",
+               SanitizeHeroRadius(
+                   std::numeric_limits<float>::quiet_NaN()),
+               kMinimumHeroRadius);
+    ExpectNear("hero radius sanitizer rejects infinite footprint",
+               SanitizeHeroRadius(
+                   std::numeric_limits<float>::infinity()),
+               kMinimumHeroRadius);
     ExpectNear("configured model-edge collision boundary",
                ExitCollisionDistance(80.0f, 65.0f, kDefaultEndpointMargin, 0.0f),
-               155.0f);
-    ExpectNear("default model-edge margin",
+               163.0f);
+    ExpectNear("default target clearance is 18.25 plus uncertainty",
                ExitCenterDistance(80.0f, 65.0f, kDefaultEndpointMargin, 0.0f),
-               155.25f);
+               163.25f);
+    ExpectNear("default target clearance adds uncertainty once",
+               ExitCenterDistance(80.0f, 65.0f, kDefaultEndpointMargin, 7.0f) -
+                   80.0f - 65.0f,
+               25.25f);
     ExpectNear("uncertainty added once",
                ExitCenterDistance(80.0f, 65.0f, 10.0f, 7.0f),
                162.25f);
     ExpectNear("negative values clamp",
                ExitCenterDistance(-80.0f, 65.0f, -10.0f, -7.0f),
                65.25f);
+    const float defaultReachTolerance =
+        EndpointReachTolerance(kDefaultEndpointMargin);
+    ExpectTrue("default endpoint reach tolerance remains within two to four",
+               defaultReachTolerance >= 3.5f &&
+                   defaultReachTolerance <= 4.0f);
+    const float realizedEdgeClearance =
+        kDefaultEndpointMargin + kNumericalOutwardEpsilon -
+        defaultReachTolerance;
+    ExpectNear("default four-unit shortfall realizes 14.25 edge clearance",
+               kDefaultEndpointMargin + kNumericalOutwardEpsilon - 4.0f,
+               14.25f);
+    ExpectTrue("boundary reach preserves at least 14.25 edge clearance",
+               realizedEdgeClearance >= 14.25f);
+    ExpectTrue("four units short obeys endpoint boundary policy",
+               IsRouteTargetReached(
+                   4.0f,
+                   kDefaultEndpointMargin,
+                   false) ==
+                   (4.0f <= defaultReachTolerance));
+    ExpectTrue("exact-danger position is never endpoint-reached",
+               !IsRouteTargetReached(
+                   1.0f,
+                   kDefaultEndpointMargin,
+                   true));
+    const float zeroMarginReachTolerance =
+        EndpointReachTolerance(0.0f);
+    ExpectNear("zero endpoint margin uses two-unit reach tolerance",
+               zeroMarginReachTolerance,
+               2.0f);
+    ExpectTrue("zero-margin exact danger vetoes early completion",
+               !IsRouteTargetReached(
+                   zeroMarginReachTolerance,
+                   0.0f,
+                   true) &&
+                   !IsMoveTargetReached(
+                       zeroMarginReachTolerance,
+                       zeroMarginReachTolerance,
+                       true));
+    ExpectTrue("zero-margin endpoint completes once exact-safe",
+               IsRouteTargetReached(
+                   zeroMarginReachTolerance,
+                   0.0f,
+                   false) &&
+                   IsMoveTargetReached(
+                       zeroMarginReachTolerance,
+                       zeroMarginReachTolerance,
+                       false));
 
     ThreatCoverage dangerFour;
     dangerFour.collisionCount = 1;
@@ -262,6 +342,8 @@ int main() {
     collisionAt40.pathDanger = 2;
     collisionAt40.firstCollisionTimeMs = 40.0f;
     collisionAt40.timeMarginMs = 15.0f;
+    collisionAt40.requiresStartEnvelopeExit = true;
+    collisionAt40.exitedStartEnvelope = true;
     collisionAt40.exitDistance = 40.0f;
     collisionAt40.travelDistance = 45.0f;
 
@@ -270,16 +352,83 @@ int main() {
     collisionAt400.timeMarginMs = 375.0f;
     collisionAt400.exitDistance = 220.0f;
     collisionAt400.travelDistance = 240.0f;
-    ExpectTrue("400ms fallback collision beats shorter 40ms exit",
-               PreferFallbackRoute(collisionAt400, collisionAt40));
-    ExpectTrue("40ms fallback collision cannot win on exit distance",
-               !PreferFallbackRoute(collisionAt40, collisionAt400));
+    ExpectTrue("shorter true fallback exit beats later collision",
+               PreferFallbackRoute(collisionAt40, collisionAt400));
+    ExpectTrue("later collision cannot beat shorter true exit",
+               !PreferFallbackRoute(collisionAt400, collisionAt40));
 
     FallbackRouteRank largerTimeMargin = collisionAt400;
     largerTimeMargin.timeMarginMs = 420.0f;
     largerTimeMargin.exitDistance = 300.0f;
-    ExpectTrue("fallback time margin precedes exit and travel distance",
-               PreferFallbackRoute(largerTimeMargin, collisionAt400));
+    ExpectTrue("true exit distance precedes fallback time margin",
+               PreferFallbackRoute(collisionAt400, largerTimeMargin));
+
+    FallbackRouteRank noExitWithLateCollision = collisionAt40;
+    noExitWithLateCollision.exitedStartEnvelope = false;
+    noExitWithLateCollision.exitDistance =
+        std::numeric_limits<float>::infinity();
+    noExitWithLateCollision.travelDistance = 300.0f;
+    noExitWithLateCollision.firstCollisionTimeMs = 900.0f;
+    noExitWithLateCollision.timeMarginMs = 900.0f;
+    ExpectTrue("genuine start-envelope exit outranks no-exit timing",
+               PreferFallbackRoute(
+                   collisionAt40,
+                   noExitWithLateCollision) &&
+                   !PreferFallbackRoute(
+                       noExitWithLateCollision,
+                       collisionAt40));
+
+    FallbackRouteRank entersNewThreat = collisionAt40;
+    entersNewThreat.enteredNewThreat = true;
+    entersNewThreat.exitDistance = 10.0f;
+    entersNewThreat.travelDistance = 15.0f;
+    ExpectTrue("new-threat entry precedes egress distance ranking",
+               PreferFallbackRoute(
+                   collisionAt40,
+                   entersNewThreat) &&
+                   !PreferFallbackRoute(
+                       entersNewThreat,
+                       collisionAt40));
+
+    FallbackRouteRank startsOutsideShort = collisionAt40;
+    startsOutsideShort.requiresStartEnvelopeExit = false;
+    startsOutsideShort.exitedStartEnvelope = false;
+    startsOutsideShort.exitDistance = 0.0f;
+    FallbackRouteRank startsOutsideLate = collisionAt400;
+    startsOutsideLate.requiresStartEnvelopeExit = false;
+    startsOutsideLate.exitedStartEnvelope = false;
+    startsOutsideLate.exitDistance = 0.0f;
+    ExpectTrue("starts-outside preserves later-collision priority",
+               PreferFallbackRoute(
+                   startsOutsideLate,
+                   startsOutsideShort) &&
+                   !PreferFallbackRoute(
+                       startsOutsideShort,
+                       startsOutsideLate));
+    FallbackRouteRank mixedStartContext = collisionAt40;
+    mixedStartContext.requiresStartEnvelopeExit = false;
+    mixedStartContext.exitedStartEnvelope = false;
+    ExpectTrue("mixed start contexts have deterministic ordering",
+               PreferFallbackRoute(
+                   mixedStartContext,
+                   collisionAt40) !=
+                   PreferFallbackRoute(
+                       collisionAt40,
+                       mixedStartContext));
+
+    FallbackRouteRank twoThreatCoverage = collisionAt40;
+    twoThreatCoverage.collisionCount = 2;
+    twoThreatCoverage.maxDanger = 4;
+    twoThreatCoverage.pathDanger = 4;
+    FallbackRouteRank betterMultiThreatCoverage =
+        noExitWithLateCollision;
+    betterMultiThreatCoverage.collisionCount = 1;
+    betterMultiThreatCoverage.maxDanger = 2;
+    betterMultiThreatCoverage.pathDanger = 2;
+    ExpectTrue("multi-threat coverage dominance precedes exit evidence",
+               PreferFallbackRoute(
+                   betterMultiThreatCoverage,
+                   twoThreatCoverage));
 
     FallbackRouteRank saferPath = collisionAt400;
     saferPath.pathDanger = 1;

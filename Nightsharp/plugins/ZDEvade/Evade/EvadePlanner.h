@@ -28,7 +28,7 @@ public:
         const Vec2 cursorPos = goal.IsValid() && !goal.IsZero()
             ? goal
             : SDK::Game::CursorPos().To2D();
-        const float heroRadius = std::max(10.0f, player.BoundingRadius());
+        const float heroRadius = SanitizeHeroRadius(player.BoundingRadius());
         const float moveSpeed = std::max(50.0f, player.MoveSpeed());
         const float planeY = player.ServerPosition().y;
         const EnvironmentSnapshot environment = CaptureEnvironment(heroRadius);
@@ -46,10 +46,6 @@ public:
             now);
 
         result.candidates.reserve(static_cast<std::size_t>(maxCandidates));
-        CandidateEvaluation bestStrict;
-        CandidateEvaluation bestFallback;
-        bool hasStrict = false;
-        bool hasFallback = false;
 
         const auto evaluateSeed = [&](const CandidateSeed& seed) {
             CandidateEvaluation evaluation = EvadeGeometry::EvaluateCandidate(
@@ -68,31 +64,92 @@ public:
                 seed.stabilityBranchKey;
             AddEnvironmentalMetrics(evaluation, environment);
             result.candidates.push_back(evaluation);
-            if (evaluation.strictSafe && (!hasStrict || StrictBetter(evaluation, bestStrict, settings))) {
-                bestStrict = evaluation;
-                hasStrict = true;
-            }
-            if (evaluation.valid && evaluation.walkable &&
-                (!hasFallback || FallbackBetter(evaluation, bestFallback))) {
-                bestFallback = evaluation;
-                hasFallback = true;
-            }
         };
 
         for (const CandidateSeed& seed : seeds) evaluateSeed(seed);
 
+        const PlannerResult selection = SelectBestEvaluatedCandidates(
+            result.candidates,
+            settings,
+            IsSingleLineStartEnvelopeContext(
+                threats,
+                heroPos,
+                heroRadius,
+                settings.endpointBuffer,
+                now));
+        result.found = selection.found;
+        result.strictSafe = selection.strictSafe;
+        result.selected = selection.selected;
+        return result;
+    }
+#endif
+
+    static bool IsSingleLineStartEnvelopeContext(
+        const std::vector<Threat>& threats,
+        const Vec2& heroPos,
+        float heroRadius,
+        float endpointBuffer,
+        int now) {
+        return threats.size() == 1 &&
+            threats.front().Type() == ZDSpellType::Line &&
+            !threats.front().IsExpiredAt(now) &&
+            EvadeGeometry::ContainsAt(
+                threats.front(),
+                heroPos,
+                heroRadius,
+                endpointBuffer,
+                now);
+    }
+
+    static PlannerResult SelectBestEvaluatedCandidates(
+        const std::vector<CandidateEvaluation>& candidates,
+        const EvadeSettings& settings,
+        bool singleLineStartEnvelope) {
+        PlannerResult result;
+        CandidateEvaluation bestStrict;
+        CandidateEvaluation bestFallback;
+        bool hasStrict = false;
+        bool hasFallback = false;
+        for (const CandidateEvaluation& candidate : candidates) {
+            if (!candidate.valid ||
+                !candidate.walkable ||
+                !CandidateHasRequiredStartEnvelopeExit(
+                    candidate.startThreatIdentities.Size() > 0,
+                    candidate.exitedStartEnvelope)) {
+                continue;
+            }
+            if (candidate.strictSafe &&
+                (!hasStrict ||
+                 BetterEvaluatedCandidate(
+                     candidate,
+                     bestStrict,
+                     settings,
+                     singleLineStartEnvelope,
+                     true))) {
+                bestStrict = candidate;
+                hasStrict = true;
+            }
+            if (!hasFallback ||
+                BetterEvaluatedCandidate(
+                    candidate,
+                    bestFallback,
+                    settings,
+                    singleLineStartEnvelope,
+                    false)) {
+                bestFallback = candidate;
+                hasFallback = true;
+            }
+        }
         if (hasStrict) {
             result.found = true;
             result.strictSafe = true;
             result.selected = bestStrict;
         } else if (hasFallback) {
             result.found = true;
-            result.strictSafe = false;
             result.selected = bestFallback;
         }
         return result;
     }
-#endif
 
     static std::vector<CandidateSeed> GenerateCandidateSeeds(
         const std::vector<Threat>& threats,
@@ -215,7 +272,7 @@ public:
             castDelayMs);
         AddEnvironmentalMetrics(
             result,
-            CaptureEnvironment(std::max(10.0f, player.BoundingRadius())));
+            CaptureEnvironment(SanitizeHeroRadius(player.BoundingRadius())));
         return result;
     }
 
@@ -233,7 +290,7 @@ public:
         const Vec2 heroPos = player.ServerPosition().To2D();
         const Vec2 cursorPos = SDK::Game::CursorPos().To2D();
         const EnvironmentSnapshot environment = CaptureEnvironment(
-            std::max(10.0f, player.BoundingRadius()));
+            SanitizeHeroRadius(player.BoundingRadius()));
         const int angleCount = 32;
         const int radiusCount = fixedRange ? 1 : 3;
         for (int radiusIndex = 1; radiusIndex <= radiusCount; ++radiusIndex) {
@@ -251,7 +308,7 @@ public:
                         heroPos,
                         cursorPos,
                         player.ServerPosition().y,
-                        std::max(10.0f, player.BoundingRadius()),
+                        SanitizeHeroRadius(player.BoundingRadius()),
                         SDK::Variables::TickCount(),
                         castDelayMs,
                         settings,
@@ -279,7 +336,7 @@ public:
                         heroPos,
                         cursorPos,
                         player.ServerPosition().y,
-                        std::max(10.0f, player.BoundingRadius()),
+                        SanitizeHeroRadius(player.BoundingRadius()),
                         SDK::Variables::TickCount(),
                         castDelayMs,
                         settings,
@@ -301,6 +358,107 @@ public:
 #endif
 
 private:
+    static int CompareSingleLineFallbackSafety(
+        const CandidateEvaluation& left,
+        const CandidateEvaluation& right,
+        float temporalResolutionMs) {
+        if (left.endpointSafe != right.endpointSafe)
+            return left.endpointSafe ? -1 : 1;
+        if (left.endpointDanger != right.endpointDanger)
+            return left.endpointDanger < right.endpointDanger ? -1 : 1;
+        if (left.maxDanger != right.maxDanger)
+            return left.maxDanger < right.maxDanger ? -1 : 1;
+        if (left.collisionCount != right.collisionCount)
+            return left.collisionCount < right.collisionCount ? -1 : 1;
+        if (left.pathDanger != right.pathDanger)
+            return left.pathDanger < right.pathDanger ? -1 : 1;
+        const ThreatCoverage leftCoverage = {
+            left.collisionCount,
+            left.endpointDanger,
+            left.pathDanger,
+            left.maxDanger,
+            left.dangerExposureMs,
+            left.firstCollisionTimeMs,
+            left.summedExposureDanger,
+        };
+        const ThreatCoverage rightCoverage = {
+            right.collisionCount,
+            right.endpointDanger,
+            right.pathDanger,
+            right.maxDanger,
+            right.dangerExposureMs,
+            right.firstCollisionTimeMs,
+            right.summedExposureDanger,
+        };
+        const std::uint64_t leftExposure = DangerExposureBucketId(
+            left.dangerExposureMs,
+            leftCoverage,
+            temporalResolutionMs);
+        const std::uint64_t rightExposure = DangerExposureBucketId(
+            right.dangerExposureMs,
+            rightCoverage,
+            temporalResolutionMs);
+        if (leftExposure != rightExposure)
+            return leftExposure < rightExposure ? -1 : 1;
+        if (left.reenteredDanger != right.reenteredDanger)
+            return left.reenteredDanger ? 1 : -1;
+        if (left.enteredNewThreat != right.enteredNewThreat)
+            return left.enteredNewThreat ? 1 : -1;
+        const float temporalBucket =
+            NormalizeMetricBucketSize(temporalResolutionMs);
+        const std::uint64_t leftFirstContact =
+            TemporalMetricBucketId(
+                left.firstCollisionTimeMs,
+                temporalBucket,
+                false);
+        const std::uint64_t rightFirstContact =
+            TemporalMetricBucketId(
+                right.firstCollisionTimeMs,
+                temporalBucket,
+                false);
+        if (leftFirstContact != rightFirstContact)
+            return leftFirstContact > rightFirstContact ? -1 : 1;
+        return 0;
+    }
+
+    static bool PreferSingleLineStartEnvelopeExit(
+        const CandidateEvaluation& left,
+        const CandidateEvaluation& right) {
+        if (left.exitedStartEnvelope !=
+            right.exitedStartEnvelope) {
+            return left.exitedStartEnvelope;
+        }
+        if (RankDifferent(left.exitDistance, right.exitDistance))
+            return left.exitDistance < right.exitDistance;
+        if (RankDifferent(left.travelDistance, right.travelDistance))
+            return left.travelDistance < right.travelDistance;
+        return false;
+    }
+
+    static bool BetterEvaluatedCandidate(
+        const CandidateEvaluation& left,
+        const CandidateEvaluation& right,
+        const EvadeSettings& settings,
+        bool singleLineStartEnvelope,
+        bool strict) {
+        if (singleLineStartEnvelope) {
+            if (!strict) {
+                const int safety = CompareSingleLineFallbackSafety(
+                    left,
+                    right,
+                    std::max(25.0f, settings.temporalStepMs));
+                if (safety != 0) return safety < 0;
+            }
+            if (PreferSingleLineStartEnvelopeExit(left, right))
+                return true;
+            if (PreferSingleLineStartEnvelopeExit(right, left))
+                return false;
+        }
+        return strict
+            ? StrictBetter(left, right, settings)
+            : FallbackBetter(left, right);
+    }
+
 #ifndef ZDEVADE_PLANNER_SEED_ONLY
     struct EnvironmentSnapshot {
         std::vector<Vec2> enemies;
@@ -642,34 +800,50 @@ private:
         for (const Threat* threatPtr : relevant) {
             const Threat& threat = *threatPtr;
             switch (threat.Type()) {
-            case ZDSpellType::Line:
-                AddSeed(
-                    seeds,
-                    EvadeGeometry::ClosestLineExit(
-                        threat,
-                        heroPos,
-                        heroRadius,
-                        settings.endpointBuffer,
-                        true,
-                        now),
-                    PlannerCandidateSource::LineLeft,
-                    threat.id,
-                    settings.maxCandidates,
-                    StabilityBranch::LineAnalyticalLeft);
-                AddSeed(
-                    seeds,
-                    EvadeGeometry::ClosestLineExit(
-                        threat,
-                        heroPos,
-                        heroRadius,
-                        settings.endpointBuffer,
-                        false,
-                        now),
-                    PlannerCandidateSource::LineRight,
-                    threat.id,
-                    settings.maxCandidates,
-                    StabilityBranch::LineAnalyticalRight);
+            case ZDSpellType::Line: {
+                const Vec2 corridorStart = threat.HeadAtTick(now);
+                const Vec2 corridorDirection =
+                    (threat.endPos - corridorStart).Normalized();
+                const auto addPhysicalSide =
+                    [&](const Vec2& candidate) {
+                        Vec2 projection;
+                        EvadeGeometry::DistanceToSegment(
+                            candidate,
+                            corridorStart,
+                            threat.endPos,
+                            nullptr,
+                            &projection);
+                        const float side = corridorDirection.Cross(
+                            candidate - projection);
+                        const bool physicalLeft = side >= 0.0f;
+                        AddSeed(
+                            seeds,
+                            candidate,
+                            physicalLeft
+                                ? PlannerCandidateSource::LineLeft
+                                : PlannerCandidateSource::LineRight,
+                            threat.id,
+                            settings.maxCandidates,
+                            physicalLeft
+                                ? StabilityBranch::LineAnalyticalLeft
+                                : StabilityBranch::LineAnalyticalRight);
+                    };
+                addPhysicalSide(EvadeGeometry::ClosestLineExit(
+                    threat,
+                    heroPos,
+                    heroRadius,
+                    settings.endpointBuffer,
+                    true,
+                    now));
+                addPhysicalSide(EvadeGeometry::ClosestLineExit(
+                    threat,
+                    heroPos,
+                    heroRadius,
+                    settings.endpointBuffer,
+                    false,
+                    now));
                 break;
+            }
             case ZDSpellType::Circular: {
                 const Vec2 circleExit =
                     EvadeGeometry::ClosestCircleExit(
@@ -1346,7 +1520,7 @@ private:
             SDK::Game::CursorPos().To2D(),
             player.ServerPosition().y,
             std::max(50.0f, travelSpeed),
-            std::max(10.0f, player.BoundingRadius()),
+            SanitizeHeroRadius(player.BoundingRadius()),
             SDK::Variables::TickCount(),
             adjusted,
             threats);
@@ -1403,6 +1577,9 @@ private:
                 left.pathDanger,
                 left.dangerExposureMs,
                 left.reenteredDanger,
+                left.enteredNewThreat,
+                left.startThreatIdentities.Size() > 0,
+                left.exitedStartEnvelope,
                 left.firstCollisionTimeMs,
                 left.timeMarginMs,
                 left.exitDistance,
@@ -1418,6 +1595,9 @@ private:
                 right.pathDanger,
                 right.dangerExposureMs,
                 right.reenteredDanger,
+                right.enteredNewThreat,
+                right.startThreatIdentities.Size() > 0,
+                right.exitedStartEnvelope,
                 right.firstCollisionTimeMs,
                 right.timeMarginMs,
                 right.exitDistance,

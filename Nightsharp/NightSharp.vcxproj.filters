@@ -133,6 +133,9 @@
     <Filter Include="Plugins\ZDEvade\EvadeSpells">
       <UniqueIdentifier>{46A99B7F-0B06-188E-DA30-4380E1699943}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\ZDEvade\Visual">
+      <UniqueIdentifier>{6AE545D7-516E-4D86-8B76-4F16D30D35A1}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\ZDPrediction">
       <UniqueIdentifier>{D282EFDC-F7C1-2A87-4553-B9057DAEB1BE}</UniqueIdentifier>
     </Filter>
@@ -1255,6 +1258,15 @@
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellManager.h">
       <Filter>Plugins\ZDEvade\EvadeSpells</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatRenderer.h">
+      <Filter>Plugins\ZDEvade\Visual</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualGeometry.h">
+      <Filter>Plugins\ZDEvade\Visual</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualStyle.h">
+      <Filter>Plugins\ZDEvade\Visual</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\PositionInfo.h">
       <Filter>Plugins\ZDEvade</Filter>
     </ClInclude>
@@ -1292,6 +1304,9 @@
       <Filter>tests</Filter>
     </ClInclude>
     <ClInclude Include="tests\zdevade_routing_policy_test.cpp">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\zdevade_visual_geometry_test.cpp">
       <Filter>tests</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDPrediction\Analysis\AoeOptimizer.h">

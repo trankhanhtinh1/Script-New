@@ -1,6 +1,7 @@
 #include "tests/ZDEvadeTestSupport.h"
 #include "core/CoreEvadeState.h"
 #include "plugins/ZDEvade/ZDEvadeActivationPolicy.h"
+#include "plugins/ZDEvade/Detection/ThreatDetectionPolicy.h"
 #include "plugins/ZDEvade/Evade/EvadeMoveResultAdapter.h"
 #include "plugins/ZDEvade/Evade/EvadeRoutingPolicy.h"
 #include "plugins/ZDEvade/EvadeSpells/EvadeSpellDatabase.h"
@@ -758,6 +759,212 @@ void TestThreatFreeActionPolicy() {
                    ManualRouteAction::PreserveAndBlock);
 }
 
+void TestExternalMoveDecisionPolicy() {
+    ExternalMoveRouteEvaluation safeRoute;
+    safeRoute.valid = true;
+    safeRoute.walkable = true;
+    safeRoute.pathSafe = true;
+    safeRoute.endpointSafe = true;
+    safeRoute.strictSafe = true;
+
+    const auto decide = [&](MoveIntentSource source,
+                            bool controllerOwnsMovement,
+                            bool actionableThreatContext,
+                            const ExternalMoveRouteEvaluation& route) {
+        return DecideExternalMove({
+            source,
+            controllerOwnsMovement,
+            actionableThreatContext,
+            route,
+        });
+    };
+
+    ExternalMoveRouteEvaluation insideDestination = safeRoute;
+    insideDestination.endpointSafe = false;
+    insideDestination.strictSafe = false;
+    const ExternalMoveDecision inside = decide(
+        MoveIntentSource::Manual, false, true, insideDestination);
+    ExpectTrue("active destination inside threat is consumed and discarded",
+               !inside.allowNative &&
+                   inside.consume &&
+                   !inside.adoptGoal &&
+                   inside.discardBlockedIntent);
+
+    ExternalMoveRouteEvaluation crossesThenExits = safeRoute;
+    crossesThenExits.pathSafe = false;
+    crossesThenExits.strictSafe = false;
+    const ExternalMoveDecision crossing = decide(
+        MoveIntentSource::Manual, false, true, crossesThenExits);
+    ExpectTrue("active route crossing then exiting is consumed and discarded",
+               !crossing.allowNative &&
+                   crossing.consume &&
+                   !crossing.adoptGoal &&
+                   crossing.discardBlockedIntent);
+
+    const ExternalMoveDecision safeOutward = decide(
+        MoveIntentSource::Manual, false, true, safeRoute);
+    ExpectTrue("safe strict outward manual route proceeds natively",
+               safeOutward.allowNative &&
+                   !safeOutward.consume &&
+                   safeOutward.adoptGoal &&
+                   !safeOutward.discardBlockedIntent);
+
+    ExternalMoveRouteEvaluation bestEffortExit = safeRoute;
+    bestEffortExit.pathSafe = false;
+    bestEffortExit.strictSafe = false;
+    bestEffortExit.startsInThreat = true;
+    bestEffortExit.coverageNoWorseThanHold = true;
+    bestEffortExit.makesExitProgress = true;
+    const ExternalMoveDecision manualBestEffort = decide(
+        MoveIntentSource::Manual, true, true, bestEffortExit);
+    const ExternalMoveDecision orbBestEffort = decide(
+        MoveIntentSource::Orbwalker, true, true, bestEffortExit);
+    ExpectTrue("best-effort manual exit is adopted and allowed natively",
+               manualBestEffort.allowNative &&
+                   !manualBestEffort.consume &&
+                   manualBestEffort.adoptGoal &&
+                   !manualBestEffort.discardBlockedIntent);
+    ExpectTrue("best-effort controlled orb exit is adopted but consumed",
+               !orbBestEffort.allowNative &&
+                   orbBestEffort.consume &&
+                   orbBestEffort.adoptGoal &&
+                   !orbBestEffort.discardBlockedIntent);
+
+    ExternalMoveRouteEvaluation newThreatExit = bestEffortExit;
+    newThreatExit.enteredNewThreat = true;
+    ExternalMoveRouteEvaluation worseExit = bestEffortExit;
+    worseExit.coverageNoWorseThanHold = false;
+    ExternalMoveRouteEvaluation noProgressExit = bestEffortExit;
+    noProgressExit.makesExitProgress = false;
+    const ExternalMoveDecision transfer = decide(
+        MoveIntentSource::Manual, true, true, newThreatExit);
+    const ExternalMoveDecision worse = decide(
+        MoveIntentSource::Manual, true, true, worseExit);
+    const ExternalMoveDecision noProgress = decide(
+        MoveIntentSource::Manual, true, true, noProgressExit);
+    ExpectTrue("A-to-B transfer is blocked and discarded",
+               transfer.consume &&
+                   transfer.discardBlockedIntent &&
+                   !transfer.adoptGoal);
+    ExpectTrue("worse exposure and no-progress exits are blocked",
+               worse.consume &&
+                   worse.discardBlockedIntent &&
+                   noProgress.consume &&
+                   noProgress.discardBlockedIntent);
+
+    ExternalMoveRouteEvaluation tangentContact = safeRoute;
+    tangentContact.pathSafe = false;
+    tangentContact.strictSafe = false;
+    const ExternalMoveDecision tangent = decide(
+        MoveIntentSource::Manual, false, true, tangentContact);
+    const ExternalMoveDecision epsilonOutside = decide(
+        MoveIntentSource::Manual, false, true, safeRoute);
+    ExpectTrue("tangent contact blocks while epsilon-clear route proceeds",
+               tangent.consume &&
+                   tangent.discardBlockedIntent &&
+                   epsilonOutside.allowNative &&
+                   epsilonOutside.adoptGoal);
+
+    ExternalMoveRouteEvaluation geometricReentry = safeRoute;
+    geometricReentry.reenteredDanger = true;
+    const ExternalMoveDecision reentry = decide(
+        MoveIntentSource::Manual, false, true, geometricReentry);
+    ExpectTrue("geometric re-entry blocks despite time-resolved safety",
+               reentry.consume &&
+                   reentry.discardBlockedIntent &&
+                   !reentry.allowNative &&
+                   !reentry.adoptGoal);
+
+    ExternalMoveRouteEvaluation invalidRoute;
+    ExternalMoveRouteEvaluation nonWalkable = safeRoute;
+    nonWalkable.walkable = false;
+    ExternalMoveRouteEvaluation nonStrict = safeRoute;
+    nonStrict.strictSafe = false;
+    const ExternalMoveDecision invalid = decide(
+        MoveIntentSource::ObservedPath, true, true, invalidRoute);
+    const ExternalMoveDecision wall = decide(
+        MoveIntentSource::Orbwalker, false, true, nonWalkable);
+    const ExternalMoveDecision fallback = decide(
+        MoveIntentSource::Manual, true, true, nonStrict);
+    ExpectTrue("invalid non-walkable and non-strict active routes fail closed",
+               invalid.consume && invalid.discardBlockedIntent &&
+                   wall.consume && wall.discardBlockedIntent &&
+                   fallback.consume && fallback.discardBlockedIntent);
+
+    const ExternalMoveDecision expired = decide(
+        MoveIntentSource::Manual, true, false, geometricReentry);
+    ExpectTrue("expired threat context permits native movement without adoption",
+               expired.allowNative &&
+                   !expired.consume &&
+                   !expired.adoptGoal &&
+                   !expired.discardBlockedIntent);
+
+    const ExternalMoveDecision controlledManual = decide(
+        MoveIntentSource::Manual, true, true, safeRoute);
+    const ExternalMoveDecision controlledOrb = decide(
+        MoveIntentSource::Orbwalker, true, true, safeRoute);
+    ExpectTrue("controlled safe manual keeps native adoption behavior",
+               controlledManual.allowNative &&
+                   !controlledManual.consume &&
+                   controlledManual.adoptGoal);
+    ExpectTrue("controlled safe orb updates intent but cannot issue natively",
+               !controlledOrb.allowNative &&
+                   controlledOrb.consume &&
+                   controlledOrb.adoptGoal &&
+                   !controlledOrb.discardBlockedIntent);
+
+    const ExternalMoveDecision outsideOrb = decide(
+        MoveIntentSource::Orbwalker, false, true, safeRoute);
+    ExpectTrue("outside control safe orb proceeds natively and is adopted",
+               outsideOrb.allowNative &&
+                   !outsideOrb.consume &&
+                   outsideOrb.adoptGoal);
+
+    MoveRouteEvaluation unsafeManualRoute;
+    unsafeManualRoute.evaluated = true;
+    unsafeManualRoute.valid = true;
+    unsafeManualRoute.walkable = true;
+    MoveIntentState repeatedBlockedState;
+    repeatedBlockedState.RecordManual(
+        Vec2(600.0f, 100.0f),
+        1000,
+        1,
+        unsafeManualRoute,
+        true,
+        50);
+    for (int click = 0; click < 2; ++click) {
+        const ExternalMoveDecision blocked = decide(
+            click == 0
+                ? MoveIntentSource::Manual
+                : MoveIntentSource::Orbwalker,
+            true,
+            true,
+            crossesThenExits);
+        if (blocked.discardBlockedIntent)
+            repeatedBlockedState.Clear();
+        ExpectTrue("repeated blocked input leaves no replayable destination",
+                   blocked.consume &&
+                       !repeatedBlockedState.HasGoal() &&
+                       !repeatedBlockedState.HasDeferred() &&
+                       !repeatedBlockedState.HasManual());
+    }
+    ExpectTrue("active context cannot resume discarded deferred destination",
+               DecideDeferredRoute(
+                   repeatedBlockedState.HasDeferred(),
+                   false) == DeferredRouteAction::None);
+
+    const ExternalMoveDecision threatOrderA = decide(
+        MoveIntentSource::ObservedPath, true, true, crossesThenExits);
+    const ExternalMoveDecision threatOrderB = decide(
+        MoveIntentSource::ObservedPath, true, true, crossesThenExits);
+    ExpectTrue("multiple-threat aggregate action is order independent",
+               threatOrderA.allowNative == threatOrderB.allowNative &&
+                   threatOrderA.consume == threatOrderB.consume &&
+                   threatOrderA.adoptGoal == threatOrderB.adoptGoal &&
+                   threatOrderA.discardBlockedIntent ==
+                       threatOrderB.discardBlockedIntent);
+}
+
 void TestStableRouteStrictPriority() {
     StableRouteMetrics fallbackCurrent;
     fallbackCurrent.strictSafe = false;
@@ -828,6 +1035,8 @@ void TestRouteCommitmentFrames() {
     strictLeft.evaluationValid = true;
     strictLeft.walkable = true;
     strictLeft.strictSafe = true;
+    strictLeft.startsInThreat = true;
+    strictLeft.exitedStartEnvelope = true;
     strictLeft.coverage = baseline;
     strictLeft.baselineCoverage = baseline;
     const LockedRouteValidation strictFrame =
@@ -846,6 +1055,65 @@ void TestRouteCommitmentFrames() {
                degradedFrame.hardValid &&
                    degradedFrame.safety ==
                        LockedRouteSafety::FallbackNoWorse);
+    LockedRouteValidationInput longitudinalCommitted =
+        fallbackLeft;
+    longitudinalCommitted.exitedStartEnvelope = false;
+    const LockedRouteValidation invalidLongitudinal =
+        ClassifyLockedRoute(longitudinalCommitted);
+    ExpectTrue(
+        "committed longitudinal fallback without true exit invalidates",
+        !invalidLongitudinal.hardValid &&
+            invalidLongitudinal.safety ==
+                LockedRouteSafety::Unsafe);
+    UnavoidableDecisionInput oppositeLateral;
+    oppositeLateral.holdCoverage = baseline;
+    oppositeLateral.candidateCoverage = baseline;
+    oppositeLateral.candidateAvailable = true;
+    oppositeLateral.candidateValid = true;
+    oppositeLateral.candidateWalkable = true;
+    oppositeLateral.candidateMakesProgress = true;
+    oppositeLateral.candidateStartsInThreat = true;
+    oppositeLateral.candidateExitedStartEnvelope = true;
+    oppositeLateral.fallbackLockActive = true;
+    oppositeLateral.lockCoverage = baseline;
+    oppositeLateral.lockValid = invalidLongitudinal.hardValid;
+    oppositeLateral.lockWalkable = true;
+    ExpectTrue(
+        "invalid no-exit lock permits opposite lateral route",
+        DecideUnavoidableAction(oppositeLateral).action ==
+                UnavoidableAction::MoveFallback &&
+            !DecideUnavoidableAction(oppositeLateral)
+                 .retainLockedFallback);
+    oppositeLateral.candidateAvailable = false;
+    ExpectTrue(
+        "invalid no-exit lock without route reaches hold and spell policy",
+        DecideUnavoidableAction(oppositeLateral).action ==
+                UnavoidableAction::Hold &&
+            DecideReachedCommitmentEscalation(
+                false,
+                true,
+                true) ==
+                ReachedCommitmentEscalation::TryEvadeSpell);
+    UnavoidableDecisionInput delayedTransfer =
+        oppositeLateral;
+    delayedTransfer.fallbackLockActive = false;
+    delayedTransfer.candidateAvailable = true;
+    delayedTransfer.candidateEnteredNewThreat = true;
+    ExpectTrue(
+        "equal-bucket A-to-delayed-B transfer is never progress",
+        DecideUnavoidableAction(delayedTransfer).action ==
+            UnavoidableAction::Hold);
+    delayedTransfer.candidateEnteredNewThreat = false;
+    delayedTransfer.candidateReenteredDanger = true;
+    ExpectTrue(
+        "equal-bucket re-entry is never admitted as fallback progress",
+        DecideUnavoidableAction(delayedTransfer).action ==
+            UnavoidableAction::Hold);
+    delayedTransfer.candidateReenteredDanger = false;
+    ExpectTrue(
+        "clean exit from current threat remains legitimate progress",
+        DecideUnavoidableAction(delayedTransfer).action ==
+            UnavoidableAction::MoveFallback);
     ExpectTrue("degradation window uses bounded target lock",
                DegradationCommitWindowMs(20) == 90 &&
                    DegradationCommitWindowMs(120) == 120 &&
@@ -895,8 +1163,69 @@ void TestRouteCommitmentFrames() {
                !ClassifyLockedRoute(blockedLeft).hardValid);
     LockedRouteValidationInput reachedLeft = fallbackLeft;
     reachedLeft.reached = true;
-    ExpectTrue("reached L is immediately hard-invalid",
-               !ClassifyLockedRoute(reachedLeft).hardValid);
+    const LockedRouteValidation reachedValidation =
+        ClassifyLockedRoute(reachedLeft);
+    ExpectTrue("reached L remains hard-valid for extension policy",
+               reachedValidation.hardValid &&
+                   reachedValidation.reached &&
+                   reachedValidation.safety ==
+                       LockedRouteSafety::FallbackNoWorse);
+    const float endpointTolerance =
+        EndpointReachTolerance(kDefaultEndpointMargin);
+    const float reachedDistances[] = {
+        0.0f,
+        0.5f,
+        0.999f,
+        1.0f,
+        endpointTolerance,
+    };
+    for (const float distance : reachedDistances) {
+        const LockedRouteValidation boundary =
+            ClassifyLockedEndpointBoundary({
+                baseline,
+                true,
+                true,
+                distance,
+                endpointTolerance,
+                25.0f,
+            });
+        ExpectTrue(
+            "runtime endpoint boundary is hard-valid reached fallback",
+            boundary.hardValid &&
+                boundary.reached &&
+                boundary.safety ==
+                    LockedRouteSafety::FallbackNoWorse);
+    }
+    const LockedRouteValidation outsideBoundary =
+        ClassifyLockedEndpointBoundary({
+            baseline,
+            true,
+            true,
+            endpointTolerance + 0.001f,
+            endpointTolerance,
+            25.0f,
+        });
+    const LockedRouteValidation wallInvalidBoundary =
+        ClassifyLockedEndpointBoundary({
+            baseline,
+            true,
+            false,
+            0.0f,
+            endpointTolerance,
+            25.0f,
+        });
+    ExpectTrue(
+        "endpoint shortcut is exact and requires stored walkability",
+        !outsideBoundary.hardValid &&
+            !outsideBoundary.reached &&
+            !wallInvalidBoundary.hardValid &&
+            !wallInvalidBoundary.reached);
+    ExpectTrue(
+        "reached endpoint releases only after danger clears",
+        ShouldExecuteReleaseOrDeferredResume(false, false) &&
+            !ShouldExecuteReleaseOrDeferredResume(
+                false,
+                true));
     LockedRouteValidationInput failedLeft = fallbackLeft;
     failedLeft.hardMoveFailure = true;
     ExpectTrue("hard move failure immediately invalidates L",
@@ -918,6 +1247,67 @@ void TestRouteCommitmentFrames() {
     ExpectTrue("manual epoch switches immediately away from old L",
                !DecideUnavoidableAction(manualSwitch)
                     .retainLockedFallback);
+    UnavoidableDecisionInput longitudinalNoExit;
+    longitudinalNoExit.holdCoverage = baseline;
+    longitudinalNoExit.candidateCoverage = baseline;
+    longitudinalNoExit.candidateAvailable = true;
+    longitudinalNoExit.candidateValid = true;
+    longitudinalNoExit.candidateWalkable = true;
+    longitudinalNoExit.candidateMakesProgress = true;
+    longitudinalNoExit.candidateStartsInThreat = true;
+    longitudinalNoExit.candidateExitedStartEnvelope = false;
+    ExpectTrue(
+        "longitudinal travel inside starting line cannot become progress",
+        DecideUnavoidableAction(longitudinalNoExit).action ==
+            UnavoidableAction::Hold);
+
+    StableRouteMetrics fallbackExitCurrent;
+    fallbackExitCurrent.coverage = baseline;
+    fallbackExitCurrent.exitedStartEnvelope = true;
+    fallbackExitCurrent.exitDistance = 120.0f;
+    fallbackExitCurrent.travelDistance = 180.0f;
+    StableRouteMetrics fallbackExitShorter = fallbackExitCurrent;
+    fallbackExitShorter.exitDistance = 70.0f;
+    fallbackExitShorter.travelDistance = 105.0f;
+    ExpectTrue(
+        "fallback lock may shorten materially on the same physical side",
+        ShouldReplaceCommittedFallback(
+            fallbackExitCurrent,
+            fallbackExitShorter,
+            true));
+    ExpectTrue(
+        "fallback lock cannot shorten by flipping physical side",
+        !ShouldReplaceCommittedFallback(
+            fallbackExitCurrent,
+            fallbackExitShorter,
+            false));
+    StableRouteMetrics fallbackNoExit = fallbackExitShorter;
+    fallbackNoExit.exitedStartEnvelope = false;
+    fallbackNoExit.exitDistance =
+        std::numeric_limits<float>::infinity();
+    ExpectTrue(
+        "fallback no-exit target cannot replace true exit",
+        !ShouldReplaceCommittedFallback(
+            fallbackExitCurrent,
+            fallbackNoExit,
+            true));
+    bool tenNoisyReplansStable = true;
+    for (int frame = 0; frame < 10; ++frame) {
+        StableRouteMetrics noisyOpposite = fallbackExitShorter;
+        noisyOpposite.exitDistance +=
+            static_cast<float>((frame % 3) - 1) * 4.0f;
+        noisyOpposite.travelDistance +=
+            static_cast<float>((frame % 2) ? 6 : -6);
+        tenNoisyReplansStable =
+            tenNoisyReplansStable &&
+            !ShouldReplaceCommittedFallback(
+                fallbackExitCurrent,
+                noisyOpposite,
+                false);
+    }
+    ExpectTrue(
+        "ten noisy opposite-side fallback replans retain exact lock",
+        tenNoisyReplansStable);
 
     StableRouteMetrics noisyFallback = fallbackMetrics;
     noisyFallback.coverage.dangerExposureMs += 24.0f;
@@ -1114,16 +1504,42 @@ void TestRouteCommitmentFrames() {
                    dangerFive,
                    25.0f));
 
-    ExpectTrue("near but unreached target does not bypass retention",
-               !IsRouteTargetReached(45.0f) &&
+    ExpectTrue("twelve units short remains commanded and revalidated",
+               !IsMoveTargetReached(
+                   12.0f,
+                   EndpointReachTolerance(kDefaultEndpointMargin),
+                   false) &&
+                   !IsRouteTargetReached(
+                       12.0f,
+                       kDefaultEndpointMargin,
+                       false) &&
                    KeepStableRoute(
                        fallbackMetrics,
                        noisyFallback,
                        -1.0f,
                        true,
                        false));
-    ExpectTrue("only genuine endpoint reach bypasses retention",
-               IsRouteTargetReached(17.9f));
+    LockedRouteValidationInput twelveShort = fallbackLeft;
+    twelveShort.reached = IsRouteTargetReached(
+        12.0f,
+        kDefaultEndpointMargin,
+        false);
+    ExpectTrue("twelve-short lock remains hard-valid for revalidation",
+               ClassifyLockedRoute(twelveShort).hardValid);
+    ExpectTrue("only exact-safe endpoint reach bypasses retention",
+               IsRouteTargetReached(
+                   EndpointReachTolerance(kDefaultEndpointMargin),
+                   kDefaultEndpointMargin,
+                   false));
+    ExpectTrue("exact danger inside tolerance retains endpoint command",
+               !IsRouteTargetReached(
+                   1.0f,
+                   kDefaultEndpointMargin,
+                   true) &&
+                   !IsMoveTargetReached(
+                       1.0f,
+                       EndpointReachTolerance(kDefaultEndpointMargin),
+                       true));
 
     ExpectTrue("target-lock expiry allows genuine strict improvement",
                !KeepStableRoute(
@@ -1478,6 +1894,908 @@ void TestRouteCommitmentFrames() {
                        true));
 }
 
+void TestSimpleCommittedRoutePolicyFrames() {
+    struct Harness {
+        CommittedRouteIdentity commitment;
+        Vec2 committedTarget = {};
+        int switches = 0;
+        int commits = 0;
+        int lastCommittedBranch = StabilityBranch::Unknown;
+
+        CommittedRouteDecision Step(
+            std::uint64_t fingerprint,
+            std::uint64_t manualEpoch,
+            bool currentHardValid,
+            bool currentNoWorse,
+            bool reached,
+            int sourceThreatId,
+            int branchKey,
+            const Vec2& direction,
+            const Vec2& target,
+            MoveIssueResult moveResult,
+            bool threatSetEmpty = false,
+            bool candidateSyntheticExtension = false,
+            bool reachedExtensionEvaluated = false,
+            bool candidateStartsInThreat = false,
+            bool candidateExitedStartEnvelope = false) {
+            CommittedRoutePolicyInput input;
+            input.commitment = commitment;
+            input.threatSetFingerprint = fingerprint;
+            input.manualEpoch = manualEpoch;
+            input.threatSetEmpty = threatSetEmpty;
+            input.currentHardValid = currentHardValid;
+            input.currentNoWorse = currentNoWorse;
+            input.currentReached = reached;
+            input.candidateAvailable =
+                target.IsValid() &&
+                !target.IsZero();
+            input.candidateStartsInThreat =
+                candidateStartsInThreat;
+            input.candidateExitedStartEnvelope =
+                candidateExitedStartEnvelope;
+            input.candidateSourceThreatId = sourceThreatId;
+            input.candidateStabilityBranchKey = branchKey;
+            input.candidateDirection = direction;
+            input.candidateSyntheticExtension =
+                candidateSyntheticExtension;
+            input.reachedExtensionEvaluated =
+                reachedExtensionEvaluated;
+            const CommittedRouteDecision decision =
+                DecideCommittedRoute(input);
+            commitment = decision.commitment;
+            if (decision.action ==
+                CommittedRouteAction::ReleaseReachedBranch) {
+                commitment = {};
+            }
+            if (decision.action ==
+                    CommittedRouteAction::ProposeSameBranch ||
+                decision.action ==
+                    CommittedRouteAction::ProposeSameDirectionExtension ||
+                decision.action ==
+                    CommittedRouteAction::ProposeBranchSwitch) {
+                const TargetCommitDecision targetCommit =
+                    DecideTargetCommit(moveResult, currentHardValid);
+                if (targetCommit.commitProposed) {
+                    commitment = CommitProposedRoute(
+                        decision,
+                        input);
+                    committedTarget = target;
+                    ++commits;
+                    if (lastCommittedBranch !=
+                            StabilityBranch::Unknown &&
+                        lastCommittedBranch !=
+                            commitment.stabilityBranchKey) {
+                        ++switches;
+                    }
+                    lastCommittedBranch =
+                        commitment.stabilityBranchKey;
+                }
+            }
+            return decision;
+        }
+    };
+
+    const std::uint64_t oneThreat =
+        StableThreatSetFingerprint({701});
+    const std::uint64_t twoThreats =
+        StableThreatSetFingerprint({701, 702});
+    const int left = StabilityBranch::LineAnalyticalLeft;
+    const int right = StabilityBranch::LineAnalyticalRight;
+    const Vec2 leftDirection(0.0f, 1.0f);
+    const Vec2 rightDirection(0.0f, -1.0f);
+    const float endpointTolerance =
+        EndpointReachTolerance(kDefaultEndpointMargin);
+    Harness noExitInitial;
+    const CommittedRouteDecision rejectedInitialNoExit =
+        noExitInitial.Step(
+            oneThreat,
+            1,
+            false,
+            false,
+            false,
+            701,
+            StabilityBranch::LineEndCap,
+            Vec2(1.0f, 0.0f),
+            Vec2(500.0f, 100.0f),
+            MoveIssueResult::Issued,
+            false,
+            false,
+            false,
+            true,
+            false);
+    ExpectTrue(
+        "initial longitudinal no-exit candidate cannot be committed",
+        rejectedInitialNoExit.action ==
+                CommittedRouteAction::KeepCommitted &&
+            !noExitInitial.commitment.active &&
+            noExitInitial.commits == 0);
+
+    Harness noExitSameBranch;
+    noExitSameBranch.Step(
+        oneThreat,
+        2,
+        false,
+        false,
+        false,
+        701,
+        left,
+        leftDirection,
+        Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued,
+        false,
+        false,
+        false,
+        true,
+        true);
+    const Vec2 acceptedTrueExitTarget =
+        noExitSameBranch.committedTarget;
+    const CommittedRouteDecision rejectedSameBranchNoExit =
+        noExitSameBranch.Step(
+            oneThreat,
+            2,
+            false,
+            false,
+            false,
+            701,
+            left,
+            leftDirection,
+            Vec2(100.0f, 420.0f),
+            MoveIssueResult::Issued,
+            false,
+            false,
+            false,
+            true,
+            false);
+    ExpectTrue(
+        "same-branch no-exit fallback is unavailable",
+        rejectedSameBranchNoExit.action ==
+                CommittedRouteAction::KeepCommitted &&
+            noExitSameBranch.commits == 1 &&
+            noExitSameBranch.committedTarget.Distance(
+                acceptedTrueExitTarget) < 0.001f);
+
+    Harness staleNoExitBranch;
+    staleNoExitBranch.commitment = {
+        oneThreat,
+        701,
+        StabilityBranch::LineEndCap,
+        Vec2(1.0f, 0.0f),
+        2,
+        true,
+    };
+    staleNoExitBranch.lastCommittedBranch =
+        StabilityBranch::LineEndCap;
+    const CommittedRouteDecision escapedStaleNoExit =
+        staleNoExitBranch.Step(
+            oneThreat,
+            2,
+            false,
+            false,
+            false,
+            701,
+            left,
+            leftDirection,
+            Vec2(100.0f, 220.0f),
+            MoveIssueResult::Issued,
+            false,
+            false,
+            false,
+            true,
+            true);
+    ExpectTrue(
+        "bad committed line branch switches once to analytical true exit",
+        escapedStaleNoExit.action ==
+                CommittedRouteAction::ProposeBranchSwitch &&
+            staleNoExitBranch.commitment.stabilityBranchKey == left &&
+            staleNoExitBranch.switches == 1);
+
+    const float endpointDistances[] = {
+        0.0f,
+        0.5f,
+        0.999f,
+        1.0f,
+        endpointTolerance,
+    };
+    ThreatCoverage reachedBaseline;
+    Harness endpointNoFlip;
+    endpointNoFlip.Step(
+        oneThreat, 2, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    const Vec2 endpointTarget =
+        endpointNoFlip.committedTarget;
+    bool allBoundariesKeepCommitment = true;
+    for (const float distance : endpointDistances) {
+        const LockedRouteValidation boundary =
+            ClassifyLockedEndpointBoundary({
+                reachedBaseline,
+                true,
+                true,
+                distance,
+                endpointTolerance,
+                25.0f,
+            });
+        const CommittedRouteDecision decision =
+            endpointNoFlip.Step(
+                oneThreat,
+                2,
+                boundary.hardValid,
+                boundary.safety !=
+                    LockedRouteSafety::Unsafe,
+                boundary.reached,
+                701,
+                right,
+                rightDirection,
+                Vec2(100.0f, -260.0f),
+                MoveIssueResult::Issued);
+        allBoundariesKeepCommitment =
+            allBoundariesKeepCommitment &&
+            decision.action ==
+                CommittedRouteAction::KeepCommitted &&
+            endpointNoFlip.committedTarget.Distance(
+                endpointTarget) < 0.001f;
+    }
+    ExpectTrue(
+        "all reached boundaries defer planner branch flip to extension",
+        allBoundariesKeepCommitment &&
+            endpointNoFlip.commits == 1 &&
+            endpointNoFlip.switches == 0 &&
+            endpointNoFlip.commitment.stabilityBranchKey ==
+                left);
+
+    SpellData semanticSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    semanticSpell.spellName = "VeigarQ";
+    semanticSpell.spellKey = ZDSpellSlot::Q;
+    Threat semanticA = ZDEvadeTest::MakeThreat(semanticSpell);
+    semanticA.id = 701;
+    semanticA.logicalCastEpisodeId = 5001;
+    semanticA.casterNetworkId = 99;
+    semanticA.slot = static_cast<int>(ZDSpellSlot::Q);
+    semanticA.startTick = 989;
+    semanticA.startPos = Vec2(100.0f, 100.0f);
+    semanticA.endPos = Vec2(1100.0f, 100.0f);
+    semanticA.direction = Vec2(1.0f, 0.0f);
+    semanticA.projectileLaneKey = 1;
+    Threat semanticB = semanticA;
+    semanticB.id = 702;
+    semanticB.logicalCastEpisodeId =
+        semanticA.logicalCastEpisodeId;
+    semanticB.startTick = 1070;
+    semanticB.startPos = Vec2(108.0f, 101.0f);
+    semanticB.direction = Vec2(0.999848f, 0.017452f);
+    semanticB.endPos =
+        semanticB.startPos + semanticB.direction * 1000.0f;
+    semanticB.missileBound = true;
+    Threat semanticC = semanticA;
+    semanticC.id = 706;
+    semanticC.startTick = 1050;
+    semanticC.direction = Vec2(0.999998f, -0.001745f);
+    semanticC.endPos =
+        semanticC.startPos + semanticC.direction * 1000.0f;
+    const std::uint64_t semanticAOnly =
+        StableSemanticThreatSetFingerprint({semanticA});
+    const std::uint64_t semanticDuplicates =
+        StableSemanticThreatSetFingerprint({semanticA, semanticB});
+    ExpectTrue(
+        "Veigar Q A A+B B transitions keep one semantic fingerprint",
+        semanticAOnly == semanticDuplicates &&
+            semanticDuplicates ==
+                StableSemanticThreatSetFingerprint(
+                    {semanticB, semanticA}) &&
+            semanticDuplicates ==
+                StableSemanticThreatSetFingerprint(
+                    {semanticC, semanticB}) &&
+            semanticDuplicates ==
+                StableSemanticThreatSetFingerprint({semanticB}) &&
+            semanticDuplicates ==
+                StableSemanticThreatSetFingerprint({semanticC}) &&
+            SemanticThreatGroupCount({semanticA, semanticB}) == 1);
+
+    Threat laterCast = semanticA;
+    laterCast.id = 703;
+    laterCast.logicalCastEpisodeId = 5002;
+    laterCast.startTick = semanticA.startTick + 400;
+    Threat incompatibleGeometry = semanticA;
+    incompatibleGeometry.id = 704;
+    incompatibleGeometry.logicalCastEpisodeId = 5003;
+    incompatibleGeometry.direction = Vec2(0.0f, 1.0f);
+    incompatibleGeometry.endPos = Vec2(100.0f, 1100.0f);
+    ExpectTrue(
+        "true second cast and incompatible geometry change fingerprint",
+        StableSemanticThreatSetFingerprint(
+            {semanticA, laterCast}) != semanticAOnly &&
+            StableSemanticThreatSetFingerprint(
+                {laterCast}) != semanticAOnly &&
+            StableSemanticThreatSetFingerprint(
+                {semanticA, incompatibleGeometry}) != semanticAOnly &&
+            StableSemanticThreatSetFingerprint(
+                {incompatibleGeometry}) != semanticAOnly);
+
+    SpellData wildSpell = semanticSpell;
+    wildSpell.spellName = "WildCards";
+    Threat wildCenter = ZDEvadeTest::MakeThreat(wildSpell);
+    wildCenter.id = 710;
+    wildCenter.logicalCastEpisodeId = 6001;
+    wildCenter.projectileIndex = 1;
+    wildCenter.casterNetworkId = semanticA.casterNetworkId;
+    wildCenter.slot = semanticA.slot;
+    wildCenter.startTick = semanticA.startTick;
+    wildCenter.startPos = semanticA.startPos;
+    wildCenter.endPos = semanticA.endPos;
+    wildCenter.direction = semanticA.direction;
+    wildCenter.projectileLaneKey =
+        StableProjectileLaneKey(wildCenter.direction);
+    Threat wildLeft = wildCenter;
+    wildLeft.id = 711;
+    wildLeft.projectileIndex = 0;
+    wildLeft.direction = Vec2(0.882948f, 0.469472f);
+    wildLeft.projectileLaneKey =
+        StableProjectileLaneKey(wildLeft.direction);
+    wildLeft.endPos =
+        wildLeft.startPos + wildLeft.direction * 1000.0f;
+    Threat wildRight = wildCenter;
+    wildRight.id = 712;
+    wildRight.projectileIndex = 2;
+    wildRight.direction = Vec2(0.882948f, -0.469472f);
+    wildRight.projectileLaneKey =
+        StableProjectileLaneKey(wildRight.direction);
+    wildRight.endPos =
+        wildRight.startPos + wildRight.direction * 1000.0f;
+    const std::uint64_t wildLanes =
+        StableSemanticThreatSetFingerprint(
+            {wildLeft, wildCenter, wildRight});
+    ExpectTrue(
+        "Wild Cards lanes remain distinct and order independent",
+        SemanticThreatGroupCount(
+            {wildLeft, wildCenter, wildRight}) == 3 &&
+            wildLanes == StableSemanticThreatSetFingerprint(
+                {wildRight, wildLeft, wildCenter}));
+    Threat renumberedWildLeft = wildLeft;
+    renumberedWildLeft.projectileIndex = 2;
+    ExpectTrue(
+        "logical fingerprint uses stable lane key not mutable lane index",
+        StableSemanticThreatSetFingerprint({wildLeft}) ==
+            StableSemanticThreatSetFingerprint(
+                {renumberedWildLeft}));
+    Threat missileOnlyA = wildLeft;
+    missileOnlyA.logicalCastEpisodeId = 6100;
+    missileOnlyA.projectileIndex = -1;
+    missileOnlyA.projectileLaneKey = 1;
+    Threat jitteredMissileOnlyA = missileOnlyA;
+    jitteredMissileOnlyA.direction =
+        Vec2(0.874620f, 0.484810f);
+    jitteredMissileOnlyA.endPos =
+        jitteredMissileOnlyA.startPos +
+        jitteredMissileOnlyA.direction * 1000.0f;
+    Threat missileOnlyB = wildRight;
+    missileOnlyB.logicalCastEpisodeId =
+        missileOnlyA.logicalCastEpisodeId;
+    missileOnlyB.projectileIndex = -1;
+    missileOnlyB.projectileLaneKey = 2;
+    Threat jitteredMissileOnlyB = missileOnlyB;
+    jitteredMissileOnlyB.direction =
+        Vec2(0.891007f, -0.453990f);
+    jitteredMissileOnlyB.endPos =
+        jitteredMissileOnlyB.startPos +
+        jitteredMissileOnlyB.direction * 1000.0f;
+    ExpectTrue(
+        "A A+B B missile-only fingerprints keep stable lane identity",
+        StableSemanticThreatSetFingerprint({missileOnlyA}) ==
+            StableSemanticThreatSetFingerprint(
+                {jitteredMissileOnlyA}) &&
+            StableSemanticThreatSetFingerprint(
+                {missileOnlyA, missileOnlyB}) ==
+            StableSemanticThreatSetFingerprint(
+                {jitteredMissileOnlyB, jitteredMissileOnlyA}) &&
+            StableSemanticThreatSetFingerprint({missileOnlyB}) ==
+            StableSemanticThreatSetFingerprint(
+                {jitteredMissileOnlyB}));
+
+    Threat closeLaneA = wildCenter;
+    closeLaneA.id = 720;
+    closeLaneA.projectileIndex = 0;
+    closeLaneA.direction = Vec2(1.0f, 0.0f);
+    closeLaneA.projectileLaneKey =
+        StableProjectileLaneKey(closeLaneA.direction);
+    closeLaneA.endPos =
+        closeLaneA.startPos + closeLaneA.direction * 1000.0f;
+    Threat closeLaneB = closeLaneA;
+    closeLaneB.id = 721;
+    closeLaneB.projectileIndex = 1;
+    closeLaneB.direction = Vec2(0.999391f, 0.034899f);
+    closeLaneB.projectileLaneKey =
+        StableProjectileLaneKey(closeLaneB.direction);
+    closeLaneB.endPos =
+        closeLaneB.startPos + closeLaneB.direction * 1000.0f;
+    ExpectTrue(
+        "close multi-projectile lanes stay distinct by lane key",
+        SameSemanticThreatEpisode(closeLaneA, closeLaneB) == false &&
+            SemanticThreatGroupCount({closeLaneA, closeLaneB}) == 2);
+    std::vector<Threat> indexedStore = {closeLaneA};
+    ExpectTrue(
+        "detector dedup never merges different known lane keys",
+        FindNormalizedCastDuplicate(indexedStore, closeLaneB) ==
+            nullptr);
+    Threat unknownLaneCorrection = closeLaneA;
+    unknownLaneCorrection.projectileIndex = -1;
+    unknownLaneCorrection.projectileLaneKey = 0;
+    const int indexedThreatId = closeLaneA.id;
+    const std::uint64_t indexedLaneKey =
+        closeLaneA.projectileLaneKey;
+    MergeNormalizedCastDuplicate(
+        indexedStore.front(),
+        unknownLaneCorrection);
+    CorrectExistingThreatFromMissile(
+        indexedStore.front(),
+        [](Threat& bound) {
+            bound.missileBound = true;
+            ++bound.revision;
+        });
+    ExpectTrue(
+        "dedup binding and missile correction preserve lane identity",
+        StableProjectileLaneIndex(3, 0) == 0 &&
+            StableProjectileLaneIndex(1, 0) == -1 &&
+            indexedStore.front().id == indexedThreatId &&
+            indexedStore.front().logicalCastEpisodeId ==
+                closeLaneA.logicalCastEpisodeId &&
+            indexedStore.front().projectileLaneKey ==
+                indexedLaneKey &&
+            indexedStore.front().projectileIndex == 0 &&
+            indexedStore.front().missileBound);
+    Threat retainedEpisode = indexedStore.front();
+    retainedEpisode.projectileTerminated = true;
+    retainedEpisode.missileBound = false;
+    retainedEpisode.missingMissileTermination = true;
+    std::vector<Threat> lifecycleSurvivors = {
+        retainedEpisode,
+        semanticA,
+    };
+    lifecycleSurvivors[1].expired = true;
+    lifecycleSurvivors.erase(
+        std::remove_if(
+            lifecycleSurvivors.begin(),
+            lifecycleSurvivors.end(),
+            [](const Threat& threat) {
+                return threat.expired;
+            }),
+        lifecycleSurvivors.end());
+    ExpectTrue(
+        "retained missing and delete lifecycle preserves logical lane",
+        lifecycleSurvivors.size() == 1 &&
+            lifecycleSurvivors.front().logicalCastEpisodeId ==
+                closeLaneA.logicalCastEpisodeId &&
+            lifecycleSurvivors.front().projectileLaneKey ==
+                indexedLaneKey &&
+            lifecycleSurvivors.front().projectileIndex == 0);
+
+    Threat chainA = semanticA;
+    chainA.id = 730;
+    chainA.logicalCastEpisodeId = 0;
+    chainA.projectileIndex = -1;
+    chainA.direction = Vec2(1.0f, 0.0f);
+    chainA.endPos = chainA.startPos + chainA.direction * 1000.0f;
+    Threat chainB = chainA;
+    chainB.id = 731;
+    chainB.direction = Vec2(0.996195f, 0.087156f);
+    chainB.endPos = chainB.startPos + chainB.direction * 1000.0f;
+    Threat chainC = chainA;
+    chainC.id = 732;
+    chainC.direction = Vec2(0.984808f, 0.173648f);
+    chainC.endPos = chainC.startPos + chainC.direction * 1000.0f;
+    ExpectTrue(
+        "unknown-lane transitive direction chain cannot collapse",
+        SameSemanticThreatEpisode(chainA, chainB) &&
+            SameSemanticThreatEpisode(chainB, chainC) &&
+            !SameSemanticThreatEpisode(chainA, chainC) &&
+            SemanticThreatGroupCount({chainA, chainB, chainC}) == 2 &&
+            StableSemanticThreatSetFingerprint(
+                {chainA, chainB, chainC}) ==
+                StableSemanticThreatSetFingerprint(
+                    {chainC, chainA, chainB}));
+
+    Harness noisySingleThreat;
+    noisySingleThreat.Step(
+        oneThreat, 4, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 240.0f),
+        MoveIssueResult::Issued);
+    for (int frame = 0; frame < 10; ++frame) {
+        noisySingleThreat.Step(
+            oneThreat,
+            4,
+            true,
+            (frame % 3) != 0,
+            false,
+            701,
+            right,
+            rightDirection,
+            Vec2(
+                100.0f + static_cast<float>(frame * 11),
+                -220.0f - static_cast<float>(frame * 7)),
+            MoveIssueResult::Issued);
+    }
+    ExpectTrue(
+        "one Veigar Q keeps exactly one branch across ten noisy replans",
+        noisySingleThreat.commitment.active &&
+            noisySingleThreat.commitment.stabilityBranchKey == left &&
+            noisySingleThreat.commits == 1 &&
+            noisySingleThreat.switches == 0);
+
+    Harness driftingTarget;
+    driftingTarget.Step(
+        oneThreat, 8, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    const Vec2 firstCommittedTarget = driftingTarget.committedTarget;
+    bool keptEveryProposal = true;
+    for (int frame = 0; frame < 10; ++frame) {
+        const float drift = 0.02f +
+            static_cast<float>(frame) * 0.012f;
+        const CommittedRouteDecision decision =
+            driftingTarget.Step(
+                oneThreat,
+                8,
+                true,
+                true,
+                false,
+                701,
+                left,
+                Vec2(drift, 1.0f - drift * 0.25f),
+                Vec2(
+                    118.0f + static_cast<float>(frame * 13),
+                    310.0f + static_cast<float>(frame * 17)),
+                MoveIssueResult::Issued);
+        keptEveryProposal =
+            keptEveryProposal &&
+            decision.action ==
+                CommittedRouteAction::KeepCommitted &&
+            driftingTarget.committedTarget.Distance(
+                firstCommittedTarget) < 0.001f;
+    }
+    ExpectTrue(
+        "ten same-branch moving proposals retain exact locked target",
+        keptEveryProposal &&
+            driftingTarget.commits == 1 &&
+            driftingTarget.commitment.stabilityBranchKey == left &&
+            driftingTarget.switches == 0);
+
+    Harness fallbackFlicker;
+    fallbackFlicker.Step(
+        oneThreat, 81, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 225.0f),
+        MoveIssueResult::Issued);
+    const Vec2 flickerTarget = fallbackFlicker.committedTarget;
+    bool flickerStayedExact = true;
+    for (int frame = 0; frame < 10; ++frame) {
+        const CommittedRouteDecision decision =
+            fallbackFlicker.Step(
+                oneThreat,
+                81,
+                true,
+                true,
+                false,
+                701,
+                left,
+                Vec2(
+                    frame % 2 == 0 ? 0.03f : -0.03f,
+                    1.0f),
+                Vec2(
+                    90.0f + static_cast<float>(frame * 4),
+                    260.0f + static_cast<float>(frame * 9)),
+                MoveIssueResult::Issued);
+        flickerStayedExact =
+            flickerStayedExact &&
+            decision.action ==
+                CommittedRouteAction::KeepCommitted &&
+            fallbackFlicker.committedTarget.Distance(
+                flickerTarget) < 0.001f;
+    }
+    ExpectTrue(
+        "strict fallback flicker does not change exact target",
+        flickerStayedExact &&
+            fallbackFlicker.commits == 1);
+
+    Harness unsafeSameBranch;
+    unsafeSameBranch.Step(
+        oneThreat, 82, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 230.0f),
+        MoveIssueResult::Issued);
+    const CommittedRouteDecision unsafeReplacement =
+        unsafeSameBranch.Step(
+            oneThreat, 82, true, false, false,
+            701, left, Vec2(0.08f, 0.996f),
+            Vec2(118.0f, 330.0f),
+            MoveIssueResult::Issued);
+    ExpectTrue(
+        "unsafe current route allows valid same-branch replacement",
+        unsafeReplacement.action ==
+                CommittedRouteAction::ProposeSameBranch &&
+            unsafeSameBranch.commits == 2 &&
+            unsafeSameBranch.switches == 0 &&
+            unsafeSameBranch.committedTarget.Distance(
+                Vec2(118.0f, 330.0f)) < 0.001f);
+
+    Harness addedSafeThreat;
+    addedSafeThreat.Step(
+        oneThreat, 3, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    addedSafeThreat.Step(
+        twoThreats, 3, true, true, false,
+        702, right, rightDirection, Vec2(100.0f, -260.0f),
+        MoveIssueResult::Issued);
+    ExpectTrue(
+        "safe second threat adopts fingerprint without switching",
+        addedSafeThreat.commitment.threatSetFingerprint == twoThreats &&
+            addedSafeThreat.commitment.stabilityBranchKey == left &&
+            addedSafeThreat.switches == 0);
+
+    Harness addedBlockingThreat;
+    addedBlockingThreat.Step(
+        oneThreat, 5, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    addedBlockingThreat.Step(
+        twoThreats, 5, true, false, false,
+        702, right, rightDirection, Vec2(100.0f, -260.0f),
+        MoveIssueResult::Issued);
+    for (int frame = 0; frame < 10; ++frame) {
+        addedBlockingThreat.Step(
+            twoThreats, 5, true, (frame % 2) == 0, false,
+            701, left, leftDirection,
+            Vec2(120.0f + frame, 250.0f + frame),
+            MoveIssueResult::Issued);
+    }
+    ExpectTrue(
+        "blocking second threat permits one switch then locks two-ID set",
+        addedBlockingThreat.commitment.threatSetFingerprint == twoThreats &&
+            addedBlockingThreat.commitment.stabilityBranchKey == right &&
+            addedBlockingThreat.switches == 1);
+
+    addedBlockingThreat.Step(
+        oneThreat, 5, true, true, false,
+        701, left, leftDirection, Vec2(140.0f, 280.0f),
+        MoveIssueResult::Issued);
+    ExpectTrue(
+        "threat removal keeps valid committed direction",
+        addedBlockingThreat.commitment.threatSetFingerprint == oneThreat &&
+            addedBlockingThreat.commitment.stabilityBranchKey == right &&
+            addedBlockingThreat.switches == 1);
+
+    Harness allowedInvalidations;
+    allowedInvalidations.Step(
+        oneThreat, 9, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    allowedInvalidations.Step(
+        oneThreat, 9, false, false, false,
+        701, right, rightDirection, Vec2(100.0f, -220.0f),
+        MoveIssueResult::Issued);
+    allowedInvalidations.Step(
+        oneThreat, 9, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 260.0f),
+        MoveIssueResult::Issued);
+    allowedInvalidations.Step(
+        oneThreat, 10, true, true, false,
+        701, right, rightDirection, Vec2(100.0f, -280.0f),
+        MoveIssueResult::Issued);
+    ExpectTrue(
+        "wall hard failure and manual epoch each allow a switch",
+        allowedInvalidations.switches == 3 &&
+            allowedInvalidations.commitment.manualEpoch == 10 &&
+            allowedInvalidations.commitment.stabilityBranchKey == right);
+
+    Harness reachedInDanger;
+    reachedInDanger.Step(
+        oneThreat, 11, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    const Vec2 reachedDirectionBefore =
+        reachedInDanger.commitment.normalizedDirection;
+    const CommittedRouteDecision reachedExtension =
+        reachedInDanger.Step(
+        oneThreat, 11, true, true, true,
+        701, left, Vec2(0.04f, 0.999f), Vec2(112.0f, 390.0f),
+        MoveIssueResult::Issued, false, true);
+    ExpectTrue(
+        "reached exact-safe target extends stored direction only",
+        reachedExtension.action ==
+                CommittedRouteAction::ProposeSameDirectionExtension &&
+            reachedInDanger.commits == 2 &&
+            reachedInDanger.switches == 0 &&
+            reachedInDanger.commitment.stabilityBranchKey == left &&
+            reachedInDanger.commitment.normalizedDirection.Distance(
+                reachedDirectionBefore) < 0.001f &&
+            reachedInDanger.committedTarget.Distance(
+                Vec2(112.0f, 390.0f)) < 0.001f);
+
+    Harness syntheticReached;
+    syntheticReached.Step(
+        semanticAOnly, 12, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    const Vec2 syntheticHero(100.0f, 218.0f);
+    const Vec2 syntheticTarget =
+        BuildCommittedRouteExtensionTarget(
+            syntheticHero,
+            syntheticReached.commitment,
+            65.0f,
+            kDefaultEndpointMargin,
+            35.0f,
+            760.0f);
+    const CommittedRouteDecision syntheticDecision =
+        syntheticReached.Step(
+            semanticAOnly,
+            12,
+            true,
+            true,
+            true,
+            701,
+            left,
+            syntheticTarget - syntheticHero,
+            syntheticTarget,
+            MoveIssueResult::Issued,
+            false,
+            true);
+    ExpectTrue(
+        "missing generated branch uses accepted same-direction extension",
+        syntheticDecision.action ==
+                CommittedRouteAction::ProposeSameDirectionExtension &&
+            syntheticReached.commits == 2 &&
+            syntheticReached.switches == 0 &&
+            syntheticReached.committedTarget.Distance(
+                syntheticTarget) < 0.001f);
+
+    Harness noExitSyntheticReached;
+    noExitSyntheticReached.Step(
+        semanticAOnly, 121, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    const CommittedRouteDecision rejectedNoExitExtension =
+        noExitSyntheticReached.Step(
+            semanticAOnly,
+            121,
+            true,
+            true,
+            true,
+            701,
+            left,
+            syntheticTarget - syntheticHero,
+            syntheticTarget,
+            MoveIssueResult::Issued,
+            false,
+            true,
+            true,
+            true,
+            false);
+    ExpectTrue(
+        "reached longitudinal no-exit extension releases commitment",
+        rejectedNoExitExtension.action ==
+                CommittedRouteAction::ReleaseReachedBranch &&
+            rejectedNoExitExtension.continuePlannerPipeline &&
+            !noExitSyntheticReached.commitment.active &&
+            noExitSyntheticReached.commits == 1);
+
+    Harness wallBlockedExtension;
+    wallBlockedExtension.Step(
+        semanticAOnly, 13, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    const CommittedRouteDecision releasedReached =
+        wallBlockedExtension.Step(
+            semanticAOnly,
+            13,
+            true,
+            true,
+            true,
+            701,
+            left,
+            leftDirection,
+            {},
+            MoveIssueResult::Issued,
+            false,
+            false,
+            true);
+    wallBlockedExtension.Step(
+        semanticAOnly,
+        13,
+        true,
+        true,
+        false,
+        701,
+        right,
+        rightDirection,
+        Vec2(100.0f, -280.0f),
+        MoveIssueResult::Issued);
+    for (int frame = 0; frame < 10; ++frame) {
+        wallBlockedExtension.Step(
+            semanticAOnly,
+            13,
+            true,
+            true,
+            false,
+            701,
+            left,
+            leftDirection,
+            Vec2(100.0f, 280.0f),
+            MoveIssueResult::Issued);
+    }
+    ExpectTrue(
+        "wall-invalid extension releases branch and switches exactly once",
+        releasedReached.action ==
+                CommittedRouteAction::ReleaseReachedBranch &&
+            releasedReached.continuePlannerPipeline &&
+            wallBlockedExtension.commits == 2 &&
+            wallBlockedExtension.switches == 1 &&
+            wallBlockedExtension.commitment.stabilityBranchKey ==
+                right);
+
+    const ReachedCommitmentEscalation spellEscalation =
+        DecideReachedCommitmentEscalation(false, true, true);
+    const ReachedCommitmentEscalation noPlanEscalation =
+        DecideReachedCommitmentEscalation(false, true, false);
+    ExpectTrue(
+        "no alternate reaches spell then normal no-plan safety",
+        spellEscalation ==
+                ReachedCommitmentEscalation::TryEvadeSpell &&
+            noPlanEscalation ==
+                ReachedCommitmentEscalation::NoPlanSafety &&
+            DecideNoPlanHoldAction(
+                true,
+                StopIssueResult::Issued) ==
+                NoPlanHoldAction::Hold);
+
+    Harness duplicateChurn;
+    duplicateChurn.Step(
+        semanticAOnly, 14, false, false, false,
+        701, left, leftDirection, Vec2(100.0f, 220.0f),
+        MoveIssueResult::Issued);
+    for (int frame = 0; frame < 10; ++frame) {
+        const std::uint64_t duplicateFrame =
+            (frame % 3) == 1
+            ? StableSemanticThreatSetFingerprint(
+                {semanticA, semanticB})
+            : StableSemanticThreatSetFingerprint({semanticA});
+        duplicateChurn.Step(
+            duplicateFrame, 14, true, true, false,
+            701, right, rightDirection, Vec2(100.0f, -240.0f),
+            MoveIssueResult::Issued);
+    }
+    duplicateChurn.Step(
+        StableSemanticThreatSetFingerprint(
+            {semanticA, incompatibleGeometry}),
+        14,
+        true,
+        false,
+        false,
+        704,
+        right,
+        rightDirection,
+        Vec2(100.0f, -280.0f),
+        MoveIssueResult::Issued);
+    ExpectTrue(
+        "duplicate churn locks one branch and real blocker switches once",
+        duplicateChurn.switches == 1 &&
+            duplicateChurn.commits == 2 &&
+            duplicateChurn.commitment.stabilityBranchKey == right);
+
+    reachedInDanger.Step(
+        StableThreatSetFingerprint({}),
+        11,
+        true,
+        true,
+        false,
+        -1,
+        StabilityBranch::Unknown,
+        {},
+        {},
+        MoveIssueResult::AlreadyFollowing,
+        true);
+    ExpectTrue(
+        "empty threat set clears committed route identity",
+        !reachedInDanger.commitment.active);
+}
+
 void TestNoPlanStopActions() {
     const NoPlanHoldAction failedFrame =
         DecideNoPlanHoldAction(true, StopIssueResult::Failed);
@@ -1501,6 +2819,221 @@ void TestNoPlanStopActions() {
                    throttledFrame != NoPlanHoldAction::Hold &&
                    issuedFrame == NoPlanHoldAction::Hold &&
                    settledFrame == NoPlanHoldAction::Hold);
+}
+
+void TestFirstActionableAcquisitionPolicy() {
+    ActionableAcquisitionInput firstInput;
+    firstInput.controllerOwnsMovement = false;
+    firstInput.exactDanger = true;
+    firstInput.pathAcquisitionDanger = true;
+    firstInput.directDanger = true;
+    firstInput.unsafeThreatPath = true;
+    firstInput.verifiedSuppressingHold = false;
+    firstInput.threatSerial = 41;
+    firstInput.handledAcquisitionSerial = 40;
+    const FirstActionableAcquisitionPolicy first =
+        DecideFirstActionableAcquisition(firstInput);
+    const AcquisitionActionSequence firstActions =
+        DecideAcquisitionActionSequence(first, true);
+    constexpr bool nearWallWouldHold = true;
+    constexpr int windupRemainingMs = 300;
+    constexpr int updateTick = 1020;
+    constexpr int recentMoveAttemptTick = 1000;
+    const bool comfortGatePassed =
+        !nearWallWouldHold || first.skipComfortHold;
+    const bool windupGatePassed =
+        windupRemainingMs <= 0 ||
+        first.skipWindupPreservation;
+    const MoveCadenceAction firstMoveCadence =
+        DecideMoveCadence(
+            false,
+            false,
+            true,
+            updateTick,
+            recentMoveAttemptTick,
+            recentMoveAttemptTick,
+            first.moveMinimumIntervalMs,
+            260);
+    bool everyActionabilitySourceAcquires = true;
+    for (int source = 0; source < 4; ++source) {
+        ActionableAcquisitionInput sourceInput = firstInput;
+        sourceInput.exactDanger = source == 0;
+        sourceInput.pathAcquisitionDanger = source == 1;
+        sourceInput.directDanger = source == 2;
+        sourceInput.unsafeThreatPath = source == 3;
+        everyActionabilitySourceAcquires =
+            everyActionabilitySourceAcquires &&
+            DecideFirstActionableAcquisition(sourceInput)
+                .firstActionableAcquisition;
+    }
+
+    ExpectTrue(
+        "ACQ-01 actionable fresh serial forces plan then move in one update",
+        first.firstActionableAcquisition &&
+            everyActionabilitySourceAcquires &&
+            first.forceReplan &&
+            first.skipComfortHold &&
+            first.skipWindupPreservation &&
+            first.moveMinimumIntervalMs == 20 &&
+            comfortGatePassed &&
+            windupGatePassed &&
+            firstMoveCadence == MoveCadenceAction::Issue &&
+            firstActions.count == 2 &&
+            firstActions.actions[0] == AcquisitionFrameAction::Plan &&
+            firstActions.actions[1] == AcquisitionFrameAction::Move);
+    ExpectTrue(
+        "ACQ-02 first acquisition records only after frame processing",
+        first.recordSerialAfterProcessing);
+
+    ActionableAcquisitionInput futureInput = firstInput;
+    futureInput.exactDanger = false;
+    futureInput.pathAcquisitionDanger = false;
+    futureInput.directDanger = false;
+    futureInput.unsafeThreatPath = false;
+    futureInput.threatSerial = 42;
+    const FirstActionableAcquisitionPolicy future =
+        DecideFirstActionableAcquisition(futureInput);
+    ExpectTrue(
+        "ACQ-03 revision-only future threat preserves comfort waits",
+        !future.firstActionableAcquisition &&
+            !future.forceReplan &&
+            !future.skipComfortHold &&
+            !future.skipWindupPreservation &&
+            !future.recordSerialAfterProcessing);
+
+    ActionableAcquisitionInput protectedInput = firstInput;
+    protectedInput.verifiedSuppressingHold = true;
+    protectedInput.threatSerial = 43;
+    const FirstActionableAcquisitionPolicy protectedDecision =
+        DecideFirstActionableAcquisition(protectedInput);
+    const AcquisitionActionSequence protectedActions =
+        DecideAcquisitionActionSequence(protectedDecision, true);
+    ExpectTrue(
+        "ACQ-04 verified invulnerability suppresses first plan and move",
+        protectedDecision.firstActionableAcquisition &&
+            protectedDecision.suppressForVerifiedHold &&
+            !protectedDecision.forceReplan &&
+            protectedActions.count == 1 &&
+            protectedActions.actions[0] ==
+                AcquisitionFrameAction::Suppress);
+
+    const AcquisitionActionSequence noPlanActions =
+        DecideAcquisitionActionSequence(first, false);
+    ExpectTrue(
+        "ACQ-05 first acquisition no-plan stops and retries next update",
+        first.stopImmediatelyWithoutPlan &&
+            first.noPlanRetryDelayMs == 0 &&
+            noPlanActions.count == 2 &&
+            noPlanActions.actions[0] == AcquisitionFrameAction::Plan &&
+            noPlanActions.actions[1] == AcquisitionFrameAction::Stop);
+
+    ActionableAcquisitionInput sameSerialInput = firstInput;
+    sameSerialInput.handledAcquisitionSerial =
+        sameSerialInput.threatSerial;
+    const FirstActionableAcquisitionPolicy sameSerial =
+        DecideFirstActionableAcquisition(sameSerialInput);
+    ExpectTrue(
+        "ACQ-06 same serial later may use normal comfort policies",
+        !sameSerial.firstActionableAcquisition &&
+            !sameSerial.skipComfortHold &&
+            !sameSerial.skipWindupPreservation);
+
+    ActionableAcquisitionInput newSerialInput = sameSerialInput;
+    ++newSerialInput.threatSerial;
+    const FirstActionableAcquisitionPolicy newSerial =
+        DecideFirstActionableAcquisition(newSerialInput);
+    ExpectTrue(
+        "ACQ-07 a new actionable serial creates a new first acquisition",
+        newSerial.firstActionableAcquisition &&
+            newSerial.forceReplan);
+
+    const MoveFailureClassification coreThrottle =
+        AdaptCoreMoveIssueResult(
+            CoreControl::OrderIssueResult::Throttled,
+            0);
+    const TargetCommitDecision throttleCommit =
+        DecideTargetCommit(coreThrottle.result, false);
+    ExpectTrue(
+        "ACQ-08 Core throttle keeps target and retries at emergency cadence",
+        coreThrottle.result == MoveIssueResult::Throttled &&
+            coreThrottle.consecutiveFailures == 0 &&
+            throttleCommit.retryProposed &&
+            !throttleCommit.commitProposed &&
+            DecideMoveCadence(
+                false,
+                false,
+                false,
+                1020,
+                0,
+                1000,
+                first.moveMinimumIntervalMs,
+                260) == MoveCadenceAction::Issue);
+
+    const MoveIssueResult retryResults[] = {
+        MoveIssueResult::Throttled,
+        MoveIssueResult::RetryableFailure,
+    };
+    bool twoFrameRetryPersistence = true;
+    for (const MoveIssueResult retryResult : retryResults) {
+        bool pendingProposal = true;
+        const TargetCommitDecision firstFrame =
+            DecideTargetCommit(retryResult, true);
+        if (ShouldClearPendingTargetForExactCommitment(
+                true,
+                firstFrame.retryProposed)) {
+            pendingProposal = false;
+        }
+        const TargetCommitDecision secondFrame =
+            pendingProposal
+            ? DecideTargetCommit(
+                MoveIssueResult::Issued,
+                true)
+            : TargetCommitDecision{};
+        twoFrameRetryPersistence =
+            twoFrameRetryPersistence &&
+            firstFrame.retryProposed &&
+            !firstFrame.commitProposed &&
+            pendingProposal &&
+            secondFrame.commitProposed;
+    }
+    ExpectTrue(
+        "two-frame fallback shortening retries then commits on acceptance",
+        twoFrameRetryPersistence);
+    ExpectTrue(
+        "exact retention clears non-retry pending proposals only",
+        ShouldClearPendingTargetForExactCommitment(
+            true,
+            false) &&
+            !ShouldClearPendingTargetForExactCommitment(
+                true,
+                true));
+    LockedRouteValidationInput unsafeRefreshInput;
+    unsafeRefreshInput.hasLock = true;
+    unsafeRefreshInput.evaluationValid = true;
+    unsafeRefreshInput.walkable = true;
+    unsafeRefreshInput.startsInThreat = true;
+    unsafeRefreshInput.exitedStartEnvelope = false;
+    const LockedRouteValidation unsafeRefresh =
+        ClassifyLockedRoute(unsafeRefreshInput);
+    ExpectTrue(
+        "throttled pending proposal clears when refresh becomes unsafe",
+        !ShouldRetainRefreshedPendingTarget(
+            true,
+            true,
+            true,
+            unsafeRefresh.safety));
+    LockedRouteValidationInput usableRefreshInput =
+        unsafeRefreshInput;
+    usableRefreshInput.exitedStartEnvelope = true;
+    const LockedRouteValidation usableRefresh =
+        ClassifyLockedRoute(usableRefreshInput);
+    ExpectTrue(
+        "throttled pending proposal persists while refresh stays usable",
+        ShouldRetainRefreshedPendingTarget(
+            true,
+            true,
+            true,
+            usableRefresh.safety));
 }
 
 void TestNoPlanRetryPolicy() {
@@ -1976,9 +3509,12 @@ int main() {
     TestActiveEvadeSpellDatabase();
     TestObservedRoutePolicy();
     TestThreatFreeActionPolicy();
+    TestExternalMoveDecisionPolicy();
     TestStableRouteStrictPriority();
     TestRouteCommitmentFrames();
+    TestSimpleCommittedRoutePolicyFrames();
     TestNoPlanStopActions();
+    TestFirstActionableAcquisitionPolicy();
     TestNoPlanRetryPolicy();
     TestStopThrottleReleasePolicy();
     TestMoveRefreshCadencePolicy();
@@ -2596,6 +4132,20 @@ int main() {
         DecideDeferredRoute(true, false) == DeferredRouteAction::Detour;
     const bool rerouteNowResumable =
         DecideDeferredRoute(true, true) == DeferredRouteAction::Resume;
+    ExpectTrue("deferred resume keeps explicit twelve-unit tolerance",
+               kDeferredResumeReachTolerance == 12.0f);
+    ExpectTrue("unsafe deferred route never resumes due to proximity",
+               rerouteStillRequired &&
+                   IsMoveTargetReached(
+                       1.0f,
+                       kDeferredResumeReachTolerance,
+                       false));
+    ExpectTrue("strict-safe deferred route then uses resume tolerance",
+               rerouteNowResumable &&
+                   IsMoveTargetReached(
+                       kDeferredResumeReachTolerance,
+                       kDeferredResumeReachTolerance,
+                       false));
     ExpectTrue("strict evade remains committed without deferred detour",
                ShouldCommitStrictState(true, false, false));
     ExpectTrue("required reroute remains committed",

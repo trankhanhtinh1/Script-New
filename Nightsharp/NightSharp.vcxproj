@@ -439,6 +439,9 @@
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellEngine.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellManager.h" />
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatRenderer.h" />
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualGeometry.h" />
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualStyle.h" />
     <ClInclude Include="Plugins\ZDEvade\ZDEvade.h" />
     <ClInclude Include="Plugins\ZDPrediction\Analysis\AoeOptimizer.h" />
     <ClInclude Include="Plugins\ZDPrediction\Analysis\ConfidenceEvaluator.h" />
@@ -692,6 +695,7 @@
     <ClInclude Include="tests\zdevade_detector_policy_test.cpp" />
     <ClInclude Include="tests\zdevade_geometry_runtime_test.cpp" />
     <ClInclude Include="tests\zdevade_routing_policy_test.cpp" />
+    <ClInclude Include="tests\zdevade_visual_geometry_test.cpp" />
     <ClInclude Include="Third_Party\clipper\clipper.h" />
     <ClInclude Include="Third_Party\clipper\clipper.hpp" />
   </ItemGroup>

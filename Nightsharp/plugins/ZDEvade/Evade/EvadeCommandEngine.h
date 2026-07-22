@@ -106,7 +106,9 @@ public:
     MoveIssueResult MoveTo(const SDK::AIHeroClient& player,
                            const Vec2& destination,
                            int minimumIntervalMs,
-                           int refreshIntervalMs) {
+                           int refreshIntervalMs,
+                           float targetReachTolerance,
+                           bool currentPositionExactDanger) {
         if (!player.IsValid() ||
             !destination.IsValid() ||
             destination.IsZero()) {
@@ -136,7 +138,10 @@ public:
             lastProgressTick = now;
         }
 
-        if (distance < 12.0f) {
+        if (IsMoveTargetReached(
+                distance,
+                targetReachTolerance,
+                currentPositionExactDanger)) {
             if (targetChanged) {
                 lastTarget = destination;
                 lastProgressDistance = distance;

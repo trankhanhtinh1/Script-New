@@ -232,7 +232,6 @@ public:
         return inlineSize + overflowValues.size();
     }
 
-private:
     bool Contains(const CollisionIdentity& identity) const {
         for (std::size_t index = 0; index < inlineSize; ++index) {
             if (inlineValues[index] == identity) return true;
@@ -243,6 +242,31 @@ private:
         return false;
     }
 
+    bool AnyNotIn(const CollisionIdentitySet& other) const {
+        bool found = false;
+        ForEach([&](const CollisionIdentity& identity) {
+            found = found || !other.Contains(identity);
+        });
+        return found;
+    }
+
+    bool Intersects(const CollisionIdentitySet& other) const {
+        bool found = false;
+        ForEach([&](const CollisionIdentity& identity) {
+            found = found || other.Contains(identity);
+        });
+        return found;
+    }
+
+    template <typename Visitor>
+    void ForEach(Visitor&& visitor) const {
+        for (std::size_t index = 0; index < inlineSize; ++index)
+            visitor(inlineValues[index]);
+        for (const CollisionIdentity& identity : overflowValues)
+            visitor(identity);
+    }
+
+private:
     std::array<CollisionIdentity, kInlineCollisionIdentityCapacity>
         inlineValues = {};
     std::size_t inlineSize = 0;
@@ -297,6 +321,12 @@ struct CandidateEvaluation {
     bool timingSafe = false;
     bool strictSafe = false;
     bool reenteredDanger = false;
+    bool enteredNewThreat = false;
+    bool exitedStartEnvelope = false;
+    CollisionIdentitySet startThreatIdentities;
+    CollisionIdentitySet encounteredCollisionIdentities;
+    CollisionIdentitySet encounteredEnvelopeIdentities;
+    CollisionIdentitySet endThreatIdentities;
     int endpointDanger = 0;
     int pathDanger = 0;
     int maxDanger = 0;

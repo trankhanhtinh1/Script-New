@@ -2933,7 +2933,7 @@ public:
             spell.missileName = "NautilusAnchorDragMissile";
             spell.name = "Dredge Line";
             spell.projectileSpeed = 2000.0f;
-            spell.radius = 90.0f;
+            spell.radius = 95.0f;
             spell.range = 1150.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;

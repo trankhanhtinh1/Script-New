@@ -18,6 +18,8 @@ using ZDEvadeTest::ExpectTrue;
 
 namespace {
 
+constexpr int kExpectedLogicalCastEpisodeWindowMs = 180;
+
 struct QueueEvent {
     std::uint64_t id = 0;
     char spellName[64] = {};
@@ -277,6 +279,493 @@ int main() {
     ExpectTrue("ProcessSpell and DoCast share one logical cast",
                SameLogicalCast(processSpell, doCast));
 
+    SpellData episodeSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    episodeSpell.spellName = "EpisodeSpell";
+    episodeSpell.spellKey = ZDSpellSlot::Q;
+    episodeSpell.multipleNumber = 3;
+    episodeSpell.multipleAngle = 2.0f;
+    LogicalCastEpisodeObservation episodeA;
+    episodeA.casterNetworkId = 42u;
+    episodeA.data = &episodeSpell;
+    episodeA.slot = static_cast<int>(ZDSpellSlot::Q);
+    episodeA.episodeTick = 989;
+    episodeA.observationTick = 989;
+    episodeA.start = Vec2(100.0f, 100.0f);
+    episodeA.end = Vec2(1000.0f, 100.0f);
+    episodeA.direction = Vec2(1.0f, 0.0f);
+    LogicalCastEpisodeObservation episodeB = episodeA;
+    episodeB.episodeTick = 1070;
+    episodeB.observationTick = 1070;
+    episodeB.start = Vec2(106.0f, 102.0f);
+    episodeB.end = Vec2(1006.0f, 102.0f);
+
+    LogicalCastEpisodeResolver<8> episodes;
+    const std::uint64_t episodeIdA = episodes.Resolve(episodeA);
+    const std::uint64_t episodeIdB = episodes.Resolve(episodeB);
+    ExpectTrue(
+        "989 and 1070 cross-bucket callbacks share ingestion episode",
+        episodeIdA != 0 &&
+            episodeIdA == episodeIdB &&
+            episodes.Size() == 1);
+    LogicalCastEpisodeObservation missileEpisode = episodeA;
+    missileEpisode.observationTick = 1120;
+    missileEpisode.direction =
+        Vec2(0.999391f, 0.034899f);
+    missileEpisode.end =
+        missileEpisode.start +
+        missileEpisode.direction * 900.0f;
+    missileEpisode.projectileObservation = true;
+    const std::uint64_t castLeftLaneKey =
+        episodes.ResolveLaneKey(
+            episodeIdA,
+            Vec2(0.999391f, -0.034899f),
+            0);
+    const std::uint64_t castCenterLaneKey =
+        episodes.ResolveLaneKey(
+            episodeIdA,
+            Vec2(1.0f, 0.0f),
+            1);
+    const std::uint64_t castRightLaneKey =
+        episodes.ResolveLaneKey(
+            episodeIdA,
+            missileEpisode.direction,
+            2);
+    Vec2 resolvedEpisodeDirection;
+    bool matchedMissileEpisode = false;
+    std::uint64_t resolvedCastLaneKey = 0;
+    const std::uint64_t missileEpisodeId = episodes.Resolve(
+        missileEpisode,
+        &resolvedEpisodeDirection,
+        &matchedMissileEpisode,
+        &resolvedCastLaneKey);
+    ExpectTrue(
+        "missile observation binds existing multi-projectile episode",
+        missileEpisodeId == episodeIdA &&
+            matchedMissileEpisode &&
+            resolvedEpisodeDirection.Dot(
+                episodeA.direction) > 0.999f &&
+            resolvedCastLaneKey == castRightLaneKey &&
+            castLeftLaneKey != castCenterLaneKey &&
+            castCenterLaneKey != castRightLaneKey &&
+            StableProjectileLaneIndex(3, 0) == 0 &&
+            StableProjectileLaneIndex(3, 1) == 1 &&
+            StableProjectileLaneIndex(3, 2) == 2);
+
+    SpellData missileOnlySpell = episodeSpell;
+    missileOnlySpell.multipleAngle = 28.0f;
+    const std::array<Vec2, 3> missileOnlyDirections = {{
+        Vec2(0.882947593f, -0.469471563f),
+        Vec2(1.0f, 0.0f),
+        Vec2(0.882947593f, 0.469471563f),
+    }};
+    const std::array<std::array<int, 3>, 6> arrivalPermutations = {{
+        {{0, 1, 2}},
+        {{0, 2, 1}},
+        {{1, 0, 2}},
+        {{1, 2, 0}},
+        {{2, 0, 1}},
+        {{2, 1, 0}},
+    }};
+    const auto rotateDirection = [](const Vec2& direction, float degrees) {
+        const float radians =
+            degrees * 3.14159265358979323846f / 180.0f;
+        return Vec2(
+            direction.x * std::cos(radians) -
+                direction.y * std::sin(radians),
+            direction.x * std::sin(radians) +
+                direction.y * std::cos(radians)).Normalized();
+    };
+    bool everyPermutationSharedEpisode = true;
+    bool everyPermutationKeptLaneKeys = true;
+    for (const auto& permutation : arrivalPermutations) {
+        LogicalCastEpisodeResolver<8> missileOnlyEpisodes;
+        std::uint64_t sharedId = 0;
+        std::array<std::uint64_t, 3> keysByAuthoredLane = {};
+        for (std::size_t arrival = 0; arrival < permutation.size(); ++arrival) {
+            const int lane = permutation[arrival];
+            LogicalCastEpisodeObservation observation = episodeA;
+            observation.data = &missileOnlySpell;
+            observation.episodeTick = 2000;
+            observation.observationTick =
+                2000 + static_cast<int>(arrival) * 10;
+            observation.direction = missileOnlyDirections[lane];
+            observation.end =
+                observation.start + observation.direction * 900.0f;
+            observation.projectileObservation = true;
+            Vec2 assumedCenter;
+            std::uint64_t laneKey = 0;
+            const std::uint64_t resolved =
+                missileOnlyEpisodes.Resolve(
+                    observation,
+                    &assumedCenter,
+                    nullptr,
+                    &laneKey);
+            if (arrival == 0) sharedId = resolved;
+            everyPermutationSharedEpisode =
+                everyPermutationSharedEpisode &&
+                resolved != 0 &&
+                resolved == sharedId &&
+                assumedCenter.IsZero() &&
+                laneKey != 0;
+            keysByAuthoredLane[lane] = laneKey;
+        }
+        std::array<std::uint64_t, 3> sortedKeys =
+            keysByAuthoredLane;
+        std::sort(sortedKeys.begin(), sortedKeys.end());
+        everyPermutationKeptLaneKeys =
+            everyPermutationKeptLaneKeys &&
+            sortedKeys == std::array<std::uint64_t, 3>{{1, 2, 3}};
+        for (std::size_t lane = 0;
+             lane < missileOnlyDirections.size();
+             ++lane) {
+            LogicalCastEpisodeObservation jittered = episodeA;
+            jittered.data = &missileOnlySpell;
+            jittered.episodeTick = 2000;
+            jittered.observationTick =
+                2040 + static_cast<int>(lane) * 10;
+            jittered.direction = rotateDirection(
+                missileOnlyDirections[lane],
+                lane == 0 ? 1.0f : lane == 1 ? -0.1f : -0.75f);
+            jittered.end =
+                jittered.start + jittered.direction * 900.0f;
+            jittered.projectileObservation = true;
+            std::uint64_t jitteredKey = 0;
+            everyPermutationSharedEpisode =
+                everyPermutationSharedEpisode &&
+                missileOnlyEpisodes.Resolve(
+                    jittered,
+                    nullptr,
+                    nullptr,
+                    &jitteredKey) == sharedId;
+            everyPermutationKeptLaneKeys =
+                everyPermutationKeptLaneKeys &&
+                jitteredKey == keysByAuthoredLane[lane];
+        }
+    }
+    ExpectTrue(
+        "all missile-only lane arrival permutations share one episode",
+        everyPermutationSharedEpisode);
+    ExpectTrue(
+        "outer-first center and other arrivals keep physical lane keys",
+        everyPermutationKeptLaneKeys);
+
+    LogicalCastEpisodeResolver<8> missileOnlyLaterEpisodes;
+    LogicalCastEpisodeObservation firstMissileOnly = episodeA;
+    firstMissileOnly.data = &missileOnlySpell;
+    firstMissileOnly.episodeTick = 3000;
+    firstMissileOnly.observationTick = 3000;
+    firstMissileOnly.direction = missileOnlyDirections[0];
+    firstMissileOnly.end =
+        firstMissileOnly.start + firstMissileOnly.direction * 900.0f;
+    firstMissileOnly.projectileObservation = true;
+    const std::uint64_t firstMissileOnlyId =
+        missileOnlyLaterEpisodes.Resolve(firstMissileOnly);
+    LogicalCastEpisodeObservation genuineLaterMissile =
+        firstMissileOnly;
+    genuineLaterMissile.episodeTick =
+        firstMissileOnly.episodeTick +
+        kExpectedLogicalCastEpisodeWindowMs + 1;
+    genuineLaterMissile.observationTick =
+        genuineLaterMissile.episodeTick;
+    ExpectTrue(
+        "genuine later missile-only cast receives a separate episode",
+        missileOnlyLaterEpisodes.Resolve(genuineLaterMissile) !=
+            firstMissileOnlyId);
+
+    LogicalCastEpisodeResolver<4> boundaryEpisodes;
+    LogicalCastEpisodeObservation boundaryLane = firstMissileOnly;
+    boundaryLane.episodeTick = 4000;
+    boundaryLane.observationTick = 4000;
+    boundaryLane.direction = rotateDirection(Vec2(1.0f, 0.0f), 10.0f);
+    boundaryLane.end =
+        boundaryLane.start + boundaryLane.direction * 900.0f;
+    std::uint64_t boundaryKey = 0;
+    boundaryEpisodes.Resolve(
+        boundaryLane, nullptr, nullptr, &boundaryKey);
+    LogicalCastEpisodeObservation boundaryJitter = boundaryLane;
+    boundaryJitter.observationTick += 10;
+    boundaryJitter.direction =
+        rotateDirection(boundaryLane.direction, 1.0f);
+    boundaryJitter.end =
+        boundaryJitter.start + boundaryJitter.direction * 900.0f;
+    std::uint64_t boundaryJitterKey = 0;
+    boundaryEpisodes.Resolve(
+        boundaryJitter,
+        nullptr,
+        nullptr,
+        &boundaryJitterKey);
+    ExpectTrue(
+        "same-lane jitter crosses exact quantization but reuses registry key",
+        StableProjectileLaneKey(boundaryLane.direction) !=
+            StableProjectileLaneKey(boundaryJitter.direction) &&
+            boundaryKey != 0 &&
+            boundaryKey == boundaryJitterKey);
+
+    LogicalCastEpisodeResolver<4> noTransitiveEpisodes;
+    LogicalCastEpisodeObservation transitiveA = firstMissileOnly;
+    transitiveA.episodeTick = 4500;
+    transitiveA.observationTick = 4500;
+    transitiveA.direction = Vec2(1.0f, 0.0f);
+    transitiveA.end =
+        transitiveA.start + transitiveA.direction * 900.0f;
+    std::uint64_t transitiveKeyA = 0;
+    noTransitiveEpisodes.Resolve(
+        transitiveA, nullptr, nullptr, &transitiveKeyA);
+    LogicalCastEpisodeObservation transitiveB = transitiveA;
+    transitiveB.observationTick += 10;
+    transitiveB.direction =
+        rotateDirection(transitiveA.direction, 2.5f);
+    transitiveB.end =
+        transitiveB.start + transitiveB.direction * 900.0f;
+    std::uint64_t transitiveKeyB = 0;
+    noTransitiveEpisodes.Resolve(
+        transitiveB, nullptr, nullptr, &transitiveKeyB);
+    LogicalCastEpisodeObservation transitiveC = transitiveA;
+    transitiveC.observationTick += 20;
+    transitiveC.direction =
+        rotateDirection(transitiveA.direction, 5.0f);
+    transitiveC.end =
+        transitiveC.start + transitiveC.direction * 900.0f;
+    std::uint64_t transitiveKeyC = 0;
+    noTransitiveEpisodes.Resolve(
+        transitiveC, nullptr, nullptr, &transitiveKeyC);
+    ExpectTrue(
+        "lane registry matching is non-transitive",
+        transitiveKeyA == transitiveKeyB &&
+            transitiveKeyC != transitiveKeyA);
+
+    LogicalCastEpisodeResolver<4> closeDistinctEpisodes;
+    LogicalCastEpisodeObservation closeLaneA = transitiveA;
+    closeLaneA.episodeTick = 5000;
+    closeLaneA.observationTick = 5000;
+    std::uint64_t closeLaneKeyA = 0;
+    closeDistinctEpisodes.Resolve(
+        closeLaneA, nullptr, nullptr, &closeLaneKeyA);
+    LogicalCastEpisodeObservation closeLaneB = closeLaneA;
+    closeLaneB.observationTick += 10;
+    closeLaneB.direction =
+        rotateDirection(closeLaneA.direction, 4.0f);
+    closeLaneB.end =
+        closeLaneB.start + closeLaneB.direction * 900.0f;
+    std::uint64_t closeLaneKeyB = 0;
+    closeDistinctEpisodes.Resolve(
+        closeLaneB, nullptr, nullptr, &closeLaneKeyB);
+    ExpectTrue(
+        "close authored lanes beyond tolerance stay distinct",
+        closeLaneKeyA != 0 &&
+            closeLaneKeyB != 0 &&
+            closeLaneKeyA != closeLaneKeyB);
+
+    SpellData singleProjectileSpell = episodeSpell;
+    singleProjectileSpell.spellName = "VeigarQ";
+    singleProjectileSpell.multipleNumber = 1;
+    LogicalCastEpisodeObservation veigarCast = episodeA;
+    veigarCast.data = &singleProjectileSpell;
+    veigarCast.episodeTick = 6000;
+    veigarCast.observationTick = 6000;
+    veigarCast.projectileObservation = false;
+    LogicalCastEpisodeResolver<8> singleProjectileEpisodes;
+    const std::uint64_t veigarEpisodeId =
+        singleProjectileEpisodes.Resolve(veigarCast);
+    const std::uint64_t veigarCastLaneKey =
+        singleProjectileEpisodes.ResolveLaneKey(
+            veigarEpisodeId,
+            veigarCast.direction,
+            0);
+    LogicalCastEpisodeObservation veigarDoCast = veigarCast;
+    veigarDoCast.episodeTick += 30;
+    veigarDoCast.observationTick += 30;
+    veigarDoCast.direction =
+        rotateDirection(veigarCast.direction, 0.1f);
+    veigarDoCast.end =
+        veigarDoCast.start + veigarDoCast.direction * 900.0f;
+    const std::uint64_t veigarDoCastEpisodeId =
+        singleProjectileEpisodes.Resolve(veigarDoCast);
+    const std::uint64_t veigarDoCastLaneKey =
+        singleProjectileEpisodes.ResolveLaneKey(
+            veigarDoCastEpisodeId,
+            veigarDoCast.direction,
+            0);
+    LogicalCastEpisodeObservation veigarMissile = veigarCast;
+    veigarMissile.episodeTick += 60;
+    veigarMissile.observationTick += 60;
+    veigarMissile.direction =
+        rotateDirection(veigarCast.direction, -1.0f);
+    veigarMissile.end =
+        veigarMissile.start + veigarMissile.direction * 900.0f;
+    veigarMissile.projectileObservation = true;
+    std::uint64_t veigarMissileLaneKey = 0;
+    const std::uint64_t veigarMissileEpisodeId =
+        singleProjectileEpisodes.Resolve(
+            veigarMissile,
+            nullptr,
+            nullptr,
+            &veigarMissileLaneKey);
+    ExpectTrue(
+        "Veigar Q callback and missile jitter reuse one episode lane",
+        veigarEpisodeId != 0 &&
+            veigarEpisodeId == veigarDoCastEpisodeId &&
+            veigarEpisodeId == veigarMissileEpisodeId &&
+            veigarCastLaneKey != 0 &&
+            veigarCastLaneKey == veigarDoCastLaneKey &&
+            veigarCastLaneKey == veigarMissileLaneKey &&
+            StableProjectileLaneKey(veigarCast.direction) !=
+                StableProjectileLaneKey(veigarDoCast.direction) &&
+            StableProjectileLaneKey(veigarCast.direction) !=
+                StableProjectileLaneKey(veigarMissile.direction) &&
+            StableProjectileLaneIndex(1, 0) == -1 &&
+            singleProjectileEpisodes.Size() == 1);
+    const CastEventKey veigarRawProcess = MakeCastKey(
+        42u,
+        0xA100u,
+        static_cast<int>(ZDSpellSlot::Q),
+        6000,
+        "VeigarQ",
+        veigarCast.start,
+        veigarCast.end);
+    const CastEventKey veigarRawDoCast = MakeCastKey(
+        42u,
+        0xB200u,
+        static_cast<int>(ZDSpellSlot::Q),
+        6030,
+        "VeigarQ",
+        veigarDoCast.start,
+        veigarDoCast.end);
+    ExpectTrue(
+        "Veigar Q raw identity churn coalesces across jittered callbacks",
+        SameLogicalCast(veigarRawProcess, veigarRawDoCast));
+
+    LogicalCastEpisodeResolver<8> missileFirstVeigarEpisodes;
+    LogicalCastEpisodeObservation missileFirstVeigar =
+        veigarMissile;
+    missileFirstVeigar.episodeTick = 7000;
+    missileFirstVeigar.observationTick = 7000;
+    std::uint64_t missileFirstVeigarKey = 0;
+    const std::uint64_t missileFirstVeigarId =
+        missileFirstVeigarEpisodes.Resolve(
+            missileFirstVeigar,
+            nullptr,
+            nullptr,
+            &missileFirstVeigarKey);
+    LogicalCastEpisodeObservation delayedVeigarCast =
+        veigarCast;
+    delayedVeigarCast.episodeTick = 7040;
+    delayedVeigarCast.observationTick = 7040;
+    delayedVeigarCast.direction =
+        rotateDirection(veigarCast.direction, 0.75f);
+    delayedVeigarCast.end =
+        delayedVeigarCast.start +
+        delayedVeigarCast.direction * 900.0f;
+    const std::uint64_t delayedVeigarCastId =
+        missileFirstVeigarEpisodes.Resolve(delayedVeigarCast);
+    const std::uint64_t delayedVeigarCastKey =
+        missileFirstVeigarEpisodes.ResolveLaneKey(
+            delayedVeigarCastId,
+            delayedVeigarCast.direction,
+            0);
+    ExpectTrue(
+        "missile-first Veigar Q retains lane through callback churn",
+        missileFirstVeigarId != 0 &&
+            missileFirstVeigarId == delayedVeigarCastId &&
+            missileFirstVeigarKey != 0 &&
+            missileFirstVeigarKey == delayedVeigarCastKey);
+
+    LogicalCastEpisodeObservation incompatibleVeigar =
+        veigarCast;
+    incompatibleVeigar.episodeTick = 6060;
+    incompatibleVeigar.observationTick = 6060;
+    incompatibleVeigar.direction = Vec2(0.0f, 1.0f);
+    incompatibleVeigar.end =
+        incompatibleVeigar.start +
+        incompatibleVeigar.direction * 900.0f;
+    LogicalCastEpisodeObservation movedVeigar = veigarCast;
+    movedVeigar.episodeTick = 6060;
+    movedVeigar.observationTick = 6060;
+    movedVeigar.start = Vec2(500.0f, 500.0f);
+    movedVeigar.end =
+        movedVeigar.start + movedVeigar.direction * 900.0f;
+    LogicalCastEpisodeObservation laterVeigar = veigarCast;
+    laterVeigar.episodeTick =
+        veigarCast.episodeTick +
+        kExpectedLogicalCastEpisodeWindowMs + 1;
+    laterVeigar.observationTick = laterVeigar.episodeTick;
+    ExpectTrue(
+        "incompatible and later Veigar Q casts get separate identities",
+        singleProjectileEpisodes.Resolve(incompatibleVeigar) !=
+            veigarEpisodeId &&
+            singleProjectileEpisodes.Resolve(movedVeigar) !=
+                veigarEpisodeId &&
+            singleProjectileEpisodes.Resolve(laterVeigar) !=
+                veigarEpisodeId);
+
+    LogicalCastEpisodeResolver<8> reversedEpisodes;
+    const std::uint64_t reversedB =
+        reversedEpisodes.Resolve(episodeB);
+    const std::uint64_t reversedA =
+        reversedEpisodes.Resolve(episodeA);
+    ExpectTrue(
+        "reversed callback order and raw identity differences share episode",
+        reversedA != 0 &&
+            reversedA == reversedB);
+
+    LogicalCastEpisodeObservation laterEpisode = episodeA;
+    laterEpisode.episodeTick = 1389;
+    laterEpisode.observationTick = 1389;
+    LogicalCastEpisodeObservation turnedEpisode = episodeA;
+    turnedEpisode.episodeTick = 1030;
+    turnedEpisode.observationTick = 1030;
+    turnedEpisode.direction = Vec2(0.0f, 1.0f);
+    turnedEpisode.end = Vec2(100.0f, 1000.0f);
+    LogicalCastEpisodeObservation movedEpisode = episodeA;
+    movedEpisode.episodeTick = 1030;
+    movedEpisode.observationTick = 1030;
+    movedEpisode.start = Vec2(500.0f, 500.0f);
+    movedEpisode.end = Vec2(1400.0f, 500.0f);
+    ExpectTrue(
+        "later and incompatible cast ingestion receive new episodes",
+        episodes.Resolve(laterEpisode) != episodeIdA &&
+            episodes.Resolve(turnedEpisode) != episodeIdA &&
+            episodes.Resolve(movedEpisode) != episodeIdA);
+
+    LogicalCastEpisodeResolver<8> wrappedEpisodes;
+    LogicalCastEpisodeObservation beforeWrap = episodeA;
+    beforeWrap.episodeTick = INT_MAX - 40;
+    beforeWrap.observationTick = INT_MAX - 40;
+    LogicalCastEpisodeObservation afterWrap = beforeWrap;
+    afterWrap.episodeTick = INT_MIN + 39;
+    afterWrap.observationTick = INT_MIN + 39;
+    ExpectTrue(
+        "logical episode tick matching is signed-wrap safe",
+        wrappedEpisodes.Resolve(beforeWrap) ==
+            wrappedEpisodes.Resolve(afterWrap));
+
+    LogicalCastEpisodeResolver<4> boundedEpisodes;
+    for (int index = 0; index < 12; ++index) {
+        LogicalCastEpisodeObservation value = episodeA;
+        value.casterNetworkId =
+            static_cast<std::uint32_t>(100 + index);
+        value.episodeTick = 2000 + index * 400;
+        value.observationTick = value.episodeTick;
+        boundedEpisodes.Resolve(value);
+    }
+    ExpectTrue(
+        "recent logical episode table remains fixed capacity",
+        boundedEpisodes.Size() <= 4);
+    boundedEpisodes.Prune(
+        2000 + 11 * 400 +
+        kLogicalCastEpisodeRetentionMs + 1);
+    ExpectTrue(
+        "recent logical episode pruning removes stale entries",
+        boundedEpisodes.Size() == 0);
+    boundedEpisodes.Reset();
+    const std::uint64_t resetEpisode =
+        boundedEpisodes.Resolve(episodeA);
+    ExpectTrue(
+        "logical episode reset clears state and restarts nonzero IDs",
+        boundedEpisodes.Size() == 1 &&
+            resetEpisode != 0);
+
     const CastEventKey distinctCast = {42u, 0x5678u, 0, 1080};
     ExpectTrue("distinct cast identities remain separate",
                !SameLogicalCast(processSpell, distinctCast));
@@ -292,7 +781,8 @@ int main() {
         Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f));
     ExpectTrue("identity-free events coalesce within tolerance",
                SameLogicalCast(fallbackProcessSpell, fallbackDoCast));
-    fallbackDoCast.tick = 1121;
+    fallbackDoCast.tick =
+        1000 + kExpectedLogicalCastEpisodeWindowMs + 1;
     ExpectTrue("identity-free events outside tolerance remain separate",
                !SameLogicalCast(fallbackProcessSpell, fallbackDoCast));
     const CastEventKey minimumTick = {42u, 0u, 0, INT_MIN};
@@ -316,6 +806,32 @@ int main() {
         Vec2(), Vec2(900.0f, 100.0f));
     ExpectTrue("sparse canonical name overlap merges mixed identity",
                SameLogicalCast(mixedIdentityProcess, mixedIdentityDoCast));
+    const CastEventKey differentPointerDoCast = MakeCastKey(
+        42u, 0xDEF0u, 0, 2085, {"EzrealMysticShot"},
+        Vec2(106.0f, 102.0f), Vec2(908.0f, 116.0f));
+    ExpectTrue("different nonzero hook pointers are only positive hints",
+               SameLogicalCast(
+                   MakeCastKey(
+                       42u, 0xABC0u, 0, 2000, "EzrealMysticShot",
+                       Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f)),
+                   differentPointerDoCast));
+    CastEventKey outsideEpisode = differentPointerDoCast;
+    outsideEpisode.tick =
+        2000 + kExpectedLogicalCastEpisodeWindowMs + 1;
+    ExpectTrue("compatible later cast outside episode stays separate",
+               !SameLogicalCast(
+                   MakeCastKey(
+                       42u, 0xABC0u, 0, 2000, "EzrealMysticShot",
+                       Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f)),
+                   outsideEpisode));
+    CastEventKey incompatibleEpisode = differentPointerDoCast;
+    incompatibleEpisode.endPosition = Vec2(-900.0f, 100.0f);
+    ExpectTrue("same-episode incompatible geometry stays separate",
+               !SameLogicalCast(
+                   MakeCastKey(
+                       42u, 0xABC0u, 0, 2000, "EzrealMysticShot",
+                       Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f)),
+                   incompatibleEpisode));
     const CastEventKey reorderedNamesLeft = MakeCastKey(
         42u, 0u, 0, 2070, {"Ezreal", "EzrealMysticShot", "EzrealQ"},
         Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f));
@@ -339,6 +855,47 @@ int main() {
         Vec2(), Vec2(), Vec2(-900.0f, 100.0f));
     ExpectTrue("missing starts cannot bypass cross-field endpoint conflict",
                !SameLogicalCast(endpointReference, conflictingEndpoint));
+    const CastEventKey semanticReference = MakeCastKey(
+        42u, 0xA100u, 0, 2070, {"EzrealMysticShot"},
+        Vec2(100.0f, 100.0f),
+        Vec2(900.0f, 100.0f),
+        Vec2(700.0f, 100.0f));
+    const CastEventKey matchingCastDivergentEnd = MakeCastKey(
+        42u, 0xB200u, 0, 2070, {"EzrealMysticShot"},
+        Vec2(104.0f, 102.0f),
+        Vec2(-900.0f, 100.0f),
+        Vec2(708.0f, 108.0f));
+    ExpectTrue("matching CastPosition ignores divergent EndPosition",
+               SameLogicalCast(
+                   semanticReference, matchingCastDivergentEnd));
+    const CastEventKey matchingEndDivergentCast = MakeCastKey(
+        42u, 0xB201u, 0, 2070, {"EzrealMysticShot"},
+        Vec2(104.0f, 102.0f),
+        Vec2(908.0f, 108.0f),
+        Vec2(-700.0f, 100.0f));
+    ExpectTrue("matching EndPosition ignores divergent CastPosition",
+               SameLogicalCast(
+                   semanticReference, matchingEndDivergentCast));
+    const CastEventKey crossFieldEndOnly = MakeCastKey(
+        42u, 0xA300u, 0, 2070, {"EzrealMysticShot"},
+        Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f));
+    const CastEventKey crossFieldCastOnly = MakeCastKey(
+        42u, 0xB300u, 0, 2070, {"EzrealMysticShot"},
+        Vec2(104.0f, 102.0f), Vec2(), Vec2(908.0f, 108.0f));
+    ExpectTrue("compatible End-to-Cast fallback merges when only pair",
+               SameLogicalCast(crossFieldEndOnly, crossFieldCastOnly));
+    CastEventKey incompatibleCrossField = crossFieldCastOnly;
+    incompatibleCrossField.castPosition = Vec2(-900.0f, 100.0f);
+    ExpectTrue("incompatible End-to-Cast fallback rejects when only pair",
+               !SameLogicalCast(crossFieldEndOnly, incompatibleCrossField));
+    const CastEventKey conflictingSameSemanticPairs = MakeCastKey(
+        42u, 0xB400u, 0, 2070, {"EzrealMysticShot"},
+        Vec2(104.0f, 102.0f),
+        Vec2(-900.0f, 100.0f),
+        Vec2(-700.0f, 100.0f));
+    ExpectTrue("both conflicting same-semantic pairs reject",
+               !SameLogicalCast(
+                   semanticReference, conflictingSameSemanticPairs));
     const CastEventKey conflictingStart = MakeCastKey(
         42u, 0xABC0u, 0, 2070, {"EzrealMysticShot"},
         Vec2(900.0f, 900.0f), Vec2(900.0f, 100.0f));
@@ -354,8 +911,8 @@ int main() {
                !SameLogicalCast(startOnly, endpointOnly));
     CastEventKey simultaneousDistinct = mixedIdentityDoCast;
     simultaneousDistinct.castIdentity = 0xDEF0u;
-    ExpectTrue("simultaneous casts with distinct nonzero identities stay separate",
-               !SameLogicalCast(
+    ExpectTrue("simultaneous compatible hooks with distinct pointers merge",
+               SameLogicalCast(
                    MakeCastKey(42u, 0xABC0u, 0, 2070, "EzrealMysticShot",
                                Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f)),
                    simultaneousDistinct));
@@ -373,23 +930,1006 @@ int main() {
     ExpectEq("negative delays clamp before tolerance",
              MissileBindWindowMs(INT_MIN, -1),
              250);
-    ExpectTrue("missing missile remains bound during first absent frame",
+    ExpectEq("missile evidence-loss grace is documented at 750ms",
+             kMissileEvidenceLossGraceMs,
+             750);
+    ExpectEq("missile evidence loss is capped at 10 seconds",
+             kMissileEvidenceLossMaximumMs,
+             10000);
+    ExpectEq("targetless collision prediction freshness is 250ms",
+             kDeletePredictedCollisionMaximumAgeMs,
+             250);
+    ExpectTrue("no tracked threats skip authoritative missile enumeration",
+               !ShouldEnumerateMissileManager(0));
+    ExpectTrue("tracked threats require one authoritative missile enumeration",
+               ShouldEnumerateMissileManager(1));
+    const int nautilusArrival = 1000 + 575; // 1150 range / 2000 speed.
+    const int nautilusDeadline = MissileEvidenceLossDeadlineTick(
+        nautilusArrival, nautilusArrival);
+    ExpectEq("Nautilus Q fallback deadline adds evidence grace",
+             nautilusDeadline,
+             2325);
+    for (int miss = 1; miss <= 10; ++miss) {
+        ExpectTrue("one through ten lookup misses retain the live missile",
+                   !ShouldTerminateMissingMissile(
+                       true,
+                       false,
+                       false,
+                       1000,
+                       nautilusDeadline,
+                       1000 + miss * 40));
+    }
+    ExpectTrue("missing missile is active at evidence deadline boundary",
                !ShouldTerminateMissingMissile(
-                   true, false, false, 1000, 1000));
-    ExpectTrue("missing missile remains bound inside observation grace",
-               !ShouldTerminateMissingMissile(
-                   true, false, false, 1000, 1249));
-    ExpectTrue("missing missile terminates at observation grace boundary",
+                   true, false, false, 1000, nautilusDeadline,
+                   nautilusDeadline));
+    ExpectTrue("missing missile terminates only after evidence deadline",
                ShouldTerminateMissingMissile(
-                   true, false, false, 1000, 1250));
-    ExpectTrue("valid missile observation prevents jitter termination",
+                   true, false, false, 1000, nautilusDeadline,
+                   nautilusDeadline + 1));
+    const int saturatedEvidenceDeadline =
+        MissileEvidenceLossDeadlineTick(INT_MAX, 4000);
+    ExpectEq("INT_MAX arrival is bounded from last trustworthy evidence",
+             saturatedEvidenceDeadline,
+             14000);
+    ExpectTrue("INT_MAX missile remains active at bounded deadline",
                !ShouldTerminateMissingMissile(
-                   true, false, true, 1000, 2000));
+                   true, false, false, 4001, saturatedEvidenceDeadline,
+                   saturatedEvidenceDeadline));
+    ExpectTrue("INT_MAX missile terminates after bounded deadline",
+               ShouldTerminateMissingMissile(
+                   true, false, false, 4001, saturatedEvidenceDeadline,
+                   saturatedEvidenceDeadline + 1));
+    ExpectEq("INT_MAX fallback termination anchors to bounded prediction",
+             MissingMissileTerminationTick(INT_MAX, 4000),
+             14000);
+    const int maximumAnchorDeadline =
+        MissileEvidenceLossDeadlineTick(INT_MAX, INT_MAX);
+    ExpectEq("INT_MAX anchor wraps to an exceedable 10s deadline",
+             maximumAnchorDeadline,
+             INT_MIN + kMissileEvidenceLossMaximumMs - 1);
+    ExpectTrue("INT_MAX-anchor missile is active at wrapped deadline",
+               !ShouldTerminateMissingMissile(
+                   true, false, false, INT_MAX,
+                   maximumAnchorDeadline,
+                   maximumAnchorDeadline));
+    ExpectTrue("INT_MAX-anchor missile terminates after wrapped deadline",
+               ShouldTerminateMissingMissile(
+                   true, false, false, INT_MAX,
+                   maximumAnchorDeadline,
+                   WrappingTickAdd(maximumAnchorDeadline, 1)));
+    const int finiteArrivalNearWrap = INT_MAX - 250;
+    const int finiteDeadlineNearWrap =
+        MissileEvidenceLossDeadlineTick(
+            finiteArrivalNearWrap,
+            INT_MAX - 500);
+    ExpectEq("finite arrival deadline crosses signed wrap without saturation",
+             finiteDeadlineNearWrap,
+             INT_MIN + 499);
+    ExpectTrue("finite wrapped deadline remains active at boundary",
+               !ShouldTerminateMissingMissile(
+                   true, false, false, INT_MAX - 500,
+                   finiteDeadlineNearWrap,
+                   finiteDeadlineNearWrap));
+    ExpectTrue("finite wrapped deadline expires on first later tick",
+               ShouldTerminateMissingMissile(
+                   true, false, false, INT_MAX - 500,
+                   finiteDeadlineNearWrap,
+                   WrappingTickAdd(finiteDeadlineNearWrap, 1)));
+    ExpectEq("explicitly untrustworthy finite arrival uses anchor cap",
+             MissileEvidenceLossDeadlineTick(25000, 4000, false),
+             14000);
+    ExpectEq("untrustworthy fallback termination uses anchor cap",
+             MissingMissileTerminationTick(25000, 4000, false),
+             14000);
+    ExpectTrue("valid missile observation prevents evidence-loss termination",
+               !ShouldTerminateMissingMissile(
+                   true, false, true, 1000, nautilusDeadline,
+                   nautilusDeadline + 500));
+    ExpectTrue("live object with invalid position remains authoritative evidence",
+               MissileObjectIsLiveEvidence(true, false));
+    ExpectTrue("lookup miss remains uncertainty rather than live evidence",
+               !MissileObjectIsLiveEvidence(false, false));
+    const MissileEvidenceStateUpdate unavailableEvidence =
+        ResolveMissileEvidenceState(true, false, 1200, false, 1400);
+    ExpectTrue("present invalid-position evidence clears missing timer",
+               unavailableEvidence.missingSinceTick == -1 &&
+               unavailableEvidence.positionUnavailable &&
+               unavailableEvidence.stateChanged);
+    const MissileEvidenceStateUpdate repeatedUnavailableEvidence =
+        ResolveMissileEvidenceState(
+            true,
+            false,
+            unavailableEvidence.missingSinceTick,
+            unavailableEvidence.positionUnavailable,
+            1500);
+    ExpectTrue("repeated invalid-position evidence retains stable state",
+               repeatedUnavailableEvidence.missingSinceTick == -1 &&
+               repeatedUnavailableEvidence.positionUnavailable &&
+               !repeatedUnavailableEvidence.stateChanged);
+    const MissileEvidenceStateUpdate reacquiredEvidence =
+        ResolveMissileEvidenceState(
+            true,
+            true,
+            repeatedUnavailableEvidence.missingSinceTick,
+            repeatedUnavailableEvidence.positionUnavailable,
+            1600);
+    ExpectTrue("valid position evidence clears unavailable state",
+               reacquiredEvidence.missingSinceTick == -1 &&
+               !reacquiredEvidence.positionUnavailable &&
+               reacquiredEvidence.stateChanged);
     ExpectTrue("unbound or terminated projectiles do not re-terminate",
                !ShouldTerminateMissingMissile(
-                   false, false, false, 1000, 2000) &&
+                   false, false, false, 1000, nautilusDeadline, 3000) &&
                !ShouldTerminateMissingMissile(
-                   true, true, false, 1000, 2000));
+                   true, true, false, 1000, nautilusDeadline, 3000));
+    struct MissileLifecycleFixture {
+        const char* spellName;
+        float range;
+        float speed;
+        int expectedDeadline;
+    };
+    const std::array<MissileLifecycleFixture, 3> fastLifecycleFixtures = {{
+        {"NautilusAnchorDrag", 1150.0f, 2000.0f, 2325},
+        {"EzrealQ", 1150.0f, 2000.0f, 2325},
+        {"VeigarBalefulStrike", 1000.0f, 2200.0f, 2205},
+    }};
+    for (const auto& fixture : fastLifecycleFixtures) {
+        const int arrival = 1000 + static_cast<int>(std::ceil(
+            1000.0f * fixture.range / fixture.speed));
+        const int deadline =
+            MissileEvidenceLossDeadlineTick(arrival, arrival);
+        ExpectEq("fast missile fallback deadline matches arrival plus grace",
+                 deadline,
+                 fixture.expectedDeadline);
+        ExpectTrue("fast missile remains active at fallback boundary",
+                   !ShouldTerminateMissingMissile(
+                       true, false, false, 1000, deadline, deadline));
+        ExpectTrue("fast missile expires after fallback boundary",
+                   ShouldTerminateMissingMissile(
+                       true, false, false, 1000, deadline, deadline + 1));
+    }
+    struct LongFlightLifecycleFixture {
+        const char* spellName;
+        float range;
+        float speed;
+    };
+    const std::array<LongFlightLifecycleFixture, 2>
+        longFlightLifecycleFixtures = {{
+            {"AsheR", 25000.0f, 1600.0f},
+            {"LilliaERollingMissile", 25000.0f, 1150.0f},
+        }};
+    for (const auto& fixture : longFlightLifecycleFixtures) {
+        const int launch = 1000;
+        const int arrival = launch + static_cast<int>(std::ceil(
+            1000.0f * fixture.range / fixture.speed));
+        const int deadline =
+            MissileEvidenceLossDeadlineTick(arrival, launch);
+        ExpectEq("trustworthy long-flight deadline is arrival plus grace",
+                 deadline,
+                 arrival + kMissileEvidenceLossGraceMs);
+        ExpectTrue("trustworthy long flight is not shortened by 10s cap",
+                   WrappingTickDifference(
+                       deadline,
+                       WrappingTickAdd(
+                           launch,
+                           kMissileEvidenceLossMaximumMs)) > 0);
+        ExpectTrue("long-flight missile remains active at deadline",
+                   !ShouldTerminateMissingMissile(
+                       true, false, false, launch + 1,
+                       deadline, deadline));
+        ExpectTrue("long-flight missile terminates after deadline",
+                   ShouldTerminateMissingMissile(
+                       true, false, false, launch + 1,
+                       deadline, WrappingTickAdd(deadline, 1)));
+    }
+    for (const auto& fixture : longFlightLifecycleFixtures) {
+        SpellData spell =
+            ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+        spell.spellName = fixture.spellName;
+        spell.range = fixture.range;
+        spell.projectileSpeed = fixture.speed;
+        Threat threat = ZDEvadeTest::MakeThreat(spell);
+        threat.startPos = Vec2(100.0f, 100.0f);
+        threat.endPos = Vec2(
+            100.0f + fixture.range,
+            100.0f);
+        threat.authoredEndPos = threat.endPos;
+        threat.direction = Vec2(1.0f, 0.0f);
+        threat.missileBound = true;
+        threat.launchTick = INT_MAX - 100;
+        threat.observedTick = INT_MAX - 100;
+        threat.observedHead = threat.startPos;
+        const int remainingDuration =
+            threat.RemainingTravelDurationMs();
+        const int expectedRemainingDuration =
+            static_cast<int>(std::ceil(
+                1000.0f * fixture.range / fixture.speed));
+        const MissileEvidenceWindow window =
+            ResolveMissileEvidenceWindow(
+                threat.observedTick,
+                remainingDuration);
+        ExpectEq("actual long-flight Threat reports finite remaining duration",
+                 remainingDuration,
+                 expectedRemainingDuration);
+        ExpectEq("actual long-flight absolute arrival saturates near INT_MAX",
+                 threat.ArrivalTick(),
+                 INT_MAX);
+        ExpectEq("remaining-duration deadline wraps from evidence anchor",
+                 window.deadlineTick,
+                 WrappingTickAdd(
+                     WrappingTickAdd(
+                         threat.observedTick,
+                         expectedRemainingDuration),
+                     kMissileEvidenceLossGraceMs));
+        ExpectTrue("wrapped long-flight deadline is active at boundary",
+                   !ShouldTerminateMissingMissile(
+                       true,
+                       false,
+                       false,
+                       threat.observedTick,
+                       window.deadlineTick,
+                       window.deadlineTick));
+        ExpectTrue("wrapped long-flight deadline expires after boundary",
+                   ShouldTerminateMissingMissile(
+                       true,
+                       false,
+                       false,
+                       threat.observedTick,
+                       window.deadlineTick,
+                       WrappingTickAdd(window.deadlineTick, 1)));
+    }
+    const MissileEvidenceWindow invalidRemainingWindow =
+        ResolveMissileEvidenceWindow(4000, INT_MAX);
+    ExpectTrue("saturated remaining duration alone uses 10s fallback",
+               !invalidRemainingWindow.usedRemainingTravel &&
+                   invalidRemainingWindow.deadlineTick == 14000 &&
+                   invalidRemainingWindow.terminationTick == 14000);
+    ExpectTrue("live bound collision prediction is diagnostic only",
+               !ShouldCommitPredictedCollision(true, false));
+    ExpectTrue("cast-origin collision prediction may remain conservative",
+               ShouldCommitPredictedCollision(false, false));
+    Threat predictedCollision =
+        ZDEvadeTest::MakeThreat(
+            ZDEvadeTest::MakeSpell(ZDSpellType::Line));
+    predictedCollision.endPos = Vec2(1150.0f, 100.0f);
+    predictedCollision.authoredEndPos = predictedCollision.endPos;
+    predictedCollision.missileBound = true;
+    if (ShouldCommitPredictedCollision(
+            predictedCollision.missileBound,
+            predictedCollision.projectileTerminated)) {
+        predictedCollision.endPos = Vec2(400.0f, 100.0f);
+        predictedCollision.collisionKind = ZDCollisionKind::Terrain;
+        predictedCollision.collisionStopped = true;
+    }
+    ExpectTrue("predicted terrain collision cannot shorten live bound end",
+               predictedCollision.endPos.DistanceSqr(
+                   predictedCollision.authoredEndPos) <= 1.0f &&
+                   !predictedCollision.collisionStopped &&
+                   predictedCollision.collisionKind ==
+                       ZDCollisionKind::None);
+    predictedCollision.id = 991;
+    predictedCollision.startTick = 3100;
+    predictedCollision.collisionStopped = true;
+    predictedCollision.collisionKind = ZDCollisionKind::Unit;
+    predictedCollision.collisionUnitNetworkId = 1234;
+    predictedCollision.collisionUnitObjectIdentity = 0x8800u;
+    predictedCollision.collisionUnitCenter = Vec2(400.0f, 100.0f);
+    predictedCollision.collisionExplosionCenter = Vec2(410.0f, 100.0f);
+    predictedCollision.lastConsumedCollisionPoint = Vec2(390.0f, 100.0f);
+    predictedCollision.collisionEndExplosionRadius = 250.0f;
+    predictedCollision.collisionEndExplosionDelay = 500;
+    predictedCollision.collisionHitCount = 2;
+    predictedCollision.collisionUnitTargetAuthoritative = true;
+    predictedCollision.pendingUnitCollisions = {{1234, 400.0f}};
+    predictedCollision.consumedCollisionUnits = {1234};
+    predictedCollision.predictedCollisionKind = ZDCollisionKind::Unit;
+    predictedCollision.predictedCollisionUnitNetworkId = 1234;
+    predictedCollision.predictedCollisionUnitCenter =
+        Vec2(400.0f, 100.0f);
+    predictedCollision.predictedCollisionPoint =
+        Vec2(390.0f, 100.0f);
+    predictedCollision.predictedCollisionTick = 3190;
+    predictedCollision.predictedCollisionMissileNetworkId = 66u;
+    predictedCollision.predictedCollisionMissileObjectIdentity =
+        0x9900u;
+    predictedCollision.predictedCollisionUnitObjectIdentity =
+        0x8800u;
+    predictedCollision.projectileTerminated = true;
+    predictedCollision.projectileTerminationTick = 3200;
+    predictedCollision.missingMissileTermination = true;
+    predictedCollision.missileMissingSinceTick = 3150;
+    predictedCollision.missilePositionUnavailable = true;
+    CorrectExistingThreatFromMissile(
+        predictedCollision,
+        [](Threat& bound) {
+            bound.endPos = Vec2(1150.0f, 100.0f);
+            bound.authoredEndPos = bound.endPos;
+            bound.missileNetworkId = 77u;
+            bound.missileObjectIdentity = 0xA100u;
+        });
+    ExpectTrue("authoritative missile bind clears all speculative collision state",
+               predictedCollision.id == 991 &&
+                   predictedCollision.startTick == 3100 &&
+                   predictedCollision.missileBound &&
+                   !predictedCollision.collisionStopped &&
+                   predictedCollision.collisionKind == ZDCollisionKind::None &&
+                   predictedCollision.collisionUnitNetworkId == 0 &&
+                   predictedCollision.collisionUnitObjectIdentity == 0 &&
+                   predictedCollision.collisionUnitCenter.IsZero() &&
+                   predictedCollision.collisionExplosionCenter.IsZero() &&
+                   predictedCollision.lastConsumedCollisionPoint.IsZero() &&
+                   predictedCollision.collisionEndExplosionRadius == 0.0f &&
+                   predictedCollision.collisionEndExplosionDelay == -1 &&
+                   predictedCollision.collisionHitCount == 0 &&
+                   !predictedCollision
+                       .collisionUnitTargetAuthoritative &&
+                   predictedCollision.pendingUnitCollisions.empty() &&
+                   predictedCollision.consumedCollisionUnits.empty() &&
+                   predictedCollision.predictedCollisionKind ==
+                       ZDCollisionKind::None &&
+                   predictedCollision.predictedCollisionUnitNetworkId == 0 &&
+                   predictedCollision.predictedCollisionUnitCenter.IsZero() &&
+                   predictedCollision.predictedCollisionPoint.IsZero() &&
+                   predictedCollision.predictedCollisionTick == -1 &&
+                   predictedCollision
+                       .predictedCollisionMissileNetworkId == 0 &&
+                   predictedCollision
+                       .predictedCollisionMissileObjectIdentity == 0 &&
+                   predictedCollision
+                       .predictedCollisionUnitObjectIdentity == 0 &&
+                   !predictedCollision.projectileTerminated &&
+                   predictedCollision.projectileTerminationTick == 0 &&
+                   !predictedCollision.missingMissileTermination &&
+                   predictedCollision.missileMissingSinceTick == -1 &&
+                   !predictedCollision.missilePositionUnavailable);
+    ExpectNear("reacquisition cannot rewind tracked missile head",
+               MonotonicMissileHead(
+                   Vec2(500.0f, 100.0f),
+                   Vec2(450.0f, 100.0f),
+                   Vec2(1.0f, 0.0f),
+                   true).x,
+               500.0f);
+    ExpectNear("forward reacquisition advances tracked missile head",
+               MonotonicMissileHead(
+                   Vec2(500.0f, 100.0f),
+                   Vec2(650.0f, 110.0f),
+                   Vec2(1.0f, 0.0f),
+                   true).x,
+               650.0f);
+    const Vec2 steeringTurn = MonotonicMissileHead(
+        Vec2(500.0f, 100.0f),
+        Vec2(450.0f, 250.0f),
+        Vec2(1.0f, 0.0f),
+        false);
+    ExpectTrue("steering reacquisition accepts a valid turning observation",
+               steeringTurn.DistanceSqr(Vec2(450.0f, 250.0f)) <= 1.0f);
+    ExpectTrue("matching delete accepts exact missile episode",
+               MatchesMissileEpisode(77u, 0xA100u, 77u, 0xA100u));
+    ExpectTrue("wrong missile ID is ignored",
+               !MatchesMissileEpisode(77u, 0xA100u, 78u, 0xA100u));
+    ExpectTrue("stale reused-ID delete with different object is ignored",
+               !MatchesMissileEpisode(77u, 0xA100u, 77u, 0xB200u));
+    ExpectTrue("ID-only delete remains accepted when event identity unavailable",
+               MatchesMissileEpisode(77u, 0xA100u, 77u, 0u));
+    ExpectTrue("observation matches exact reused-ID episode identity",
+               MatchesObservedMissileEpisode(
+                   77u, 0xA100u, 77u, 0xA100u) &&
+                   MatchesObservedMissileEpisode(
+                       77u, 0xB200u, 77u, 0xB200u));
+    ExpectTrue("one reused-ID episode cannot observe the other",
+               !MatchesObservedMissileEpisode(
+                   77u, 0xA100u, 77u, 0xB200u) &&
+                   !MatchesObservedMissileEpisode(
+                       77u, 0xB200u, 77u, 0xA100u));
+    struct EpisodeMissingState {
+        int threatId;
+        std::uint32_t networkId;
+        std::uintptr_t objectIdentity;
+        int missingSinceTick;
+    };
+    std::array<EpisodeMissingState, 2> reusedEpisodes = {{
+        {201, 77u, 0xA100u, 5000},
+        {202, 77u, 0xB200u, 5000},
+    }};
+    const int observedThreatId = 202;
+    for (auto& episode : reusedEpisodes) {
+        if (episode.threatId == observedThreatId &&
+            MatchesObservedMissileEpisode(
+                episode.networkId,
+                episode.objectIdentity,
+                77u,
+                0xB200u))
+            episode.missingSinceTick = -1;
+    }
+    ExpectTrue("reused-ID observation clears only matching threat episode",
+               reusedEpisodes[0].missingSinceTick == 5000 &&
+                   reusedEpisodes[1].missingSinceTick == -1);
+    ExpectTrue("matching delete finalizes live episode exactly once",
+               ShouldFinalizeMissileDelete(
+                   true, false, 77u, 0xA100u, 77u, 0xA100u));
+    ExpectTrue("duplicate delete is idempotently ignored",
+               !ShouldFinalizeMissileDelete(
+                   false, true, 77u, 0xA100u, 77u, 0xA100u));
+    ExpectTrue("explicit delete target classifies unit collision",
+               ShouldClassifyDeleteAsUnitCollision(
+                   true,
+                   ZDCollisionKind::None,
+                   0,
+                   Vec2(),
+                   -1,
+                   5000,
+                   false,
+                   false,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("nearby unit alone cannot classify delete collision",
+               !ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::None,
+                   0,
+                   Vec2(505.0f, 100.0f),
+                   4950,
+                   5000,
+                   true,
+                   true,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("matching predicted unit impact may classify delete collision",
+               ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::Unit,
+                   1234,
+                   Vec2(505.0f, 100.0f),
+                   4750,
+                   5000,
+                   true,
+                   true,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("distant predicted unit impact cannot classify delete collision",
+               !ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::Unit,
+                   1234,
+                   Vec2(700.0f, 100.0f),
+                   4950,
+                   5000,
+                   true,
+                   true,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("stale predicted unit impact cannot classify delete collision",
+               !ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::Unit,
+                   1234,
+                   Vec2(505.0f, 100.0f),
+                   4749,
+                   5000,
+                   true,
+                   true,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("wrong missile episode prediction is rejected",
+               !ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::Unit,
+                   1234,
+                   Vec2(505.0f, 100.0f),
+                   4950,
+                   5000,
+                   false,
+                   true,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("prediction without a unit ID is rejected",
+               !ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::Unit,
+                   0,
+                   Vec2(505.0f, 100.0f),
+                   4950,
+                   5000,
+                   true,
+                   true,
+                   Vec2(500.0f, 100.0f)));
+    ExpectTrue("spell without unit collision cannot use unit prediction",
+               !ShouldClassifyDeleteAsUnitCollision(
+                   false,
+                   ZDCollisionKind::Unit,
+                   1234,
+                   Vec2(505.0f, 100.0f),
+                   4950,
+                   5000,
+                   true,
+                   false,
+                   Vec2(500.0f, 100.0f)));
+    SpellData livePredictionSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    Threat livePrediction =
+        ZDEvadeTest::MakeThreat(livePredictionSpell);
+    livePrediction.authoredEndPos = livePrediction.endPos;
+    livePrediction.missileBound = true;
+    livePrediction.missileNetworkId = 77u;
+    livePrediction.missileObjectIdentity = 0xA100u;
+    livePrediction.observedTick = 4900;
+    livePrediction.observedHead = Vec2(300.0f, 100.0f);
+    const Vec2 liveAuthoredEnd = livePrediction.endPos;
+    ExpectTrue("live collision scan refreshes prediction metadata",
+               RefreshLiveBoundCollisionPrediction(
+                   livePrediction,
+                   ZDCollisionKind::Unit,
+                   1234,
+                   Vec2(510.0f, 100.0f),
+                   Vec2(500.0f, 100.0f),
+                   5000));
+    ExpectTrue("live collision prediction leaves body geometry unshortened",
+               livePrediction.endPos.DistanceSqr(liveAuthoredEnd) <= 1.0f &&
+                   livePrediction.AuthoredEnd().DistanceSqr(
+                       liveAuthoredEnd) <= 1.0f &&
+                   !livePrediction.collisionStopped &&
+                   livePrediction.collisionKind ==
+                       ZDCollisionKind::None &&
+                   livePrediction.collisionUnitNetworkId == 0);
+    ExpectTrue("live collision metadata records exact episode and impact",
+               livePrediction.predictedCollisionKind ==
+                       ZDCollisionKind::Unit &&
+                   livePrediction.predictedCollisionUnitNetworkId == 1234 &&
+                   livePrediction.predictedCollisionUnitCenter.DistanceSqr(
+                       Vec2(510.0f, 100.0f)) <= 1.0f &&
+                   livePrediction.predictedCollisionPoint.DistanceSqr(
+                       Vec2(500.0f, 100.0f)) <= 1.0f &&
+                   livePrediction.predictedCollisionTick == 4900 &&
+                   livePrediction.predictedCollisionMissileNetworkId == 77u &&
+                   livePrediction
+                       .predictedCollisionMissileObjectIdentity == 0xA100u);
+    livePrediction.missileMissingSinceTick = 5001;
+    ExpectTrue("missing missile prediction refresh clears stale metadata",
+               RefreshLiveBoundCollisionPrediction(
+                   livePrediction,
+                   ZDCollisionKind::Unit,
+                   4321,
+                   Vec2(610.0f, 100.0f),
+                   Vec2(600.0f, 100.0f),
+                   5050) &&
+                   livePrediction.predictedCollisionKind ==
+                       ZDCollisionKind::None &&
+                   livePrediction.predictedCollisionTick == -1);
+    livePrediction.missileMissingSinceTick = -1;
+    livePrediction.missilePositionUnavailable = true;
+    RefreshLiveBoundCollisionPrediction(
+        livePrediction,
+        ZDCollisionKind::Unit,
+        1234,
+        Vec2(510.0f, 100.0f),
+        Vec2(500.0f, 100.0f),
+        5050);
+    ExpectTrue("position-unavailable missile cannot refresh prediction",
+               livePrediction.predictedCollisionKind ==
+                   ZDCollisionKind::None);
+    livePrediction.missilePositionUnavailable = false;
+    livePrediction.observedHead = {};
+    RefreshLiveBoundCollisionPrediction(
+        livePrediction,
+        ZDCollisionKind::Unit,
+        1234,
+        Vec2(510.0f, 100.0f),
+        Vec2(500.0f, 100.0f),
+        5050);
+    ExpectTrue("missing observed head cannot refresh prediction",
+               livePrediction.predictedCollisionKind ==
+                   ZDCollisionKind::None);
+    livePrediction.observedHead = Vec2(300.0f, 100.0f);
+    livePrediction.observedTick = 4700;
+    RefreshLiveBoundCollisionPrediction(
+        livePrediction,
+        ZDCollisionKind::Unit,
+        1234,
+        Vec2(510.0f, 100.0f),
+        Vec2(500.0f, 100.0f),
+        5000);
+    ExpectTrue("stale observation cannot refresh prediction",
+               livePrediction.predictedCollisionKind ==
+                   ZDCollisionKind::None);
+    livePrediction.predictedCollisionKind = ZDCollisionKind::Terrain;
+    livePrediction.predictedCollisionPoint = Vec2(450.0f, 100.0f);
+    livePrediction.predictedCollisionTick = 4900;
+    ExpectTrue("collision early return clears stale side channel",
+               ClearPredictedCollisionMetadata(livePrediction) &&
+                   livePrediction.predictedCollisionKind ==
+                       ZDCollisionKind::None &&
+                   livePrediction.predictedCollisionPoint.IsZero());
+    ExpectTrue("route change invalidates stale collision prediction",
+               livePrediction.predictedCollisionKind ==
+                       ZDCollisionKind::None &&
+                   livePrediction.predictedCollisionTick == -1 &&
+                   livePrediction.predictedCollisionPoint.IsZero());
+
+    std::array<SpellData, 2> predictedDeleteSpells = {{
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line),
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line),
+    }};
+    predictedDeleteSpells[0].spellName = "EnchantedCrystalArrow";
+    predictedDeleteSpells[0].secondaryRadius = 400.0f;
+    predictedDeleteSpells[1].spellName = "SennaW";
+    predictedDeleteSpells[1].secondaryRadius = 280.0f;
+    predictedDeleteSpells[1].extraDelay = 1000;
+    predictedDeleteSpells[1].endExplosionFollowsUnit = true;
+    predictedDeleteSpells[1].endExplosionDetonatesOnUnitDeath = true;
+    for (auto& spell : predictedDeleteSpells) {
+        spell.hasEndExplosion = true;
+        spell.endExplosionRequiresUnitCollision = true;
+        spell.endExplosionAtUnitCenter = true;
+        spell.collisionObjects = {
+            ZDCollisionObjectType::EnemyChampions,
+            ZDCollisionObjectType::EnemyMinions,
+        };
+    }
+    std::array<bool, 2> targetlessMatches = {};
+    std::array<bool, 2> targetlessFarRejections = {};
+    std::array<bool, 2> targetlessExplosions = {};
+    std::array<bool, 2> targetlessNoReplay = {};
+    for (std::size_t index = 0;
+         index < predictedDeleteSpells.size();
+         ++index) {
+        Threat threat =
+            ZDEvadeTest::MakeThreat(predictedDeleteSpells[index]);
+        threat.missileBound = true;
+        threat.missileNetworkId =
+            static_cast<std::uint32_t>(80 + index);
+        threat.missileObjectIdentity =
+            static_cast<std::uintptr_t>(0xB100u + index);
+        threat.observedTick = 5000;
+        threat.observedHead = Vec2(300.0f, 100.0f);
+        RefreshLiveBoundCollisionPrediction(
+            threat,
+            ZDCollisionKind::Unit,
+            1234,
+            Vec2(900.0f, 100.0f),
+            Vec2(500.0f, 100.0f),
+            5000);
+        const bool sameEpisode = MatchesMissileEpisode(
+            threat.predictedCollisionMissileNetworkId,
+            threat.predictedCollisionMissileObjectIdentity,
+            threat.missileNetworkId,
+            threat.missileObjectIdentity);
+        targetlessMatches[index] =
+            ShouldClassifyDeleteAsUnitCollision(
+                false,
+                threat.predictedCollisionKind,
+                threat.predictedCollisionUnitNetworkId,
+                threat.predictedCollisionPoint,
+                threat.predictedCollisionTick,
+                5100,
+                sameEpisode,
+                true,
+                Vec2(505.0f, 100.0f));
+        targetlessFarRejections[index] =
+            !ShouldClassifyDeleteAsUnitCollision(
+                false,
+                threat.predictedCollisionKind,
+                threat.predictedCollisionUnitNetworkId,
+                threat.predictedCollisionPoint,
+                threat.predictedCollisionTick,
+                5100,
+                sameEpisode,
+                true,
+                Vec2(650.0f, 100.0f));
+        if (targetlessMatches[index]) {
+            ConfirmDeleteUnitCollision(
+                threat,
+                threat.predictedCollisionUnitNetworkId,
+                Vec2(505.0f, 100.0f),
+                false);
+            threat.projectileTerminated = true;
+            threat.projectileTerminationTick = 5100;
+            threat.missileBound = false;
+            threat.ClearPredictedCollision();
+            targetlessExplosions[index] =
+                threat.HasEndExplosionArea() &&
+                threat.EndExplosionCenter().DistanceSqr(
+                    Vec2(505.0f, 100.0f)) <= 1.0f &&
+                threat.collisionUnitCenter.DistanceSqr(
+                    Vec2(505.0f, 100.0f)) <= 1.0f &&
+                !threat.collisionUnitTargetAuthoritative &&
+                WrappingTickDifference(
+                    threat.EndExplosionEndTick(),
+                    threat.EndExplosionStartTick()) == 100;
+            targetlessNoReplay[index] =
+                !threat.IsEndExplosionActiveAt(
+                    WrappingTickAdd(
+                        threat.EndExplosionEndTick(),
+                        1));
+        }
+    }
+    ExpectTrue("Ashe R targetless delete confirms matching prediction",
+               targetlessMatches[0] &&
+                   targetlessFarRejections[0] &&
+                   targetlessExplosions[0] &&
+                   targetlessNoReplay[0]);
+    ExpectTrue("Senna W targetless delete confirms matching prediction",
+               targetlessMatches[1] &&
+                   targetlessFarRejections[1] &&
+                   targetlessExplosions[1] &&
+                   targetlessNoReplay[1]);
+    const Vec2 attachedDeleteImpact(505.0f, 100.0f);
+    const Vec2 attachedUnitCenter(510.0f, 100.0f);
+    ExpectTrue("verified targetless unit may attach retained lifecycle",
+               ShouldAttachPredictedUnitAtDelete(
+                   1234,
+                   1234,
+                   0xD100u,
+                   0xD100u,
+                   true,
+                   false,
+                   true,
+                   true,
+                   attachedUnitCenter,
+                   attachedDeleteImpact));
+    ExpectTrue("far targetless unit remains static",
+               !ShouldAttachPredictedUnitAtDelete(
+                   1234,
+                   1234,
+                   0xD100u,
+                   0xD100u,
+                   true,
+                   false,
+                   true,
+                   true,
+                   Vec2(700.0f, 100.0f),
+                   attachedDeleteImpact));
+    ExpectTrue("dead targetless unit remains static",
+               !ShouldAttachPredictedUnitAtDelete(
+                   1234,
+                   1234,
+                   0xD100u,
+                   0xD100u,
+                   true,
+                   true,
+                   true,
+                   true,
+                   attachedUnitCenter,
+                   attachedDeleteImpact));
+    ExpectTrue("reused targetless unit ID remains static",
+               !ShouldAttachPredictedUnitAtDelete(
+                   1234,
+                   1234,
+                   0xD100u,
+                   0xD200u,
+                   true,
+                   false,
+                   true,
+                   true,
+                   attachedUnitCenter,
+                   attachedDeleteImpact));
+    Threat attachedSenna =
+        ZDEvadeTest::MakeThreat(predictedDeleteSpells[1]);
+    attachedSenna.projectileTerminated = true;
+    attachedSenna.projectileTerminationTick = 5100;
+    ConfirmDeleteUnitCollision(
+        attachedSenna,
+        1234,
+        attachedDeleteImpact,
+        true,
+        attachedUnitCenter,
+        0xD100u);
+    const bool followedAttachedMovement =
+        UpdateAttachedUnitExplosion(
+            attachedSenna,
+            Vec2(600.0f, 100.0f),
+            false,
+            5200);
+    const bool detonatedAttachedDeath =
+        UpdateAttachedUnitExplosion(
+            attachedSenna,
+            Vec2(600.0f, 100.0f),
+            true,
+            5300);
+    ExpectTrue("verified targetless Senna follows unit movement",
+               followedAttachedMovement &&
+                   MatchesAttachedUnitIdentity(
+                       attachedSenna
+                           .collisionUnitTargetAuthoritative,
+                       attachedSenna.collisionUnitObjectIdentity,
+                       0xD100u) &&
+                   attachedSenna.collisionUnitCenter.DistanceSqr(
+                       Vec2(600.0f, 100.0f)) <= 1.0f &&
+                   attachedSenna.collisionExplosionCenter.DistanceSqr(
+                       Vec2(600.0f, 100.0f)) <= 1.0f);
+    ExpectTrue("verified targetless Senna detonates on unit death",
+               detonatedAttachedDeath &&
+                   attachedSenna.collisionEndExplosionDelay == 0 &&
+                   attachedSenna.projectileTerminationTick == 5300);
+    ExpectTrue("reused attached unit object cannot inherit follow lifecycle",
+               !MatchesAttachedUnitIdentity(
+                   attachedSenna
+                       .collisionUnitTargetAuthoritative,
+                   attachedSenna.collisionUnitObjectIdentity,
+                   0xD200u));
+    Threat staticSenna =
+        ZDEvadeTest::MakeThreat(predictedDeleteSpells[1]);
+    staticSenna.projectileTerminated = true;
+    staticSenna.projectileTerminationTick = 5100;
+    ConfirmDeleteUnitCollision(
+        staticSenna,
+        1234,
+        attachedDeleteImpact,
+        false);
+    ExpectTrue("unverified targetless Senna remains at delete impact",
+               !UpdateAttachedUnitExplosion(
+                   staticSenna,
+                   Vec2(700.0f, 100.0f),
+                   true,
+                   5200) &&
+                   staticSenna.EndExplosionCenter().DistanceSqr(
+                       attachedDeleteImpact) <= 1.0f &&
+                   staticSenna.collisionEndExplosionDelay == -1);
+    Threat genericAshe =
+        ZDEvadeTest::MakeThreat(predictedDeleteSpells[0]);
+    genericAshe.projectileTerminated = true;
+    genericAshe.projectileTerminationTick = 5100;
+    ConfirmDeleteUnitCollision(
+        genericAshe,
+        1234,
+        attachedDeleteImpact,
+        false);
+    ExpectTrue("Ashe generic impact remains static at delete point",
+               !UpdateAttachedUnitExplosion(
+                   genericAshe,
+                   Vec2(510.0f, 100.0f),
+                   false,
+                   5200) &&
+                   genericAshe.EndExplosionCenter().DistanceSqr(
+                       attachedDeleteImpact) <= 1.0f);
+    Threat noConfirmedImpact =
+        ZDEvadeTest::MakeThreat(predictedDeleteSpells[0]);
+    noConfirmedImpact.projectileTerminated = true;
+    noConfirmedImpact.projectileTerminationTick = 5100;
+    ExpectTrue("unconfirmed delete cannot fabricate required explosion",
+               !noConfirmedImpact.HasEndExplosionArea());
+    ExpectTrue("valid explicit target metadata verifies attachment",
+               ShouldAttachExplicitUnitAtDelete(
+                   true,
+                   1234,
+                   0xE100u,
+                   1234,
+                   0xE100u,
+                   Vec2(520.0f, 100.0f)));
+    ExpectTrue("unresolved explicit target cannot create wildcard attachment",
+               !ShouldAttachExplicitUnitAtDelete(
+                   true,
+                   1234,
+                   0xE100u,
+                   0,
+                   0,
+                   Vec2()));
+    std::array<bool, 2> explicitImpactCenters = {};
+    for (std::size_t index = 0;
+         index < predictedDeleteSpells.size();
+         ++index) {
+        Threat threat =
+            ZDEvadeTest::MakeThreat(predictedDeleteSpells[index]);
+        ConfirmDeleteUnitCollision(
+            threat,
+            1234,
+            attachedDeleteImpact,
+            true,
+            Vec2(520.0f, 100.0f),
+            0xE100u);
+        explicitImpactCenters[index] =
+            threat.collisionUnitTargetAuthoritative &&
+            threat.collisionUnitCenter.DistanceSqr(
+                Vec2(520.0f, 100.0f)) <= 1.0f &&
+            threat.collisionExplosionCenter.DistanceSqr(
+                Vec2(520.0f, 100.0f)) <= 1.0f &&
+            threat.collisionUnitObjectIdentity == 0xE100u;
+    }
+    ExpectTrue("explicit Ashe impact uses verified unit center and address",
+               explicitImpactCenters[0]);
+    ExpectTrue("explicit Senna impact uses verified unit center and address",
+               explicitImpactCenters[1]);
+    Threat explicitSenna =
+        ZDEvadeTest::MakeThreat(predictedDeleteSpells[1]);
+    explicitSenna.projectileTerminated = true;
+    explicitSenna.projectileTerminationTick = 5100;
+    ConfirmDeleteUnitCollision(
+        explicitSenna,
+        1234,
+        attachedDeleteImpact,
+        true,
+        Vec2(520.0f, 100.0f),
+        0xE100u);
+    ExpectTrue("explicit Senna follows exact target object movement",
+               MatchesAttachedUnitIdentity(
+                   explicitSenna.collisionUnitTargetAuthoritative,
+                   explicitSenna.collisionUnitObjectIdentity,
+                   0xE100u) &&
+                   UpdateAttachedUnitExplosion(
+                       explicitSenna,
+                       Vec2(620.0f, 100.0f),
+                       false,
+                       5200) &&
+                   explicitSenna.EndExplosionCenter().DistanceSqr(
+                       Vec2(620.0f, 100.0f)) <= 1.0f);
+    ExpectTrue("explicit reused network ID with new pointer is rejected",
+               !MatchesAttachedUnitIdentity(
+                   explicitSenna.collisionUnitTargetAuthoritative,
+                   explicitSenna.collisionUnitObjectIdentity,
+                   0xE200u));
+    Threat unresolvedExplicitSenna =
+        ZDEvadeTest::MakeThreat(predictedDeleteSpells[1]);
+    unresolvedExplicitSenna.projectileTerminated = true;
+    unresolvedExplicitSenna.projectileTerminationTick = 5100;
+    ConfirmDeleteUnitCollision(
+        unresolvedExplicitSenna,
+        1234,
+        attachedDeleteImpact,
+        false);
+    ExpectTrue("unresolved explicit target remains static at impact",
+               !unresolvedExplicitSenna
+                    .collisionUnitTargetAuthoritative &&
+                   unresolvedExplicitSenna
+                       .collisionUnitObjectIdentity == 0 &&
+                   !UpdateAttachedUnitExplosion(
+                       unresolvedExplicitSenna,
+                       Vec2(620.0f, 100.0f),
+                       false,
+                       5200) &&
+                   unresolvedExplicitSenna.EndExplosionCenter()
+                       .DistanceSqr(attachedDeleteImpact) <= 1.0f);
+    std::array<bool, 2> localPlayerPredictions = {};
+    for (std::size_t index = 0;
+         index < predictedDeleteSpells.size();
+         ++index) {
+        Threat threat =
+            ZDEvadeTest::MakeThreat(predictedDeleteSpells[index]);
+        threat.missileBound = true;
+        threat.missileNetworkId =
+            static_cast<std::uint32_t>(90 + index);
+        threat.missileObjectIdentity =
+            static_cast<std::uintptr_t>(0xC100u + index);
+        threat.observedTick = 7000;
+        threat.observedHead = Vec2(300.0f, 100.0f);
+        RefreshLiveBoundCollisionPrediction(
+            threat,
+            ZDCollisionKind::Unit,
+            9999,
+            Vec2(510.0f, 100.0f),
+            Vec2(500.0f, 100.0f),
+            7050,
+            static_cast<std::uintptr_t>(
+                0xD100u + index));
+        localPlayerPredictions[index] =
+            threat.predictedCollisionKind ==
+                ZDCollisionKind::Unit &&
+            threat.predictedCollisionUnitNetworkId == 9999 &&
+            threat.predictedCollisionUnitObjectIdentity ==
+                static_cast<std::uintptr_t>(
+                    0xD100u + index);
+    }
+    ExpectTrue("Ashe R predicts non-committing local-player collision",
+               localPlayerPredictions[0]);
+    ExpectTrue("Senna W predicts non-committing local-player collision",
+               localPlayerPredictions[1]);
+    ExpectTrue("ambiguous ID-only delete is rejected",
+               !ShouldAcceptMissileDeleteOwnership(0, 2));
+    ExpectTrue("unique ID-only delete owner is accepted",
+               ShouldAcceptMissileDeleteOwnership(0, 1));
+    ExpectTrue("object-identified delete ignores network owner ambiguity",
+               ShouldAcceptMissileDeleteOwnership(0xA100u, 2));
+    ExpectTrue("ambiguous ID-only episode cannot finalize",
+               !ShouldFinalizeMissileDelete(
+                   true,
+                   false,
+                   77u,
+                   0xA100u,
+                   77u,
+                   0u,
+                   2));
+    ExpectTrue("exactly one ID-only episode can finalize",
+               ShouldFinalizeMissileDelete(
+                   true,
+                   false,
+                   77u,
+                   0xA100u,
+                   77u,
+                   0u,
+                   1));
     ExpectTrue("missile-bound Circular participates in projectile lifecycle",
                UsesMissileLifecycle(ZDSpellType::Circular, true));
     ExpectTrue("missile-bound non-Arc geometries participate in lifecycle",
@@ -434,10 +1974,19 @@ int main() {
     missingExplosionThreat.projectileTerminated = true;
     missingExplosionThreat.missingMissileTermination = true;
     missingExplosionThreat.projectileTerminationTick = 2000;
-    ExpectTrue("missing callback preserves configured end explosion",
-               missingExplosionThreat.HasEndExplosionArea());
-    ExpectEq("missing callback explosion uses current termination tick",
-             missingExplosionThreat.EndExplosionEndTick(),
+    ExpectTrue("missing timeout cannot fabricate collision-required explosion",
+               !missingExplosionThreat.HasEndExplosionArea());
+    SpellData unconditionalMissingExplosion = missingExplosion;
+    unconditionalMissingExplosion.endExplosionRequiresUnitCollision = false;
+    Threat unconditionalMissingExplosionThreat =
+        ZDEvadeTest::MakeThreat(unconditionalMissingExplosion);
+    unconditionalMissingExplosionThreat.projectileTerminated = true;
+    unconditionalMissingExplosionThreat.missingMissileTermination = true;
+    unconditionalMissingExplosionThreat.projectileTerminationTick = 2000;
+    ExpectTrue("missing timeout retains unconditional configured explosion",
+               unconditionalMissingExplosionThreat.HasEndExplosionArea());
+    ExpectEq("retained missing explosion uses termination tick",
+             unconditionalMissingExplosionThreat.EndExplosionEndTick(),
              3500);
     SpellData missingWithoutExplosion = missingExplosion;
     missingWithoutExplosion.hasEndExplosion = false;
@@ -562,6 +2111,36 @@ int main() {
              5250);
     ExpectTrue("cast-only Hwei survives through delayed explosion",
                !hweiThreat.IsExpiredAt(5250));
+    Threat missingHwei = hweiThreat;
+    missingHwei.launchTick = 1000;
+    missingHwei.missileBound = true;
+    missingHwei.observedHead = Vec2(350.0f, 0.0f);
+    missingHwei.observedTick = 1250;
+    const int hweiBodyArrival = missingHwei.ArrivalTick();
+    const int hweiEvidenceDeadline = MissileEvidenceLossDeadlineTick(
+        hweiBodyArrival,
+        missingHwei.observedTick);
+    ExpectEq("Hwei evidence deadline excludes delayed explosion linger",
+             hweiEvidenceDeadline,
+             hweiBodyArrival + kMissileEvidenceLossGraceMs);
+    const int hweiTerminationTick = MissingMissileTerminationTick(
+        hweiBodyArrival,
+        missingHwei.observedTick);
+    missingHwei.projectileTerminated = true;
+    missingHwei.missileBound = false;
+    missingHwei.projectileTerminationTick = hweiTerminationTick;
+    ExpectEq("Hwei missing termination anchors to predicted body arrival",
+             missingHwei.EndExplosionStartTick(),
+             hweiBodyArrival + 3000);
+    ExpectEq("short Hwei terminal explosion has canonical 100ms duration",
+             missingHwei.EndExplosionEndTick(),
+             hweiBodyArrival + 3100);
+    ExpectTrue("late Hwei timeout does not replay an ended explosion",
+               ShouldExpireMissingTerminationAt(
+                   hweiBodyArrival + 4000,
+                   missingHwei.EndExplosionEndTick()) &&
+                   !missingHwei.IsEndExplosionActiveAt(
+                       hweiBodyArrival + 4000));
 
     SpellData sennaCastOnly = ZDEvadeTest::MakeSpell(ZDSpellType::Line);
     sennaCastOnly.spellName = "SennaW";
@@ -1003,19 +2582,32 @@ int main() {
     castOrigin.startTick = 4000;
     castOrigin.casterNetworkId = 42u;
     castOrigin.castIdentity = 0xBEEF;
+    castOrigin.slot = static_cast<int>(ZDSpellSlot::Q);
     normalizedStore.push_back(castOrigin);
 
     Threat pairedCallback = castOrigin;
     pairedCallback.id = -1;
-    pairedCallback.startTick = 4020;
+    pairedCallback.startTick = 4085;
+    pairedCallback.castIdentity = 0xCAFE;
+    pairedCallback.startPos = Vec2(6.0f, 2.0f);
+    pairedCallback.endPos = Vec2(1006.0f, 18.0f);
+    pairedCallback.authoredEndPos = pairedCallback.endPos;
+    pairedCallback.direction =
+        (pairedCallback.endPos - pairedCallback.startPos).Normalized();
     Threat* normalizedDuplicate =
         FindNormalizedCastDuplicate(normalizedStore, pairedCallback);
-    ExpectTrue("paired callback finds normalized cast store entry",
+    ExpectTrue("different-pointer callback finds normalized cast store entry",
                normalizedDuplicate != nullptr);
     if (normalizedDuplicate)
         MergeNormalizedCastDuplicate(*normalizedDuplicate, pairedCallback);
 
     Threat& sameFrameThreat = normalizedStore.front();
+    ExpectEq("different-pointer callback keeps one stored threat",
+             static_cast<int>(normalizedStore.size()), 1);
+    ExpectEq("different-pointer callback preserves threat ID",
+             sameFrameThreat.id, 77);
+    ExpectEq("different-pointer callback advances one revision lineage",
+             sameFrameThreat.revision, 1);
     const MissileBindKey sameFrameCastKey = {
         sameFrameThreat.casterNetworkId,
         sameFrameThreat.castIdentity,
@@ -1023,16 +2615,22 @@ int main() {
         sameFrameThreat.direction,
         sameFrameThreat.startTick,
         sameFrameThreat.Delay(),
-        sameFrameThreat.Delay()
+        sameFrameThreat.Delay(),
+        sameFrameThreat.slot,
+        sameFrameThreat.startPos,
+        sameFrameThreat.AuthoredEnd()
     };
     const MissileBindObservation sameFrameMissile = {
         42u,
-        0xBEEF,
+        0xD00D,
         reinterpret_cast<std::uintptr_t>(sameFrameThreat.data),
         sameFrameThreat.direction,
-        4030
+        4030,
+        static_cast<int>(ZDSpellSlot::Q),
+        Vec2(8.0f, 3.0f),
+        Vec2(1008.0f, 20.0f)
     };
-    ExpectTrue("same-frame missile binds normalized cast store entry",
+    ExpectTrue("different-payload missile binds normalized cast store entry",
                CanBindMissile(sameFrameCastKey, sameFrameMissile));
     CorrectExistingThreatFromMissile(
         sameFrameThreat,
@@ -1050,6 +2648,182 @@ int main() {
              sameFrameThreat.startTick, 4000);
     ExpectTrue("same-frame missile marks existing threat bound",
                sameFrameThreat.missileBound);
+
+    Threat laterCast = pairedCallback;
+    laterCast.startTick =
+        castOrigin.startTick + kExpectedLogicalCastEpisodeWindowMs + 1;
+    laterCast.id = -1;
+    ExpectTrue("stored later cast outside episode is not deduplicated",
+               FindNormalizedCastDuplicate(normalizedStore, laterCast) == nullptr);
+    Threat incompatibleCast = pairedCallback;
+    incompatibleCast.id = -1;
+    incompatibleCast.direction = Vec2(-1.0f, 0.0f);
+    incompatibleCast.endPos = Vec2(-1000.0f, 0.0f);
+    incompatibleCast.authoredEndPos = incompatibleCast.endPos;
+    ExpectTrue("stored incompatible cast is not deduplicated",
+               FindNormalizedCastDuplicate(normalizedStore, incompatibleCast) ==
+                   nullptr);
+
+    const SpellData* wildCards =
+        ThreatDatabase::FindAny("WildCards", "TwistedFate");
+    ExpectTrue("Wild Cards database fixture has exactly three lanes",
+               wildCards != nullptr &&
+                   wildCards->multipleNumber == 3 &&
+                   std::fabs(wildCards->multipleAngle - 28.0f) < 0.001f);
+    std::vector<Threat> wildCardStore;
+    const std::array<Vec2, 3> wildCardDirections = {{
+        Vec2(1.0f, -0.25f).Normalized(),
+        Vec2(1.0f, 0.0f),
+        Vec2(1.0f, 0.25f).Normalized(),
+    }};
+    for (const Vec2& laneDirection : wildCardDirections) {
+        Threat lane;
+        lane.data = wildCards;
+        lane.id = 100 + static_cast<int>(wildCardStore.size());
+        lane.startPos = Vec2(100.0f, 100.0f);
+        lane.direction = laneDirection;
+        lane.endPos = lane.startPos + laneDirection * wildCards->range;
+        lane.authoredEndPos = lane.endPos;
+        lane.startTick = 5000;
+        lane.casterNetworkId = 84u;
+        lane.castIdentity = 0x1111u;
+        lane.slot = static_cast<int>(ZDSpellSlot::Q);
+        wildCardStore.push_back(lane);
+    }
+    for (const Vec2& laneDirection : wildCardDirections) {
+        Threat callbackLane;
+        callbackLane.data = wildCards;
+        callbackLane.id = -1;
+        callbackLane.startPos = Vec2(104.0f, 102.0f);
+        callbackLane.direction =
+            Vec2(laneDirection.x, laneDirection.y + 0.004f).Normalized();
+        callbackLane.endPos =
+            callbackLane.startPos + callbackLane.direction * wildCards->range;
+        callbackLane.authoredEndPos = callbackLane.endPos;
+        callbackLane.startTick = 5090;
+        callbackLane.casterNetworkId = 84u;
+        callbackLane.castIdentity = 0x2222u;
+        callbackLane.slot = static_cast<int>(ZDSpellSlot::Q);
+        Threat* duplicate =
+            FindNormalizedCastDuplicate(wildCardStore, callbackLane);
+        if (duplicate) {
+            MergeNormalizedCastDuplicate(*duplicate, callbackLane);
+        } else {
+            callbackLane.id = 100 + static_cast<int>(wildCardStore.size());
+            wildCardStore.push_back(callbackLane);
+        }
+    }
+    ExpectEq("differing Wild Cards hook pointers keep exactly three lanes",
+             static_cast<int>(wildCardStore.size()), 3);
+    std::array<int, 3> wildCardIds = {};
+    for (std::size_t index = 0; index < wildCardStore.size() &&
+                                index < wildCardIds.size(); ++index)
+        wildCardIds[index] = wildCardStore[index].id;
+    for (std::size_t missileIndex = 0;
+         missileIndex < wildCardDirections.size();
+         ++missileIndex) {
+        Threat* bestLane = nullptr;
+        float bestDot = -2.0f;
+        for (Threat& lane : wildCardStore) {
+            if (lane.missileBound) continue;
+            const MissileBindKey laneKey = {
+                lane.casterNetworkId,
+                lane.castIdentity,
+                reinterpret_cast<std::uintptr_t>(lane.data),
+                lane.direction,
+                lane.startTick,
+                lane.Delay(),
+                lane.Delay(),
+                lane.slot,
+                lane.startPos,
+                lane.AuthoredEnd()
+            };
+            const MissileBindObservation laneMissile = {
+                84u,
+                0x3000u + missileIndex,
+                reinterpret_cast<std::uintptr_t>(wildCards),
+                wildCardDirections[missileIndex],
+                5300,
+                static_cast<int>(ZDSpellSlot::Q),
+                Vec2(106.0f, 103.0f),
+                Vec2(106.0f, 103.0f) +
+                    wildCardDirections[missileIndex] * wildCards->range
+            };
+            if (!CanBindMissile(laneKey, laneMissile, 0.99f)) continue;
+            const float dot = lane.direction.Normalized().Dot(
+                wildCardDirections[missileIndex].Normalized());
+            if (dot > bestDot) {
+                bestDot = dot;
+                bestLane = &lane;
+            }
+        }
+        ExpectTrue("each Wild Cards missile finds one unbound lane",
+                   bestLane != nullptr);
+        if (bestLane) {
+            CorrectExistingThreatFromMissile(
+                *bestLane,
+                [missileIndex](Threat& bound) {
+                    bound.missileNetworkId =
+                        900u + static_cast<std::uint32_t>(missileIndex);
+                });
+        }
+    }
+    ExpectEq("three Wild Cards missiles do not add lanes",
+             static_cast<int>(wildCardStore.size()), 3);
+    ExpectTrue("Wild Cards lane IDs remain stable through missile binding",
+               wildCardStore.size() == 3 &&
+                   wildCardStore[0].id == wildCardIds[0] &&
+                   wildCardStore[1].id == wildCardIds[1] &&
+                   wildCardStore[2].id == wildCardIds[2] &&
+                   wildCardStore[0].missileBound &&
+                   wildCardStore[1].missileBound &&
+                   wildCardStore[2].missileBound);
+    const std::size_t beforeDuplicateMissile = wildCardStore.size();
+    const std::uint32_t duplicateMissileId =
+        wildCardStore.front().missileNetworkId;
+    const bool duplicateMissileFound = std::any_of(
+        wildCardStore.begin(),
+        wildCardStore.end(),
+        [duplicateMissileId](const Threat& lane) {
+            return !lane.expired &&
+                lane.missileBound &&
+                lane.missileNetworkId == duplicateMissileId;
+        });
+    if (!duplicateMissileFound)
+        wildCardStore.push_back(wildCardStore.front());
+    ExpectEq("duplicate missile-create is idempotent",
+             static_cast<int>(wildCardStore.size()),
+             static_cast<int>(beforeDuplicateMissile));
+
+    Threat retainedLane = wildCardStore[1];
+    retainedLane.missileBound = false;
+    retainedLane.projectileTerminated = true;
+    retainedLane.collisionExplosionCenter = retainedLane.endPos;
+    retainedLane.revision = 7;
+    const int retainedId = retainedLane.id;
+    const int retainedStartTick = retainedLane.startTick;
+    Threat lateCallback = retainedLane;
+    lateCallback.id = -1;
+    lateCallback.projectileTerminated = false;
+    lateCallback.collisionExplosionCenter = {};
+    lateCallback.castIdentity = 0x4444u;
+    lateCallback.startTick =
+        retainedStartTick + kExpectedLogicalCastEpisodeWindowMs;
+    std::vector<Threat> retainedStore = {retainedLane};
+    Threat* retainedDuplicate =
+        FindNormalizedCastDuplicate(retainedStore, lateCallback);
+    ExpectTrue("late callback finds retained explosion lane",
+               retainedDuplicate != nullptr);
+    if (retainedDuplicate)
+        MergeNormalizedCastDuplicate(*retainedDuplicate, lateCallback);
+    ExpectEq("late callback keeps one retained logical lane",
+             static_cast<int>(retainedStore.size()), 1);
+    ExpectTrue("late callback preserves retained explosion state and identity",
+               retainedStore.front().id == retainedId &&
+                   retainedStore.front().startTick == retainedStartTick &&
+                   retainedStore.front().projectileTerminated &&
+                   !retainedStore.front().collisionExplosionCenter.IsZero() &&
+                   retainedStore.front().revision == 7);
 
     const SpellData* fizzR =
         ThreatDatabase::FindAny("FizzRMissile", "Fizz");
@@ -1276,6 +3050,32 @@ int main() {
                std::strcmp(merged.spellName, "EzrealMysticShot") == 0);
     ExpectNear("real merge preserves sparse start", merged.start.x, 100.0f);
     ExpectNear("real merge enriches missing end", merged.end.x, 900.0f);
+
+    Queue differentPointerQueue;
+    PendingEventDescriptor firstPointerDescriptor;
+    firstPointerDescriptor.key = MakeCastKey(
+        42u, 0xA100u, 0, 6000, "EzrealMysticShot",
+        Vec2(100.0f, 100.0f), Vec2(900.0f, 100.0f));
+    firstPointerDescriptor.priority = PendingPriority::HostileCast;
+    PendingEventDescriptor secondPointerDescriptor;
+    secondPointerDescriptor.key = MakeCastKey(
+        42u, 0xB200u, 0, 6090, "EzrealMysticShot",
+        Vec2(106.0f, 102.0f), Vec2(908.0f, 116.0f));
+    secondPointerDescriptor.priority = PendingPriority::HostileCast;
+    differentPointerQueue.Push(
+        MakeQueueEvent(11u, "EzrealMysticShot"),
+        firstPointerDescriptor,
+        MergeQueueEvent);
+    ExpectEq("queue coalesces differing nonzero hook identities",
+             static_cast<int>(differentPointerQueue.Push(
+                 MakeQueueEvent(12u, "EzrealMysticShot"),
+                 secondPointerDescriptor,
+                 MergeQueueEvent)),
+             static_cast<int>(PendingQueueDecision::Coalesce));
+    ExpectEq("different-pointer coalesce keeps one queued event",
+             static_cast<int>(differentPointerQueue.Size()), 1);
+    ExpectEq("different-pointer coalesce increments counter once",
+             differentPointerQueue.Counters().coalesced, 1);
 
     Queue protectedQueue;
     protectedQueue.Push(
@@ -1577,8 +3377,8 @@ int main() {
                CanBindMissile(delayedCast, delayedMissile));
     MissileBindObservation wrongIdentity = delayedMissile;
     wrongIdentity.castIdentity = 0x5678u;
-    ExpectTrue("wrong available cast identity does not bind",
-               !CanBindMissile(delayedCast, wrongIdentity));
+    ExpectTrue("different missile payload identity remains a positive hint",
+               CanBindMissile(delayedCast, wrongIdentity));
     MissileBindObservation wrongDirection = delayedMissile;
     wrongDirection.direction = Vec2(-1.0f, 0.0f);
     ExpectTrue("wrong missile direction does not bind",

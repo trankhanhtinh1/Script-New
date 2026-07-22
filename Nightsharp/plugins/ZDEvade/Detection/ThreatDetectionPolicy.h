@@ -1,7 +1,6 @@
 #pragma once
 
-#include "../Database/SpellData.h"
-#include "../../../Core/Vector.h"
+#include "Threat.h"
 
 #include <algorithm>
 #include <array>
@@ -352,6 +351,33 @@ inline void CorrectExistingThreatFromMissile(
     std::forward<Correction>(correction)(existing);
     existing.id = castThreatId;
     existing.startTick = castStartTick;
+    existing.collisionUnitCenter = {};
+    existing.collisionExplosionCenter = {};
+    existing.lastConsumedCollisionPoint = {};
+    existing.collisionEndExplosionRadius = 0.0f;
+    existing.collisionEndExplosionDelay = -1;
+    existing.collisionHitCount = 0;
+    existing.collisionUnitNetworkId = 0;
+    existing.collisionUnitObjectIdentity = 0;
+    existing.collisionKind = {};
+    existing.pendingUnitCollisions.clear();
+    existing.consumedCollisionUnits.clear();
+    existing.collisionStopped = false;
+    existing.collisionUnitTargetAuthoritative = false;
+    existing.predictedCollisionKind = {};
+    existing.predictedCollisionUnitNetworkId = 0;
+    existing.predictedCollisionUnitCenter = {};
+    existing.predictedCollisionPoint = {};
+    existing.predictedCollisionTick = -1;
+    existing.predictedCollisionMissileNetworkId = 0;
+    existing.predictedCollisionMissileObjectIdentity = 0;
+    existing.predictedCollisionUnitObjectIdentity = 0;
+    existing.projectileTerminated = false;
+    existing.projectileTerminationTick = 0;
+    existing.missingMissileTermination = false;
+    existing.missileMissingSinceTick = -1;
+    existing.missilePositionUnavailable = false;
+    existing.expired = false;
     existing.missileBound = true;
 }
 
@@ -434,6 +460,487 @@ struct CastEventKey {
     Vec2 castPosition = {};
 };
 
+// ProcessSpell and DoCast are observations of one engine cast episode. Keep
+// this deliberately below 200 ms: it absorbs normal hook/tick skew without
+// joining a plausible later cast of the same slot.
+inline constexpr int kLogicalCastEpisodeWindowMs = 180;
+inline constexpr float kLogicalLaneDirectionDot = 0.995f;
+// Missile-only lanes are matched to their immutable first observation within
+// three degrees. This absorbs normal 0.1-1 degree runtime jitter while staying
+// far below authored spreads such as Wild Cards' 28 degrees.
+inline constexpr float kMissileLaneRegistryDirectionDot = 0.998629535f;
+inline constexpr float kLogicalCastStartTolerance = 160.0f;
+inline constexpr float kLogicalCastEndTolerance = 200.0f;
+inline constexpr int kLogicalCastEpisodeRetentionMs = 12000;
+
+struct LogicalCastEpisodeObservation {
+    std::uint32_t casterNetworkId = 0;
+    const SpellData* data = nullptr;
+    int slot = -1;
+    int episodeTick = 0;
+    int observationTick = 0;
+    Vec2 start = {};
+    Vec2 end = {};
+    Vec2 direction = {};
+    bool projectileObservation = false;
+};
+
+inline std::uint64_t CanonicalSpellEpisodeHash(
+    const SpellData* data) {
+    constexpr std::uint64_t offset = 1469598103934665603ull;
+    constexpr std::uint64_t prime = 1099511628211ull;
+    std::uint64_t hash = offset;
+    if (!data) return hash;
+    const auto mixText = [&](const std::string& text) {
+        for (unsigned char value : text) {
+            if (value >= 'A' && value <= 'Z')
+                value = static_cast<unsigned char>(
+                    value - 'A' + 'a');
+            hash ^= value;
+            hash *= prime;
+        }
+        hash ^= std::numeric_limits<std::uint64_t>::max();
+        hash *= prime;
+    };
+    mixText(data->charName);
+    mixText(data->spellName);
+    hash ^= static_cast<std::uint64_t>(data->spellType);
+    hash *= prime;
+    return hash;
+}
+
+inline std::uint32_t LogicalEpisodeTickDistance(
+    int left,
+    int right) {
+    const std::uint32_t forward =
+        static_cast<std::uint32_t>(left) -
+        static_cast<std::uint32_t>(right);
+    const std::uint32_t reverse =
+        static_cast<std::uint32_t>(right) -
+        static_cast<std::uint32_t>(left);
+    return std::min(forward, reverse);
+}
+
+inline std::int64_t LogicalEpisodeForwardAge(
+    int current,
+    int previous) {
+    const std::uint32_t difference =
+        static_cast<std::uint32_t>(current) -
+        static_cast<std::uint32_t>(previous);
+    if (difference <=
+        static_cast<std::uint32_t>(
+            std::numeric_limits<std::int32_t>::max())) {
+        return static_cast<std::int64_t>(difference);
+    }
+    return -static_cast<std::int64_t>(
+        std::numeric_limits<std::uint32_t>::max() -
+        difference + 1u);
+}
+
+inline bool CompatibleLogicalEpisodeGeometry(
+    const LogicalCastEpisodeObservation& observation,
+    const Vec2& start,
+    const Vec2& end,
+    const Vec2& direction,
+    bool hasCastObservation) {
+    const Vec2 episodeDirection = direction.Normalized();
+    const Vec2 observedDirection =
+        observation.direction.Normalized();
+    const bool commonGeometry =
+        observation.start.IsValid() &&
+        observation.end.IsValid() &&
+        start.IsValid() &&
+        end.IsValid() &&
+        !episodeDirection.IsZero() &&
+        !observedDirection.IsZero() &&
+        start.DistanceSqr(observation.start) <=
+            kLogicalCastStartTolerance *
+                kLogicalCastStartTolerance;
+    if (!commonGeometry) return false;
+    if (observation.data &&
+        observation.data->spellType == ZDSpellType::Line &&
+        observation.data->multipleNumber > 1) {
+        const int projectileCount = std::clamp(
+            observation.data->multipleNumber,
+            1,
+            15);
+        if (!hasCastObservation) {
+            // A missile-only episode has no authoritative center lane. Any
+            // pair of authored lanes can differ by the complete configured
+            // spread, regardless of which lane happened to arrive first.
+            const float fullSpreadDegrees = std::min(
+                180.0f,
+                std::fabs(observation.data->multipleAngle) *
+                    static_cast<float>(projectileCount - 1));
+            const float minimumDot = std::cos(
+                fullSpreadDegrees *
+                3.14159265358979323846f / 180.0f);
+            return episodeDirection.Dot(observedDirection) >=
+                minimumDot - 0.00001f;
+        }
+        if (!observation.projectileObservation) {
+            return episodeDirection.Dot(observedDirection) >=
+                    kLogicalLaneDirectionDot &&
+                end.DistanceSqr(observation.end) <=
+                    kLogicalCastEndTolerance *
+                        kLogicalCastEndTolerance;
+        }
+        const float centerIndex =
+            static_cast<float>(projectileCount - 1) * 0.5f;
+        for (int index = 0; index < projectileCount; ++index) {
+            const float radians =
+                (static_cast<float>(index) - centerIndex) *
+                observation.data->multipleAngle *
+                3.14159265358979323846f / 180.0f;
+            const float cosine = std::cos(radians);
+            const float sine = std::sin(radians);
+            const Vec2 expected(
+                episodeDirection.x * cosine -
+                    episodeDirection.y * sine,
+                episodeDirection.x * sine +
+                    episodeDirection.y * cosine);
+            if (expected.Dot(observedDirection) >=
+                kLogicalLaneDirectionDot) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return episodeDirection.Dot(observedDirection) >=
+            kLogicalLaneDirectionDot &&
+        end.DistanceSqr(observation.end) <=
+            kLogicalCastEndTolerance *
+                kLogicalCastEndTolerance;
+}
+
+inline std::uint64_t StableProjectileLaneKey(
+    const Vec2& authoredInitialWorldDirection);
+
+template <std::size_t Capacity>
+class LogicalCastEpisodeResolver {
+    static_assert(Capacity > 0);
+
+public:
+    std::uint64_t Resolve(
+        const LogicalCastEpisodeObservation& observation,
+        Vec2* episodeDirectionOut = nullptr,
+        bool* matchedExistingOut = nullptr,
+        std::uint64_t* projectileLaneKeyOut = nullptr) {
+        Prune(observation.observationTick);
+        if (matchedExistingOut)
+            *matchedExistingOut = false;
+        if (projectileLaneKeyOut)
+            *projectileLaneKeyOut = 0;
+        const std::uint64_t spellHash =
+            CanonicalSpellEpisodeHash(observation.data);
+        for (Record& record : records) {
+            if (!record.active ||
+                record.casterNetworkId !=
+                    observation.casterNetworkId ||
+                record.spellHash != spellHash ||
+                record.slot != observation.slot ||
+                LogicalEpisodeTickDistance(
+                    record.episodeTick,
+                    observation.episodeTick) >
+                    static_cast<std::uint32_t>(
+                        kLogicalCastEpisodeWindowMs) ||
+                !CompatibleLogicalEpisodeGeometry(
+                    observation,
+                    record.start,
+                    record.end,
+                    record.direction,
+                    record.hasCastObservation)) {
+                continue;
+            }
+            if (LogicalEpisodeForwardAge(
+                    observation.observationTick,
+                    record.lastSeenTick) >= 0) {
+                record.lastSeenTick =
+                    observation.observationTick;
+            }
+            if (!observation.projectileObservation &&
+                !record.hasCastObservation) {
+                record.start = observation.start;
+                record.end = observation.end;
+                record.direction =
+                    observation.direction.Normalized();
+                record.hasCastObservation = true;
+            }
+            if (episodeDirectionOut) {
+                *episodeDirectionOut = record.hasCastObservation
+                    ? record.direction
+                    : Vec2();
+            }
+            if (matchedExistingOut)
+                *matchedExistingOut = true;
+            if (projectileLaneKeyOut &&
+                observation.projectileObservation) {
+                *projectileLaneKeyOut =
+                    ObservationLaneKey(record, observation);
+            }
+            return record.id;
+        }
+
+        Record* target = nullptr;
+        for (Record& record : records) {
+            if (!record.active) {
+                target = &record;
+                break;
+            }
+        }
+        if (!target) {
+            target = &records.front();
+            std::int64_t oldestAge = -1;
+            for (Record& record : records) {
+                const std::int64_t age =
+                    LogicalEpisodeForwardAge(
+                        observation.observationTick,
+                        record.lastSeenTick);
+                if (age > oldestAge) {
+                    oldestAge = age;
+                    target = &record;
+                }
+            }
+        }
+        std::uint64_t id = nextId++;
+        if (id == 0) id = nextId++;
+        *target = {};
+        target->id = id;
+        target->casterNetworkId = observation.casterNetworkId;
+        target->spellHash = spellHash;
+        target->slot = observation.slot;
+        target->episodeTick = observation.episodeTick;
+        target->lastSeenTick = observation.observationTick;
+        target->start = observation.start;
+        target->end = observation.end;
+        target->direction = observation.direction.Normalized();
+        target->hasCastObservation =
+            !observation.projectileObservation;
+        target->active = true;
+        if (episodeDirectionOut) {
+            *episodeDirectionOut = target->hasCastObservation
+                ? target->direction
+                : Vec2();
+        }
+        if (projectileLaneKeyOut &&
+            observation.projectileObservation) {
+            *projectileLaneKeyOut =
+                ObservationLaneKey(*target, observation);
+        }
+        return id;
+    }
+
+    std::uint64_t ResolveLaneKey(
+        std::uint64_t episodeId,
+        const Vec2& authoredInitialWorldDirection,
+        int projectileIndex = -1) {
+        if (episodeId == 0) return 0;
+        for (Record& record : records) {
+            if (record.active && record.id == episodeId) {
+                return RegisteredLaneKey(
+                    record,
+                    authoredInitialWorldDirection,
+                    projectileIndex);
+            }
+        }
+        return 0;
+    }
+
+    void Prune(int now) {
+        for (Record& record : records) {
+            const std::int64_t age =
+                LogicalEpisodeForwardAge(
+                    now,
+                    record.lastSeenTick);
+            if (record.active &&
+                age > kLogicalCastEpisodeRetentionMs) {
+                record = {};
+            }
+        }
+    }
+
+    void Reset() {
+        records = {};
+        nextId = 1;
+    }
+
+    std::size_t Size() const {
+        return static_cast<std::size_t>(std::count_if(
+            records.begin(),
+            records.end(),
+            [](const Record& record) {
+                return record.active;
+            }));
+    }
+
+private:
+    struct LaneRecord {
+        Vec2 initialDirection = {};
+        std::uint64_t key = 0;
+        int projectileIndex = -1;
+    };
+
+    struct Record {
+        std::uint64_t id = 0;
+        std::uint32_t casterNetworkId = 0;
+        std::uint64_t spellHash = 0;
+        int slot = -1;
+        int episodeTick = 0;
+        int lastSeenTick = 0;
+        Vec2 start = {};
+        Vec2 end = {};
+        Vec2 direction = {};
+        std::array<LaneRecord, 15> lanes = {};
+        std::uint8_t laneCount = 0;
+        std::uint64_t nextLaneKey = 1;
+        bool hasCastObservation = false;
+        bool active = false;
+    };
+
+    static bool UsesEpisodeLaneRegistry(
+        const LogicalCastEpisodeObservation& observation) {
+        return observation.data &&
+            observation.data->spellType == ZDSpellType::Line &&
+            observation.data->multipleNumber > 1;
+    }
+
+    static std::uint64_t RegisteredLaneKey(
+        Record& record,
+        const Vec2& initialWorldDirection,
+        int projectileIndex = -1) {
+        const Vec2 direction = initialWorldDirection.Normalized();
+        if (!direction.IsValid() || direction.IsZero()) return 0;
+        if (projectileIndex >= 0) {
+            for (std::size_t index = 0;
+                 index < record.laneCount;
+                 ++index) {
+                if (record.lanes[index].projectileIndex ==
+                    projectileIndex) {
+                    return record.lanes[index].key;
+                }
+            }
+        }
+        LaneRecord* best = nullptr;
+        float bestDot = -1.0f;
+        for (std::size_t index = 0; index < record.laneCount; ++index) {
+            if (projectileIndex >= 0 &&
+                record.lanes[index].projectileIndex >= 0) {
+                continue;
+            }
+            const float dot =
+                record.lanes[index].initialDirection.Dot(direction);
+            if (dot > bestDot) {
+                bestDot = dot;
+                best = &record.lanes[index];
+            }
+        }
+        if (best &&
+            bestDot >= kMissileLaneRegistryDirectionDot) {
+            if (projectileIndex >= 0) {
+                best->projectileIndex = projectileIndex;
+            }
+            return best->key;
+        }
+        if (record.laneCount >= record.lanes.size())
+            return 0;
+        std::uint64_t key = record.nextLaneKey++;
+        if (key == 0) key = record.nextLaneKey++;
+        record.lanes[record.laneCount++] = {
+            direction,
+            key,
+            projectileIndex,
+        };
+        return key;
+    }
+
+    static int AuthoredProjectileIndex(
+        const Record& record,
+        const LogicalCastEpisodeObservation& observation) {
+        if (!record.hasCastObservation ||
+            !UsesEpisodeLaneRegistry(observation)) {
+            return -1;
+        }
+        const int projectileCount = std::clamp(
+            observation.data->multipleNumber,
+            1,
+            15);
+        const float centerIndex =
+            static_cast<float>(projectileCount - 1) * 0.5f;
+        const Vec2 projectileDirection =
+            observation.direction.Normalized();
+        int bestIndex = -1;
+        float bestDot = -1.0f;
+        for (int index = 0; index < projectileCount; ++index) {
+            const float radians =
+                (static_cast<float>(index) - centerIndex) *
+                observation.data->multipleAngle *
+                3.14159265358979323846f / 180.0f;
+            const float cosine = std::cos(radians);
+            const float sine = std::sin(radians);
+            const Vec2 expected(
+                record.direction.x * cosine -
+                    record.direction.y * sine,
+                record.direction.x * sine +
+                    record.direction.y * cosine);
+            const float dot = expected.Dot(projectileDirection);
+            if (dot > bestDot) {
+                bestDot = dot;
+                bestIndex = index;
+            }
+        }
+        return bestDot >= kLogicalLaneDirectionDot
+            ? bestIndex
+            : -1;
+    }
+
+    static std::uint64_t ObservationLaneKey(
+        Record& record,
+        const LogicalCastEpisodeObservation& observation) {
+        const int projectileIndex =
+            UsesEpisodeLaneRegistry(observation)
+            ? AuthoredProjectileIndex(record, observation)
+            : 0;
+        return RegisteredLaneKey(
+            record,
+            observation.direction,
+            projectileIndex);
+    }
+
+    std::array<Record, Capacity> records = {};
+    std::uint64_t nextId = 1;
+};
+
+inline int StableProjectileLaneIndex(int projectileCount,
+                                     int projectileIndex) {
+    return projectileCount > 1 &&
+        projectileIndex >= 0 &&
+        projectileIndex < projectileCount
+        ? projectileIndex
+        : -1;
+}
+
+// This deterministic direction key remains available for legacy/non-episode
+// callers. Logical cast lanes, including single-projectile episodes, use the
+// retained episode registry so jitter cannot change identity.
+inline constexpr float kProjectileLaneDirectionQuantum = 0.000001f;
+
+inline std::uint64_t StableProjectileLaneKey(
+    const Vec2& authoredInitialWorldDirection) {
+    const Vec2 direction = authoredInitialWorldDirection.Normalized();
+    if (!direction.IsValid() || direction.IsZero()) return 0;
+    const auto quantize = [](float component) {
+        return static_cast<std::int32_t>(std::llround(
+            static_cast<double>(component) /
+            static_cast<double>(kProjectileLaneDirectionQuantum)));
+    };
+    const std::uint32_t x = static_cast<std::uint32_t>(
+        quantize(direction.x));
+    const std::uint32_t y = static_cast<std::uint32_t>(
+        quantize(direction.y));
+    return (static_cast<std::uint64_t>(x) << 32u) |
+        static_cast<std::uint64_t>(y);
+}
+
 inline std::uint64_t TickDistance(std::int64_t left, std::int64_t right) {
     if ((left < 0) == (right < 0)) {
         return left >= right
@@ -456,7 +963,28 @@ inline typename ThreatRange::value_type* FindNormalizedCastDuplicate(
         if (existing.expired ||
             existing.casterNetworkId != candidate.casterNetworkId ||
             existing.SpellName() != candidate.SpellName() ||
-            TickDistance(candidate.startTick, existing.startTick) > 120u)
+            TickDistance(candidate.startTick, existing.startTick) >
+                static_cast<std::uint64_t>(
+                    kLogicalCastEpisodeWindowMs))
+            continue;
+        if (existing.slot >= 0 && candidate.slot >= 0 &&
+            existing.slot != candidate.slot)
+            continue;
+        if (existing.logicalCastEpisodeId != 0 &&
+            candidate.logicalCastEpisodeId != 0 &&
+            existing.logicalCastEpisodeId !=
+                candidate.logicalCastEpisodeId)
+            continue;
+        if (existing.projectileLaneKey != 0 &&
+            candidate.projectileLaneKey != 0 &&
+            existing.projectileLaneKey !=
+                candidate.projectileLaneKey)
+            continue;
+        if ((existing.projectileLaneKey == 0 ||
+             candidate.projectileLaneKey == 0) &&
+            existing.projectileIndex >= 0 &&
+            candidate.projectileIndex >= 0 &&
+            existing.projectileIndex != candidate.projectileIndex)
             continue;
         const Vec2 existingDirection = existing.direction.Normalized();
         const Vec2 candidateDirection = candidate.direction.Normalized();
@@ -467,17 +995,15 @@ inline typename ThreatRange::value_type* FindNormalizedCastDuplicate(
                 !candidateDirection.IsZero()
             ? existingDirection.Dot(candidateDirection)
             : -1.0f;
-        if (candidate.castIdentity != 0 && existing.castIdentity != 0) {
-            if (candidate.castIdentity == existing.castIdentity &&
-                directionDot >= 0.9985f)
-                return &existing;
-            continue;
-        }
-        if (existing.startPos.DistanceSqr(candidate.startPos) > 160000.0f ||
-            directionDot < 0.9985f)
+        if (directionDot < kLogicalLaneDirectionDot ||
+            existing.startPos.DistanceSqr(candidate.startPos) >
+                kLogicalCastStartTolerance *
+                    kLogicalCastStartTolerance)
             continue;
         if (existing.Type() != ZDSpellType::Line &&
-            existing.endPos.DistanceSqr(candidate.endPos) > 22500.0f)
+            existing.endPos.DistanceSqr(candidate.endPos) >
+                kLogicalCastEndTolerance *
+                    kLogicalCastEndTolerance)
             continue;
         return &existing;
     }
@@ -488,14 +1014,31 @@ template <typename ThreatState>
 inline int MergeNormalizedCastDuplicate(
         ThreatState& existing,
         const ThreatState& candidate) {
-    if (existing.missileBound) return -1;
+    // A delayed hook must not rewind live missile correction or replace a
+    // retained terminal explosion with its earlier cast-only geometry.
+    if (existing.missileBound || existing.projectileTerminated) return -1;
     const int originalId = existing.id;
     const int originalStart = existing.startTick;
     const int originalRevision = existing.revision;
+    const int originalProjectileIndex =
+        existing.projectileIndex;
+    const std::uint64_t originalProjectileLaneKey =
+        existing.projectileLaneKey;
+    const std::uint64_t originalLogicalCastEpisodeId =
+        existing.logicalCastEpisodeId;
     existing = candidate;
     existing.id = originalId;
     existing.startTick = std::min(originalStart, candidate.startTick);
     existing.revision = originalRevision + 1;
+    if (existing.projectileIndex < 0)
+        existing.projectileIndex =
+            originalProjectileIndex;
+    if (originalProjectileLaneKey != 0)
+        existing.projectileLaneKey =
+            originalProjectileLaneKey;
+    if (originalLogicalCastEpisodeId != 0)
+        existing.logicalCastEpisodeId =
+            originalLogicalCastEpisodeId;
     return originalId;
 }
 
@@ -506,51 +1049,99 @@ inline bool CompatibleCastGeometry(const CastEventKey& left,
     };
     const bool leftStart = usable(left.startPosition);
     const bool rightStart = usable(right.startPosition);
-    bool compared = false;
+    const bool startCompared = leftStart && rightStart;
     if (leftStart && rightStart) {
-        compared = true;
-        if (left.startPosition.DistanceSqr(right.startPosition) > 160000.0f)
+        if (left.startPosition.DistanceSqr(right.startPosition) >
+            kLogicalCastStartTolerance *
+                kLogicalCastStartTolerance)
             return false;
     }
 
-    const Vec2 leftEndpoints[] = {
-        left.endPosition,
-        left.castPosition
-    };
-    const Vec2 rightEndpoints[] = {
-        right.endPosition,
-        right.castPosition
-    };
-    for (const Vec2& leftEndpoint : leftEndpoints) {
-        if (!usable(leftEndpoint)) continue;
-        for (const Vec2& rightEndpoint : rightEndpoints) {
-            if (!usable(rightEndpoint)) continue;
-            compared = true;
-            if (leftEndpoint.DistanceSqr(rightEndpoint) > 160000.0f)
+    const auto compatibleEndpointPair =
+        [&](const Vec2& leftEndpoint, const Vec2& rightEndpoint) {
+            if (leftEndpoint.DistanceSqr(rightEndpoint) >
+                kLogicalCastEndTolerance *
+                    kLogicalCastEndTolerance)
                 return false;
-            if (!leftStart || !rightStart) continue;
+            if (!leftStart || !rightStart) return true;
             const Vec2 leftDirection =
                 (leftEndpoint - left.startPosition).Normalized();
             const Vec2 rightDirection =
                 (rightEndpoint - right.startPosition).Normalized();
-            if (!leftDirection.IsZero() && !rightDirection.IsZero() &&
-                leftDirection.Dot(rightDirection) < 0.98f)
-                return false;
+            return leftDirection.IsZero() || rightDirection.IsZero() ||
+                leftDirection.Dot(rightDirection) >=
+                    kLogicalLaneDirectionDot;
+        };
+
+    // Prefer fields with the same meaning. Hooks can populate EndPosition and
+    // CastPosition differently, so a valid same-semantic match must not be
+    // vetoed by comparing it against the other field.
+    const std::pair<Vec2, Vec2> sameSemanticPairs[] = {
+        {left.endPosition, right.endPosition},
+        {left.castPosition, right.castPosition}
+    };
+    bool sameSemanticCompared = false;
+    bool sameSemanticCompatible = false;
+    for (const auto& pair : sameSemanticPairs) {
+        if (!usable(pair.first) || !usable(pair.second)) continue;
+        sameSemanticCompared = true;
+        sameSemanticCompatible =
+            sameSemanticCompatible ||
+            compatibleEndpointPair(pair.first, pair.second);
+    }
+    if (sameSemanticCompared) return sameSemanticCompatible;
+
+    const std::pair<Vec2, Vec2> crossFieldPairs[] = {
+        {left.endPosition, right.castPosition},
+        {left.castPosition, right.endPosition}
+    };
+    bool crossFieldCompared = false;
+    bool crossFieldCompatible = false;
+    for (const auto& pair : crossFieldPairs) {
+        if (!usable(pair.first) || !usable(pair.second)) continue;
+        crossFieldCompared = true;
+        crossFieldCompatible =
+            crossFieldCompatible ||
+            compatibleEndpointPair(pair.first, pair.second);
+    }
+    if (crossFieldCompared) return crossFieldCompatible;
+    return startCompared;
+}
+
+inline bool HasComparableCastGeometry(const CastEventKey& left,
+                                      const CastEventKey& right) {
+    const auto usable = [](const Vec2& position) {
+        return position.IsValid() && !position.IsZero();
+    };
+    if (usable(left.startPosition) && usable(right.startPosition))
+        return true;
+    const Vec2 leftEndpoints[] = {left.endPosition, left.castPosition};
+    const Vec2 rightEndpoints[] = {right.endPosition, right.castPosition};
+    for (const Vec2& leftEndpoint : leftEndpoints) {
+        if (!usable(leftEndpoint)) continue;
+        for (const Vec2& rightEndpoint : rightEndpoints) {
+            if (usable(rightEndpoint)) return true;
         }
     }
-    return compared;
+    return false;
 }
 
 inline bool SameLogicalCast(const CastEventKey& left,
                             const CastEventKey& right,
-                            int toleranceMs = 120) {
+                            int toleranceMs =
+                                kLogicalCastEpisodeWindowMs) {
     if (left.casterNetworkId != right.casterNetworkId || left.slot != right.slot)
         return false;
     if (TickDistance(left.tick, right.tick) >
         static_cast<std::uint64_t>(std::max(0, toleranceMs)))
         return false;
-    if (left.castIdentity != 0 && right.castIdentity != 0)
-        return left.castIdentity == right.castIdentity;
+    // Equal pointer identity is strong evidence and permits sparse callbacks.
+    // Different pointers are common across hook domains, so they fall through
+    // to canonical spell/geometry correlation instead of vetoing it.
+    if (left.castIdentity != 0 && right.castIdentity != 0 &&
+        left.castIdentity == right.castIdentity)
+        return !HasComparableCastGeometry(left, right) ||
+            CompatibleCastGeometry(left, right);
     return CastSpellNamesOverlap(left.spellNames, right.spellNames) &&
            CompatibleCastGeometry(left, right);
 }
@@ -903,6 +1494,9 @@ struct MissileBindKey {
     std::int64_t castTick = 0;
     int spellDelayMs = 0;
     int expectedLaunchDelayMs = 0;
+    int slot = -1;
+    Vec2 startPosition = {};
+    Vec2 endPosition = {};
 };
 
 struct MissileBindObservation {
@@ -911,6 +1505,9 @@ struct MissileBindObservation {
     std::uintptr_t spellIdentity = 0;
     Vec2 direction = {};
     std::int64_t tick = 0;
+    int slot = -1;
+    Vec2 startPosition = {};
+    Vec2 endPosition = {};
 };
 
 inline bool CanBindMissile(const MissileBindKey& cast,
@@ -921,8 +1518,8 @@ inline bool CanBindMissile(const MissileBindKey& cast,
         cast.spellIdentity == 0 ||
         cast.spellIdentity != missile.spellIdentity)
         return false;
-    if (cast.castIdentity != 0 && missile.castIdentity != 0 &&
-        cast.castIdentity != missile.castIdentity)
+    if (cast.slot >= 0 && missile.slot >= 0 &&
+        cast.slot != missile.slot)
         return false;
     if (missile.tick < cast.castTick ||
         TickDistance(missile.tick, cast.castTick) >
@@ -931,9 +1528,194 @@ inline bool CanBindMissile(const MissileBindKey& cast,
         return false;
     const Vec2 castDirection = cast.direction.Normalized();
     const Vec2 missileDirection = missile.direction.Normalized();
-    return castDirection.IsValid() && missileDirection.IsValid() &&
-           !castDirection.IsZero() && !missileDirection.IsZero() &&
-           castDirection.Dot(missileDirection) >= minimumDirectionDot;
+    if (!castDirection.IsValid() || !missileDirection.IsValid() ||
+        castDirection.IsZero() || missileDirection.IsZero() ||
+        castDirection.Dot(missileDirection) < minimumDirectionDot)
+        return false;
+    const auto usable = [](const Vec2& position) {
+        return position.IsValid() && !position.IsZero();
+    };
+    if (usable(cast.startPosition) && usable(missile.startPosition) &&
+        cast.startPosition.DistanceSqr(missile.startPosition) >
+            kLogicalCastStartTolerance *
+                kLogicalCastStartTolerance)
+        return false;
+    if (usable(cast.endPosition) && usable(missile.endPosition)) {
+        const Vec2 castEndDirection =
+            (cast.endPosition - cast.startPosition).Normalized();
+        const Vec2 missileEndDirection =
+            (missile.endPosition - missile.startPosition).Normalized();
+        if (!castEndDirection.IsZero() && !missileEndDirection.IsZero() &&
+            castEndDirection.Dot(missileEndDirection) <
+                minimumDirectionDot)
+            return false;
+    }
+    return true;
+}
+
+inline float MissileBindScore(const MissileBindKey& cast,
+                              const MissileBindObservation& missile,
+                              float minimumDirectionDot = 0.95f) {
+    if (!CanBindMissile(cast, missile, minimumDirectionDot))
+        return -std::numeric_limits<float>::infinity();
+    const float directionScore =
+        cast.direction.Normalized().Dot(missile.direction.Normalized());
+    const float identityHint =
+        cast.castIdentity != 0 &&
+            cast.castIdentity == missile.castIdentity
+        ? 0.02f
+        : 0.0f;
+    const auto usable = [](const Vec2& position) {
+        return position.IsValid() && !position.IsZero();
+    };
+    const float startPenalty =
+        usable(cast.startPosition) && usable(missile.startPosition)
+        ? cast.startPosition.Distance(missile.startPosition) / 10000.0f
+        : 0.0f;
+    const std::int64_t expectedLaunchTick =
+        cast.castTick +
+        std::max<std::int64_t>(0, cast.expectedLaunchDelayMs);
+    const float timingPenalty =
+        static_cast<float>(std::min<std::uint64_t>(
+            TickDistance(missile.tick, expectedLaunchTick), 5000u)) /
+        100000.0f;
+    return directionScore + identityHint - startPenalty - timingPenalty;
+}
+
+// Manager snapshots can temporarily omit a live missile. Only treat sustained
+// evidence loss beyond the last trustworthy travel/lifecycle prediction as a
+// fallback termination, with enough grace to span normal snapshot jitter.
+inline constexpr int kMissileEvidenceLossGraceMs = 750;
+inline constexpr int kMissileEvidenceLossMaximumMs = 10000;
+inline constexpr float kDeletePredictedUnitImpactTolerance = 75.0f;
+inline constexpr int kDeletePredictedCollisionMaximumAgeMs = 250;
+
+// Game ticks are signed views of a wrapping 32-bit counter. Evidence deadlines
+// are short enough to compare unambiguously in that modular domain.
+inline int WrappingTickAdd(int tick, int duration) {
+    const std::uint32_t value =
+        static_cast<std::uint32_t>(tick) +
+        static_cast<std::uint32_t>(std::max(0, duration));
+    const std::int64_t signedValue =
+        value <= static_cast<std::uint32_t>(std::numeric_limits<int>::max())
+        ? static_cast<std::int64_t>(value)
+        : static_cast<std::int64_t>(value) -
+            (static_cast<std::int64_t>(
+                std::numeric_limits<std::uint32_t>::max()) + 1);
+    return static_cast<int>(signedValue);
+}
+
+inline std::int64_t WrappingTickDifference(int left, int right) {
+    const std::uint32_t difference =
+        static_cast<std::uint32_t>(left) -
+        static_cast<std::uint32_t>(right);
+    return difference <=
+            static_cast<std::uint32_t>(std::numeric_limits<int>::max())
+        ? static_cast<std::int64_t>(difference)
+        : static_cast<std::int64_t>(difference) -
+            (static_cast<std::int64_t>(
+                std::numeric_limits<std::uint32_t>::max()) + 1);
+}
+
+struct MissileEvidenceWindow {
+    int deadlineTick = 0;
+    int terminationTick = 0;
+    bool usedRemainingTravel = false;
+};
+
+inline MissileEvidenceWindow ResolveMissileEvidenceWindow(
+        int evidenceAnchorTick,
+        int remainingTravelDurationMs,
+        int evidenceLossGraceMs = kMissileEvidenceLossGraceMs,
+        int evidenceLossMaximumMs = kMissileEvidenceLossMaximumMs) {
+    const int safeGrace = std::max(0, evidenceLossGraceMs);
+    const bool finiteDuration =
+        remainingTravelDurationMs >= 0 &&
+        remainingTravelDurationMs <=
+            std::numeric_limits<int>::max() - safeGrace;
+    if (!finiteDuration) {
+        const int fallback = WrappingTickAdd(
+            evidenceAnchorTick,
+            evidenceLossMaximumMs);
+        return {fallback, fallback, false};
+    }
+    const int termination = WrappingTickAdd(
+        evidenceAnchorTick,
+        remainingTravelDurationMs);
+    return {
+        WrappingTickAdd(termination, safeGrace),
+        termination,
+        true
+    };
+}
+
+inline int MissileEvidenceLossDeadlineTick(
+        int arrivalTick,
+        int evidenceAnchorTick,
+        bool arrivalTickTrustworthy = true,
+        int evidenceLossGraceMs = kMissileEvidenceLossGraceMs,
+        int evidenceLossMaximumMs = kMissileEvidenceLossMaximumMs) {
+    // INT_MAX is the saturating ArrivalTick sentinel, not a finite prediction.
+    // A trustworthy finite arrival is never shortened by the fallback cap.
+    return arrivalTickTrustworthy &&
+            arrivalTick != std::numeric_limits<int>::max()
+        ? WrappingTickAdd(arrivalTick, evidenceLossGraceMs)
+        : WrappingTickAdd(evidenceAnchorTick, evidenceLossMaximumMs);
+}
+
+inline int MissingMissileTerminationTick(
+        int arrivalTick,
+        int evidenceAnchorTick,
+        bool arrivalTickTrustworthy = true,
+        int evidenceLossMaximumMs = kMissileEvidenceLossMaximumMs) {
+    return arrivalTickTrustworthy &&
+            arrivalTick != std::numeric_limits<int>::max()
+        ? arrivalTick
+        : WrappingTickAdd(evidenceAnchorTick, evidenceLossMaximumMs);
+}
+
+inline bool ShouldExpireMissingTerminationAt(
+        int currentTick,
+        int terminalHazardEndTick) {
+    return WrappingTickDifference(currentTick, terminalHazardEndTick) > 0;
+}
+
+inline bool ShouldEnumerateMissileManager(std::size_t trackedThreatCount) {
+    return trackedThreatCount != 0;
+}
+
+inline bool MissileObjectIsLiveEvidence(bool objectPresent,
+                                        bool positionUsable) {
+    (void)positionUsable;
+    return objectPresent;
+}
+
+struct MissileEvidenceStateUpdate {
+    int missingSinceTick = -1;
+    bool positionUnavailable = false;
+    bool stateChanged = false;
+};
+
+inline MissileEvidenceStateUpdate ResolveMissileEvidenceState(
+        bool objectPresent,
+        bool positionUsable,
+        int currentMissingSinceTick,
+        bool currentPositionUnavailable,
+        int now) {
+    MissileEvidenceStateUpdate result;
+    if (objectPresent) {
+        result.missingSinceTick = -1;
+        result.positionUnavailable = !positionUsable;
+    } else {
+        result.missingSinceTick = currentMissingSinceTick >= 0
+            ? currentMissingSinceTick
+            : now;
+        result.positionUnavailable = false;
+    }
+    result.stateChanged =
+        result.missingSinceTick != currentMissingSinceTick ||
+        result.positionUnavailable != currentPositionUnavailable;
+    return result;
 }
 
 inline bool ShouldTerminateMissingMissile(
@@ -941,13 +1723,364 @@ inline bool ShouldTerminateMissingMissile(
         bool projectileTerminated,
         bool missileObserved,
         std::int64_t missingSinceTick,
-        std::int64_t currentTick,
-        int observationGraceMs = 250) {
+        int evidenceLossDeadlineTick,
+        int currentTick) {
     if (!missileBound || projectileTerminated || missileObserved ||
-        missingSinceTick < 0 || currentTick < missingSinceTick)
+        missingSinceTick < 0 ||
+        WrappingTickDifference(
+            currentTick, static_cast<int>(missingSinceTick)) < 0)
         return false;
-    return TickDistance(currentTick, missingSinceTick) >=
-        static_cast<std::uint64_t>(std::max(0, observationGraceMs));
+    // The projectile remains active through the exact deadline tick and
+    // terminates on the first later tick, including across signed wrap.
+    return WrappingTickDifference(
+        currentTick, evidenceLossDeadlineTick) > 0;
+}
+
+inline bool ShouldCommitPredictedCollision(bool missileBound,
+                                           bool projectileTerminated) {
+    return !missileBound || projectileTerminated;
+}
+
+template <typename ThreatState>
+inline bool ClearPredictedCollisionMetadata(ThreatState& threat) {
+    const bool changed =
+        threat.predictedCollisionKind != ZDCollisionKind::None ||
+        threat.predictedCollisionUnitNetworkId != 0 ||
+        !threat.predictedCollisionUnitCenter.IsZero() ||
+        !threat.predictedCollisionPoint.IsZero() ||
+        threat.predictedCollisionTick != -1 ||
+        threat.predictedCollisionMissileNetworkId != 0 ||
+        threat.predictedCollisionMissileObjectIdentity != 0 ||
+        threat.predictedCollisionUnitObjectIdentity != 0;
+    threat.ClearPredictedCollision();
+    return changed;
+}
+
+template <typename ThreatState>
+inline bool CanRefreshLiveBoundCollisionPrediction(
+        const ThreatState& threat,
+        int currentTick,
+        int maximumObservationAgeMs =
+            kDeletePredictedCollisionMaximumAgeMs) {
+    if (ShouldCommitPredictedCollision(
+            threat.missileBound,
+            threat.projectileTerminated) ||
+        threat.missileMissingSinceTick >= 0 ||
+        threat.missilePositionUnavailable ||
+        threat.observedTick == 0 ||
+        !threat.observedHead.IsValid() ||
+        threat.observedHead.IsZero())
+        return false;
+    const std::int64_t observationAge =
+        WrappingTickDifference(currentTick, threat.observedTick);
+    return observationAge >= 0 &&
+        observationAge <=
+            std::max(0, maximumObservationAgeMs);
+}
+
+template <typename ThreatState>
+inline bool RefreshLiveBoundCollisionPrediction(
+        ThreatState& threat,
+        ZDCollisionKind kind,
+        int unitNetworkId,
+        const Vec2& unitCenter,
+        const Vec2& collisionPoint,
+        int currentTick,
+        std::uintptr_t unitObjectIdentity = 0) {
+    if (!CanRefreshLiveBoundCollisionPrediction(
+            threat,
+            currentTick))
+        return ClearPredictedCollisionMetadata(threat);
+    const bool hasPrediction =
+        kind != ZDCollisionKind::None &&
+        collisionPoint.IsValid() &&
+        !collisionPoint.IsZero();
+    const ZDCollisionKind nextKind =
+        hasPrediction ? kind : ZDCollisionKind::None;
+    const int nextUnitNetworkId =
+        hasPrediction && kind == ZDCollisionKind::Unit
+        ? unitNetworkId
+        : 0;
+    const Vec2 nextUnitCenter =
+        hasPrediction && kind == ZDCollisionKind::Unit
+        ? unitCenter
+        : Vec2();
+    const Vec2 nextPoint =
+        hasPrediction ? collisionPoint : Vec2();
+    const int nextTick =
+        hasPrediction ? threat.observedTick : -1;
+    const std::uint32_t nextMissileNetworkId =
+        hasPrediction ? threat.missileNetworkId : 0;
+    const std::uintptr_t nextMissileObjectIdentity =
+        hasPrediction ? threat.missileObjectIdentity : 0;
+    const std::uintptr_t nextUnitObjectIdentity =
+        hasPrediction && kind == ZDCollisionKind::Unit
+        ? unitObjectIdentity
+        : 0;
+    const bool changed =
+        threat.predictedCollisionKind != nextKind ||
+        threat.predictedCollisionUnitNetworkId != nextUnitNetworkId ||
+        threat.predictedCollisionUnitCenter.DistanceSqr(
+            nextUnitCenter) > 1.0f ||
+        threat.predictedCollisionPoint.DistanceSqr(nextPoint) > 1.0f ||
+        threat.predictedCollisionTick != nextTick ||
+        threat.predictedCollisionMissileNetworkId !=
+            nextMissileNetworkId ||
+        threat.predictedCollisionMissileObjectIdentity !=
+            nextMissileObjectIdentity ||
+        threat.predictedCollisionUnitObjectIdentity !=
+            nextUnitObjectIdentity;
+    threat.predictedCollisionKind = nextKind;
+    threat.predictedCollisionUnitNetworkId = nextUnitNetworkId;
+    threat.predictedCollisionUnitCenter = nextUnitCenter;
+    threat.predictedCollisionPoint = nextPoint;
+    threat.predictedCollisionTick = nextTick;
+    threat.predictedCollisionMissileNetworkId =
+        nextMissileNetworkId;
+    threat.predictedCollisionMissileObjectIdentity =
+        nextMissileObjectIdentity;
+    threat.predictedCollisionUnitObjectIdentity =
+        nextUnitObjectIdentity;
+    return changed;
+}
+
+inline bool ShouldAttachPredictedUnitAtDelete(
+        int predictedUnitNetworkId,
+        int resolvedUnitNetworkId,
+        std::uintptr_t predictedUnitObjectIdentity,
+        std::uintptr_t resolvedUnitObjectIdentity,
+        bool resolvedUnitValid,
+        bool resolvedUnitDead,
+        bool resolvedUnitAllowed,
+        bool supportsAttachedUnitLifecycle,
+        const Vec2& resolvedUnitCenter,
+        const Vec2& deleteImpact,
+        float tolerance = kDeletePredictedUnitImpactTolerance) {
+    if (predictedUnitNetworkId == 0 ||
+        predictedUnitNetworkId != resolvedUnitNetworkId ||
+        predictedUnitObjectIdentity == 0 ||
+        predictedUnitObjectIdentity != resolvedUnitObjectIdentity ||
+        !resolvedUnitValid ||
+        resolvedUnitDead ||
+        !resolvedUnitAllowed ||
+        !supportsAttachedUnitLifecycle ||
+        !resolvedUnitCenter.IsValid() ||
+        resolvedUnitCenter.IsZero() ||
+        !deleteImpact.IsValid() ||
+        deleteImpact.IsZero())
+        return false;
+    const float safeTolerance =
+        std::isfinite(tolerance)
+        ? std::max(0.0f, tolerance)
+        : 0.0f;
+    return resolvedUnitCenter.DistanceSqr(deleteImpact) <=
+        safeTolerance * safeTolerance;
+}
+
+template <typename ThreatState>
+inline void ConfirmDeleteUnitCollision(
+        ThreatState& threat,
+        int unitNetworkId,
+        const Vec2& deleteImpact,
+        bool unitTargetAuthoritative,
+        const Vec2& attachedUnitCenter = {},
+        std::uintptr_t attachedUnitObjectIdentity = 0) {
+    const Vec2 center =
+        unitTargetAuthoritative &&
+            attachedUnitCenter.IsValid() &&
+            !attachedUnitCenter.IsZero()
+        ? attachedUnitCenter
+        : deleteImpact;
+    threat.endPos = deleteImpact;
+    threat.collisionKind = ZDCollisionKind::Unit;
+    threat.collisionStopped = true;
+    threat.collisionHitCount =
+        std::max(1, threat.collisionHitCount);
+    threat.collisionUnitNetworkId = unitNetworkId;
+    threat.collisionUnitObjectIdentity =
+        unitTargetAuthoritative
+        ? attachedUnitObjectIdentity
+        : 0;
+    threat.collisionUnitCenter = center;
+    threat.collisionExplosionCenter = center;
+    threat.collisionUnitTargetAuthoritative =
+        unitTargetAuthoritative;
+    if (unitNetworkId != 0 &&
+        std::find(
+            threat.consumedCollisionUnits.begin(),
+            threat.consumedCollisionUnits.end(),
+            unitNetworkId) ==
+            threat.consumedCollisionUnits.end())
+        threat.consumedCollisionUnits.push_back(unitNetworkId);
+    ClearPredictedCollisionMetadata(threat);
+}
+
+inline bool MatchesAttachedUnitIdentity(
+        bool unitTargetAuthoritative,
+        std::uintptr_t attachedUnitObjectIdentity,
+        std::uintptr_t resolvedUnitObjectIdentity) {
+    return unitTargetAuthoritative &&
+        attachedUnitObjectIdentity != 0 &&
+        attachedUnitObjectIdentity ==
+            resolvedUnitObjectIdentity;
+}
+
+inline bool ShouldAttachExplicitUnitAtDelete(
+        bool hasExplicitTargetMetadata,
+        int metadataUnitNetworkId,
+        std::uintptr_t metadataUnitObjectIdentity,
+        int resolvedUnitNetworkId,
+        std::uintptr_t resolvedUnitObjectIdentity,
+        const Vec2& resolvedUnitCenter) {
+    if (!hasExplicitTargetMetadata ||
+        (metadataUnitNetworkId == 0 &&
+         metadataUnitObjectIdentity == 0) ||
+        resolvedUnitNetworkId == 0 ||
+        resolvedUnitObjectIdentity == 0 ||
+        !resolvedUnitCenter.IsValid() ||
+        resolvedUnitCenter.IsZero())
+        return false;
+    if (metadataUnitNetworkId != 0 &&
+        metadataUnitNetworkId != resolvedUnitNetworkId)
+        return false;
+    if (metadataUnitObjectIdentity != 0 &&
+        metadataUnitObjectIdentity !=
+            resolvedUnitObjectIdentity)
+        return false;
+    return true;
+}
+
+template <typename ThreatState>
+inline bool UpdateAttachedUnitExplosion(
+        ThreatState& threat,
+        const Vec2& unitCenter,
+        bool unitDead,
+        int currentTick) {
+    if (!threat.data ||
+        !threat.collisionUnitTargetAuthoritative)
+        return false;
+    bool changed = false;
+    if (threat.data->endExplosionFollowsUnit &&
+        unitCenter.IsValid() &&
+        !unitCenter.IsZero() &&
+        threat.collisionUnitCenter.DistanceSqr(unitCenter) > 1.0f) {
+        threat.collisionUnitCenter = unitCenter;
+        if (!threat.collisionExplosionCenter.IsZero())
+            threat.collisionExplosionCenter = unitCenter;
+        changed = true;
+    }
+    if (threat.data->endExplosionDetonatesOnUnitDeath &&
+        unitDead &&
+        WrappingTickDifference(
+            threat.EndExplosionStartTick(),
+            currentTick) > 0) {
+        threat.collisionEndExplosionDelay = 0;
+        threat.projectileTerminationTick = currentTick;
+        threat.endTick = SaturatingTickAdd(
+            currentTick,
+            std::max(
+                threat.ExtraEndTime(),
+                threat.EndExplosionDuration()));
+        changed = true;
+    }
+    return changed;
+}
+
+inline Vec2 MonotonicMissileHead(const Vec2& currentHead,
+                                 const Vec2& observedHead,
+                                 const Vec2& routeDirection,
+                                 bool clampForward) {
+    if (!currentHead.IsValid() || currentHead.IsZero()) return observedHead;
+    if (!observedHead.IsValid() || observedHead.IsZero()) return currentHead;
+    if (!clampForward) return observedHead;
+    const Vec2 direction = routeDirection.Normalized();
+    if (!direction.IsValid() || direction.IsZero()) return currentHead;
+    return (observedHead - currentHead).Dot(direction) < 0.0f
+        ? currentHead
+        : observedHead;
+}
+
+inline bool MatchesMissileEpisode(
+        std::uint32_t trackedMissileNetworkId,
+        std::uintptr_t trackedMissileObjectIdentity,
+        std::uint32_t eventMissileNetworkId,
+        std::uintptr_t eventMissileObjectIdentity) {
+    if (trackedMissileNetworkId == 0 ||
+        trackedMissileNetworkId != eventMissileNetworkId)
+        return false;
+    return trackedMissileObjectIdentity == 0 ||
+        eventMissileObjectIdentity == 0 ||
+        trackedMissileObjectIdentity == eventMissileObjectIdentity;
+}
+
+inline bool MatchesObservedMissileEpisode(
+        std::uint32_t trackedMissileNetworkId,
+        std::uintptr_t trackedMissileObjectIdentity,
+        std::uint32_t observedMissileNetworkId,
+        std::uintptr_t observedMissileObjectIdentity) {
+    return trackedMissileNetworkId != 0 &&
+        trackedMissileObjectIdentity != 0 &&
+        trackedMissileNetworkId == observedMissileNetworkId &&
+        trackedMissileObjectIdentity == observedMissileObjectIdentity;
+}
+
+inline bool ShouldClassifyDeleteAsUnitCollision(
+        bool hasExplicitTargetMetadata,
+        ZDCollisionKind predictedKind,
+        int predictedUnitNetworkId,
+        const Vec2& predictedImpact,
+        int predictedTick,
+        int currentTick,
+        bool predictionMatchesMissileEpisode,
+        bool allowsUnitCollision,
+        const Vec2& deleteImpact,
+        float tolerance = kDeletePredictedUnitImpactTolerance,
+        int maximumPredictionAgeMs =
+            kDeletePredictedCollisionMaximumAgeMs) {
+    if (hasExplicitTargetMetadata) return true;
+    const std::int64_t predictionAge =
+        WrappingTickDifference(currentTick, predictedTick);
+    if (predictedKind != ZDCollisionKind::Unit ||
+        predictedUnitNetworkId == 0 ||
+        !predictionMatchesMissileEpisode ||
+        !allowsUnitCollision ||
+        predictedTick == -1 ||
+        predictionAge < 0 ||
+        predictionAge > std::max(0, maximumPredictionAgeMs) ||
+        !predictedImpact.IsValid() || predictedImpact.IsZero() ||
+        !deleteImpact.IsValid() || deleteImpact.IsZero())
+        return false;
+    const float safeTolerance =
+        std::isfinite(tolerance) ? std::max(0.0f, tolerance) : 0.0f;
+    return predictedImpact.DistanceSqr(deleteImpact) <=
+        safeTolerance * safeTolerance;
+}
+
+inline bool ShouldAcceptMissileDeleteOwnership(
+        std::uintptr_t eventMissileObjectIdentity,
+        std::size_t activeNetworkIdOwnerCount) {
+    return eventMissileObjectIdentity != 0 ||
+        activeNetworkIdOwnerCount == 1;
+}
+
+inline bool ShouldFinalizeMissileDelete(
+        bool missileBound,
+        bool projectileTerminated,
+        std::uint32_t trackedMissileNetworkId,
+        std::uintptr_t trackedMissileObjectIdentity,
+        std::uint32_t eventMissileNetworkId,
+        std::uintptr_t eventMissileObjectIdentity,
+        std::size_t activeNetworkIdOwnerCount = 1) {
+    return missileBound &&
+        !projectileTerminated &&
+        ShouldAcceptMissileDeleteOwnership(
+            eventMissileObjectIdentity,
+            activeNetworkIdOwnerCount) &&
+        MatchesMissileEpisode(
+            trackedMissileNetworkId,
+            trackedMissileObjectIdentity,
+            eventMissileNetworkId,
+            eventMissileObjectIdentity);
 }
 
 inline bool UsesMissileLifecycle(ZDSpellType type, bool missileBound) {
@@ -1077,6 +2210,63 @@ inline Vec2 ObservationRouteDirection(const Vec2& currentDirection,
     if (normalizedCurrent.IsValid() && !normalizedCurrent.IsZero())
         return normalizedCurrent;
     return {};
+}
+
+struct MissileRouteObservationUpdate {
+    Vec2 direction = {};
+    Vec2 authoredEnd = {};
+    Vec2 effectiveEnd = {};
+    bool geometryChanged = false;
+};
+
+inline MissileRouteObservationUpdate ResolveMissileRouteObservationUpdate(
+        MissileRouteMode routeMode,
+        const Vec2& currentDirection,
+        const Vec2& startPosition,
+        const Vec2& currentAuthoredEnd,
+        const Vec2& currentEffectiveEnd,
+        const Vec2& observedPosition,
+        const Vec2& observedEndPosition,
+        const Vec2& observedMovement,
+        bool movementRouted,
+        bool collisionStopped) {
+    MissileRouteObservationUpdate result{
+        currentDirection,
+        currentAuthoredEnd,
+        currentEffectiveEnd,
+        false
+    };
+    if (routeMode != MissileRouteMode::Steering)
+        return result;
+
+    const Vec2 routeDirection = ObservationRouteDirection(
+        currentDirection,
+        startPosition,
+        observedPosition,
+        observedEndPosition,
+        observedMovement,
+        true,
+        movementRouted);
+    if (routeDirection.IsZero())
+        return result;
+
+    Vec2 routeEnd = currentAuthoredEnd;
+    if (movementRouted) {
+        routeEnd = observedPosition + routeDirection * 500.0f;
+    } else if (observedEndPosition.IsValid() &&
+               !observedEndPosition.IsZero() &&
+               observedPosition.Distance(observedEndPosition) > 1.0f) {
+        routeEnd = observedEndPosition;
+    }
+
+    result.geometryChanged =
+        currentDirection.DistanceSqr(routeDirection) > 0.0001f ||
+        currentAuthoredEnd.DistanceSqr(routeEnd) > 1.0f;
+    result.direction = routeDirection;
+    result.authoredEnd = routeEnd;
+    if (!collisionStopped)
+        result.effectiveEnd = routeEnd;
+    return result;
 }
 
 inline Vec2 SionChargeDirection(const Vec2& facing, const Vec2& fallback) {

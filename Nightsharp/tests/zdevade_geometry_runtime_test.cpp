@@ -65,6 +65,47 @@ void InstallWalkableTestGrid() {
     ++CoreRuntime::g_ctx.refreshGeneration;
 }
 
+void InstallFineWalkableTestGrid() {
+    alignas(16) static std::array<std::uint8_t, 0x20> navGrid = {};
+    alignas(16) static std::array<std::uint8_t, 0x800> manager = {};
+    alignas(16) static std::array<
+        std::uint8_t,
+        100 * 100 * 16> cells = {};
+    std::memset(navGrid.data(), 0, navGrid.size());
+    std::memset(manager.data(), 0, manager.size());
+    std::memset(cells.data(), 0, cells.size());
+
+    *reinterpret_cast<std::uintptr_t*>(
+        navGrid.data() + Offset::NavGridLayout::NavGridMgr) =
+        reinterpret_cast<std::uintptr_t>(manager.data());
+    *reinterpret_cast<std::uintptr_t*>(
+        manager.data() + Offset::NavGridLayout::Data) =
+        reinterpret_cast<std::uintptr_t>(cells.data());
+    *reinterpret_cast<int*>(
+        manager.data() + Offset::NavGridLayout::Width) = 100;
+    *reinterpret_cast<int*>(
+        manager.data() + Offset::NavGridLayout::Height) = 100;
+    *reinterpret_cast<float*>(
+        manager.data() + Offset::NavGridLayout::MinX) = 0.0f;
+    *reinterpret_cast<float*>(
+        manager.data() + Offset::NavGridLayout::MinZ) = 0.0f;
+    *reinterpret_cast<float*>(
+        manager.data() + Offset::NavGridLayout::MaxX) = 2000.0f;
+    *reinterpret_cast<float*>(
+        manager.data() + Offset::NavGridLayout::MaxZ) = 2000.0f;
+    *reinterpret_cast<float*>(
+        manager.data() + Offset::NavGridLayout::Scale) = 20.0f;
+    *reinterpret_cast<float*>(
+        manager.data() + Offset::NavGridLayout::InverseScale) =
+        1.0f / 20.0f;
+
+    CoreRuntime::g_ctx.navGrid =
+        reinterpret_cast<std::uintptr_t>(navGrid.data());
+    CoreRuntime::g_ctx.statusMask =
+        CoreRuntime::BuildRequiredInitMask();
+    ++CoreRuntime::g_ctx.refreshGeneration;
+}
+
 void ExpectConeBoundary(const char* spellName,
                         float expectedAngle,
                         float insideDegrees,
@@ -92,6 +133,62 @@ bool HasSeedNear(const std::vector<CandidateSeed>& seeds,
         if (seed.position.Distance(expected) <= epsilon) return true;
     }
     return false;
+}
+
+float RawSkillEdgeDistance(const Threat& threat, const Vec2& point) {
+    switch (threat.Type()) {
+    case ZDSpellType::Line:
+        return EvadeGeometry::DistanceToSegment(
+                   point,
+                   threat.startPos,
+                   threat.endPos) -
+            threat.Radius();
+    case ZDSpellType::Circular:
+        return point.Distance(threat.endPos) - threat.Radius();
+    case ZDSpellType::Ring: {
+        const float radial = point.Distance(threat.endPos);
+        return radial < threat.InnerRadius()
+            ? threat.InnerRadius() - radial
+            : radial - threat.Radius();
+    }
+    case ZDSpellType::Cone: {
+        const Vec2 direction = threat.direction.IsZero()
+            ? (threat.endPos - threat.startPos).Normalized()
+            : threat.direction;
+        return EvadeGeometryMath::SignedDistanceToSector(
+                   point,
+                   threat.startPos,
+                   direction,
+                   threat.Range(),
+                   threat.Angle() * 0.5f *
+                       (3.14159265358979323846f / 180.0f)) -
+            threat.ConeEdgePadding();
+    }
+    default:
+        return -FLT_MAX;
+    }
+}
+
+void ExpectEndpointMarginInvariant(const char* name,
+                                   const Threat& threat,
+                                   const Vec2& endpoint,
+                                   float heroRadius,
+                                   int activeTick) {
+    const float realizedEdgeClearance =
+        RawSkillEdgeDistance(threat, endpoint) - heroRadius;
+    ExpectTrue(
+        name,
+        endpoint.IsValid() &&
+            !endpoint.IsZero() &&
+            !EvadeGeometry::ContainsAt(
+                threat,
+                endpoint,
+                heroRadius,
+                0.0f,
+                activeTick) &&
+            realizedEdgeClearance + 0.001f >=
+                kDefaultEndpointMargin + kNumericalOutwardEpsilon &&
+            realizedEdgeClearance - 4.0f + 0.001f >= 14.25f);
 }
 
 int CountSeedSource(const std::vector<CandidateSeed>& seeds,
@@ -158,6 +255,50 @@ int main() {
     Threat lineThreat = ZDEvadeTest::MakeThreat(lineSpell);
     lineThreat.endPos = Vec2(1000.0f, 0.0f);
     lineThreat.direction = (lineThreat.endPos - lineThreat.startPos).Normalized();
+    const int lineActiveTick =
+        lineThreat.startTick + lineThreat.Delay();
+
+    ExpectNear("central threat safety padding is ten",
+               kThreatSafetyPadding,
+               10.0f);
+    ExpectNear("line authored radius remains physical collision radius",
+               lineThreat.AuthoredRadius(),
+               50.0f);
+    ExpectNear("line raw radius aliases authored radius",
+               lineThreat.RawRadius(),
+               50.0f);
+    ExpectNear("physical projectile collision radius stays authored",
+               lineThreat.ProjectileCollisionRadius(),
+               50.0f);
+    ExpectNear("line effective radius adds padding once",
+               lineThreat.Radius(),
+               60.0f);
+    ExpectTrue("line effective padding contains authored-outside point",
+               EvadeGeometry::ContainsAt(
+                   lineThreat,
+                   Vec2(500.0f, 55.0f),
+                   0.0f,
+                   0.0f,
+                   lineActiveTick));
+    ExpectTrue("line effective padding stops after exactly ten",
+               !EvadeGeometry::ContainsAt(
+                   lineThreat,
+                   Vec2(500.0f, 60.01f),
+                   0.0f,
+                   0.0f,
+                   lineActiveTick));
+    ExpectNear("line exit target shifts by exactly ten",
+               ExitCenterDistance(
+                   lineThreat.Radius(),
+                   35.0f,
+                   17.0f,
+                   4.0f) -
+                   ExitCenterDistance(
+                       lineThreat.AuthoredRadius(),
+                       35.0f,
+                       17.0f,
+                       4.0f),
+               kThreatSafetyPadding);
 
     bool onSegment = false;
     Vec2 projection;
@@ -367,6 +508,12 @@ int main() {
     circleSpell.radius = 100.0f;
     Threat circleThreat = ZDEvadeTest::MakeThreat(circleSpell);
     circleThreat.endPos = Vec2(400.0f, 0.0f);
+    ExpectNear("circle authored radius remains raw",
+               circleThreat.AuthoredRadius(),
+               100.0f);
+    ExpectNear("circle effective radius adds padding once",
+               circleThreat.Radius(),
+               110.0f);
 
     ExpectNear("circle impact timing",
                static_cast<float>(
@@ -377,7 +524,74 @@ int main() {
                    circleThreat, circleThreat.endPos, 0.0f, 0.0f, 1250));
     ExpectTrue("circle excludes point outside radius",
                !EvadeGeometry::ContainsAt(
-                   circleThreat, Vec2(501.0f, 0.0f), 0.0f, 0.0f, 1250));
+                   circleThreat, Vec2(511.0f, 0.0f), 0.0f, 0.0f, 1250));
+    ExpectTrue("circle includes point in ten-unit safety shell",
+               EvadeGeometry::ContainsAt(
+                   circleThreat, Vec2(505.0f, 0.0f), 0.0f, 0.0f, 1250));
+    ExpectNear("circle exit target shifts by exactly ten",
+               EvadeGeometry::ClosestCircleExit(
+                   circleThreat,
+                   Vec2(800.0f, 0.0f),
+                   0.0f,
+                   0.0f).Distance(circleThreat.endPos) -
+                   ExitCenterDistance(
+                       circleThreat.AuthoredRadius(),
+                       0.0f,
+                       0.0f,
+                       0.0f),
+               kThreatSafetyPadding);
+
+    SpellData safetyRingSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Ring);
+    safetyRingSpell.spellDelay = 0;
+    safetyRingSpell.projectileSpeed = 0.0f;
+    safetyRingSpell.innerRadius = 100.0f;
+    safetyRingSpell.radius = 200.0f;
+    Threat safetyRing = ZDEvadeTest::MakeThreat(safetyRingSpell);
+    safetyRing.endPos = Vec2(400.0f, 0.0f);
+    ExpectNear("ring authored inner radius remains raw",
+               safetyRing.AuthoredInnerRadius(),
+               100.0f);
+    ExpectNear("ring effective inner radius contracts by ten",
+               safetyRing.InnerRadius(),
+               90.0f);
+    ExpectNear("ring effective outer radius expands by ten",
+               safetyRing.Radius(),
+               210.0f);
+    ExpectTrue("ring safety band widens inward",
+               EvadeGeometry::ContainsAt(
+                   safetyRing,
+                   safetyRing.endPos + Vec2(95.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   1000));
+    ExpectTrue("ring safety band widens outward",
+               EvadeGeometry::ContainsAt(
+                   safetyRing,
+                   safetyRing.endPos + Vec2(205.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   1000));
+    ExpectTrue("ring remains safe beyond widened band",
+               !EvadeGeometry::ContainsAt(
+                   safetyRing,
+                   safetyRing.endPos + Vec2(89.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   1000) &&
+               !EvadeGeometry::ContainsAt(
+                   safetyRing,
+                   safetyRing.endPos + Vec2(211.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   1000));
+
+    SpellData clampedRingSpell = safetyRingSpell;
+    clampedRingSpell.innerRadius = 5.0f;
+    Threat clampedRing = ZDEvadeTest::MakeThreat(clampedRingSpell);
+    ExpectNear("ring effective inner radius clamps at zero",
+               clampedRing.InnerRadius(),
+               0.0f);
 
     ExpectTrue("tick addition clamps positive overflow",
                SaturatingTickAdd(INT_MAX, 1) == INT_MAX);
@@ -480,18 +694,22 @@ int main() {
                    28.0f);
     }
 
-    ExpectConeBoundary("AatroxQ2", 60.0f, 29.0f, 31.0f);
-    ExpectConeBoundary("Incinerate", 25.0f, 12.0f, 13.0f);
-    ExpectConeBoundary("CassiopeiaR", 80.0f, 39.0f, 41.0f);
-    ExpectConeBoundary("SwainQ", 45.0f, 22.0f, 23.0f);
+    ExpectConeBoundary("AatroxQ2", 60.0f, 29.0f, 33.0f);
+    ExpectConeBoundary("Incinerate", 25.0f, 12.0f, 15.0f);
+    ExpectConeBoundary("CassiopeiaR", 80.0f, 39.0f, 42.0f);
+    ExpectConeBoundary("SwainQ", 45.0f, 22.0f, 25.0f);
 
     const SpellData* swainSpell = FindSpell("SwainQ");
     ExpectTrue("Swain Q exists", swainSpell != nullptr);
     if (swainSpell) {
         Threat swainThreat = ZDEvadeTest::MakeThreat(*swainSpell);
         const int activeTick = swainThreat.startTick + swainThreat.Delay();
-        ExpectTrue("Swain Q radius remains database metadata",
-                   swainThreat.Radius() == 725.0f);
+        ExpectNear("Swain Q authored radius remains database metadata",
+                   swainThreat.AuthoredRadius(),
+                   725.0f);
+        ExpectNear("Swain Q effective radius adds safety padding",
+                   swainThreat.Radius(),
+                   725.0f + kThreatSafetyPadding);
         ExpectTrue("Swain Q excludes behind-caster point",
                    !EvadeGeometry::ContainsAt(
                        swainThreat, Vec2(-100.0f, 0.0f), 0.0f, 0.0f, activeTick));
@@ -506,12 +724,24 @@ int main() {
     paddedCone.coneEdgePadding = 5.0f;
     Threat paddedConeThreat = ZDEvadeTest::MakeThreat(paddedCone);
     const int paddedConeTick = paddedConeThreat.startTick + paddedConeThreat.Delay();
+    ExpectNear("cone authored edge padding remains raw",
+               paddedConeThreat.AuthoredConeEdgePadding(),
+               5.0f);
+    ExpectNear("cone effective edge padding adds ten",
+               paddedConeThreat.ConeEdgePadding(),
+               15.0f);
+    ExpectNear("cone authored range remains unchanged",
+               paddedConeThreat.Range(),
+               100.0f);
+    ExpectNear("cone authored angle remains unchanged",
+               paddedConeThreat.Angle(),
+               60.0f);
     ExpectTrue("cone edge padding expands sector boundary",
                EvadeGeometry::ContainsAt(
                    paddedConeThreat, Vec2(104.0f, 0.0f), 0.0f, 0.0f, paddedConeTick));
-    ExpectTrue("cone radius does not expand sector boundary",
+    ExpectTrue("cone radius does not expand beyond effective edge padding",
                !EvadeGeometry::ContainsAt(
-                   paddedConeThreat, Vec2(106.0f, 0.0f), 0.0f, 0.0f, paddedConeTick));
+                   paddedConeThreat, Vec2(116.0f, 0.0f), 0.0f, 0.0f, paddedConeTick));
 
     SpellData invalidCone = ZDEvadeTest::MakeSpell(ZDSpellType::Cone);
     invalidCone.coneAngleDegrees = 0.0f;
@@ -1189,8 +1419,115 @@ int main() {
     ExpectTrue("dash crossing and leaving before activation stays path-safe",
                dashLeavesBeforeActivation.pathSafe &&
                    dashLeavesBeforeActivation.pathDanger == 0);
-    ExpectTrue("future static impact remains in anticipatory envelope",
-               dashLeavesBeforeActivation.reenteredDanger);
+    ExpectTrue("future static impact is a newly entered envelope",
+               dashLeavesBeforeActivation.enteredNewThreat &&
+                   !dashLeavesBeforeActivation.reenteredDanger);
+    const ExternalMoveDecision delayedReentryAction =
+        DecideExternalMove({
+            MoveIntentSource::Manual,
+            false,
+            true,
+            {
+                dashLeavesBeforeActivation.valid,
+                dashLeavesBeforeActivation.walkable,
+                dashLeavesBeforeActivation.pathSafe,
+                dashLeavesBeforeActivation.endpointSafe,
+                dashLeavesBeforeActivation.strictSafe,
+                dashLeavesBeforeActivation.reenteredDanger,
+                dashLeavesBeforeActivation.enteredNewThreat,
+            },
+        });
+    ExpectTrue("time-safe geometric entry is consumed and discarded",
+               delayedReentryAction.consume &&
+                   delayedReentryAction.discardBlockedIntent &&
+                   !delayedReentryAction.allowNative &&
+                   !delayedReentryAction.adoptGoal);
+
+    const CandidateEvaluation afterDelayedCircleExpiry =
+        EvadeGeometry::EvaluateCandidate(
+            blinkEndpoint,
+            PlannerCandidateSource::Cursor,
+            -1,
+            blinkOrigin,
+            blinkEndpoint,
+            0.0f,
+            2000.0f,
+            blinkHeroRadius,
+            delayedCircle.endTick + 251,
+            blinkSettings,
+            {delayedCircle});
+    const ExternalMoveDecision expiredEnvelopeAction =
+        DecideExternalMove({
+            MoveIntentSource::Manual,
+            false,
+            false,
+            {
+                afterDelayedCircleExpiry.valid,
+                afterDelayedCircleExpiry.walkable,
+                afterDelayedCircleExpiry.pathSafe,
+                afterDelayedCircleExpiry.endpointSafe,
+                afterDelayedCircleExpiry.strictSafe,
+                afterDelayedCircleExpiry.reenteredDanger,
+                afterDelayedCircleExpiry.enteredNewThreat,
+            },
+        });
+    ExpectTrue("expired envelope no longer marks geometric re-entry",
+               afterDelayedCircleExpiry.pathSafe &&
+                   afterDelayedCircleExpiry.endpointSafe &&
+                   !afterDelayedCircleExpiry.reenteredDanger);
+    ExpectTrue("movement behind expired envelope proceeds natively",
+               expiredEnvelopeAction.allowNative &&
+                   !expiredEnvelopeAction.consume &&
+                   !expiredEnvelopeAction.discardBlockedIntent);
+
+    Threat secondDelayedCircle = delayedCircle;
+    secondDelayedCircle.id = delayedCircle.id + 1000;
+    secondDelayedCircle.endPos = Vec2(650.0f, 500.0f);
+    const auto evaluateOrderedReentry =
+        [&](const std::vector<Threat>& orderedThreats) {
+            const CandidateEvaluation route =
+                EvadeGeometry::EvaluateCandidate(
+                    blinkEndpoint,
+                    PlannerCandidateSource::Cursor,
+                    -1,
+                    blinkOrigin,
+                    blinkEndpoint,
+                    0.0f,
+                    2000.0f,
+                    blinkHeroRadius,
+                    blinkNow,
+                    blinkSettings,
+                    orderedThreats);
+            return DecideExternalMove({
+                MoveIntentSource::ObservedPath,
+                true,
+                true,
+                {
+                    route.valid,
+                    route.walkable,
+                    route.pathSafe,
+                    route.endpointSafe,
+                    route.strictSafe,
+                    route.reenteredDanger,
+                    route.enteredNewThreat,
+                },
+            });
+        };
+    const ExternalMoveDecision orderedThreatAction =
+        evaluateOrderedReentry({delayedCircle, secondDelayedCircle});
+    const ExternalMoveDecision reversedThreatAction =
+        evaluateOrderedReentry({secondDelayedCircle, delayedCircle});
+    ExpectTrue("multiple-threat ordering preserves blocked action",
+               orderedThreatAction.consume &&
+                   orderedThreatAction.discardBlockedIntent &&
+                   orderedThreatAction.allowNative ==
+                       reversedThreatAction.allowNative &&
+                   orderedThreatAction.consume ==
+                       reversedThreatAction.consume &&
+                   orderedThreatAction.adoptGoal ==
+                       reversedThreatAction.adoptGoal &&
+                   orderedThreatAction.discardBlockedIntent ==
+                       reversedThreatAction.discardBlockedIntent);
 
     const auto makeExplosion = [&](const Vec2& center, int explosionTick) {
         SpellData spell = ZDEvadeTest::MakeSpell(ZDSpellType::Circular);
@@ -1344,6 +1681,12 @@ int main() {
     sweptExplosion.endTick = 3000;
     sweptExplosion.endPos = Vec2(1800.0f, 1200.0f);
     sweptExplosion.collisionExplosionCenter = Vec2(705.0f, 549.0f);
+    ExpectNear("explosion authored radius remains raw",
+               sweptExplosion.AuthoredEndExplosionRadius(),
+               50.0f);
+    ExpectNear("explosion effective radius adds ten",
+               sweptExplosion.EndExplosionRadius(),
+               60.0f);
     EvadeSettings sweptExplosionSettings = blinkSettings;
     sweptExplosionSettings.inputDelayMs = 0.0f;
     sweptExplosionSettings.pathStep = 4.0f;
@@ -1374,7 +1717,10 @@ int main() {
                sweptExplosionCrossing.minimumClearance < 0.0f);
     ExpectNear("continuous explosion reports analytical first contact",
                sweptExplosionCrossing.firstCollisionTimeMs,
-               49.5f,
+               static_cast<float>(
+                   TickDifference(
+                       sweptExplosion.EndExplosionStartTick(),
+                       blinkNow)),
                0.2f);
     ExpectTrue("continuous explosion contributes exact exposure",
                sweptExplosionCrossing.dangerExposureMs > 4.0f);
@@ -1399,7 +1745,7 @@ int main() {
                !tangentExplosionCrossing.pathSafe);
     ExpectNear("tangent explosion clearance is exact",
                tangentExplosionCrossing.minimumClearance,
-               0.0f,
+               -kThreatSafetyPadding,
                0.02f);
 
     Threat walkingEndpointExplosion = makeExplosion(blinkEndpoint, 1401);
@@ -1521,7 +1867,7 @@ int main() {
                !fractionalTangent.strictSafe);
     ExpectNear("fractional high-speed tangent keeps exact radius",
                fractionalTangent.minimumClearance,
-               0.0f,
+               -kThreatSafetyPadding,
                0.02f);
 
     SpellData graceCircleSpell =
@@ -1744,6 +2090,132 @@ int main() {
     ExpectTrue("INT_MAX budget sums without overflow",
                maximumIntegerBudget.Total() == INT_MAX);
 
+    constexpr float actualBoundingRadius = 65.0f;
+    const float endpointHeroRadius =
+        SanitizeHeroRadius(actualBoundingRadius);
+    constexpr int endpointActiveTick = 1000;
+
+    SpellData marginLineSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    marginLineSpell.spellDelay = 0;
+    marginLineSpell.projectileSpeed = 0.0f;
+    marginLineSpell.radius = 45.0f;
+    Threat marginLine = ZDEvadeTest::MakeThreat(marginLineSpell);
+    marginLine.startPos = Vec2(0.0f, 0.0f);
+    marginLine.endPos = Vec2(800.0f, 0.0f);
+    marginLine.direction = Vec2(1.0f, 0.0f);
+    marginLine.startTick = 900;
+    marginLine.endTick = 3000;
+    const Vec2 marginLineLeft = EvadeGeometry::ClosestLineExit(
+        marginLine,
+        Vec2(400.0f, 0.0f),
+        endpointHeroRadius,
+        kDefaultEndpointMargin,
+        true,
+        endpointActiveTick);
+    const Vec2 marginLineRight = EvadeGeometry::ClosestLineExit(
+        marginLine,
+        Vec2(400.0f, 0.0f),
+        endpointHeroRadius,
+        kDefaultEndpointMargin,
+        false,
+        endpointActiveTick);
+    ExpectEndpointMarginInvariant(
+        "line left endpoint keeps footprint and 14.25 shortfall clearance",
+        marginLine,
+        marginLineLeft,
+        endpointHeroRadius,
+        endpointActiveTick);
+    ExpectEndpointMarginInvariant(
+        "line right endpoint keeps footprint and 14.25 shortfall clearance",
+        marginLine,
+        marginLineRight,
+        endpointHeroRadius,
+        endpointActiveTick);
+
+    SpellData marginCircleSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Circular);
+    marginCircleSpell.spellDelay = 0;
+    marginCircleSpell.radius = 120.0f;
+    Threat marginCircle = ZDEvadeTest::MakeThreat(marginCircleSpell);
+    marginCircle.endPos = Vec2(400.0f, 300.0f);
+    marginCircle.startTick = 900;
+    marginCircle.endTick = 3000;
+    const Vec2 marginCircleExit = EvadeGeometry::ClosestCircleExit(
+        marginCircle,
+        marginCircle.endPos,
+        endpointHeroRadius,
+        kDefaultEndpointMargin);
+    ExpectEndpointMarginInvariant(
+        "circle endpoint keeps footprint and 14.25 shortfall clearance",
+        marginCircle,
+        marginCircleExit,
+        endpointHeroRadius,
+        endpointActiveTick);
+
+    SpellData marginRingSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Ring);
+    marginRingSpell.spellDelay = 0;
+    marginRingSpell.innerRadius = 220.0f;
+    marginRingSpell.radius = 340.0f;
+    Threat marginRing = ZDEvadeTest::MakeThreat(marginRingSpell);
+    marginRing.endPos = Vec2(500.0f, 500.0f);
+    marginRing.startTick = 900;
+    marginRing.endTick = 3000;
+    const Vec2 marginRingInnerExit = EvadeGeometry::ClosestRingExit(
+        marginRing,
+        marginRing.endPos + Vec2(160.0f, 0.0f),
+        endpointHeroRadius,
+        kDefaultEndpointMargin);
+    const Vec2 marginRingOuterExit = EvadeGeometry::ClosestRingExit(
+        marginRing,
+        marginRing.endPos + Vec2(600.0f, 0.0f),
+        endpointHeroRadius,
+        kDefaultEndpointMargin);
+    ExpectEndpointMarginInvariant(
+        "ring inner endpoint keeps footprint and 14.25 shortfall clearance",
+        marginRing,
+        marginRingInnerExit,
+        endpointHeroRadius,
+        endpointActiveTick);
+    ExpectEndpointMarginInvariant(
+        "ring outer endpoint keeps footprint and 14.25 shortfall clearance",
+        marginRing,
+        marginRingOuterExit,
+        endpointHeroRadius,
+        endpointActiveTick);
+
+    SpellData marginConeSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Cone);
+    marginConeSpell.spellDelay = 0;
+    marginConeSpell.projectileSpeed = 0.0f;
+    marginConeSpell.range = 600.0f;
+    marginConeSpell.coneAngleDegrees = 60.0f;
+    marginConeSpell.coneEdgePadding = 5.0f;
+    Threat marginCone = ZDEvadeTest::MakeThreat(marginConeSpell);
+    marginCone.startPos = Vec2(0.0f, 0.0f);
+    marginCone.endPos = Vec2(600.0f, 0.0f);
+    marginCone.direction = Vec2(1.0f, 0.0f);
+    marginCone.startTick = 900;
+    marginCone.endTick = 3000;
+    std::vector<Vec2> marginConeExits;
+    EvadeGeometry::AddConeExits(
+        marginCone,
+        Vec2(300.0f, 0.0f),
+        endpointHeroRadius,
+        kDefaultEndpointMargin,
+        marginConeExits);
+    ExpectTrue("cone produces every analytical endpoint",
+               marginConeExits.size() == 5);
+    for (const Vec2& endpoint : marginConeExits) {
+        ExpectEndpointMarginInvariant(
+            "each cone endpoint keeps footprint and 14.25 shortfall clearance",
+            marginCone,
+            endpoint,
+            endpointHeroRadius,
+            endpointActiveTick);
+    }
+
     EvadeSettings seedSettings;
     seedSettings.maxCandidates = 32;
     seedSettings.maxSearchRadius = 760.0f;
@@ -1791,8 +2263,12 @@ int main() {
                 0.0f);
     ExpectTrue("release margin does not move analytical endpoint",
                SameSeeds(lowReleaseSeeds, highReleaseSeeds));
-    ExpectTrue("analytical endpoint preserves 10.25 edge margin",
+    ExpectTrue("analytical endpoint preserves default 18.25 edge margin",
                HasSeedNear(lowReleaseSeeds, expectedNearEdgeTarget));
+    ExpectNear("default seed edge clearance remains independent of release buffer",
+               expectedNearEdgeTarget.Distance(releaseCircle.endPos) -
+                   releaseCircle.Radius(),
+               18.25f);
     bool hasCircleClockwise = false;
     bool hasCircleCounterClockwise = false;
     const std::vector<CandidateSeed> circleBranchSeeds =
@@ -1892,10 +2368,466 @@ int main() {
     }
     ExpectTrue("analytical line sides have fixed distinct keys",
                hasLineLeft && hasLineRight);
-    ExpectNear("analytical model-edge gap remains 10.25",
+    const auto analyticalLineSidesArePhysical =
+        [&](float heroY) {
+            const Vec2 hero(500.0f, heroY);
+            const std::vector<CandidateSeed> seeds =
+                EvadePlanner::GenerateCandidateSeeds(
+                    {branchLine},
+                    hero,
+                    Vec2(800.0f, heroY),
+                    0.0f,
+                    seedSettings,
+                    1000);
+            bool physicalLeft = false;
+            bool physicalRight = false;
+            float leftDistance = FLT_MAX;
+            float rightDistance = FLT_MAX;
+            for (const CandidateSeed& seed : seeds) {
+                if (seed.threatId != branchLine.id ||
+                    (seed.stabilityBranchKey !=
+                         StabilityBranch::LineAnalyticalLeft &&
+                     seed.stabilityBranchKey !=
+                         StabilityBranch::LineAnalyticalRight)) {
+                    continue;
+                }
+                Vec2 projection;
+                EvadeGeometry::DistanceToSegment(
+                    seed.position,
+                    branchLine.startPos,
+                    branchLine.endPos,
+                    nullptr,
+                    &projection);
+                const float side = branchLine.direction.Cross(
+                    seed.position - projection);
+                physicalLeft = physicalLeft ||
+                    (side > 0.01f &&
+                     seed.source == PlannerCandidateSource::LineLeft &&
+                     seed.stabilityBranchKey ==
+                         StabilityBranch::LineAnalyticalLeft);
+                physicalRight = physicalRight ||
+                    (side < -0.01f &&
+                     seed.source == PlannerCandidateSource::LineRight &&
+                     seed.stabilityBranchKey ==
+                         StabilityBranch::LineAnalyticalRight);
+                if (side > 0.01f)
+                    leftDistance = std::min(
+                        leftDistance,
+                        hero.Distance(seed.position));
+                if (side < -0.01f)
+                    rightDistance = std::min(
+                        rightDistance,
+                        hero.Distance(seed.position));
+            }
+            const bool nearestSideIsPhysical =
+                heroY < 500.0f
+                ? rightDistance < leftDistance
+                : heroY > 500.0f
+                    ? leftDistance < rightDistance
+                    : std::fabs(
+                        leftDistance - rightDistance) <= 0.01f;
+            return physicalLeft &&
+                physicalRight &&
+                nearestSideIsPhysical;
+        };
+    ExpectTrue(
+        "off-center analytical keys retain physical left and right",
+        analyticalLineSidesArePhysical(490.0f) &&
+            analyticalLineSidesArePhysical(510.0f));
+    ExpectTrue(
+        "tiny centerline jitter retains physical branch identity",
+        analyticalLineSidesArePhysical(499.999f) &&
+            analyticalLineSidesArePhysical(500.001f));
+
+    InstallWalkableTestGrid();
+    branchLine.persistent = true;
+    branchLine.endTick = 10000;
+    EvadeSettings lineExitSettings = seedSettings;
+    lineExitSettings.endpointBuffer = kDefaultEndpointMargin;
+    lineExitSettings.pathBuffer = 8.0f;
+    lineExitSettings.inputDelayMs = 0.0f;
+    lineExitSettings.minimumTimeMarginMs = 0.0f;
+    lineExitSettings.maxThreatHorizonMs = 1000.0f;
+    const Vec2 centeredLineHero(500.0f, 500.0f);
+    const CandidateEvaluation longitudinalLineRoute =
+        EvadeGeometry::EvaluateCandidate(
+            Vec2(800.0f, 500.0f),
+            PlannerCandidateSource::Cursor,
+            -1,
+            centeredLineHero,
+            Vec2(800.0f, 500.0f),
+            0.0f,
+            1000.0f,
+            35.0f,
+            1000,
+            lineExitSettings,
+            {branchLine});
+    const Vec2 nearestPerpendicularExit =
+        EvadeGeometry::ClosestLineExit(
+            branchLine,
+            centeredLineHero,
+            35.0f,
+            lineExitSettings.endpointBuffer,
+            true,
+            1000);
+    const CandidateEvaluation lateralLineRoute =
+        EvadeGeometry::EvaluateCandidate(
+            nearestPerpendicularExit,
+            PlannerCandidateSource::LineLeft,
+            branchLine.id,
+            centeredLineHero,
+            nearestPerpendicularExit,
+            0.0f,
+            1000.0f,
+            35.0f,
+            1000,
+            lineExitSettings,
+            {branchLine});
+    ExpectTrue(
+        "longitudinal 300 route has explicit no-exit evidence",
+        longitudinalLineRoute.valid &&
+            longitudinalLineRoute.walkable &&
+            longitudinalLineRoute.startThreatIdentities.Size() == 1 &&
+            !longitudinalLineRoute.exitedStartEnvelope &&
+            longitudinalLineRoute.exitDistance !=
+                longitudinalLineRoute.travelDistance);
+    ExpectTrue(
+        "perpendicular route exits full hero-radius line envelope",
+        lateralLineRoute.exitedStartEnvelope &&
+            lateralLineRoute.endpointSafe &&
+            nearestPerpendicularExit.x == centeredLineHero.x &&
+            nearestPerpendicularExit.y > centeredLineHero.y &&
+            !EvadeGeometry::ContainsAt(
+                branchLine,
+                nearestPerpendicularExit,
+                35.0f,
+                lineExitSettings.endpointBuffer,
+                1000));
+
+    InstallFineWalkableTestGrid();
+    const Vec2 oppositePerpendicularExit =
+        EvadeGeometry::ClosestLineExit(
+            branchLine,
+            centeredLineHero,
+            35.0f,
+            lineExitSettings.endpointBuffer,
+            false,
+            1000);
+    const auto evaluateLineExit =
+        [&](const Vec2& target,
+            PlannerCandidateSource source) {
+            return EvadeGeometry::EvaluateCandidate(
+                target,
+                source,
+                branchLine.id,
+                centeredLineHero,
+                target,
+                0.0f,
+                1000.0f,
+                35.0f,
+                1000,
+                lineExitSettings,
+                {branchLine});
+        };
+    CandidateEvaluation shortLeft =
+        evaluateLineExit(
+            nearestPerpendicularExit,
+            PlannerCandidateSource::LineLeft);
+    CandidateEvaluation shortRight =
+        evaluateLineExit(
+            oppositePerpendicularExit,
+            PlannerCandidateSource::LineRight);
+    CandidateEvaluation longDiagonal =
+        evaluateLineExit(
+            Vec2(800.0f, 620.0f),
+            PlannerCandidateSource::Cursor);
+    shortLeft.turretPenalty = 600.0f;
+    shortLeft.cursorDistance = 5000.0f;
+    shortLeft.enemyDistance = 1.0f;
+    shortRight.turretPenalty = 400.0f;
+    shortRight.cursorDistance = 4000.0f;
+    shortRight.enemyDistance = 2.0f;
+    longDiagonal.turretPenalty = 0.0f;
+    longDiagonal.cursorDistance = 0.0f;
+    longDiagonal.enemyDistance = FLT_MAX;
+    CandidateEvaluation dangerousShortFallback = shortLeft;
+    dangerousShortFallback.strictSafe = false;
+    dangerousShortFallback.endpointDanger = 4;
+    dangerousShortFallback.maxDanger = 5;
+    dangerousShortFallback.collisionCount = 3;
+    dangerousShortFallback.pathDanger = 5;
+    dangerousShortFallback.dangerExposureMs = 600.0f;
+    dangerousShortFallback.summedExposureDanger = 15;
+    dangerousShortFallback.firstCollisionTimeMs = 20.0f;
+    CandidateEvaluation saferLongFallback = longDiagonal;
+    saferLongFallback.strictSafe = false;
+    saferLongFallback.endpointDanger = 1;
+    saferLongFallback.maxDanger = 2;
+    saferLongFallback.collisionCount = 1;
+    saferLongFallback.pathDanger = 2;
+    saferLongFallback.dangerExposureMs = 100.0f;
+    saferLongFallback.summedExposureDanger = 2;
+    saferLongFallback.firstCollisionTimeMs = 200.0f;
+    const PlannerResult saferFallbackSelection =
+        EvadePlanner::SelectBestEvaluatedCandidates(
+            {dangerousShortFallback, saferLongFallback},
+            lineExitSettings,
+            true);
+    ExpectTrue(
+        "single-line fallback safety outranks shorter exit",
+        saferFallbackSelection.found &&
+            !saferFallbackSelection.strictSafe &&
+            saferFallbackSelection.selected.position.Distance(
+                saferLongFallback.position) < 0.001f);
+
+    CandidateEvaluation equivalentShortFallback = shortLeft;
+    equivalentShortFallback.strictSafe = false;
+    equivalentShortFallback.endpointDanger = 1;
+    equivalentShortFallback.maxDanger = 2;
+    equivalentShortFallback.collisionCount = 1;
+    equivalentShortFallback.pathDanger = 2;
+    equivalentShortFallback.dangerExposureMs = 100.0f;
+    equivalentShortFallback.summedExposureDanger = 2;
+    equivalentShortFallback.firstCollisionTimeMs = 200.0f;
+    equivalentShortFallback.turretPenalty = 800.0f;
+    equivalentShortFallback.enemyDistance = 1.0f;
+    equivalentShortFallback.cursorDistance = 8000.0f;
+    equivalentShortFallback.minimumClearance = 1.0f;
+    CandidateEvaluation equivalentLongFallback = saferLongFallback;
+    equivalentLongFallback.dangerExposureMs = 110.0f;
+    equivalentLongFallback.firstCollisionTimeMs = 210.0f;
+    equivalentLongFallback.turretPenalty = 0.0f;
+    equivalentLongFallback.enemyDistance = FLT_MAX;
+    equivalentLongFallback.cursorDistance = 0.0f;
+    equivalentLongFallback.minimumClearance = 500.0f;
+    const ThreatCoverage equivalentShortCoverage = {
+        equivalentShortFallback.collisionCount,
+        equivalentShortFallback.endpointDanger,
+        equivalentShortFallback.pathDanger,
+        equivalentShortFallback.maxDanger,
+        equivalentShortFallback.dangerExposureMs,
+        equivalentShortFallback.firstCollisionTimeMs,
+        equivalentShortFallback.summedExposureDanger,
+    };
+    const ThreatCoverage equivalentLongCoverage = {
+        equivalentLongFallback.collisionCount,
+        equivalentLongFallback.endpointDanger,
+        equivalentLongFallback.pathDanger,
+        equivalentLongFallback.maxDanger,
+        equivalentLongFallback.dangerExposureMs,
+        equivalentLongFallback.firstCollisionTimeMs,
+        equivalentLongFallback.summedExposureDanger,
+    };
+    const PlannerResult equivalentFallbackSelection =
+        EvadePlanner::SelectBestEvaluatedCandidates(
+            {equivalentLongFallback, equivalentShortFallback},
+            lineExitSettings,
+            true);
+    ExpectTrue(
+        "equivalent single-line fallbacks use shortest exit before soft metrics",
+        EquivalentThreatCoverageAtResolution(
+            equivalentShortCoverage,
+            equivalentLongCoverage,
+            std::max(25.0f, lineExitSettings.temporalStepMs)) &&
+            equivalentFallbackSelection.found &&
+            equivalentFallbackSelection.selected.position.Distance(
+                equivalentShortFallback.position) < 0.001f);
+
+    CandidateEvaluation strictLongExit = saferLongFallback;
+    strictLongExit.strictSafe = true;
+    const PlannerResult strictOverFallbackSelection =
+        EvadePlanner::SelectBestEvaluatedCandidates(
+            {dangerousShortFallback, strictLongExit},
+            lineExitSettings,
+            true);
+    ExpectTrue(
+        "strict true exit always outranks shorter fallback",
+        strictOverFallbackSelection.found &&
+            strictOverFallbackSelection.strictSafe &&
+            strictOverFallbackSelection.selected.position.Distance(
+                strictLongExit.position) < 0.001f);
+
+    const PlannerResult singleLineSelection =
+        EvadePlanner::SelectBestEvaluatedCandidates(
+            {
+                longitudinalLineRoute,
+                longDiagonal,
+                shortLeft,
+                shortRight,
+            },
+            lineExitSettings,
+            true);
+    const PlannerResult noExitOnlySelection =
+        EvadePlanner::SelectBestEvaluatedCandidates(
+            {longitudinalLineRoute},
+            lineExitSettings,
+            true);
+    ExpectTrue(
+        "single-line planner admits only a true start-envelope exit",
+        singleLineSelection.found &&
+            singleLineSelection.selected.exitedStartEnvelope &&
+            singleLineSelection.selected.startThreatIdentities.Size() == 1 &&
+            singleLineSelection.selected.exitDistance + 0.5f <
+                longDiagonal.exitDistance &&
+            !noExitOnlySelection.found);
+    ExpectTrue(
+        "single-line shortest sidestep ignores soft turret cursor enemy metrics",
+        (singleLineSelection.selected.source ==
+             PlannerCandidateSource::LineLeft ||
+         singleLineSelection.selected.source ==
+             PlannerCandidateSource::LineRight) &&
+            singleLineSelection.selected.travelDistance + 0.5f <
+                longDiagonal.travelDistance);
+
+    SpellData passedHeadSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    passedHeadSpell.spellDelay = 0;
+    passedHeadSpell.projectileSpeed = 1000.0f;
+    passedHeadSpell.radius = 40.0f;
+    Threat passedHeadLine =
+        ZDEvadeTest::MakeThreat(passedHeadSpell);
+    passedHeadLine.id = 993;
+    passedHeadLine.startPos = Vec2(100.0f, 500.0f);
+    passedHeadLine.endPos = Vec2(900.0f, 500.0f);
+    passedHeadLine.direction = Vec2(1.0f, 0.0f);
+    passedHeadLine.startTick = 0;
+    passedHeadLine.launchTick = 0;
+    passedHeadLine.endTick = 3000;
+    passedHeadLine.missileBound = true;
+    passedHeadLine.observedHead = Vec2(700.0f, 500.0f);
+    passedHeadLine.observedTick = 1000;
+    passedHeadLine.observedSpeed = 1000.0f;
+    const std::vector<CandidateSeed> passedHeadSeeds =
+        EvadePlanner::GenerateCandidateSeeds(
+            {passedHeadLine},
+            centeredLineHero,
+            Vec2(800.0f, 500.0f),
+            35.0f,
+            lineExitSettings,
+            1000);
+    bool passedHeadGeneratedAnalyticalSide = false;
+    for (const CandidateSeed& seed : passedHeadSeeds) {
+        passedHeadGeneratedAnalyticalSide =
+            passedHeadGeneratedAnalyticalSide ||
+            (seed.threatId == passedHeadLine.id &&
+             (seed.stabilityBranchKey ==
+                  StabilityBranch::LineAnalyticalLeft ||
+              seed.stabilityBranchKey ==
+                  StabilityBranch::LineAnalyticalRight));
+    }
+    ExpectTrue(
+        "moving-line observed head is already past hero",
+        passedHeadLine.HeadAtTick(1000).x >
+            centeredLineHero.x);
+    ExpectTrue(
+        "stale authored corridor still geometrically covers hero",
+        EvadeGeometry::DistanceToSegment(
+            centeredLineHero,
+            passedHeadLine.startPos,
+            passedHeadLine.endPos) <=
+            passedHeadLine.Radius() + 35.0f +
+                lineExitSettings.endpointBuffer);
+    ExpectTrue(
+        "passed moving-line head disables special ranking",
+        !EvadeGeometry::ContainsAt(
+            passedHeadLine,
+            centeredLineHero,
+            35.0f,
+            lineExitSettings.endpointBuffer,
+            1000) &&
+            !EvadePlanner::IsSingleLineStartEnvelopeContext(
+                {passedHeadLine},
+                centeredLineHero,
+                35.0f,
+                lineExitSettings.endpointBuffer,
+                1000));
+    ExpectTrue(
+        "passed moving-line head creates no analytical sidestep",
+        !passedHeadGeneratedAnalyticalSide);
+
+    ExpectTrue(
+        "one-side wall fixture blocks physical line left",
+        CoreNavGrid::SetCollisionFlags(
+            Vec3::From2D(Vec2(500.0f, 570.0f), 0.0f),
+            CoreNavGrid::Collision_Wall));
+    const CandidateEvaluation wallBlockedLeft =
+        evaluateLineExit(
+            nearestPerpendicularExit,
+            PlannerCandidateSource::LineLeft);
+    const CandidateEvaluation openRight =
+        evaluateLineExit(
+            oppositePerpendicularExit,
+            PlannerCandidateSource::LineRight);
+    ExpectTrue(
+        "one side wall chooses the other true lateral exit",
+        !wallBlockedLeft.walkable &&
+            openRight.walkable &&
+            openRight.exitedStartEnvelope &&
+            EvadePlanner::SelectBestEvaluatedCandidates(
+                {
+                    wallBlockedLeft,
+                    openRight,
+                    longitudinalLineRoute,
+                },
+                lineExitSettings,
+                true).selected.source ==
+                PlannerCandidateSource::LineRight);
+
+    ExpectTrue(
+        "both-side wall fixture blocks physical line right",
+        CoreNavGrid::SetCollisionFlags(
+            Vec3::From2D(Vec2(500.0f, 430.0f), 0.0f),
+            CoreNavGrid::Collision_Wall));
+    const CandidateEvaluation wallBlockedRight =
+        evaluateLineExit(
+            oppositePerpendicularExit,
+            PlannerCandidateSource::LineRight);
+    const CandidateEvaluation remainingLongitudinal =
+        EvadeGeometry::EvaluateCandidate(
+            Vec2(800.0f, 500.0f),
+            PlannerCandidateSource::Cursor,
+            -1,
+            centeredLineHero,
+            Vec2(800.0f, 500.0f),
+            0.0f,
+            1000.0f,
+            35.0f,
+            1000,
+            lineExitSettings,
+            {branchLine});
+    UnavoidableDecisionInput bothSidesBlocked;
+    bothSidesBlocked.candidateAvailable = true;
+    bothSidesBlocked.candidateValid =
+        remainingLongitudinal.valid;
+    bothSidesBlocked.candidateWalkable =
+        remainingLongitudinal.walkable;
+    bothSidesBlocked.candidateMakesProgress = false;
+    bothSidesBlocked.candidateStartsInThreat = true;
+    bothSidesBlocked.candidateExitedStartEnvelope =
+        remainingLongitudinal.exitedStartEnvelope;
+    ExpectTrue(
+        "both side walls reject longitudinal movement and escalate",
+        !wallBlockedLeft.walkable &&
+            !wallBlockedRight.walkable &&
+            remainingLongitudinal.walkable &&
+            !remainingLongitudinal.exitedStartEnvelope &&
+            DecideUnavoidableAction(bothSidesBlocked).action ==
+                UnavoidableAction::Hold &&
+            DecideReachedCommitmentEscalation(
+                false,
+                true,
+                true) ==
+                ReachedCommitmentEscalation::TryEvadeSpell &&
+            DecideReachedCommitmentEscalation(
+                false,
+                true,
+                false) ==
+                ReachedCommitmentEscalation::NoPlanSafety);
+    InstallWalkableTestGrid();
+    ExpectNear("analytical model-edge gap remains 18.25",
                expectedNearEdgeTarget.Distance(releaseCircle.endPos) -
                    releaseCircle.Radius(),
-               10.25f);
+               18.25f);
     ExpectTrue("static endpoint clears lower release margin",
                !EvadeGeometry::HeroThreatenedNow(
                    {releaseCircle},
@@ -2072,8 +3004,10 @@ int main() {
             0.0f,
             intersectionSettings,
             1000);
-    const float exactLineRadius = ExitCenterDistance(20.0f, 0.0f, 0.0f, 0.0f);
-    const float exactCircleRadius = ExitCenterDistance(100.0f, 0.0f, 0.0f, 0.0f);
+    const float exactLineRadius = ExitCenterDistance(
+        exactLine.Radius(), 0.0f, 0.0f, 0.0f);
+    const float exactCircleRadius = ExitCenterDistance(
+        exactCircle.Radius(), 0.0f, 0.0f, 0.0f);
     const float lineCircleOffset = std::sqrt(
         exactCircleRadius * exactCircleRadius -
         exactLineRadius * exactLineRadius);
@@ -2130,13 +3064,16 @@ int main() {
             0.0f,
             intersectionSettings,
             1000);
-    const float centerLineRadius = ExitCenterDistance(0.0f, 0.0f, 0.0f, 0.0f);
+    const float centerLineRadius = ExitCenterDistance(
+        centerLine.Radius(), 0.0f, 0.0f, 0.0f);
     const float ringSafeInnerRadius =
-        60.0f - ExitCenterDistance(0.0f, 0.0f, 0.0f, 0.0f);
+        ringBoundary.InnerRadius() -
+            ExitCenterDistance(0.0f, 0.0f, 0.0f, 0.0f);
     const float ringInnerLineOffset = std::sqrt(
         ringSafeInnerRadius * ringSafeInnerRadius -
         centerLineRadius * centerLineRadius);
-    const float ringOuterRadius = ExitCenterDistance(120.0f, 0.0f, 0.0f, 0.0f);
+    const float ringOuterRadius = ExitCenterDistance(
+        ringBoundary.Radius(), 0.0f, 0.0f, 0.0f);
     const float ringOuterLineOffset = std::sqrt(
         ringOuterRadius * ringOuterRadius -
         centerLineRadius * centerLineRadius);
@@ -2229,7 +3166,11 @@ int main() {
             intersectionSettings,
             1000);
     const float coneBoundaryExpansion =
-        ExitCenterDistance(0.0f, 0.0f, 0.0f, 0.0f);
+        ExitCenterDistance(
+            coneBoundary.ConeEdgePadding(),
+            0.0f,
+            0.0f,
+            0.0f);
     const float coneSideAlong = std::sqrt(
         exactCircleRadius * exactCircleRadius -
         coneBoundaryExpansion * coneBoundaryExpansion);
@@ -2250,7 +3191,7 @@ int main() {
 
     Threat outerArcCircle = exactCircle;
     outerArcCircle.id += 400;
-    outerArcCircle.endPos = Vec2(200.0f, 0.0f);
+    outerArcCircle.endPos = Vec2(300.0f, 0.0f);
     const std::vector<CandidateSeed> coneArcSeeds =
         EvadePlanner::GenerateExactIntersectionSeeds(
             {coneBoundary, outerArcCircle},
@@ -2259,9 +3200,12 @@ int main() {
             intersectionSettings,
             1000);
     const float coneOuterRadius = ExitCenterDistance(
-        200.0f, 0.0f, 0.0f, 0.0f);
+        coneBoundary.Range() + coneBoundary.ConeEdgePadding(),
+        0.0f,
+        0.0f,
+        0.0f);
     const Vec2 upperConeArc = circleIntersectionFromRingCenter(
-        coneOuterRadius, exactCircleRadius, 200.0f);
+        coneOuterRadius, exactCircleRadius, 300.0f);
     ExpectTrue("cone exact upper outer-arc intersection",
                HasSeedNear(coneArcSeeds, upperConeArc));
     ExpectTrue("cone exact lower outer-arc intersection",
@@ -3160,11 +4104,16 @@ int main() {
                0.1f);
     ExpectNear("partial horizon segment preserves exact first contact",
                clippedExposurePath.firstCollisionTimeMs,
-               115.0f,
+               225.0f -
+                   partialExposure.EndExplosionRadius() -
+                   1.0f -
+                   commonHorizonPath.front().x,
                0.1f);
     ExpectNear("partial horizon segment preserves exact exposure",
                clippedExposurePath.dangerExposureMs,
-               20.0f * static_cast<float>(partialExposure.Danger()),
+               2.0f *
+                   (partialExposure.EndExplosionRadius() + 1.0f) *
+                   static_cast<float>(partialExposure.Danger()),
                0.1f);
 
     EvadeSettings zeroHorizonPathSettings = commonHorizonSettings;
@@ -3349,6 +4298,699 @@ int main() {
             promotedBranch.strictSafe) &&
             promotedBranch.stabilityBranchKey ==
                 StabilityBranch::ConeLeft);
+
+    InstallWalkableTestGrid();
+    EvadeSettings transitionSettings;
+    transitionSettings.inputDelayMs = 0.0f;
+    transitionSettings.pathBuffer = 0.0f;
+    transitionSettings.endpointBuffer = 0.0f;
+    transitionSettings.minimumTimeMarginMs = 0.0f;
+    transitionSettings.maxThreatHorizonMs = 1000.0f;
+    transitionSettings.pathStep = 4.0f;
+    transitionSettings.temporalStepMs = 12.0f;
+
+    const auto makePersistentCircle =
+        [&](int id, const Vec2& center, float radius) {
+            SpellData spell =
+                ZDEvadeTest::MakeSpell(ZDSpellType::Circular);
+            spell.spellDelay = 0;
+            spell.projectileSpeed = 0.0f;
+            spell.radius = radius;
+            spell.extraEndTime = 2000;
+            Threat threat = ZDEvadeTest::MakeThreat(spell);
+            threat.id = id;
+            threat.startTick = 900;
+            threat.endTick = 4000;
+            threat.endPos = center;
+            threat.persistent = true;
+            return threat;
+        };
+    const auto transitionCoverage =
+        [](const CandidateEvaluation& route) {
+            return ThreatCoverage{
+                route.collisionCount,
+                route.endpointDanger,
+                route.pathDanger,
+                route.maxDanger,
+                route.dangerExposureMs,
+                route.firstCollisionTimeMs,
+                route.summedExposureDanger,
+            };
+        };
+    const auto decideGeometryRoute =
+        [&](const CandidateEvaluation& route,
+            const CandidateEvaluation& hold,
+            MoveIntentSource source = MoveIntentSource::Manual,
+            bool controllerOwnsMovement = true) {
+            ExternalMoveRouteEvaluation external;
+            external.valid = route.valid;
+            external.walkable = route.walkable;
+            external.pathSafe = route.pathSafe;
+            external.endpointSafe = route.endpointSafe;
+            external.strictSafe = route.strictSafe;
+            external.reenteredDanger = route.reenteredDanger;
+            external.enteredNewThreat = route.enteredNewThreat;
+            external.startsInThreat =
+                route.startThreatIdentities.Size() > 0;
+            external.coverageNoWorseThanHold =
+                ThreatCoverageNoWorseAtResolution(
+                    transitionCoverage(route),
+                    transitionCoverage(hold),
+                    transitionSettings.temporalStepMs) &&
+                route.dangerExposureMs <=
+                    hold.dangerExposureMs + 0.01f;
+            external.makesExitProgress =
+                external.startsInThreat &&
+                route.endpointSafe &&
+                std::isfinite(route.exitDistance) &&
+                route.exitDistance + 0.5f <
+                    route.travelDistance;
+            return DecideExternalMove({
+                source,
+                controllerOwnsMovement,
+                true,
+                external,
+            });
+        };
+
+    const Vec2 horizonRouteStart(300.0f, 500.0f);
+    const Vec2 horizonRouteEnd(700.0f, 500.0f);
+    const auto evaluateHorizonRoute =
+        [&](const Threat& threat) {
+            const CandidateEvaluation route =
+                EvadeGeometry::EvaluateCandidate(
+                    horizonRouteEnd,
+                    PlannerCandidateSource::Cursor,
+                    -1,
+                    horizonRouteStart,
+                    horizonRouteEnd,
+                    0.0f,
+                    1000.0f,
+                    0.0f,
+                    1000,
+                    transitionSettings,
+                    {threat});
+            const CandidateEvaluation hold =
+                EvadeGeometry::EvaluateStationaryCandidate(
+                    horizonRouteStart,
+                    horizonRouteEnd,
+                    0.0f,
+                    0.0f,
+                    1000,
+                    transitionSettings,
+                    {threat});
+            return std::make_pair(
+                route,
+                decideGeometryRoute(route, hold));
+        };
+    const auto makeDelayedBody =
+        [&](ZDSpellType type, int activationTick, int id) {
+            SpellData spell = ZDEvadeTest::MakeSpell(type);
+            spell.spellDelay = 0;
+            spell.projectileSpeed = 0.0f;
+            spell.radius = 70.0f;
+            spell.extraEndTime = 500;
+            Threat threat = ZDEvadeTest::MakeThreat(spell);
+            threat.id = id;
+            threat.startTick = activationTick;
+            threat.endTick = activationTick + 1000;
+            threat.startPos = Vec2(450.0f, 500.0f);
+            threat.endPos = type == ZDSpellType::Line
+                ? Vec2(550.0f, 500.0f)
+                : Vec2(500.0f, 500.0f);
+            threat.direction = Vec2(1.0f, 0.0f);
+            return threat;
+        };
+
+    const auto circleBeyondHorizon =
+        evaluateHorizonRoute(
+            makeDelayedBody(
+                ZDSpellType::Circular,
+                2001,
+                2901));
+    const auto circleAtHorizon =
+        evaluateHorizonRoute(
+            makeDelayedBody(
+                ZDSpellType::Circular,
+                2000,
+                2902));
+    const auto circleActiveNow =
+        evaluateHorizonRoute(
+            makeDelayedBody(
+                ZDSpellType::Circular,
+                1000,
+                2903));
+    ExpectTrue("delayed circle beyond horizon does not enter envelope",
+               !circleBeyondHorizon.first.enteredNewThreat &&
+                   circleBeyondHorizon.first.strictSafe &&
+                   circleBeyondHorizon.second.allowNative &&
+                   !circleBeyondHorizon.second.consume);
+    ExpectTrue("delayed circle at horizon remains blocked",
+               circleAtHorizon.first.enteredNewThreat &&
+                   circleAtHorizon.second.consume &&
+                   circleAtHorizon.second.discardBlockedIntent);
+    ExpectTrue("active-now circle remains blocked",
+               circleActiveNow.first.enteredNewThreat &&
+                   circleActiveNow.second.consume &&
+                   circleActiveNow.second.discardBlockedIntent);
+
+    const auto lineBeyondHorizon =
+        evaluateHorizonRoute(
+            makeDelayedBody(
+                ZDSpellType::Line,
+                2001,
+                2911));
+    const auto lineAtHorizon =
+        evaluateHorizonRoute(
+            makeDelayedBody(
+                ZDSpellType::Line,
+                2000,
+                2912));
+    const auto lineActiveNow =
+        evaluateHorizonRoute(
+            makeDelayedBody(
+                ZDSpellType::Line,
+                1000,
+                2913));
+    ExpectTrue("delayed line beyond horizon does not enter envelope",
+               !lineBeyondHorizon.first.enteredNewThreat &&
+                   lineBeyondHorizon.first.strictSafe &&
+                   lineBeyondHorizon.second.allowNative &&
+                   !lineBeyondHorizon.second.consume);
+    ExpectTrue("delayed line at horizon remains blocked",
+               lineAtHorizon.first.enteredNewThreat &&
+                   lineAtHorizon.second.consume &&
+                   lineAtHorizon.second.discardBlockedIntent);
+    ExpectTrue("active-now line remains blocked",
+               lineActiveNow.first.enteredNewThreat &&
+                   lineActiveNow.second.consume &&
+                   lineActiveNow.second.discardBlockedIntent);
+
+    const auto explosionAtEnvelopeHorizon =
+        evaluateHorizonRoute(
+            makeExplosion(
+                Vec2(500.0f, 500.0f),
+                2000));
+    const auto explosionBeyondEnvelopeHorizon =
+        evaluateHorizonRoute(
+            makeExplosion(
+                Vec2(500.0f, 500.0f),
+                2001));
+    ExpectTrue("explosion at horizon remains blocked",
+               explosionAtEnvelopeHorizon.first.enteredNewThreat &&
+                   explosionAtEnvelopeHorizon.second.consume &&
+                   explosionAtEnvelopeHorizon.second.discardBlockedIntent);
+    ExpectTrue("explosion beyond horizon remains ignored",
+               !explosionBeyondEnvelopeHorizon.first.enteredNewThreat &&
+                   explosionBeyondEnvelopeHorizon.first.strictSafe &&
+                   explosionBeyondEnvelopeHorizon.second.allowNative);
+
+    const Vec2 circleStart(500.0f, 500.0f);
+    const Vec2 circleExit(720.0f, 500.0f);
+    const Threat transitionCircle =
+        makePersistentCircle(3001, circleStart, 80.0f);
+    const CandidateEvaluation transitionCircleHold =
+        EvadeGeometry::EvaluateStationaryCandidate(
+            circleStart,
+            circleExit,
+            0.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const CandidateEvaluation radialExit =
+        EvadeGeometry::EvaluateCandidate(
+            circleExit,
+            PlannerCandidateSource::Cursor,
+            -1,
+            circleStart,
+            circleExit,
+            0.0f,
+            500.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const ExternalMoveDecision radialExitAction =
+        decideGeometryRoute(radialExit, transitionCircleHold);
+    ExpectTrue("start-inside circle records initial and encountered identity",
+               radialExit.startThreatIdentities.Size() == 1 &&
+                   radialExit.encounteredCollisionIdentities.Size() == 1 &&
+                   radialExit.encounteredEnvelopeIdentities.Size() == 1 &&
+                   !radialExit.enteredNewThreat &&
+                   !radialExit.reenteredDanger);
+    ExpectTrue("radial circle exit is allowed as shorter best effort",
+               !radialExit.pathSafe &&
+                   radialExit.endpointSafe &&
+                   radialExit.dangerExposureMs <
+                       transitionCircleHold.dangerExposureMs &&
+                   radialExitAction.allowNative &&
+                   radialExitAction.adoptGoal &&
+                   !radialExitAction.consume);
+
+    SpellData staticLineSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    staticLineSpell.spellDelay = 0;
+    staticLineSpell.projectileSpeed = 0.0f;
+    staticLineSpell.radius = 55.0f;
+    staticLineSpell.extraEndTime = 2000;
+    Threat staticLine = ZDEvadeTest::MakeThreat(staticLineSpell);
+    staticLine.id = 3002;
+    staticLine.startPos = Vec2(300.0f, 500.0f);
+    staticLine.endPos = Vec2(700.0f, 500.0f);
+    staticLine.direction = Vec2(1.0f, 0.0f);
+    staticLine.startTick = 900;
+    staticLine.endTick = 4000;
+    staticLine.persistent = true;
+    const Vec2 lineExit(500.0f, 700.0f);
+    const CandidateEvaluation transitionLineHold =
+        EvadeGeometry::EvaluateStationaryCandidate(
+            circleStart,
+            lineExit,
+            0.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {staticLine});
+    const CandidateEvaluation perpendicularExit =
+        EvadeGeometry::EvaluateCandidate(
+            lineExit,
+            PlannerCandidateSource::Cursor,
+            -1,
+            circleStart,
+            lineExit,
+            0.0f,
+            500.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {staticLine});
+    const ExternalMoveDecision perpendicularExitAction =
+        decideGeometryRoute(
+            perpendicularExit,
+            transitionLineHold);
+    ExpectTrue("perpendicular line exit is allowed as shorter best effort",
+               perpendicularExit.startThreatIdentities.Size() == 1 &&
+                   !perpendicularExit.enteredNewThreat &&
+                   !perpendicularExit.reenteredDanger &&
+                   perpendicularExit.endpointSafe &&
+                   perpendicularExitAction.allowNative &&
+                   perpendicularExitAction.adoptGoal);
+
+    const Threat overlapA =
+        makePersistentCircle(3010, Vec2(470.0f, 500.0f), 100.0f);
+    const Threat overlapB =
+        makePersistentCircle(3011, Vec2(650.0f, 500.0f), 100.0f);
+    const Vec2 overlapStart(450.0f, 500.0f);
+    const Vec2 overlapExit(800.0f, 500.0f);
+    const CandidateEvaluation overlapHold =
+        EvadeGeometry::EvaluateStationaryCandidate(
+            overlapStart,
+            overlapExit,
+            0.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {overlapA, overlapB});
+    const CandidateEvaluation overlapTransfer =
+        EvadeGeometry::EvaluateCandidate(
+            overlapExit,
+            PlannerCandidateSource::Cursor,
+            -1,
+            overlapStart,
+            overlapExit,
+            0.0f,
+            500.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {overlapA, overlapB});
+    const ExternalMoveDecision overlapTransferAction =
+        decideGeometryRoute(overlapTransfer, overlapHold);
+    ExpectTrue("A-to-overlapping-B transition detects a new identity",
+               overlapTransfer.startThreatIdentities.Size() == 1 &&
+                   overlapTransfer.encounteredEnvelopeIdentities.Size() == 2 &&
+                   overlapTransfer.enteredNewThreat);
+    ExpectTrue("A-to-overlapping-B transfer is blocked and discarded",
+               overlapTransfer.endpointSafe &&
+                   overlapTransferAction.consume &&
+                   overlapTransferAction.discardBlockedIntent &&
+                   !overlapTransferAction.adoptGoal);
+
+    const Vec2 outsideStart(300.0f, 420.0f);
+    const Vec2 outsideEnd(700.0f, 420.0f);
+    const CandidateEvaluation tangentOutside =
+        EvadeGeometry::EvaluateCandidate(
+            outsideEnd,
+            PlannerCandidateSource::Cursor,
+            -1,
+            outsideStart,
+            outsideEnd,
+            0.0f,
+            500.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const CandidateEvaluation outsideHold =
+        EvadeGeometry::EvaluateStationaryCandidate(
+            outsideStart,
+            outsideEnd,
+            0.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const ExternalMoveDecision tangentOutsideAction =
+        decideGeometryRoute(tangentOutside, outsideHold);
+    ExpectTrue("outside tangent contact counts as entering a new identity",
+               tangentOutside.startThreatIdentities.Size() == 0 &&
+                   tangentOutside.encounteredCollisionIdentities.Size() == 1 &&
+                   tangentOutside.enteredNewThreat);
+    ExpectTrue("outside tangent contact is blocked and discarded",
+               tangentOutsideAction.consume &&
+                   tangentOutsideAction.discardBlockedIntent);
+
+    const std::vector<Vec2> outsideCrossPath = {
+        Vec2(300.0f, 500.0f),
+        Vec2(700.0f, 500.0f),
+    };
+    const CandidateEvaluation outsideCross =
+        EvadeGeometry::EvaluatePathCandidate(
+            outsideCrossPath,
+            PlannerCandidateSource::Cursor,
+            -1,
+            outsideCrossPath.back(),
+            0.0f,
+            1000.0f,
+            1.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const CandidateEvaluation outsideCrossHold =
+        EvadeGeometry::EvaluateStationaryCandidate(
+            outsideCrossPath.front(),
+            outsideCrossPath.back(),
+            0.0f,
+            1.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const ExternalMoveDecision outsideCrossAction =
+        decideGeometryRoute(
+            outsideCross,
+            outsideCrossHold);
+    ExpectTrue("outside crossing then exit enters a new identity",
+               outsideCross.startThreatIdentities.Size() == 0 &&
+                   outsideCross.enteredNewThreat &&
+                   outsideCross.endpointSafe);
+    ExpectTrue("outside crossing then exit is blocked and discarded",
+               outsideCrossAction.consume &&
+                   outsideCrossAction.discardBlockedIntent);
+
+    const std::vector<Vec2> outsideReenterPath = {
+        Vec2(300.0f, 500.0f),
+        Vec2(700.0f, 500.0f),
+        Vec2(300.0f, 500.0f),
+    };
+    const CandidateEvaluation outsideReenter =
+        EvadeGeometry::EvaluatePathCandidate(
+            outsideReenterPath,
+            PlannerCandidateSource::Cursor,
+            -1,
+            outsideReenterPath.back(),
+            0.0f,
+            1000.0f,
+            1.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const ExternalMoveDecision outsideReenterAction =
+        decideGeometryRoute(
+            outsideReenter,
+            outsideCrossHold);
+    ExpectTrue("outside crossing and re-entry records both transitions",
+               outsideReenter.startThreatIdentities.Size() == 0 &&
+                   outsideReenter.enteredNewThreat &&
+                   outsideReenter.reenteredDanger &&
+                   outsideReenter.endpointSafe);
+    ExpectTrue("outside re-entry is blocked and discarded",
+               outsideReenterAction.consume &&
+                   outsideReenterAction.discardBlockedIntent);
+
+    const std::vector<Vec2> leaveAndReenterPath = {
+        circleStart,
+        circleExit,
+        circleStart,
+        lineExit,
+    };
+    const CandidateEvaluation leaveAndReenter =
+        EvadeGeometry::EvaluatePathCandidate(
+            leaveAndReenterPath,
+            PlannerCandidateSource::Cursor,
+            -1,
+            leaveAndReenterPath.back(),
+            0.0f,
+            1000.0f,
+            1.0f,
+            1000,
+            transitionSettings,
+            {transitionCircle});
+    const ExternalMoveDecision leaveAndReenterAction =
+        decideGeometryRoute(
+            leaveAndReenter,
+            transitionCircleHold);
+    ExpectTrue("leaving then re-entering A preserves identity re-entry",
+               leaveAndReenter.startThreatIdentities.Size() == 1 &&
+                   leaveAndReenter.reenteredDanger &&
+                   !leaveAndReenter.enteredNewThreat);
+    ExpectTrue("leaving then re-entering A is blocked and discarded",
+               leaveAndReenter.endpointSafe &&
+                   leaveAndReenterAction.consume &&
+                   leaveAndReenterAction.discardBlockedIntent);
+
+    SpellData transitionMovingLineSpell =
+        ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    transitionMovingLineSpell.spellDelay = 0;
+    transitionMovingLineSpell.projectileSpeed = 500.0f;
+    transitionMovingLineSpell.radius = 40.0f;
+    transitionMovingLineSpell.extraEndTime = 0;
+    Threat transitionMovingLine =
+        ZDEvadeTest::MakeThreat(transitionMovingLineSpell);
+    transitionMovingLine.id = 3020;
+    transitionMovingLine.startPos = Vec2(100.0f, 700.0f);
+    transitionMovingLine.endPos = Vec2(1100.0f, 700.0f);
+    transitionMovingLine.direction = Vec2(1.0f, 0.0f);
+    transitionMovingLine.startTick = 1000;
+    transitionMovingLine.launchTick = 1000;
+    transitionMovingLine.endTick = 4000;
+    const Vec2 movingStart(100.0f, 700.0f);
+    const Vec2 movingExit(700.0f, 700.0f);
+    const CandidateEvaluation movingHold =
+        EvadeGeometry::EvaluateStationaryCandidate(
+            movingStart,
+            movingExit,
+            0.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {transitionMovingLine});
+    const CandidateEvaluation worseMovingExit =
+        EvadeGeometry::EvaluateCandidate(
+            movingExit,
+            PlannerCandidateSource::Cursor,
+            -1,
+            movingStart,
+            movingExit,
+            0.0f,
+            600.0f,
+            0.0f,
+            1000,
+            transitionSettings,
+            {transitionMovingLine});
+    const ExternalMoveDecision worseMovingExitAction =
+        decideGeometryRoute(worseMovingExit, movingHold);
+    ExpectTrue("outward-looking moving-line route has worse exposure",
+               worseMovingExit.startThreatIdentities.Size() == 1 &&
+                   worseMovingExit.endpointSafe &&
+                   worseMovingExit.dangerExposureMs >
+                       movingHold.dangerExposureMs);
+    ExpectTrue("worse outward-looking exposure is blocked and discarded",
+               worseMovingExitAction.consume &&
+                   worseMovingExitAction.discardBlockedIntent &&
+                   !worseMovingExitAction.adoptGoal);
+
+    const auto evaluateTransitionOrder =
+        [&](const std::vector<Threat>& threats) {
+            const CandidateEvaluation route =
+                EvadeGeometry::EvaluateCandidate(
+                    overlapExit,
+                    PlannerCandidateSource::Cursor,
+                    -1,
+                    overlapStart,
+                    overlapExit,
+                    0.0f,
+                    500.0f,
+                    0.0f,
+                    1000,
+                    transitionSettings,
+                    threats);
+            const CandidateEvaluation hold =
+                EvadeGeometry::EvaluateStationaryCandidate(
+                    overlapStart,
+                    overlapExit,
+                    0.0f,
+                    0.0f,
+                    1000,
+                    transitionSettings,
+                    threats);
+            return std::make_pair(
+                route,
+                decideGeometryRoute(route, hold));
+        };
+    const auto orderedTransition =
+        evaluateTransitionOrder({overlapA, overlapB});
+    const auto reversedTransition =
+        evaluateTransitionOrder({overlapB, overlapA});
+    ExpectTrue("multi-threat transition data is input-order independent",
+               orderedTransition.first.startThreatIdentities.Size() ==
+                       reversedTransition.first.startThreatIdentities.Size() &&
+                   orderedTransition.first.encounteredEnvelopeIdentities.Size() ==
+                       reversedTransition.first.encounteredEnvelopeIdentities.Size() &&
+                   orderedTransition.first.enteredNewThreat ==
+                       reversedTransition.first.enteredNewThreat &&
+                   orderedTransition.first.reenteredDanger ==
+                       reversedTransition.first.reenteredDanger);
+    ExpectTrue("multi-threat action is input-order independent",
+               orderedTransition.second.allowNative ==
+                       reversedTransition.second.allowNative &&
+                   orderedTransition.second.consume ==
+                       reversedTransition.second.consume &&
+                   orderedTransition.second.adoptGoal ==
+                       reversedTransition.second.adoptGoal &&
+                   orderedTransition.second.discardBlockedIntent ==
+                       reversedTransition.second.discardBlockedIntent);
+
+    SpellData lifecycleLine = ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    lifecycleLine.spellDelay = 0;
+    lifecycleLine.range = 1150.0f;
+    lifecycleLine.projectileSpeed = 2000.0f;
+    lifecycleLine.radius = 70.0f;
+    Threat liveLifecycle = ZDEvadeTest::MakeThreat(lifecycleLine);
+    liveLifecycle.id = 770;
+    liveLifecycle.startTick = 1000;
+    liveLifecycle.launchTick = 1000;
+    liveLifecycle.endPos = Vec2(1150.0f, 0.0f);
+    liveLifecycle.authoredEndPos = liveLifecycle.endPos;
+    liveLifecycle.direction = Vec2(1.0f, 0.0f);
+    liveLifecycle.observedHead = Vec2(400.0f, 0.0f);
+    liveLifecycle.observedTick = 1200;
+    liveLifecycle.observedSpeed = 2000.0f;
+    liveLifecycle.endTick = 1575;
+    liveLifecycle.missileBound = true;
+    liveLifecycle.missileNetworkId = 77u;
+    const Vec2 headBeforeMisses = liveLifecycle.HeadAtTick(1300);
+    const CollisionIdentity identityBeforeMisses =
+        MakeCollisionIdentity(liveLifecycle.id, 0u);
+    const int stableThreatId = liveLifecycle.id;
+    const std::uint64_t fingerprintBeforeMisses =
+        StableThreatSetFingerprint({liveLifecycle.id});
+    for (int miss = 1; miss <= 10; ++miss) {
+        liveLifecycle.missileMissingSinceTick =
+            liveLifecycle.missileMissingSinceTick < 0
+            ? 1300
+            : liveLifecycle.missileMissingSinceTick;
+        ExpectTrue("live bound threat remains stored past predicted end",
+                   !liveLifecycle.IsExpiredAt(1575 + miss * 100));
+        ExpectTrue("live bound threat body remains drawable past arrival",
+                   liveLifecycle.IsBodyActiveAt(1575 + miss * 100));
+        ExpectTrue("lookup miss does not alter planner collision identity",
+                   MakeCollisionIdentity(liveLifecycle.id, 0u) ==
+                       identityBeforeMisses);
+    }
+    ExpectEq("lookup misses retain the same threat ID",
+             liveLifecycle.id,
+             stableThreatId);
+    ExpectTrue("lookup misses retain planner threat-set fingerprint",
+               StableThreatSetFingerprint({liveLifecycle.id}) ==
+                   fingerprintBeforeMisses);
+    ExpectNear("missing live missile freezes at last observed head",
+               liveLifecycle.HeadAtTick(2400).x,
+               liveLifecycle.observedHead.x);
+    ExpectTrue("missing live missile retains last-head to endpoint corridor",
+               EvadeGeometry::ContainsAt(
+                   liveLifecycle,
+                   Vec2(800.0f, 0.0f),
+                   0.0f,
+                   0.0f,
+                   2400));
+    ExpectTrue("planner retains frozen missing corridor through endpoint",
+               EvadeGeometry::ContainsAt(
+                   liveLifecycle,
+                   liveLifecycle.endPos,
+                   0.0f,
+                   0.0f,
+                   2400));
+    ExpectTrue("frozen missing corridor remains lifecycle-active",
+               EvadeGeometry::ThreatActiveAt(liveLifecycle, 2400));
+    liveLifecycle.missileMissingSinceTick = -1;
+    liveLifecycle.observedHead = Vec2(700.0f, 0.0f);
+    liveLifecycle.observedTick = 1500;
+    ExpectTrue("reacquisition advances rather than rewinds missile head",
+               liveLifecycle.HeadAtTick(1500).x >= headBeforeMisses.x);
+    ExpectEq("reacquisition preserves threat ID",
+             liveLifecycle.id,
+             stableThreatId);
+
+    Threat terminatedLifecycle = liveLifecycle;
+    terminatedLifecycle.missileBound = false;
+    terminatedLifecycle.projectileTerminated = true;
+    terminatedLifecycle.projectileTerminationTick = 1600;
+    terminatedLifecycle.endTick = 1600;
+    ExpectTrue("confirmed line termination suppresses projectile body",
+               !terminatedLifecycle.IsBodyActiveAt(1600));
+
+    SpellData terminalExplosionLine = lifecycleLine;
+    terminalExplosionLine.hasEndExplosion = true;
+    terminalExplosionLine.secondaryRadius = 180.0f;
+    terminalExplosionLine.endExplosionDelay = 0;
+    terminalExplosionLine.endExplosionDuration = 500;
+    Threat retainedTermination =
+        ZDEvadeTest::MakeThreat(terminalExplosionLine);
+    retainedTermination.missileBound = false;
+    retainedTermination.projectileTerminated = true;
+    retainedTermination.projectileTerminationTick = 1600;
+    retainedTermination.endTick = 2100;
+    ExpectTrue("terminated line retains configured explosion only",
+               !retainedTermination.IsBodyActiveAt(1700) &&
+                   retainedTermination.IsEndExplosionActiveAt(1700));
+
+    SpellData shortExplosionLine = terminalExplosionLine;
+    shortExplosionLine.endExplosionDuration = 1;
+    Threat shortExplosion =
+        ZDEvadeTest::MakeThreat(shortExplosionLine);
+    shortExplosion.missileBound = false;
+    shortExplosion.projectileTerminated = true;
+    shortExplosion.projectileTerminationTick = 2000;
+    shortExplosion.endPos = Vec2(600.0f, 600.0f);
+    shortExplosion.endTick = 2100;
+    ExpectTrue("short explosion renderer predicate uses canonical 100ms",
+               shortExplosion.IsEndExplosionActiveAt(2099));
+    ExpectTrue("short explosion planner matches renderer through 100ms",
+               EvadeGeometry::ContainsAt(
+                   shortExplosion,
+                   shortExplosion.endPos,
+                   0.0f,
+                   0.0f,
+                   2099));
+    ExpectTrue("short explosion renderer and planner end after 100ms",
+               !shortExplosion.IsEndExplosionActiveAt(2101) &&
+                   !EvadeGeometry::ContainsAt(
+                       shortExplosion,
+                       shortExplosion.endPos,
+                       0.0f,
+                       0.0f,
+                       2101));
 
     return ZDEvadeTest::Finish("ZDEVADE GEOMETRY RUNTIME");
 }

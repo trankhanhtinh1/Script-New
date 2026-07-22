@@ -181,10 +181,23 @@ public:
             heroRadius,
             extraBuffer,
             threat.PositionUncertainty());
-        const float angularBuffer = expansion / std::max(50.0f, distance);
-        const float outsideAngle = boundaryAngle + (boundaryAngle >= 0.0f ? angularBuffer : -angularBuffer);
-        output.push_back(threat.startPos + Rotate(baseDirection, outsideAngle) * std::max(50.0f, distance));
-        output.push_back(threat.startPos + Rotate(baseDirection, -outsideAngle) * std::max(50.0f, distance));
+        const float exitDistance = std::max({
+            50.0f,
+            distance,
+            expansion,
+        });
+        const float angularBuffer = std::asin(std::clamp(
+            expansion / exitDistance,
+            0.0f,
+            1.0f));
+        const float outsideAngle = boundaryAngle +
+            (boundaryAngle >= 0.0f ? angularBuffer : -angularBuffer);
+        output.push_back(
+            threat.startPos +
+            Rotate(baseDirection, outsideAngle) * exitDistance);
+        output.push_back(
+            threat.startPos +
+            Rotate(baseDirection, -outsideAngle) * exitDistance);
         for (int side = -1; side <= 1; side += 2) {
             const Vec2 boundaryDirection = Rotate(
                 baseDirection,
@@ -413,7 +426,8 @@ public:
         result.position = candidate;
         result.source = PlannerCandidateSource::EvadeSpell;
         result.travelDistance = heroPos.Distance(candidate);
-        result.exitDistance = result.travelDistance;
+        result.exitDistance =
+            std::numeric_limits<float>::infinity();
         result.arrivalTimeMs = std::max(0.0f, castDelayMs);
         result.cursorDistance = candidate.Distance(cursorPos);
         result.valid = candidate.IsValid() && !candidate.IsZero() && result.travelDistance >= 1.0f;
@@ -446,6 +460,28 @@ public:
             if (threat.IsExpiredAt(now)) continue;
             const CollisionIdentity identity =
                 MakeCollisionIdentity(threat.id, threatIndex);
+            const int originImpactTick =
+                ImpactTickAt(threat, heroPos);
+            const bool originPredictedEnvelope =
+                TickDifference(originImpactTick, now) <=
+                    static_cast<int>(
+                        settings.maxThreatHorizonMs) &&
+                TickDifference(originImpactTick, now) >= -100 &&
+                ContainsAt(
+                    threat,
+                    heroPos,
+                    heroRadius,
+                    settings.pathBuffer,
+                    std::max(now, originImpactTick));
+            if (originPredictedEnvelope ||
+                OccupiesAt(
+                    threat,
+                    heroPos,
+                    heroRadius,
+                    settings.pathBuffer,
+                    now)) {
+                result.startThreatIdentities.Add(identity);
+            }
             const ContinuousCollisionResult originCollision = AnalyzeBlinkOrigin(
                 threat,
                 heroPos,
@@ -586,6 +622,20 @@ public:
                 &exposureDangers);
         result.dangerExposureMs +=
             destinationExposure.dangerExposureMs;
+        result.endThreatIdentities.AddAll(
+            destinationExposure.startThreatIdentities);
+        result.endThreatIdentities.AddAll(
+            endpointCollisionIdentities);
+        result.exitedStartEnvelope =
+            result.startThreatIdentities.Size() > 0 &&
+            !result.endThreatIdentities.Intersects(
+                result.startThreatIdentities);
+        result.exitDistance =
+            result.startThreatIdentities.Size() == 0
+            ? 0.0f
+            : result.exitedStartEnvelope
+                ? result.travelDistance
+                : std::numeric_limits<float>::infinity();
         result.summedExposureDanger =
             exposureDangers.SummedDanger();
         result.collisionCount =
@@ -599,7 +649,12 @@ public:
             : firstCollisionMs;
         result.timingSafe = firstCollisionMs == FLT_MAX ||
             firstCollisionMs >= settings.minimumTimeMarginMs;
-        result.strictSafe = result.pathSafe && result.endpointSafe && result.timingSafe;
+        result.strictSafe =
+            result.pathSafe &&
+            result.endpointSafe &&
+            result.timingSafe &&
+            (result.startThreatIdentities.Size() == 0 ||
+             result.exitedStartEnvelope);
         result.rejectReason = result.strictSafe
             ? PlannerRejectReason::None
             : !result.endpointSafe
@@ -781,7 +836,9 @@ private:
                 TickDifference(TravelStartTick(threat), now));
             const float travelEndMs = static_cast<float>(
                 TickDifference(TravelEndTick(threat), now));
-            const float terminalEndMs = threat.persistent
+            const float terminalEndMs =
+                (threat.missileBound && !threat.projectileTerminated) ||
+                    threat.persistent
                 ? analysisEndMs
                 : static_cast<float>(TickDifference(
                     threat.MovingLineTerminalActiveEndTick(),
@@ -1050,6 +1107,20 @@ private:
             MergeStationaryIntervals(accumulator.intervals);
             if (accumulator.intervals.empty()) continue;
             collisionIdentities.Add(accumulator.identity);
+            result.encounteredCollisionIdentities.Add(
+                accumulator.identity);
+            result.encounteredEnvelopeIdentities.Add(
+                accumulator.identity);
+            if (accumulator.intervals.front().beginMs <=
+                start + 0.001f) {
+                result.startThreatIdentities.Add(
+                    accumulator.identity);
+            }
+            if (accumulator.intervals.back().endMs + 0.001f >=
+                horizon) {
+                result.endThreatIdentities.Add(
+                    accumulator.identity);
+            }
             result.maxDanger = std::max(
                 result.maxDanger,
                 accumulator.danger);
@@ -1097,13 +1168,19 @@ private:
             exposureDangersOut->AddAll(exposureDangers);
         result.summedExposureDanger =
             exposureDangers.SummedDanger();
+        result.enteredNewThreat =
+            result.encounteredCollisionIdentities.AnyNotIn(
+                result.startThreatIdentities) ||
+            result.encounteredEnvelopeIdentities.AnyNotIn(
+                result.startThreatIdentities);
         if (result.minimumClearance == FLT_MAX)
             result.minimumClearance = settings.maxSearchRadius;
         result.pathSafe = result.pathDanger == 0;
         result.endpointSafe = true;
-        result.exitDistance = result.pathSafe
+        result.exitDistance =
+            result.startThreatIdentities.Size() == 0
             ? 0.0f
-            : settings.maxSearchRadius;
+            : std::numeric_limits<float>::infinity();
         result.timeMarginMs =
             result.firstCollisionTimeMs == FLT_MAX
                 ? horizon
@@ -1114,7 +1191,9 @@ private:
                 settings.minimumTimeMarginMs;
         result.strictSafe =
             result.pathSafe &&
-            result.timingSafe;
+            result.timingSafe &&
+            !result.enteredNewThreat &&
+            !result.reenteredDanger;
         result.rejectReason = result.strictSafe
             ? PlannerRejectReason::None
             : !result.pathSafe
@@ -1219,6 +1298,20 @@ private:
                 result.maxDanger,
                 accumulator.danger);
             collisionIdentities.Add(accumulator.identity);
+            result.encounteredCollisionIdentities.Add(
+                accumulator.identity);
+            result.encounteredEnvelopeIdentities.Add(
+                accumulator.identity);
+            if (accumulator.intervals.front().beginMs <=
+                start + 0.001f) {
+                result.startThreatIdentities.Add(
+                    accumulator.identity);
+            }
+            if (accumulator.intervals.back().endMs + 0.001f >=
+                horizon) {
+                result.endThreatIdentities.Add(
+                    accumulator.identity);
+            }
             result.firstCollisionTimeMs = std::min(
                 result.firstCollisionTimeMs,
                 accumulator.intervals.front().beginMs);
@@ -1228,6 +1321,11 @@ private:
         if (collisionIdentitiesOut)
             collisionIdentitiesOut->AddAll(collisionIdentities);
         result.endpointSafe = result.endpointDanger == 0;
+        result.enteredNewThreat =
+            result.encounteredCollisionIdentities.AnyNotIn(
+                result.startThreatIdentities) ||
+            result.encounteredEnvelopeIdentities.AnyNotIn(
+                result.startThreatIdentities);
         result.timeMarginMs =
             result.firstCollisionTimeMs == FLT_MAX
                 ? horizon
@@ -1239,7 +1337,9 @@ private:
         result.strictSafe =
             result.pathSafe &&
             result.endpointSafe &&
-            result.timingSafe;
+            result.timingSafe &&
+            !result.enteredNewThreat &&
+            !result.reenteredDanger;
         result.rejectReason = result.strictSafe
             ? PlannerRejectReason::None
             : !result.endpointSafe
@@ -1325,6 +1425,8 @@ private:
         int maximumPathDanger = 0;
         CollisionIdentitySet collisionIdentities;
         CollisionIdentitySet endpointCollisionIdentities;
+        CollisionIdentitySet previousEnvelopeIdentities;
+        CollisionIdentitySet exitedEnvelopeIdentities;
         std::vector<IdentityExposureAccumulator> exposureAccumulators;
         ExposureDangerSet exposureDangers;
         for (std::size_t threatIndex = 0;
@@ -1414,6 +1516,10 @@ private:
                     envelopeCollisionIdentities.Add(identity)) {
                     envelopeDanger += threat.Danger();
                 }
+                if (predictedEnvelope || occupied) {
+                    result.encounteredEnvelopeIdentities.Add(
+                        identity);
+                }
                 if (ThreatActiveAt(threat, sampleTick)) {
                     minimumClearance = std::min(
                         minimumClearance,
@@ -1425,6 +1531,8 @@ private:
                             sampleTick));
                 }
                 if (!occupied) continue;
+                result.encounteredCollisionIdentities.Add(
+                    identity);
                 const int danger = threat.Danger();
                 if (pointCollisionIdentities.Add(identity))
                     pointDanger += danger;
@@ -1456,13 +1564,39 @@ private:
             }
             maximumDanger = std::max(maximumDanger, pointMaxDanger);
             maximumPathDanger = std::max(maximumPathDanger, pointDanger);
-            if (envelopeDanger == 0) {
-                if (!foundEnvelopeSafe) {
-                    foundEnvelopeSafe = true;
-                    firstSafeDistance = travelled;
+            if (step == 0) {
+                result.startThreatIdentities.AddAll(
+                    envelopeCollisionIdentities);
+            } else {
+                previousEnvelopeIdentities.ForEach(
+                    [&](const CollisionIdentity& identity) {
+                        if (!envelopeCollisionIdentities.Contains(
+                                identity)) {
+                            exitedEnvelopeIdentities.Add(identity);
+                        }
+                    });
+                if (envelopeCollisionIdentities.Intersects(
+                        exitedEnvelopeIdentities)) {
+                    envelopeReentered = true;
                 }
-            } else if (foundEnvelopeSafe) {
-                envelopeReentered = true;
+            }
+            previousEnvelopeIdentities =
+                envelopeCollisionIdentities;
+            if (step == steps) {
+                result.endThreatIdentities.AddAll(
+                    envelopeCollisionIdentities);
+            }
+            const bool startsOutsideEveryEnvelope =
+                result.startThreatIdentities.Size() == 0;
+            const bool clearedEveryStartingEnvelope =
+                !startsOutsideEveryEnvelope &&
+                !envelopeCollisionIdentities.Intersects(
+                    result.startThreatIdentities);
+            if (!foundEnvelopeSafe &&
+                ((step == 0 && startsOutsideEveryEnvelope) ||
+                 (step > 0 && clearedEveryStartingEnvelope))) {
+                foundEnvelopeSafe = true;
+                firstSafeDistance = travelled;
             }
             if (pointDanger > 0) actualCollision = true;
         }
@@ -1481,6 +1615,17 @@ private:
             const float pathAnalysisEndMs = std::min(
                 result.arrivalTimeMs,
                 std::max(0.0f, settings.maxThreatHorizonMs));
+            if (GeometricEnvelopeIntersects(
+                    threat,
+                    heroPos,
+                    candidate,
+                    heroRadius,
+                    settings.pathBuffer,
+                    now,
+                    settings.maxThreatHorizonMs)) {
+                result.encounteredEnvelopeIdentities.Add(
+                    identity);
+            }
             const ContinuousCollisionResult collision = AnalyzeThreatPath(
                 threat,
                 heroPos,
@@ -1505,6 +1650,10 @@ private:
             const bool pathCollision = collision.collides;
             if (pathCollision) {
                 actualCollision = true;
+                result.encounteredCollisionIdentities.Add(
+                    identity);
+                result.encounteredEnvelopeIdentities.Add(
+                    identity);
                 firstCollisionMs = std::min(
                     firstCollisionMs,
                     collision.firstContactMs);
@@ -1600,6 +1749,11 @@ private:
                 }
             }
             if (endpointCollision) {
+                result.encounteredCollisionIdentities.Add(
+                    identity);
+                result.encounteredEnvelopeIdentities.Add(
+                    identity);
+                result.endThreatIdentities.Add(identity);
                 if (endpointCollisionIdentities.Add(identity))
                     endpointDanger += threat.Danger();
                 endpointMaxDanger = std::max(
@@ -1646,6 +1800,18 @@ private:
                     &endpointHoldIdentities,
                     &exposureDangers);
             collisionIdentities.AddAll(endpointHoldIdentities);
+            result.encounteredCollisionIdentities.AddAll(
+                endpointHold.encounteredCollisionIdentities);
+            result.encounteredEnvelopeIdentities.AddAll(
+                endpointHold.encounteredEnvelopeIdentities);
+            result.endThreatIdentities.AddAll(
+                endpointHold.startThreatIdentities);
+            if (endpointHold.encounteredCollisionIdentities.Intersects(
+                    exitedEnvelopeIdentities) ||
+                endpointHold.encounteredEnvelopeIdentities.Intersects(
+                    exitedEnvelopeIdentities)) {
+                envelopeReentered = true;
+            }
             endpointDanger = std::max(
                 endpointDanger,
                 endpointHold.endpointDanger);
@@ -1665,10 +1831,8 @@ private:
                 firstCollisionMs,
                 endpointHold.firstCollisionTimeMs);
             exposureMs += endpointHold.dangerExposureMs;
-            if (!endpointHold.pathSafe) {
+            if (!endpointHold.pathSafe)
                 actualCollision = true;
-                if (foundEnvelopeSafe) envelopeReentered = true;
-            }
         }
         if (collisionIdentitiesOut)
             collisionIdentitiesOut->AddAll(collisionIdentities);
@@ -1684,7 +1848,17 @@ private:
         result.endpointSafe = endpointDanger == 0;
         result.pathSafe = !actualCollision;
         result.reenteredDanger = envelopeReentered;
-        result.exitDistance = foundEnvelopeSafe ? firstSafeDistance : result.travelDistance;
+        result.enteredNewThreat =
+            result.encounteredCollisionIdentities.AnyNotIn(
+                result.startThreatIdentities) ||
+            result.encounteredEnvelopeIdentities.AnyNotIn(
+                result.startThreatIdentities);
+        result.exitedStartEnvelope =
+            result.startThreatIdentities.Size() > 0 &&
+            foundEnvelopeSafe;
+        result.exitDistance = foundEnvelopeSafe
+            ? firstSafeDistance
+            : std::numeric_limits<float>::infinity();
         result.firstCollisionTimeMs = firstCollisionMs;
         result.dangerExposureMs = exposureMs;
         result.summedExposureDanger =
@@ -1695,12 +1869,20 @@ private:
             : firstCollisionMs;
         result.timingSafe = firstCollisionMs == FLT_MAX ||
             firstCollisionMs >= settings.minimumTimeMarginMs;
-        result.strictSafe = result.endpointSafe && result.pathSafe && result.timingSafe;
+        result.strictSafe =
+            result.endpointSafe &&
+            result.pathSafe &&
+            result.timingSafe &&
+            !result.reenteredDanger &&
+            !result.enteredNewThreat &&
+            (result.startThreatIdentities.Size() == 0 ||
+             result.exitedStartEnvelope);
         if (result.strictSafe) {
             result.rejectReason = PlannerRejectReason::None;
         } else if (!result.endpointSafe) {
             result.rejectReason = PlannerRejectReason::EndpointDanger;
-        } else if (result.reenteredDanger) {
+        } else if (result.reenteredDanger ||
+                   result.enteredNewThreat) {
             result.rejectReason = PlannerRejectReason::Reentry;
         } else if (!result.pathSafe) {
             result.rejectReason = PlannerRejectReason::PathDanger;
@@ -1734,7 +1916,8 @@ public:
         result.position = path.empty() ? Vec2() : path.back();
         result.cursorDistance = path.empty() ? FLT_MAX : path.back().Distance(cursorPos);
         result.travelDistance = EvadeGeometryMath::PolylineLength(path);
-        result.exitDistance = result.travelDistance;
+        result.exitDistance =
+            std::numeric_limits<float>::infinity();
         result.valid = path.size() >= 2 && result.position.IsValid() &&
             !result.position.IsZero() && result.travelDistance >= 1.0f;
         if (!result.valid) {
@@ -1769,7 +1952,10 @@ public:
         float distanceBefore = 0.0f;
         bool foundExit = false;
         bool firstMotionSegment = true;
+        bool firstEvaluatedSegment = true;
         CollisionIdentitySet collisionIdentities;
+        CollisionIdentitySet activeThreatIdentities;
+        CollisionIdentitySet exitedThreatIdentities;
         ExposureDangerSet exposureDangers;
         for (std::size_t index = 1; index < path.size(); ++index) {
             const Vec2& segmentStart = path[index - 1];
@@ -1851,6 +2037,45 @@ public:
                 result.rejectReason = segment.rejectReason;
                 return result;
             }
+            if (firstEvaluatedSegment) {
+                result.startThreatIdentities.AddAll(
+                    segment.startThreatIdentities);
+                activeThreatIdentities =
+                    segment.startThreatIdentities;
+                if (result.startThreatIdentities.Size() == 0) {
+                    result.exitDistance = 0.0f;
+                    foundExit = true;
+                }
+                firstEvaluatedSegment = false;
+            }
+            if (segment.encounteredCollisionIdentities.Intersects(
+                    exitedThreatIdentities) ||
+                segment.encounteredEnvelopeIdentities.Intersects(
+                    exitedThreatIdentities)) {
+                result.reenteredDanger = true;
+            }
+            result.encounteredCollisionIdentities.AddAll(
+                segment.encounteredCollisionIdentities);
+            result.encounteredEnvelopeIdentities.AddAll(
+                segment.encounteredEnvelopeIdentities);
+            activeThreatIdentities.ForEach(
+                [&](const CollisionIdentity& identity) {
+                    if (!segment.endThreatIdentities.Contains(
+                            identity)) {
+                        exitedThreatIdentities.Add(identity);
+                    }
+                });
+            segment.encounteredEnvelopeIdentities.ForEach(
+                [&](const CollisionIdentity& identity) {
+                    if (!segment.endThreatIdentities.Contains(
+                            identity)) {
+                        exitedThreatIdentities.Add(identity);
+                    }
+                });
+            activeThreatIdentities =
+                segment.endThreatIdentities;
+            result.endThreatIdentities =
+                segment.endThreatIdentities;
             result.pathSafe = result.pathSafe && segment.pathSafe;
             result.pathDanger = std::max(result.pathDanger, segment.pathDanger);
             result.maxDanger = std::max(result.maxDanger, segment.maxDanger);
@@ -1859,8 +2084,11 @@ public:
             result.minimumClearance = std::min(
                 result.minimumClearance,
                 segment.minimumClearance);
-            if (!foundExit && segment.exitDistance < segment.travelDistance) {
+            if (!foundExit &&
+                segment.exitedStartEnvelope &&
+                std::isfinite(segment.exitDistance)) {
                 result.exitDistance = distanceBefore + segment.exitDistance;
+                result.exitedStartEnvelope = true;
                 foundExit = true;
             }
             if (segment.firstCollisionTimeMs != FLT_MAX) {
@@ -1884,6 +2112,11 @@ public:
             collisionIdentitiesOut->AddAll(collisionIdentities);
         result.summedExposureDanger =
             exposureDangers.SummedDanger();
+        result.enteredNewThreat =
+            result.encounteredCollisionIdentities.AnyNotIn(
+                result.startThreatIdentities) ||
+            result.encounteredEnvelopeIdentities.AnyNotIn(
+                result.startThreatIdentities);
         result.arrivalTimeMs = fullArrivalTimeMs;
         if (result.minimumClearance == FLT_MAX)
             result.minimumClearance = settings.maxSearchRadius;
@@ -1892,16 +2125,26 @@ public:
             : result.firstCollisionTimeMs;
         result.timingSafe = result.firstCollisionTimeMs == FLT_MAX ||
             result.firstCollisionTimeMs >= settings.minimumTimeMarginMs;
-        result.strictSafe = result.pathSafe && result.endpointSafe && result.timingSafe;
+        result.strictSafe =
+            result.pathSafe &&
+            result.endpointSafe &&
+            result.timingSafe &&
+            !result.reenteredDanger &&
+            !result.enteredNewThreat &&
+            (result.startThreatIdentities.Size() == 0 ||
+             result.exitedStartEnvelope);
         result.rejectReason = result.strictSafe
             ? PlannerRejectReason::None
             : !result.endpointSafe
                 ? PlannerRejectReason::EndpointDanger
-                : result.reenteredDanger
+                : result.reenteredDanger ||
+                        result.enteredNewThreat
                     ? PlannerRejectReason::Reentry
                     : !result.pathSafe
                         ? PlannerRejectReason::PathDanger
-                        : PlannerRejectReason::Late;
+                        : !result.timingSafe
+                            ? PlannerRejectReason::Late
+                            : PlannerRejectReason::NoExit;
         return result;
     }
 
@@ -1922,6 +2165,180 @@ private:
             if (accumulators[index].identity == identity) return index;
         }
         return accumulators.size();
+    }
+
+    static bool ThreatBodyRelevantWithinHorizon(
+        const Threat& threat,
+        int now,
+        float horizonMs) {
+        if (threat.expired) return false;
+        if (ThreatBodyActiveAt(threat, now)) return true;
+
+        const float safeHorizonMs = std::clamp(
+            std::isfinite(horizonMs)
+                ? horizonMs
+                : kMaximumAnalysisHorizonMs,
+            0.0f,
+            kMaximumAnalysisHorizonMs);
+        const int horizonTick = SaturatingTickAdd(
+            now,
+            ClampTickOffset(std::floor(safeHorizonMs)));
+        int activeStartTick = 0;
+        int activeEndTick = 0;
+
+        if (threat.projectileTerminated) {
+            if (threat.Type() != ZDSpellType::Circular ||
+                threat.projectileTerminationTick <= 0 ||
+                threat.ExtraEndTime() <= 0) {
+                return false;
+            }
+            activeStartTick =
+                threat.projectileTerminationTick;
+            activeEndTick = SaturatingTickAdd(
+                activeStartTick,
+                threat.ExtraEndTime());
+        } else if (
+            threat.Type() == ZDSpellType::Line &&
+            threat.HasTravelSpeed()) {
+            activeStartTick = TravelStartTick(threat);
+            activeEndTick = threat.persistent
+                ? std::numeric_limits<int>::max()
+                : threat.MovingLineTerminalActiveEndTick();
+        } else {
+            activeStartTick =
+                threat.Type() == ZDSpellType::Circular &&
+                    threat.HasTravelSpeed()
+                ? ImpactTickAt(threat, threat.endPos)
+                : SaturatingTickAdd(
+                    threat.startTick,
+                    threat.Delay());
+            activeEndTick = threat.persistent
+                ? std::numeric_limits<int>::max()
+                : std::min(
+                    SaturatingTickAdd(
+                        activeStartTick,
+                        std::max(
+                            100,
+                            threat.ExtraEndTime())),
+                    SaturatingTickAdd(
+                        threat.endTick,
+                        100));
+        }
+        return !TickAfter(activeStartTick, horizonTick) &&
+            !TickAfter(now, activeEndTick);
+    }
+
+    static bool GeometricEnvelopeIntersects(
+        const Threat& threat,
+        const Vec2& routeStart,
+        const Vec2& routeEnd,
+        float heroRadius,
+        float buffer,
+        int now,
+        float horizonMs) {
+        const float uncertainty =
+            threat.PositionUncertainty();
+        const float radius = std::max(
+            0.0f,
+            threat.Radius() +
+                heroRadius +
+                buffer +
+                uncertainty);
+        bool intersects = false;
+        if (ThreatBodyRelevantWithinHorizon(
+                threat,
+                now,
+                horizonMs)) {
+            switch (threat.Type()) {
+            case ZDSpellType::Line: {
+                const Vec2 envelopeStart =
+                    threat.HasTravelSpeed()
+                        ? threat.HeadAtTick(now)
+                        : threat.startPos;
+                intersects =
+                    EvadeGeometryMath::SegmentSegmentDistance(
+                        routeStart,
+                        routeEnd,
+                        envelopeStart,
+                        threat.endPos) <= radius;
+                break;
+            }
+            case ZDSpellType::Circular:
+                intersects =
+                    EvadeGeometryMath::DistanceToSegment(
+                        threat.endPos,
+                        routeStart,
+                        routeEnd) <= radius;
+                break;
+            case ZDSpellType::Ring: {
+                const float inner = std::max(
+                    0.0f,
+                    threat.InnerRadius() -
+                        heroRadius -
+                        buffer -
+                        uncertainty);
+                const auto clearance = [&](const Vec2& point) {
+                    return RingSignedClearance(
+                        point,
+                        threat.endPos,
+                        inner,
+                        radius);
+                };
+                intersects =
+                    EvadeGeometryMath::MinimumSignedDistanceAlongSegment(
+                        routeStart,
+                        routeEnd,
+                        clearance,
+                        64) <= 0.0f;
+                break;
+            }
+            case ZDSpellType::Cone: {
+                if (!threat.HasValidConeAngle())
+                    return true;
+                const Vec2 direction =
+                    threat.direction.IsZero()
+                        ? (threat.endPos -
+                           threat.startPos).Normalized()
+                        : threat.direction;
+                intersects =
+                    EvadeGeometryMath::FirstContactMovingPointSector(
+                        routeStart,
+                        routeEnd,
+                        threat.startPos,
+                        direction,
+                        threat.Range(),
+                        threat.Angle() *
+                            0.5f *
+                            kDegToRad,
+                        ConeExpansion(
+                            threat,
+                            heroRadius,
+                            buffer,
+                            uncertainty),
+                        0.02f) != FLT_MAX;
+                break;
+            }
+            case ZDSpellType::Arc:
+                return true;
+            }
+        }
+        if (intersects) return true;
+        if (!threat.HasEndExplosionArea() ||
+            !FutureTickWithinHorizon(
+                threat.EndExplosionStartTick(),
+                now,
+                horizonMs)) {
+            return false;
+        }
+        const float explosionRadius =
+            threat.EndExplosionRadius() +
+            heroRadius +
+            buffer +
+            uncertainty;
+        return EvadeGeometryMath::DistanceToSegment(
+            threat.EndExplosionCenter(),
+            routeStart,
+            routeEnd) <= explosionRadius;
     }
 
     static ContinuousCollisionResult MergeContinuousCollisions(
@@ -2195,32 +2612,7 @@ private:
     }
 
     static bool ThreatBodyActiveAt(const Threat& threat, int tick) {
-        if (threat.expired)
-            return false;
-        if (threat.projectileTerminated) {
-            return threat.Type() == ZDSpellType::Circular &&
-                threat.projectileTerminationTick > 0 &&
-                threat.ExtraEndTime() > 0 &&
-                tick >= threat.projectileTerminationTick &&
-                !TickAfter(
-                    tick,
-                    SaturatingTickAdd(
-                        threat.projectileTerminationTick,
-                        threat.ExtraEndTime()));
-        }
-        if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) {
-            return tick >= TravelStartTick(threat) &&
-                (threat.persistent ||
-                 !TickAfter(tick, threat.MovingLineTerminalActiveEndTick()));
-        }
-        if (!threat.persistent &&
-            TickAfter(tick, SaturatingTickAdd(threat.endTick, 100))) return false;
-        const int activation = threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()
-            ? ImpactTickAt(threat, threat.endPos)
-            : SaturatingTickAdd(threat.startTick, threat.Delay());
-        const int persistence = std::max(100, threat.ExtraEndTime());
-        return tick >= activation && (threat.persistent ||
-            tick <= SaturatingTickAdd(activation, persistence));
+        return threat.IsBodyActiveAt(tick);
     }
 
     static int TravelStartTick(const Threat& threat) {
@@ -2472,7 +2864,9 @@ private:
             static_cast<float>(TickDifference(TravelEndTick(threat), now));
         const float activeStartMs = std::max({0.0f, analysisStartMs, travelStartMs});
         const float requestedHorizonMs = std::max(0.0f, horizonMs);
-        const float activeEndMs = threat.persistent
+        const float activeEndMs =
+            (threat.missileBound && !threat.projectileTerminated) ||
+                threat.persistent
             ? requestedHorizonMs
             : std::min(
                 requestedHorizonMs,
