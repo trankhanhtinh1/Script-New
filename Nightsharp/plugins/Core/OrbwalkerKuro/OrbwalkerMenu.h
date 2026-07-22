@@ -8,9 +8,9 @@
 
 #include <algorithm>
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 class OrbwalkerMenu {
 public:

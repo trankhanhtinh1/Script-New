@@ -30,9 +30,9 @@
 #include <string>
 #include <vector>
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 class OrbwalkerBase : public IOrbwalker {
 public:

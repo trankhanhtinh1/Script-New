@@ -1,8 +1,8 @@
 #pragma once
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     : menu_(parentMenu) {

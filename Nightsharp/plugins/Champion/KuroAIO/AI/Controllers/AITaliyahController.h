@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -432,7 +432,7 @@ inline float ExpectedQRawDamage(const AIBaseClient& target,
     const int rank = SpellRank(0);
     const float ap = player.AP();
     const bool monster = target.IsMinion() &&
-        Core::Objects::IsJungleMonster(target.Address());
+        ::Core::Objects::IsJungleMonster(target.Address());
     if (form == QForm::Boulder) {
         return monster
             ? QMonsterBigRawDamage(rank, ap)
@@ -473,7 +473,7 @@ inline float EInitialDamage(const AIBaseClient& target) {
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     float raw = ERawInitialDamage(SpellRank(2), player.AP());
     if (target.IsMinion() &&
-        Core::Objects::IsJungleMonster(target.Address())) {
+        ::Core::Objects::IsJungleMonster(target.Address())) {
         raw *= kEMonsterMultiplier;
     }
     return player.CalculateMagicDamage(target, raw);
@@ -483,7 +483,7 @@ inline float EComboDamage(const AIBaseClient& target, int contacts) {
     const auto player = ObjectManager::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const bool monster = target.IsMinion() &&
-        Core::Objects::IsJungleMonster(target.Address());
+        ::Core::Objects::IsJungleMonster(target.Address());
     return player.CalculateMagicDamage(
         target, ERawTotalDamage(
             SpellRank(2), player.AP(), contacts, monster));
@@ -678,7 +678,7 @@ inline QPlan BuildQPlan(const AIBaseClient& intended,
         const bool lethal = !denied &&
             dealt >= intended.Health() + intended.AllShield() + 2.0f;
         const bool monster = intended.IsMinion() &&
-            Core::Objects::IsJungleMonster(intended.Address());
+            ::Core::Objects::IsJungleMonster(intended.Address());
 
         QContext context{};
         context.Ready = true;

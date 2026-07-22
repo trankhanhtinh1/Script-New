@@ -286,7 +286,7 @@ namespace SDK::DamageMod {
 
                 const auto meditate = CoreBuffs::FindByName(heroTarget.Address(), "Meditate");
                 if (meditate.IsValid()) {
-                    const float elapsed = SDK::Game::Time() - meditate.GetStartTime();
+                    const float elapsed = ::SDK::Game::Time() - meditate.GetStartTime();
                     if (elapsed >= 0.0f && elapsed < 0.5f) {
                         reduction += SpellRankValue(MasterYiWInitialExtra, spellLevel);
                     }

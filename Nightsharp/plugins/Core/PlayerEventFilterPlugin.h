@@ -797,8 +797,8 @@ private:
     }
 
     void LogRejected(const char* eventName,
-                     const Core::Events::ObjectInfo& sender,
-                     const Core::Events::RawEventArgs& raw,
+                     const ::Core::Events::ObjectInfo& sender,
+                     const ::Core::Events::RawEventArgs& raw,
                      long long received) const {
         if (!WriteLog() || received > 40) {
             return;

@@ -672,7 +672,7 @@ private:
         m_menu = new Menu(GetInternalId(), GetName(), true);
         auto* settings = m_menu->AddSubMenu(new Menu("settings", "Settings"));
         m_enabledMenu = settings->Add(new MenuBool("enabled", "Enabled", true));
-        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write debug log", false));
+        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write debug log", true));
         BuildChampionMenu(settings);
         settings->Add(new MenuButton(
             "resetCounters",

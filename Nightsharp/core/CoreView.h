@@ -376,4 +376,13 @@ inline bool OnScreen(const Vec2& point) {
            point.y < static_cast<float>(Height());
 }
 
+inline bool OnScreen(const Vec3& world) {
+    Vec2 screen;
+    if (!WorldToScreen(world, screen)) return false;
+    return OnScreen(screen);
+}
+
+inline bool IsOnScreen(const Vec2& point) { return OnScreen(point); }
+inline bool IsOnScreen(const Vec3& world) { return OnScreen(world); }
+
 } // namespace CoreView

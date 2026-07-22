@@ -14,9 +14,9 @@
 
 #include <cstdint>
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 static constexpr int kOrbwalkerDebugConsoleMaxLines = 64;
 static constexpr int kOrbwalkerDebugConsoleLineLength = 224;

@@ -1,8 +1,8 @@
 #pragma once
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 inline bool OrbwalkerBase::EvadeOwnsActions(int now) const {
     return menu_.CoordinateKuroEvade() &&

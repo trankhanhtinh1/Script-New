@@ -83,12 +83,12 @@ inline bool IsSandSoldierName(std::string_view name) {
     }
 
     // Exclude R wall soldiers explicitly
-    if (EqualsInsensitive(name, "AzirRSolider") || EqualsInsensitive(name, "AzirRSoldier")) {
+    if (ContainsInsensitive(name, "AzirR") || EqualsInsensitive(name, "AzirRSolider") || EqualsInsensitive(name, "AzirRSoldier")) {
         return false;
     }
 
-    // Exact string match (accepting both AzirSoldier and Riot's internal typo AzirSolider)
     return EqualsInsensitive(name, "AzirSoldier") ||
+           EqualsInsensitive(name, "AzirSolider") ||
            EqualsInsensitive(name, "Azir_Base_P_Soldier_Ring") ||
            EqualsInsensitive(name, "Azir_Base_W_Soldier") ||
            EqualsInsensitive(name, "Azir_Base_W_Soldier_Ring");
@@ -214,117 +214,30 @@ inline float SecondaryLineDamageMultiplier(int championLevel) {
         : std::min(1.0f, 0.20f + static_cast<float>(level - 8) * 0.08f);
 }
 
-struct EventDrivenSoldierCache {
-    int tick = -1;
-    int playerNetworkId = 0;
-    std::vector<::SDK::GameObject> soldiers;
-    bool createSubscribed = false;
-    bool deleteSubscribed = false;
-};
-
-inline EventDrivenSoldierCache& EventSoldierCache() {
-    static EventDrivenSoldierCache cache;
-    return cache;
-}
-
-inline void EnsureSoldierEventSubscribed() {
-    auto& cache = EventSoldierCache();
-    if (!cache.createSubscribed) {
-        cache.createSubscribed = ::SDK::Events::AddOnCreateObject([](const ::SDK::Events::ObjectEventArgs& args) {
-            if (!args.Sender.IsValid()) return;
-            if (IsSandSoldierName(args.Sender.CharacterName) ||
-                IsSandSoldierName(args.Sender.Name)) {
-                auto& c = EventSoldierCache();
-                ::Core::Objects::ObjectHandle handle{};
-                handle.address   = args.Sender.Ptr;
-                handle.index     = args.Sender.Index;
-                handle.networkId = args.Sender.NetworkId;
-                handle.type      = args.Sender.Type;
-                const ::SDK::GameObject obj(handle);
-                if (obj.IsValid()) {
-                    bool found = false;
-                    for (const auto& existing : c.soldiers) {
-                        if (existing.NetworkId() == obj.NetworkId()) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        c.soldiers.push_back(obj);
-                    }
-                }
-            }
-        });
-
-        // One-time initial seed scan at event subscription time for any soldier created before script load
-        const auto player = ::SDK::ObjectManager::Player();
-        if (player.IsValid()) {
-            const ::SDK::GameObjectTeam playerTeam = player.Team();
-            for (const auto& minion : ::SDK::GameObjects::Get<::SDK::AIMinionClient>()) {
-                if (minion.IsValid() && !minion.IsDead() && minion.Team() == playerTeam &&
-                    (IsSandSoldierName(minion.CharacterName()) || IsSandSoldierName(minion.Name()))) {
-                    bool found = false;
-                    for (const auto& existing : cache.soldiers) {
-                        if (existing.NetworkId() == minion.NetworkId()) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        cache.soldiers.push_back(minion);
-                    }
-                }
-            }
-        }
-    }
-
-    if (!cache.deleteSubscribed) {
-        cache.deleteSubscribed = ::SDK::Events::AddOnDeleteObject([](const ::SDK::Events::ObjectEventArgs& args) {
-            if (!args.Sender.IsValid()) return;
-            const int netId = static_cast<int>(args.Sender.NetworkId);
-            auto& c = EventSoldierCache();
-            c.soldiers.erase(
-                std::remove_if(c.soldiers.begin(), c.soldiers.end(),
-                    [netId](const ::SDK::GameObject& obj) {
-                        return obj.NetworkId() == netId;
-                    }),
-                c.soldiers.end());
-        });
-    }
-}
-
-inline const std::vector<::SDK::GameObject>& GetAzirSandSoldiers(
+inline std::vector<::SDK::AIMinionClient> GetAzirSandSoldiers(
     const ::SDK::AIHeroClient& player
 ) {
-    EnsureSoldierEventSubscribed();
-    auto& cache = EventSoldierCache();
-    const int now = ::SDK::Game::TickCount();
-    const int playerNetworkId = player.IsValid() ? player.NetworkId() : 0;
-    if (cache.tick == now && cache.playerNetworkId == playerNetworkId) {
-        return cache.soldiers;
-    }
-
-    cache.tick = now;
-    cache.playerNetworkId = playerNetworkId;
+    std::vector<::SDK::AIMinionClient> result;
 
     if (!player.IsValid() || player.IsDead() || !IsAzirChampionName(player.CharacterName())) {
-        cache.soldiers.clear();
-        return cache.soldiers;
+        return result;
     }
 
     const ::SDK::GameObjectTeam playerTeam = player.Team();
 
-    // Fast loop: validate ONLY tracked soldier GameObjects (0 to 3 items max!)
-    for (auto it = cache.soldiers.begin(); it != cache.soldiers.end(); ) {
-        const auto& obj = *it;
-        if (!obj.IsValid() || obj.IsDead() || obj.Team() != playerTeam) {
-            it = cache.soldiers.erase(it);
+    for (const auto& minion : ::SDK::ObjectManager::Get<::SDK::AIMinionClient>()) {
+        if (!minion.IsValid() || minion.IsDead() || minion.Team() != playerTeam) {
             continue;
         }
-        ++it;
+
+        const auto charName = minion.CharacterName();
+        const auto name = minion.Name();
+        if (IsSandSoldierName(charName) || IsSandSoldierName(name)) {
+            result.push_back(minion);
+        }
     }
 
-    return cache.soldiers;
+    return result;
 }
 
 } // namespace OrbwalkerKuro::AzirSoldierSupport

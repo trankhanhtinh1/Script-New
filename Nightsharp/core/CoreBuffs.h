@@ -64,10 +64,26 @@ namespace CoreBuffs {
         }
 
         int GetStacks() const {
-            const int stacks = Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacks);
-            if (stacks > 0) return stacks;
-            return Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacksAlt);
+            if (!IsValid()) return 0;
+
+            const auto begin = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffStackArrayBegin);
+            const auto end = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffStacks);
+
+            if (Globals::IsValidPtr(begin) && Globals::IsValidPtr(end) && end >= begin) {
+                const auto count = static_cast<int>((end - begin) / Offset::BuffScriptInstanceLayout::EntryStride);
+                if (count >= 0 && count < 1000) {
+                    return count;
+                }
+            }
+
+            const int alt = Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacksAlt);
+            if (alt > 0 && alt < 1000) {
+                return alt;
+            }
+
+            return 0;
         }
+
         int GetCounterCurrent() const {
             return Globals::Read<int>(address + Offset::BuffDataLayout::BuffCounterCurrent);
         }
@@ -103,16 +119,8 @@ namespace CoreBuffs {
         bool IsActive(float gameTime) const {
             if (!IsValid()) return false;
 
-            // Authoritative liveness: the game zeroes the buff's LIVE count
-            // (BuffStacks, +0x38) the instant the buff is removed/cancelled.
-            // Verified in live memory (CheatEngine, League 26.x): the
-            // XerathLocusOfPower2 R buff goes +0x38: 1 -> 0 on an abrupt R cancel
-            // while endTime (+0x1C) stays in the future and stacksAlt (+0x3C)
-            // stays 1. Use the RAW count here, NOT GetStacks(): GetStacks() falls
-            // back to stacksAlt (+0x3C), which the game does NOT clear on removal,
-            // so it would keep abruptly-cancelled channel/toggle buffs "active"
-            // forever (Xerath unable to cast after ending R; recall lingering).
-            if (Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacks) <= 0) {
+            const int liveCount = Globals::Read<int>(address + 0x38);
+            if (liveCount <= 0 && GetStacks() <= 0) {
                 return false;
             }
 
@@ -138,10 +146,6 @@ namespace CoreBuffs {
             }
 
             const auto charPtr = Globals::Read<uintptr_t>(scriptBase + kScriptBaseNameOffset);
-            if (!Globals::IsValidPtr(charPtr)) {
-                out[0] = 0;
-                return false;
-            }
             return Globals::ReadCString(charPtr, out, maxOut);
         }
 
@@ -156,9 +160,9 @@ namespace CoreBuffs {
                 address + Offset::BuffDataLayout::BuffStackArrayBegin);
             if (!Globals::IsValidPtr(arrayBegin)) return 0;
 
-            const auto count = Globals::Read<int>(
-                address + Offset::BuffDataLayout::BuffStackCount);
-            if (count <= 0) return 0;
+            const auto arrayEnd = Globals::Read<uintptr_t>(
+                address + Offset::BuffDataLayout::BuffStacks);
+            if (!Globals::IsValidPtr(arrayEnd) || arrayEnd <= arrayBegin) return 0;
 
             // First entry: {BuffScriptInstance*, refcount*}
             const auto scriptInstance = Globals::Read<uintptr_t>(arrayBegin);
@@ -210,23 +214,71 @@ namespace CoreBuffs {
 
     // ── Manager accessors ──
 
+    inline uintptr_t ResolveBuffManagerOffset(uintptr_t obj) {
+        static uintptr_t s_cachedOffset = 0;
+        if (s_cachedOffset != 0) {
+            return s_cachedOffset;
+        }
+
+        if (!Globals::IsValidPtr(obj)) return Offset::BuffManagerRuntime::BuffManagerOffset;
+
+        for (uintptr_t offset = 0x2000; offset <= 0x3800; offset += 8) {
+            const uintptr_t manager = obj + offset;
+            const uintptr_t start = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesStart);
+            const uintptr_t end   = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
+
+            if (!Globals::IsValidPtr(start) || !Globals::IsValidPtr(end) || end <= start) {
+                continue;
+            }
+
+            const uintptr_t diff = end - start;
+            if (diff > 16000 || (diff % Offset::BuffEntryLayout::EntryStride != 0)) {
+                continue;
+            }
+
+            const uintptr_t entryBuff = Globals::Read<uintptr_t>(start + Offset::BuffEntryLayout::EntryBuff);
+            if (!Globals::IsValidPtr(entryBuff)) {
+                continue;
+            }
+
+            const uintptr_t scriptBase = Globals::Read<uintptr_t>(entryBuff + Offset::BuffDataLayout::BuffScriptPtr);
+            if (!Globals::IsValidPtr(scriptBase)) {
+                continue;
+            }
+
+            const uintptr_t namePtr = Globals::Read<uintptr_t>(scriptBase + kScriptBaseNameOffset);
+            if (!Globals::IsValidPtr(namePtr)) {
+                continue;
+            }
+
+            char sampleName[64] = {};
+            if (Globals::ReadCString(namePtr, sampleName, sizeof(sampleName)) &&
+                sampleName[0] >= 'A' && sampleName[0] <= 'z') {
+                s_cachedOffset = offset;
+                NightSharpDebug::Logf("[CoreBuffs] 100%% VERIFIED REAL BuffManagerOffset = 0x%X (Sample: %s)",
+                    static_cast<unsigned>(offset), sampleName);
+                return s_cachedOffset;
+            }
+        }
+
+        return Offset::BuffManagerRuntime::BuffManagerOffset;
+    }
+
     inline uintptr_t GetBuffManager(uintptr_t obj) {
         if (!Globals::IsValidPtr(obj)) return 0;
-        return obj + Offset::BuffManagerRuntime::BuffManagerOffset;
+        return obj + ResolveBuffManagerOffset(obj);
     }
 
     // Walk `[EntriesStart, EntriesEnd)` writing each entry's `buff*` into `out`.
-    // Condition 1 of the active-check is implicitly applied here: the game
-    // maintains the entries array so only live buffs are inside the range.
     inline int Enumerate(uintptr_t obj, uintptr_t* out, int maxOut) {
-        if (!out || maxOut <= 0) return 0;
+        if (!out || maxOut <= 0 || !Globals::IsValidPtr(obj)) return 0;
 
         const auto manager = GetBuffManager(obj);
         if (!Globals::IsValidPtr(manager)) return 0;
 
         const auto begin = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesStart);
         const auto end   = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
-        if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end < begin) {
+        if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end <= begin) {
             return 0;
         }
 

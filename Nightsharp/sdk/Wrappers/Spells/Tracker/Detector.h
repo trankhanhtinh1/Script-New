@@ -34,9 +34,9 @@ public:
         }
 
         Initialized() = true;
-        Events::AddOnProcessSpell(&Obj_AI_Base_OnProcessSpellCast);
-        Events::AddOnMissileCreate(&MissileClient_OnCreate);
-        Events::AddOnCreateObject(&GameObject_OnCreate);
+        ::SDK::Events::AddOnProcessSpell(&Obj_AI_Base_OnProcessSpellCast);
+        ::SDK::Events::AddOnMissileCreate(&MissileClient_OnCreate);
+        ::SDK::Events::AddOnCreateObject(&GameObject_OnCreate);
     }
 
     static void Shutdown() {
@@ -44,9 +44,9 @@ public:
             return;
         }
 
-        Events::RemoveOnCreateObject(&GameObject_OnCreate);
-        Events::RemoveOnMissileCreate(&MissileClient_OnCreate);
-        Events::RemoveOnProcessSpell(&Obj_AI_Base_OnProcessSpellCast);
+        ::SDK::Events::RemoveOnCreateObject(&GameObject_OnCreate);
+        ::SDK::Events::RemoveOnMissileCreate(&MissileClient_OnCreate);
+        ::SDK::Events::RemoveOnProcessSpell(&Obj_AI_Base_OnProcessSpellCast);
         Initialized() = false;
     }
 
@@ -115,7 +115,7 @@ private:
         return AIBaseClient();
     }
 
-    static void Obj_AI_Base_OnProcessSpellCast(const Events::ProcessSpellEventArgs& args) {
+    static void Obj_AI_Base_OnProcessSpellCast(const ::SDK::Events::ProcessSpellEventArgs& args) {
         const auto* spellDatabaseEntry = SpellDatabase::GetByName(args.SpellName);
         if (!spellDatabaseEntry) {
             return;
@@ -127,15 +127,15 @@ private:
             SkillshotDetectionType::ProcessSpell,
             args.StartPosition.To2D(),
             args.EndPosition.To2D(),
-            Variables::TickCount() - Game::Ping() / 2);
+            ::SDK::Variables::TickCount() - ::SDK::Game::Ping() / 2);
     }
 
-    static void GameObject_OnCreate(const Events::ObjectEventArgs& args) {
+    static void GameObject_OnCreate(const ::SDK::Events::ObjectEventArgs& args) {
         if (!args.Sender.IsValid()) {
             return;
         }
 
-        const auto type = ObjectManager::detail::InferExtendedType(args.Sender.Ptr);
+        const auto type = ::SDK::ObjectManager::detail::InferExtendedType(args.Sender.Ptr);
         GameObject sender(args.Sender.Ptr, type);
         if (!sender.IsValid()) {
             return;
@@ -154,10 +154,10 @@ private:
             SkillshotDetectionType::CreateObject,
             sender.Position().To2D(),
             sender.Position().To2D(),
-            Variables::TickCount() - Game::Ping() / 2);
+            ::SDK::Variables::TickCount() - ::SDK::Game::Ping() / 2);
     }
 
-    static void MissileClient_OnCreate(const Events::ObjectEventArgs& args) {
+    static void MissileClient_OnCreate(const ::SDK::Events::ObjectEventArgs& args) {
         const MissileClient missile(args.Sender.Ptr);
         if (!missile.IsValid()) {
             return;
@@ -173,7 +173,7 @@ private:
         }
 
         const SpellDatabaseEntry entry = *spellDatabaseEntry;
-        Utils::DelayAction::Add(0, [missile, entry]() {
+        ::SDK::Utils::DelayAction::Add(0, [missile, entry]() {
             MissileClient_OnCreate_Delayed(missile, entry);
         });
     }
@@ -184,15 +184,15 @@ private:
             return;
         }
 
-        AIBaseClient caster = ObjectManager::GetUnitByNetworkId<AIBaseClient>(missile.CasterNetworkId());
+        AIBaseClient caster = ::SDK::ObjectManager::GetUnitByNetworkId<AIBaseClient>(missile.CasterNetworkId());
         if (!caster.IsValid()) {
             return;
         }
 
         const int speed = std::max(1, spellDatabaseEntry.MissileSpeed);
         const int castTime =
-            Variables::TickCount() -
-            Game::Ping() / 2 -
+            ::SDK::Variables::TickCount() -
+            ::SDK::Game::Ping() / 2 -
             (spellDatabaseEntry.MissileDelayed ? 0 : spellDatabaseEntry.Delay) -
             static_cast<int>(
                 1000.0f * missile.Position().Distance(missile.StartPosition()) /
@@ -257,7 +257,7 @@ private:
             if (missileSkillshot) {
                 missileSkillshot->Missile = missile;
             } else {
-                Utils::Logging::Write()(LogLevel::Warn,
+                ::SDK::Utils::Logging::Write()(::SDK::LogLevel::Warn,
                     "Wrong SpellType for Skillshot %s, a Missile Type was expected",
                     skillshot->SData.SpellName.c_str());
             }

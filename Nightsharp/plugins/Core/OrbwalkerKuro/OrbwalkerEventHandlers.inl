@@ -1,8 +1,8 @@
 #pragma once
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 inline void OrbwalkerBase::OnGameUpdateStatic(const Events::GameUpdateEventArgs& args) {
     (void)args;
@@ -278,21 +278,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     } else if (context_.lastAutoAttackTick <= 0 || now - context_.lastAutoAttackTick > 300) {
         context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
     }
-
-<<<<<<< Updated upstream
     CheckAfterAttack();
-=======
-    if (context_.lastAutoAttackTick > 0) {
-        const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
-        OrbwalkingActionArgs afterArgs(
-            OrbwalkingType::AfterAttack,
-            eventTarget,
-            eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-            "Kuro");
-        OrbwalkingDetail::FireAfterAttack(afterArgs);
-        context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
-    }
->>>>>>> Stashed changes
 }
 
 inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {

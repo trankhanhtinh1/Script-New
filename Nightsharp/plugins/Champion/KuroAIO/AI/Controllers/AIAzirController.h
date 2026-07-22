@@ -1634,7 +1634,7 @@ inline bool TryReactiveDefense(Mode mode) {
     const bool urgent = GapcloserExpireTick >= Now() ||
         IncomingHardCrowdControl || InterruptExpireTick >= Now();
 
-    if (Ready(3) && Bool(RMenu, "ReactivePeel", true) &&
+    if (Ready(3) && CastThrottleReady(3, true) && Bool(RMenu, "ReactivePeel", true) &&
         distance <= kRForwardReach + threat.BoundingRadius() + 80.0f &&
         (urgent || player.HealthPercent() <=
             Slider(TacticsMenu, "DefensiveHealth", 42))) {
@@ -1649,7 +1649,7 @@ inline bool TryReactiveDefense(Mode mode) {
         }
     }
 
-    if (Ready(2) && Bool(EMenu, "ReactiveEscape", true) &&
+    if (Ready(2) && CastThrottleReady(2, true) && Bool(EMenu, "ReactiveEscape", true) &&
         !BuildSoldiers().empty()) {
         const EPlan e = BuildEPlan(
             threat,
@@ -1668,7 +1668,7 @@ inline bool TryReactiveDefense(Mode mode) {
         }
     }
 
-    if (WAvailable() && Bool(WMenu, "DefensiveAnchor", true) &&
+    if (WAvailable() && CastThrottleReady(1, true) && Bool(WMenu, "DefensiveAnchor", true) &&
         (urgent || mode == Mode::Flee)) {
         const WPlan w = BuildWPlan(threat, WPurpose::DefensiveAnchor);
         if (CastWPlan(w, true)) {
@@ -2094,6 +2094,9 @@ inline void RecordSoldierAttack(
 
 inline void RecordEnemySpell(
     const SDK::Events::ProcessSpellEventArgs& args) {
+    if (!args.Sender.IsValid() || args.Sender.Type != ::Core::Objects::ObjectType::AIHeroClient) {
+        return;
+    }
     const auto analysis = AnalyzeEnemyCast(
         args, 220.0f, 115.0f, 280, 250, 220, 1650, 480);
     if (!analysis.Valid) return;

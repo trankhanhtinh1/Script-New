@@ -6,9 +6,9 @@
 #include <string>
 #include <vector>
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 struct ProcessSpellLogEntry {
     int processTick = 0;

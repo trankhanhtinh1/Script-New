@@ -43,7 +43,7 @@ static float EffectivePhysicalHealth(const AIBaseClient& unit) {
     return unit.Health() + unit.PhysicalShield();
 }
 
-static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
+static AIHeroClient HeroFromInfo(const ::Core::Events::ObjectInfo& info) {
     ::Core::Objects::ObjectHandle handle{};
     handle.address = info.Ptr;
     handle.index = info.Index;

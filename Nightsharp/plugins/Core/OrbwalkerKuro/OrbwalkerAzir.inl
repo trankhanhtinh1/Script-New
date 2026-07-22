@@ -30,7 +30,7 @@ inline AzirSoldierSupport::Point2 PlanarPoint(const Vector3& position) {
     return { position.x, position.z };
 }
 
-inline const std::vector<GameObject>& GetAzirSandSoldiers(
+inline std::vector<AIMinionClient> GetAzirSandSoldiers(
     const AIHeroClient& player
 ) {
     return AzirSoldierSupport::GetAzirSandSoldiers(player);

@@ -14,7 +14,7 @@ class LastCastedSpellEntry {
 public:
     LastCastedSpellEntry() = default;
 
-    explicit LastCastedSpellEntry(const Events::ProcessSpellEventArgs& args) {
+    explicit LastCastedSpellEntry(const ::SDK::Events::ProcessSpellEventArgs& args) {
         Name = args.SpellName;
         Target = args.TargetNetworkId != 0
             ? ObjectManager::GetUnitByNetworkId<AIBaseClient>(static_cast<int>(args.TargetNetworkId))

@@ -806,7 +806,7 @@ static void ShutdownPluginsSafe() {
 
 static void ShutdownCoreEventsSafe() {
     __try {
-        Core::Events::Shutdown();
+        ::Core::Events::Shutdown();
     }
     __except (1) {
     }

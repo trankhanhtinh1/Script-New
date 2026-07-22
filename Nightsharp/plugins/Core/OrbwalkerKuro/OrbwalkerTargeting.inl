@@ -2,9 +2,9 @@
 
 #include "../../../sdk/GameObjects/ObjectManager.h"
 
-namespace OrbwalkerKuro::OrbwalkingDetail {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro::OrbwalkingDetail {
 
 inline constexpr float kLaneClearWaitTime = 1.7f;
 
@@ -412,8 +412,6 @@ inline bool HasSoonKillableMinion(const AIHeroClient& player,
 } // namespace OrbwalkerKuro::OrbwalkingDetail
 
 namespace OrbwalkerKuro {
-
-using namespace ::SDK;
 
 inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int now = Tick();

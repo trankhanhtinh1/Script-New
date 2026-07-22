@@ -457,16 +457,11 @@ namespace CoreCastSpell {
             }
 
             g_lastTrace.hud = ctx.hudInstance;
-            if (!Globals::IsValidPtr(g_lastTrace.hud)) {
-                Fail(CastFailure::MissingHud);
-                return false;
-            }
-
-            g_lastTrace.castContext = Globals::Read<uintptr_t>(
-                g_lastTrace.hud + Offset::HudRuntime::SpellInfo);
-            if (!Globals::IsValidPtr(g_lastTrace.castContext)) {
-                Fail(CastFailure::MissingCastContext);
-                return false;
+            if (Globals::IsValidPtr(g_lastTrace.hud)) {
+                g_lastTrace.castContext = Globals::Read<uintptr_t>(
+                    g_lastTrace.hud + Offset::HudRuntime::SpellInfo);
+            } else {
+                g_lastTrace.castContext = 0;
             }
 
             g_lastTrace.spoofTrampoline = CoreBypass::ResolveSpoofTrampoline();
@@ -650,13 +645,16 @@ namespace CoreCastSpell {
                 return false;
             }
 
-            if (!startPosition.IsValid() || !endPosition.IsValid() ||
-                startPosition.IsZero() || endPosition.IsZero()) {
+            if (!endPosition.IsValid() || endPosition.IsZero()) {
                 Fail(CastFailure::InvalidPosition);
                 return false;
             }
 
-            g_lastTrace.startPosition = startPosition;
+            const Vec3 actualStart = (!startPosition.IsValid() || startPosition.IsZero())
+                ? endPosition
+                : startPosition;
+
+            g_lastTrace.startPosition = actualStart;
             g_lastTrace.endPosition = endPosition;
 
             const uintptr_t castFn =
@@ -672,13 +670,17 @@ namespace CoreCastSpell {
             const std::int32_t visionFlag = Globals::Read<std::int32_t>(
                 CoreRuntime::ResolveRva(Offset::ControlRuntime::CastVisionIndexDefault));
 
-            const NativeVec3Xyz start{ startPosition.x, startPosition.y, startPosition.z };
+            const NativeVec3Xyz start{ actualStart.x, actualStart.y, actualStart.z };
             const NativeVec3Xyz end{ endPosition.x, endPosition.y, endPosition.z };
 
             bool nativeException = false;
             bool bypassTouched = false;
 
             __try {
+                NightSharpDebug::CrashTrace::Record(
+                    nscrash::TraceTag::SpellCast,
+                    static_cast<std::uint64_t>(slot),
+                    static_cast<std::uint64_t>(CastKind::Vector));
                 g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
@@ -700,105 +702,6 @@ namespace CoreCastSpell {
             }
 
             ClearBypassFlag(bypassTouched);
-
-            if (nativeException) {
-                Fail(CastFailure::NativeException);
-                return false;
-            }
-
-            g_lastTrace.failure = CastFailure::None;
-            g_lastTrace.success = true;
-            CoreValidation::MarkCastResult(true);
-            return true;
-        }
-
-        inline bool DispatchTargetViaHud(std::uint8_t slot, uintptr_t target) {
-            if (!ResolveCommon(CastKind::Target, slot)) {
-                return false;
-            }
-
-            if (!ThrottleReserve(slot)) {
-                Fail(CastFailure::Throttled);
-                return false;
-            }
-
-            if (!Globals::IsValidPtr(target)) {
-                Fail(CastFailure::InvalidTarget);
-                return false;
-            }
-
-            g_lastTrace.targetNetworkId =
-                Globals::Read<std::uint32_t>(target + Offset::All::NetworkId);
-            g_lastTrace.targetObjectIndex =
-                Globals::Read<std::uint32_t>(target + Offset::All::Index);
-            g_lastTrace.endPosition =
-                Globals::Read<Vec3>(target + Offset::All::Position);
-
-            if (g_lastTrace.targetNetworkId == 0 ||
-                g_lastTrace.targetNetworkId == 0xFFFFFFFFu ||
-                g_lastTrace.targetObjectIndex == 0 ||
-                !g_lastTrace.endPosition.IsValid()) {
-                Fail(CastFailure::InvalidTarget);
-                return false;
-            }
-
-            const uintptr_t targeting = Globals::Read<uintptr_t>(
-                g_lastTrace.hud + Offset::HudRuntime::SpellTargeting);
-            if (!Globals::IsValidPtr(targeting)) {
-                Fail(CastFailure::MissingHud);
-                return false;
-            }
-
-            g_lastTrace.hudTargetState = Globals::Read<std::uint32_t>(
-                targeting + Offset::HudSpellTargetingLayout::State);
-            g_lastTrace.hudTargetObjectIndex = Globals::Read<std::uint32_t>(
-                targeting + Offset::HudSpellTargetingLayout::ObjectIndex);
-
-            // Jax Q's live classifier does not accept C12220's explicit-network-ID
-            // branch. The real Smart Cast path calls C12220(..., 0), which performs
-            // the cursor pick during BF1EF0. The cached HUD index may still be zero
-            // before the key event, so it is diagnostic only. Never write it.
-
-            g_lastTrace.canCastCheck =
-                CoreRuntime::ResolveRva(Offset::ControlRuntime::CanCastCheck);
-            g_lastTrace.castSpellSafe =
-                CoreRuntime::ResolveRva(Offset::ControlRuntime::HudSpellHandler);
-            if (!Globals::IsValidPtr(g_lastTrace.canCastCheck) ||
-                !Globals::IsValidPtr(g_lastTrace.castSpellSafe)) {
-                Fail(CastFailure::MissingNativeFunction);
-                return false;
-            }
-
-            bool nativeException = false;
-            bool bypassTouched = false;
-            ScopedVirtualCursor virtualCursor;
-            if (!virtualCursor.Apply(g_lastTrace.endPosition)) {
-                return false;
-            }
-
-            __try {
-                g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
-                bypassTouched = true;
-
-                spoof_call(
-                    reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
-                    reinterpret_cast<FnHudSpellHandler>(g_lastTrace.castSpellSafe),
-                    g_lastTrace.castContext,
-                    static_cast<std::int64_t>(slot),
-                    kHudModeSmartCast,
-                    kHudKeyPress);
-
-                // BF1EF0 is void. It internally runs C12220(..., 0) and the regular
-                // dispatcher; spell events are the authoritative runtime proof.
-                g_lastTrace.canCastAccepted = true;
-                g_lastTrace.nativeResult = 1;
-            }
-            __except (1) {
-                nativeException = true;
-            }
-
-            ClearBypassFlag(bypassTouched);
-            virtualCursor.Restore();
 
             if (nativeException) {
                 Fail(CastFailure::NativeException);
@@ -871,100 +774,13 @@ namespace CoreCastSpell {
             return true;
         }
 
-
-        inline bool DispatchCharge(CastKind kind,
-            std::uint8_t slot,
-            const Vec3& position,
-            std::int64_t keyState) {
-            if (!ResolveCommon(kind, slot)) {
-                return false;
-            }
-
-            if (!position.IsValid()) {
-                Fail(CastFailure::InvalidPosition);
-                return false;
-            }
-            g_lastTrace.endPosition = position;
-
-            const uintptr_t chargeBefore = Globals::Read<uintptr_t>(
-                g_lastTrace.castContext + kHudChargeSpellInput);
-            if (keyState == kHudKeyRelease &&
-                chargeBefore != g_lastTrace.spellInput) {
-                Fail(CastFailure::MissingChargeState);
-                return false;
-            }
-
-            g_lastTrace.castSpellSafe =
-                CoreRuntime::ResolveRva(Offset::ControlRuntime::HudSpellHandler);
-            if (!Globals::IsValidPtr(g_lastTrace.castSpellSafe)) {
-                Fail(CastFailure::MissingNativeFunction);
-                return false;
-            }
-
-            bool nativeException = false;
-            bool bypassTouched = false;
-            ScopedVirtualCursor virtualCursor;
-            if (!virtualCursor.Apply(position)) {
-                return false;
-            }
-
-            __try {
-                g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
-                bypassTouched = true;
-
-                // This mirrors the game's Smart/Quick Cast hotkey path. The handler
-                // reads the live HUD cursor; callers should pass the same position
-                // they currently expose through their cursor service.
-                spoof_call(
-                    reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
-                    reinterpret_cast<FnHudSpellHandler>(g_lastTrace.castSpellSafe),
-                    g_lastTrace.castContext,
-                    static_cast<std::int64_t>(slot),
-                    kHudModeSmartCast,
-                    keyState);
-
-                g_lastTrace.canCastAccepted = true;
-                g_lastTrace.nativeResult = 1;
-            }
-            __except (1) {
-                nativeException = true;
-            }
-
-            ClearBypassFlag(bypassTouched);
-            virtualCursor.Restore();
-
-            if (nativeException) {
-                Fail(CastFailure::NativeException);
-                return false;
-            }
-
-            const uintptr_t chargeAfter = Globals::Read<uintptr_t>(
-                g_lastTrace.castContext + kHudChargeSpellInput);
-            if (keyState == kHudKeyPress &&
-                chargeAfter != g_lastTrace.spellInput) {
-                Fail(CastFailure::CanCastRejected);
-                return false;
-            }
-            if (keyState == kHudKeyRelease &&
-                chargeAfter == g_lastTrace.spellInput) {
-                Fail(CastFailure::CanCastRejected);
-                return false;
-            }
-
-            g_lastTrace.failure = CastFailure::None;
-            g_lastTrace.success = true;
-            CoreValidation::MarkCastResult(true);
-            return true;
-        }
-
     } // namespace detail
 
-    // Position casts use the native HUD cursor selected by CanCastCheck. No
-    // SpellInput fields are modified.
+    // Position casts call native CastSpellVector with verbatim world coordinates (bypasses HUD).
     inline bool CastPositionSpell(std::uint8_t slot, const Vec3& position) {
         return slot > SlotSummonerF
         ? detail::DispatchItemPosition(slot, position)
-        : detail::CastValidated(CastKind::Position, slot, position, 0);
+        : detail::DispatchVector(slot, {}, position);
     }
 
     inline bool CastVectorSpell(std::uint8_t slot,
@@ -973,33 +789,11 @@ namespace CoreCastSpell {
         return detail::DispatchVector(slot, startPosition, endPosition);
     }
 
-    // Targeted casts mirror Smart Cast key press. BF1EF0 performs the actual
-    // cursor pick during the event; the target argument is used for validation
-    // and diagnostics, not for writing internal HUD state.
-    inline bool CastTargetSpell(std::uint8_t slot, uintptr_t target) {
-        return detail::DispatchTargetViaHud(slot, target);
-    }
+    // Targeted casts perform direct native CastTargetSpell call via CoreNewCastSpell.
+    bool CastTargetSpell(std::uint8_t slot, uintptr_t target);
 
     inline bool CastSelfSpell(std::uint8_t slot) {
         return detail::CastValidated(CastKind::Self, slot, {}, 0);
-    }
-
-    // Charge begin/release mirror the real Smart Cast key events:
-    // sub_BF1EF0(context, slot, mode=2, keyState=1/2).
-    inline bool BeginChargeSpell(std::uint8_t slot, const Vec3& position) {
-        return detail::DispatchCharge(
-            CastKind::ChargeBegin,
-            slot,
-            position,
-            kHudKeyPress);
-    }
-
-    inline bool ReleaseChargeSpell(std::uint8_t slot, const Vec3& position) {
-        return detail::DispatchCharge(
-            CastKind::ChargeRelease,
-            slot,
-            position,
-            kHudKeyRelease);
     }
 
 } // namespace CoreCastSpell
