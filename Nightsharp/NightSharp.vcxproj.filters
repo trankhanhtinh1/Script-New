@@ -121,6 +121,9 @@
     <Filter Include="Plugins\ZDEvade\Database">
       <UniqueIdentifier>{7DA19114-744A-2517-5FE1-D59F4F6318B0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\ZDEvade\Debug">
+      <UniqueIdentifier>{A4E2C8D1-6F93-4B12-9D77-2C5E8A1B0F34}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\ZDEvade\Detection">
       <UniqueIdentifier>{488E119C-A0C4-B7FE-98DF-FCD9B9018485}</UniqueIdentifier>
     </Filter>
@@ -147,6 +150,9 @@
     </Filter>
     <Filter Include="SDK">
       <UniqueIdentifier>{E6959F98-715F-22EE-9380-5276E036B646}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{C3D9F2A8-1E74-4C6B-8A91-5F0D2E7B6C41}</UniqueIdentifier>
     </Filter>
     <Filter Include="SDK\Core">
       <UniqueIdentifier>{E82D40A5-9091-FD52-A228-8DF8A9C14270}</UniqueIdentifier>
@@ -1147,6 +1153,12 @@
     <ClInclude Include="Plugins\ZDEvade\Core\Situation.h">
       <Filter>Plugins\ZDEvade\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Debug\CandidateDebug.h">
+      <Filter>Plugins\ZDEvade\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Debug\ZDLog.h">
+      <Filter>Plugins\ZDEvade\Debug</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellData.h">
       <Filter>Plugins\ZDEvade\Database</Filter>
     </ClInclude>
@@ -1169,6 +1181,9 @@
       <Filter>Plugins\ZDEvade\Database</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\Detection\SpellDetector.h">
+      <Filter>Plugins\ZDEvade\Detection</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Detection\ThreatDetectionPolicy.h">
       <Filter>Plugins\ZDEvade\Detection</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\Detection\Threat.h">
@@ -1198,7 +1213,13 @@
     <ClInclude Include="Plugins\ZDEvade\Evade\EvadeMath.h">
       <Filter>Plugins\ZDEvade\Evade</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeMoveResultAdapter.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\Evade\EvadePlanner.h">
+      <Filter>Plugins\ZDEvade\Evade</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Evade\EvadeRoutingPolicy.h">
       <Filter>Plugins\ZDEvade\Evade</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\Evade\EvadeTypes.h">
@@ -1257,6 +1278,21 @@
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\ZDEvade.h">
       <Filter>Plugins\ZDEvade</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\ZDEvadeTestSupport.h">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\zdevade_controller_policy_test.cpp">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\zdevade_detector_policy_test.cpp">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\zdevade_geometry_runtime_test.cpp">
+      <Filter>tests</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\zdevade_routing_policy_test.cpp">
+      <Filter>tests</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDPrediction\Analysis\AoeOptimizer.h">
       <Filter>Plugins\ZDPrediction\Analysis</Filter>

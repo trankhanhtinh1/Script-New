@@ -1,9 +1,9 @@
 #pragma once
 
 #include "EvadeTypes.h"
+#include "EvadeRoutingPolicy.h"
 #include "EvadeMath.h"
 #include "../../../Core/CoreNavGrid.h"
-#include "../../../SDK/SDK.h"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +15,13 @@ namespace ZDEvade {
 
 class EvadeGeometry {
 public:
+    struct ContinuousCollisionResult {
+        bool collides = false;
+        float firstContactMs = FLT_MAX;
+        float minimumClearance = FLT_MAX;
+        float exposureMs = 0.0f;
+    };
+
     static float DistanceToSegment(const Vec2& point,
                                    const Vec2& start,
                                    const Vec2& end,
@@ -32,16 +39,7 @@ public:
     }
 
     static bool ThreatActiveAt(const Threat& threat, int tick) {
-        if (threat.expired || tick > threat.endTick + 100) return false;
-        if ((threat.Type() == ZDSpellType::Line || threat.Type() == ZDSpellType::Arc) &&
-            threat.HasTravelSpeed()) {
-            return tick >= TravelStartTick(threat);
-        }
-        const int activation = threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()
-            ? ImpactTickAt(threat, threat.endPos)
-            : threat.startTick + threat.Delay();
-        const int persistence = std::max(100, threat.ExtraEndTime());
-        return tick >= activation - 120 && tick <= activation + persistence;
+        return ThreatBodyActiveAt(threat, tick) || EndExplosionActiveAt(threat, tick);
     }
 
     static int ImpactTickAt(const Threat& threat, const Vec2& point) {
@@ -49,38 +47,19 @@ public:
             bool onSegment = false;
             Vec2 projection;
             DistanceToSegment(point, threat.startPos, threat.endPos, &onSegment, &projection);
-            if (threat.observedTick > 0 && threat.observedHead.IsValid() && !threat.observedHead.IsZero()) {
-                const float remaining = std::max(
-                    0.0f,
-                    (projection - threat.observedHead).Dot(threat.direction));
-                return threat.observedTick + static_cast<int>(std::ceil(
-                    1000.0f * remaining / std::max(1.0f, threat.Speed())));
-            }
-            const float distance = threat.startPos.Distance(projection);
-            const int baseTick = threat.missileBound && threat.launchTick > 0
-                ? threat.launchTick
-                : threat.startTick + threat.Delay();
-            return baseTick + static_cast<int>(std::ceil(1000.0f * distance / threat.Speed()));
+            return threat.ArrivalTickAt(projection);
         }
-        if ((threat.Type() == ZDSpellType::Circular || threat.Type() == ZDSpellType::Arc) &&
-            threat.HasTravelSpeed()) {
-            if (threat.observedTick > 0 && threat.observedHead.IsValid() && !threat.observedHead.IsZero())
-                return threat.observedTick + static_cast<int>(std::ceil(
-                    1000.0f * threat.observedHead.Distance(threat.endPos) /
-                    std::max(1.0f, threat.Speed())));
-            const int baseTick = threat.missileBound && threat.launchTick > 0
-                ? threat.launchTick
-                : threat.startTick + threat.Delay();
-            return baseTick + static_cast<int>(std::ceil(
-                1000.0f * threat.startPos.Distance(threat.endPos) / threat.Speed()));
+        if (threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()) {
+            return threat.ArrivalTick();
         }
-        return threat.startTick + threat.Delay();
+        return SaturatingTickAdd(threat.startTick, threat.Delay());
     }
 
     static float TimeMarginAt(const Threat& threat,
                               const Vec2& point,
                               int arrivalTick) {
-        return static_cast<float>(ImpactTickAt(threat, point) - arrivalTick);
+        return static_cast<float>(
+            TickDifference(ImpactTickAt(threat, point), arrivalTick));
     }
 
     static bool ContainsAt(const Threat& threat,
@@ -88,33 +67,18 @@ public:
                            float heroRadius,
                            float extraBuffer,
                            int tick) {
-        if (!ThreatActiveAt(threat, tick)) return false;
-        const float uncertainty = threat.HasTravelSpeed()
-            ? threat.PositionUncertainty()
-            : 0.0f;
-        const float radius = std::max(
-            0.0f,
-            threat.Radius() + heroRadius + extraBuffer + uncertainty);
-        switch (threat.Type()) {
-        case ZDSpellType::Line:
-            return ContainsLineAt(threat, point, radius, tick);
-        case ZDSpellType::Circular:
-            return point.Distance(threat.endPos) <= radius;
-        case ZDSpellType::Ring:
-            return RingSignedClearance(
-                point,
-                threat.endPos,
-                std::max(
-                    0.0f,
-                    threat.InnerRadius() - heroRadius - extraBuffer - uncertainty),
-                radius) <= 0.0f;
-        case ZDSpellType::Cone:
-            return ContainsCone(threat, point, heroRadius + extraBuffer + uncertainty);
-        case ZDSpellType::Arc:
-            return ContainsArc(threat, point, radius);
-        default:
-            return true;
-        }
+        if (!threat.HasValidGeometry()) return true;
+        if (EndExplosionContainsAt(threat, point, heroRadius, extraBuffer, tick)) return true;
+        // No exact arc geometry is implemented. An Arc reaching geometry is
+        // therefore unsafe by default; detector admission prevents this path
+        // during normal operation.
+        if (threat.Type() == ZDSpellType::Arc) return true;
+        return ThreatBodyContainsAt(
+            threat,
+            point,
+            heroRadius,
+            extraBuffer,
+            tick);
     }
 
     static bool OccupiesAt(const Threat& threat,
@@ -122,9 +86,10 @@ public:
                            float heroRadius,
                            float extraBuffer,
                            int tick) {
+        if (!threat.HasValidGeometry()) return true;
+        if (EndExplosionContainsAt(threat, point, heroRadius, extraBuffer, tick)) return true;
         if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) {
-            if (!ThreatActiveAt(threat, tick) || tick > TravelEndTick(threat) +
-                std::max(80, threat.ExtraEndTime())) return false;
+            if (!ThreatBodyActiveAt(threat, tick)) return false;
             const float radius = std::max(
                 0.0f,
                 threat.Radius() + heroRadius + extraBuffer + threat.PositionUncertainty());
@@ -137,8 +102,9 @@ public:
                                 const Vec2& heroPos,
                                 float heroRadius,
                                 float extraBuffer,
-                                bool left) {
-        const Vec2 head = threat.HeadAtTick(SDK::Variables::TickCount());
+                                bool left,
+                                int now) {
+        const Vec2 head = threat.HeadAtTick(now);
         Vec2 projection;
         DistanceToSegment(heroPos, head, threat.endPos, nullptr, &projection);
         Vec2 away = heroPos - projection;
@@ -149,8 +115,11 @@ public:
             away = away.Normalized();
             if (!left) away = away * -1.0f;
         }
-        const float distance = threat.Radius() + heroRadius + extraBuffer +
-            threat.PositionUncertainty();
+        const float distance = ExitCenterDistance(
+            threat.Radius(),
+            heroRadius,
+            extraBuffer,
+            threat.PositionUncertainty());
         return projection + away * distance;
     }
 
@@ -161,24 +130,36 @@ public:
         Vec2 direction = (heroPos - threat.endPos).Normalized();
         if (direction.IsZero()) direction = (heroPos - threat.startPos).Normalized();
         if (direction.IsZero()) direction = Vec2(1.0f, 0.0f);
-        return threat.endPos + direction * (
-            threat.Radius() + heroRadius + extraBuffer + threat.PositionUncertainty());
+        const float distance = ExitCenterDistance(
+            threat.Radius(),
+            heroRadius,
+            extraBuffer,
+            threat.PositionUncertainty());
+        return threat.endPos + direction * distance;
     }
 
     static Vec2 ClosestRingExit(const Threat& threat,
                                 const Vec2& heroPos,
                                 float heroRadius,
                                 float extraBuffer) {
-        const float expansion = heroRadius + extraBuffer + threat.PositionUncertainty();
-        const float outerRadius = threat.Radius() + expansion;
+        const float expansion = ExitCenterDistance(
+            0.0f,
+            heroRadius,
+            extraBuffer,
+            threat.PositionUncertainty());
+        const float outerRadius = ExitCenterDistance(
+            threat.Radius(),
+            heroRadius,
+            extraBuffer,
+            threat.PositionUncertainty());
         const float innerRadius = std::max(0.0f, threat.InnerRadius() - expansion);
         Vec2 direction = (heroPos - threat.endPos).Normalized();
         if (direction.IsZero()) direction = (heroPos - threat.startPos).Normalized();
         if (direction.IsZero()) direction = Vec2(1.0f, 0.0f);
         const float distance = heroPos.Distance(threat.endPos);
         if (innerRadius > 2.0f && distance - innerRadius <= outerRadius - distance)
-            return threat.endPos + direction * (innerRadius - 2.0f);
-        return threat.endPos + direction * (outerRadius + 2.0f);
+            return threat.endPos + direction * innerRadius;
+        return threat.endPos + direction * outerRadius;
     }
 
     static void AddConeExits(const Threat& threat,
@@ -186,6 +167,7 @@ public:
                              float heroRadius,
                              float extraBuffer,
                              std::vector<Vec2>& output) {
+        if (!threat.HasValidConeAngle()) return;
         const Vec2 baseDirection = threat.direction.IsZero()
             ? (threat.endPos - threat.startPos).Normalized()
             : threat.direction;
@@ -194,8 +176,11 @@ public:
         const float distance = relative.Length();
         const float currentAngle = SignedAngle(baseDirection, relative);
         const float boundaryAngle = currentAngle >= 0.0f ? halfAngle : -halfAngle;
-        const float expansion = threat.Radius() + heroRadius + extraBuffer +
-            threat.PositionUncertainty();
+        const float expansion = ExitCenterDistance(
+            threat.ConeEdgePadding(),
+            heroRadius,
+            extraBuffer,
+            threat.PositionUncertainty());
         const float angularBuffer = expansion / std::max(50.0f, distance);
         const float outsideAngle = boundaryAngle + (boundaryAngle >= 0.0f ? angularBuffer : -angularBuffer);
         output.push_back(threat.startPos + Rotate(baseDirection, outsideAngle) * std::max(50.0f, distance));
@@ -219,40 +204,119 @@ public:
         output.push_back(threat.startPos + radial * (threat.Range() + expansion));
     }
 
-    static Vec2 ClosestArcExit(const Threat& threat,
-                               const Vec2& heroPos,
-                               float heroRadius,
-                               float extraBuffer) {
-        Vec2 projection;
-        DistanceToSegment(heroPos, threat.startPos, threat.endPos, nullptr, &projection);
-        Vec2 direction = (heroPos - projection).Normalized();
-        if (direction.IsZero()) direction = Vec2(-threat.direction.y, threat.direction.x);
-        if (direction.IsZero()) direction = Vec2(1.0f, 0.0f);
-        const float chordLength = threat.startPos.Distance(threat.endPos);
-        const float expansion = threat.Radius() + heroRadius + extraBuffer +
-            threat.PositionUncertainty() + chordLength * 0.18f;
-        return projection + direction * expansion;
-    }
-
     static bool WalkablePath(const Vec2& from,
                              const Vec2& to,
-                             float planeY) {
-        return WalkablePath(std::vector<Vec2>{from, to}, planeY);
+                             float planeY,
+                             float heroRadius) {
+        const std::array<Vec2, 2> path = {from, to};
+        return WalkablePathImpl(path, planeY, heroRadius);
     }
 
     static bool WalkablePath(const std::vector<Vec2>& path,
-                             float planeY) {
+                             float planeY,
+                             float heroRadius) {
+        return WalkablePathImpl(path, planeY, heroRadius);
+    }
+
+    static bool PointWalkable(const Vec2& point,
+                              float planeY,
+                              float heroRadius) {
+        const CoreNavGrid::GridRef navGrid = CoreNavGrid::Get();
+        if (!navGrid.IsValid() || !std::isfinite(planeY)) return false;
+        const SweptCircleGridGeometry grid = {
+            navGrid.minX,
+            navGrid.minZ,
+            navGrid.maxX,
+            navGrid.maxZ,
+            navGrid.cellSize,
+            navGrid.width,
+            navGrid.height,
+        };
+        return SweptCirclePointWalkable(
+            point,
+            heroRadius,
+            grid,
+            [&](int x, int y) {
+                return navGrid.GetRawCellFlags(x, y);
+            });
+    }
+
+    template <typename Path>
+    static bool WalkablePathImpl(const Path& path,
+                                 float planeY,
+                                 float heroRadius) {
         if (path.size() < 2) return false;
-        for (std::size_t index = 1; index < path.size(); ++index) {
-            const Vec2& from = path[index - 1];
-            const Vec2& to = path[index];
-            if (!from.IsValid() || !to.IsValid() || to.IsZero()) return false;
-            const Vec3 worldFrom = Vec3::From2D(from, planeY);
-            const Vec3 worldTo = Vec3::From2D(to, planeY);
-            if (!CoreNavGrid::IsWalkable(worldTo) ||
-                CoreNavGrid::IsWallBetween(worldFrom, worldTo)) return false;
+        const CoreNavGrid::GridRef navGrid = CoreNavGrid::Get();
+        if (!navGrid.IsValid() || !std::isfinite(planeY)) return false;
+        const SweptCircleGridGeometry grid = {
+            navGrid.minX,
+            navGrid.minZ,
+            navGrid.maxX,
+            navGrid.maxZ,
+            navGrid.cellSize,
+            navGrid.width,
+            navGrid.height,
+        };
+        return SweptCirclePathWalkable(
+            path,
+            heroRadius,
+            grid,
+            [&](int x, int y) {
+                return navGrid.GetRawCellFlags(x, y);
+            });
+    }
+
+    static bool ThreatensPointNowOrAtFutureImpact(
+            const Threat& threat,
+            const Vec2& point,
+            float heroRadius,
+            float buffer,
+            int now,
+            float horizonMs,
+            int* firstThreatTick = nullptr) {
+        if (ContainsAt(threat, point, heroRadius, buffer, now)) {
+            if (firstThreatTick) *firstThreatTick = now;
+            return true;
         }
-        return true;
+
+        bool threatened = false;
+        int firstTick = now;
+        const auto recordFutureTick = [&](int tick) {
+            if (!threatened || TickDifference(tick, firstTick) < 0)
+                firstTick = tick;
+            threatened = true;
+        };
+        const int impact = ImpactTickAt(threat, point);
+        if (FutureTickWithinHorizon(impact, now, horizonMs) &&
+            ContainsAt(threat, point, heroRadius, buffer, impact)) {
+            recordFutureTick(impact);
+        }
+        if (threat.HasEndExplosionArea()) {
+            const int explosionStart = threat.EndExplosionStartTick();
+            if (FutureTickWithinHorizon(explosionStart, now, horizonMs) &&
+                EndExplosionContainsAt(
+                    threat, point, heroRadius, buffer, explosionStart)) {
+                recordFutureTick(explosionStart);
+            }
+        }
+        if (threatened && firstThreatTick) *firstThreatTick = firstTick;
+        return threatened;
+    }
+
+    static bool EndExplosionThreatensPointWithinHorizon(
+            const Threat& threat,
+            const Vec2& point,
+            float heroRadius,
+            float buffer,
+            int now,
+            float horizonMs) {
+        if (!threat.HasEndExplosionArea()) return false;
+        if (EndExplosionContainsAt(threat, point, heroRadius, buffer, now))
+            return true;
+        const int explosionStart = threat.EndExplosionStartTick();
+        return FutureTickWithinHorizon(explosionStart, now, horizonMs) &&
+            EndExplosionContainsAt(
+                threat, point, heroRadius, buffer, explosionStart);
     }
 
     static bool HeroThreatenedNow(const std::vector<Threat>& threats,
@@ -261,9 +325,21 @@ public:
                                   float buffer,
                                   int now,
                                   float horizonMs) {
+        const float safeHorizonMs = std::clamp(
+            std::isfinite(horizonMs) ? horizonMs : kMaximumAnalysisHorizonMs,
+            0.0f,
+            kMaximumAnalysisHorizonMs);
         for (const auto& threat : threats) {
             if (threat.IsExpiredAt(now)) continue;
+            if (!threat.HasValidGeometry()) return true;
             if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) {
+                if (EndExplosionThreatensPointWithinHorizon(
+                        threat,
+                        heroPos,
+                        heroRadius,
+                        buffer,
+                        now,
+                        safeHorizonMs)) return true;
                 if (AnalyzeMovingLine(
                         threat,
                         heroPos,
@@ -273,15 +349,54 @@ public:
                         heroRadius,
                         buffer,
                         now,
-                        horizonMs).collides) return true;
+                        safeHorizonMs).collides) return true;
                 continue;
             }
-            const int impact = ImpactTickAt(threat, heroPos);
-            if (impact - now > static_cast<int>(horizonMs)) continue;
-            if (ContainsAt(threat, heroPos, heroRadius, buffer, now) ||
-                ContainsAt(threat, heroPos, heroRadius, buffer, impact)) return true;
+            if (ThreatensPointNowOrAtFutureImpact(
+                    threat,
+                    heroPos,
+                    heroRadius,
+                    buffer,
+                    now,
+                    safeHorizonMs)) return true;
         }
         return false;
+    }
+
+    static ContinuousCollisionResult AnalyzeBlinkOrigin(
+        const Threat& threat,
+        const Vec2& origin,
+        float heroRadius,
+        int now,
+        float castDelayMs,
+        const EvadeSettings& settings) {
+        ContinuousCollisionResult result;
+        const int completionTick = SaturatingTickAdd(
+            now,
+            ClampTickOffset(std::round(std::max(0.0f, castDelayMs))));
+        if (!TickAfter(completionTick, now)) return result;
+
+        const int horizonEndTick = SaturatingTickAdd(
+            now,
+            ClampTickOffset(std::floor(
+                std::max(0.0f, settings.maxThreatHorizonMs))));
+        const int originEndTick = std::min(
+            SaturatingTickAdd(completionTick, -1), horizonEndTick);
+        if (originEndTick < now) return result;
+        const float originEndMs =
+            static_cast<float>(TickDifference(originEndTick, now));
+        return AnalyzeThreatPath(
+            threat,
+            origin,
+            origin,
+            50.0f,
+            0.0f,
+            heroRadius,
+            settings.pathBuffer,
+            now,
+            0.0f,
+            originEndMs,
+            false);
     }
 
     static CandidateEvaluation EvaluateBlinkCandidate(
@@ -303,79 +418,178 @@ public:
         result.cursorDistance = candidate.Distance(cursorPos);
         result.valid = candidate.IsValid() && !candidate.IsZero() && result.travelDistance >= 1.0f;
         if (!result.valid) return result;
-        result.walkable = CoreNavGrid::IsWalkable(Vec3::From2D(candidate, planeY));
+        // Geometry-only tests use a zero collision radius. Keep the runtime
+        // nav query non-degenerate without changing collision calculations.
+        const float navValidationRadius = heroRadius == 0.0f
+            ? kZeroRadiusNavValidationEpsilon
+            : heroRadius;
+        result.walkable =
+            PointWalkable(candidate, planeY, navValidationRadius);
         if (!result.walkable) {
             result.rejectReason = PlannerRejectReason::Wall;
             return result;
         }
 
-        const int arrivalTick = now + static_cast<int>(std::round(result.arrivalTimeMs));
+        const int arrivalTick = SaturatingTickAdd(
+            now, ClampTickOffset(std::round(result.arrivalTimeMs)));
         float firstCollisionMs = FLT_MAX;
-        for (const auto& threat : threats) {
+        CollisionIdentitySet collisionIdentities;
+        CollisionIdentitySet pathCollisionIdentities;
+        CollisionIdentitySet endpointCollisionIdentities;
+        std::vector<IdentityExposureAccumulator>
+            originExposureAccumulators;
+        ExposureDangerSet exposureDangers;
+        for (std::size_t threatIndex = 0;
+             threatIndex < threats.size();
+             ++threatIndex) {
+            const Threat& threat = threats[threatIndex];
             if (threat.IsExpiredAt(now)) continue;
-            bool castCollision = false;
-            bool endpointCollision = false;
+            const CollisionIdentity identity =
+                MakeCollisionIdentity(threat.id, threatIndex);
+            const ContinuousCollisionResult originCollision = AnalyzeBlinkOrigin(
+                threat,
+                heroPos,
+                heroRadius,
+                now,
+                result.arrivalTimeMs,
+                settings);
+            result.minimumClearance = std::min(
+                result.minimumClearance,
+                originCollision.minimumClearance);
+            const bool castCollision = originCollision.collides;
+            if (castCollision) {
+                firstCollisionMs = std::min(
+                    firstCollisionMs,
+                    originCollision.firstContactMs);
+            }
+            if (originCollision.exposureMs > 0.0f) {
+                std::size_t exposureIndex =
+                    ExposureAccumulatorIndex(
+                        originExposureAccumulators,
+                        identity);
+                if (exposureIndex ==
+                    originExposureAccumulators.size()) {
+                    originExposureAccumulators.push_back(
+                        {identity, threat.Danger()});
+                    exposureIndex =
+                        originExposureAccumulators.size() - 1;
+                }
+                IdentityExposureAccumulator& exposure =
+                    originExposureAccumulators[exposureIndex];
+                exposure.danger = std::max(
+                    exposure.danger,
+                    threat.Danger());
+                exposure.exactExplosionMs = std::max(
+                    exposure.exactExplosionMs,
+                    originCollision.exposureMs);
+            }
+
+            const int explosionTick = threat.EndExplosionStartTick();
+            const int explosionEndTick =
+                CanonicalEndExplosionEndTick(threat);
+            const float explosionRadius = threat.EndExplosionRadius() +
+                std::max(0.0f, heroRadius) +
+                std::max(0.0f, settings.endpointBuffer) +
+                threat.PositionUncertainty();
+            bool endpointCollision = threat.HasEndExplosionArea() &&
+                TickDifference(explosionTick, now) <=
+                    static_cast<int>(settings.maxThreatHorizonMs) &&
+                explosionEndTick >= arrivalTick &&
+                candidate.Distance(threat.EndExplosionCenter()) <= explosionRadius;
+            float endpointFirstCollisionMs = endpointCollision
+                ? std::max(
+                    result.arrivalTimeMs,
+                    static_cast<float>(TickDifference(explosionTick, now)))
+                : FLT_MAX;
             if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) {
                 const ContinuousCollisionResult collision = AnalyzeMovingLine(
                     threat,
-                    heroPos,
                     candidate,
-                    100000.0f,
-                    result.arrivalTimeMs,
+                    candidate,
+                    50.0f,
+                    0.0f,
                     heroRadius,
                     settings.endpointBuffer,
                     now,
                     settings.maxThreatHorizonMs,
-                    0.0f,
-                    true);
+                    result.arrivalTimeMs);
                 result.minimumClearance = std::min(
                     result.minimumClearance,
                     collision.minimumClearance);
-                castCollision = collision.collides && collision.firstContactMs < result.arrivalTimeMs;
-                endpointCollision = collision.collides && collision.firstContactMs >= result.arrivalTimeMs;
-                if (collision.collides)
+                endpointCollision = endpointCollision || collision.collides;
+                if (collision.collides) {
+                    endpointFirstCollisionMs = std::min(
+                        endpointFirstCollisionMs,
+                        collision.firstContactMs);
                     firstCollisionMs = std::min(firstCollisionMs, collision.firstContactMs);
+                }
             } else {
                 const int impactTick = ImpactTickAt(threat, candidate);
-                if (impactTick - now > static_cast<int>(settings.maxThreatHorizonMs)) continue;
-                const ContinuousCollisionResult collision = AnalyzeStaticThreat(
-                    threat,
-                    heroPos,
-                    candidate,
-                    100000.0f,
-                    result.arrivalTimeMs,
-                    heroRadius,
-                    settings.pathBuffer,
-                    now,
-                    0.0f,
-                    result.arrivalTimeMs,
-                    true);
-                result.minimumClearance = std::min(
-                    result.minimumClearance,
-                    collision.minimumClearance);
-                castCollision = collision.collides &&
-                    collision.firstContactMs < result.arrivalTimeMs;
-                if (collision.collides)
-                    firstCollisionMs = std::min(firstCollisionMs, collision.firstContactMs);
-                endpointCollision = ContainsAt(
-                    threat,
-                    candidate,
-                    heroRadius,
-                    settings.endpointBuffer,
-                    arrivalTick) ||
-                    (impactTick >= arrivalTick && ContainsAt(
+                if (TickDifference(impactTick, now) <=
+                    static_cast<int>(settings.maxThreatHorizonMs)) {
+                    if (ContainsAt(
+                            threat,
+                            candidate,
+                            heroRadius,
+                            settings.endpointBuffer,
+                            arrivalTick)) {
+                        endpointCollision = true;
+                        endpointFirstCollisionMs = std::min(
+                            endpointFirstCollisionMs,
+                            result.arrivalTimeMs);
+                    }
+                    if (impactTick >= arrivalTick && ContainsAt(
                         threat,
                         candidate,
                         heroRadius,
                         settings.endpointBuffer,
-                        impactTick));
+                        impactTick)) {
+                        endpointCollision = true;
+                        endpointFirstCollisionMs = std::min(
+                            endpointFirstCollisionMs,
+                            static_cast<float>(TickDifference(impactTick, now)));
+                    }
+                }
             }
-            if (castCollision) result.pathDanger += threat.Danger();
-            if (endpointCollision) result.endpointDanger += threat.Danger();
+            if (castCollision && pathCollisionIdentities.Add(identity))
+                result.pathDanger += threat.Danger();
+            if (endpointCollision &&
+                endpointCollisionIdentities.Add(identity)) {
+                result.endpointDanger += threat.Danger();
+            }
             if (!castCollision && !endpointCollision) continue;
+            firstCollisionMs = std::min(
+                firstCollisionMs,
+                endpointFirstCollisionMs);
             result.maxDanger = std::max(result.maxDanger, threat.Danger());
-            ++result.collisionCount;
+            collisionIdentities.Add(identity);
         }
+        for (const IdentityExposureAccumulator& exposure :
+             originExposureAccumulators) {
+            result.dangerExposureMs +=
+                static_cast<float>(exposure.danger) *
+                exposure.exactExplosionMs;
+            exposureDangers.AddOrMax(
+                exposure.identity,
+                exposure.danger);
+        }
+        const CandidateEvaluation destinationExposure =
+            EvaluateStationaryPathCandidateCore(
+                candidate,
+                cursorPos,
+                heroRadius,
+                now,
+                settings,
+                threats,
+                result.arrivalTimeMs,
+                nullptr,
+                &exposureDangers);
+        result.dangerExposureMs +=
+            destinationExposure.dangerExposureMs;
+        result.summedExposureDanger =
+            exposureDangers.SummedDanger();
+        result.collisionCount =
+            static_cast<int>(collisionIdentities.Size());
         if (result.minimumClearance == FLT_MAX) result.minimumClearance = settings.maxSearchRadius;
         result.pathSafe = result.pathDanger == 0;
         result.endpointSafe = result.endpointDanger == 0;
@@ -405,7 +619,653 @@ public:
         float heroRadius,
         int now,
         const EvadeSettings& settings,
-        const std::vector<Threat>& threats) {
+        const std::vector<Threat>& threats,
+        CollisionIdentitySet* collisionIdentitiesOut = nullptr,
+        bool includeEndpointCoverage = true) {
+        return EvaluateCandidateCore(
+            candidate,
+            source,
+            sourceThreatId,
+            heroPos,
+            cursorPos,
+            planeY,
+            moveSpeed,
+            heroRadius,
+            now,
+            settings,
+            threats,
+            collisionIdentitiesOut,
+            includeEndpointCoverage,
+            NavValidationMode::ValidateSegment,
+            nullptr);
+    }
+
+    static CandidateEvaluation EvaluateStationaryCandidate(
+        const Vec2& position,
+        const Vec2& cursorPos,
+        float planeY,
+        float heroRadius,
+        int now,
+        const EvadeSettings& settings,
+        const std::vector<Threat>& threats,
+        CollisionIdentitySet* collisionIdentitiesOut = nullptr) {
+        (void)planeY;
+        return EvaluateStationaryCandidateCore(
+            position,
+            cursorPos,
+            heroRadius,
+            now,
+            settings,
+            threats,
+            0.0f,
+            collisionIdentitiesOut,
+            nullptr);
+    }
+
+private:
+    enum class NavValidationMode {
+        ValidateSegment,
+        AlreadyValidatedPolyline,
+    };
+
+    struct IdentityExposureAccumulator {
+        CollisionIdentity identity;
+        int danger = 0;
+        float sampledUnionMs = 0.0f;
+        float sampledExplosionMs = 0.0f;
+        float exactExplosionMs = 0.0f;
+        bool previousUnion = false;
+        bool previousExplosion = false;
+    };
+
+    struct TimeInterval {
+        float beginMs = 0.0f;
+        float endMs = 0.0f;
+    };
+
+    struct StationaryIdentityAccumulator {
+        CollisionIdentity identity;
+        int danger = 0;
+        std::vector<TimeInterval> intervals;
+    };
+
+    static bool CircleInsideParameterInterval(
+        const Vec2& start,
+        const Vec2& end,
+        const Vec2& center,
+        float radius,
+        float* enterOut,
+        float* leaveOut) {
+        const Vec2 delta = end - start;
+        const Vec2 offset = start - center;
+        const double a = static_cast<double>(delta.x) * delta.x +
+            static_cast<double>(delta.y) * delta.y;
+        const double halfB = static_cast<double>(offset.x) * delta.x +
+            static_cast<double>(offset.y) * delta.y;
+        const double safeRadius =
+            std::max(0.0, static_cast<double>(radius));
+        const double c = static_cast<double>(offset.x) * offset.x +
+            static_cast<double>(offset.y) * offset.y -
+            safeRadius * safeRadius;
+        const double tolerance =
+            1.0e-9 * std::max(1.0, safeRadius * safeRadius);
+        if (a <= 1.0e-12) {
+            if (c > tolerance) return false;
+            if (enterOut) *enterOut = 0.0f;
+            if (leaveOut) *leaveOut = 1.0f;
+            return true;
+        }
+        double discriminant = halfB * halfB - a * c;
+        const double discriminantTolerance = 1.0e-12 *
+            std::max(1.0, halfB * halfB + std::fabs(a * c));
+        if (discriminant < -discriminantTolerance) return false;
+        discriminant = std::max(0.0, discriminant);
+        const double root = std::sqrt(discriminant);
+        const double enter = std::clamp(
+            (-halfB - root) / a, 0.0, 1.0);
+        const double leave = std::clamp(
+            (-halfB + root) / a, 0.0, 1.0);
+        if (leave < enter) return false;
+        if (enterOut) *enterOut = static_cast<float>(enter);
+        if (leaveOut) *leaveOut = static_cast<float>(leave);
+        return true;
+    }
+
+    static void AddStationaryInterval(
+        std::vector<TimeInterval>& intervals,
+        float beginMs,
+        float endMs,
+        float analysisStartMs,
+        float analysisEndMs) {
+        const float begin = std::max(beginMs, analysisStartMs);
+        const float end = std::min(endMs, analysisEndMs);
+        if (!std::isfinite(begin) ||
+            !std::isfinite(end) ||
+            end < begin) {
+            return;
+        }
+        intervals.push_back({begin, end});
+    }
+
+    static std::vector<TimeInterval> StationaryThreatIntervals(
+        const Threat& threat,
+        const Vec2& position,
+        float heroRadius,
+        float buffer,
+        int now,
+        float analysisStartMs,
+        float analysisEndMs) {
+        std::vector<TimeInterval> intervals;
+        if (threat.IsExpiredAt(now) ||
+            analysisEndMs < analysisStartMs) {
+            return intervals;
+        }
+
+        if (threat.Type() == ZDSpellType::Arc) {
+            AddStationaryInterval(
+                intervals,
+                analysisStartMs,
+                analysisEndMs,
+                analysisStartMs,
+                analysisEndMs);
+        } else if (threat.Type() == ZDSpellType::Line &&
+                   threat.HasTravelSpeed() &&
+                   !threat.projectileTerminated) {
+            const float radius = std::max(
+                0.0f,
+                threat.Radius() +
+                    heroRadius +
+                    buffer +
+                    threat.PositionUncertainty());
+            const float travelStartMs = static_cast<float>(
+                TickDifference(TravelStartTick(threat), now));
+            const float travelEndMs = static_cast<float>(
+                TickDifference(TravelEndTick(threat), now));
+            const float terminalEndMs = threat.persistent
+                ? analysisEndMs
+                : static_cast<float>(TickDifference(
+                    threat.MovingLineTerminalActiveEndTick(),
+                    now));
+            std::array<float, 4> boundaries = {
+                analysisStartMs,
+                analysisEndMs,
+                std::clamp(
+                    travelStartMs,
+                    analysisStartMs,
+                    analysisEndMs),
+                std::clamp(
+                    travelEndMs,
+                    analysisStartMs,
+                    analysisEndMs),
+            };
+            std::sort(boundaries.begin(), boundaries.end());
+            for (std::size_t index = 0;
+                 index + 1 < boundaries.size();
+                 ++index) {
+                const float begin = std::max(
+                    boundaries[index],
+                    travelStartMs);
+                const float end = std::min(
+                    boundaries[index + 1],
+                    terminalEndMs);
+                if (end < begin) continue;
+                const Vec2 headBegin =
+                    MovingLineHeadAtTime(threat, now, begin);
+                const Vec2 headEnd =
+                    MovingLineHeadAtTime(threat, now, end);
+                float enter = 0.0f;
+                float leave = 0.0f;
+                if (!CircleInsideParameterInterval(
+                        headBegin,
+                        headEnd,
+                        position,
+                        radius,
+                        &enter,
+                        &leave)) {
+                    continue;
+                }
+                const float duration = end - begin;
+                AddStationaryInterval(
+                    intervals,
+                    begin + duration * enter,
+                    begin + duration * leave,
+                    analysisStartMs,
+                    analysisEndMs);
+            }
+        } else {
+            int activeStartTick =
+                SaturatingTickAdd(threat.startTick, threat.Delay());
+            int activeEndTick = threat.persistent
+                ? SaturatingTickAdd(
+                    now,
+                    ClampTickOffset(std::ceil(analysisEndMs)))
+                : SaturatingTickAdd(
+                    activeStartTick,
+                    std::max(100, threat.ExtraEndTime()));
+            if (threat.projectileTerminated) {
+                if (threat.Type() != ZDSpellType::Circular ||
+                    threat.ExtraEndTime() <= 0) {
+                    activeEndTick = SaturatingTickAdd(activeStartTick, -1);
+                } else {
+                    activeStartTick = threat.projectileTerminationTick;
+                    activeEndTick = SaturatingTickAdd(
+                        activeStartTick,
+                        threat.ExtraEndTime());
+                }
+            } else if (
+                threat.Type() == ZDSpellType::Circular &&
+                threat.HasTravelSpeed()) {
+                activeStartTick = ImpactTickAt(threat, threat.endPos);
+                if (!threat.persistent) {
+                    activeEndTick = SaturatingTickAdd(
+                        activeStartTick,
+                        std::max(100, threat.ExtraEndTime()));
+                }
+            }
+            const float activeStartMs = static_cast<float>(
+                TickDifference(activeStartTick, now));
+            const float activeEndMs = static_cast<float>(
+                TickDifference(activeEndTick, now));
+            const float probeMs = std::clamp(
+                activeStartMs,
+                analysisStartMs,
+                analysisEndMs);
+            const int probeTick = SaturatingTickAdd(
+                now,
+                ClampTickOffset(std::round(probeMs)));
+            if (activeEndMs >= activeStartMs &&
+                ThreatBodyContainsAt(
+                    threat,
+                    position,
+                    heroRadius,
+                    buffer,
+                    probeTick)) {
+                AddStationaryInterval(
+                    intervals,
+                    activeStartMs,
+                    activeEndMs,
+                    analysisStartMs,
+                    analysisEndMs);
+            }
+        }
+
+        if (threat.HasEndExplosionArea()) {
+            const float explosionStartMs = static_cast<float>(
+                TickDifference(
+                    threat.EndExplosionStartTick(),
+                    now));
+            const float explosionEndMs = static_cast<float>(
+                TickDifference(
+                    CanonicalEndExplosionEndTick(threat),
+                    now));
+            const float radius = std::max(
+                0.0f,
+                threat.EndExplosionRadius() +
+                    heroRadius +
+                    buffer +
+                    threat.PositionUncertainty());
+            if (position.Distance(
+                    threat.EndExplosionCenter()) <= radius) {
+                AddStationaryInterval(
+                    intervals,
+                    explosionStartMs,
+                    explosionEndMs,
+                    analysisStartMs,
+                    analysisEndMs);
+            }
+        }
+        return intervals;
+    }
+
+    static void MergeStationaryIntervals(
+        std::vector<TimeInterval>& intervals) {
+        if (intervals.empty()) return;
+        std::sort(
+            intervals.begin(),
+            intervals.end(),
+            [](const TimeInterval& left, const TimeInterval& right) {
+                if (left.beginMs != right.beginMs)
+                    return left.beginMs < right.beginMs;
+                return left.endMs < right.endMs;
+            });
+        std::size_t output = 0;
+        for (std::size_t index = 1;
+             index < intervals.size();
+             ++index) {
+            if (intervals[index].beginMs <=
+                intervals[output].endMs + 0.001f) {
+                intervals[output].endMs = std::max(
+                    intervals[output].endMs,
+                    intervals[index].endMs);
+                continue;
+            }
+            ++output;
+            intervals[output] = intervals[index];
+        }
+        intervals.resize(output + 1);
+    }
+
+    static std::size_t StationaryAccumulatorIndex(
+        const std::vector<StationaryIdentityAccumulator>& accumulators,
+        const CollisionIdentity& identity) {
+        for (std::size_t index = 0;
+             index < accumulators.size();
+             ++index) {
+            if (accumulators[index].identity == identity) return index;
+        }
+        return accumulators.size();
+    }
+
+    static CandidateEvaluation EvaluateStationaryPathCandidateCore(
+        const Vec2& position,
+        const Vec2& cursorPos,
+        float heroRadius,
+        int now,
+        const EvadeSettings& settings,
+        const std::vector<Threat>& threats,
+        float analysisStartMs,
+        CollisionIdentitySet* collisionIdentitiesOut,
+        ExposureDangerSet* exposureDangersOut) {
+        CandidateEvaluation result;
+        result.position = position;
+        result.source = PlannerCandidateSource::Unknown;
+        result.cursorDistance = position.Distance(cursorPos);
+        result.travelDistance = 0.0f;
+        result.arrivalTimeMs = 0.0f;
+        result.valid = position.IsValid() && !position.IsZero();
+        result.walkable = result.valid;
+        if (!result.valid) return result;
+
+        const float horizon = std::clamp(
+            std::isfinite(settings.maxThreatHorizonMs)
+                ? settings.maxThreatHorizonMs
+                : kMaximumAnalysisHorizonMs,
+            0.0f,
+            kMaximumAnalysisHorizonMs);
+        const float start = std::clamp(
+            std::isfinite(analysisStartMs) ? analysisStartMs : 0.0f,
+            0.0f,
+            horizon);
+        std::vector<StationaryIdentityAccumulator> pathAccumulators;
+        pathAccumulators.reserve(threats.size());
+
+        for (std::size_t threatIndex = 0;
+             threatIndex < threats.size();
+             ++threatIndex) {
+            const Threat& threat = threats[threatIndex];
+            if (threat.IsExpiredAt(now)) continue;
+            const CollisionIdentity identity =
+                MakeCollisionIdentity(threat.id, threatIndex);
+            std::size_t index =
+                StationaryAccumulatorIndex(pathAccumulators, identity);
+            if (index == pathAccumulators.size()) {
+                pathAccumulators.push_back(
+                    {identity, threat.Danger(), {}});
+                index = pathAccumulators.size() - 1;
+            } else {
+                pathAccumulators[index].danger = std::max(
+                    pathAccumulators[index].danger,
+                    threat.Danger());
+            }
+            std::vector<TimeInterval> intervals =
+                StationaryThreatIntervals(
+                    threat,
+                    position,
+                    heroRadius,
+                    settings.pathBuffer,
+                    now,
+                    start,
+                    horizon);
+            pathAccumulators[index].intervals.insert(
+                pathAccumulators[index].intervals.end(),
+                intervals.begin(),
+                intervals.end());
+            const ContinuousCollisionResult clearance =
+                AnalyzeThreatPath(
+                    threat,
+                    position,
+                    position,
+                    50.0f,
+                    0.0f,
+                    heroRadius,
+                    settings.pathBuffer,
+                    now,
+                    start,
+                    horizon,
+                    false);
+            result.minimumClearance = std::min(
+                result.minimumClearance,
+                clearance.minimumClearance);
+        }
+
+        struct DangerEvent {
+            float timeMs = 0.0f;
+            int delta = 0;
+        };
+        std::vector<DangerEvent> events;
+        CollisionIdentitySet collisionIdentities;
+        ExposureDangerSet exposureDangers;
+        for (StationaryIdentityAccumulator& accumulator :
+             pathAccumulators) {
+            MergeStationaryIntervals(accumulator.intervals);
+            if (accumulator.intervals.empty()) continue;
+            collisionIdentities.Add(accumulator.identity);
+            result.maxDanger = std::max(
+                result.maxDanger,
+                accumulator.danger);
+            for (const TimeInterval& interval :
+                 accumulator.intervals) {
+                result.firstCollisionTimeMs = std::min(
+                    result.firstCollisionTimeMs,
+                    interval.beginMs);
+                const float exposureDurationMs =
+                    std::max(0.0f, interval.endMs - interval.beginMs);
+                result.dangerExposureMs +=
+                    accumulator.danger * exposureDurationMs;
+                if (exposureDurationMs > 0.0f) {
+                    exposureDangers.AddOrMax(
+                        accumulator.identity,
+                        accumulator.danger);
+                }
+                events.push_back(
+                    {interval.beginMs, accumulator.danger});
+                events.push_back(
+                    {interval.endMs, -accumulator.danger});
+            }
+        }
+        std::sort(
+            events.begin(),
+            events.end(),
+            [](const DangerEvent& left, const DangerEvent& right) {
+                if (left.timeMs != right.timeMs)
+                    return left.timeMs < right.timeMs;
+                return left.delta > right.delta;
+            });
+        int activeDanger = 0;
+        for (const DangerEvent& event : events) {
+            activeDanger += event.delta;
+            result.pathDanger = std::max(
+                result.pathDanger,
+                activeDanger);
+        }
+
+        result.collisionCount =
+            static_cast<int>(collisionIdentities.Size());
+        if (collisionIdentitiesOut)
+            collisionIdentitiesOut->AddAll(collisionIdentities);
+        if (exposureDangersOut)
+            exposureDangersOut->AddAll(exposureDangers);
+        result.summedExposureDanger =
+            exposureDangers.SummedDanger();
+        if (result.minimumClearance == FLT_MAX)
+            result.minimumClearance = settings.maxSearchRadius;
+        result.pathSafe = result.pathDanger == 0;
+        result.endpointSafe = true;
+        result.exitDistance = result.pathSafe
+            ? 0.0f
+            : settings.maxSearchRadius;
+        result.timeMarginMs =
+            result.firstCollisionTimeMs == FLT_MAX
+                ? horizon
+                : result.firstCollisionTimeMs;
+        result.timingSafe =
+            result.firstCollisionTimeMs == FLT_MAX ||
+            result.firstCollisionTimeMs >=
+                settings.minimumTimeMarginMs;
+        result.strictSafe =
+            result.pathSafe &&
+            result.timingSafe;
+        result.rejectReason = result.strictSafe
+            ? PlannerRejectReason::None
+            : !result.pathSafe
+                ? PlannerRejectReason::PathDanger
+                : PlannerRejectReason::Late;
+        return result;
+    }
+
+    static CandidateEvaluation EvaluateStationaryCandidateCore(
+        const Vec2& position,
+        const Vec2& cursorPos,
+        float heroRadius,
+        int now,
+        const EvadeSettings& settings,
+        const std::vector<Threat>& threats,
+        float analysisStartMs,
+        CollisionIdentitySet* collisionIdentitiesOut,
+        ExposureDangerSet* exposureDangersOut) {
+        CollisionIdentitySet collisionIdentities;
+        CandidateEvaluation result =
+            EvaluateStationaryPathCandidateCore(
+                position,
+                cursorPos,
+                heroRadius,
+                now,
+                settings,
+                threats,
+                analysisStartMs,
+                &collisionIdentities,
+                exposureDangersOut);
+        if (!result.valid) return result;
+
+        const float horizon = std::clamp(
+            std::isfinite(settings.maxThreatHorizonMs)
+                ? settings.maxThreatHorizonMs
+                : kMaximumAnalysisHorizonMs,
+            0.0f,
+            kMaximumAnalysisHorizonMs);
+        const float start = std::clamp(
+            std::isfinite(analysisStartMs) ? analysisStartMs : 0.0f,
+            0.0f,
+            horizon);
+        std::vector<StationaryIdentityAccumulator> endpointAccumulators;
+        endpointAccumulators.reserve(threats.size());
+        for (std::size_t threatIndex = 0;
+             threatIndex < threats.size();
+             ++threatIndex) {
+            const Threat& threat = threats[threatIndex];
+            if (threat.IsExpiredAt(now)) continue;
+            const CollisionIdentity identity =
+                MakeCollisionIdentity(threat.id, threatIndex);
+            std::size_t index =
+                StationaryAccumulatorIndex(
+                    endpointAccumulators,
+                    identity);
+            if (index == endpointAccumulators.size()) {
+                endpointAccumulators.push_back(
+                    {identity, threat.Danger(), {}});
+                index = endpointAccumulators.size() - 1;
+            } else {
+                endpointAccumulators[index].danger = std::max(
+                    endpointAccumulators[index].danger,
+                    threat.Danger());
+            }
+            std::vector<TimeInterval> intervals =
+                StationaryThreatIntervals(
+                    threat,
+                    position,
+                    heroRadius,
+                    settings.endpointBuffer,
+                    now,
+                    start,
+                    horizon);
+            endpointAccumulators[index].intervals.insert(
+                endpointAccumulators[index].intervals.end(),
+                intervals.begin(),
+                intervals.end());
+            const ContinuousCollisionResult clearance =
+                AnalyzeThreatPath(
+                    threat,
+                    position,
+                    position,
+                    50.0f,
+                    0.0f,
+                    heroRadius,
+                    settings.endpointBuffer,
+                    now,
+                    start,
+                    horizon,
+                    false);
+            result.minimumClearance = std::min(
+                result.minimumClearance,
+                clearance.minimumClearance);
+        }
+
+        for (StationaryIdentityAccumulator& accumulator :
+             endpointAccumulators) {
+            MergeStationaryIntervals(accumulator.intervals);
+            if (accumulator.intervals.empty()) continue;
+            result.endpointDanger += accumulator.danger;
+            result.maxDanger = std::max(
+                result.maxDanger,
+                accumulator.danger);
+            collisionIdentities.Add(accumulator.identity);
+            result.firstCollisionTimeMs = std::min(
+                result.firstCollisionTimeMs,
+                accumulator.intervals.front().beginMs);
+        }
+        result.collisionCount =
+            static_cast<int>(collisionIdentities.Size());
+        if (collisionIdentitiesOut)
+            collisionIdentitiesOut->AddAll(collisionIdentities);
+        result.endpointSafe = result.endpointDanger == 0;
+        result.timeMarginMs =
+            result.firstCollisionTimeMs == FLT_MAX
+                ? horizon
+                : result.firstCollisionTimeMs;
+        result.timingSafe =
+            result.firstCollisionTimeMs == FLT_MAX ||
+            result.firstCollisionTimeMs >=
+                settings.minimumTimeMarginMs;
+        result.strictSafe =
+            result.pathSafe &&
+            result.endpointSafe &&
+            result.timingSafe;
+        result.rejectReason = result.strictSafe
+            ? PlannerRejectReason::None
+            : !result.endpointSafe
+                ? PlannerRejectReason::EndpointDanger
+                : !result.pathSafe
+                    ? PlannerRejectReason::PathDanger
+                    : PlannerRejectReason::Late;
+        return result;
+    }
+
+    static CandidateEvaluation EvaluateCandidateCore(
+        const Vec2& candidate,
+        PlannerCandidateSource source,
+        int sourceThreatId,
+        const Vec2& heroPos,
+        const Vec2& cursorPos,
+        float planeY,
+        float moveSpeed,
+        float heroRadius,
+        int now,
+        const EvadeSettings& settings,
+        const std::vector<Threat>& threats,
+        CollisionIdentitySet* collisionIdentitiesOut,
+        bool includeEndpointCoverage,
+        NavValidationMode navValidationMode,
+        ExposureDangerSet* exposureDangersOut) {
         CandidateEvaluation result;
         result.position = candidate;
         result.source = source;
@@ -420,7 +1280,20 @@ public:
             result.rejectReason = PlannerRejectReason::Invalid;
             return result;
         }
-        result.walkable = WalkablePath(heroPos, candidate, planeY);
+        // Geometry-only callers use a zero collision radius. Keep navigation
+        // validation non-degenerate without inflating collision calculations.
+        const float navValidationRadius =
+            heroRadius == 0.0f
+                ? kZeroRadiusNavValidationEpsilon
+                : heroRadius;
+        result.walkable =
+            navValidationMode ==
+                NavValidationMode::AlreadyValidatedPolyline ||
+            WalkablePath(
+                heroPos,
+                candidate,
+                planeY,
+                navValidationRadius);
         if (!result.walkable) {
             result.rejectReason = PlannerRejectReason::Wall;
             return result;
@@ -431,24 +1304,54 @@ public:
             std::min(std::max(6.0f, settings.temporalStepMs), spatialStepMs),
             6.0f,
             24.0f);
-        const int steps = std::max(
-            2,
-            static_cast<int>(std::ceil(result.arrivalTimeMs / temporalStepMs)));
+        const float pathAnalysisDurationMs = std::min(
+            result.arrivalTimeMs,
+            std::clamp(
+                std::isfinite(settings.maxThreatHorizonMs)
+                    ? settings.maxThreatHorizonMs
+                    : kMaximumAnalysisHorizonMs,
+                0.0f,
+                kMaximumAnalysisHorizonMs));
+        const int steps = AnalysisSampleCount(
+            pathAnalysisDurationMs,
+            temporalStepMs);
         bool foundEnvelopeSafe = false;
         bool envelopeReentered = false;
         bool actualCollision = false;
         float firstSafeDistance = FLT_MAX;
         float firstCollisionMs = FLT_MAX;
         float minimumClearance = FLT_MAX;
-        float exposureMs = 0.0f;
-        int previousDanger = 0;
         int maximumDanger = 0;
         int maximumPathDanger = 0;
-        int collisionCount = 0;
+        CollisionIdentitySet collisionIdentities;
+        CollisionIdentitySet endpointCollisionIdentities;
+        std::vector<IdentityExposureAccumulator> exposureAccumulators;
+        ExposureDangerSet exposureDangers;
+        for (std::size_t threatIndex = 0;
+             threatIndex < threats.size();
+             ++threatIndex) {
+            const Threat& threat = threats[threatIndex];
+            if (threat.IsExpiredAt(now)) continue;
+            const CollisionIdentity identity =
+                MakeCollisionIdentity(threat.id, threatIndex);
+            const std::size_t exposureIndex =
+                ExposureAccumulatorIndex(
+                    exposureAccumulators,
+                    identity);
+            if (exposureIndex == exposureAccumulators.size()) {
+                exposureAccumulators.push_back(
+                    {identity, threat.Danger()});
+            } else {
+                exposureAccumulators[exposureIndex].danger =
+                    std::max(
+                        exposureAccumulators[exposureIndex].danger,
+                        threat.Danger());
+            }
+        }
 
         for (int step = 0; step <= steps; ++step) {
             const float fraction = static_cast<float>(step) / static_cast<float>(steps);
-            const float timeMs = result.arrivalTimeMs * fraction;
+            const float timeMs = pathAnalysisDurationMs * fraction;
             const Vec2 point = HeroPositionAt(
                 heroPos,
                 candidate,
@@ -457,17 +1360,30 @@ public:
                 timeMs,
                 false);
             const float travelled = heroPos.Distance(point);
-            const int sampleTick = now + static_cast<int>(std::round(timeMs));
+            const int sampleTick = SaturatingTickAdd(
+                now, ClampTickOffset(std::round(timeMs)));
             int pointDanger = 0;
             int pointMaxDanger = 0;
             int envelopeDanger = 0;
+            CollisionIdentitySet pointCollisionIdentities;
+            CollisionIdentitySet envelopeCollisionIdentities;
+            std::vector<unsigned char> occupiedByIdentity(
+                exposureAccumulators.size(), 0);
+            std::vector<unsigned char> explosionByIdentity(
+                exposureAccumulators.size(), 0);
 
-            for (const auto& threat : threats) {
+            for (std::size_t threatIndex = 0;
+                 threatIndex < threats.size();
+                 ++threatIndex) {
+                const Threat& threat = threats[threatIndex];
                 if (threat.IsExpiredAt(now)) continue;
+                const CollisionIdentity identity =
+                    MakeCollisionIdentity(threat.id, threatIndex);
                 const int impactTick = ImpactTickAt(threat, point);
                 const bool predictedEnvelope =
-                    impactTick - now <= static_cast<int>(settings.maxThreatHorizonMs) &&
-                    impactTick >= now - 100 && ContainsAt(
+                    TickDifference(impactTick, now) <=
+                        static_cast<int>(settings.maxThreatHorizonMs) &&
+                    TickDifference(impactTick, now) >= -100 && ContainsAt(
                         threat,
                         point,
                         heroRadius,
@@ -479,7 +1395,25 @@ public:
                     heroRadius,
                     settings.pathBuffer,
                     sampleTick);
-                if (predictedEnvelope || occupied) envelopeDanger += threat.Danger();
+                const std::size_t exposureIndex = ExposureAccumulatorIndex(
+                    exposureAccumulators, identity);
+                if (exposureIndex < exposureAccumulators.size()) {
+                    occupiedByIdentity[exposureIndex] =
+                        occupiedByIdentity[exposureIndex] ||
+                        occupied;
+                    explosionByIdentity[exposureIndex] =
+                        explosionByIdentity[exposureIndex] ||
+                        EndExplosionContainsAt(
+                            threat,
+                            point,
+                            heroRadius,
+                            settings.pathBuffer,
+                            sampleTick);
+                }
+                if ((predictedEnvelope || occupied) &&
+                    envelopeCollisionIdentities.Add(identity)) {
+                    envelopeDanger += threat.Danger();
+                }
                 if (ThreatActiveAt(threat, sampleTick)) {
                     minimumClearance = std::min(
                         minimumClearance,
@@ -492,16 +1426,34 @@ public:
                 }
                 if (!occupied) continue;
                 const int danger = threat.Danger();
-                pointDanger += danger;
+                if (pointCollisionIdentities.Add(identity))
+                    pointDanger += danger;
                 pointMaxDanger = std::max(pointMaxDanger, danger);
                 firstCollisionMs = std::min(firstCollisionMs, timeMs);
             }
 
-            if (step > 0) {
-                exposureMs += 0.5f * static_cast<float>(previousDanger + pointDanger) *
-                    (result.arrivalTimeMs / static_cast<float>(steps));
+            const float sampleDurationMs =
+                pathAnalysisDurationMs / static_cast<float>(steps);
+            for (std::size_t index = 0;
+                 index < exposureAccumulators.size();
+                 ++index) {
+                IdentityExposureAccumulator& exposure =
+                    exposureAccumulators[index];
+                const bool occupied = occupiedByIdentity[index] != 0;
+                const bool explosion = explosionByIdentity[index] != 0;
+                if (step > 0) {
+                    exposure.sampledUnionMs +=
+                        0.5f * static_cast<float>(
+                            exposure.previousUnion + occupied) *
+                        sampleDurationMs;
+                    exposure.sampledExplosionMs +=
+                        0.5f * static_cast<float>(
+                            exposure.previousExplosion + explosion) *
+                        sampleDurationMs;
+                }
+                exposure.previousUnion = occupied;
+                exposure.previousExplosion = explosion;
             }
-            previousDanger = pointDanger;
             maximumDanger = std::max(maximumDanger, pointMaxDanger);
             maximumPathDanger = std::max(maximumPathDanger, pointDanger);
             if (envelopeDanger == 0) {
@@ -515,95 +1467,228 @@ public:
             if (pointDanger > 0) actualCollision = true;
         }
 
-        for (const auto& threat : threats) {
-            if (threat.IsExpiredAt(now)) continue;
-            const ContinuousCollisionResult collision =
-                threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()
-                    ? AnalyzeMovingLine(
-                        threat,
-                        heroPos,
-                        candidate,
-                        speed,
-                        std::max(0.0f, settings.inputDelayMs),
-                        heroRadius,
-                        settings.pathBuffer,
-                        now,
-                        settings.maxThreatHorizonMs)
-                    : AnalyzeStaticThreat(
-                        threat,
-                        heroPos,
-                        candidate,
-                        speed,
-                        std::max(0.0f, settings.inputDelayMs),
-                        heroRadius,
-                        settings.pathBuffer,
-                        now,
-                        0.0f,
-                        result.arrivalTimeMs,
-                        false);
-            minimumClearance = std::min(minimumClearance, collision.minimumClearance);
-            if (!collision.collides) continue;
-            ++collisionCount;
-            actualCollision = true;
-            firstCollisionMs = std::min(firstCollisionMs, collision.firstContactMs);
-            maximumDanger = std::max(maximumDanger, threat.Danger());
-            maximumPathDanger = std::max(maximumPathDanger, threat.Danger());
-        }
-
-        const int endpointTick = now + static_cast<int>(std::round(result.arrivalTimeMs));
+        const int endpointTick = SaturatingTickAdd(
+            now, ClampTickOffset(std::round(result.arrivalTimeMs)));
         int endpointDanger = 0;
         int endpointMaxDanger = 0;
-        for (const auto& threat : threats) {
+        for (std::size_t threatIndex = 0;
+             threatIndex < threats.size();
+             ++threatIndex) {
+            const Threat& threat = threats[threatIndex];
             if (threat.IsExpiredAt(now)) continue;
+            const CollisionIdentity identity =
+                MakeCollisionIdentity(threat.id, threatIndex);
+            const float pathAnalysisEndMs = std::min(
+                result.arrivalTimeMs,
+                std::max(0.0f, settings.maxThreatHorizonMs));
+            const ContinuousCollisionResult collision = AnalyzeThreatPath(
+                threat,
+                heroPos,
+                candidate,
+                speed,
+                std::max(0.0f, settings.inputDelayMs),
+                heroRadius,
+                settings.pathBuffer,
+                now,
+                0.0f,
+                pathAnalysisEndMs,
+                false);
+            minimumClearance = std::min(minimumClearance, collision.minimumClearance);
+            const std::size_t exposureIndex = ExposureAccumulatorIndex(
+                exposureAccumulators, identity);
+            if (exposureIndex < exposureAccumulators.size()) {
+                exposureAccumulators[exposureIndex].exactExplosionMs =
+                    std::max(
+                        exposureAccumulators[exposureIndex].exactExplosionMs,
+                        collision.exposureMs);
+            }
+            const bool pathCollision = collision.collides;
+            if (pathCollision) {
+                actualCollision = true;
+                firstCollisionMs = std::min(
+                    firstCollisionMs,
+                    collision.firstContactMs);
+                maximumDanger = std::max(maximumDanger, threat.Danger());
+                maximumPathDanger = std::max(
+                    maximumPathDanger,
+                    threat.Danger());
+            }
+
             bool endpointCollision = false;
-            if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) {
-                const ContinuousCollisionResult endpoint = AnalyzeMovingLine(
-                    threat,
-                    candidate,
-                    candidate,
-                    speed,
-                    0.0f,
-                    heroRadius,
-                    settings.endpointBuffer,
-                    now,
-                    settings.maxThreatHorizonMs,
-                    result.arrivalTimeMs);
-                minimumClearance = std::min(minimumClearance, endpoint.minimumClearance);
-                endpointCollision = endpoint.collides;
-                if (endpoint.collides)
-                    firstCollisionMs = std::min(firstCollisionMs, endpoint.firstContactMs);
-            } else {
-                const int impactTick = ImpactTickAt(threat, candidate);
-                if (impactTick - now > static_cast<int>(settings.maxThreatHorizonMs)) continue;
-                endpointCollision = ContainsAt(
-                    threat,
-                    candidate,
-                    heroRadius,
-                    settings.endpointBuffer,
-                    endpointTick) ||
-                    (impactTick >= endpointTick && ContainsAt(
+            float endpointFirstCollisionMs = FLT_MAX;
+            if (includeEndpointCoverage &&
+                result.arrivalTimeMs <=
+                    settings.maxThreatHorizonMs) {
+                const int explosionTick = threat.EndExplosionStartTick();
+                if (threat.HasEndExplosionArea() &&
+                    TickDifference(explosionTick, now) <=
+                        static_cast<int>(settings.maxThreatHorizonMs)) {
+                    if (EndExplosionContainsAt(
+                            threat,
+                            candidate,
+                            heroRadius,
+                            settings.endpointBuffer,
+                            endpointTick)) {
+                        endpointCollision = true;
+                        endpointFirstCollisionMs = result.arrivalTimeMs;
+                    }
+                    if (explosionTick >= endpointTick &&
+                        EndExplosionContainsAt(
+                            threat,
+                            candidate,
+                            heroRadius,
+                            settings.endpointBuffer,
+                            explosionTick)) {
+                        endpointCollision = true;
+                        endpointFirstCollisionMs = std::min(
+                            endpointFirstCollisionMs,
+                            static_cast<float>(TickDifference(explosionTick, now)));
+                    }
+                }
+                if (threat.Type() == ZDSpellType::Line &&
+                    threat.HasTravelSpeed()) {
+                    const ContinuousCollisionResult endpoint = AnalyzeMovingLine(
                         threat,
                         candidate,
-                        heroRadius,
-                        settings.endpointBuffer,
-                        impactTick));
+                            candidate,
+                            speed,
+                            0.0f,
+                            heroRadius,
+                            settings.endpointBuffer,
+                            now,
+                            settings.maxThreatHorizonMs,
+                            result.arrivalTimeMs);
+                    minimumClearance = std::min(
+                        minimumClearance,
+                        endpoint.minimumClearance);
+                    endpointCollision = endpointCollision || endpoint.collides;
+                    if (endpoint.collides) {
+                        endpointFirstCollisionMs = std::min(
+                            endpointFirstCollisionMs,
+                            endpoint.firstContactMs);
+                        firstCollisionMs = std::min(
+                            firstCollisionMs,
+                            endpoint.firstContactMs);
+                    }
+                } else {
+                    const int impactTick = ImpactTickAt(threat, candidate);
+                    if (TickDifference(impactTick, now) <=
+                        static_cast<int>(settings.maxThreatHorizonMs)) {
+                        if (ContainsAt(
+                                threat,
+                                candidate,
+                                heroRadius,
+                                settings.endpointBuffer,
+                                endpointTick)) {
+                            endpointCollision = true;
+                            endpointFirstCollisionMs = std::min(
+                                endpointFirstCollisionMs,
+                                result.arrivalTimeMs);
+                        }
+                        if (impactTick >= endpointTick && ContainsAt(
+                            threat,
+                            candidate,
+                            heroRadius,
+                            settings.endpointBuffer,
+                            impactTick)) {
+                            endpointCollision = true;
+                            endpointFirstCollisionMs = std::min(
+                                endpointFirstCollisionMs,
+                                static_cast<float>(TickDifference(impactTick, now)));
+                        }
+                    }
+                }
             }
-            if (!endpointCollision) continue;
-            endpointDanger += threat.Danger();
-            endpointMaxDanger = std::max(endpointMaxDanger, threat.Danger());
+            if (endpointCollision) {
+                if (endpointCollisionIdentities.Add(identity))
+                    endpointDanger += threat.Danger();
+                endpointMaxDanger = std::max(
+                    endpointMaxDanger,
+                    threat.Danger());
+                firstCollisionMs = std::min(
+                    firstCollisionMs,
+                    endpointFirstCollisionMs);
+            }
+            if (!pathCollision && !endpointCollision) continue;
+
+            collisionIdentities.Add(identity);
         }
+
+        float exposureMs = 0.0f;
+        for (const IdentityExposureAccumulator& exposure :
+             exposureAccumulators) {
+            const float sampledOutsideExplosionMs = std::max(
+                0.0f,
+                exposure.sampledUnionMs - exposure.sampledExplosionMs);
+            const float exposureDurationMs =
+                sampledOutsideExplosionMs + exposure.exactExplosionMs;
+            exposureMs += static_cast<float>(exposure.danger) *
+                exposureDurationMs;
+            if (exposureDurationMs > 0.0f) {
+                exposureDangers.AddOrMax(
+                    exposure.identity,
+                    exposure.danger);
+            }
+        }
+        if (includeEndpointCoverage &&
+            result.arrivalTimeMs <=
+                settings.maxThreatHorizonMs) {
+            CollisionIdentitySet endpointHoldIdentities;
+            const CandidateEvaluation endpointHold =
+                EvaluateStationaryCandidateCore(
+                    candidate,
+                    cursorPos,
+                    heroRadius,
+                    now,
+                    settings,
+                    threats,
+                    result.arrivalTimeMs,
+                    &endpointHoldIdentities,
+                    &exposureDangers);
+            collisionIdentities.AddAll(endpointHoldIdentities);
+            endpointDanger = std::max(
+                endpointDanger,
+                endpointHold.endpointDanger);
+            endpointMaxDanger = std::max(
+                endpointMaxDanger,
+                endpointHold.maxDanger);
+            maximumDanger = std::max(
+                maximumDanger,
+                endpointHold.maxDanger);
+            maximumPathDanger = std::max(
+                maximumPathDanger,
+                endpointHold.pathDanger);
+            minimumClearance = std::min(
+                minimumClearance,
+                endpointHold.minimumClearance);
+            firstCollisionMs = std::min(
+                firstCollisionMs,
+                endpointHold.firstCollisionTimeMs);
+            exposureMs += endpointHold.dangerExposureMs;
+            if (!endpointHold.pathSafe) {
+                actualCollision = true;
+                if (foundEnvelopeSafe) envelopeReentered = true;
+            }
+        }
+        if (collisionIdentitiesOut)
+            collisionIdentitiesOut->AddAll(collisionIdentities);
+        if (exposureDangersOut)
+            exposureDangersOut->AddAll(exposureDangers);
 
         if (minimumClearance == FLT_MAX) minimumClearance = settings.maxSearchRadius;
         result.endpointDanger = endpointDanger;
         result.pathDanger = maximumPathDanger;
         result.maxDanger = std::max(maximumDanger, endpointMaxDanger);
-        result.collisionCount = collisionCount;
+        result.collisionCount =
+            static_cast<int>(collisionIdentities.Size());
         result.endpointSafe = endpointDanger == 0;
         result.pathSafe = !actualCollision;
         result.reenteredDanger = envelopeReentered;
         result.exitDistance = foundEnvelopeSafe ? firstSafeDistance : result.travelDistance;
         result.firstCollisionTimeMs = firstCollisionMs;
         result.dangerExposureMs = exposureMs;
+        result.summedExposureDanger =
+            exposureDangers.SummedDanger();
         result.minimumClearance = minimumClearance;
         result.timeMarginMs = firstCollisionMs == FLT_MAX
             ? settings.maxThreatHorizonMs
@@ -627,6 +1712,7 @@ public:
         return result;
     }
 
+public:
     static CandidateEvaluation EvaluatePathCandidate(
         const std::vector<Vec2>& path,
         PlannerCandidateSource source,
@@ -637,10 +1723,14 @@ public:
         float heroRadius,
         int now,
         const EvadeSettings& settings,
-        const std::vector<Threat>& threats) {
+        const std::vector<Threat>& threats,
+        CollisionIdentitySet* collisionIdentitiesOut = nullptr,
+        int stabilityBranchKey =
+            StabilityBranch::Unknown) {
         CandidateEvaluation result;
         result.source = source;
         result.sourceThreatId = sourceThreatId;
+        result.stabilityBranchKey = stabilityBranchKey;
         result.position = path.empty() ? Vec2() : path.back();
         result.cursorDistance = path.empty() ? FLT_MAX : path.back().Distance(cursorPos);
         result.travelDistance = EvadeGeometryMath::PolylineLength(path);
@@ -651,7 +1741,10 @@ public:
             result.rejectReason = PlannerRejectReason::Invalid;
             return result;
         }
-        result.walkable = WalkablePath(path, planeY);
+        result.walkable = WalkablePath(
+            path,
+            planeY,
+            heroRadius);
         if (!result.walkable) {
             result.rejectReason = PlannerRejectReason::Wall;
             return result;
@@ -662,27 +1755,97 @@ public:
         result.timingSafe = true;
         result.minimumClearance = FLT_MAX;
         result.firstCollisionTimeMs = FLT_MAX;
+        const float speed = std::max(50.0f, moveSpeed);
+        const float horizon = std::clamp(
+            std::isfinite(settings.maxThreatHorizonMs)
+                ? settings.maxThreatHorizonMs
+                : kMaximumAnalysisHorizonMs,
+            0.0f,
+            kMaximumAnalysisHorizonMs);
+        const float fullArrivalTimeMs =
+            std::max(0.0f, settings.inputDelayMs) +
+            1000.0f * result.travelDistance / speed;
         float elapsedMs = 0.0f;
         float distanceBefore = 0.0f;
         bool foundExit = false;
+        bool firstMotionSegment = true;
+        CollisionIdentitySet collisionIdentities;
+        ExposureDangerSet exposureDangers;
         for (std::size_t index = 1; index < path.size(); ++index) {
-            if (path[index - 1].Distance(path[index]) <= 0.001f) continue;
-            EvadeSettings segmentSettings = settings;
-            segmentSettings.inputDelayMs = index == 1
+            const Vec2& segmentStart = path[index - 1];
+            const Vec2& segmentEnd = path[index];
+            const float segmentDistance =
+                segmentStart.Distance(segmentEnd);
+            if (segmentDistance <= 0.001f) continue;
+            const bool instantaneousInitialHorizon =
+                elapsedMs == 0.0f && horizon == 0.0f;
+            if (elapsedMs >= horizon &&
+                !instantaneousInitialHorizon) {
+                break;
+            }
+
+            const float segmentInputDelayMs = firstMotionSegment
                 ? std::max(0.0f, settings.inputDelayMs)
                 : 0.0f;
-            const CandidateEvaluation segment = EvaluateCandidate(
-                path[index],
-                source,
-                sourceThreatId,
-                path[index - 1],
-                cursorPos,
-                planeY,
-                moveSpeed,
-                heroRadius,
-                now + static_cast<int>(std::round(elapsedMs)),
-                segmentSettings,
-                threats);
+            firstMotionSegment = false;
+            const float segmentTravelTimeMs =
+                1000.0f * segmentDistance / speed;
+            const float segmentDurationMs =
+                segmentInputDelayMs + segmentTravelTimeMs;
+            const float remainingHorizonMs =
+                std::max(0.0f, horizon - elapsedMs);
+            const bool clipsAtHorizon =
+                segmentDurationMs > remainingHorizonMs;
+
+            EvadeSettings segmentSettings = settings;
+            segmentSettings.inputDelayMs = segmentInputDelayMs;
+            segmentSettings.maxThreatHorizonMs = remainingHorizonMs;
+            const int segmentNow = SaturatingTickAdd(
+                now, ClampTickOffset(std::round(elapsedMs)));
+
+            Vec2 evaluatedEnd = segmentEnd;
+            if (clipsAtHorizon) {
+                const float movementTimeMs = std::max(
+                    0.0f,
+                    remainingHorizonMs - segmentInputDelayMs);
+                const float movementFraction = std::clamp(
+                    movementTimeMs / segmentTravelTimeMs,
+                    0.0f,
+                    1.0f);
+                evaluatedEnd = segmentStart +
+                    (segmentEnd - segmentStart) * movementFraction;
+            }
+
+            CandidateEvaluation segment;
+            if (evaluatedEnd.Distance(segmentStart) <= 0.001f) {
+                segment = EvaluateStationaryPathCandidateCore(
+                    segmentStart,
+                    cursorPos,
+                    heroRadius,
+                    segmentNow,
+                    segmentSettings,
+                    threats,
+                    0.0f,
+                    &collisionIdentities,
+                    &exposureDangers);
+            } else {
+                segment = EvaluateCandidateCore(
+                    evaluatedEnd,
+                    source,
+                    sourceThreatId,
+                    segmentStart,
+                    cursorPos,
+                    planeY,
+                    moveSpeed,
+                    heroRadius,
+                    segmentNow,
+                    segmentSettings,
+                    threats,
+                    &collisionIdentities,
+                    !clipsAtHorizon && index + 1 == path.size(),
+                    NavValidationMode::AlreadyValidatedPolyline,
+                    &exposureDangers);
+            }
             if (!segment.valid || !segment.walkable) {
                 result.walkable = false;
                 result.rejectReason = segment.rejectReason;
@@ -691,7 +1854,6 @@ public:
             result.pathSafe = result.pathSafe && segment.pathSafe;
             result.pathDanger = std::max(result.pathDanger, segment.pathDanger);
             result.maxDanger = std::max(result.maxDanger, segment.maxDanger);
-            result.collisionCount += segment.collisionCount;
             result.dangerExposureMs += segment.dangerExposureMs;
             result.reenteredDanger = result.reenteredDanger || segment.reenteredDanger;
             result.minimumClearance = std::min(
@@ -706,14 +1868,23 @@ public:
                     result.firstCollisionTimeMs,
                     elapsedMs + segment.firstCollisionTimeMs);
             }
-            elapsedMs += segment.arrivalTimeMs;
-            distanceBefore += segment.travelDistance;
-            if (index + 1 == path.size()) {
+            elapsedMs += clipsAtHorizon
+                ? remainingHorizonMs
+                : segmentDurationMs;
+            distanceBefore += segmentStart.Distance(evaluatedEnd);
+            if (!clipsAtHorizon && index + 1 == path.size()) {
                 result.endpointSafe = segment.endpointSafe;
                 result.endpointDanger = segment.endpointDanger;
             }
+            if (clipsAtHorizon) break;
         }
-        result.arrivalTimeMs = elapsedMs;
+        result.collisionCount =
+            static_cast<int>(collisionIdentities.Size());
+        if (collisionIdentitiesOut)
+            collisionIdentitiesOut->AddAll(collisionIdentities);
+        result.summedExposureDanger =
+            exposureDangers.SummedDanger();
+        result.arrivalTimeMs = fullArrivalTimeMs;
         if (result.minimumClearance == FLT_MAX)
             result.minimumClearance = settings.maxSearchRadius;
         result.timeMarginMs = result.firstCollisionTimeMs == FLT_MAX
@@ -735,32 +1906,359 @@ public:
     }
 
 private:
-    struct ContinuousCollisionResult {
-        bool collides = false;
-        float firstContactMs = FLT_MAX;
-        float minimumClearance = FLT_MAX;
-    };
-
     static inline constexpr float kPi = 3.14159265358979323846f;
     static inline constexpr float kDegToRad = kPi / 180.0f;
+
+    static int CanonicalEndExplosionEndTick(const Threat& threat) {
+        return SaturatingTickAdd(
+            threat.EndExplosionStartTick(),
+            std::max(100, threat.EndExplosionDuration()));
+    }
+
+    static std::size_t ExposureAccumulatorIndex(
+        const std::vector<IdentityExposureAccumulator>& accumulators,
+        const CollisionIdentity& identity) {
+        for (std::size_t index = 0; index < accumulators.size(); ++index) {
+            if (accumulators[index].identity == identity) return index;
+        }
+        return accumulators.size();
+    }
+
+    static ContinuousCollisionResult MergeContinuousCollisions(
+        const ContinuousCollisionResult& body,
+        const ContinuousCollisionResult& explosion) {
+        ContinuousCollisionResult result;
+        result.collides = body.collides || explosion.collides;
+        result.firstContactMs = std::min(
+            body.firstContactMs, explosion.firstContactMs);
+        result.minimumClearance = std::min(
+            body.minimumClearance, explosion.minimumClearance);
+        // Both components have the same collision identity. Taking the larger
+        // duration prevents overlapping body/explosion exposure from being
+        // counted twice; body exposure is currently sampled by the caller.
+        result.exposureMs = std::max(body.exposureMs, explosion.exposureMs);
+        return result;
+    }
+
+    static float CircleInsideDurationMs(const Vec2& start,
+                                        const Vec2& end,
+                                        const Vec2& center,
+                                        float radius,
+                                        float durationMs) {
+        if (!start.IsValid() || !end.IsValid() || !center.IsValid() ||
+            !std::isfinite(radius) || !std::isfinite(durationMs) ||
+            durationMs <= 0.0f) return 0.0f;
+        const Vec2 delta = end - start;
+        const Vec2 offset = start - center;
+        const double safeRadius = std::max(0.0, static_cast<double>(radius));
+        const double a = static_cast<double>(delta.x) * delta.x +
+            static_cast<double>(delta.y) * delta.y;
+        const double halfB = static_cast<double>(offset.x) * delta.x +
+            static_cast<double>(offset.y) * delta.y;
+        const double c = static_cast<double>(offset.x) * offset.x +
+            static_cast<double>(offset.y) * offset.y -
+            safeRadius * safeRadius;
+        if (!std::isfinite(a) || !std::isfinite(halfB) ||
+            !std::isfinite(c)) return 0.0f;
+        const double contactTolerance =
+            1.0e-9 * std::max(1.0, safeRadius * safeRadius);
+        if (a <= 1.0e-12)
+            return c <= contactTolerance ? durationMs : 0.0f;
+
+        double discriminant = halfB * halfB - a * c;
+        const double discriminantTolerance = 1.0e-12 *
+            std::max(1.0, halfB * halfB + std::fabs(a * c));
+        if (discriminant < -discriminantTolerance) return 0.0f;
+        discriminant = std::max(0.0, discriminant);
+        const double root = std::sqrt(discriminant);
+        const double enter = (-halfB - root) / a;
+        const double leave = (-halfB + root) / a;
+        const double clippedEnter = std::clamp(enter, 0.0, 1.0);
+        const double clippedLeave = std::clamp(leave, 0.0, 1.0);
+        if (clippedLeave <= clippedEnter) return 0.0f;
+        return durationMs *
+            static_cast<float>(clippedLeave - clippedEnter);
+    }
+
+    static ContinuousCollisionResult AnalyzeEndExplosion(
+        const Threat& threat,
+        const Vec2& heroPos,
+        const Vec2& candidate,
+        float moveSpeed,
+        float inputDelayMs,
+        float heroRadius,
+        float buffer,
+        int now,
+        float analysisStartMs,
+        float analysisEndMs,
+        bool teleport) {
+        ContinuousCollisionResult result;
+        if (!threat.HasEndExplosionArea() ||
+            !std::isfinite(analysisStartMs) ||
+            !std::isfinite(analysisEndMs)) return result;
+
+        const int explosionStartTick = threat.EndExplosionStartTick();
+        const int explosionEndTick =
+            CanonicalEndExplosionEndTick(threat);
+        const float activeStartMs = std::max({
+            0.0f,
+            analysisStartMs,
+            static_cast<float>(TickDifference(explosionStartTick, now)),
+        });
+        const float activeEndMs = std::min(
+            std::max(0.0f, analysisEndMs),
+            static_cast<float>(TickDifference(explosionEndTick, now)));
+        if (activeEndMs < activeStartMs) return result;
+
+        const float radius = std::max(
+            0.0f,
+            threat.EndExplosionRadius() +
+                std::max(0.0f, heroRadius) +
+                std::max(0.0f, buffer) +
+                threat.PositionUncertainty());
+        const Vec2 center = threat.EndExplosionCenter();
+        const float moveDurationMs = teleport
+            ? 0.0f
+            : 1000.0f * heroPos.Distance(candidate) /
+                std::max(50.0f, moveSpeed);
+        const float arrivalMs = inputDelayMs + moveDurationMs;
+        std::array<float, 4> boundaries = {
+            activeStartMs,
+            activeEndMs,
+            std::clamp(inputDelayMs, activeStartMs, activeEndMs),
+            std::clamp(arrivalMs, activeStartMs, activeEndMs),
+        };
+        std::sort(boundaries.begin(), boundaries.end());
+        for (std::size_t index = 0; index + 1 < boundaries.size(); ++index) {
+            const float beginMs = boundaries[index];
+            const float endMs = boundaries[index + 1];
+            if (endMs <= beginMs) continue;
+            const Vec2 start = HeroPositionAt(
+                heroPos, candidate, moveSpeed, inputDelayMs, beginMs, teleport);
+            const Vec2 end = HeroPositionAt(
+                heroPos, candidate, moveSpeed, inputDelayMs, endMs, teleport);
+            result.minimumClearance = std::min(
+                result.minimumClearance,
+                EvadeGeometryMath::DistanceToSegment(center, start, end) -
+                    radius);
+            const float contact =
+                EvadeGeometryMath::FirstContactMovingPointCircle(
+                    start, end, center, radius);
+            if (contact != FLT_MAX) {
+                result.collides = true;
+                result.firstContactMs = std::min(
+                    result.firstContactMs,
+                    beginMs + (endMs - beginMs) * contact);
+            }
+            result.exposureMs += CircleInsideDurationMs(
+                start,
+                end,
+                center,
+                radius,
+                endMs - beginMs);
+        }
+
+        if (activeEndMs <= activeStartMs) {
+            const Vec2 point = HeroPositionAt(
+                heroPos,
+                candidate,
+                moveSpeed,
+                inputDelayMs,
+                activeStartMs,
+                teleport);
+            result.minimumClearance = point.Distance(center) - radius;
+            if (result.minimumClearance <= 0.0f) {
+                result.collides = true;
+                result.firstContactMs = activeStartMs;
+            }
+        }
+        return result;
+    }
+
+    static ContinuousCollisionResult AnalyzeThreatPath(
+        const Threat& threat,
+        const Vec2& heroPos,
+        const Vec2& candidate,
+        float moveSpeed,
+        float inputDelayMs,
+        float heroRadius,
+        float buffer,
+        int now,
+        float analysisStartMs,
+        float analysisEndMs,
+        bool teleport) {
+        const ContinuousCollisionResult body =
+            threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()
+                ? AnalyzeMovingLine(
+                    threat,
+                    heroPos,
+                    candidate,
+                    moveSpeed,
+                    inputDelayMs,
+                    heroRadius,
+                    buffer,
+                    now,
+                    analysisEndMs,
+                    analysisStartMs,
+                    teleport)
+                : AnalyzeStaticThreat(
+                    threat,
+                    heroPos,
+                    candidate,
+                    moveSpeed,
+                    inputDelayMs,
+                    heroRadius,
+                    buffer,
+                    now,
+                    analysisStartMs,
+                    analysisEndMs,
+                    teleport);
+        const ContinuousCollisionResult explosion = AnalyzeEndExplosion(
+            threat,
+            heroPos,
+            candidate,
+            moveSpeed,
+            inputDelayMs,
+            heroRadius,
+            buffer,
+            now,
+            analysisStartMs,
+            analysisEndMs,
+            teleport);
+        return MergeContinuousCollisions(body, explosion);
+    }
+
+    static bool EndExplosionActiveAt(const Threat& threat, int tick) {
+        if (threat.expired || !threat.HasEndExplosionArea()) return false;
+        const int start = threat.EndExplosionStartTick();
+        return tick >= start &&
+            tick <= CanonicalEndExplosionEndTick(threat);
+    }
+
+    static bool EndExplosionContainsAt(const Threat& threat,
+                                       const Vec2& point,
+                                       float heroRadius,
+                                       float extraBuffer,
+                                       int tick) {
+        if (!EndExplosionActiveAt(threat, tick)) return false;
+        const float radius = threat.EndExplosionRadius() +
+            std::max(0.0f, heroRadius) +
+            std::max(0.0f, extraBuffer) +
+            threat.PositionUncertainty();
+        return point.Distance(threat.EndExplosionCenter()) <= radius;
+    }
+
+    static bool ThreatBodyContainsAt(const Threat& threat,
+                                     const Vec2& point,
+                                     float heroRadius,
+                                     float extraBuffer,
+                                     int tick) {
+        if (!ThreatBodyActiveAt(threat, tick)) return false;
+        if (!threat.HasValidGeometry()) return true;
+        const float uncertainty = threat.HasTravelSpeed()
+            ? threat.PositionUncertainty()
+            : 0.0f;
+        if (threat.Type() == ZDSpellType::Cone) {
+            return ContainsCone(
+                threat,
+                point,
+                ConeExpansion(
+                    threat,
+                    heroRadius,
+                    extraBuffer,
+                    uncertainty));
+        }
+        const float radius = std::max(
+            0.0f,
+            threat.Radius() + heroRadius + extraBuffer + uncertainty);
+        switch (threat.Type()) {
+        case ZDSpellType::Line:
+            return ContainsLineAt(threat, point, radius, tick);
+        case ZDSpellType::Circular:
+            return point.Distance(threat.endPos) <= radius;
+        case ZDSpellType::Ring:
+            return RingSignedClearance(
+                point,
+                threat.endPos,
+                std::max(
+                    0.0f,
+                    threat.InnerRadius() -
+                        heroRadius -
+                        extraBuffer -
+                        uncertainty),
+                radius) <= 0.0f;
+        case ZDSpellType::Arc:
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    static bool ThreatBodyActiveAt(const Threat& threat, int tick) {
+        if (threat.expired)
+            return false;
+        if (threat.projectileTerminated) {
+            return threat.Type() == ZDSpellType::Circular &&
+                threat.projectileTerminationTick > 0 &&
+                threat.ExtraEndTime() > 0 &&
+                tick >= threat.projectileTerminationTick &&
+                !TickAfter(
+                    tick,
+                    SaturatingTickAdd(
+                        threat.projectileTerminationTick,
+                        threat.ExtraEndTime()));
+        }
+        if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) {
+            return tick >= TravelStartTick(threat) &&
+                (threat.persistent ||
+                 !TickAfter(tick, threat.MovingLineTerminalActiveEndTick()));
+        }
+        if (!threat.persistent &&
+            TickAfter(tick, SaturatingTickAdd(threat.endTick, 100))) return false;
+        const int activation = threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()
+            ? ImpactTickAt(threat, threat.endPos)
+            : SaturatingTickAdd(threat.startTick, threat.Delay());
+        const int persistence = std::max(100, threat.ExtraEndTime());
+        return tick >= activation && (threat.persistent ||
+            tick <= SaturatingTickAdd(activation, persistence));
+    }
 
     static int TravelStartTick(const Threat& threat) {
         return threat.missileBound && threat.launchTick > 0
             ? threat.launchTick
-            : threat.startTick + threat.Delay();
+            : SaturatingTickAdd(threat.startTick, threat.Delay());
     }
 
     static int TravelEndTick(const Threat& threat) {
-        if (!threat.HasTravelSpeed()) return threat.startTick + threat.Delay();
-        if (threat.observedTick > 0 && threat.observedHead.IsValid() && !threat.observedHead.IsZero()) {
-            const float remaining = std::max(
-                0.0f,
-                (threat.endPos - threat.observedHead).Dot(threat.direction));
-            return threat.observedTick + static_cast<int>(std::ceil(
-                1000.0f * remaining / std::max(1.0f, threat.Speed())));
-        }
-        return TravelStartTick(threat) + static_cast<int>(std::ceil(
-            1000.0f * threat.startPos.Distance(threat.endPos) / threat.Speed()));
+        return threat.ArrivalTick();
+    }
+
+    static bool FutureTickWithinHorizon(int tick,
+                                        int now,
+                                        float horizonMs) {
+        const float safeHorizonMs = std::clamp(
+            std::isfinite(horizonMs) ? horizonMs : kMaximumAnalysisHorizonMs,
+            0.0f,
+            kMaximumAnalysisHorizonMs);
+        const std::int64_t offset = TickDifference(tick, now);
+        return offset >= 0 &&
+            offset <= ClampTickOffset(safeHorizonMs);
+    }
+
+    static Vec2 MovingLineHeadAtTime(const Threat& threat,
+                                     int now,
+                                     float timeMs) {
+        if (!std::isfinite(timeMs)) return threat.HeadAtTick(now);
+        const float floorMs = std::floor(timeMs);
+        const float ceilMs = std::ceil(timeMs);
+        const int floorTick = SaturatingTickAdd(
+            now, ClampTickOffset(floorMs));
+        const int ceilTick = SaturatingTickAdd(
+            now, ClampTickOffset(ceilMs));
+        const Vec2 floorHead = threat.HeadAtTick(floorTick);
+        if (floorTick == ceilTick) return floorHead;
+        const Vec2 ceilHead = threat.HeadAtTick(ceilTick);
+        return floorHead + (ceilHead - floorHead) * (timeMs - floorMs);
     }
 
     static Vec2 HeroPositionAt(const Vec2& heroPos,
@@ -792,34 +2290,49 @@ private:
         float analysisEndMs,
         bool teleport) {
         ContinuousCollisionResult result;
-        if (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed()) return result;
-        int activeStartTick = threat.startTick + threat.Delay() - 120;
-        int activeEndTick = threat.startTick + threat.Delay() +
-            std::max(100, threat.ExtraEndTime());
+        if (threat.Type() == ZDSpellType::Arc) {
+            result.collides = true;
+            result.firstContactMs = 0.0f;
+            result.minimumClearance = -FLT_MAX;
+            return result;
+        }
+        if (threat.projectileTerminated ||
+            (threat.Type() == ZDSpellType::Line && threat.HasTravelSpeed())) return result;
+        int activeStartTick = SaturatingTickAdd(threat.startTick, threat.Delay());
+        int activeEndTick = threat.persistent
+            ? SaturatingTickAdd(
+                now,
+                ClampTickOffset(std::ceil(std::max(0.0f, analysisEndMs))))
+            : SaturatingTickAdd(
+                activeStartTick, std::max(100, threat.ExtraEndTime()));
         if (threat.Type() == ZDSpellType::Circular && threat.HasTravelSpeed()) {
             const int impact = ImpactTickAt(threat, threat.endPos);
-            activeStartTick = impact - 120;
-            activeEndTick = impact + std::max(100, threat.ExtraEndTime());
-        } else if (threat.Type() == ZDSpellType::Arc && threat.HasTravelSpeed()) {
-            activeStartTick = TravelStartTick(threat);
-            activeEndTick = threat.endTick + 100;
+            activeStartTick = impact;
+            if (!threat.persistent)
+                activeEndTick = SaturatingTickAdd(
+                    impact, std::max(100, threat.ExtraEndTime()));
         }
         const float activeStartMs = std::max(
             std::max(0.0f, analysisStartMs),
-            static_cast<float>(activeStartTick - now));
+            static_cast<float>(TickDifference(activeStartTick, now)));
         const float activeEndMs = std::min(
             std::max(0.0f, analysisEndMs),
-            static_cast<float>(activeEndTick - now));
+            static_cast<float>(TickDifference(activeEndTick, now)));
         if (activeEndMs < activeStartMs) return result;
 
-        const float radius = std::max(
-            0.0f,
-            threat.Radius() + heroRadius + buffer + threat.PositionUncertainty());
+        const float radius = threat.Type() == ZDSpellType::Cone
+            ? 0.0f
+            : std::max(
+                0.0f,
+                threat.Radius() + heroRadius + buffer + threat.PositionUncertainty());
+        const float coneExpansion = ConeExpansion(
+            threat,
+            heroRadius,
+            buffer,
+            threat.PositionUncertainty());
         const Vec2 direction = threat.direction.IsZero()
             ? (threat.endPos - threat.startPos).Normalized()
             : threat.direction;
-        const float chordLength = threat.startPos.Distance(threat.endPos);
-        const float arcRadius = radius + chordLength * 0.18f;
         const auto clearance = [&](const Vec2& point) {
             switch (threat.Type()) {
             case ZDSpellType::Line:
@@ -835,14 +2348,15 @@ private:
                         threat.InnerRadius() - heroRadius - buffer - threat.PositionUncertainty()),
                     radius);
             case ZDSpellType::Cone:
+                if (!threat.HasValidConeAngle()) return -1.0f;
                 return EvadeGeometryMath::SignedDistanceToSector(
                     point,
                     threat.startPos,
                     direction,
                     threat.Range(),
-                    std::max(0.05f, threat.Angle() * 0.5f * kDegToRad)) - radius;
+                    threat.Angle() * 0.5f * kDegToRad) - coneExpansion;
             case ZDSpellType::Arc:
-                return DistanceToSegment(point, threat.startPos, threat.endPos) - arcRadius;
+                return -FLT_MAX;
             default:
                 return -1.0f;
             }
@@ -889,6 +2403,11 @@ private:
                     start, end, clearance);
                 break;
             case ZDSpellType::Cone:
+                if (!threat.HasValidConeAngle()) {
+                    intervalClearance = -1.0f;
+                    contact = 0.0f;
+                    break;
+                }
                 intervalClearance = EvadeGeometryMath::MinimumSignedDistanceAlongSegment(
                     start, end, clearance, 64);
                 contact = EvadeGeometryMath::FirstContactMovingPointSector(
@@ -897,15 +2416,13 @@ private:
                     threat.startPos,
                     direction,
                     threat.Range(),
-                    std::max(0.05f, threat.Angle() * 0.5f * kDegToRad),
-                    radius,
+                    threat.Angle() * 0.5f * kDegToRad,
+                    coneExpansion,
                     0.02f);
                 break;
             case ZDSpellType::Arc:
-                intervalClearance = EvadeGeometryMath::SegmentSegmentDistance(
-                    start, end, threat.startPos, threat.endPos) - arcRadius;
-                contact = EvadeGeometryMath::FirstContactMovingPointCapsule(
-                    start, end, threat.startPos, threat.endPos, arcRadius);
+                intervalClearance = -FLT_MAX;
+                contact = 0.0f;
                 break;
             default:
                 intervalClearance = -1.0f;
@@ -944,18 +2461,23 @@ private:
         float analysisStartMs = 0.0f,
         bool teleport = false) {
         ContinuousCollisionResult result;
-        if (threat.Type() != ZDSpellType::Line || !threat.HasTravelSpeed()) return result;
+        if (threat.projectileTerminated || threat.Type() != ZDSpellType::Line ||
+            !threat.HasTravelSpeed()) return result;
         const float radius = std::max(
             0.0f,
             threat.Radius() + heroRadius + buffer + threat.PositionUncertainty());
-        const float travelStartMs = static_cast<float>(TravelStartTick(threat) - now);
-        const float travelEndMs = static_cast<float>(TravelEndTick(threat) - now);
+        const float travelStartMs =
+            static_cast<float>(TickDifference(TravelStartTick(threat), now));
+        const float travelEndMs =
+            static_cast<float>(TickDifference(TravelEndTick(threat), now));
         const float activeStartMs = std::max({0.0f, analysisStartMs, travelStartMs});
-        const float activeEndMs = std::min(
-            std::max(0.0f, horizonMs),
-            std::min(
-                static_cast<float>(threat.endTick + 100 - now),
-                travelEndMs + static_cast<float>(std::max(30, threat.ExtraEndTime()))));
+        const float requestedHorizonMs = std::max(0.0f, horizonMs);
+        const float activeEndMs = threat.persistent
+            ? requestedHorizonMs
+            : std::min(
+                requestedHorizonMs,
+                static_cast<float>(TickDifference(
+                    threat.MovingLineTerminalActiveEndTick(), now)));
         if (activeEndMs < activeStartMs) return result;
 
         const float moveDurationMs = teleport
@@ -985,8 +2507,8 @@ private:
             const Vec2 firstVelocity = heroMoving
                 ? heroDirection * std::max(50.0f, moveSpeed)
                 : Vec2();
-            const Vec2 secondPosition = threat.HeadAtTick(
-                now + static_cast<int>(std::round(beginMs)));
+            const Vec2 secondPosition = MovingLineHeadAtTime(
+                threat, now, beginMs);
             const bool missileMoving = midpointMs >= travelStartMs && midpointMs < travelEndMs;
             const Vec2 secondVelocity = missileMoving ? missileVelocity : Vec2();
             const float durationSeconds = (endMs - beginMs) / 1000.0f;
@@ -1014,8 +2536,8 @@ private:
         if (activeEndMs - activeStartMs <= 0.001f) {
             const Vec2 firstPosition = HeroPositionAt(
                 heroPos, candidate, moveSpeed, inputDelayMs, activeStartMs, teleport);
-            const Vec2 secondPosition = threat.HeadAtTick(
-                now + static_cast<int>(std::round(activeStartMs)));
+            const Vec2 secondPosition = MovingLineHeadAtTime(
+                threat, now, activeStartMs);
             result.minimumClearance = firstPosition.Distance(secondPosition) - radius;
             if (result.minimumClearance <= 0.0f) {
                 result.collides = true;
@@ -1030,9 +2552,27 @@ private:
                                    float heroRadius,
                                    float extraBuffer,
                                    int tick) {
+        if (threat.Type() == ZDSpellType::Arc) return -FLT_MAX;
         const float uncertainty = threat.HasTravelSpeed()
             ? threat.PositionUncertainty()
             : 0.0f;
+        if (threat.Type() == ZDSpellType::Cone) {
+            if (!threat.HasValidConeAngle()) return -1.0f;
+            const Vec2 direction = threat.direction.IsZero()
+                ? (threat.endPos - threat.startPos).Normalized()
+                : threat.direction;
+            return EvadeGeometryMath::SignedDistanceToSector(
+                point,
+                threat.startPos,
+                direction,
+                threat.Range(),
+                threat.Angle() * 0.5f * kDegToRad) -
+                ConeExpansion(
+                    threat,
+                    heroRadius,
+                    extraBuffer,
+                    threat.PositionUncertainty());
+        }
         const float radius = std::max(
             0.0f,
             threat.Radius() + heroRadius + extraBuffer + uncertainty);
@@ -1050,21 +2590,7 @@ private:
                     threat.InnerRadius() - heroRadius - extraBuffer - uncertainty),
                 radius);
         }
-        if (threat.Type() == ZDSpellType::Cone) {
-            const Vec2 direction = threat.direction.IsZero()
-                ? (threat.endPos - threat.startPos).Normalized()
-                : threat.direction;
-            return EvadeGeometryMath::SignedDistanceToSector(
-                point,
-                threat.startPos,
-                direction,
-                threat.Range(),
-                std::max(0.05f, threat.Angle() * 0.5f * kDegToRad)) - radius;
-        }
-        const float chordLength = threat.startPos.Distance(threat.endPos);
-        const float conservativeRadius = radius + chordLength * 0.18f;
-        return DistanceToSegment(point, threat.startPos, threat.endPos, nullptr, nullptr) -
-            conservativeRadius;
+        return -FLT_MAX;
     }
 
     static float RingSignedClearance(const Vec2& point,
@@ -1093,6 +2619,7 @@ private:
     static bool ContainsCone(const Threat& threat,
                              const Vec2& point,
                              float expansion) {
+        if (!threat.HasValidConeAngle()) return true;
         const Vec2 direction = threat.direction.IsZero()
             ? (threat.endPos - threat.startPos).Normalized()
             : threat.direction;
@@ -1102,20 +2629,19 @@ private:
             threat.startPos,
             direction,
             threat.Range(),
-            std::max(0.05f, threat.Angle() * 0.5f * kDegToRad)) <=
-            std::max(0.0f, threat.Radius() + expansion);
+            threat.Angle() * 0.5f * kDegToRad) <= std::max(0.0f, expansion);
     }
 
-    static bool ContainsArc(const Threat& threat,
-                            const Vec2& point,
-                            float radius) {
-        const Vec2 chord = threat.endPos - threat.startPos;
-        const float chordLength = chord.Length();
-        if (chordLength < 1.0f) return point.Distance(threat.endPos) <= radius;
-        const float conservativeRadius = radius + chordLength * 0.18f;
-        const float distance = DistanceToSegment(point, threat.startPos, threat.endPos, nullptr, nullptr);
-        return distance <= conservativeRadius;
+    static float ConeExpansion(const Threat& threat,
+                               float heroRadius,
+                               float extraBuffer,
+                               float uncertainty) {
+        return std::max(0.0f, heroRadius) +
+            std::max(0.0f, extraBuffer) +
+            std::max(0.0f, uncertainty) +
+            threat.ConeEdgePadding();
     }
+
 };
 
 }

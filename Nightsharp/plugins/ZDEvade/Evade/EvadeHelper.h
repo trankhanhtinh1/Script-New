@@ -111,8 +111,9 @@ public:
 
     // ── Spell position ──
     static Vec2 GetCurrentSpellPosition(const TrackedSpell& spell, int afterTime = 0, bool allowNegative = false) {
+        if (spell.Type() == ZDSpellType::Arc) return spell.startPos;
         if (spell.isMissile && spell.missile.IsValid()) return spell.GetMissilePosition(afterTime);
-        if (!IsLineType(spell.Type()) && spell.Type() != ZDSpellType::Arc) {
+        if (!IsLineType(spell.Type())) {
             return IsCircleType(spell.Type()) || spell.Type() == ZDSpellType::Ring
                 ? spell.endPos
                 : spell.startPos;
@@ -204,12 +205,20 @@ public:
         if (IsLineType(spell.Type())) {
             const float speed = spell.MissileSpeed();
             if (speed >= FLT_MAX * 0.5f) {
-                return std::max(0.0f, static_cast<float>(spell.endTime - now - SDK::Game::Ping()));
+                return std::max(
+                    0.0f,
+                    static_cast<float>(
+                        TickDifference(spell.endTime, now) -
+                        static_cast<std::int64_t>(SDK::Game::Ping())));
             }
             const Vec2 head = GetCurrentSpellPosition(spell, SDK::Game::Ping(), true);
             return (EvadeMath::Dist(head, pos) / std::max(1.0f, speed)) * 1000.0f;
         }
-        return std::max(0.0f, static_cast<float>(spell.endTime - now - SDK::Game::Ping()));
+        return std::max(
+            0.0f,
+            static_cast<float>(
+                TickDifference(spell.endTime, now) -
+                static_cast<std::int64_t>(SDK::Game::Ping())));
     }
 
     static float GetClosestDistanceApproach(const TrackedSpell& spell, const Vec2& pos,
@@ -240,7 +249,11 @@ public:
         }
         if (IsCircleType(type)) {
             const int now = SDK::Variables::TickCount();
-            const float hitTime = std::max(0.0f, static_cast<float>(spell.startTime + spell.Delay() - now) - delayMs);
+            const float hitTime = std::max(
+                0.0f,
+                static_cast<float>(TickDifference(
+                    SaturatingTickAdd(spell.startTime, spell.Delay()), now)) -
+                    delayMs);
             const float walkRange = EvadeMath::Dist(heroPos, pos);
             const float predictedRange = speed * (hitTime / 1000.0f);
             const Vec2 tHeroPos = heroPos + walkDir * std::min(predictedRange, walkRange);

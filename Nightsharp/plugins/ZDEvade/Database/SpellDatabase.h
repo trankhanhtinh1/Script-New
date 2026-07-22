@@ -1,12 +1,20 @@
 #pragma once
 #include "SpellData.h"
 
+#include <cmath>
+
 namespace ZDEvade { class SpellDatabase {
 public:
     static std::vector<ZDEvade::SpellData> Spells;
+    static int InvalidConeSpellCount() { return invalidConeSpellCount_; }
+    static int InvalidArcSpellCount() { return invalidArcSpellCount_; }
+    static int SupportedArcSpellCount() { return supportedArcSpellCount_; }
 
     static void Initialize() {
         if (!Spells.empty()) return;
+        invalidConeSpellCount_ = 0;
+        invalidArcSpellCount_ = 0;
+        supportedArcSpellCount_ = 0;
 
         // === AllChampions ===
         {
@@ -48,12 +56,12 @@ public:
             spell.charName = "Aatrox";
             spell.dangerlevel = 3;
             spell.name = "The Darkin Blade (Cast 2)";
-            spell.radius = 250.0f;
-            spell.range = 100.0f;
+            spell.range = 525.0f;
             spell.spellDelay = 600;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "AatroxQ2";
-            spell.spellType = ZDSpellType::Line;
+            spell.spellType = ZDSpellType::Cone;
+            spell.coneAngleDegrees = 60.0f;
             spell.ccType = CCType::KnockUp;
             Spells.push_back(spell);
         }
@@ -87,20 +95,6 @@ public:
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
-        {
-            SpellData spell;
-            spell.charName = "Aatrox";
-            spell.dangerlevel = 2;
-            spell.name = "Umbral Dash";
-            spell.radius = 285.0f;
-            spell.spellDelay = 250;
-            spell.spellKey = ZDSpellSlot::E;
-            spell.spellName = "AatroxE";
-            spell.spellType = ZDSpellType::Circular;
-            spell.ccType = CCType::None;
-            Spells.push_back(spell);
-        }
-
         // === Ahri ===
         {
             SpellData spell;
@@ -116,8 +110,26 @@ public:
             spell.spellName = "AhriQ";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::None;
-            spell.extraMissileNames = { "AhriQReturnMissile" };
+            spell.extraSpellNames = { "AhriOrbofDeception" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ahri";
+            spell.dangerlevel = 2;
+            spell.missileName = "AhriOrbReturn";
+            spell.extraMissileNames = { "AhriQReturnMissile" };
+            spell.name = "Orb of Deception (Return)";
+            spell.projectileSpeed = 915.0f;
+            spell.radius = 100.0f;
+            spell.range = 925.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "AhriOrbofDeception2";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.isSpecial = true;
             Spells.push_back(spell);
         }
         {
@@ -152,6 +164,7 @@ public:
             spell.spellName = "AkaliQ";
             spell.spellType = ZDSpellType::Cone;
             spell.ccType = CCType::Slow;
+            spell.coneAngleDegrees = 45.0f;
             spell.extraMissileNames = { "AkaliQMis0", "AkaliQMis1", "AkaliQMis2", "AkaliQMis3", "AkaliQMis4", "AkaliQMis5" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
@@ -191,6 +204,22 @@ public:
             spell.ccType = CCType::None;
             spell.extraMissileNames = { "AkshanQMissileReturn" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+
+        {
+            SpellData spell;
+            spell.charName = "Alistar";
+            spell.dangerlevel = 3;
+            spell.name = "Pulverize";
+            spell.radius = 375.0f;
+            spell.range = 375.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "Pulverize";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::KnockUp;
+            spell.useEndPosition = true;
             Spells.push_back(spell);
         }
 
@@ -243,6 +272,7 @@ public:
             SpellData spell;
             spell.charName = "Amumu";
             spell.dangerlevel = 3;
+            spell.missileName = "SadMummyBandageToss";
             spell.name = "Bandage Toss";
             spell.projectileSpeed = 2000.0f;
             spell.radius = 80.0f;
@@ -250,6 +280,21 @@ public:
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "BandageToss";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Amumu";
+            spell.dangerlevel = 4;
+            spell.name = "Curse of the Sad Mummy";
+            spell.radius = 560.0f;
+            spell.range = 560.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "CurseoftheSadMummy";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::Stun;
             Spells.push_back(spell);
@@ -260,18 +305,36 @@ public:
             SpellData spell;
             spell.charName = "Anivia";
             spell.dangerlevel = 3;
+            spell.missileName = "FlashFrostSpell";
             spell.name = "Flash Frost";
-            spell.range = 1075.0f;
+            spell.projectileSpeed = 850.0f;
+            spell.radius = 110.0f;
+            spell.range = 1250.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;
-            spell.spellName = "FlashFrost";
-            spell.spellType = ZDSpellType::Circular;
+            spell.spellName = "FlashFrostSpell";
+            spell.extraSpellNames = { "FlashFrost" };
+            spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Stun;
             Spells.push_back(spell);
         }
 
 
         // === Annie ===
+        {
+            SpellData spell;
+            spell.charName = "Annie";
+            spell.dangerlevel = 2;
+            spell.name = "Incinerate";
+            spell.range = 625.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::W;
+            spell.spellName = "Incinerate";
+            spell.spellType = ZDSpellType::Cone;
+            spell.ccType = CCType::Stun;
+            spell.coneAngleDegrees = 25.0f;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Annie";
@@ -289,6 +352,23 @@ public:
 
         // === Aphelios ===
 	//MissQ
+        {
+            SpellData spell;
+            spell.charName = "Aphelios";
+            spell.dangerlevel = 2;
+            spell.missileName = "ApheliosCalibrumQMis";
+            spell.name = "Moonshot";
+            spell.projectileSpeed = 1850.0f;
+            spell.radius = 60.0f;
+            spell.range = 1450.0f;
+            spell.spellDelay = 400;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "ApheliosCalibrumQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Aphelios";
@@ -311,23 +391,41 @@ public:
         {
             SpellData spell;
             spell.charName = "Ashe";
-            spell.dangerlevel = 3;
+            spell.dangerlevel = 4;
             spell.missileName = "EnchantedCrystalArrow";
             spell.name = "Enchanted Crystal Arrow";
-            spell.projectileSpeed = 1500.0f;
+            spell.projectileSpeed = 1600.0f;
             spell.radius = 130.0f;
-            spell.range = 400.0f;
+            spell.range = 25000.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "EnchantedCrystalArrow";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Stun;
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 400.0f;
+            spell.endExplosionRequiresUnitCollision = true;
+            spell.endExplosionAtUnitCenter = true;
             Spells.push_back(spell);
         }
 
         // === AurelionSol ===
-	//viết lại AurelionSol
+	//thiếu E
+        {
+            SpellData spell;
+            spell.charName = "AurelionSol";
+            spell.dangerlevel = 4;
+            spell.name = "Falling Star / The Skies Descend";
+            spell.radius = 350.0f;
+            spell.range = 1200.0f;
+            spell.spellDelay = 1250;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "AurelionSolR";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::Stun;
+            Spells.push_back(spell);
+        }
 
 
         // === Aurora ===
@@ -554,11 +652,13 @@ public:
             spell.name = "Chilling Scream";
             spell.projectileSpeed = 1900.0f;
             spell.radius = 190.0f;
-            spell.spellDelay = 250;
+            spell.range = 600.0f;
+            spell.spellDelay = 1000;
             spell.spellKey = ZDSpellSlot::E;
             spell.spellName = "BriarE";
-            spell.spellType = ZDSpellType::Line;
+            spell.spellType = ZDSpellType::Cone;
             spell.ccType = CCType::KnockUp;
+            spell.coneAngleDegrees = 40.0f;
             spell.extraMissileNames = { "BriarEMisStrong" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
@@ -655,13 +755,13 @@ public:
             spell.charName = "Camille";
             spell.dangerlevel = 2;
             spell.name = "Tactical Sweep";
-            spell.radius = 100.0f;
-            spell.range = 610.0f;
-            spell.spellDelay = 250;
+            spell.range = 650.0f;
+            spell.spellDelay = 750;
             spell.spellKey = ZDSpellSlot::W;
             spell.spellName = "CamilleW";
-            spell.spellType = ZDSpellType::Line;
+            spell.spellType = ZDSpellType::Cone;
             spell.ccType = CCType::Slow;
+            spell.coneAngleDegrees = 45.0f;
             Spells.push_back(spell);
         }
         {
@@ -716,6 +816,20 @@ public:
             Spells.push_back(spell);
         }
 	//Cassiopeia R thiếu
+        {
+            SpellData spell;
+            spell.charName = "Cassiopeia";
+            spell.dangerlevel = 4;
+            spell.name = "Petrifying Gaze";
+            spell.range = 825.0f;
+            spell.spellDelay = 500;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "CassiopeiaR";
+            spell.spellType = ZDSpellType::Cone;
+            spell.ccType = CCType::Stun;
+            spell.coneAngleDegrees = 80.0f;
+            Spells.push_back(spell);
+        }
 
         // === Chogath ===
         {
@@ -733,6 +847,20 @@ public:
             Spells.push_back(spell);
         }
 	//Chogath thiếu W
+        {
+            SpellData spell;
+            spell.charName = "Chogath";
+            spell.dangerlevel = 2;
+            spell.name = "Feral Scream";
+            spell.range = 650.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::W;
+            spell.spellName = "FeralScream";
+            spell.spellType = ZDSpellType::Cone;
+            spell.ccType = CCType::Silence;
+            spell.coneAngleDegrees = 60.0f;
+            Spells.push_back(spell);
+        }
 
         // === Corki ===
         {
@@ -775,6 +903,20 @@ public:
 
         // === Darius ===
 	//thiếu Darius Q
+        {
+            SpellData spell;
+            spell.charName = "Darius";
+            spell.dangerlevel = 3;
+            spell.name = "Apprehend";
+            spell.range = 535.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "DariusE";
+            spell.spellType = ZDSpellType::Cone;
+            spell.ccType = CCType::KnockUp;
+            spell.coneAngleDegrees = 50.0f;
+            Spells.push_back(spell);
+        }
 
         // === Diana ===
         {
@@ -936,6 +1078,7 @@ public:
             spell.spellName = "EvelynnR";
             spell.spellType = ZDSpellType::Cone;
             spell.ccType = CCType::None;
+            spell.coneAngleDegrees = 180.0f;
             Spells.push_back(spell);
         }
 
@@ -983,13 +1126,13 @@ public:
             spell.name = "Trueshot Barrage";
             spell.projectileSpeed = 2000.0f;
             spell.radius = 160.0f;
-            spell.range = 640.0f;
-            spell.spellDelay = 250;
+            spell.range = 25000.0f;
+            spell.spellDelay = 1000;
             spell.spellKey = ZDSpellSlot::R;
-            spell.spellName = "EzrealR";
+            spell.spellName = "EzrealTrueshotBarrage";
+            spell.extraSpellNames = { "EzrealR" };
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::None;
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
 
@@ -1006,8 +1149,9 @@ public:
             spell.range = 850.0f;
             spell.spellDelay = 400;
             spell.spellKey = ZDSpellSlot::E;
-            spell.spellName = "FiddleSticksE";
-            spell.spellType = ZDSpellType::Cone;
+            spell.spellName = "FiddlesticksE";
+            spell.extraSpellNames = { "FiddleSticksE" };
+            spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Silence;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
@@ -1141,7 +1285,38 @@ public:
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
+        {
+            SpellData spell;
+            spell.charName = "Gnar";
+            spell.dangerlevel = 2;
+            spell.missileName = "GnarBigQMissile";
+            spell.name = "Boulder Toss";
+            spell.projectileSpeed = 2100.0f;
+            spell.radius = 90.0f;
+            spell.range = 1150.0f;
+            spell.spellDelay = 500;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "GnarBigQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
 	//Gnar thiếu W hoá khổng lồ GnarBigW, GnarBigE
+        {
+            SpellData spell;
+            spell.charName = "Gnar";
+            spell.dangerlevel = 3;
+            spell.name = "Wallop";
+            spell.radius = 100.0f;
+            spell.range = 600.0f;
+            spell.spellDelay = 600;
+            spell.spellKey = ZDSpellSlot::W;
+            spell.spellName = "GnarBigW";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Stun;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Gnar";
@@ -1211,6 +1386,22 @@ public:
             SpellData spell;
             spell.charName = "Graves";
             spell.dangerlevel = 2;
+            spell.missileName = "GravesQLineMissile";
+            spell.name = "End of the Line";
+            spell.projectileSpeed = 3000.0f;
+            spell.radius = 40.0f;
+            spell.range = 925.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "GravesQLineSpell";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Graves";
+            spell.dangerlevel = 2;
             spell.name = "Smoke Screen";
             spell.projectileSpeed = 1500.0f;
             spell.radius = 225.0f;
@@ -1227,18 +1418,18 @@ public:
             SpellData spell;
             spell.charName = "Graves";
             spell.dangerlevel = 3;
-            spell.missileName = "GravesChargeShotFxMissile";
+            spell.missileName = "GravesUltimateMissile";
             spell.name = "Collateral Damage";
-            spell.projectileSpeed = 2000.0f;
-            spell.radius = 20.0f;
+            spell.projectileSpeed = 2100.0f;
+            spell.radius = 100.0f;
             spell.range = 1000.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::R;
-            spell.spellName = "GravesChargeShot";
-            spell.spellType = ZDSpellType::Cone;
+            spell.spellName = "GravesUltimateShot";
+            spell.extraSpellNames = { "GravesChargeShot" };
+            spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::None;
-            spell.extraMissileNames = { "GravesChargeShotFxMissile2" };
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.extraMissileNames = { "GravesChargeShotFxMissile", "GravesChargeShotFxMissile2" };
             Spells.push_back(spell);
         }
 
@@ -1319,18 +1510,88 @@ public:
         {
             SpellData spell;
             spell.charName = "Hwei";
+            spell.dangerlevel = 2;
+            spell.missileName = "HweiQQMissile";
+            spell.name = "Subject: Disaster - Devastating Fire (QQ)";
+            spell.projectileSpeed = 2000.0f;
+            spell.radius = 50.0f;
+            spell.range = 800.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "HweiQQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 200.0f;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Hwei";
+            spell.dangerlevel = 2;
+            spell.name = "Subject: Disaster - Molten Fissure (QW)";
+            spell.radius = 100.0f;
+            spell.range = 2000.0f;
+            spell.spellDelay = 850;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "HweiQW";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Hwei";
             spell.dangerlevel = 3;
-            spell.missileName = "HweiR";
+            spell.missileName = "HweiEQMissile";
+            spell.name = "Subject: Torment - Grim Visage (EQ)";
+            spell.projectileSpeed = 1500.0f;
+            spell.radius = 60.0f;
+            spell.range = 850.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "HweiEQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Charm;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Hwei";
+            spell.dangerlevel = 3;
+            spell.missileName = "HweiEWMissile";
+            spell.name = "Subject: Torment - Gaze of the Abyss (EW)";
+            spell.projectileSpeed = 1400.0f;
+            spell.radius = 180.0f;
+            spell.range = 850.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "HweiEW";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::Snare;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Hwei";
+            spell.dangerlevel = 4;
+            spell.missileName = "HweiRMissile";
+            spell.extraMissileNames = { "HweiR", "Hwei_R_Mis" };
             spell.name = "Spiraling Despair";
             spell.projectileSpeed = 1400.0f;
             spell.radius = 90.0f;
-            spell.range = 1300.0f;
+            spell.range = 1340.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "HweiR";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Slow;
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 500.0f;
+            spell.extraDelay = 3000;
             Spells.push_back(spell);
         }
 
@@ -1491,6 +1752,44 @@ public:
 
         // === Jayce ===
 	//JayceShockBlast và JayceQAccel
+        {
+            SpellData spell;
+            spell.charName = "Jayce";
+            spell.dangerlevel = 2;
+            spell.missileName = "JayceShockBlastMis";
+            spell.name = "Shock Blast";
+            spell.projectileSpeed = 1450.0f;
+            spell.radius = 70.0f;
+            spell.range = 1050.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "JayceShockBlast";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 175.0f;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Jayce";
+            spell.dangerlevel = 3;
+            spell.missileName = "JayceShockBlastWallMis";
+            spell.name = "Shock Blast (Accelerated)";
+            spell.projectileSpeed = 2350.0f;
+            spell.radius = 70.0f;
+            spell.range = 1600.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "JayceShockBlastCharged";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 250.0f;
+            Spells.push_back(spell);
+        }
 
         // === Jhin ===
         {
@@ -1521,6 +1820,23 @@ public:
             spell.ccType = CCType::Slow;
             Spells.push_back(spell);
         }
+        {
+            SpellData spell;
+            spell.charName = "Jhin";
+            spell.dangerlevel = 3;
+            spell.missileName = "JhinRShotMis";
+            spell.name = "Curtain Call";
+            spell.projectileSpeed = 5000.0f;
+            spell.radius = 80.0f;
+            spell.range = 3500.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "JhinRShot";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
 
         // === Jinx ===
         {
@@ -1532,11 +1848,12 @@ public:
             spell.projectileSpeed = 3300.0f;
             spell.radius = 60.0f;
             spell.range = 1450.0f;
-            spell.spellDelay = 250;
+            spell.spellDelay = 600;
             spell.spellKey = ZDSpellSlot::W;
             spell.spellName = "JinxW";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Slow;
+            spell.isSpecial = true;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
@@ -1573,6 +1890,21 @@ public:
         }
 
         // === KSante ===
+        {
+            SpellData spell;
+            spell.charName = "KSante";
+            spell.dangerlevel = 2;
+            spell.name = "Ntofo Strikes (Q3)";
+            spell.projectileSpeed = 1400.0f;
+            spell.radius = 100.0f;
+            spell.range = 475.0f;
+            spell.spellDelay = 400;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "KSanteQ3";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "KSante";
@@ -1687,35 +2019,37 @@ public:
             spell.missileName = "KarmaQMissile";
             spell.name = "Inner Flame";
             spell.projectileSpeed = 1700.0f;
-            spell.radius = 80.0f;
+            spell.radius = 60.0f;
             spell.range = 950.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "KarmaQ";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Slow;
-            spell.extraMissileNames = { "KarmaQMissileMantra" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 280.0f;
             Spells.push_back(spell);
         }
         {
             SpellData spell;
             spell.charName = "Karma";
             spell.dangerlevel = 3;
-            spell.missileName = "KarmaMantra";
-            spell.name = "Mantra";
-            spell.projectileSpeed = 1300.0f;
-            spell.radius = 275.0f;
-            spell.range = 1100.0f;
+            spell.missileName = "KarmaQMissileMantra";
+            spell.name = "Inner Flame (Mantra)";
+            spell.projectileSpeed = 1700.0f;
+            spell.radius = 80.0f;
+            spell.range = 950.0f;
             spell.spellDelay = 250;
-            spell.spellKey = ZDSpellSlot::R;
-            spell.spellName = "KarmaMantra";
-            spell.spellType = ZDSpellType::Circular;
-            spell.ccType = CCType::Snare;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "KarmaQHeavy";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 280.0f;
             Spells.push_back(spell);
         }
-
         // === Karthus ===
         {
             SpellData spell;
@@ -1736,6 +2070,20 @@ public:
         {
             SpellData spell;
             spell.charName = "Kassadin";
+            spell.dangerlevel = 2;
+            spell.name = "Force Pulse";
+            spell.range = 600.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "ForcePulse";
+            spell.spellType = ZDSpellType::Cone;
+            spell.ccType = CCType::Slow;
+            spell.coneAngleDegrees = 80.0f;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Kassadin";
             spell.dangerlevel = 3;
             spell.name = "Riftwalk";
             spell.radius = 270.0f;
@@ -1752,8 +2100,55 @@ public:
 
         // === Kayle ===
 	//Kayle Q
+        {
+            SpellData spell;
+            spell.charName = "Kayle";
+            spell.dangerlevel = 1;
+            spell.missileName = "KayleQMis";
+            spell.name = "Radiant Blast";
+            spell.projectileSpeed = 1600.0f;
+            spell.radius = 75.0f;
+            spell.range = 900.0f;
+            spell.spellDelay = 264;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "KayleQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 100.0f;
+            Spells.push_back(spell);
+        }
 
         // === Kayn ===
+        {
+            SpellData spell;
+            spell.charName = "Kayn";
+            spell.dangerlevel = 2;
+            spell.name = "Blade's Reach";
+            spell.radius = 90.0f;
+            spell.range = 700.0f;
+            spell.spellDelay = 550;
+            spell.spellKey = ZDSpellSlot::W;
+            spell.spellName = "KaynW";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Kayn";
+            spell.dangerlevel = 3;
+            spell.name = "Blade's Reach (Darkin)";
+            spell.radius = 90.0f;
+            spell.range = 700.0f;
+            spell.spellDelay = 550;
+            spell.spellKey = ZDSpellSlot::W;
+            spell.spellName = "KaynAssW";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Kayn";
@@ -1940,6 +2335,23 @@ public:
             spell.ccType = CCType::Snare;
             Spells.push_back(spell);
         }
+        {
+            SpellData spell;
+            spell.charName = "Leblanc";
+            spell.dangerlevel = 3;
+            spell.missileName = "LeblancREMissile";
+            spell.name = "Ethereal Chains (Mimic)";
+            spell.projectileSpeed = 1750.0f;
+            spell.radius = 55.0f;
+            spell.range = 950.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "LeblancRE";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Snare;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
 
         // === LeeSin ===
         {
@@ -2015,16 +2427,35 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "LilliaE";
             spell.name = "Swirlseed";
-            spell.projectileSpeed = 1150.0f;
-            spell.radius = 60.0f;
+            spell.projectileSpeed = 1400.0f;
+            spell.radius = 150.0f;
             spell.range = 700.0f;
-            spell.spellDelay = 349;
+            spell.spellDelay = 400;
             spell.spellKey = ZDSpellSlot::E;
             spell.spellName = "LilliaE";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::Slow;
+            spell.useEndPosition = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Lillia";
+            spell.dangerlevel = 3;
+            spell.missileName = "LilliaERollingMissile";
+            spell.name = "Swirlseed (Rolling)";
+            spell.projectileSpeed = 1150.0f;
+            spell.radius = 60.0f;
+            spell.range = 25000.0f;
+            spell.spellDelay = 0;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "LilliaERollingMissile";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Slow;
-            spell.extraMissileNames = { "LilliaERollingMissile" };
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions, ZDCollisionObjectType::Terrain, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 150.0f;
+            spell.endExplosionRequiresCollision = true;
             Spells.push_back(spell);
         }
 
@@ -2065,8 +2496,57 @@ public:
             Spells.push_back(spell);
         }
 
+        {
+            SpellData spell;
+            spell.charName = "Locke";
+            spell.dangerlevel = 2;
+            spell.missileName = "LockeQNailMissile";
+            spell.name = "Ritual Nails";
+            spell.projectileSpeed = 1800.0f;
+            spell.radius = 60.0f;
+            spell.range = 950.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "LockeQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Locke";
+            spell.dangerlevel = 5;
+            spell.missileName = "LockeRArtifact";
+            spell.name = "Purgatory";
+            spell.projectileSpeed = 1500.0f;
+            spell.radius = 350.0f;
+            spell.range = 1000.0f;
+            spell.spellDelay = 750;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "LockeR";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
+
         // === Lucian ===
 	//Lucian Q
+        {
+            SpellData spell;
+            spell.charName = "Lucian";
+            spell.dangerlevel = 2;
+            spell.name = "Piercing Light";
+            spell.radius = 65.0f;
+            spell.range = 500.0f;
+            spell.spellDelay = 350;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "LucianQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Lucian";
@@ -2225,6 +2705,21 @@ public:
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::KnockBack;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Maokai";
+            spell.dangerlevel = 4;
+            spell.name = "Nature's Grasp";
+            spell.projectileSpeed = 500.0f;
+            spell.radius = 240.0f;
+            spell.range = 3000.0f;
+            spell.spellDelay = 500;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "MaokaiR";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Snare;
             Spells.push_back(spell);
         }
 
@@ -2508,6 +3003,20 @@ public:
 
         // === Nilah ===
         // thiếu nilah Q
+        {
+            SpellData spell;
+            spell.charName = "Nilah";
+            spell.dangerlevel = 1;
+            spell.name = "Formless Blade";
+            spell.radius = 75.0f;
+            spell.range = 600.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "NilahQ";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            Spells.push_back(spell);
+        }
 
         // === Nocturne ===
         {
@@ -2655,6 +3164,23 @@ public:
 
         // === Pyke ===
 	//PykeQ
+        {
+            SpellData spell;
+            spell.charName = "Pyke";
+            spell.dangerlevel = 3;
+            spell.missileName = "PykeQMissile";
+            spell.name = "Bone Skewer";
+            spell.projectileSpeed = 2000.0f;
+            spell.radius = 70.0f;
+            spell.range = 1100.0f;
+            spell.spellDelay = 200;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "PykeQCast";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::KnockBack;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Pyke";
@@ -2888,6 +3414,22 @@ public:
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
+        {
+            SpellData spell;
+            spell.charName = "Riven";
+            spell.dangerlevel = 4;
+            spell.missileName = "RivenWindSlashMissile";
+            spell.name = "Wind Slash";
+            spell.projectileSpeed = 1600.0f;
+            spell.radius = 125.0f;
+            spell.range = 900.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::R;
+            spell.spellName = "RivenIzunaBlade";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            Spells.push_back(spell);
+        }
 
 
         // === Rumble ===
@@ -2943,8 +3485,41 @@ public:
             spell.spellDelay = 50;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "SamiraQ";
-            spell.spellType = ZDSpellType::Circular;
+            spell.extraSpellNames = { "SamiraQGun", "SamiraQBuffered" };
+            spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::None;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Samira";
+            spell.dangerlevel = 2;
+            spell.name = "Flair (Sword Cone)";
+            spell.radius = 65.0f;
+            spell.range = 400.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "SamiraQSword";
+            spell.extraSpellNames = { "SamiraQBufferedSword" };
+            spell.spellType = ZDSpellType::Cone;
+            spell.ccType = CCType::None;
+            spell.coneAngleDegrees = 50.0f;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Samira";
+            spell.dangerlevel = 2;
+            spell.name = "Wild Rush";
+            spell.projectileSpeed = 1600.0f;
+            spell.radius = 150.0f;
+            spell.range = 650.0f;
+            spell.spellDelay = 0;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "SamiraE";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::None;
+            spell.isSpecial = true;
             Spells.push_back(spell);
         }
 
@@ -3001,36 +3576,42 @@ public:
             SpellData spell;
             spell.charName = "Senna";
             spell.dangerlevel = 3;
-            spell.missileName = "SennaW";
+            spell.missileName = "SennaWMissile";
             spell.name = "Last Embrace";
             spell.projectileSpeed = 1200.0f;
-            spell.radius = 70.0f;
-            spell.range = 1250.0f;
+            spell.radius = 60.0f;
+            spell.range = 1300.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::W;
             spell.spellName = "SennaW";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Snare;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 280.0f;
+            spell.extraDelay = 1000;
+            spell.endExplosionRequiresUnitCollision = true;
+            spell.endExplosionAtUnitCenter = true;
+            spell.endExplosionFollowsUnit = true;
+            spell.endExplosionDetonatesOnUnitDeath = true;
             Spells.push_back(spell);
         }
 
         {
             SpellData spell;
             spell.charName = "Senna";
-            spell.dangerlevel = 3;
-            spell.missileName = "SennaR";
+            spell.dangerlevel = 4;
+            spell.missileName = "SennaRWarningMis";
             spell.name = "Dawning Shadow";
             spell.projectileSpeed = 20000.0f;
-            spell.radius = 1200.0f;
-            spell.range = 640.0f;
-            spell.spellDelay = 500;
+            spell.radius = 160.0f;
+            spell.range = 25000.0f;
+            spell.spellDelay = 1000;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "SennaR";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::None;
-            spell.extraMissileNames = { "SennaRWarningMis" };
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.extraMissileNames = { "SennaR" };
             Spells.push_back(spell);
         }
 
@@ -3196,8 +3777,9 @@ public:
             spell.charName = "Sion";
             spell.dangerlevel = 3;
             spell.name = "Decimating Smash";
-            spell.range = 10000.0f;
-            spell.spellDelay = 250;
+            spell.radius = 200.0f;
+            spell.range = 850.0f;
+            spell.spellDelay = 1000;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "SionQ";
             spell.spellType = ZDSpellType::Line;
@@ -3208,32 +3790,34 @@ public:
         {
             SpellData spell;
             spell.charName = "Sion";
-            spell.dangerlevel = 3;
+            spell.dangerlevel = 2;
             spell.missileName = "SionEMissile";
             spell.name = "Roar of the Slayer";
-            spell.projectileSpeed = 1800.0f;
+            spell.projectileSpeed = 2000.0f;
             spell.radius = 80.0f;
             spell.range = 800.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::E;
             spell.spellName = "SionE";
             spell.spellType = ZDSpellType::Line;
-            spell.ccType = CCType::KnockBack;
+            spell.ccType = CCType::Slow;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
         {
             SpellData spell;
             spell.charName = "Sion";
-            spell.dangerlevel = 3;
+            spell.dangerlevel = 4;
             spell.name = "Unstoppable Onslaught";
-            spell.radius = 500.0f;
+            spell.projectileSpeed = 950.0f;
+            spell.radius = 120.0f;
             spell.range = 7500.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "SionR";
             spell.spellType = ZDSpellType::Line;
-            spell.ccType = CCType::Stun;
+            spell.ccType = CCType::KnockUp;
+            spell.isSpecial = true;
 	    spell.fixedRange = true;
             Spells.push_back(spell);
         }
@@ -3260,6 +3844,22 @@ public:
 
         // === Skarner ===
 	//thiếu Q
+        {
+            SpellData spell;
+            spell.charName = "Skarner";
+            spell.dangerlevel = 3;
+            spell.missileName = "SkarnerEIsotopeMissile";
+            spell.name = "Ixtal's Impact";
+            spell.projectileSpeed = 1200.0f;
+            spell.radius = 70.0f;
+            spell.range = 1000.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::E;
+            spell.spellName = "SkarnerE";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Skarner";
@@ -3379,6 +3979,7 @@ public:
             spell.spellName = "SwainQ";
             spell.spellType = ZDSpellType::Cone;
             spell.ccType = CCType::None;
+            spell.coneAngleDegrees = 45.0f;
             Spells.push_back(spell);
         }
         {
@@ -3454,6 +4055,20 @@ public:
 
         // === Syndra ===
 	//thiếu Q
+        {
+            SpellData spell;
+            spell.charName = "Syndra";
+            spell.dangerlevel = 2;
+            spell.name = "Dark Sphere";
+            spell.radius = 180.0f;
+            spell.range = 800.0f;
+            spell.spellDelay = 600;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "SyndraQ";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::None;
+            Spells.push_back(spell);
+        }
         {
             SpellData spell;
             spell.charName = "Syndra";
@@ -3542,6 +4157,22 @@ public:
 
         // === Talon ===
 	//TalonW
+        {
+            SpellData spell;
+            spell.charName = "Talon";
+            spell.dangerlevel = 2;
+            spell.missileName = "TalonWBlades";
+            spell.name = "Rake";
+            spell.projectileSpeed = 1850.0f;
+            spell.radius = 75.0f;
+            spell.range = 900.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::W;
+            spell.spellName = "TalonW";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
 
         // === Taric ===
         {
@@ -3780,6 +4411,8 @@ public:
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "VeigarBalefulStrike";
+            spell.extraSpellNames = { "VeigarQ" };
+            spell.extraMissileNames = { "VeigarQMis", "VeigarQMissile" };
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::None;
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
@@ -3788,13 +4421,14 @@ public:
         {
             SpellData spell;
             spell.charName = "Veigar";
-            spell.dangerlevel = 2;
+            spell.dangerlevel = 3;
             spell.name = "Dark Matter";
-            spell.radius = 225.0f;
-            spell.range = 950.0f;
-            spell.spellDelay = 1471;
+            spell.radius = 240.0f;
+            spell.range = 900.0f;
+            spell.spellDelay = 1250;
             spell.spellKey = ZDSpellSlot::W;
-            spell.spellName = "VeigarDarkMatter";
+            spell.spellName = "VeigarW";
+            spell.extraSpellNames = { "VeigarDarkMatter" };
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::None;
             Spells.push_back(spell);
@@ -3831,10 +4465,27 @@ public:
             spell.spellName = "VelkozQ";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Slow;
-            spell.extraMissileNames = { "VelkozQMissileSplit" };
             spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
 	    //special
+        }
+        {
+            SpellData spell;
+            spell.charName = "Velkoz";
+            spell.dangerlevel = 3;
+            spell.missileName = "VelkozQMissileSplit";
+            spell.name = "Plasma Fission (Split)";
+            spell.projectileSpeed = 2100.0f;
+            spell.radius = 45.0f;
+            spell.range = 1100.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "VelkozQSplit";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions, ZDCollisionObjectType::EnemyYasuoWall };
+            spell.fixedRange = true;
+            Spells.push_back(spell);
         }
         {
             SpellData spell;
@@ -4082,12 +4733,15 @@ public:
             spell.charName = "Warwick";
             spell.dangerlevel = 4;
             spell.name = "Infinite Duress";
-            spell.radius = 675.0f;
+            spell.projectileSpeed = 1800.0f;
+            spell.radius = 55.0f;
+            spell.range = 2500.0f;
             spell.spellDelay = 100;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "WarwickR";
             spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::Suppression;
+            spell.isSpecial = true;
             Spells.push_back(spell);
         }
 
@@ -4213,22 +4867,53 @@ public:
 
         // === Yasuo ===
 	//Yasuo 2Q, Q1 và Q3
+        {
+            SpellData spell;
+            spell.charName = "Yasuo";
+            spell.dangerlevel = 3;
+            spell.missileName = "YasuoQ3Mis";
+            spell.name = "Steel Tempest (Q3)";
+            spell.projectileSpeed = 1200.0f;
+            spell.radius = 90.0f;
+            spell.range = 1150.0f;
+            spell.spellDelay = 333;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "YasuoQ3W";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            Spells.push_back(spell);
+        }
 
 
         // === Yone ===
 	//Yone 2Q, Q1 và Q3
-
         {
             SpellData spell;
             spell.charName = "Yone";
-            spell.dangerlevel = 4;
+            spell.dangerlevel = 3;
+            spell.missileName = "YoneQ3Mis";
+            spell.name = "Mortal Steel (Q3)";
+            spell.projectileSpeed = 1500.0f;
+            spell.radius = 80.0f;
+            spell.range = 1050.0f;
+            spell.spellDelay = 350;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "YoneQ3";
+            spell.spellType = ZDSpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yone";
+            spell.dangerlevel = 5;
             spell.name = "Fate Sealed";
-            spell.radius = 1000.0f;
+            spell.radius = 112.5f;
             spell.range = 1000.0f;
             spell.spellDelay = 750;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "YoneR";
-            spell.spellType = ZDSpellType::Circular;
+            spell.spellType = ZDSpellType::Line;
             spell.ccType = CCType::KnockUp;
             Spells.push_back(spell);
         }
@@ -4255,6 +4940,26 @@ public:
 
         // === Yuumi ===
 	//YummiQ danger2, special
+        {
+            SpellData spell;
+            spell.charName = "Yuumi";
+            spell.dangerlevel = 2;
+            spell.missileName = "YuumiQMissile";
+            spell.name = "Prowling Projectile";
+            spell.projectileSpeed = 1450.0f;
+            spell.radius = 60.0f;
+            spell.range = 1150.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "YuumiQCast";
+            spell.spellType = ZDSpellType::Line;
+            spell.missileRouteMode = MissileRouteMode::Steering;
+            spell.ccType = CCType::Slow;
+            spell.extraSpellNames = { "YuumiQ" };
+            spell.isSpecial = true;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
 
         // === Zac ===
         {
@@ -4335,15 +5040,56 @@ public:
             SpellData spell;
             spell.charName = "Ziggs";
             spell.dangerlevel = 2;
+            spell.missileName = "ZiggsQSpell";
             spell.name = "Bouncing Bomb";
             spell.projectileSpeed = 1700.0f;
-            spell.radius = 125.0f;
+            spell.radius = 240.0f;
             spell.range = 850.0f;
             spell.spellDelay = 250;
             spell.spellKey = ZDSpellSlot::Q;
             spell.spellName = "ZiggsQ";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::None;
+            spell.isSpecial = true;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyYasuoWall };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ziggs";
+            spell.dangerlevel = 2;
+            spell.missileName = "ZiggsQSpell2";
+            spell.name = "Bouncing Bomb";
+            spell.projectileSpeed = 1700.0f;
+            spell.radius = 240.0f;
+            spell.range = 850.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "ZiggsQBounce1";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::None;
+            spell.isSpecial = true;
+            spell.noProcess = true;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyYasuoWall };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ziggs";
+            spell.dangerlevel = 2;
+            spell.missileName = "ZiggsQSpell3";
+            spell.name = "Bouncing Bomb";
+            spell.projectileSpeed = 1700.0f;
+            spell.radius = 240.0f;
+            spell.range = 850.0f;
+            spell.spellDelay = 250;
+            spell.spellKey = ZDSpellSlot::Q;
+            spell.spellName = "ZiggsQBounce2";
+            spell.spellType = ZDSpellType::Circular;
+            spell.ccType = CCType::None;
+            spell.isSpecial = true;
+            spell.noProcess = true;
+            spell.collisionObjects = { ZDCollisionObjectType::EnemyYasuoWall };
             Spells.push_back(spell);
         }
         {
@@ -4412,14 +5158,15 @@ public:
             spell.charName = "Ziggs";
             spell.dangerlevel = 3;
             spell.name = "Mega Inferno Bomb";
-            spell.projectileSpeed = 2250.0f;
+            spell.projectileSpeed = 0.0f;
             spell.radius = 250.0f;
             spell.range = 5000.0f;
-            spell.spellDelay = 250;
+            spell.spellDelay = 1500;
             spell.spellKey = ZDSpellSlot::R;
             spell.spellName = "ZiggsR";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::None;
+            spell.isSpecial = true;
             Spells.push_back(spell);
         }
 
@@ -4523,8 +5270,35 @@ public:
         }
 	//ZyraR
 
+        // Validation runs before Initialize returns, while no caller can hold
+        // pointers into the stable database. Invalid cones remain conservative
+        // in geometry and are default-off in runtime configuration.
+        for (SpellData& spell : Spells) {
+            if (!spell.HasValidGeometryFields())
+                spell.defaultOff = true;
+            if (spell.spellType == ZDSpellType::Cone) {
+                if (!std::isfinite(spell.coneAngleDegrees) ||
+                    spell.coneAngleDegrees <= 0.0f ||
+                    spell.coneAngleDegrees > 360.0f) {
+                    spell.defaultOff = true;
+                    ++invalidConeSpellCount_;
+                }
+            }
+            if (spell.spellType == ZDSpellType::Arc) {
+                spell.defaultOff = true;
+                ++invalidArcSpellCount_;
+            }
+        }
     }
+
+private:
+    static int invalidConeSpellCount_;
+    static int invalidArcSpellCount_;
+    static int supportedArcSpellCount_;
 };
 
 inline std::vector<ZDEvade::SpellData> SpellDatabase::Spells;
+inline int SpellDatabase::invalidConeSpellCount_ = 0;
+inline int SpellDatabase::invalidArcSpellCount_ = 0;
+inline int SpellDatabase::supportedArcSpellCount_ = 0;
 } // namespace ZDEvade

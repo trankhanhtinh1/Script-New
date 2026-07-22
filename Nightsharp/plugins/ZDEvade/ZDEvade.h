@@ -8,11 +8,13 @@
 // ============================================================================
 
 #include "../IPlugin.h"
+#include "../PluginRegistry.h"
 #include "../../Core/Globals.h"
 #include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
 #include "../../SDK/UI/IMenu/Menu.h"
 
+#include "ZDEvadeActivationPolicy.h"
 #include "Debug/ZDLog.h"
 #include "Debug/CandidateDebug.h"
 #include "Detection/ThreatDetector.h"
@@ -41,14 +43,19 @@ public:
     const char* GetAuthor() const override { return "ZD"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
     bool AutoLoadByDefault() const override { return false; }
+    bool CanLoad() const override {
+        return ZDEvade::CanActivateZDEvade(ReadOtherEvadeState());
+    }
 
     void OnLoad() override {
         s_instance = this;
 
         ZDEvade::ThreatDetector::Initialize();
         CreateMenu();
+        RefreshOtherEvadeSuspension();
 
         SDK::Events::AddOnGameUpdate(&ZDEvadePlugin::OnGameUpdateStatic);
+        SDK::Game::AddOnWndProc(&ZDEvadePlugin::OnWndProcStatic);
         SDK::Orbwalker::OnBeforeMove += &ZDEvadePlugin::OnBeforeMoveStatic;
 
         ZDLog("[ZDEvade] loaded engine=new");
@@ -57,7 +64,12 @@ public:
     void OnUnload() override {
         SDK::Events::RemoveOnGameUpdate(&ZDEvadePlugin::OnGameUpdateStatic);
         SDK::Orbwalker::OnBeforeMove -= &ZDEvadePlugin::OnBeforeMoveStatic;
-        m_controller.Reset();
+        SDK::Game::RemoveOnWndProc(&ZDEvadePlugin::OnWndProcStatic);
+        if (!RefreshOtherEvadeSuspension()) {
+            m_controller.Reset();
+        }
+        m_suspended = false;
+        m_suspendReason = ZDEvade::OtherEvadeReason::None;
         ZDEvade::ThreatDetector::Shutdown();
 
         DestroyMenu();
@@ -115,6 +127,13 @@ public:
                 } else {
                     SDK::Drawing::DrawCircle(Vec3::From2D(threat.endPos, planeY), std::max(threat.Radius(), 80.0f), color, 2.0f);
                 }
+                if (threat.HasEndExplosionArea()) {
+                    SDK::Drawing::DrawCircle(
+                        Vec3::From2D(threat.EndExplosionCenter(), planeY),
+                        threat.EndExplosionRadius(),
+                        color,
+                        2.0f);
+                }
             }
         }
 
@@ -144,7 +163,17 @@ public:
         ImGui::Text("Tracked threats: %d", static_cast<int>(ZDEvade::ThreatDetector::Snapshot().size()));
         ImGui::Text("Detector serial: %d", ZDEvade::ThreatDetector::ChangeSerial());
         ImGui::Text("Detector dropped: %d", ZDEvade::ThreatDetector::DroppedRawEvents());
-        ImGui::Text("State: %s", ZDEvade::ControllerStateName(renderState.state));
+        ImGui::Text("Unsupported Arc dropped: %d",
+                    ZDEvade::ThreatDetector::UnsupportedArcDropped());
+        ImGui::Text("Active Arc DB: %d",
+                    ZDEvade::SpellDatabase::SupportedArcSpellCount());
+        if (m_suspended) {
+            ImGui::Text(
+                "State: Suspended (%s)",
+                ZDEvade::OtherEvadeReasonName(m_suspendReason));
+        } else {
+            ImGui::Text("State: %s", ZDEvade::ControllerStateName(renderState.state));
+        }
         if (renderState.locked.valid) {
             ImGui::Text("Target: %s %s", ZDEvade::CandidateSourceName(renderState.locked.source),
                         renderState.locked.strictSafe ? "strict" : "fallback");
@@ -171,10 +200,17 @@ private:
         MenuSlider* health = nullptr;
     };
 
+    struct EvadeSpellMenuBinding {
+        MenuBool* enabled = nullptr;
+        MenuSlider* danger = nullptr;
+        MenuBool* wardJump = nullptr;
+    };
+
     static inline ZDEvadePlugin* s_instance = nullptr;
 
     Menu* m_menu = nullptr;
     Menu* m_spellsMenu = nullptr;
+    Menu* m_evadeSpellOptionsMenu = nullptr;
     MenuBool* m_enabledMenu = nullptr;
     MenuBool* m_walkEnabledMenu = nullptr;
     MenuBool* m_evadeSpellsMenu = nullptr;
@@ -197,9 +233,14 @@ private:
 
     ZDEvade::EvadeController m_controller;
     std::unordered_map<std::string, SpellMenuBinding> m_spellBindings;
+    std::unordered_map<std::string, EvadeSpellMenuBinding> m_evadeSpellBindings;
     ZDEvade::ThreatRuleMap m_threatRules;
+    EvadeSpellRuleMap m_evadeSpellRules;
     mutable SRWLOCK m_renderStateLock = SRWLOCK_INIT;
     RenderState m_renderState;
+    bool m_suspended = false;
+    ZDEvade::OtherEvadeReason m_suspendReason =
+        ZDEvade::OtherEvadeReason::None;
 
     bool Enabled() const { return !m_enabledMenu || m_enabledMenu->Value; }
     bool DrawSpells() const { return !m_drawSpellsMenu || m_drawSpellsMenu->Value; }
@@ -210,10 +251,32 @@ private:
     }
 
     static void OnBeforeMoveStatic(SDK::OrbwalkingActionArgs& args) {
-        if (!s_instance || !args.Process) return;
-        if (s_instance->m_controller.ShouldBlockMove(
+        if (!s_instance || s_instance->RefreshOtherEvadeSuspension() ||
+            !args.Process) {
+            return;
+        }
+        if (s_instance->m_controller.HandleMoveRequest(
                 args.Position.To2D(),
+                ZDEvade::MoveIntentSource::Orbwalker,
                 s_instance->BuildConfig())) args.Process = false;
+    }
+
+    static void OnWndProcStatic(SDK::Game::WndEventArgs& args) {
+        if (!s_instance || s_instance->RefreshOtherEvadeSuspension() ||
+            !args.Process ||
+            (args.Msg != WM_RBUTTONDOWN &&
+             args.Msg != WM_RBUTTONDBLCLK) ||
+            !s_instance->Enabled()) {
+            return;
+        }
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid() || player.IsDead()) return;
+        if (s_instance->m_controller.HandleMoveRequest(
+                SDK::Game::CursorPos().To2D(),
+                ZDEvade::MoveIntentSource::Manual,
+                s_instance->BuildConfig())) {
+            args.Process = false;
+        }
     }
 
     ZDEvade::EvadeRuntimeConfig BuildConfig() const {
@@ -227,11 +290,13 @@ private:
         config.evadeSpellMarginThresholdMs = static_cast<float>(
             m_evadeSpellMarginMenu ? m_evadeSpellMarginMenu->Value : 45);
         config.threatRules = &m_threatRules;
+        config.evadeSpellRules = &m_evadeSpellRules;
         config.moveIntervalMs = m_moveIntervalMenu ? m_moveIntervalMenu->Value : 75;
         config.moveRefreshMs = m_moveRefreshMenu ? m_moveRefreshMenu->Value : 260;
         config.replanIntervalMs = m_replanIntervalMenu ? m_replanIntervalMenu->Value : 70;
         config.fallbackReplanIntervalMs = std::max(25, config.replanIntervalMs / 2);
-        config.planner.endpointBuffer = static_cast<float>(m_endpointBufferMenu ? m_endpointBufferMenu->Value : 24);
+        config.planner.endpointBuffer = static_cast<float>(
+            m_endpointBufferMenu ? m_endpointBufferMenu->Value : 10);
         config.planner.pathBuffer = static_cast<float>(m_pathBufferMenu ? m_pathBufferMenu->Value : 8);
         config.planner.releaseBuffer = static_cast<float>(m_releaseBufferMenu ? m_releaseBufferMenu->Value : 48);
         config.planner.inputDelayMs = static_cast<float>(m_inputDelayMenu ? m_inputDelayMenu->Value : 55) +
@@ -244,7 +309,10 @@ private:
     }
 
     void Tick() {
+        if (RefreshOtherEvadeSuspension(true)) return;
+
         RefreshThreatRules();
+        RefreshEvadeSpellRules();
         m_controller.Update(BuildConfig());
         RenderState next;
         next.state = m_controller.State();
@@ -253,6 +321,39 @@ private:
         AcquireSRWLockExclusive(&m_renderStateLock);
         m_renderState = std::move(next);
         ReleaseSRWLockExclusive(&m_renderStateLock);
+    }
+
+    ZDEvade::OtherEvadeState ReadOtherEvadeState() const {
+        return {
+            PluginRegistry::IsLoaded("core.kuroevade", false),
+            PluginRegistry::IsLoaded("core.ezevade", false),
+        };
+    }
+
+    bool RefreshOtherEvadeSuspension(bool allowRelease = false) {
+        const ZDEvade::OtherEvadeDecision decision =
+            ZDEvade::DecideOtherEvadeState(
+                ReadOtherEvadeState(),
+                m_suspended,
+                allowRelease);
+        if (decision.suspended &&
+            decision.reason != ZDEvade::OtherEvadeReason::None) {
+            m_suspendReason = decision.reason;
+        }
+        if (decision.suspendNow) {
+            m_controller.ResetForExternalOwner();
+            AcquireSRWLockExclusive(&m_renderStateLock);
+            m_renderState = {};
+            ReleaseSRWLockExclusive(&m_renderStateLock);
+            ZDLog(
+                "[ZDEvade] suspended: %s",
+                ZDEvade::OtherEvadeReasonName(decision.reason));
+        } else if (decision.releaseNow) {
+            ZDLog("[ZDEvade] suspension released");
+            m_suspendReason = ZDEvade::OtherEvadeReason::None;
+        }
+        m_suspended = decision.suspended;
+        return m_suspended;
     }
 
     RenderState GetRenderState() const {
@@ -277,11 +378,15 @@ private:
 
         m_spellsMenu = m_menu->AddSubMenu(new Menu("spells", "Enemy Spells"));
         CreateSpellMenus();
+        m_evadeSpellOptionsMenu = m_menu->AddSubMenu(new Menu("evadeSpellOptions", "Evade Spells"));
+        CreateEvadeSpellMenus();
 
         auto* safety = m_menu->AddSubMenu(new Menu("safety", "Safety and Timing"));
-        m_endpointBufferMenu = safety->Add(new MenuSlider("endpointBuffer", "Endpoint Buffer", 24, 0, 120));
+        m_endpointBufferMenu = safety->Add(
+            new MenuSlider("exitMarginV2", "Model Edge Exit Margin", 10, 0, 30));
         m_pathBufferMenu = safety->Add(new MenuSlider("pathBuffer", "Path Buffer", 8, 0, 100));
-        m_releaseBufferMenu = safety->Add(new MenuSlider("releaseBuffer", "Release Buffer", 48, 0, 140));
+        m_releaseBufferMenu = safety->Add(new MenuSlider(
+            "releaseBuffer", "Release Control Margin", 48, 0, 140));
         m_inputDelayMenu = safety->Add(new MenuSlider("inputDelay", "Extra Input Delay", 55, 0, 200));
         m_minMarginMenu = safety->Add(new MenuSlider("minimumMargin", "Minimum Time Margin", 25, 0, 250));
         m_preferredClearanceMenu = safety->Add(new MenuSlider(
@@ -327,6 +432,44 @@ private:
         RefreshThreatRules();
     }
 
+    void CreateEvadeSpellMenus() {
+        if (!m_evadeSpellOptionsMenu) return;
+        EvadeSpellDatabase::Initialize();
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid()) return;
+        const std::string champion = player.CharacterName();
+        int index = 0;
+        for (const auto& spell : EvadeSpellDatabase::Spells) {
+            const bool playerSpell = _stricmp(spell.charName.c_str(), champion.c_str()) == 0;
+            const bool globalSpell = _stricmp(spell.charName.c_str(), "AllChampions") == 0 ||
+                spell.isSummonerSpell || spell.isItem;
+            if (!playerSpell && !globalSpell) continue;
+            const std::string key = ZDEvade::EvadeSpellEngine::RuleKey(spell);
+            if (m_evadeSpellBindings.find(key) != m_evadeSpellBindings.end()) continue;
+            const std::string id = "evade_spell_" + std::to_string(index++);
+            const std::string label = spell.name.empty() ? spell.spellName : spell.name;
+            auto* menu = m_evadeSpellOptionsMenu->AddSubMenu(new Menu(id.c_str(), label.c_str()));
+            EvadeSpellMenuBinding binding;
+            binding.enabled = menu->Add(new MenuBool("enabled", "Use", true));
+            binding.danger = menu->Add(new MenuSlider(
+                "danger", "Minimum Danger", std::clamp(spell.dangerlevel, 1, 4), 1, 4));
+            if (spell.castType == EvadeCastType::Target) {
+                binding.wardJump = menu->Add(new MenuBool("wardJump", "Ward Jump", true));
+            }
+            m_evadeSpellBindings.emplace(key, binding);
+        }
+        RefreshEvadeSpellRules();
+    }
+
+    void RefreshEvadeSpellRules() {
+        for (const auto& entry : m_evadeSpellBindings) {
+            EvadeSpellRule& rule = m_evadeSpellRules[entry.first];
+            rule.enabled = !entry.second.enabled || entry.second.enabled->Value;
+            rule.danger = entry.second.danger ? entry.second.danger->Value : 1;
+            rule.wardJump = !entry.second.wardJump || entry.second.wardJump->Value;
+        }
+    }
+
     void RefreshThreatRules() {
         for (const auto& entry : m_spellBindings) {
             ZDEvade::ThreatRule& rule = m_threatRules[entry.first];
@@ -343,8 +486,11 @@ private:
         delete m_menu;
         m_menu = nullptr;
         m_spellsMenu = nullptr;
+        m_evadeSpellOptionsMenu = nullptr;
         m_spellBindings.clear();
+        m_evadeSpellBindings.clear();
         m_threatRules.clear();
+        m_evadeSpellRules.clear();
         m_enabledMenu = nullptr;
         m_walkEnabledMenu = nullptr;
         m_evadeSpellsMenu = nullptr;

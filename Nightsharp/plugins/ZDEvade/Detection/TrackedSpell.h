@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Database/SpellData.h"
+#include "Threat.h"
 #include "../../../SDK/SDK.h"
 
 #include <algorithm>
@@ -37,16 +37,20 @@ struct TrackedSpell {
     bool HasExpired() const {
         if (expired) return true;
         const int now = SDK::Variables::TickCount();
-        if (now > endTime + 500) return true;
+        if (TickAfter(now, SaturatingTickAdd(endTime, 500))) return true;
         if (isMissile && !missile.IsValid()) return true;
         return false;
     }
 
     Vec2 GetMissilePosition(int afterTime = 0) const {
         if (!isMissile || !missile.IsValid()) return startPos;
-        const int baseTime = missileStartTime > 0 ? missileStartTime : startTime + info.spellDelay;
-        const int elapsed = std::max(0,
-            SDK::Variables::TickCount() + afterTime - baseTime);
+        const int baseTime = missileStartTime > 0
+            ? missileStartTime
+            : SaturatingTickAdd(startTime, info.spellDelay);
+        const int sampleTick = SaturatingTickAdd(
+            SDK::Variables::TickCount(), afterTime);
+        const std::int64_t elapsed = std::max<std::int64_t>(
+            0, TickDifference(sampleTick, baseTime));
         const float speed = std::max(1.0f, info.projectileSpeed);
         const float distance = static_cast<float>(elapsed) * speed / 1000.0f;
         return startPos + direction * distance;
