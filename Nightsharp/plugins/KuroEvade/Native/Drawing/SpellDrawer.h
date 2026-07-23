@@ -71,8 +71,10 @@ public:
                 !style.DrawIrrelevant) {
                 continue;
             }
-            if (!skillshot->ProjectileTerminated &&
-                !skillshot->ProjectileWallSuppressesEndpointHazard()) {
+            const bool drawMainShape = (!skillshot->ProjectileTerminated ||
+                (skillshot->IsActive() && !skillshot->HasEndExplosionArea())) &&
+                !skillshot->ProjectileWallSuppressesEndpointHazard();
+            if (drawMainShape) {
                 DrawSkillshot(draw, *skillshot->Native, info, style);
             }
             DrawEndExplosion(draw, *skillshot, info, style);

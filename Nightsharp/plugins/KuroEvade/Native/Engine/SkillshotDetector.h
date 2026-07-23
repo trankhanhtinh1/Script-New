@@ -427,7 +427,9 @@ public:
                         skillshot->StartTick(),
                         skillshot->SpellData().SpellName });
                 }
-                if (!skillshot->HasEndExplosionArea()) {
+                const bool remainActiveOnGround = skillshot->IsActive() ||
+                    skillshot->ExtraDurationMs() > 0;
+                if (!skillshot->HasEndExplosionArea() && !remainActiveOnGround) {
                     return true;
                 }
                 skillshot->ProjectileTerminated = true;
@@ -767,13 +769,15 @@ private:
         if (text.empty() || value.empty()) {
             return false;
         }
-        std::string haystack = text;
-        std::string needle = value;
-        std::transform(haystack.begin(), haystack.end(), haystack.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        std::transform(needle.begin(), needle.end(), needle.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return haystack.find(needle) != std::string::npos;
+        auto it = std::search(
+            text.begin(), text.end(),
+            value.begin(), value.end(),
+            [](char c1, char c2) {
+                return std::tolower(static_cast<unsigned char>(c1)) ==
+                       std::tolower(static_cast<unsigned char>(c2));
+            }
+        );
+        return it != text.end();
     }
 
     static bool IsBasicAttackName(const char* name) {

@@ -579,15 +579,6 @@ inline PredictionOutput GetPositionOnPath(PredictionInput& input,
         isJungle = minion.IsJungle();
     }
     std::string characterName = input.Unit.CharacterName();
-    if (characterName.empty()) {
-        char directName[96] = {};
-        if (::Core::Objects::ReadCharacterName(
-                input.Unit.Address(),
-                directName,
-                static_cast<int>(sizeof(directName)))) {
-            characterName = directName;
-        }
-    }
     if ((path.size() == 2 && pLength < 5.0f) &&
         (characterName == "PracticeTool_TargetDummy" ||
          input.Unit.IsMinion() ||

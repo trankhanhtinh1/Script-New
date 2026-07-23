@@ -10,19 +10,7 @@ using namespace ::SDK;
 
 namespace OrbwalkerKuro {
 
-struct ProcessSpellLogEntry {
-    int processTick = 0;
-    std::string spellName;
-    uint32_t targetNetworkId = 0;
-};
-
-struct OrbwalkerDebugConsoleLine {
-    char text[kOrbwalkerDebugConsoleLineLength] = {};
-    int tick = 0;
-};
-
 struct OrbwalkerRuntimeContext {
-    std::vector<ProcessSpellLogEntry> pendingProcessSpellList;
     AttackableUnit forceTarget = {};
     AttackableUnit lastTarget = {};
     AttackableUnit laneClearMinion = {};
@@ -56,7 +44,6 @@ struct OrbwalkerRuntimeContext {
     int cachedTargetTick = -1;
     int cachedTargetForceTargetNetworkId = 0;
     int cachedShouldWaitTick = -1;
-    OrbwalkerDebugConsoleLine debugConsoleLines[kOrbwalkerDebugConsoleMaxLines] = {};
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
@@ -65,9 +52,6 @@ struct OrbwalkerRuntimeContext {
     float visualCooldownWeight = 0.0f;
     float visualSmoothProgress = 1.0f;
     int visualLastDrawTick = 0;
-
-    int debugConsoleNextLine = 0;
-    int debugConsoleLineCount = 0;
 
     bool attackEnabled = true;
     bool moveEnabled = true;

@@ -952,13 +952,16 @@ private:
         if (text.empty() || !value || !value[0]) {
             return false;
         }
-        std::string lhs = text;
-        std::string rhs = value;
-        std::transform(lhs.begin(), lhs.end(), lhs.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        std::transform(rhs.begin(), rhs.end(), rhs.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return lhs.find(rhs) != std::string::npos;
+        const std::string_view n(value);
+        auto it = std::search(
+            text.begin(), text.end(),
+            n.begin(), n.end(),
+            [](char c1, char c2) {
+                return std::tolower(static_cast<unsigned char>(c1)) ==
+                       std::tolower(static_cast<unsigned char>(c2));
+            }
+        );
+        return it != text.end();
     }
 
     static bool IsNamed(const Database::EvadeSpellData& data,

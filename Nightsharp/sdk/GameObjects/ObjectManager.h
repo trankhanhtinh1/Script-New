@@ -171,8 +171,8 @@ inline std::vector<T> GetUncached() {
 // (OnGameUpdate) and render thread (OnDraw) keep independent caches with no lock
 // and no data race. Still returns a copy, so callers may freely sort/mutate it.
 template <typename T>
-inline std::vector<T> Get() {
-    thread_local int s_frame = -1;   // game time is always >= 0, so -1 never aliases
+inline const std::vector<T>& GetRef() {
+    thread_local int s_frame = -1;
     thread_local std::vector<T> s_cache;
     const int frame = static_cast<int>(CoreBuffs::ResolveGameTime() * 1000.0f);
     if (s_frame != frame) {
@@ -180,6 +180,11 @@ inline std::vector<T> Get() {
         s_cache = GetUncached<T>();
     }
     return s_cache;
+}
+
+template <typename T>
+inline std::vector<T> Get() {
+    return GetRef<T>();
 }
 
 } // namespace SDK::ObjectManager

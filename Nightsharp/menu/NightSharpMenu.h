@@ -2315,7 +2315,7 @@ namespace NightSharpMenu {
         // Height = laid-out content only (row count * ITEM_H), not a fixed panel.
         const float measuredBodyH = ImGui::GetCursorPosY() + 4.0f;
         if (measuredBodyH > 0.5f) {
-            contentPanelBodyH = MaxF(contentPanelBodyH, measuredBodyH);
+            contentPanelBodyH = MaxF(ITEM_H, measuredBodyH);
         }
 
         ImGui::End();

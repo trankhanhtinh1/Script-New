@@ -534,7 +534,14 @@ public:
             }
             return best;
         }
-        return std::max(0.0f, static_cast<float>(EndTick() - now) - latency);
+        const int impactTick = ImpactTick();
+        if (now > impactTick) {
+            if (now <= EndTick() && ContainsStatic(point, 0.0f, settings)) {
+                return 0.0f;
+            }
+            return FLT_MAX;
+        }
+        return std::max(0.0f, static_cast<float>(impactTick - now) - latency);
     }
 
     bool CanHeroEvade(const SDK::AIHeroClient& hero,
@@ -620,13 +627,9 @@ public:
                 settings, unitRadius);
         }
 
-        const int impactTick = ImpactTick();
-        const int tolerance = 20;
-        if (!Persistent && ExtraDurationMs() <= 0 &&
-            std::abs(absoluteTick - impactTick) > tolerance + 35) {
-            return false;
-        }
-        if (absoluteTick + tolerance < impactTick) {
+        const int activeStartTick = Native->StartTime + std::max(0, Native->SData.Delay) - 100;
+        const int activeEndTick = EndTick();
+        if (absoluteTick < activeStartTick || absoluteTick > activeEndTick) {
             return false;
         }
         return ContainsStatic(point, unitRadius, settings);

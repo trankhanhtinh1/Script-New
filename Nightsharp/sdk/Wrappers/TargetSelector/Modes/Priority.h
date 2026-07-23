@@ -47,12 +47,6 @@ public:
     int GetHeroPriority(const AIHeroClient& hero) {
         EnsureHeroSliders();
         std::string cname = hero.CharacterName();
-        if (cname.empty() && hero.Address()) {
-            char buf[96] = {};
-            if (::Core::Objects::ReadCharacterName(hero.Address(), buf, static_cast<int>(sizeof(buf)))) {
-                cname = buf;
-            }
-        }
         if (cname.empty()) cname = hero.Name();
         if (sub_ && !cname.empty()) {
             auto* s = sub_->Get<MenuSlider>(("p_" + cname).c_str());
@@ -81,12 +75,6 @@ private:
         for (const auto& hero : GameObjects::EnemyHeroes()) {
             if (!hero.IsValid()) continue;
             std::string cname = hero.CharacterName();
-            if (cname.empty() && hero.Address()) {
-                char buf[96] = {};
-                if (::Core::Objects::ReadCharacterName(hero.Address(), buf, static_cast<int>(sizeof(buf)))) {
-                    cname = buf;
-                }
-            }
             if (cname.empty()) cname = hero.Name();
             if (cname.empty()) continue;
 

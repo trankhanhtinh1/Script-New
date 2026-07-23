@@ -35,7 +35,7 @@ inline constexpr float kQSlowPercent = 0.25f;
 inline constexpr float kQFormationSpacing = 105.0f;
 inline constexpr float kQArrivalOvershoot = 50.0f;
 
-inline constexpr float kWSpawnRange = 525.0f;
+inline constexpr float kWSpawnRange = 500.0f;
 inline constexpr float kWCastSeconds = 0.25f;
 inline constexpr float kWSoldierLifetimeSeconds = 10.0f;
 inline constexpr float kWTurretLifetimeMultiplier = 0.50f;

@@ -39,18 +39,18 @@ int main() {
             "a soldier is commandable through the exact 660 tether only");
 
     const Point2 soldier{ 500.0f, 0.0f };
-    Require(CanReachPrimaryTarget(soldier, { 925.0f, 0.0f }, 50.0f) &&
-                !CanReachPrimaryTarget(soldier, { 925.1f, 0.0f }, 50.0f),
-            "375 attack range must honor target bounding boxes without using spear overflow");
+    Require(CanReachPrimaryTarget(soldier, { 900.0f, 0.0f }, 50.0f) &&
+                !CanReachPrimaryTarget(soldier, { 900.1f, 0.0f }, 50.0f),
+            "350 attack range must honor target bounding boxes without using spear overflow");
     Require(CanCommandAttack(
-                azir, soldier, { 875.0f, 0.0f }, 0.0f,
+                azir, soldier, { 850.0f, 0.0f }, 0.0f,
                 TargetKind::OrdinaryUnit),
             "a target reachable only through a live soldier must be attackable");
     Require(!CanCommandAttack(
-                azir, soldier, { 875.0f, 0.0f }, 0.0f,
+                azir, soldier, { 850.0f, 0.0f }, 0.0f,
                 TargetKind::Structure) &&
                 !CanCommandAttack(
-                    azir, soldier, { 875.0f, 0.0f }, 0.0f,
+                    azir, soldier, { 850.0f, 0.0f }, 0.0f,
                     TargetKind::WardOrTrap),
             "soldiers must never inflate structure, ward, or trap attack range");
 

@@ -97,37 +97,41 @@ namespace detail {
         return value;
     }
 
-    inline std::string ReadRuntimeName(uintptr_t address, bool characterName) {
-        char buf[96] = {};
-        const bool ok = characterName
-            ? ::Core::Objects::ReadCharacterName(address, buf, static_cast<int>(sizeof(buf)))
-            : ::Core::Objects::ReadName(address, buf, static_cast<int>(sizeof(buf)));
-        return ok ? std::string(buf) : std::string();
-    }
-
-    inline std::string BestName(uintptr_t address) {
-        std::string name = ReadRuntimeName(address, true);
-        if (name.empty()) {
-            name = ReadRuntimeName(address, false);
-        }
+    // BestName: use handle-cached CharacterName/Name rather than a raw memory
+    // read on every call — avoids the ReadName syscall per-object per-frame.
+    inline std::string BestNameOf(const AIMinionClient& minion) {
+        std::string name = minion.CharacterName();
+        if (name.empty()) name = minion.Name();
         return ToLower(std::move(name));
     }
 
+    // Legacy overload kept for the few internal callers that only have an address.
+    inline std::string BestName(uintptr_t address) {
+        AIMinionClient tmp(address);
+        return BestNameOf(tmp);
+    }
+
     inline bool ContainsAny(const std::string& value, std::initializer_list<const char*> needles) {
+        if (value.empty()) return false;
         for (const auto* needle : needles) {
-            if (!needle) {
-                continue;
-            }
-            if (value.find(ToLower(needle)) != std::string::npos) {
-                return true;
-            }
+            if (!needle || !needle[0]) continue;
+            auto it = std::search(
+                value.begin(), value.end(),
+                needle, needle + std::strlen(needle),
+                [](char c1, char c2) {
+                    return std::tolower(static_cast<unsigned char>(c1)) ==
+                           std::tolower(static_cast<unsigned char>(c2));
+                }
+            );
+            if (it != value.end()) return true;
         }
         return false;
     }
 
     inline bool EqualsAny(const std::string& value, std::initializer_list<const char*> needles) {
+        if (value.empty()) return false;
         for (const auto* needle : needles) {
-            if (needle && value == ToLower(needle)) {
+            if (needle && _stricmp(value.c_str(), needle) == 0) {
                 return true;
             }
         }
@@ -162,8 +166,18 @@ namespace detail {
     }
 
     inline int PlayerTeam() {
-        const auto player = SDK::ObjectManager::Player();
-        return player.IsValid() ? TeamValue(player) : 0;
+        static int s_team = 0;
+        static bool s_resolved = false;
+        if (!s_resolved) {
+            const auto player = SDK::ObjectManager::Player();
+            if (player.IsValid()) {
+                s_team = TeamValue(player);
+                if (s_team != 0) {
+                    s_resolved = true;
+                }
+            }
+        }
+        return s_team;
     }
 
     // ------------------------ minion classification ------------------------
@@ -201,7 +215,7 @@ namespace detail {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        const std::string name = BestName(minion.Address());
+        const std::string name = BestNameOf(minion);
         return HasFlag(minion.GetMinionType(), MinionTypes::Ward) ||
                ContainsAny(name, {
                    "ward", "jammerdevice", "trinket", "sightward", "visionward"
@@ -212,7 +226,7 @@ namespace detail {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        const std::string name = BestName(minion.Address());
+        const std::string name = BestNameOf(minion);
         const float maxHp = minion.MaxHealth();
         return minion.GetJungleType() == JungleType::Plant ||
                IsKnownJunglePlantName(name) ||
@@ -230,7 +244,7 @@ namespace detail {
         if (maxHp <= 6.0f) {
             return false;
         }
-        const std::string name = BestName(minion.Address());
+        const std::string name = BestNameOf(minion);
         return minion.IsJungle() || IsKnownJungleMonsterName(name);
     }
 
@@ -245,7 +259,7 @@ namespace detail {
         if (maxHp <= 0.0f || maxHp >= 10000.0f) {
             return false;
         }
-        const std::string name = BestName(minion.Address());
+        const std::string name = BestNameOf(minion);
         if (IsKnownJungleMonsterName(name)) {
             return false;
         }
@@ -256,7 +270,7 @@ namespace detail {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        return minion.IsClone() || EqualsAny(BestName(minion.Address()), {
+        return minion.IsClone() || EqualsAny(BestNameOf(minion), {
             "leblanc", "monkeyking", "neeko", "shaco"
         });
     }
@@ -270,7 +284,7 @@ namespace detail {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        return EqualsAny(BestName(minion.Address()), {
+        return EqualsAny(BestNameOf(minion), {
             "annietibbers", "elisespiderling", "heimertyellow",
             "heimertblue", "ivernminion", "malzaharvoidling",
             "shacobox", "teemomushroom", "yorickghoulmelee",
@@ -279,7 +293,7 @@ namespace detail {
     }
 
     inline bool IsIgnoredMinionObject(const AIMinionClient& minion) {
-        return minion.IsValid() && EqualsAny(BestName(minion.Address()), {
+        return minion.IsValid() && EqualsAny(BestNameOf(minion), {
             "jarvanivstandard"
         });
     }
@@ -717,82 +731,42 @@ inline bool OnDelete(void(*handler)(const GameObject&)) { return AddOnDelete(han
 
 inline void EnsureInitialized() {
     Initialize();
-    detail::PlayerObject = SDK::ObjectManager::Player();
+    // Resolve PlayerObject once on first call; afterward re-use the cached handle.
+    // ObjectManager::Player() builds a 92-read snapshot every call, so we only
+    // pay that cost once (or when the player handle is not yet valid).
+    if (!detail::PlayerObject.IsValid()) {
+        detail::PlayerObject = SDK::ObjectManager::Player();
+    }
 }
 
 inline AIHeroClient Player() {
     EnsureInitialized();
-    detail::PlayerObject = SDK::ObjectManager::Player();
     return detail::PlayerObject;
 }
 
 // ------------------------------- accessors ----------------------------------
 inline std::vector<AIHeroClient> Heroes() {
-    return SDK::ObjectManager::Get<AIHeroClient>();
+    return detail::Snapshot(detail::HeroesList);
 }
 
 inline std::vector<AIHeroClient> AllyHeroes() {
-    std::vector<AIHeroClient> result;
-    const int myTeam = detail::PlayerTeam();
-    const auto heroes = SDK::ObjectManager::Get<AIHeroClient>();
-    result.reserve(heroes.size());
-    for (const auto& hero : heroes) {
-        if (!hero.IsValid()) continue;
-        const int team = detail::TeamValue(hero);
-        if (myTeam != 0 && team == myTeam) {
-            result.push_back(hero);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::AllyHeroesList);
 }
 
 inline std::vector<AIHeroClient> EnemyHeroes() {
-    std::vector<AIHeroClient> result;
-    const int myTeam = detail::PlayerTeam();
-    const auto heroes = SDK::ObjectManager::Get<AIHeroClient>();
-    result.reserve(heroes.size());
-    for (const auto& hero : heroes) {
-        if (!hero.IsValid()) continue;
-        const int team = detail::TeamValue(hero);
-        if (team != 0 && team != 300 && (myTeam == 0 || team != myTeam)) {
-            result.push_back(hero);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::EnemyHeroesList);
 }
 
 inline std::vector<AIMinionClient> Minions() {
-    return SDK::ObjectManager::Get<AIMinionClient>();
+    return detail::Snapshot(detail::MinionsList);
 }
 
 inline std::vector<AIMinionClient> AllyMinions() {
-    std::vector<AIMinionClient> result;
-    const int myTeam = detail::PlayerTeam();
-    const auto minions = SDK::ObjectManager::Get<AIMinionClient>();
-    result.reserve(minions.size());
-    for (const auto& minion : minions) {
-        if (!minion.IsValid()) continue;
-        const int team = detail::TeamValue(minion);
-        if (myTeam != 0 && team == myTeam) {
-            result.push_back(minion);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::AllyMinionsList);
 }
 
 inline std::vector<AIMinionClient> EnemyMinions() {
-    std::vector<AIMinionClient> result;
-    const int myTeam = detail::PlayerTeam();
-    const auto minions = SDK::ObjectManager::Get<AIMinionClient>();
-    result.reserve(minions.size());
-    for (const auto& minion : minions) {
-        if (!minion.IsValid()) continue;
-        const int team = detail::TeamValue(minion);
-        if (team != 0 && team != 300 && (myTeam == 0 || team != myTeam)) {
-            result.push_back(minion);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::EnemyMinionsList);
 }
 
 inline std::vector<AIMinionClient> AllyLaneMinions() { return detail::Snapshot(detail::AllyLaneMinionsList); }
@@ -822,81 +796,35 @@ inline std::vector<AIMinionClient> AllyPets() { return detail::Snapshot(detail::
 inline std::vector<AIMinionClient> EnemyPets() { return detail::Snapshot(detail::EnemyPetsList); }
 
 inline std::vector<AITurretClient> Turrets() {
-    return SDK::ObjectManager::Get<AITurretClient>();
+    return detail::Snapshot(detail::TurretsList);
 }
 inline std::vector<AITurretClient> AllyTurrets() {
-    std::vector<AITurretClient> result;
-    const int myTeam = detail::PlayerTeam();
-    const auto turrets = SDK::ObjectManager::Get<AITurretClient>();
-    result.reserve(turrets.size());
-    for (const auto& turret : turrets) {
-        if (!turret.IsValid()) continue;
-        const int team = detail::TeamValue(turret);
-        if (myTeam != 0 && team == myTeam) {
-            result.push_back(turret);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::AllyTurretsList);
 }
 inline std::vector<AITurretClient> EnemyTurrets() {
-    std::vector<AITurretClient> result;
-    const int myTeam = detail::PlayerTeam();
-    const auto turrets = SDK::ObjectManager::Get<AITurretClient>();
-    result.reserve(turrets.size());
-    for (const auto& turret : turrets) {
-        if (!turret.IsValid()) continue;
-        const int team = detail::TeamValue(turret);
-        if (team != 0 && team != 300 && (myTeam == 0 || team != myTeam)) {
-            result.push_back(turret);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::EnemyTurretsList);
 }
 
 inline std::vector<BarracksDampenerClient> Inhibitors() {
-    return SDK::ObjectManager::Get<BarracksDampenerClient>();
+    return detail::Snapshot(detail::InhibitorsList);
 }
 inline std::vector<BarracksDampenerClient> AllyInhibitors() {
-    std::vector<BarracksDampenerClient> result;
-    const int myTeam = detail::PlayerTeam();
-    for (const auto& inhib : Inhibitors()) {
-        if (inhib.IsValid() && myTeam != 0 && detail::TeamValue(inhib) == myTeam) {
-            result.push_back(inhib);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::AllyInhibitorsList);
 }
 inline std::vector<BarracksDampenerClient> EnemyInhibitors() {
-    std::vector<BarracksDampenerClient> result;
-    const int myTeam = detail::PlayerTeam();
-    for (const auto& inhib : Inhibitors()) {
-        if (inhib.IsValid() && detail::TeamValue(inhib) != 300 && (myTeam == 0 || detail::TeamValue(inhib) != myTeam)) {
-            result.push_back(inhib);
-        }
-    }
-    return result;
+    return detail::Snapshot(detail::EnemyInhibitorsList);
 }
 
 inline std::vector<HQClient> Nexuses() {
-    return SDK::ObjectManager::Get<HQClient>();
+    return detail::Snapshot(detail::NexusList);
 }
 inline HQClient AllyNexus() {
-    const int myTeam = detail::PlayerTeam();
-    for (const auto& n : Nexuses()) {
-        if (n.IsValid() && myTeam != 0 && detail::TeamValue(n) == myTeam) {
-            return n;
-        }
-    }
-    return {};
+    detail::Lock lk(detail::g_mutex);
+    return detail::AllyNexusObject;
 }
 inline HQClient EnemyNexus() {
-    const int myTeam = detail::PlayerTeam();
-    for (const auto& n : Nexuses()) {
-        if (n.IsValid() && (myTeam == 0 || detail::TeamValue(n) != myTeam)) {
-            return n;
-        }
-    }
-    return {};
+    detail::Lock lk(detail::g_mutex);
+    return detail::EnemyNexusObject;
 }
 
 // Compatibility aliases (previous API); same snapshot data.
@@ -914,7 +842,7 @@ inline std::vector<Obj_SpawnPoint> EnemySpawnPoints() { return detail::Snapshot(
 
 inline std::vector<EffectEmitter> ParticleEmitters() { return detail::Snapshot(detail::ParticleEmittersList); }
 inline std::vector<MissileClient> Missiles() {
-    return SDK::ObjectManager::Get<MissileClient>();
+    return detail::Snapshot(detail::MissilesList);
 }
 inline std::vector<GameObject> AllGameObjects() { return detail::Snapshot(detail::GameObjectsList); }
 inline std::vector<AttackableUnit> AttackableUnits() { return detail::Snapshot(detail::AttackableUnitsList); }

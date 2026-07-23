@@ -32,12 +32,6 @@ public:
     bool ShowFakeClick() const { return BoolValue(showFakeClick_, false); }
     bool ShowFakeCursor() const { return BoolValue(showFakeCursor_, false); }
     int FakeCursorSize() const { return SliderValue(fakeCursorSize_, 22); }
-    bool DrawLiveDebugConsole() const { return BoolValue(drawLiveDebugConsole_, true); }
-    int DrawLiveDebugConsoleLines() const {
-        return std::max(
-            kOrbwalkerDebugConsoleDefaultVisibleLines,
-            SliderValue(drawLiveDebugConsoleLines_, kOrbwalkerDebugConsoleDefaultVisibleLines));
-    }
 
     bool MovementRandomize() const { return BoolValue(movementRandomize_, true); }
     int MovementExtraHold() const { return SliderValue(movementExtraHold_, 0); }
@@ -128,9 +122,6 @@ private:
             showFakeClick_ = drawingsMenu_->Add(new MenuBool("ShowFakeClick", "Show Fake Click", false));
             showFakeCursor_ = drawingsMenu_->Add(new MenuBool("ShowFakeCursor", "Show Fake Cursor", false));
             fakeCursorSize_ = drawingsMenu_->Add(new MenuSlider("FakeCursorSize", "Fake Cursor Size", 22, 12, 42));
-            drawLiveDebugConsole_ = drawingsMenu_->Add(new MenuBool("drawLiveDebugConsole", "Live Debug Console", false));
-            drawLiveDebugConsoleLines_ = drawingsMenu_->Add(
-                new MenuSlider("drawLiveDebugConsoleLines", "Live Debug Console Lines", 10, 10, 24));
         }
 
         advancedMenu_ = menu_->AddSubMenu(new Menu("advanced", "Advanced"));
@@ -198,8 +189,6 @@ private:
     MenuBool* showFakeClick_ = nullptr;
     MenuBool* showFakeCursor_ = nullptr;
     MenuSlider* fakeCursorSize_ = nullptr;
-    MenuBool* drawLiveDebugConsole_ = nullptr;
-    MenuSlider* drawLiveDebugConsoleLines_ = nullptr;
 
     MenuList* movementLogic_ = nullptr;
     MenuBool* coordinateKuroEvade_ = nullptr;

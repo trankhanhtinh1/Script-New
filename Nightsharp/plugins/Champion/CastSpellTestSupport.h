@@ -652,6 +652,9 @@ protected:
         CloseHandle(hFile);
     }
 
+protected:
+    CoreCastSpell::CastTrace m_lastTrace = {};
+
 private:
     static inline CastSpellTestPluginBase* s_active = nullptr;
 
@@ -664,7 +667,6 @@ private:
     volatile long long m_processSpellLocal = 0;
     volatile long long m_stopCastLocal = 0;
     DWORD m_lastBlockedLog = 0;
-    CoreCastSpell::CastTrace m_lastTrace = {};
 
     void CreateMenu() {
         DestroyMenu();

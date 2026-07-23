@@ -15,22 +15,12 @@ struct EvadeUtils final {
 
     static std::string GetObjectName(const SDK::GameObject& object) {
         if (!object.IsValid()) return {};
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return {};
+        return object.Name();
     }
 
     static std::string GetObjectCharacterName(const SDK::GameObject& object) {
         if (!object.IsValid()) return {};
-        std::string name = object.CharacterName();
-        if (!name.empty()) return name;
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return {};
+        return object.CharacterName();
     }
 
     static std::vector<Vec2> PathToVector2(const std::vector<Vec3>& path) {

@@ -134,12 +134,7 @@ inline bool ContainsAnyLower(const std::string& value,
 inline std::string RuntimeMinionName(const AIMinionClient& minion) {
     std::string name = minion.CharacterName();
     if (name.empty()) {
-        char buffer[96] = {};
-        const uintptr_t address = minion.Address();
-        if (::Core::Objects::ReadCharacterName(address, buffer, static_cast<int>(sizeof(buffer))) ||
-            ::Core::Objects::ReadName(address, buffer, static_cast<int>(sizeof(buffer)))) {
-            name = buffer;
-        }
+        name = minion.Name();
     }
     return ToLower(std::move(name));
 }

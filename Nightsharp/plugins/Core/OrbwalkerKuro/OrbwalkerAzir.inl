@@ -4,16 +4,10 @@ namespace OrbwalkerKuro::OrbwalkingDetail {
 
 using namespace ::SDK;
 
-struct AzirSoldierRuntimeCache {
+struct AzirSoldierFrameCache {
     int tick = -1;
-    int playerNetworkId = 0;
     std::vector<AIMinionClient> soldiers;
 };
-
-inline AzirSoldierRuntimeCache& AzirSoldierCache() {
-    static AzirSoldierRuntimeCache cache;
-    return cache;
-}
 
 inline bool IsAzirPlayer(const AIHeroClient& player) {
     return player.IsValid() &&
@@ -30,19 +24,42 @@ inline AzirSoldierSupport::Point2 PlanarPoint(const Vector3& position) {
     return { position.x, position.z };
 }
 
+inline void OnObjectCreate(const Events::ObjectEventArgs& args) {
+    (void)args;
+}
+
+inline void OnObjectDelete(const Events::ObjectEventArgs& args) {
+    (void)args;
+}
+
 inline std::vector<AIMinionClient> GetAzirSandSoldiers(
     const AIHeroClient& player
 ) {
-    return AzirSoldierSupport::GetAzirSandSoldiers(player);
+    if (!IsAzirPlayer(player)) {
+        return {};
+    }
+    static AzirSoldierFrameCache frameCache;
+    const int now = Variables::TickCount();
+    if (frameCache.tick == now) {
+        return frameCache.soldiers;
+    }
+
+    frameCache.soldiers = AzirSoldierSupport::GetAzirSandSoldiers(player);
+    frameCache.tick = now;
+    return frameCache.soldiers;
 }
 
 inline bool IsCommandableAzirSandSoldier(const AIHeroClient& player,
                                          const GameObject& soldier) {
+    const float soldierRadius = AIBaseClient(soldier.Handle()).BoundingRadius();
+    const float playerRadius = player.BoundingRadius();
     return IsAzirPlayer(player) && soldier.IsValid() && !soldier.IsDead() &&
            soldier.Team() == player.Team() && IsAzirSandSoldier(soldier) &&
            AzirSoldierSupport::IsCommandable(
                PlanarPoint(player.Position()),
-               PlanarPoint(soldier.Position()));
+               PlanarPoint(soldier.Position()),
+               soldierRadius,
+               playerRadius);
 }
 
 inline bool IsStructureTarget(const AttackableUnit& target) {
@@ -101,9 +118,11 @@ inline int AzirSoldierAttackCount(const AIHeroClient& player,
     const float attackRange = AzirSoldierSupport::kPrimaryAttackRange *
                               std::max(0.0f, rangeScale);
     int count = 0;
+    const float playerRadius = player.BoundingRadius();
     for (const auto& soldier : GetAzirSandSoldiers(player)) {
+        const float soldierRadius = soldier.BoundingRadius();
         if (!AzirSoldierSupport::IsCommandable(
-                playerPoint, PlanarPoint(soldier.Position())) ||
+                playerPoint, PlanarPoint(soldier.Position()), soldierRadius, playerRadius) ||
             !AzirSoldierSupport::CanReachPrimaryTarget(
                 PlanarPoint(soldier.Position()),
                 targetPoint,

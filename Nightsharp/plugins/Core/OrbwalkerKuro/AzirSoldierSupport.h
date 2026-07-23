@@ -12,12 +12,8 @@
 
 namespace OrbwalkerKuro::AzirSoldierSupport {
 
-// Live 16.14 values.  The command radius is Azir W's tether, while 375 is
-// the primary target range of a Sand Soldier stab.  The spear continues for
-// another 50 units, but that extension may only hit secondary bodies and must
-// never be used to decide whether an attack command itself is legal.
 inline constexpr float kCommandRadius = 660.0f;
-inline constexpr float kPrimaryAttackRange = 375.0f;
+inline constexpr float kPrimaryAttackRange = 350.0f;
 inline constexpr float kSpearPassThroughRange = 50.0f;
 inline constexpr float kAdditionalSoldierDamageMultiplier = 0.25f;
 inline constexpr float kOnHitEffectiveness = 0.50f;
@@ -33,44 +29,26 @@ enum class TargetKind {
     WardOrTrap,
 };
 
-inline char LowerAscii(char value) {
-    return static_cast<char>(
-        std::tolower(static_cast<unsigned char>(value)));
-}
-
 inline bool EqualsInsensitive(std::string_view left, std::string_view right) {
     if (left.size() != right.size()) {
         return false;
     }
-    for (std::size_t index = 0; index < left.size(); ++index) {
-        if (LowerAscii(left[index]) != LowerAscii(right[index])) {
-            return false;
-        }
-    }
-    return true;
+    return _strnicmp(left.data(), right.data(), left.size()) == 0;
 }
 
-inline bool ContainsInsensitive(std::string_view value,
-                                std::string_view needle) {
+inline bool ContainsInsensitive(std::string_view value, std::string_view needle) {
     if (needle.empty()) {
         return true;
     }
-    if (needle.size() > value.size()) {
-        return false;
-    }
-    for (std::size_t start = 0; start + needle.size() <= value.size(); ++start) {
-        bool match = true;
-        for (std::size_t index = 0; index < needle.size(); ++index) {
-            if (LowerAscii(value[start + index]) != LowerAscii(needle[index])) {
-                match = false;
-                break;
-            }
+    auto it = std::search(
+        value.begin(), value.end(),
+        needle.begin(), needle.end(),
+        [](char c1, char c2) {
+            return std::tolower(static_cast<unsigned char>(c1)) ==
+                   std::tolower(static_cast<unsigned char>(c2));
         }
-        if (match) {
-            return true;
-        }
-    }
-    return false;
+    );
+    return it != value.end();
 }
 
 inline bool IsAzirChampionName(std::string_view name) {
@@ -82,16 +60,8 @@ inline bool IsSandSoldierName(std::string_view name) {
         return false;
     }
 
-    // Exclude R wall soldiers explicitly
-    if (ContainsInsensitive(name, "AzirR") || EqualsInsensitive(name, "AzirRSolider") || EqualsInsensitive(name, "AzirRSoldier")) {
-        return false;
-    }
-
     return EqualsInsensitive(name, "AzirSoldier") ||
-           EqualsInsensitive(name, "AzirSolider") ||
-           EqualsInsensitive(name, "Azir_Base_P_Soldier_Ring") ||
-           EqualsInsensitive(name, "Azir_Base_W_Soldier") ||
-           EqualsInsensitive(name, "Azir_Base_W_Soldier_Ring");
+           EqualsInsensitive(name, "AzirSolider");
 }
 
 inline bool IsSoldierAttackSpellName(std::string_view name) {
@@ -127,8 +97,12 @@ inline float DistanceSquared(Point2 left, Point2 right) {
 
 inline bool IsCommandable(Point2 azir,
                           Point2 soldier,
+                          float soldierBoundingRadius = 0.0f,
+                          float playerBoundingRadius = 0.0f,
                           float commandRadius = kCommandRadius) {
-    const float safeRadius = std::max(0.0f, commandRadius) + 35.0f;
+    const float safeRadius = std::max(0.0f, commandRadius) +
+                             std::max(0.0f, playerBoundingRadius) +
+                             std::max(0.0f, soldierBoundingRadius);
     return DistanceSquared(azir, soldier) <= safeRadius * safeRadius;
 }
 
@@ -147,9 +121,10 @@ inline bool CanCommandAttack(Point2 azir,
                              Point2 soldier,
                              Point2 target,
                              float targetBoundingRadius,
-                             TargetKind kind) {
+                             TargetKind kind,
+                             float soldierBoundingRadius = 0.0f) {
     return CanUseSoldierAttack(kind) &&
-           IsCommandable(azir, soldier) &&
+           IsCommandable(azir, soldier, soldierBoundingRadius) &&
            CanReachPrimaryTarget(soldier, target, targetBoundingRadius);
 }
 
@@ -225,15 +200,15 @@ inline std::vector<::SDK::AIMinionClient> GetAzirSandSoldiers(
 
     const ::SDK::GameObjectTeam playerTeam = player.Team();
 
-    for (const auto& minion : ::SDK::ObjectManager::Get<::SDK::AIMinionClient>()) {
-        if (!minion.IsValid() || minion.IsDead() || minion.Team() != playerTeam) {
+    for (const auto& obj : ::SDK::ObjectManager::Get<::SDK::GameObject>()) {
+        if (!obj.IsValid() || obj.IsDead() || obj.Team() != playerTeam) {
             continue;
         }
 
-        const auto charName = minion.CharacterName();
-        const auto name = minion.Name();
+        const auto charName = obj.CharacterName();
+        const auto name = obj.Name();
         if (IsSandSoldierName(charName) || IsSandSoldierName(name)) {
-            result.push_back(minion);
+            result.push_back(::SDK::AIMinionClient(obj.Handle()));
         }
     }
 

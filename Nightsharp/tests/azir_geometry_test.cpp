@@ -44,11 +44,11 @@ int main() {
     const Vec3 azir{ 0.0f, 0.0f, 0.0f };
     Soldier edge{ Vec3{ 660.0f, 0.0f, 0.0f }, 1, 1.0f, 4.0f,
                   true, true };
-    Unit target{ Vec3{ 1035.0f, 0.0f, 0.0f }, {}, 0.0f, 10,
+    Unit target{ Vec3{ 1010.0f, 0.0f, 0.0f }, {}, 0.0f, 10,
                  1000.0f, 1.5f, true, false, false, false, false,
                  false, true };
     Require(Commandable(azir, edge) && SoldierCanAttack(azir, edge, target),
-            "a soldier on the 660 tether edge must command a 375-range stab");
+            "a soldier on the 660 tether edge must command a 350-range stab");
     edge.Position.x = 660.1f;
     Require(!Commandable(azir, edge),
             "a soldier beyond the tether must deactivate immediately");

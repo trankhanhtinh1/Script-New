@@ -35,15 +35,7 @@ public:
 
     std::string GetHeroCharacterName(const SDK::AIHeroClient& hero) const {
         if (!hero.IsValid()) return "";
-        std::string name = hero.CharacterName();
-        if (!name.empty()) {
-            return name;
-        }
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadCharacterName(hero.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return "";
+        return hero.CharacterName();
     }
 
     void OnLoad() override {

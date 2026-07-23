@@ -434,10 +434,16 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int forceTargetNetworkId = context_.forceTarget.IsValid()
         ? context_.forceTarget.NetworkId()
         : 0;
-    if (context_.cachedTargetTick == now &&
+    constexpr int kTargetSelectionThrottleMs = 35;
+    if (context_.cachedTargetTick > 0 &&
+        now - context_.cachedTargetTick >= 0 &&
+        now - context_.cachedTargetTick < kTargetSelectionThrottleMs &&
         context_.cachedTargetMode == mode &&
         context_.cachedTargetForceTargetNetworkId == forceTargetNetworkId) {
-        return context_.cachedTarget;
+        if (!context_.cachedTarget.IsValid() ||
+            OrbwalkingDetail::IsValidCurrentAttackTarget(player, context_.cachedTarget)) {
+            return context_.cachedTarget;
+        }
     }
 
     auto cacheTarget = [&](const AttackableUnit& target) -> AttackableUnit {

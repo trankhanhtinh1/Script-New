@@ -42,7 +42,7 @@ inline constexpr ChampionProfile Azir = [] {
             Intent::Waveclear | Intent::Jungle | Intent::Objective,
         Mode::Combo | Mode::Harass | Mode::LaneClear | Mode::Jungle |
             Mode::LastHit | Mode::Flee | Mode::Automatic,
-        525.0f, 0.25f, 1.0f, FLT_MAX, false,
+        500.0f, 0.25f, 1.0f, FLT_MAX, false,
         SDK::DamageType::Magical, SDK::SpellType::SkillshotCircle);
     p.Spells[1].Priority = 96;
     p.Spells[1].Aim = AimPolicy::BetweenPlayerAndTarget;

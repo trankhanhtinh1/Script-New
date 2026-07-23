@@ -765,7 +765,7 @@ inline WPlan BuildWPlan(const AIHeroClient& target,
             const float maxAttackDist = SoldierRules::kPrimaryAttackRange + target.BoundingRadius() - 15.0f; // 15u safety buffer
             const bool coversCurrent = currentDist <= maxAttackDist;
             const bool coversPredicted = predDist <= maxAttackDist;
-            coverage = coversCurrent || coversPredicted;
+            coverage = coversPredicted;
             doubleCoverage = coversCurrent && coversPredicted;
         }
         const bool nearTurret = NearEnemyTurret(candidate, -100.0f);
@@ -1770,13 +1770,16 @@ inline bool TryCombo(const AIHeroClient& target) {
 
     // 2. W Placement (Soldier Spawning & Long-Range W-Q Setup)
     if (WAvailable() && SpellEnabled(1, Mode::Combo) && !Orbwalker::IsWindingUp()) {
-        const Vector3 targetPos = PredictPosition(target, 0.20f);
+        const Vector3 targetPos = PredictPosition(target, kWCastSeconds);
+        const float targetDistFromPlayer = player.Position().Distance2D(targetPos);
+        const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+        const float distFromSoldierToTarget = castPos.Distance2D(targetPos);
+        const float maxReach = SoldierRules::kPrimaryAttackRange + target.BoundingRadius() - 15.0f;
 
-        // Case A: Target in direct W range + attack reach (525 + 375 = ~900 range)
-        if (dist <= kWSpawnRange + 375.0f) {
+        // Case A: Target in direct W range + attack reach (500 + 350 = ~850 max reach)
+        if (distFromSoldierToTarget <= maxReach) {
             // Place W if target not currently covered by soldiers, or if we have 2 W charges for max DPS
             if (attackers == 0 || (WCharges() >= 2 && attackers < 2)) {
-                const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
                 if (Engine::ControllerCastPosition(1, castPos)) {
                     LastWCastTick = Now();
                     PendingWPosition = castPos;
@@ -1785,9 +1788,8 @@ inline bool TryCombo(const AIHeroClient& target) {
                 }
             }
         }
-        // Case B: Long-range W-Q Poke/Engage (525 < dist <= 1100 and Q is ready!)
-        else if (dist <= 1100.0f && Ready(0) && SpellEnabled(0, Mode::Combo)) {
-            const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+        // Case B: Long-range W-Q Poke/Engage (500 < dist <= 1100 and Q is ready!)
+        else if (targetDistFromPlayer <= 1100.0f && Ready(0) && SpellEnabled(0, Mode::Combo)) {
             if (Engine::ControllerCastPosition(1, castPos)) {
                 LastWCastTick = Now();
                 PendingWPosition = castPos;
@@ -1802,8 +1804,8 @@ inline bool TryCombo(const AIHeroClient& target) {
         const Vector3 targetPos = PredictPosition(target, 0.25f);
         const float targetDistFromPlayer = player.Position().Distance2D(targetPos);
 
-        // Q can reach target if target is within Q range (800) + soldier attack range (375)
-        if (targetDistFromPlayer <= kQCastRange + 375.0f) {
+        // Q can reach target if target is within Q range (720) + soldier attack range (350)
+        if (targetDistFromPlayer <= kQCastRange + SoldierRules::kPrimaryAttackRange) {
             bool shouldQ = false;
 
             // Condition 1: Target is outside current soldier attack range
@@ -1866,9 +1868,12 @@ inline bool TryHarass(const AIHeroClient& target) {
     const auto soldiers = BuildSoldiers();
 
     if (WAvailable() && SpellEnabled(1, Mode::Harass) && !Orbwalker::IsWindingUp()) {
-        if (dist <= kWSpawnRange + 375.0f && attackers == 0) {
-            const Vector3 targetPos = PredictPosition(target, 0.20f);
-            const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+        const Vector3 targetPos = PredictPosition(target, kWCastSeconds);
+        const Vector3 castPos = ClampCast(player.Position(), targetPos, kWSpawnRange);
+        const float distFromSoldierToTarget = castPos.Distance2D(targetPos);
+        const float maxReach = SoldierRules::kPrimaryAttackRange + target.BoundingRadius() - 15.0f;
+
+        if (distFromSoldierToTarget <= maxReach && attackers == 0) {
             if (Engine::ControllerCastPosition(1, castPos)) {
                 LastWCastTick = Now();
                 return true;
@@ -2661,7 +2666,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject enemy and stale soldiers from Azir planning",
     "Keep non-commandable soldiers visible for coaching but out of cast plans",
     "Use a 660-unit Azir-to-soldier command tether",
-    "Use a 375-unit soldier primary target range plus target bounding radius",
+    "Use a 350-unit soldier primary target range plus target bounding radius",
     "Never use the spear's extra 50 units to legalize a primary target command",
     "Never attack structures, wards or traps through a Sand Soldier",
     "Allow the ordinary Azir basic attack when no soldier can command the target",

@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 
 #ifndef NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS
 #define NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS 0
@@ -213,39 +214,25 @@ inline bool IsLifecycleType(ObjectType type) {
 }
 
 inline bool EqualsInsensitive(const char* lhs, const char* rhs) {
-    if (!lhs || !rhs) {
-        return false;
-    }
-    while (*lhs && *rhs) {
-        if (std::tolower(static_cast<unsigned char>(*lhs)) !=
-            std::tolower(static_cast<unsigned char>(*rhs))) {
-            return false;
-        }
-        ++lhs;
-        ++rhs;
-    }
-    return *lhs == 0 && *rhs == 0;
+    if (!lhs || !rhs) return lhs == rhs;
+    return _stricmp(lhs, rhs) == 0;
 }
 
 inline bool ContainsInsensitive(const char* value, const char* needle) {
     if (!value || !needle || !*needle) {
         return false;
     }
-
-    for (const char* start = value; *start; ++start) {
-        const char* a = start;
-        const char* b = needle;
-        while (*a && *b &&
-               std::tolower(static_cast<unsigned char>(*a)) ==
-                   std::tolower(static_cast<unsigned char>(*b))) {
-            ++a;
-            ++b;
+    const std::string_view v(value);
+    const std::string_view n(needle);
+    auto it = std::search(
+        v.begin(), v.end(),
+        n.begin(), n.end(),
+        [](char c1, char c2) {
+            return std::tolower(static_cast<unsigned char>(c1)) ==
+                   std::tolower(static_cast<unsigned char>(c2));
         }
-        if (!*b) {
-            return true;
-        }
-    }
-    return false;
+    );
+    return it != v.end();
 }
 
 inline bool IsClone(const ObjectSnapshot& snapshot) {

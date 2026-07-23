@@ -555,7 +555,7 @@ namespace WaypointCache {
         std::vector<Vector3> waypoints;
         Vector3 serverPosition = {};
     };
-    inline Entry entries[kBuckets] = {};
+    inline thread_local Entry entries[kBuckets] = {};
     inline int Bucket(uintptr_t a) {
         return static_cast<int>((a >> 4) & (kBuckets - 1));
     }

@@ -264,6 +264,12 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
         }
     }
 
+    // Strict Windup Protection: Never allow movement if current time is strictly less than attack windup end!
+    const float strictWindupEnd = static_cast<float>(attackTick) + context_.attackWindupMs;
+    if (static_cast<float>(now) < strictWindupEnd) {
+        return false;
+    }
+
     if (!pending && context_.attackCastComplete) {
         return true;
     }
