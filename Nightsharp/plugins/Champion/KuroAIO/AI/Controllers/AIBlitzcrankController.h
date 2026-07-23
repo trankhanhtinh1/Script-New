@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -463,7 +463,7 @@ inline HookBody RuntimeHookBody(const AIBaseClient& unit,
 }
 
 inline std::vector<HookBody> BuildHookBodies(int futureTargetableId = 0) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::vector<HookBody> result;
     result.reserve(50);
     if (!player.IsValid()) return result;
@@ -509,7 +509,7 @@ inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
     if (Engine::ValidEnemy(locked, range)) return locked;
     AIHeroClient best{};
     float bestScore = -FLT_MAX;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, range)) continue;
         float score = EnemyPriority(enemy) * 150.0f -
@@ -644,7 +644,7 @@ inline bool IsHookRejectedState(const AIHeroClient& target,
 }
 
 inline float WEReliableReach(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const float attackReach = player.AttackRange() +
         target.BoundingRadius() + kEBonusAttackRange;
@@ -654,7 +654,7 @@ inline float WEReliableReach(const AIHeroClient& target) {
 }
 
 inline bool WalkUpEReliable(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target) ||
         !Ready(1) || !Ready(2) || EnemyMobilityReady(target) ||
         TargetDisplacementImmune(target)) {
@@ -683,7 +683,7 @@ inline float HitchanceConfidence(SDK::HitChance hitchance) {
 inline std::vector<Vector3> HookCandidates(const AIHeroClient& target,
                                            const Vector3& forcedPosition = {}) {
     std::vector<Vector3> candidates;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return candidates;
     Vector3 predicted = forcedPosition;
     if (!predicted.IsValid() || predicted.IsZero()) {
@@ -728,7 +728,7 @@ inline HookContext RuntimeHookContext(
     bool selected,
     bool allowStasis) {
     HookContext context{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 landing = PullLandingPosition(
         player.Position(), contact.TargetPosition.IsValid()
             ? contact.TargetPosition : target.Position());
@@ -794,7 +794,7 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
                         bool allowStasis = false,
                         const Vector3& forcedPosition = {}) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0) ||
         IsHookRejectedState(target, allowStasis)) return best;
     if (player.Position().Distance2D(target.Position()) >
@@ -904,7 +904,7 @@ inline float PeelManaReserve() {
 inline WPlan BuildWPlan(const AIHeroClient& target,
                         WPurpose purpose) {
     WPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(1)) return plan;
     Vector3 destination = player.PathEnd();
     if (!destination.IsValid() || destination.IsZero() ||
@@ -994,7 +994,7 @@ inline bool CastWPlan(const WPlan& plan, bool reactive = false) {
 }
 
 inline float BasicAttackDamage(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const float damage = SDK::Damage::GetAutoAttackDamage(
         player, target, true);
@@ -1002,7 +1002,7 @@ inline float BasicAttackDamage(const AIHeroClient& target) {
 }
 
 inline float PowerFistDamage(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const float raw = EEmpoweredAttackRawDamage(
         player.TotalAttackDamage(), player.AP());
@@ -1012,7 +1012,7 @@ inline float PowerFistDamage(const AIHeroClient& target) {
 inline EPlan BuildEPlan(const AIHeroClient& target,
                         bool peelUrgent = false) {
     EPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2) || EArmed ||
         !Engine::ValidEnemy(target, 700.0f)) return plan;
     const int targetId = static_cast<int>(target.NetworkId());
@@ -1091,7 +1091,7 @@ inline bool CastEPlan(const EPlan& plan, bool reactive = false) {
 }
 
 inline bool CleanDirectHookLine(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target,
             kQMaximumTargetCenterRange + 80.0f)) return false;
     Vector3 aim = PredictPosition(
@@ -1110,7 +1110,7 @@ inline bool CleanDirectHookLine(const AIHeroClient& target) {
 inline RPlan BuildRPlan(const AIHeroClient& preferred,
                         RPurpose purpose) {
     RPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3)) return plan;
     AIHeroClient primary = Engine::ValidEnemy(preferred,
         kRRadius + preferred.BoundingRadius()) ? preferred : AIHeroClient{};
@@ -1216,7 +1216,7 @@ inline bool CastRPlan(const RPlan& plan, bool reactive = false) {
 
 inline bool TryStasisExitHook(int selectedTargetId) {
     if (!Ready(0) || !Bool(QMenu, "StasisExit", true)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (auto& record : StasisRecords) {
         if (record.NetworkId == 0 || record.EndTick <= Now() - 120) continue;
         AIHeroClient target = RawEnemyById(record.NetworkId);
@@ -1247,7 +1247,7 @@ inline bool TryInterrupt() {
     if (InterruptTargetId == 0 || InterruptExpireTick < Now()) return false;
     const AIHeroClient target = RawEnemyById(InterruptTargetId);
     if (!Engine::ValidEnemy(target, 1250.0f)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (Bool(RMenu, "Interrupt", true) && Ready(3) &&
         player.Position().Distance2D(target.Position()) <=
             kRRadius + target.BoundingRadius()) {
@@ -1286,7 +1286,7 @@ inline bool TryGapcloser() {
         if (CastQPlan(q, true)) return true;
     }
     if (Bool(RMenu, "Peel", true) && Ready(3) &&
-        Engine::CountEnemiesAt(ObjectManager::Player().Position(),
+        Engine::CountEnemiesAt(GameObjects::Player().Position(),
                                kRRadius) >= 2) {
         const RPlan r = BuildRPlan(target, RPurpose::Peel);
         if (CastRPlan(r, true)) return true;
@@ -1312,7 +1312,7 @@ inline bool TryPeel(const AIHeroClient& ally,
         if (CastQPlan(q, true)) return true;
     }
     if (Ready(3) && Bool(RMenu, "Peel", true) &&
-        threat.Position().Distance2D(ObjectManager::Player().Position()) <=
+        threat.Position().Distance2D(GameObjects::Player().Position()) <=
             kRRadius + threat.BoundingRadius()) {
         const RPlan r = BuildRPlan(threat, RPurpose::Peel);
         if (CastRPlan(r, true)) return true;
@@ -1329,7 +1329,7 @@ inline bool TryAutomaticShieldBreak() {
     AIHeroClient best{};
     float bestShield = static_cast<float>(
         Slider(RMenu, "ShieldBreakValue", 260));
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy) ||
             player.Position().Distance2D(enemy.Position()) >
@@ -1353,7 +1353,7 @@ inline bool TryHookFlightFollowups(bool playerLed = false) {
     const bool escapeReady = EnemyMobilityReady(target) &&
         !EnemyWindowEscapeSpent(QFlightTargetId);
     if (Ready(3) && Bool(RMenu, "MidPullSilence", true) && escapeReady &&
-        ObjectManager::Player().Position().Distance2D(target.Position()) <=
+        GameObjects::Player().Position().Distance2D(target.Position()) <=
             kRRadius + target.BoundingRadius()) {
         const RPlan r = BuildRPlan(target, RPurpose::MidPullSilence);
         if (CastRPlan(r, true)) return true;
@@ -1373,7 +1373,7 @@ inline bool TryHookFlightFollowups(bool playerLed = false) {
 inline bool TryKillSecure(const AIHeroClient& preferred,
                           int selectedTargetId) {
     if (!Bool(TacticsMenu, "KillSecure", true)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient best = preferred;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, 1250.0f)) continue;
@@ -1467,7 +1467,7 @@ inline bool TryPreHookRQ(const AIHeroClient& target) {
     if (!Bool(RMenu, "PreHookSilence", true) || !Ready(3) || !Ready(0) ||
         !Engine::ValidEnemy(target) || !EnemyMobilityReady(target) ||
         EnemyPriority(target) < 1.8f ||
-        ObjectManager::Player().Position().Distance2D(target.Position()) >
+        GameObjects::Player().Position().Distance2D(target.Position()) >
             kRRadius + target.BoundingRadius() ||
         !CleanDirectHookLine(target)) return false;
     return CastRPlan(BuildRPlan(target, RPurpose::PreHookSilence));
@@ -1500,7 +1500,7 @@ inline bool TryCombo(const AIHeroClient& target,
             target, selectedTargetId, false)) return true;
     if (Ready(3) && SpellEnabled(3, Mode::Combo)) {
         RPurpose purpose = Engine::CountEnemiesAt(
-            ObjectManager::Player().Position(), kRRadius) >=
+            GameObjects::Player().Position(), kRRadius) >=
                 Slider(RMenu, "MinimumTargets", 2)
             ? RPurpose::MultiTarget : RPurpose::None;
         const RPlan r = BuildRPlan(target, purpose);
@@ -1548,7 +1548,7 @@ inline bool TryFlee(const AIHeroClient& fallback) {
         if (CastWPlan(w, true)) return true;
     }
     if (Ready(3) && Bool(RMenu, "Flee", true) &&
-        Engine::CountEnemiesAt(ObjectManager::Player().Position(),
+        Engine::CountEnemiesAt(GameObjects::Player().Position(),
                                kRRadius) >=
             Slider(RMenu, "FleeMinimum", 2)) {
         const RPlan r = BuildRPlan(threat, RPurpose::Peel);
@@ -1562,7 +1562,7 @@ inline bool TryRoamW() {
         HasEnemyChampionNear(1400.0f) || HasNearbyEpicMonster(2000.0f)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.PathEnd().IsValid() || player.PathEnd().IsZero() ||
         player.Position().Distance2D(player.PathEnd()) < 700.0f) return false;
     const WPlan w = BuildWPlan({}, WPurpose::Roam);
@@ -1570,7 +1570,7 @@ inline bool TryRoamW() {
 }
 
 inline void RefreshRuntimeState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
     WActive = ControllerHelpers::HasAnyBuff(player, {
@@ -1638,7 +1638,7 @@ inline Posture DeterminePosture(Mode mode,
         if (mode == Mode::Combo) return Posture::Catch;
         return Posture::LaneThreat;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid() && player.PathEnd().IsValid() &&
         !player.PathEnd().IsZero() &&
         player.Position().Distance2D(player.PathEnd()) > 650.0f) {
@@ -1722,7 +1722,7 @@ inline void ObserveEnemySpell(
         AllyThreatUntil = Now() + (args.IsAutoAttack ? 850 : 1300);
     } else if (analysis.CrossesPlayer || analysis.TargetsPlayer) {
         ThreatenedAllyId = static_cast<int>(
-            ObjectManager::Player().NetworkId());
+            GameObjects::Player().NetworkId());
         PeelThreatId = enemyId;
         AllyThreatUntil = Now() + 900;
     }
@@ -1731,7 +1731,7 @@ inline void ObserveEnemySpell(
 inline void BeginObservedHook(
     const SDK::Events::ProcessSpellEventArgs& args,
     bool controllerOwned) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     Vector3 aim = args.EndPosition;
     if (!aim.IsValid() || aim.IsZero()) aim = args.CastPosition;
     if (!aim.IsValid() || aim.IsZero()) aim = QFlightEnd;
@@ -1838,7 +1838,7 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (ShouldBlockWrongAttackWhileEArmed(
             true, DesiredETargetId, LastBeforeAttackTargetId,
             desired.IsValid() &&
-                ObjectManager::Player().Position().Distance2D(
+                GameObjects::Player().Position().Distance2D(
                     desired.Position()) <= 650.0f,
             arrival, remaining)) {
         args.Process = false;
@@ -2030,7 +2030,7 @@ inline const char* SequenceName(Sequence sequence) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(

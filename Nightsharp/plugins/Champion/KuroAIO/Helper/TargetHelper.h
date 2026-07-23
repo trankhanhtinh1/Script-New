@@ -10,7 +10,7 @@
 namespace Plugins::KuroAIO {
 
 inline AIHeroClient Player() {
-    return ObjectManager::Player();
+    return GameObjects::Player();
 }
 
 inline std::string GetObjectName(const GameObject& object) {

@@ -89,7 +89,7 @@ public:
             return;
         }
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const float height = player.IsValid() ? player.Position().y : 0.0f;
         Vec2 fromScreen;
         Vec2 toScreen;
@@ -200,7 +200,7 @@ private:
             return;
         }
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const float height = player.IsValid() ? player.Position().y : 0.0f;
         std::array<ImVec2, kMaxPoints> screens = {};
         std::array<bool, kMaxPoints> visible = {};
@@ -272,7 +272,7 @@ private:
             return;
         }
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const float height = player.IsValid() ? player.Position().y : 0.0f;
         const bool irrelevant = info.State == SpellVisualState::Irrelevant;
         const ImU32 base = BaseColor(info.State, style);

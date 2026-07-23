@@ -424,7 +424,7 @@ inline const EnemyTrack* RecentJunglerTrack(int minimumMissingMs = 1500,
 }
 
 inline int ObservedHawkshotAmmo() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return -1;
     const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::E);
     if (!spell.IsValid()) return -1;
@@ -436,7 +436,7 @@ inline int ObservedHawkshotAmmo() {
 }
 
 inline void RefreshFocusState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const bool liveActive = HasAnyBuff(
         player, { "AsheQBuff", "asheqbuff", "RangersFocus" });
@@ -490,21 +490,21 @@ inline void RefreshState() {
 }
 
 inline float VolleyDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculatePhysicalDamage(
         target, VolleyRawDamage(SpellRank(1), player.BonusAttackDamage()));
 }
 
 inline float ArrowDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, ArrowRawDamage(SpellRank(3), player.AP()));
 }
 
 inline float AutoDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && target.IsValid()
         ? SDK::Damage::GetAutoAttackDamage(player, target, true)
         : 0.0f;
@@ -525,7 +525,7 @@ inline bool IsPerHitFlatReductionTarget(const AIBaseClient& target) {
 }
 
 inline bool TargetLeavingAutoRange(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid() ||
         !target.PathEnd().IsValid() || target.PathEnd().IsZero()) {
         return false;
@@ -535,7 +535,7 @@ inline bool TargetLeavingAutoRange(const AIBaseClient& target) {
 }
 
 inline int CountRemainingWaveAttacks() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     int attacks = 0;
     for (const auto& minion : GameObjects::EnemyMinions()) {
@@ -555,7 +555,7 @@ inline int ExpectedFollowupAttacks(const AIBaseClient& target, Mode mode) {
                           0, 8);
     }
     if (target.IsMinion()) return CountRemainingWaveAttacks();
-    const float distance = ObjectManager::Player().Position().Distance2D(
+    const float distance = GameObjects::Player().Position().Distance2D(
         target.Position());
     int expected = mode == Mode::Combo ? 3 : 2;
     if (IsFrosted(target)) ++expected;
@@ -622,7 +622,7 @@ inline bool TryFocusReset(Mode requestedMode) {
         return false;
     }
     const int followups = ExpectedFollowupAttacks(target, mode);
-    const float manaAfter = ObjectManager::Player().Mana() - SpellCost(0);
+    const float manaAfter = GameObjects::Player().Mana() - SpellCost(0);
     const float flurry = AutoDamage(target) *
         std::max(1.0f, QFlurryAttackRatio(SpellRank(0)));
     FocusContext context{};
@@ -667,7 +667,7 @@ inline bool TryFocusReset(Mode requestedMode) {
 }
 
 inline Vector3 PredictedVolleyPosition(const AIBaseClient& unit) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !unit.IsValid()) return {};
     float distance = player.Position().Distance2D(unit.Position());
     Vector3 predicted = PredictPosition(unit, VolleyImpactSeconds(distance));
@@ -756,7 +756,7 @@ inline VolleyPlan BuildVolleyPlan(const AIHeroClient& primary,
                                   WPurpose purpose,
                                   bool includeFarm) {
     VolleyPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int rank = SpellRank(1);
     const int primaryId = primary.IsValid()
         ? static_cast<int>(primary.NetworkId()) : 0;
@@ -873,7 +873,7 @@ inline bool CastVolley(const VolleyPlan& plan,
 }
 
 inline Vector3 IterativeArrowPrediction(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return {};
     Vector3 predicted = target.IsDashing() && target.PathEnd().IsValid()
         ? target.PathEnd() : target.Position();
@@ -887,7 +887,7 @@ inline Vector3 IterativeArrowPrediction(const AIHeroClient& target) {
 inline std::vector<ArrowUnit> CollectArrowUnits(int primaryId) {
     std::vector<ArrowUnit> units;
     units.reserve(GameObjects::EnemyHeroes().size());
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy) || IsCommonUntargetableOrImmune(enemy)) {
             continue;
@@ -923,7 +923,7 @@ inline std::vector<ArrowUnit> CollectArrowUnits(int primaryId) {
 inline ArrowPlan BuildArrowPlan(const AIHeroClient& requested,
                                 ArrowPurpose purpose) {
     ArrowPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int requestedId = requested.IsValid()
         ? static_cast<int>(requested.NetworkId()) : 0;
     if (!player.IsValid() || SpellRank(3) <= 0) return best;
@@ -1011,7 +1011,7 @@ inline bool ArrowPlanMeetsPurpose(const ArrowPlan& plan,
     case ArrowPurpose::SelfPeel:
         return distance <= 780.0f &&
             (target.IsDashing() || distance <= 460.0f ||
-             ObjectManager::Player().HealthPercent() <=
+             GameObjects::Player().HealthPercent() <=
                 Slider(ArrowMenu, "SelfPeelHp", 52));
     case ArrowPurpose::AllyPeel:
         return distance <= 1350.0f && plan.Evaluation.FirstHitThreat;
@@ -1109,7 +1109,7 @@ inline void MarkScoutHistory(int landmarkId, int tick) {
 }
 
 inline bool IsEnemyJungleSide(const LandmarkDefinition& landmark) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const bool enemyIsChaos = player.Team() == SDK::GameObjectTeam::Order;
     return landmark.Kind == ScoutKind::Objective ||
@@ -1155,7 +1155,7 @@ inline std::vector<ScoutLandmark> BuildScoutLandmarks(
 inline ScoutPlan BuildScoutPlan(ScoutPurpose purpose,
                                 const Vector3& manualDestination = {}) {
     ScoutPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
     const EnemyTrack* jungler = RecentJunglerTrack();
     const auto landmarks = BuildScoutLandmarks(purpose, jungler);
@@ -1250,7 +1250,7 @@ inline bool CastHawkshot(const ScoutPlan& plan,
         const auto landmarks = BuildScoutLandmarks(plan.Purpose,
                                                    RecentJunglerTrack());
         for (const auto& landmark : landmarks) {
-            if (HawkshotCoversPoint(ObjectManager::Player().Position(),
+            if (HawkshotCoversPoint(GameObjects::Player().Position(),
                                     plan.Destination,
                                     landmark.Position)) {
                 MarkScoutHistory(landmark.Id, Now());
@@ -1353,8 +1353,8 @@ inline bool TryAntiGapcloser() {
         if (volley.Valid && CastVolley(volley, Mode::Automatic, true)) return true;
     }
     if (Ready(3) && Bool(ArrowMenu, "AntiGapcloser", true) &&
-        (target.Position().Distance2D(ObjectManager::Player().Position()) <= 430.0f ||
-         ObjectManager::Player().HealthPercent() <=
+        (target.Position().Distance2D(GameObjects::Player().Position()) <= 430.0f ||
+         GameObjects::Player().HealthPercent() <=
             Slider(ArrowMenu, "SelfPeelHp", 52))) {
         ArrowPlan arrow = BuildArrowPlan(target, ArrowPurpose::SelfPeel);
         return CastArrow(arrow, target, Mode::Automatic, true);
@@ -1365,7 +1365,7 @@ inline bool TryAntiGapcloser() {
 inline bool TrySelfPeel(const AIHeroClient& selected, Mode mode) {
     const AIHeroClient threat = NearestEnemyToPlayer(selected, 900.0f);
     if (!Engine::ValidEnemy(threat)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(threat.Position());
     const bool committed = threat.IsDashing() || distance <=
         std::max(380.0f, threat.AttackRange() + threat.BoundingRadius() + 45.0f) ||
@@ -1425,7 +1425,7 @@ inline bool TryKillSecure() {
         }
         if (Ready(1) && VolleyDamage(enemy) >=
                 enemy.Health() + enemy.AllShield() &&
-            ObjectManager::Player().Position().Distance2D(enemy.Position()) <=
+            GameObjects::Player().Position().Distance2D(enemy.Position()) <=
                 kVolleyRange + enemy.BoundingRadius()) {
             VolleyPlan volley = BuildVolleyPlan(
                 enemy, WPurpose::KillSecure, false);
@@ -1444,7 +1444,7 @@ inline bool TryKillSecure() {
 inline bool TryComboArrow(const AIHeroClient& target) {
     if (!Ready(3) || !Engine::ValidEnemy(target) ||
         !Bool(ArrowMenu, "Combo", true)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     const int cluster = Engine::CountEnemiesAt(target.Position(),
                                                 kArrowExplosionRadius + 70.0f);
@@ -1499,7 +1499,7 @@ inline bool TryComboFocus(const AIHeroClient& selected) {
 
 inline bool TryCombo(const AIHeroClient& selected) {
     if (!Engine::ValidEnemy(selected)) return false;
-    const float distance = ObjectManager::Player().Position().Distance2D(
+    const float distance = GameObjects::Player().Position().Distance2D(
         selected.Position());
     const bool committed = distance <= 760.0f || IsFrosted(selected) ||
                            Engine::IsHardCrowdControlled(selected);
@@ -1535,7 +1535,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
         const bool acceptable = volley.Valid &&
             (volley.Threaded || volley.Evaluation.ChampionHits >= 2 ||
              LastAfterAttackTargetId == static_cast<int>(selected.NetworkId()) ||
-             ObjectManager::Player().Position().Distance2D(selected.Position()) >
+             GameObjects::Player().Position().Distance2D(selected.Position()) >
                 ControllerHelpers::AutoAttackRange(selected));
         if (acceptable && CastVolley(volley, Mode::Harass)) return true;
     }
@@ -1550,7 +1550,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
         VolleyPlan volley = BuildVolleyPlan(pursuer, WPurpose::Peel, false);
         if (volley.Valid && CastVolley(volley, Mode::Flee, true)) return true;
     }
-    if (Ready(3) && ObjectManager::Player().HealthPercent() <=
+    if (Ready(3) && GameObjects::Player().HealthPercent() <=
             Slider(ArrowMenu, "SelfPeelHp", 52)) {
         ArrowPlan arrow = BuildArrowPlan(pursuer, ArrowPurpose::SelfPeel);
         return CastArrow(arrow, pursuer, Mode::Flee, true);
@@ -1585,7 +1585,7 @@ inline bool TryAutomaticScout(Mode mode) {
     if (!Bool(HawkshotMenu, "Automatic", true) || Game::MapId() != 11 ||
         !Ready(2) || EAmmo <= Slider(HawkshotMenu, "ReserveCharges", 1) ||
         ControllerHelpers::HasEnemyChampionNear(1250.0f) ||
-        ObjectManager::Player().IsRecalling() ||
+        GameObjects::Player().IsRecalling() ||
         Now() - LastScoutDecisionTick <
             Slider(HawkshotMenu, "DecisionSeconds", 12) * 1000) {
         return false;
@@ -1626,7 +1626,7 @@ inline Posture ChoosePosture(Mode mode,
     if (mode == Mode::Combo && Engine::ValidEnemy(selected)) {
         const int cluster = Engine::CountEnemiesAt(selected.Position(), 650.0f);
         if (cluster >= 3) return Posture::Teamfight;
-        const float distance = ObjectManager::Player().Position().Distance2D(
+        const float distance = GameObjects::Player().Position().Distance2D(
             selected.Position());
         if (distance > 1200.0f) return Posture::Pick;
         if (distance > ControllerHelpers::AutoAttackRange(selected)) {
@@ -1943,7 +1943,7 @@ inline const char* ArrowPurposeName(ArrowPurpose purpose) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), kAttackRange,

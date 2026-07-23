@@ -235,7 +235,7 @@ public:
         if (!args.Sender.IsValid()) {
             return;
         }
-        SDK::AIBaseClient caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+        SDK::AIBaseClient caster = GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
             static_cast<int>(args.Sender.NetworkId));
         if (!IsValidCaster(caster)) {
             return;
@@ -286,7 +286,7 @@ public:
         // object-create payloads can still retain the original source object.
         SDK::AIBaseClient caster;
         if (missile.CasterNetworkId() != 0) {
-            caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            caster = GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
                 missile.CasterNetworkId());
         }
         if (!caster.IsValid()) {
@@ -540,7 +540,7 @@ private:
         if (!caster.IsValid()) {
             return false;
         }
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (player.IsValid() && caster.NetworkId() == player.NetworkId()) {
             return m_sameTeam;
         }
@@ -549,7 +549,7 @@ private:
 
     static SDK::AIBaseClient MakeCaster(const ::Core::Events::ObjectInfo& info) {
         if (info.NetworkId != 0 && info.NetworkId != 0xFFFFFFFFu) {
-            auto caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            auto caster = GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
                 static_cast<int>(info.NetworkId));
             if (caster.IsValid()) {
                 return caster;
@@ -616,7 +616,7 @@ private:
                 for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
                     consider(SDK::AIBaseClient(hero.Handle()));
                 }
-                const auto player = SDK::ObjectManager::Player();
+                const auto player = GameObjects::Player();
                 if (player.IsValid()) {
                     consider(SDK::AIBaseClient(player.Handle()));
                 }
@@ -708,7 +708,7 @@ private:
             return;
         }
         const SDK::AIBaseClient target =
-            SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
                 skillshot.CollisionUnitNetworkId);
         if (!target.IsValid()) {
             return;
@@ -989,7 +989,7 @@ private:
             direction = caster.Direction().To2D().Normalized();
         }
         if (direction.IsZero()) {
-            const auto player = SDK::ObjectManager::Player();
+            const auto player = GameObjects::Player();
             if (player.IsValid()) {
                 direction = (player.Position().To2D() - start).Normalized();
             }
@@ -1083,7 +1083,7 @@ private:
         }
 
         const float range = static_cast<float>(std::max(1, source.Runtime.Range));
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!source.HasTrap && player.IsValid() &&
             player.Position().To2D().Distance(start) > range + 1200.0f) {
             return {};

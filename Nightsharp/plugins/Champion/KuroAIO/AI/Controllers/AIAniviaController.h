@@ -253,7 +253,7 @@ inline constexpr int kWallDurationMs = 5000;
 inline constexpr int kEggDurationMs = 6000;
 
 inline bool PlayerCannotRecastQ() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return !player.IsValid() || Engine::IsPlayerCrowdControlled(player) ||
            EggActive;
 }
@@ -346,7 +346,7 @@ inline float TargetPriority(const AIHeroClient& target) {
 inline float QDamage(const AIBaseClient& target,
                      bool passHit = true,
                      bool explosionHit = true) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, FlashFrostRawDamage(
@@ -354,7 +354,7 @@ inline float QDamage(const AIBaseClient& target,
 }
 
 inline float EDamage(const AIBaseClient& target, bool empowered) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, FrostbiteRawDamage(
@@ -363,7 +363,7 @@ inline float EDamage(const AIBaseClient& target, bool empowered) {
 
 inline float StormTickDamage(const AIBaseClient& target,
                              bool full) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, StormRawDamagePerTick(
@@ -373,7 +373,7 @@ inline float StormTickDamage(const AIBaseClient& target,
 inline float ConservativeComboDamage(const AIHeroClient& target,
                                      bool includeStorm = true) {
     if (!Engine::ValidEnemy(target)) return 0.0f;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     float damage = SDK::Damage::GetAutoAttackDamage(player, target, true);
     if ((Ready(0) && !QActive) || QActive) {
         damage += QDamage(target, true, true);
@@ -430,7 +430,7 @@ inline void ClearQState() {
 }
 
 inline void RefreshTrackedQ() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     bool found = false;
     for (const auto& missile : GameObjects::Missiles()) {
@@ -501,7 +501,7 @@ inline void RefreshTrackedQ() {
 
 inline bool TargetCommittedToLine(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (target.IsDashing() || Engine::IsHardCrowdControlled(target) ||
         static_cast<int>(target.NetworkId()) == GapcloserTargetId ||
         static_cast<int>(target.NetworkId()) == InterruptTargetId) {
@@ -535,7 +535,7 @@ inline FlashFrostPlan BuildQPlan(const AIHeroClient& target,
                                 QPurpose purpose,
                                 bool reactive = false) {
     FlashFrostPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Engine::ValidEnemy(target, kFlashFrostRange + 80.0f) ||
         QActive || !Ready(0) || IsCommonUntargetableOrImmune(target) ||
         !Engine::RuntimeSpells[0]) {
@@ -630,7 +630,7 @@ inline bool CastFlashFrost(const FlashFrostPlan& plan,
         !CastThrottleReady(0, reactive)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!HasCurrentResource(SpellCost(0)) ||
         (Orbwalker::IsWindingUp() &&
          Bool(Engine::HumanMenu, "PreserveAttacks", true) && !reactive)) {
@@ -810,7 +810,7 @@ inline void ClearStormState(bool preserveRelocation = false) {
 }
 
 inline void RefreshTrackedStorm() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     bool found = false;
     for (const auto& object : ObjectManager::AllObjects()) {
         if (!object.IsValid() ||
@@ -865,7 +865,7 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
                                 StormPurpose purpose,
                                 const Vector3& forcedCenter = {}) {
     StormPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
 
     std::vector<Vector3> candidates;
@@ -1112,13 +1112,13 @@ inline bool CastFrostbite(const AIBaseClient& target,
                           bool reactive = false) {
     if (!target.IsValid() || !Ready(2) || !SpellEnabled(2, mode) ||
         !CastThrottleReady(2, reactive) ||
-        ObjectManager::Player().Position().Distance2D(target.Position()) >
+        GameObjects::Player().Position().Distance2D(target.Position()) >
             kFrostbiteRange + target.BoundingRadius() ||
         IsCommonUntargetableOrImmune(target) || IsSpellShielded(target)) {
         return false;
     }
     const float impactSeconds = FrostbiteImpactSeconds(
-        ObjectManager::Player().Position().Distance2D(target.Position()));
+        GameObjects::Player().Position().Distance2D(target.Position()));
     const int impactTick = Now() + static_cast<int>(
         std::ceil(impactSeconds * 1000.0f));
     int scheduledChill = 0;
@@ -1232,7 +1232,7 @@ inline bool WallEndangersAllies(const WallSegment& wall,
                                 const AIHeroClient& protectedAlly,
                                 const AIHeroClient& threat) {
     if (!wall.Valid) return true;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (!Engine::ValidAlly(ally, 1500.0f)) continue;
         const Vector3 predicted = PredictPosition(ally, 0.30f);
@@ -1277,7 +1277,7 @@ inline WallPlan BuildWallPlan(const AIHeroClient& target,
                               const AIHeroClient& threat = {},
                               const Vector3& forcedCenter = {}) {
     WallPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int rank = SpellRank(1);
     if (!player.IsValid() || !Engine::ValidEnemy(target) || rank <= 0) {
         return best;
@@ -1444,7 +1444,7 @@ inline bool CastWall(const WallPlan& plan,
 }
 
 inline AIHeroClient ProtectedAlly() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient remembered = HeroByNetworkId(ProtectedAllyId);
     if (Engine::ValidAlly(remembered, 1350.0f)) return remembered;
     AIHeroClient selected = SelectProtectionAlly(
@@ -1523,7 +1523,7 @@ inline bool TryAntiGapcloser() {
     if (GapcloserTargetId == 0 || GapcloserExpireTick < Now()) return false;
     const AIHeroClient target = HeroByNetworkId(GapcloserTargetId);
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const bool threatensPlayer = GapcloserEnd.IsValid() &&
         GapcloserEnd.Distance2D(player.Position()) <= 465.0f;
     if (!threatensPlayer) return false;
@@ -1657,7 +1657,7 @@ inline bool TryStormSequence(const AIHeroClient& target, Mode mode) {
 }
 
 inline bool TryCombo(const AIHeroClient& selected) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient target = selected;
     if (!Engine::ValidEnemy(target, 1175.0f)) {
         target = ControllerHelpers::NearestEnemyToPlayer(selected, 1175.0f);
@@ -1773,7 +1773,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
 }
 
 inline AIHeroClient NearestPursuer() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient best{};
     float bestDistance = FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -1791,7 +1791,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
     AIHeroClient pursuer = Engine::ValidEnemy(selected)
         ? selected : NearestPursuer();
     if (!Engine::ValidEnemy(pursuer)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
 
     if (QActive) {
         if (FlashFrostExplosionHits(
@@ -1865,7 +1865,7 @@ inline bool TryDetonateFarmQ(Mode mode) {
 
 inline FlashFrostPlan BuildFarmQPlan(Mode mode) {
     FlashFrostPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     auto evaluate = [&](const AIBaseClient& anchor) {
         if (!ValidHostileUnitInGameplayRange(
                 anchor, kFlashFrostRange + 80.0f)) return;
@@ -1920,7 +1920,7 @@ inline FlashFrostPlan BuildFarmQPlan(Mode mode) {
 
 inline StormPlan BuildFarmStormPlan(Mode mode) {
     StormPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     auto evaluate = [&](const AIBaseClient& anchor) {
         if (!ValidHostileUnitInGameplayRange(
                 anchor, kStormCastRange + 100.0f)) return;
@@ -1971,7 +1971,7 @@ inline AIBaseClient BestFarmFrostbiteTarget(Mode mode, bool lastHitOnly) {
         if (!ValidHostileUnitInGameplayRange(
                 unit, kFrostbiteRange + 40.0f)) return;
         const float impact = FrostbiteImpactSeconds(
-            ObjectManager::Player().Position().Distance2D(unit.Position()));
+            GameObjects::Player().Position().Distance2D(unit.Position()));
         const float health = Engine::RuntimeSpells[2]
             ? Engine::RuntimeSpells[2]->GetHealthPrediction(unit)
             : unit.Health();
@@ -2110,7 +2110,7 @@ inline Posture ChoosePosture(Mode mode,
 }
 
 inline void RefreshPassiveState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     RebirthReady = player.HasBuff("RebirthReady") ||
                    player.HasBuff("rebirthready") ||
@@ -2235,7 +2235,7 @@ inline void ObserveManualQ(
         ObserveQDetonation();
         return;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 origin = args.StartPosition.IsValid() &&
             !args.StartPosition.IsZero()
         ? args.StartPosition : player.Position();
@@ -2293,7 +2293,7 @@ inline void ObserveLocalSpell(
         const AIBaseClient target = UnitByNetworkId(ETargetId);
         EImpactTick = ECastTick + static_cast<int>(std::ceil(
             FrostbiteImpactSeconds(target.IsValid()
-                ? ObjectManager::Player().Position().Distance2D(target.Position())
+                ? GameObjects::Player().Position().Distance2D(target.Position())
                 : 450.0f) * 1000.0f));
         if (!ours) EWaitingForChill = false;
         return;
@@ -2313,7 +2313,7 @@ inline void ObserveLocalSpell(
         RTargetId = args.TargetNetworkId != 0
             ? static_cast<int>(args.TargetNetworkId)
             : static_cast<int>(args.Target.NetworkId);
-        RCenter = EventCastPosition(args, ObjectManager::Player().Position());
+        RCenter = EventCastPosition(args, GameObjects::Player().Position());
         LastStormPurpose = ours ? LastStormPurpose : StormPurpose::Manual;
         ActiveSequence = Sequence::StormGrow;
     }
@@ -2322,7 +2322,7 @@ inline void ObserveLocalSpell(
 inline void ObserveEnemyCast(
     const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid() || IsLocalPlayer(args.Sender)) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const std::uint32_t targetId = args.TargetNetworkId != 0
         ? args.TargetNetworkId : args.Target.NetworkId;
     for (const auto& ally : GameObjects::AllyHeroes()) {
@@ -2572,7 +2572,7 @@ inline const char* StormPurposeName(StormPurpose purpose) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
     if (Bool(CoachMenu, "DrawQ", true)) {

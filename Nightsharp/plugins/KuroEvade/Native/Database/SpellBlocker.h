@@ -27,7 +27,7 @@ public:
     }
 
     static bool ShouldBlockForPlayer(int rawSlot) {
-        const SDK::AIHeroClient player = SDK::ObjectManager::Player();
+        const SDK::AIHeroClient player = GameObjects::Player();
         return player.IsValid() && ShouldBlock(
             player.CharacterName(), static_cast<SDK::SpellSlot>(rawSlot));
     }

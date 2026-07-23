@@ -162,7 +162,7 @@ inline bool SafeRushDestination(const Vector3& destination,
                                 const AIHeroClient& target,
                                 bool aggressive,
                                 bool allowLockdown = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !destination.IsValid() || destination.IsZero() ||
         SDK::NavMesh::IsWall(destination) ||
         player.Position().Distance2D(destination) > kRDashRange + 35.0f) {
@@ -194,7 +194,7 @@ inline bool SafeRushDestination(const Vector3& destination,
 }
 
 inline int RuntimeRushCharges() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     // Before the first cast Ahri's recast ammo field is build-dependent and
     // can legitimately read zero.  Readiness represents the initial three-
@@ -274,7 +274,7 @@ inline float QReturnDamage(const AIBaseClient& target) {
 
 inline float ComboDamage(const AIHeroClient& target, bool includeReservedRush) {
     if (!Engine::ValidEnemy(target)) return 0.0f;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     float damage = SDK::Damage::GetAutoAttackDamage(player, target, true);
     if (QActive && QReturning) {
         damage += QReturnDamage(target);
@@ -336,7 +336,7 @@ inline AIHeroClient FindPeelTarget() {
 }
 
 inline Posture DeterminePosture(const AIHeroClient& selected) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return Posture::Neutral;
     if (player.HealthPercent() <=
         static_cast<float>(Slider(RushMenu, "EscapeHp", 26))) {
@@ -378,7 +378,7 @@ inline bool IsCharmMissileName(const char* spellName, const char* missileName) {
 }
 
 inline void RefreshTrackedMissiles() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     static int lastScanTick = 0;
     const int now = SDK::Variables::TickCount();
@@ -424,7 +424,7 @@ inline int CharmWindowQuality(const AIHeroClient& target,
     if (target.IsDashing()) return reactive ? 6 : 5;
     if (static_cast<int>(target.NetworkId()) == CommittedTargetId &&
         now <= CommittedUntilTick) return 5;
-    if (afterRush && ObjectManager::Player().Position().Distance2D(target.Position()) <=
+    if (afterRush && GameObjects::Player().Position().Distance2D(target.Position()) <=
                          static_cast<float>(Slider(CharmMenu, "RushCharmRange", 540))) {
         return 5;
     }
@@ -448,7 +448,7 @@ inline bool CastCharm(const AIHeroClient& target,
          Bool(Engine::HumanMenu, "PreserveAttacks", true) && !reactive)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto prediction = Engine::RuntimeSpells[2]->GetPrediction(target);
     if (!prediction.CollisionObjects.empty()) return false;
     const int quality = CharmWindowQuality(target, prediction, afterRush, reactive);
@@ -487,7 +487,7 @@ inline bool CastQ(const AIHeroClient& target,
          Bool(Engine::HumanMenu, "PreserveAttacks", true) && !guaranteed)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
     SDK::HitChance needed = guaranteed
         ? SDK::HitChance::Medium
@@ -532,7 +532,7 @@ inline bool WTargetIsPrioritized(const AIHeroClient& target) {
          now - LastAutoTick <= 3000) ||
         (QTargetId == static_cast<int>(target.NetworkId()) &&
          now - QCastTick <= 950) ||
-        ObjectManager::Player().Position().Distance2D(target.Position()) <= 360.0f) {
+        GameObjects::Player().Position().Distance2D(target.Position()) <= 360.0f) {
         return true;
     }
     return Engine::RuntimeSpells[1] &&
@@ -564,7 +564,7 @@ inline void AddRushCandidate(std::array<Vector3, 64>& candidates,
 
 inline std::size_t BuildRushCandidates(std::array<Vector3, 64>& candidates,
                                        const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::size_t count = 0;
     AddRushCandidate(candidates, count,
         Engine::Extend(player.Position(), Game::CursorPos(), kRDashRange));
@@ -604,7 +604,7 @@ inline bool FindCharmRushDestination(const AIHeroClient& target,
     if (!Engine::ValidEnemy(target)) return false;
     std::array<Vector3, 64> candidates = {};
     const std::size_t count = BuildRushCandidates(candidates, target);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     result = {};
     resultScore = -FLT_MAX;
     for (std::size_t i = 0; i < count; ++i) {
@@ -632,7 +632,7 @@ inline bool FindCharmRushDestination(const AIHeroClient& target,
 inline bool FindReturnRushDestination(const AIHeroClient& target,
                                       Vector3& result,
                                       float& improvement) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!QActive || !QReturning || !QMissilePosition.IsValid() ||
         QMissilePosition.IsZero() || !Engine::ValidEnemy(target)) {
         return false;
@@ -710,7 +710,7 @@ inline bool TryReturnRedirect(const AIHeroClient& fallback, Mode mode) {
 }
 
 inline Vector3 BestEscapeRushPosition(const AIHeroClient& threat) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::array<Vector3, 64> candidates = {};
     const std::size_t count = BuildRushCandidates(candidates, threat);
     Vector3 best = {};
@@ -758,7 +758,7 @@ inline bool TryRushClose(const AIHeroClient& target) {
 
     const auto currentPrediction = Engine::RuntimeSpells[2]->GetPrediction(target);
     const bool canHide = Bool(CharmMenu, "HideEWithR", true) &&
-        ObjectManager::Player().Position().Distance2D(target.Position()) <= kERange &&
+        GameObjects::Player().Position().Distance2D(target.Position()) <= kERange &&
         currentPrediction.CollisionObjects.empty() &&
         PredictionAtLeast(currentPrediction, SDK::HitChance::High);
     if (canHide) {
@@ -787,7 +787,7 @@ inline bool TryRushExecute(const AIHeroClient& target) {
     float score = 0.0f;
     if (!FindCharmRushDestination(target, destination, score, true)) {
         destination = Engine::Extend(
-            ObjectManager::Player().Position(), target.Position(), kRDashRange);
+            GameObjects::Player().Position(), target.Position(), kRDashRange);
     }
     if (destination.Distance2D(target.Position()) > 600.0f) return false;
     return CastRush(destination, target, RushPurpose::Execute,
@@ -825,7 +825,7 @@ inline bool TrySequence(const AIHeroClient& fallback, Mode mode) {
     }
 
     if (ActiveSequence == Sequence::RushThenCharm) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!Engine::ValidEnemy(target)) {
             ActiveSequence = Sequence::None;
             return false;
@@ -942,7 +942,7 @@ inline bool TryPeel(const AIHeroClient& peelTarget, Mode mode) {
 
 inline bool TryHarass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     if (HasCharm(target)) {
         if (CastQ(target, Mode::Harass, true)) return true;
@@ -993,7 +993,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
         float closest = FLT_MAX;
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
             if (!Engine::ValidEnemy(enemy, 1100.0f)) continue;
-            const float distance = ObjectManager::Player().Position().Distance2D(enemy.Position());
+            const float distance = GameObjects::Player().Position().Distance2D(enemy.Position());
             if (distance < closest) {
                 closest = distance;
                 pursuer = enemy;
@@ -1016,7 +1016,7 @@ inline bool TryExpiringWindowExit(const AIHeroClient& threat, Mode mode) {
     if (!RActive || RWindowExpireTick <= 0 ||
         RWindowExpireTick - now > Slider(RushMenu, "ExitBeforeExpiryMs", 1350) ||
         RuntimeRushCharges() <= 0 || Engine::CountEnemiesAt(
-            ObjectManager::Player().Position(), 800.0f) == 0) {
+            GameObjects::Player().Position(), 800.0f) == 0) {
         return false;
     }
     const Vector3 destination = BestEscapeRushPosition(threat);
@@ -1036,7 +1036,7 @@ struct FarmLine {
 inline FarmLine BestQFarmLine(const std::vector<AIBaseClient>& units,
                               bool lastHitOnly) {
     FarmLine best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const std::size_t maxCandidates = std::min<std::size_t>(units.size(), 6);
     for (std::size_t c = 0; c < maxCandidates; ++c) {
         const auto& candidate = units[c];
@@ -1091,13 +1091,13 @@ inline bool TryWFarm(const std::vector<AIBaseClient>& units,
     if (!Bool(FarmMenu, jungle ? "JungleW" : "LaneW", jungle) ||
         !SpellEnabled(1, lastHitOnly ? Mode::LastHit : Mode::LaneClear) ||
         !CastThrottleReady(1) ||
-        Engine::CountEnemiesAt(ObjectManager::Player().Position(), 900.0f) > 0) {
+        Engine::CountEnemiesAt(GameObjects::Player().Position(), 900.0f) > 0) {
         return false;
     }
     int killable = 0;
     for (const auto& unit : units) {
         if (!unit.IsValid() || unit.IsDead() ||
-            ObjectManager::Player().Position().Distance2D(unit.Position()) > kWAcquireRange) {
+            GameObjects::Player().Position().Distance2D(unit.Position()) > kWAcquireRange) {
             continue;
         }
         if (jungle) {
@@ -1130,7 +1130,7 @@ inline bool TryFarm(bool lastHitOnly) {
             QCastTick = SDK::Variables::TickCount();
             QActive = true;
             QReturning = false;
-            QCastOrigin = ObjectManager::Player().Position();
+            QCastOrigin = GameObjects::Player().Position();
             QCastEnd = best.End;
             return true;
         }
@@ -1139,7 +1139,7 @@ inline bool TryFarm(bool lastHitOnly) {
 }
 
 inline void RefreshState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     RefreshTrackedMissiles();
     const bool runtimeR = player.IsValid() &&
@@ -1209,7 +1209,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     if (Key(Engine::AutomaticMenu, "ManualR", false) &&
         Engine::ValidEnemy(selected)) {
         Vector3 destination = Engine::Extend(
-            ObjectManager::Player().Position(), Game::CursorPos(), kRDashRange);
+            GameObjects::Player().Position(), Game::CursorPos(), kRDashRange);
         (void)CastRush(destination, selected, RushPurpose::None,
                        false, true, Mode::Automatic, true);
     }
@@ -1218,7 +1218,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 }
 
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid()) return;
     const int now = SDK::Variables::TickCount();
 
@@ -1396,8 +1396,8 @@ inline const char* PostureName(Posture posture) {
 }
 
 inline void OnDraw() {
-    if (!CoachMenu || !ObjectManager::Player().IsValid()) return;
-    const auto player = ObjectManager::Player();
+    if (!CoachMenu || !GameObjects::Player().IsValid()) return;
+    const auto player = GameObjects::Player();
     if (Bool(CoachMenu, "DrawOrbPath", true) && QActive &&
         QMissilePosition.IsValid() && !QMissilePosition.IsZero()) {
         Drawing::DrawCircle(QMissilePosition, 38.0f,
@@ -1520,7 +1520,7 @@ inline void OnLoad() {
     ETargetId = 0;
     CharmTargetId = 0;
     CharmExpireTick = 0;
-    RActive = ObjectManager::Player().HasBuff("AhriTumble");
+    RActive = GameObjects::Player().HasBuff("AhriTumble");
     RWindowExpireTick = RActive ? SDK::Variables::TickCount() + kRWindowMs : 0;
     RLastCastTick = 0;
     RCastsInWindow = 0;

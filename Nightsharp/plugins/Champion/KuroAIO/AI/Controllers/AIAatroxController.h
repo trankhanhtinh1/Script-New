@@ -101,7 +101,7 @@ inline QStage StageFromName(const char* name, QStage fallback) {
 }
 
 inline QStage StageFromBuff() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return AvailableQStage;
     if (player.HasBuff("aatroxq3ready") || player.HasBuff("aatroxq3")) {
         return QStage::Third;
@@ -113,7 +113,7 @@ inline QStage StageFromBuff() {
 }
 
 inline QStage RuntimeQStage() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return AvailableQStage;
     }
@@ -192,7 +192,7 @@ inline bool SafeDash(const Vector3& position,
     if (!position.IsValid() || position.IsZero() || SDK::NavMesh::IsWall(position)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return false;
     }
@@ -226,7 +226,7 @@ inline bool FindDashCorrection(QStage stage,
                                Vector3& result,
                                float& improvement,
                                bool aggressive) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target) || direction.IsZero()) {
         return false;
     }
@@ -311,7 +311,7 @@ inline bool TryCorrectQWithE() {
                             1000.0f;
     const Vector3 predicted = PredictPosition(target, remaining);
     const float currentScore = SweetspotScore(
-        CastingQStage, ObjectManager::Player().Position(), QCastDirection,
+        CastingQStage, GameObjects::Player().Position(), QCastDirection,
         predicted, target.BoundingRadius());
     const bool aggressive = Engine::CurrentMode() == Mode::Combo ||
                             Engine::CurrentMode() == Mode::Harass;
@@ -364,7 +364,7 @@ inline bool CastQ(const AIHeroClient& target,
 
     AvailableQStage = RuntimeQStage();
     const QStage stage = AvailableQStage;
-    const Vector3 source = ObjectManager::Player().Position();
+    const Vector3 source = GameObjects::Player().Position();
     const Vector3 predicted = PredictPosition(target, kQCastSeconds);
     const Vector3 direction = Direction2D(source, predicted);
     if (direction.IsZero()) {
@@ -482,7 +482,7 @@ inline bool ShouldUseR(const AIHeroClient& target, bool manual) {
     if (!SpellEnabled(3, Mode::Combo)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     const int enemies = Engine::CountEnemiesAt(player.Position(), 750.0f);
     const bool engageConnected = WActiveFor(target) ||
@@ -522,7 +522,7 @@ inline bool TryExtendedEWQ(const AIHeroClient& target) {
         !Engine::RuntimeSpells[2] || !Engine::RuntimeSpells[2]->IsReady()) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 predicted = PredictPosition(target, 0.20f);
     const float distance = player.Position().Distance2D(predicted);
     if (distance < static_cast<float>(Slider(ChainMenu, "EWQMinRange", 735)) ||
@@ -548,7 +548,7 @@ inline bool ShouldWaitForAuto(const AIHeroClient& target, QStage stage) {
     if (target.HasBuff("JaxCounterStrike") || target.HasBuff("FioraW")) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     const bool passive = player.HasBuff("aatroxpassiveready");
     if (passive) {
@@ -674,7 +674,7 @@ inline bool ShouldHoldQ3(const AIHeroClient& target, Mode mode) {
     }
     if (mode == Mode::Combo && Bool(ChainMenu, "HoldQ3Unsafe", true) &&
         !WActiveFor(target) && !RActive) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const bool eUnavailable = !Engine::RuntimeSpells[2] ||
                                   !Engine::RuntimeSpells[2]->IsReady();
         const float lethal = QDamage(target, QStage::Third, true) +
@@ -770,7 +770,7 @@ inline bool TryAutoReset(const AIHeroClient& target) {
         !Engine::RuntimeSpells[2] || !Engine::RuntimeSpells[2]->IsReady()) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     Vector3 destination = player.Position().Extend(Game::CursorPos(), 85.0f);
     if (!SafeDash(destination, target, false)) {
         destination = player.Position().Extend(target.Position(), 70.0f);
@@ -798,7 +798,7 @@ inline bool TryCombo(const AIHeroClient& target, Mode mode) {
     }
 
     if (AvailableQStage == QStage::First) {
-        const float distance = ObjectManager::Player().Distance(target);
+        const float distance = GameObjects::Player().Distance(target);
         if (Bool(ChainMenu, "MeleeBranch", true) && distance <= 335.0f &&
             CastQ(target, mode, true, false)) {
             ActiveSequence = Sequence::Disengage;
@@ -830,7 +830,7 @@ inline bool TryCombo(const AIHeroClient& target, Mode mode) {
 inline bool TryFlee(const AIHeroClient& selected) {
     AIHeroClient pursuer = selected;
     float bestDistance = FLT_MAX;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, 950.0f)) continue;
         const float distance = player.Distance(enemy);
@@ -878,7 +878,7 @@ inline FarmDirection BestFarmDirection(const std::vector<AIBaseClient>& units,
                                        QStage stage,
                                        bool lastHitOnly) {
     FarmDirection best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& candidate : units) {
         if (!candidate.IsValid() || candidate.IsDead()) continue;
         const Vector3 predictedCandidate = PredictPosition(candidate, kQCastSeconds);
@@ -947,7 +947,7 @@ inline bool TryFarm(bool lastHitOnly) {
     }
     PlannedQTargetId = 0;
     CastingQStage = AvailableQStage;
-    QCastOrigin = ObjectManager::Player().Position();
+    QCastOrigin = GameObjects::Player().Position();
     QCastDirection = best.Direction;
     EUsedDuringQ = true; // Never spend E to correct a lane-clear Q.
     const Vector3 castPosition = QCastOrigin + best.Direction * QRange(AvailableQStage);
@@ -969,7 +969,7 @@ inline void RefreshState() {
         WConfirmed = false;
         WCenter = {};
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     RActive = player.IsValid() && player.HasBuff("aatroxr");
 }
 
@@ -1027,7 +1027,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
             : QWindupEndTick + kQRecastWindowMs;
         QCastOrigin = args.StartPosition.IsValid() && !args.StartPosition.IsZero()
             ? args.StartPosition
-            : ObjectManager::Player().Position();
+            : GameObjects::Player().Position();
         Vector3 castEnd = args.CastPosition;
         if (!castEnd.IsValid() || castEnd.IsZero()) castEnd = args.EndPosition;
         const Vector3 eventDirection = Direction2D(QCastOrigin, castEnd);
@@ -1113,7 +1113,7 @@ inline void OnGapcloser(
 
 inline void DrawQGeometry() {
     if (!IsQWindup() || QCastDirection.IsZero()) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const Vector3 source = player.Position();
     const Vector3 perpendicular = { -QCastDirection.z, 0.0f, QCastDirection.x };
@@ -1142,14 +1142,14 @@ inline void DrawQGeometry() {
 }
 
 inline void OnDraw() {
-    if (!CoachMenu || !ObjectManager::Player().IsValid()) return;
+    if (!CoachMenu || !GameObjects::Player().IsValid()) return;
     if (Bool(CoachMenu, "DrawSweetspot", true)) {
         DrawQGeometry();
     }
     if (Bool(CoachMenu, "DrawCorrection", true) &&
         LastDashCorrection.IsValid() && !LastDashCorrection.IsZero() && IsQWindup()) {
         Drawing::DrawCircle(LastDashCorrection, 45.0f, 0xFF55FF88u, 2.0f, 40);
-        Drawing::DrawLine(ObjectManager::Player().Position(), LastDashCorrection,
+        Drawing::DrawLine(GameObjects::Player().Position(), LastDashCorrection,
                           0xFF55FF88u, 2.0f);
     }
     if (Bool(CoachMenu, "DrawW", true) && WTargetId != 0 &&
@@ -1159,7 +1159,7 @@ inline void OnDraw() {
     }
     if (Bool(CoachMenu, "DrawState", true)) {
         Vec2 screen = {};
-        if (Drawing::WorldToScreen(ObjectManager::Player().Position(), screen)) {
+        if (Drawing::WorldToScreen(GameObjects::Player().Position(), screen)) {
             char state[160] = {};
             _snprintf_s(state, sizeof(state), _TRUNCATE,
                         "Aatrox one-trick | Q%d | seq %d | W %s | R %s",
@@ -1251,7 +1251,7 @@ inline void OnLoad() {
     InterruptExpireTick = 0;
     GapcloserTargetId = 0;
     GapcloserTick = 0;
-    RActive = ObjectManager::Player().HasBuff("aatroxr");
+    RActive = GameObjects::Player().HasBuff("aatroxr");
 }
 
 inline void OnUnload() {

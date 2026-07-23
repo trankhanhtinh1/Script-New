@@ -175,7 +175,7 @@ inline bool ValidEnemy(const AIHeroClient& hero, float range = FLT_MAX) {
 }
 
 inline bool ValidAlly(const AIHeroClient& hero, float range = FLT_MAX) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !hero.IsValid() || hero.IsDead() ||
         hero.Health() <= 0.0f || !hero.IsTargetable() || hero.IsEnemy()) {
         return false;
@@ -237,7 +237,7 @@ inline float PositionDangerScore(const Vector3& position,
         return -100000.0f;
     }
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return -100000.0f;
     }
@@ -278,7 +278,7 @@ inline float PositionDangerScore(const Vector3& position,
 inline Vector3 BestSafePosition(const SpellSpec& spec,
                                 const AIHeroClient& target,
                                 AimPolicy policy) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return {};
     }
@@ -359,7 +359,7 @@ inline bool ResourceOkay(const SpellSpec& spec, Mode mode) {
         ActiveProfile->Resource == ResourceModel::Health) {
         return true;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float mana = ManaPercent(player);
     float required = 0.0f;
     if (mode == Mode::Combo) {
@@ -426,7 +426,7 @@ inline void ConfigureRuntimeSpell(int index, bool force = false) {
         return;
     }
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return;
     }
@@ -562,7 +562,7 @@ inline float EstimatedDamage(const AIHeroClient& target, int excludedSlot = -1) 
     if (!ActiveProfile || !ValidEnemy(target)) {
         return 0.0f;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return 0.0f;
     }
@@ -583,7 +583,7 @@ inline float EstimatedDamage(const AIHeroClient& target, int excludedSlot = -1) 
 }
 
 inline bool CanAct(bool reactive = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Loaded || !ActiveProfile || !player.IsValid() || player.IsDead() ||
         player.Health() <= 0.0f || player.IsRecalling() || Game::IsChatOpen() ||
         !Game::IsFocused()) {
@@ -621,7 +621,7 @@ inline bool ShouldPreserveAttack(const SpellSpec& spec, StepRule rules) {
 }
 
 inline bool BuffRequirementsMet(const SpellSpec& spec, const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (spec.RequiredPlayerBuff && spec.RequiredPlayerBuff[0] &&
         !player.HasBuff(spec.RequiredPlayerBuff)) {
         return false;
@@ -648,7 +648,7 @@ inline bool UltimateAllowed(const SpellSpec& spec,
         return true;
     }
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float targetHp = target.IsValid() ? target.HealthPercent() : 100.0f;
     const int enemies = CountEnemiesAt(player.Position(), std::max(500.0f, spec.TriggerRange));
     const float damage = target.IsValid() && RuntimeSpells[3]
@@ -688,7 +688,7 @@ inline bool StepRulesMet(const ComboStep& step,
                          const SpellSpec& spec,
                          const AIHeroClient& target,
                          Mode mode) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int index = SlotIndex(step.Slot);
     if (Has(step.Rules, StepRule::RequireTarget) && !ValidEnemy(target)) {
         return false;
@@ -760,7 +760,7 @@ inline bool StepRulesMet(const ComboStep& step,
 }
 
 inline Vector3 AimPosition(const SpellSpec& spec, const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) {
         return {};
     }
@@ -920,7 +920,7 @@ inline bool TryCast(const SpellSpec& spec,
         return false;
     }
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto instance = player.Spellbook().GetSpell(spec.Slot);
     if (instance.IsValid() && instance.MaxAmmo() > 0 && instance.Ammo() < spec.MinimumAmmo) {
         return false;
@@ -1162,7 +1162,7 @@ inline bool TryEmergencyDefense() {
     if (!ActiveProfile || !Bool(AutomaticMenu, "EmergencyDefense", true)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.HealthPercent() > ActiveProfile->DefensiveHealthPercent ||
         CountEnemiesAt(player.Position(), 850.0f) <= 0) {
         return false;
@@ -1330,7 +1330,7 @@ inline bool TryFarmSpell(int index, bool jungle, bool lastHitOnly) {
         Slider(ClearMenu, "MinHits", 3));
 
     if (spec.Kind == CastKind::Self || spec.Kind == CastKind::Toggle) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         int nearby = 0;
         for (const auto& unit : units) {
             if (player.Position().DistanceSqr2D(unit.Position()) <=
@@ -1483,7 +1483,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) {
         return;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || args.Sender.NetworkId != player.NetworkId()) {
         return;
     }
@@ -1512,7 +1512,7 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid() || !args.IsAutoAttack) {
         return;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid() && args.Sender.NetworkId == player.NetworkId()) {
         LastAfterAttackTick = SDK::Variables::TickCount();
     }
@@ -1524,7 +1524,7 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
     LastBeforeAttackTick = SDK::Variables::TickCount();
     if (ActiveProfile->ProtectManualChannels) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const bool channelBuff = ActiveProfile->ChannelBuff && ActiveProfile->ChannelBuff[0] &&
                                  player.HasBuff(ActiveProfile->ChannelBuff);
         if (player.Spellbook().IsChanneling() || channelBuff) {
@@ -1654,7 +1654,7 @@ inline void OnDraw() {
     if (!Loaded || !ActiveProfile || !DrawMenu) {
         return;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return;
     }
@@ -1812,7 +1812,7 @@ inline void OnGameLoad(const ChampionProfile& profile,
     if (Loaded) {
         return;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || _stricmp(player.CharacterName().c_str(), profile.ChampionName) != 0) {
         return;
     }

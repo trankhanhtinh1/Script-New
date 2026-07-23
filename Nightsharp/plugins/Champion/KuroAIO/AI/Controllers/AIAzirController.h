@@ -298,7 +298,7 @@ inline bool IsSoldierAttackEvent(
 
 inline bool IsOwnedSoldierSender(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid() ||
         args.Sender.Team != static_cast<std::uint32_t>(player.Team()) ||
         (!SoldierRules::IsSandSoldierName(args.Sender.CharacterName) &&
@@ -404,7 +404,7 @@ inline bool NearEnemyTurret(const Vector3& position,
 }
 
 inline void RefreshSoldiers() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
     const auto& soldiers = SoldierRules::GetAzirSandSoldiers(player);
@@ -441,7 +441,7 @@ inline void RefreshSoldiers() {
 }
 
 inline std::vector<Soldier> BuildSoldiers(bool commandableOnly = true) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::vector<Soldier> result;
     if (!player.IsValid()) return result;
     const int now = Now();
@@ -464,7 +464,7 @@ inline std::vector<Soldier> BuildSoldiers(bool commandableOnly = true) {
 
 inline GameObject LiveSoldier(int networkId) {
     if (networkId == 0) return {};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     const auto& soldiers = SoldierRules::GetAzirSandSoldiers(player);
     for (const auto& obj : soldiers) {
@@ -477,7 +477,7 @@ inline GameObject LiveSoldier(int networkId) {
 }
 
 inline int WCharges() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::W);
     if (!spell.IsValid() || spell.Level() <= 0) return 0;
@@ -579,7 +579,7 @@ inline Vector3 RetreatDirection(const AIHeroClient& target) {
         return SharedGeometry::Direction2D(
             target.Position(), target.PathEnd());
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid()
         ? SharedGeometry::Direction2D(player.Position(), target.Position())
         : Vector3{};
@@ -624,7 +624,7 @@ inline bool EnemyCrowdControlSpent(int networkId) {
 inline bool EndpointSafe(const Vector3& position,
                          bool allowCurrentTurret = false,
                          int maximumEnemies = 2) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid() || position.IsZero() ||
         SDK::NavMesh::IsWall(position)) return false;
     if (Engine::UnderEnemyTurret(position) &&
@@ -638,14 +638,14 @@ inline bool EndpointSafe(const Vector3& position,
 }
 
 inline int CurrentSoldierAttackers(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0;
     return SoldierAttackCount(
         player.Position(), BuildSoldiers(), HeroUnit(target, 0.0f));
 }
 
 inline bool HasEscapeAnchor(const AIHeroClient& threat = {}) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const Vector3 away = threat.IsValid()
         ? SharedGeometry::Direction2D(threat.Position(), player.Position())
@@ -687,7 +687,7 @@ inline WPlan BuildWPlan(const AIHeroClient& target,
                         bool farm = false,
                         bool jungle = false) {
     WPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !WAvailable()) return best;
     std::vector<Vector3> candidates;
     const bool defensive = purpose == WPurpose::DefensiveAnchor ||
@@ -826,7 +826,7 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
                         bool includeFarm = false,
                         bool jungle = false) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0)) return best;
     const auto soldiers = BuildSoldiers();
     if (soldiers.empty()) return best;
@@ -914,7 +914,7 @@ inline EPlan BuildEPlan(const AIHeroClient& target,
                         EPurpose purpose,
                         const Vector3& redirect = {}) {
     EPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2) || PlayerMobilityLocked()) return best;
     const auto soldiers = BuildSoldiers();
     const auto collisions = BuildCollisionBodies(0.08f);
@@ -1009,7 +1009,7 @@ inline EPlan BuildEPlan(const AIHeroClient& target,
 
 inline bool LandingSafeForR(const AIHeroClient& target,
                             const Vector3& direction) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return false;
     Unit unit = HeroUnit(target, kRCastSeconds);
     const Vector3 landing = RLandingPosition(
@@ -1024,7 +1024,7 @@ inline RPlan BuildRPlan(const AIHeroClient& target,
                         RPurpose purpose,
                         bool playerAuthorized = false) {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || !Engine::ValidEnemy(target)) {
         return best;
     }
@@ -1179,7 +1179,7 @@ inline bool CastEPlan(const EPlan& plan,
         LastEPlan = plan;
         LastEPurpose = plan.Purpose;
         LastECastTick = Now();
-        const float distance = ObjectManager::Player().Position().Distance2D(
+        const float distance = GameObjects::Player().Position().Distance2D(
             plan.FinalEndpoint);
         EDashUntil = Now() + std::clamp(
             static_cast<int>(distance / kEDashSpeed * 1000.0f) + 320,
@@ -1282,7 +1282,7 @@ inline bool TargetLeavingSoldierCoverage(
     const AIHeroClient& target,
     int currentAttackers) {
     if (!Engine::ValidEnemy(target) || currentAttackers <= 0) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     Unit future = HeroUnit(target, 0.42f);
     if (!future.Valid) return false;
@@ -1302,7 +1302,7 @@ inline bool TargetLeavingSoldierCoverage(
 inline LateQContext BuildLateQContext(const AIHeroClient& target,
                                       const QPlan& plan) {
     LateQContext context{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target) || !plan.Valid) {
         return context;
     }
@@ -1348,7 +1348,7 @@ inline bool TryLateQ(const AIHeroClient& target,
 
 inline Vector3 ShuffleRedirect(const AIHeroClient& target,
                                bool revenant) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     if (revenant && SequenceOrigin.IsValid() &&
         !SequenceOrigin.IsZero()) return SequenceOrigin;
@@ -1512,7 +1512,7 @@ inline bool TryAdvanceSequence(Mode mode) {
 }
 
 inline AIHeroClient CursorEnemy(float range = 1550.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIHeroClient best{};
     float bestCursorDistance = FLT_MAX;
@@ -1532,7 +1532,7 @@ inline bool TryStartShuffle(const AIHeroClient& target,
                             bool manualIntent) {
     if (ActiveSequence.Kind != Sequence::None ||
         !Engine::ValidEnemy(target, 1500.0f)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const auto soldiers = BuildSoldiers();
     const int nearbyEnemies = Engine::CountEnemiesAt(
@@ -1616,7 +1616,7 @@ inline bool TryAutomaticShuffle(const AIHeroClient& target) {
 }
 
 inline bool TryReactiveDefense(Mode mode) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     AIHeroClient threat{};
     if (InterruptExpireTick >= Now()) {
@@ -1683,7 +1683,7 @@ inline bool TryReactiveDefense(Mode mode) {
 
 inline bool TryKillSecure(const AIHeroClient& preferred) {
     if (!Bool(TacticsMenu, "KillSecure", true)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     std::vector<AIHeroClient> candidates;
     if (Engine::ValidEnemy(preferred, 1500.0f)) {
@@ -1752,7 +1752,7 @@ inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
     if (TryAutomaticShuffle(target)) return true;
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
 
     const int id = static_cast<int>(target.NetworkId());
@@ -1860,7 +1860,7 @@ inline bool TryHarass(const AIHeroClient& target) {
         PlayerManaPercent() < Slider(QMenu, "HarassMana", 40)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
 
     const float dist = player.Position().Distance2D(target.Position());
@@ -1994,7 +1994,7 @@ inline void RefreshRuntimeState() {
             ruin = {};
         }
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid()) LastKnownPlayerPosition = player.Position();
 }
 
@@ -2218,7 +2218,7 @@ inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid()) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (IsSandSoldierObject(args) && ObjectEventIsAllied(args)) {
         const int id = static_cast<int>(args.Sender.NetworkId);
@@ -2308,7 +2308,7 @@ inline const char* PostureName(Posture posture) {
 
 inline bool SunDiscSuggestion(Vector3& position) {
     position = {};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || PassiveReadyTick > Now()) return false;
     for (const auto& ruin : TurretRuins) {
         if (!ruin.Valid || ruin.NetworkId == 0 ||
@@ -2346,7 +2346,7 @@ inline bool SunDiscSuggestion(Vector3& position) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), kWSpawnRange,

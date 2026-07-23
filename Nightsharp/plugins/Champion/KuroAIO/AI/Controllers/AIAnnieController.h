@@ -273,13 +273,13 @@ inline bool IsSpellShielded(const AIBaseClient& target) {
 
 inline AIHeroClient AllyByNetworkId(int networkId) {
     if (networkId == 0) return {};
-    const auto hero = ObjectManager::GetUnitByNetworkId<AIHeroClient>(networkId);
+    const auto hero = GameObjects::GetUnitByNetworkId<AIHeroClient>(networkId);
     return Engine::ValidAlly(hero) ? hero : AIHeroClient{};
 }
 
 inline AIMinionClient Tibbers() {
     return TibbersNetworkId != 0
-        ? ObjectManager::GetUnitByNetworkId<AIMinionClient>(TibbersNetworkId)
+        ? GameObjects::GetUnitByNetworkId<AIMinionClient>(TibbersNetworkId)
         : AIMinionClient{};
 }
 
@@ -299,7 +299,7 @@ inline float TargetPriority(const AIHeroClient& target) {
 }
 
 inline float QDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, DisintegrateRawDamage(
@@ -308,7 +308,7 @@ inline float QDamage(const AIBaseClient& target) {
 }
 
 inline float WDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, IncinerateRawDamage(
@@ -317,7 +317,7 @@ inline float WDamage(const AIBaseClient& target) {
 }
 
 inline float RDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, SummonTibbersRawDamage(
@@ -328,7 +328,7 @@ inline float RDamage(const AIBaseClient& target) {
 inline float TibbersContactDamage(const AIBaseClient& target,
                                   float seconds = 1.0f,
                                   int attacks = 1) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!target.IsValid() || !player.IsValid()) return 0.0f;
     const float rawAura = TibbersAuraRawDamagePerTick(
         SpellRank(3), player.AP()) *
@@ -342,7 +342,7 @@ inline float TibbersContactDamage(const AIBaseClient& target,
 inline float ConservativeComboDamage(const AIHeroClient& target,
                                      bool includeUltimate = true) {
     if (!Engine::ValidEnemy(target)) return 0.0f;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     float damage = SDK::Damage::GetAutoAttackDamage(player, target, true);
     if (Ready(0)) damage += QDamage(target);
     if (Ready(1)) damage += WDamage(target);
@@ -427,7 +427,7 @@ inline QPlan BuildQPlan(const AIBaseClient& target,
                         bool farmRefund = false,
                         bool reactive = false) {
     QPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid() || target.IsDead() ||
         !target.IsEnemy() || !target.IsTargetable() || !Ready(0) ||
         QPending || IsCommonUntargetableOrImmune(target)) {
@@ -484,7 +484,7 @@ inline bool CastDisintegrate(const QPlan& plan,
         !plan.Lethal) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Engine::ControllerCastUnit(0, plan.Target)) return false;
 
     QPending = true;
@@ -542,7 +542,7 @@ inline ConePlan BuildConePlan(const AIHeroClient& primary,
                               StunIntent intent,
                               bool reactive = false) {
     ConePlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(1) || WPending) return best;
 
     const int primaryId = Engine::ValidEnemy(primary)
@@ -636,7 +636,7 @@ inline bool CastIncinerate(const ConePlan& plan,
         Bool(Engine::HumanMenu, "PreserveAttacks", true)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Engine::ControllerCastPosition(1, plan.Aim)) return false;
 
     WPending = true;
@@ -682,7 +682,7 @@ inline SummonPlan BuildSummonPlan(const AIHeroClient& primary,
                                   StunIntent intent,
                                   bool reactive = false) {
     SummonPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || TibbersActive || RPending) {
         return best;
     }
@@ -802,7 +802,7 @@ inline bool CastMoltenShield(const AIBaseClient& ally,
                              Mode mode,
                              ShieldReason reason,
                              bool reactive = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!ally.IsValid() || ally.IsDead() || !ally.IsAlly() || !Ready(2) ||
         !SpellEnabled(2, mode) ||
         !CastThrottleReady(2, 34, reactive ? 0 : -1) ||
@@ -836,11 +836,11 @@ inline bool TryPrimePendingQ(Mode mode) {
     const AIHeroClient target = ControllerHelpers::HeroByNetworkId(QTargetId);
     if (!Engine::ValidEnemy(target) || IsSpellShielded(target)) return false;
 
-    AIBaseClient shieldTarget = ObjectManager::Player();
+    AIBaseClient shieldTarget = GameObjects::Player();
     const AIHeroClient protectedAlly = AllyByNetworkId(ProtectedAllyId);
     if (Engine::ValidAlly(protectedAlly) &&
         protectedAlly.Position().Distance2D(
-            ObjectManager::Player().Position()) <= kMoltenShieldRange &&
+            GameObjects::Player().Position()) <= kMoltenShieldRange &&
         TargetedAllyThreatUntil >= Now()) {
         shieldTarget = protectedAlly;
     }
@@ -869,7 +869,7 @@ inline void StoreIncomingThreat(const IncomingThreat& incoming) {
 
 inline void RecordIncomingThreats(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid() ||
         IsLocalPlayer(args.Sender)) {
         return;
@@ -990,7 +990,7 @@ inline bool TryReactiveShield(Mode mode) {
         }
         const AIHeroClient ally = AllyByNetworkId(threat.TargetId);
         if (!Engine::ValidAlly(ally) ||
-            ObjectManager::Player().Position().Distance2D(ally.Position()) >
+            GameObjects::Player().Position().Distance2D(ally.Position()) >
                 kMoltenShieldRange + ally.BoundingRadius()) {
             continue;
         }
@@ -1084,7 +1084,7 @@ inline bool PetTargetSafe(const AIBaseClient& target) {
 
 inline bool IssuePetAttack(const AIBaseClient& target,
                            PetPurpose purpose) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !PetTargetSafe(target) ||
         Now() - TibbersLastOrderTick < kPetOrderThrottleMs) {
         return false;
@@ -1101,7 +1101,7 @@ inline bool IssuePetAttack(const AIBaseClient& target,
 
 inline bool IssuePetMove(const Vector3& destination,
                          PetPurpose purpose) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !destination.IsValid() || destination.IsZero() ||
         Now() - TibbersLastOrderTick < kPetOrderThrottleMs) {
         return false;
@@ -1119,7 +1119,7 @@ inline bool IssuePetMove(const Vector3& destination,
 inline bool TryPetMicro(const AIHeroClient& selected, Mode mode) {
     if (!TibbersActive || !Bool(PetMenu, "SoftAutopilot", true)) return false;
     const AIMinionClient pet = Tibbers();
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!pet.IsValid() || pet.IsDead() || !player.IsValid()) return false;
     if (Now() < ManualPetLockUntil ||
         Now() - TibbersLastOrderTick < kPetOrderThrottleMs) {
@@ -1217,7 +1217,7 @@ inline void ResolvePendingSpells() {
                 ManualFlashTick <= WResolveTick
             ? ManualFlashTick : 0;
         const Vector3 resolveOrigin = IncinerateResolveOrigin(
-            WCastOrigin, ObjectManager::Player().Position(),
+            WCastOrigin, GameObjects::Player().Position(),
             flashTick, WResolveTick);
         AIHeroClient consumerTarget{};
         AIHeroClient shieldedFallback{};
@@ -1301,7 +1301,7 @@ inline void ResolvePendingSpells() {
 }
 
 inline void RefreshPassiveFromBuff() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (player.HasBuff("pyromania_particle") ||
         player.HasBuff("anniepassiveprimed")) {
@@ -1323,7 +1323,7 @@ inline void RefreshTrackedQ() {
         const bool idMatch = QMissileNetworkId != 0 &&
             static_cast<int>(missile.NetworkId()) == QMissileNetworkId;
         const bool casterMatch = missile.CasterNetworkId() ==
-            ObjectManager::Player().NetworkId();
+            GameObjects::Player().NetworkId();
         const std::string spell = missile.SpellName();
         const std::string name = missile.MissileName();
         if (idMatch || (casterMatch &&
@@ -1373,11 +1373,11 @@ inline bool TryTwoStackLandingRace(Mode mode) {
 
     if (PassiveStacks == 2 && Ready(2)) {
         return CastMoltenShield(
-            ObjectManager::Player(), mode,
+            GameObjects::Player(), mode,
             ShieldReason::PrimeHiddenStun, true);
     }
     if (PassiveStacks == 3 && Ready(1) &&
-        target.Position().Distance2D(ObjectManager::Player().Position()) <=
+        target.Position().Distance2D(GameObjects::Player().Position()) <=
             kIncinerateRange + target.BoundingRadius()) {
         ConePlan cone = BuildConePlan(target, StunIntent::AoeCone, true);
         if (!cone.Valid || !cone.IncludesPrimary) return false;
@@ -1398,7 +1398,7 @@ inline bool TryTwoStackLandingRace(Mode mode) {
 
 inline bool TargetCommitted(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (target.IsDashing() || Engine::IsHardCrowdControlled(target)) return true;
     const Vector3 end = target.PathEnd();
     if (end.IsValid() && !end.IsZero()) {
@@ -1474,7 +1474,7 @@ inline bool TryAntiGapcloser() {
             return true;
         }
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const bool critical = target.Position().Distance2D(player.Position()) <= 310.0f ||
                           player.HealthPercent() <= 38.0f;
     if (critical && !TibbersActive && PassiveStacks >= 3 && Ready(3) &&
@@ -1560,7 +1560,7 @@ inline bool TryAoeSetup(const AIHeroClient& target, Mode mode) {
         (!wFeasible || r.Score > w.Score + 80.0f)
         ? StunIntent::AoeSummon : StunIntent::AoeCone;
     return CastMoltenShield(
-        ObjectManager::Player(), mode,
+        GameObjects::Player(), mode,
         ShieldReason::PrimeHiddenStun, false);
 }
 
@@ -1617,7 +1617,7 @@ inline bool TryBurstFollowup(const AIHeroClient& target, Mode mode) {
         Now() - LastAutoTick <= 340 &&
         Bool(ShieldMenu, "TradeShield", true)) {
         return CastMoltenShield(
-            ObjectManager::Player(), mode,
+            GameObjects::Player(), mode,
             ShieldReason::SelfTrade, false);
     }
     return false;
@@ -1666,7 +1666,7 @@ inline bool TryCombo(const AIHeroClient& selected) {
         if (q.Valid && q.WillStun &&
             (!EnemyFlashReady(selected) || TargetCommitted(selected) ||
              selected.Position().Distance2D(
-                 ObjectManager::Player().Position()) <= 500.0f) &&
+                 GameObjects::Player().Position()) <= 500.0f) &&
             CastDisintegrate(q, Mode::Combo)) {
             return true;
         }
@@ -1691,7 +1691,7 @@ inline bool TryCombo(const AIHeroClient& selected) {
     }
     if (PassiveStacks == 2 && Ready(0) && Ready(1) && Ready(2) &&
         HasResourceFor({ 0, 1, 2 }) &&
-        selected.Position().Distance2D(ObjectManager::Player().Position()) <=
+        selected.Position().Distance2D(GameObjects::Player().Position()) <=
             kIncinerateRange + selected.BoundingRadius()) {
         QPlan q = BuildQPlan(selected, StunIntent::HiddenPointCatch);
         if (q.Valid && TargetCommitted(selected) &&
@@ -1736,7 +1736,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
     if (Ready(2) && Bool(ShieldMenu, "TradeShield", true) &&
         Now() - LastAutoTick <= 300 && InAutoAttackRange(selected, 35.0f)) {
         return CastMoltenShield(
-            ObjectManager::Player(), Mode::Harass,
+            GameObjects::Player(), Mode::Harass,
             ShieldReason::SelfTrade, false);
     }
     return false;
@@ -1745,7 +1745,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
 inline bool TryFlee(const AIHeroClient& selected) {
     const AIHeroClient pursuer = NearestEnemyToPlayer(selected, 900.0f);
     if (Ready(2) && Bool(ShieldMenu, "Flee", true) &&
-        CastMoltenShield(ObjectManager::Player(), Mode::Flee,
+        CastMoltenShield(GameObjects::Player(), Mode::Flee,
                          ShieldReason::FleeSpeed, true)) {
         return true;
     }
@@ -1768,7 +1768,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
     }
     if (!TibbersActive && PassiveStacks >= 3 && Ready(3) &&
         Bool(TibbersMenu, "Flee", true) &&
-        ObjectManager::Player().HealthPercent() <= 42.0f) {
+        GameObjects::Player().HealthPercent() <= 42.0f) {
         SummonPlan r = BuildSummonPlan(pursuer, StunIntent::Flee, true);
         if (r.Valid && r.IncludesPrimary && r.WillStun &&
             CastSummonTibbers(r, Mode::Flee, true)) {
@@ -1819,7 +1819,7 @@ inline bool TryQRefundFarm(Mode mode) {
 
 inline ConePlan BuildFarmCone(Mode mode) {
     ConePlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::vector<AIBaseClient> units;
     if (mode == Mode::Jungle) {
         for (const auto& unit : GameObjects::Jungle()) {
@@ -1951,7 +1951,7 @@ inline bool TryBuildPassiveStacks() {
         ControllerHelpers::PlayerManaPercent() < Slider(PassiveMenu, "BuildMana", 64)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsRecalling() || TibbersActive &&
         Tibbers().IsValid() && Tibbers().HealthPercent() <= 25.0f) {
         return false;
@@ -1982,7 +1982,7 @@ inline Posture ChoosePosture(Mode mode,
             selected.Position(), 700.0f);
         if (nearby >= 3) return Posture::Teamfight;
         if (TibbersActive && selected.Position().Distance2D(
-                ObjectManager::Player().Position()) >
+                GameObjects::Player().Position()) >
                     kDisintegrateRange) {
             return Posture::Siege;
         }
@@ -2031,7 +2031,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 
 inline void ObserveManualQ(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const std::uint32_t targetNetworkId = args.TargetNetworkId != 0
         ? args.TargetNetworkId : args.Target.NetworkId;
     const AIBaseClient target = UnitByNetworkId(
@@ -2074,7 +2074,7 @@ inline void ObserveManualQ(
 
 inline void ObserveManualW(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     WPending = true;
     WCastTick = Now();
     WResolveTick = WCastTick + 250;
@@ -2116,7 +2116,7 @@ inline void ObserveManualR(
             !args.EndPosition.IsZero()
         ? args.EndPosition : args.CastPosition;
     if (!center.IsValid() || center.IsZero()) {
-        center = ObjectManager::Player().Position();
+        center = GameObjects::Player().Position();
     }
     LastSummonPlan = {};
     LastSummonPlan.Center = center;
@@ -2194,7 +2194,7 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
 inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
                             bool added) {
     if (!args.Sender.IsValid()) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int senderId = static_cast<int>(args.Sender.NetworkId);
     const bool local = senderId == player.NetworkId();
     if (local && (Engine::TextContains(args.BuffName, "pyromania") ||
@@ -2373,7 +2373,7 @@ inline const char* PetPurposeName(PetPurpose purpose) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
     if (Bool(CoachMenu, "DrawQ", true)) {

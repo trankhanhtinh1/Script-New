@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -396,7 +396,7 @@ inline QBody RuntimeQBody(const AIBaseClient& unit,
 }
 
 inline std::vector<QBody> BuildQBodies() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::vector<QBody> result;
     result.reserve(64);
     if (!player.IsValid()) return result;
@@ -422,7 +422,7 @@ inline std::vector<QBody> BuildQBodies() {
 }
 
 inline float BonusMana() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0.0f;
     const int level = std::clamp(player.Level(), 1, 18);
     const float baseMana = 300.0f + 70.0f * static_cast<float>(level - 1);
@@ -433,7 +433,7 @@ inline float BonusMana() {
 }
 
 inline float QDamage(const AIBaseClient& target, bool fluxed) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const float raw = fluxed
         ? FluxedQRawDamage(SpellRank(0), SpellRank(3), player.AP(), BonusMana())
@@ -442,14 +442,14 @@ inline float QDamage(const AIBaseClient& target, bool fluxed) {
 }
 
 inline float WDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, WRawDamage(SpellRank(1), player.AP(), BonusMana()));
 }
 
 inline float EDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, ERawDamage(SpellRank(2), player.AP(), BonusMana()));
@@ -473,7 +473,7 @@ inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
     if (Engine::ValidEnemy(selected, range)) return selected;
     const AIHeroClient locked = HeroByNetworkId(Engine::LockedTargetNetworkId);
     if (Engine::ValidEnemy(locked, range)) return locked;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient best{};
     float bestScore = -FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -553,7 +553,7 @@ inline float HitchanceConfidence(SDK::HitChance chance) {
 inline std::vector<Vector3> QCandidates(const AIBaseClient& target,
                                         SDK::HitChance& observed) {
     std::vector<Vector3> result;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return result;
 
     Vector3 predicted{};
@@ -589,7 +589,7 @@ inline QPlan BuildQPlan(const AIBaseClient& intended,
                         QPurpose purpose,
                         bool reactive = false) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0) || !intended.IsValid() ||
         !ValidHostileUnitInGameplayRange(intended, kQRange + 15.0f)) {
         return best;
@@ -781,7 +781,7 @@ inline WPlan BuildWPlan(const AIBaseClient& target,
                         bool reactive = false,
                         bool rootRequired = false) {
     WPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(1) || !target.IsValid()) return plan;
     const int targetId = static_cast<int>(target.NetworkId());
     WContext context{};
@@ -837,7 +837,7 @@ inline EPlan BuildEPlan(const AIBaseClient& target,
                         int priorityVictimId = 0,
                         bool reactive = false) {
     EPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2) || !target.IsValid()) return plan;
     const int targetId = static_cast<int>(target.NetworkId());
     if (priorityVictimId == 0) priorityVictimId = targetId;
@@ -946,7 +946,7 @@ inline float EstimatedBranchDamage(const AIBaseClient& target,
 }
 
 inline bool SafeToCommit(const AIHeroClient& target, bool lethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return false;
     if (Engine::UnderEnemyTurret(player.Position()) && !lethal) return false;
     const int enemies = Engine::CountEnemiesAt(player.Position(), 720.0f);
@@ -971,8 +971,8 @@ inline bool ShouldWaitForAuto(const AIBaseClient& target,
     context.InAttackRange = InAutoAttackRange(target);
     context.AttackReady = Orbwalker::CanAttack();
     context.Safe = Engine::CountEnemiesAt(
-        ObjectManager::Player().Position(), 650.0f) <=
-        Engine::CountAlliesAt(ObjectManager::Player().Position(), 700.0f) + 1;
+        GameObjects::Player().Position(), 650.0f) <=
+        Engine::CountAlliesAt(GameObjects::Player().Position(), 700.0f) + 1;
     context.TargetCanInstantEscape = ChampionMobilityReady(hero);
     context.TargetRooted = Engine::IsHardCrowdControlled(hero) ||
         (RootedTargetId == static_cast<int>(hero.NetworkId()) &&
@@ -1075,7 +1075,7 @@ inline bool TryActiveSequence() {
         ClearSequence();
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
     const float distance = player.Position().Distance2D(unit.Position());
     if (distance > kQRange + unit.BoundingRadius() + 125.0f) {
@@ -1173,7 +1173,7 @@ inline bool ProtectedAllyChannelInPortal(const Vector3& origin) {
 }
 
 inline int AlliesInPortal(const Vector3& origin) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     int count = player.IsValid() ? 1 : 0;
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (!Engine::ValidAlly(ally) ||
@@ -1186,7 +1186,7 @@ inline int AlliesInPortal(const Vector3& origin) {
 inline WarpPlan BuildWarpPlan(WarpPurpose purpose,
                               bool manualAuthorized) {
     WarpPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3)) return plan;
     const Vector3 destination = ClampWarpDestination(
         player.Position(), Game::CursorPos());
@@ -1260,7 +1260,7 @@ inline bool TryFluxBridge(const AIHeroClient& victim,
                           bool harass) {
     if (!Bool(FluxMenu, "IndirectEQ", true) ||
         !Engine::ValidEnemy(victim, 980.0f) || !Ready(2)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const float reserve = harass ? DefensiveManaReserve() : 0.0f;
     const ManaCosts costs = LiveManaCosts();
@@ -1370,7 +1370,7 @@ inline bool TryPeel() {
 inline bool TryKillSecure(const AIHeroClient& preferred) {
     if (!Bool(TacticsMenu, "KillSecure", true) ||
         ActiveSequence != Sequence::None) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     std::vector<AIHeroClient> targets;
     if (Engine::ValidEnemy(preferred, 1120.0f)) targets.push_back(preferred);
@@ -1419,7 +1419,7 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
 inline ComboContext RuntimeComboContext(const AIHeroClient& target,
                                         bool harass) {
     ComboContext context{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return context;
     const int targetId = static_cast<int>(target.NetworkId());
     context.QReady = Ready(0);
@@ -1468,7 +1468,7 @@ inline bool TryCombo(const AIHeroClient& selected) {
     const AIHeroClient target = PreferredEnemy(selected, 1120.0f);
     if (!Engine::ValidEnemy(target)) return false;
     CurrentPosture = Posture::RootCatch;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     if (distance > kERange + target.BoundingRadius() + 20.0f &&
         TryFluxBridge(target, false)) return true;
@@ -1500,7 +1500,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
     const AIHeroClient target = PreferredEnemy(selected, 1080.0f);
     if (!Engine::ValidEnemy(target)) return false;
     CurrentPosture = Posture::ShortTrade;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.Position().Distance2D(target.Position()) >
             kERange + target.BoundingRadius() + 20.0f &&
         TryFluxBridge(target, true)) return true;
@@ -1521,7 +1521,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
 }
 
 inline AIHeroClient NearestPursuer(const AIHeroClient& fallback = {}) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient best = Engine::ValidEnemy(fallback, 760.0f)
         ? fallback : AIHeroClient{};
     float bestDistance = best.IsValid()
@@ -1554,7 +1554,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
 
 inline bool TryBestFluxedWaveQ(int minimumVictims, QPurpose purpose) {
     if (!Ready(0)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const std::vector<QBody> bodies = BuildQBodies();
     const float nowSeconds = static_cast<float>(Now()) / 1000.0f;
     int bestId = 0;
@@ -1613,7 +1613,7 @@ inline bool TryLaneFarm(Mode mode) {
     if (TryBestFluxedWaveQ(
             Slider(WaveMenu, "MinimumQHits", 3), QPurpose::Clear)) return true;
     if (Ready(2)) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const std::vector<QBody> bodies = BuildQBodies();
         const float conservativeE = ERawDamage(
             SpellRank(2), player.AP(), BonusMana()) * 0.55f;
@@ -1645,7 +1645,7 @@ inline bool TryJungleFarm() {
     ComboBranch branch = ComboBranch::FluxBurstEQ;
     if (!HasEnemyChampionNear(1100.0f) &&
         Ready(0) && Ready(1) && Ready(2) &&
-        ObjectManager::Player().Mana() + 0.5f >= BranchMana(
+        GameObjects::Player().Mana() + 0.5f >= BranchMana(
             ComboBranch::MaximumDpsQEQWQEQ, LiveManaCosts())) {
         branch = ComboBranch::MaximumDpsQEQWQEQ;
     } else if (Ready(0) && Ready(2)) {
@@ -1671,7 +1671,7 @@ inline void RefreshRuntimeState() {
             MarkFlux(body.Id, now + 260, true);
         }
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid()) {
         if (ControllerHelpers::HasAnyBuff(player, {
                 "RyzeQIconFullCharge", "RyzeQFullCharge",
@@ -1708,7 +1708,7 @@ inline void RefreshRuntimeState() {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     RefreshRuntimeState();
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) return true;
 
     if (TryRealmWarp(false)) return true;
@@ -1770,7 +1770,7 @@ inline void ObserveEnemySpell(
     const int targetId = EventTargetId(args);
     const AIHeroClient ally = RawAllyById(targetId);
     if (Engine::ValidAlly(ally) &&
-        targetId != static_cast<int>(ObjectManager::Player().NetworkId())) {
+        targetId != static_cast<int>(GameObjects::Player().NetworkId())) {
         PeelThreatId = id;
         PeelThreatUntil = Now() + 900;
     }
@@ -1857,7 +1857,7 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
                             bool added) {
     if (!args.Sender.IsValid()) return;
     const int id = static_cast<int>(args.Sender.NetworkId);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const bool local = player.IsValid() && id == player.NetworkId();
     if (BuffContains(args, "ryzee") ||
         BuffContains(args, "spellflux")) {
@@ -1959,7 +1959,7 @@ inline const char* BranchName(ComboBranch branch) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), kQRange,

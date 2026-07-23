@@ -361,7 +361,7 @@ inline QBody RuntimeQBody(const AIBaseClient& unit,
 }
 
 inline std::vector<QBody> BuildQBodies() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::vector<QBody> result;
     result.reserve(72);
     if (!player.IsValid()) return result;
@@ -387,7 +387,7 @@ inline std::vector<QBody> BuildQBodies() {
 }
 
 inline QForm CurrentQForm() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return QForm::Volley;
     const float now = static_cast<float>(Now()) / 1000.0f;
     NormalizeWorkedGround(GroundZones, now);
@@ -427,7 +427,7 @@ inline void RegisterBoulderSlowWindow(int targetId,
 inline float ExpectedQRawDamage(const AIBaseClient& target,
                                 QForm form,
                                 QPurpose purpose) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const int rank = SpellRank(0);
     const float ap = player.AP();
@@ -462,14 +462,14 @@ inline float ExpectedQRawDamage(const AIBaseClient& target,
 inline float QDamage(const AIBaseClient& target,
                      QForm form,
                      QPurpose purpose) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.CalculateMagicDamage(
         target, ExpectedQRawDamage(target, form, purpose));
 }
 
 inline float EInitialDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     float raw = ERawInitialDamage(SpellRank(2), player.AP());
     if (target.IsMinion() &&
@@ -480,7 +480,7 @@ inline float EInitialDamage(const AIBaseClient& target) {
 }
 
 inline float EComboDamage(const AIBaseClient& target, int contacts) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const bool monster = target.IsMinion() &&
         ::Core::Objects::IsJungleMonster(target.Address());
@@ -494,7 +494,7 @@ inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
     if (Engine::ValidEnemy(selected, range)) return selected;
     const AIHeroClient locked = HeroByNetworkId(Engine::LockedTargetNetworkId);
     if (Engine::ValidEnemy(locked, range)) return locked;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient best{};
     float bestScore = -FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -581,7 +581,7 @@ inline std::vector<Vector3> QCandidates(const AIBaseClient& target,
                                         const std::vector<QBody>& bodies,
                                         SDK::HitChance& observed) {
     std::vector<Vector3> result;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return result;
     Vector3 predicted{};
     observed = SDK::HitChance::VeryHigh;
@@ -635,7 +635,7 @@ inline QPlan BuildQPlan(const AIBaseClient& intended,
                         bool reactive = false,
                         bool forceBoulderSetup = false) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0) || !intended.IsValid() ||
         !ValidHostileUnitInGameplayRange(intended, kQRange + 30.0f)) {
         return best;
@@ -748,7 +748,7 @@ inline void RegisterQCast(QForm form, int targetId) {
     const int now = Now();
     if (now - LastRegisteredCastTick[0] <= 75) return;
     LastRegisteredCastTick[0] = now;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const float seconds = static_cast<float>(now) / 1000.0f;
     const QCastTransition transition = ApplyQCastToWorkedGround(
@@ -798,7 +798,7 @@ inline void RegisterECast(const Vector3& castPosition, int targetId) {
     const int now = Now();
     if (now - LastRegisteredCastTick[2] <= 75) return;
     LastRegisteredCastTick[2] = now;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     ActiveMinefield = BuildMinefield(
         player.Position(), castPosition,
@@ -836,7 +836,7 @@ inline int BestPotentialWContacts(const Minefield& field,
                                   const AIBaseClient& target,
                                   float movementStartSeconds) {
     if (!field.Valid || !target.IsValid()) return 0;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 center = PredictPosition(target, kWImpactSeconds);
     std::array<Vector3, 6> directions = {
         SharedGeometry::Direction2D(center, player.Position()),
@@ -862,7 +862,7 @@ inline EPlan BuildEPlan(const AIBaseClient& target,
                         bool reactive = false,
                         bool afterW = false) {
     EPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2) || !target.IsValid() ||
         !ValidHostileUnitInGameplayRange(target, kERange + 80.0f)) {
         return best;
@@ -1006,7 +1006,7 @@ inline Vector3 NearestAlliedTurretDirection(const Vector3& center) {
 inline Vector3 AlliedCentroidDirection(const Vector3& center) {
     Vector3 sum{};
     int count = 0;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid()) {
         sum = sum + player.Position();
         ++count;
@@ -1029,7 +1029,7 @@ inline WPlan BuildWPlan(const AIBaseClient& target,
                         bool planEAfter = false,
                         const Vector3& forcedAwayFrom = {}) {
     WPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(1) || !target.IsValid() ||
         !ValidHostileUnitInGameplayRange(target, kWRange + 80.0f)) {
         return best;
@@ -1212,7 +1212,7 @@ inline bool CastWPlan(const WPlan& plan, bool reactive = false) {
 }
 
 inline bool SafeToCommit(const AIHeroClient& target, bool lethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, 1100.0f)) return false;
     if (IsCommonUntargetableOrImmune(target) ||
         HasSpellShieldOrImmunity(target)) return false;
@@ -1307,7 +1307,7 @@ inline bool TryActiveSequence() {
         const Vector3 away = purpose == WPurpose::PeelAlly && ally.IsValid()
             ? ally.Position()
             : (purpose == WPurpose::PeelPlayer
-                ? ObjectManager::Player().Position() : Vector3{});
+                ? GameObjects::Player().Position() : Vector3{});
         if (ActiveBranch == ComboBranch::BoulderWEQ &&
             SequenceStep == 1 &&
             BoulderSlowTargetId == SequenceTargetId &&
@@ -1345,7 +1345,7 @@ inline bool TryActiveSequence() {
 
 inline ComboContext RuntimeComboContext(const AIHeroClient& target) {
     ComboContext context{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, 1100.0f)) return context;
     const QForm form = CurrentQForm();
     const bool qInRange = player.Position().Distance2D(target.Position()) <=
@@ -1421,7 +1421,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
         }
     }
     if (Ready(2) && Ready(1) &&
-        target.Position().Distance2D(ObjectManager::Player().Position()) < 720.0f &&
+        target.Position().Distance2D(GameObjects::Player().Position()) < 720.0f &&
         (target.IsDashing() || TargetCommitted(static_cast<int>(target.NetworkId())))) {
         StartSequence(Sequence::CombatBranch,
                       ComboBranch::ControlledEWQ,
@@ -1447,7 +1447,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
     if (Ready(1)) {
         const WPlan w = BuildWPlan(
             target, WPurpose::PeelPlayer, true, false,
-            ObjectManager::Player().Position());
+            GameObjects::Player().Position());
         if (CastWPlan(w, true)) return true;
     }
     if (Ready(0)) {
@@ -1492,7 +1492,7 @@ inline bool TryGapcloser() {
     if (Ready(1)) {
         const WPlan w = BuildWPlan(
             target, WPurpose::Gapcloser, true, false,
-            ObjectManager::Player().Position());
+            GameObjects::Player().Position());
         return CastWPlan(w, true);
     }
     return false;
@@ -1560,7 +1560,7 @@ inline bool TryKillSecure(const AIHeroClient& selected) {
 }
 
 inline bool RIsRecast() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto ultimate = player.IsValid()
         ? player.Spellbook().GetSpell(SDK::SpellSlot::R)
         : SDK::SpellDataInstClient{};
@@ -1583,7 +1583,7 @@ inline bool AllyChanneling(const AIHeroClient& ally) {
 
 inline std::vector<WallUnit> BuildWallUnits() {
     std::vector<WallUnit> units;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid()) {
         units.push_back({ player.Position(), true, false, true,
                           false, player.Spellbook().IsChanneling() });
@@ -1605,7 +1605,7 @@ inline std::vector<WallUnit> BuildWallUnits() {
 }
 
 inline AIBaseClient NearbyEpicObjective(float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIBaseClient best{};
     float bestDistance = FLT_MAX;
     for (const auto& monster : GameObjects::Jungle()) {
@@ -1622,7 +1622,7 @@ inline AIBaseClient NearbyEpicObjective(float range) {
 
 inline WallPlan BuildWallPlan(Mode mode) {
     WallPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || RIsRecast()) return plan;
     const int rank = SpellRank(3);
     const float range = RRange(rank);
@@ -1737,7 +1737,7 @@ inline bool TryManualWall(Mode mode) {
 
 inline bool TryQLastHit(bool jungle = false) {
     if (!Ready(0)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIBaseClient best{};
     QPlan bestPlan{};
     float bestHealth = FLT_MAX;
@@ -1855,7 +1855,7 @@ inline void RefreshRuntimeState() {
     if (PeelThreatUntil < Now()) {
         PeelThreatId = PeelThreatUntil = 0;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid()) {
         const AIHeroClient ally = SelectProtectionAlly(
             1600.0f, 0, true);
@@ -1975,7 +1975,7 @@ inline void ObserveLocalSpell(
         observed.Valid = observed.Center.IsValid() &&
             observed.DirectionEnd.IsValid();
         if (!ours && observed.Valid) {
-            const auto player = ObjectManager::Player();
+            const auto player = GameObjects::Player();
             if (player.IsValid()) {
                 observed.PlannedMinefield = BuildMinefield(
                     player.Position(), observed.Center,
@@ -2156,7 +2156,7 @@ inline const char* SequenceName(Sequence sequence) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), kQRange,

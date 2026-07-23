@@ -222,7 +222,7 @@ inline QCastPlan LastQPlan = {};
 inline UltimatePlan LastRPlan = {};
 
 inline bool PlayerReloading() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return ReloadUntil > Now() ||
            (player.IsValid() && player.HasBuff("ApheliosPReload"));
 }
@@ -367,7 +367,7 @@ inline bool HasGravitumMark(const AIBaseClient& target) {
 
 inline int CountGravitumTargets(float range = FLT_MAX,
                                 int* priorityCount = nullptr) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     int count = 0;
     int priority = 0;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -408,7 +408,7 @@ inline void RefreshChakrams(const AIHeroClient& player) {
 }
 
 inline void RefreshWeaponState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const Weapon main = MainFromRuntime(player);
     const Weapon offhand = OffhandFromBuffs(player);
@@ -524,7 +524,7 @@ inline bool EnemyCanDashToSentry(const Vector3& position) {
 }
 
 inline bool TargetApproaching(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Engine::ValidEnemy(target) || !player.IsValid()) return false;
     const Vector3 end = target.PathEnd();
     if (!end.IsValid() || end.IsZero()) return target.IsDashing();
@@ -537,7 +537,7 @@ inline bool TargetApproaching(const AIHeroClient& target) {
 inline CombatContext BuildCombatContext(const AIHeroClient& target,
                                         Mode mode) {
     CombatContext context{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     context.PlayerHealthPercent = player.IsValid()
         ? player.HealthPercent() : 100.0f;
     context.TargetDistance = Engine::ValidEnemy(target) && player.IsValid()
@@ -582,14 +582,14 @@ inline float TargetPriority(const AIHeroClient& enemy) {
 }
 
 inline float PhysicalDamage(const AIBaseClient& target, float raw) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && target.IsValid()
         ? player.CalculatePhysicalDamage(target, std::max(0.0f, raw))
         : 0.0f;
 }
 
 inline float CurrentQDamage(const AIBaseClient& target, Weapon weapon) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const int level = player.Level();
     float raw = 0.0f;
@@ -623,7 +623,7 @@ inline float CurrentQDamage(const AIBaseClient& target, Weapon weapon) {
 inline float UltimateDamage(const AIBaseClient& target,
                             Weapon weapon,
                             int hitCount) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const int rank = std::clamp(SpellRank(3), 0, 3);
     float raw = MoonlightVigilRawDamage(
@@ -645,7 +645,7 @@ inline float UltimateDamage(const AIBaseClient& target,
 inline bool CanSpendQ(QPurpose purpose,
                       const CombatContext& context,
                       bool reactive = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !IsWeapon(State.Main) || !Ready(0) ||
         !QReadyFor(State.Main) || PlayerReloading() ||
         player.Mana() + 0.01f < SpellCost(0)) {
@@ -706,7 +706,7 @@ inline QCastPlan BuildCalibrumPlan(const AIHeroClient& target,
     QCastPlan plan{};
     plan.WeaponUsed = Weapon::Calibrum;
     plan.Purpose = purpose;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (State.Main != Weapon::Calibrum ||
         !Engine::ValidEnemy(target, kCalibrumQRange + 100.0f) ||
         IsCommonUntargetableOrImmune(target) ||
@@ -768,7 +768,7 @@ inline QCastPlan BuildSeverumPlan(const AIHeroClient& target,
     QCastPlan plan{};
     plan.WeaponUsed = Weapon::Severum;
     plan.Purpose = purpose;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (State.Main != Weapon::Severum || !player.IsValid() ||
         player.HasBuff("ApheliosSeverumQ")) {
         return plan;
@@ -886,7 +886,7 @@ inline QCastPlan BuildInfernumPlan(const AIHeroClient& target,
     QCastPlan plan{};
     plan.WeaponUsed = Weapon::Infernum;
     plan.Purpose = purpose;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (State.Main != Weapon::Infernum || !player.IsValid() ||
         !Engine::ValidEnemy(target, kInfernumQRange + 120.0f)) {
         return plan;
@@ -958,7 +958,7 @@ inline int CountEnemiesAtSentry(const Vector3& position) {
 }
 
 inline Vector3 ClampFromPlayer(const Vector3& position, float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid() || position.IsZero()) return {};
     const float distance = player.Position().Distance2D(position);
     if (distance <= range) return position;
@@ -973,7 +973,7 @@ inline QCastPlan BuildCrescendumPlan(const AIHeroClient& target,
     QCastPlan plan{};
     plan.WeaponUsed = Weapon::Crescendum;
     plan.Purpose = purpose;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (State.Main != Weapon::Crescendum || !player.IsValid()) return plan;
     const bool validTarget = Engine::ValidEnemy(target, 1100.0f);
     if (!validTarget && purpose != QPurpose::Objective &&
@@ -1119,7 +1119,7 @@ inline UltimatePlan ScoreUltimateAim(
     UltimatePlan plan{};
     plan.WeaponUsed = weapon;
     plan.PrimaryId = primaryId;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !aimCandidate.IsValid() || aimCandidate.IsZero()) {
         return plan;
     }
@@ -1198,7 +1198,7 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& target,
                                       const CombatContext& combat,
                                       bool defensive = false) {
     UltimatePlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || SpellRank(3) <= 0 ||
         player.Mana() + 0.01f < SpellCost(3)) {
         return best;
@@ -1401,7 +1401,7 @@ inline bool TrySmartHandSwap(const AIHeroClient& target,
         AmmoOf(State, State.Main), context);
     if (lowAmmo != LowAmmoCombo::None) mainScore += 2.2f;
     if (State.Main == Weapon::Crescendum && Engine::ValidEnemy(target)) {
-        const float distance = ObjectManager::Player().Position().Distance2D(
+        const float distance = GameObjects::Player().Position().Distance2D(
             target.Position());
         if (!ShouldUseCrescendumAuto(
                 distance, Chakrams, context.PlayerChasingReturn, 1.55f)) {
@@ -1515,7 +1515,7 @@ inline bool TryReactiveControl() {
 
 inline bool TryDefensiveUltimate(const AIHeroClient& target,
                                  const CombatContext& context) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) ||
         !Bool(UltimateMenu, "Defensive", true)) return false;
     const float hp = player.HealthPercent();
@@ -1535,7 +1535,7 @@ inline bool TryDefensiveUltimate(const AIHeroClient& target,
 
 inline bool TryKillSecure() {
     if (!Bool(TacticsMenu, "KillSecure", true)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, kMoonlightVigilRange + 200.0f) ||
@@ -1569,7 +1569,7 @@ inline bool TryLowAmmoSequence(const AIHeroClient& target,
         AmmoOf(State, State.Main), context);
     if (combo == LowAmmoCombo::None ||
         !Bool(AmmoMenu, "LowAmmoCombos", true)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const bool utilityCombo = combo ==
             LowAmmoCombo::SeverumGravitumRootIntoIncoming ||
         combo == LowAmmoCombo::GravitumRootIntoIncoming ||
@@ -1723,7 +1723,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 
 inline int CountFarmUnitsInInfernum(const Vector3& aim,
                                     bool jungle) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     int count = 0;
     const auto units = jungle ? GameObjects::Jungle()
@@ -1741,7 +1741,7 @@ inline int CountFarmUnitsInInfernum(const Vector3& aim,
 inline bool TryInfernumFarm(bool jungle,
                             const CombatContext& context) {
     if (State.Main != Weapon::Infernum || !Ready(0)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto units = jungle ? GameObjects::Jungle()
                               : GameObjects::EnemyMinions();
     Vector3 bestAim{};
@@ -1778,7 +1778,7 @@ inline bool TryCalibrumLastHit(const CombatContext& context) {
     if (State.Main != Weapon::Calibrum || !Ready(0) ||
         !Bool(FarmMenu, "CalibrumLastHit", false) ||
         !Engine::RuntimeSpells[0]) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIMinionClient best{};
     float bestMargin = FLT_MAX;
     for (const auto& minion : GameObjects::EnemyMinions()) {
@@ -1830,7 +1830,7 @@ inline bool TryGravitumFarm(bool jungle,
 
 inline bool TryFarm(Mode mode) {
     const bool jungle = mode == Mode::Jungle || HasNearbyJungleTarget(850.0f);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const int manaFloor = Slider(FarmMenu,
         jungle ? "JungleMana" : "LaneMana", jungle ? 28 : 58);
@@ -2013,7 +2013,7 @@ inline void ObserveLocalSpell(
                 LastAutoTargetId);
             if (target.IsValid()) {
                 LastCrescendumAttackDistance =
-                    ObjectManager::Player().Position().Distance2D(
+                    GameObjects::Player().Position().Distance2D(
                         target.Position());
                 CrescendumReturnUntil = now + static_cast<int>(std::ceil(
                     CrescendumRoundTripSeconds(
@@ -2039,13 +2039,13 @@ inline void ObserveLocalSpell(
         }
         const int index = WeaponIndex(used);
         if (index >= 0) {
-            const auto q = ObjectManager::Player().Spellbook().GetSpell(
+            const auto q = GameObjects::Player().Spellbook().GetSpell(
                 SDK::SpellSlot::Q);
             float remaining = q.IsValid()
                 ? q.RemainingCooldown(Game::Time()) : 0.0f;
             if (remaining <= 0.05f) {
                 remaining = WeaponQCooldownSeconds(
-                    used, ObjectManager::Player().Level());
+                    used, GameObjects::Player().Level());
             }
             QReadyAt[index] = now + static_cast<int>(
                 std::ceil(remaining * 1000.0f));
@@ -2214,7 +2214,7 @@ inline SentryRecord* FindSentry(int networkId, bool create = false) {
 }
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!SentryObjectName(args) ||
         !ControllerHelpers::ObjectEventIsAllied(args)) return;
     const std::uint32_t sourceId = args.SourceNetworkId != 0
@@ -2303,7 +2303,7 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
         static_cast<int>(args.Target.NetworkId()));
     if (!Engine::ValidEnemy(target) || !Ready(1) ||
         Engine::CurrentMode() == Mode::None) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     bool request = false;
     if (State.Main == Weapon::Crescendum && Chakrams == 0 &&
@@ -2409,7 +2409,7 @@ inline float MainWeaponRange() {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), MainWeaponRange(),

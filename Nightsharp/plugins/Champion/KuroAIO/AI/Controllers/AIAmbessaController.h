@@ -197,7 +197,7 @@ inline bool HasEnergy(float amount, float reserve = 0.0f) {
 }
 
 inline bool Q2IsLive() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return (Q2Ready && Now() <= Q2ExpireTick) ||
            RuntimeNameContains(0, "AmbessaQ2") ||
            (player.IsValid() && player.HasBuff("AmbessaQEmpowerReady"));
@@ -210,7 +210,7 @@ inline float EnhancedAttackRange(const AIBaseClient& target) {
 
 inline bool InEnhancedAttackRange(const AIBaseClient& target,
                                   float padding = 0.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && target.IsValid() &&
         player.Position().Distance2D(target.Position()) <=
             EnhancedAttackRange(target) + padding;
@@ -218,7 +218,7 @@ inline bool InEnhancedAttackRange(const AIBaseClient& target,
 
 inline bool CursorConsentsTo(const Vector3& position,
                              float minimumDot = -0.10f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid()) return false;
     const Vector3 targetDirection = SharedGeometry::Direction2D(
         player.Position(), position);
@@ -275,7 +275,7 @@ inline Vector3 DirectionEndpoint(const Vector3& origin,
 
 inline DashChoice ChooseDashChoice(const AIHeroClient& target,
                                    Posture posture) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || PlayerMobilityLocked()) {
         return DashChoice::NoDash;
     }
@@ -313,7 +313,7 @@ inline DashChoice ChooseDashChoice(const AIHeroClient& target,
 
 inline Vector3 EndpointForDashChoice(DashChoice choice,
                                      const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     const Vector3 origin = player.Position();
     if (choice == DashChoice::NoDash ||
@@ -344,7 +344,7 @@ inline Vector3 EndpointForDashChoice(DashChoice choice,
 inline void PlanPlayerOwnedDash(int slot,
                                 const AIHeroClient& target,
                                 Posture posture) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     PlannedDashChoice = ChooseDashChoice(target, posture);
     PlannedDashEndpoint = EndpointForDashChoice(
@@ -360,7 +360,7 @@ inline void PlanPlayerOwnedDash(int slot,
 }
 
 inline bool PlayerPathAgreesWithPlannedDash() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || PlannedDashChoice == DashChoice::NoDash ||
         !PlannedDashEndpoint.IsValid()) {
         return false;
@@ -393,7 +393,7 @@ inline bool TargetRejectsUltimate(const AIHeroClient& target) {
 }
 
 inline float Q1Damage(const AIHeroClient& target, bool outerEdge) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     const float raw = Q1RawDamage(
         SpellRank(0), player.BonusAttackDamage(), target.MaxHealth(),
@@ -402,7 +402,7 @@ inline float Q1Damage(const AIHeroClient& target, bool outerEdge) {
 }
 
 inline float Q2Damage(const AIHeroClient& target, bool firstTarget) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     const float raw = Q2RawDamage(
         SpellRank(0), player.BonusAttackDamage(), target.MaxHealth(),
@@ -411,7 +411,7 @@ inline float Q2Damage(const AIHeroClient& target, bool firstTarget) {
 }
 
 inline float WDamage(const AIHeroClient& target, bool empowered) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     return player.CalculatePhysicalDamage(
         target, WRawDamage(
@@ -419,7 +419,7 @@ inline float WDamage(const AIHeroClient& target, bool empowered) {
 }
 
 inline float EDamage(const AIHeroClient& target, int hits) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     return player.CalculatePhysicalDamage(
         target, ERawDamage(
@@ -427,14 +427,14 @@ inline float EDamage(const AIHeroClient& target, int hits) {
 }
 
 inline float RDamage(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     return player.CalculatePhysicalDamage(
         target, RRawDamage(SpellRank(3), player.BonusAttackDamage()));
 }
 
 inline float PassiveAttackDamage(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     return SDK::Damage::GetAutoAttackDamage(player, target, true) +
         player.CalculatePhysicalDamage(
@@ -447,7 +447,7 @@ inline float DamageWithoutR(const AIHeroClient& target) {
     float damage = PassiveStacks > 0
         ? PassiveAttackDamage(target)
         : SDK::Damage::GetAutoAttackDamage(
-              ObjectManager::Player(), target, true);
+              GameObjects::Player(), target, true);
     if (Ready(0)) {
         damage += Q2IsLive()
             ? Q2Damage(target, true)
@@ -481,11 +481,11 @@ inline bool ShouldWeaveAuto(const AIHeroClient& target,
     }
     if (allowBurstSkip && Bool(PassiveMenu, "SkipAAForBurst", true) &&
         (target.Health() <= EDamage(target, 1) + Q2Damage(target, false) ||
-         IncomingDamage >= ObjectManager::Player().Health() * 0.35f)) {
+         IncomingDamage >= GameObjects::Player().Health() * 0.35f)) {
         return false;
     }
     const float refund = PassiveEnergyRefund(
-        ObjectManager::Player().Level());
+        GameObjects::Player().Level());
     return CurrentResource(200.0f) <= 200.0f - refund + 8.0f ||
            Bool(PassiveMenu, "AlwaysWeaveInRange", true);
 }
@@ -520,7 +520,7 @@ inline std::vector<LineTarget> Q2CollisionUnits() {
 inline Q2CastPlan BuildQ2Plan(const AIHeroClient& target,
                               float delaySeconds = 0.225f) {
     Q2CastPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, 710.0f)) return best;
     const Vector3 predicted = PredictPosition(target, delaySeconds);
     const Vector3 direct = SharedGeometry::Direction2D(
@@ -584,7 +584,7 @@ inline std::vector<LineTarget> PredictedRChampions(float delaySeconds) {
 inline UltimatePlan BuildUltimatePlan(const AIHeroClient& intended,
                                        bool defensive = false) {
     UltimatePlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || TargetRejectsUltimate(intended) ||
         player.Position().Distance2D(intended.Position()) >
             kRRange + intended.BoundingRadius()) {
@@ -670,7 +670,7 @@ inline bool CastQ(const AIHeroClient& target,
         Orbwalker::AttackCastDelayRemaining() > 25) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, 720.0f)) return false;
 
     const bool second = Q2IsLive();
@@ -765,7 +765,7 @@ inline bool CastE(const AIHeroClient& target,
         Orbwalker::AttackCastDelayRemaining() > 25) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     if (target.IsValid() && !reactive &&
         player.Position().Distance2D(target.Position()) >
@@ -818,7 +818,7 @@ inline bool CastR(const AIHeroClient& target,
 }
 
 inline bool ThreatJustifiesW(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || IncomingThreatUntil < Now()) return false;
     const float shield = WShieldRaw(
         player.Level(), player.BonusAttackDamage());
@@ -858,7 +858,7 @@ inline bool TryQuickAnimationCancel(const AIHeroClient& fallback,
     AIHeroClient target = HeroByNetworkId(QTargetId);
     if (!Engine::ValidEnemy(target)) target = fallback;
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     const bool burst = ConservativeKillable(target, false) ||
         target.HealthPercent() <= Slider(PassiveMenu, "QuickQEHp", 38) ||
@@ -916,7 +916,7 @@ inline bool TrySmartR(const AIHeroClient& target, Mode mode) {
         TargetRejectsUltimate(target)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     const bool execute = Bool(RMenu, "Execute", true) &&
         RDamage(target) >= target.Health() + target.AllShield() &&
@@ -946,7 +946,7 @@ inline bool TrySmartR(const AIHeroClient& target, Mode mode) {
 }
 
 inline Posture SelectPosture(Mode mode, const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (mode == Mode::Flee) return Posture::Escape;
     if (mode == Mode::Jungle ||
         ((mode == Mode::LaneClear || mode == Mode::None) &&
@@ -982,7 +982,7 @@ inline bool TryReactiveGapcloser(const AIHeroClient& fallback) {
     AIHeroClient target = HeroByNetworkId(GapcloserTargetId);
     if (!Engine::ValidEnemy(target)) target = fallback;
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (Ready(1) && IncomingThreatUntil >= Now() &&
         Bool(WMenu, "ShieldGapcloser", true)) {
         return CastW(target, Mode::Automatic, true);
@@ -1010,7 +1010,7 @@ inline bool TryCombo(const AIHeroClient& target) {
     }
     if (TrySmartR(target, Mode::Combo)) return true;
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     if (Ready(2) && Bool(EMenu, "UseInCombo", true) &&
         distance <= kERadius + target.BoundingRadius() + 25.0f &&
@@ -1047,7 +1047,7 @@ inline bool TryHarass(const AIHeroClient& target) {
         ActiveSequence = Sequence::EnergyWeave;
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     if (Ready(0) && !Q2IsLive()) {
         return CastQ(target, Mode::Harass, false, false);
@@ -1063,7 +1063,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 inline bool TryFlee(const AIHeroClient& fallback) {
     const AIHeroClient pursuer = NearestEnemyToPlayer(fallback, 1000.0f);
     CurrentPosture = Posture::Escape;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     if (Engine::ValidEnemy(pursuer) && Ready(2) &&
         Bool(EMenu, "UseInFlee", true) &&
@@ -1094,7 +1094,7 @@ inline bool TryJungle() {
         ControllerHelpers::SelectJungleTarget(720.0f, 0.15f);
     if (!monster.IsValid()) return false;
     const AIBaseClient unit(monster.Address());
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(monster.Position());
     if (PassiveStacks > 0 && InEnhancedAttackRange(unit, 20.0f)) {
         ActiveSequence = Sequence::JungleWeave;
@@ -1159,7 +1159,7 @@ struct LaneQPlan {
 
 inline LaneQPlan BestLaneQPlan(bool secondCast, bool lastHitOnly) {
     LaneQPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
     const float rawFallback = secondCast
         ? Q2RawDamage(SpellRank(0), player.BonusAttackDamage(), 500.0f,
@@ -1236,7 +1236,7 @@ inline bool TryLaneFarm(Mode mode) {
 
 inline void RefreshState() {
     const int now = Now();
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
     if (PassiveExpireTick > 0 && now > PassiveExpireTick) PassiveStacks = 0;
@@ -1327,7 +1327,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 
 inline void ObserveIncomingCast(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
 
@@ -1405,7 +1405,7 @@ inline void ObserveIncomingCast(
 inline void ObserveLocalAbility(
     const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int targetId = static_cast<int>(
         args.TargetNetworkId != 0
             ? args.TargetNetworkId
@@ -1690,7 +1690,7 @@ inline const char* UltimateReasonName(UltimateReason reason) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
     if (Bool(CoachMenu, "DrawQ1", true)) {
@@ -1911,7 +1911,7 @@ inline void OnLoad() {
     PendingDashSlot = -1;
     PendingDashWindowUntil = 0;
     PendingDashOrigin = PlannedDashEndpoint = {};
-    LastObservedPosition = ObjectManager::Player().Position();
+    LastObservedPosition = GameObjects::Player().Position();
     Q2Ready = false;
     Q2ExpireTick = QCastTick = QCastStage = QTargetId = 0;
     LastQDirection = {};

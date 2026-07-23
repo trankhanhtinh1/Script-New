@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -288,7 +288,7 @@ inline float TargetPriority(const AIHeroClient& target) {
 }
 
 inline bool GroundedOrRooted() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() &&
         (SDK::HasBuffOfType(player, SDK::BuffType::Grounded) ||
          SDK::HasBuffOfType(player, SDK::BuffType::Snare));
@@ -541,7 +541,7 @@ inline void ClearQState(bool clearMarks = true) {
 }
 
 inline float Q1Damage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, QBaseDamage(SpellRank(0), player.AP()))
@@ -550,7 +550,7 @@ inline float Q1Damage(const AIBaseClient& target) {
 
 inline float Q2Damage(const AIBaseClient& target,
                       float damageUnits = 1.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!target.IsValid() || !player.IsValid()) return 0.0f;
     const float missing = target.MaxHealth() > 0.0f
         ? 1.0f - target.Health() / target.MaxHealth() : 0.0f;
@@ -560,7 +560,7 @@ inline float Q2Damage(const AIBaseClient& target,
 }
 
 inline float EDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, ERawDamage(SpellRank(2), player.AP()))
@@ -568,7 +568,7 @@ inline float EDamage(const AIBaseClient& target) {
 }
 
 inline float RDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, RRawDamage(SpellRank(3), player.AP()))
@@ -576,7 +576,7 @@ inline float RDamage(const AIBaseClient& target) {
 }
 
 inline float PassiveDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? player.CalculateMagicDamage(
               target, PassiveRawDamage(
@@ -586,7 +586,7 @@ inline float PassiveDamage(const AIBaseClient& target) {
 }
 
 inline float AutoDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return target.IsValid() && player.IsValid()
         ? SDK::Damage::GetAutoAttackDamage(player, target, true)
         : 0.0f;
@@ -640,7 +640,7 @@ inline std::vector<LineUnit> BuildLineUnits(float delaySeconds,
 }
 
 inline Vector3 ClampDirectionCast(const Vector3& requested, float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !requested.IsValid() || requested.IsZero()) {
         return {};
     }
@@ -655,7 +655,7 @@ inline QPlan BuildQPlan(const AIBaseClient& primary,
                         bool includeFarm = false,
                         bool reactive = false) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !primary.IsValid() ||
         SpellRank(0) <= 0 || RuntimeQRecast()) return best;
     const int primaryId = static_cast<int>(primary.NetworkId());
@@ -866,7 +866,7 @@ inline bool CastQ2(QPurpose purpose, bool reactive = false) {
 inline bool ManageQRecast(Mode mode) {
     if (!QActive || !RuntimeQRecast()) return false;
     RefreshMarks();
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const AIBaseClient target = BestQReturnTarget();
     if (!player.IsValid() || !target.IsValid()) {
         if (QExpireTick - Now() <= 160) {
@@ -927,7 +927,7 @@ inline bool ManageQRecast(Mode mode) {
 inline Vector3 ResolveWEndpoint(const Vector3& direction,
                                 bool& crossesWall,
                                 bool& reachable) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     crossesWall = false;
     reachable = false;
     if (!player.IsValid() || direction.IsZero()) return {};
@@ -960,7 +960,7 @@ inline WPlan BuildWPlan(const AIHeroClient& target,
                         WPurpose purpose,
                         bool defensive = false) {
     WPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || SpellRank(1) <= 0 || WInvisible ||
         PlayerMobilityLocked()) return best;
     const Vector3 cursorDirection = SharedGeometry::Direction2D(
@@ -1088,7 +1088,7 @@ inline bool CastWPlan(const WPlan& plan,
 }
 
 inline void RefreshWResetTelemetry() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::W);
     if (!spell.IsValid() || spell.Level() <= 0) return;
@@ -1116,7 +1116,7 @@ inline EPlan BuildEPlan(const AIBaseClient& primary,
                         bool includeFarm = false,
                         bool reactive = false) {
     EPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !primary.IsValid() || SpellRank(2) <= 0) {
         return best;
     }
@@ -1245,7 +1245,7 @@ inline bool CastEPlan(const EPlan& plan,
         (plan.RecoilEndpoint.IsZero() ||
          SDK::NavMesh::IsWall(plan.RecoilEndpoint) ||
          (Engine::UnderEnemyTurret(plan.RecoilEndpoint) &&
-          !Engine::UnderEnemyTurret(ObjectManager::Player().Position())) ||
+          !Engine::UnderEnemyTurret(GameObjects::Player().Position())) ||
          HasReadyPointClickThreatAt(plan.RecoilEndpoint))) return false;
     if (!Engine::ControllerCastPosition(2, plan.Aim)) return false;
     ECastTick = Now();
@@ -1266,7 +1266,7 @@ inline bool CastEPlan(const EPlan& plan,
 }
 
 inline bool ResolveRLeapTerrain(RPlacement& placement) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !placement.Valid ||
         placement.Direction.IsZero()) return false;
     if (!SDK::NavMesh::IsWall(placement.LeapEndpoint)) return true;
@@ -1315,7 +1315,7 @@ inline RPlan BuildRPlan(const AIHeroClient& primary,
                         bool defensive = false,
                         bool manual = false) {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(primary) ||
         SpellRank(3) <= 0 || RArenaActive || RuntimeRRecast()) return best;
     const int primaryId = static_cast<int>(primary.NetworkId());
@@ -1491,7 +1491,7 @@ inline bool TryPortalBufferE(const AIHeroClient& threat,
         !Engine::ValidEnemy(threat) || !PortalDestinationSafe(destination)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 inward = SharedGeometry::Direction2D(
         player.Position(), RArenaCenter);
     if (inward.IsZero()) return false;
@@ -1517,7 +1517,7 @@ inline bool TryHiddenPortalW(const AIHeroClient& threat,
         !Engine::ValidEnemy(threat) || !PortalDestinationSafe(destination)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 outward = SharedGeometry::Direction2D(
         RArenaCenter, player.Position());
     if (outward.IsZero()) return false;
@@ -1551,7 +1551,7 @@ inline bool TryHiddenPortalW(const AIHeroClient& threat,
 }
 
 inline void DetectPortalTransit() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
     if (RArenaActive && LastPlayerPosition.IsValid() &&
@@ -1566,7 +1566,7 @@ inline void DetectPortalTransit() {
 
 inline bool ManageArena() {
     if (!RArenaActive) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     if (RArenaExpireTick <= Now()) {
         RArenaActive = false;
@@ -1629,7 +1629,7 @@ inline bool ManageArena() {
 }
 
 inline void RefreshRuntimeState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
     RefreshMarks();
@@ -1722,7 +1722,7 @@ inline Posture DeterminePosture(Mode mode,
 }
 
 inline AIHeroClient CursorEnemy(float range = 1450.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIHeroClient best{};
     float bestCursorDistance = FLT_MAX;
@@ -1749,7 +1749,7 @@ inline bool TryManualR() {
 }
 
 inline bool TryReactiveDefense(Mode mode) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     AIHeroClient threat = HeroByNetworkId(IncomingThreatTargetId);
     if (!Engine::ValidEnemy(threat) && GapcloserExpireTick >= Now()) {
@@ -1805,7 +1805,7 @@ inline bool TryKillSecure(const AIHeroClient& target) {
     if (QActive && RuntimeQRecast()) {
         const auto evaluation = EvaluateQReturn(
             ReturnTargetUnit(target), CurrentMarks(),
-            ObjectManager::Player().Position());
+            GameObjects::Player().Position());
         if (Q2Damage(target, std::max(1.0f, evaluation.DamageUnits)) >=
             health) {
             return CastQ2(QPurpose::PullbackLethal, true);
@@ -1885,7 +1885,7 @@ inline bool TryCombo(const AIHeroClient& target) {
         if (CastRPlan(r, Mode::Combo)) return true;
     }
 
-    const float targetDistance = ObjectManager::Player().Position().Distance2D(
+    const float targetDistance = GameObjects::Player().Position().Distance2D(
         target.Position());
     const bool resetEntry = Now() - LastChampionDamageTick <=
             static_cast<int>(kWResetDamageWindowSeconds * 1000.0f) &&
@@ -1955,7 +1955,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 }
 
 inline AIBaseClient SelectLaneTarget(float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIBaseClient best{};
     float bestScore = -FLT_MAX;
@@ -2044,7 +2044,7 @@ inline bool TryFlee(const AIHeroClient& fallback) {
         if (CastWPlan(w, Mode::Flee, true)) return true;
     }
     if (Ready(3) && Bool(WorldsMenu, "Flee", true) &&
-        ObjectManager::Player().HealthPercent() <=
+        GameObjects::Player().HealthPercent() <=
             Slider(WorldsMenu, "FleeHealth", 35)) {
         const RPlan r = BuildRPlan(
             threat, RPurpose::SelfPeel, true);
@@ -2071,7 +2071,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& target) {
 }
 
 inline void ObserveManualQLine(const Vector3& endpoint) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || endpoint.IsZero()) return;
     const Vector3 aim = ClampDirectionCast(endpoint, kQRange);
     const auto units = BuildLineUnits(kQCastSeconds + 0.25f, true);
@@ -2151,7 +2151,7 @@ inline void ObserveLocalSpell(
     }
     if (IsEEvent(args)) {
         const bool ours = Engine::WasControllerCast(2);
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const Vector3 endpoint = args.EndPosition.IsValid() &&
                 !args.EndPosition.IsZero()
             ? args.EndPosition : args.CastPosition;
@@ -2188,7 +2188,7 @@ inline void ObserveLocalSpell(
     }
     if (IsREvent(args)) {
         const bool ours = Engine::WasControllerCast(3);
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const Vector3 endpoint = args.EndPosition.IsValid() &&
                 !args.EndPosition.IsZero()
             ? args.EndPosition : (args.CastPosition.IsValid() &&
@@ -2391,7 +2391,7 @@ inline const char* PostureName(Posture posture) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), kQRange,

@@ -233,7 +233,7 @@ inline bool SafePoint(const Vector3& position,
                       bool lethal,
                       bool escape,
                       int enemyAllowance = -1) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid() || position.IsZero() ||
         SDK::NavMesh::IsWall(position)) {
         return false;
@@ -289,7 +289,7 @@ inline float TotalCritMultiplier(const AIHeroClient& player) {
 }
 
 inline float QDamage(const AIBaseClient& target, bool nonChampion = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int rank = SpellRank(0);
     if (!player.IsValid() || !target.IsValid() || rank <= 0) return 0.0f;
     static constexpr float bases[] = {
@@ -307,7 +307,7 @@ inline float QDamage(const AIBaseClient& target, bool nonChampion = false) {
 }
 
 inline float PassiveProcDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     float base = 15.0f;
     if (player.Level() >= 16) base = 150.0f;
@@ -318,7 +318,7 @@ inline float PassiveProcDamage(const AIBaseClient& target) {
 }
 
 inline float PassiveSecondShotDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const float expectedCrit = 1.0f + std::clamp(player.Crit(), 0.0f, 1.0f) *
         std::max(0.0f, TotalCritMultiplier(player) - 1.0f);
@@ -331,7 +331,7 @@ inline float PassiveSecondShotDamage(const AIBaseClient& target) {
 }
 
 inline float EShotDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int rank = SpellRank(2);
     if (!player.IsValid() || !target.IsValid() || rank <= 0) return 0.0f;
     static constexpr float bases[] = {
@@ -384,7 +384,7 @@ inline bool HoldPendingSecondShot() {
 }
 
 inline AIHeroClient FindScoundrelTarget(float range = kRRange) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIHeroClient best = {};
     float bestScore = -FLT_MAX;
@@ -411,7 +411,7 @@ inline AIHeroClient FindScoundrelTarget(float range = kRRange) {
 }
 
 inline Posture DeterminePosture(const AIHeroClient& selected) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return Posture::Neutral;
     if (Engine::CurrentMode() == Mode::Flee ||
         player.HealthPercent() <= Slider(SwingMenu, "EscapeHP", 28)) {
@@ -447,7 +447,7 @@ inline bool IsQReturnName(const char* spellName, const char* missileName) {
 }
 
 inline void RefreshTrackedQ() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     bool found = false;
     for (const auto& missile : GameObjects::Missiles()) {
@@ -490,7 +490,7 @@ inline void AddUniqueDirection(std::vector<Vector3>& directions,
 inline std::vector<QPathUnit> BuildQPathUnits(
     const AIHeroClient& target,
     const Vector3& targetPrediction) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::vector<QPathUnit> result;
     if (!player.IsValid()) return result;
     const int targetId = target.IsValid()
@@ -539,7 +539,7 @@ inline QAimPlan BestQAim(const AIHeroClient& target,
                          bool allowExtension,
                          bool requireReturn = false) {
     QAimPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, 5000.0f)) return best;
 
     const float initialDelay = 0.25f +
@@ -611,7 +611,7 @@ inline void RefreshQReturnCoach(const AIHeroClient& fallback) {
     AIHeroClient target = HeroByNetworkId(QTargetId);
     if (!Engine::ValidEnemy(target)) target = fallback;
     if (!Engine::ValidEnemy(target)) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     std::array<Vector3, 9> candidates = {};
     candidates[0] = player.Position();
     const Vector3 cursorDirection = Direction2D(player.Position(), Game::CursorPos());
@@ -662,7 +662,7 @@ inline bool CastQ(const AIHeroClient& target,
     const QAimPlan plan = BestQAim(target, allowExtension, requireReturn);
     if (!plan.Valid) return false;
     QTargetId = static_cast<int>(target.NetworkId());
-    QCastOrigin = ObjectManager::Player().Position();
+    QCastOrigin = GameObjects::Player().Position();
     QPlannedEnd = plan.OutwardEnd;
     LastQExtensionHits = plan.ExtensionHits;
     if (Engine::ControllerCastPosition(0, plan.CastPosition)) {
@@ -686,7 +686,7 @@ inline bool TryAutomaticW(const AIHeroClient& selected, Mode mode) {
         RChannelActive || EHookAttached() || ESwinging()) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = Now();
     if (!player.IsValid() || Engine::CountEnemiesAt(player.Position(), 1150.0f) > 0 ||
         now - LastCombatTick < Slider(RogueMenu, "OutOfCombatMs", 2600)) {
@@ -768,7 +768,7 @@ inline Vector3 E2CursorForDirection(const Vector3& source,
 
 inline int NearbyNonTargetUnits(const AIHeroClient& target,
                                 float range = kEShotSearchRange) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     int count = 0;
     for (const auto& minion : GameObjects::EnemyLaneMinions()) {
@@ -798,7 +798,7 @@ inline Vector3 BestDismountFrom(const Vector3& swingPosition,
                                 const AIHeroClient& target,
                                 SwingPurpose purpose,
                                 bool lethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     std::array<Vector3, 11> candidates = {};
     std::size_t count = 0;
@@ -850,7 +850,7 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
                                   SwingPurpose purpose,
                                   bool lethal) {
     SwingPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
     const Vector3 source = player.Position();
     const bool escape = purpose == SwingPurpose::Escape;
@@ -1031,7 +1031,7 @@ inline SwingPlan GetSwingPlan(const AIHeroClient& target,
 inline bool CanCommitSwing(const AIHeroClient& target,
                            SwingPurpose purpose,
                            bool lethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target) ||
         TargetCannotBeAttacked(target)) {
         return false;
@@ -1145,7 +1145,7 @@ inline bool StartPlannedSwing() {
 
 inline Vector3 ChooseLiveDismount(const AIHeroClient& target,
                                   bool lethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     Vector3 planned = PlannedDismount;
     if (planned.IsValid() && !planned.IsZero() &&
@@ -1167,7 +1167,7 @@ inline bool DismountSwing(const AIHeroClient& fallback,
     if (!Engine::ValidEnemy(target)) target = fallback;
     const bool lethal = Engine::ValidEnemy(target) &&
         LethalWith(target, EShotDamage(target) * 1.2f);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 future = SwingPoint(
         PlannedAnchor, player.Position(), PlannedSwingDirection,
         0.12f, kESwingSpeed);
@@ -1299,7 +1299,7 @@ inline RLineAnalysis AnalyzeRLine(const Vector3& source,
 }
 
 inline float RVolleyDamage(const AIHeroClient& target, int bullets) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int rank = SpellRank(3);
     if (!player.IsValid() || !Engine::ValidEnemy(target) ||
         rank <= 0 || bullets <= 0) {
@@ -1347,7 +1347,7 @@ inline bool CastRRelease(RReleaseReason reason) {
 
 inline bool CanStartR(const AIHeroClient& target,
                       bool requireLethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, kRRange) ||
         TargetCannotBeAttacked(target) || SpellRank(3) <= 0 ||
         !Engine::RuntimeSpells[3] || !Engine::RuntimeSpells[3]->IsReady() ||
@@ -1443,7 +1443,7 @@ inline bool HandleRChannel(const AIHeroClient& fallback, Mode mode) {
     if (!Engine::ValidEnemy(target)) target = fallback;
     if (!Engine::ValidEnemy(target)) return true;
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int elapsedMs = std::max(0, Now() - RChannelStartTick);
     RObservedBullets = StoredRBullets(
         SpellRank(3), static_cast<float>(elapsedMs) / 1000.0f);
@@ -1524,7 +1524,7 @@ inline AIHeroClient ResolveCombatTarget(const AIHeroClient& selected) {
 inline float ShortCombatDamage(const AIHeroClient& target,
                                int expectedEShots = 0,
                                bool includeR = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return 0.0f;
     float damage = SDK::Damage::GetAutoAttackDamage(player, target, true) +
                    PassiveSecondShotDamage(target);
@@ -1624,7 +1624,7 @@ inline bool TryGapcloserResponse(const AIHeroClient& fallback, Mode mode) {
 
 inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) || TargetCannotBeAttacked(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = Now();
     const bool inAa = InAutoAttackRange(target, 25.0f);
     const bool recentlyCompletedDouble = LastSecondShotTick > 0 &&
@@ -1700,7 +1700,7 @@ inline bool TryFlee(const AIHeroClient& fallback) {
         CastQ(threat, Mode::Flee, false, false, true)) {
         return true;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (Bool(RogueMenu, "FleeW", true) && !WCamouflaged &&
         Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsReady() &&
         CastThrottleReady(1) && NearTerrain(player.Position(), 190.0f) &&
@@ -1728,7 +1728,7 @@ struct FarmQPlan {
 inline FarmQPlan BestFarmQ(const std::vector<AIBaseClient>& units,
                            bool lastHitOnly) {
     FarmQPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || units.empty()) return best;
     std::vector<QPathUnit> pathUnits;
     std::vector<Vector3> directions;
@@ -1803,7 +1803,7 @@ inline bool TryFarm(bool lastHitOnly) {
         !CastThrottleReady(0) || HoldPendingSecondShot()) {
         return false;
     }
-    if (ObjectManager::Player().ManaPercent() <
+    if (GameObjects::Player().ManaPercent() <
         Slider(FarmMenu, "FarmMana", 48)) {
         return false;
     }
@@ -1815,7 +1815,7 @@ inline bool TryFarm(bool lastHitOnly) {
         return false;
     }
     QTargetId = 0;
-    QCastOrigin = ObjectManager::Player().Position();
+    QCastOrigin = GameObjects::Player().Position();
     QPlannedEnd = plan.OutwardEnd;
     LastQExtensionHits = plan.ExtensionHits;
     if (Engine::ControllerCastPosition(0, plan.CastPosition)) {
@@ -1850,7 +1850,7 @@ inline bool IsSwingAttackName(const char* name) {
 }
 
 inline bool HasWCamouflageBuff() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() &&
         (player.HasBuff("AkshanW") ||
          player.HasBuff("AkshanWStealth") ||
@@ -1858,7 +1858,7 @@ inline bool HasWCamouflageBuff() {
 }
 
 inline bool HasRChannelBuff() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return ControllerHelpers::HasAnyBuff(
         player, { "AkshanR", "AkshanRChannel" });
 }
@@ -1888,7 +1888,7 @@ inline void ClearSwingState() {
 }
 
 inline void RefreshState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
 
@@ -2065,7 +2065,7 @@ inline void ObserveSecondAttack(const AIBaseClient& target) {
 }
 
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid()) return;
     const int now = Now();
 
@@ -2357,8 +2357,8 @@ inline const char* EPhaseName(EPhase phase) {
 }
 
 inline void OnDraw() {
-    if (!CoachMenu || !ObjectManager::Player().IsValid()) return;
-    const auto player = ObjectManager::Player();
+    if (!CoachMenu || !GameObjects::Player().IsValid()) return;
+    const auto player = GameObjects::Player();
     if (Bool(CoachMenu, "DrawQ", true) && QActive &&
         QMissilePosition.IsValid() && !QMissilePosition.IsZero()) {
         Drawing::DrawCircle(QMissilePosition, 34.0f,

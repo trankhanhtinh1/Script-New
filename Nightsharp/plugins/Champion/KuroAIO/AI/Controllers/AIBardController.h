@@ -451,7 +451,7 @@ inline AllyThreatRecord CurrentAllyThreat(int allyId) {
 }
 
 inline int RuntimeWAmmo() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::W);
     if (spell.IsValid() && spell.MaxAmmo() > 0) {
@@ -490,7 +490,7 @@ inline std::vector<Shrine> GeometryShrines() {
 }
 
 inline bool MeepAvailable() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return MeepAmmo > 0 ||
            (player.IsValid() &&
             (player.HasBuff("BardPSpirits") ||
@@ -531,7 +531,7 @@ inline std::vector<QUnit> BuildQUnits(float predictionSeconds) {
     };
     const auto appendMinion = [&](const AIMinionClient& minion,
                                   bool jungle) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!player.IsValid() || !minion.IsValid() || minion.IsDead() ||
             !minion.IsTargetable() ||
             player.Position().Distance2D(minion.Position()) >
@@ -600,7 +600,7 @@ inline SDK::HitChance RequiredQHitchance(QPurpose purpose,
 
 inline std::vector<Vector3> QCandidates(const AIHeroClient& target) {
     std::vector<Vector3> candidates;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return candidates;
     const auto prediction = Engine::RuntimeSpells[0]
         ? Engine::RuntimeSpells[0]->GetPrediction(target)
@@ -663,7 +663,7 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
                         QPurpose purpose,
                         bool requireStun = true) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0) || TargetRejectsQ(target)) return best;
     if (player.Position().Distance2D(target.Position()) >
             kQInitialTargetRange + target.BoundingRadius() +
@@ -755,7 +755,7 @@ inline AIHeroClient RawEnemyById(int networkId) {
 
 inline AIHeroClient RawAllyById(int networkId) {
     if (networkId == 0) return {};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid() && player.NetworkId() == networkId) return player;
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (static_cast<int>(ally.NetworkId()) == networkId &&
@@ -771,7 +771,7 @@ inline QPlan BuildAnchoredQPlan(int targetId,
                                QPurpose purpose,
                                bool perfectStasisExit) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const AIHeroClient target = RawEnemyById(targetId);
     if (!player.IsValid() || !target.IsValid() || target.IsDead() ||
         !Ready(0) || !targetPosition.IsValid() || targetPosition.IsZero()) {
@@ -867,7 +867,7 @@ inline QPlan BuildPortalExitQPlan(int targetId,
 
 inline WPlan BuildEmergencyWPlan() {
     WPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || RuntimeWAmmo() <= 0 ||
         !HasCurrentResource(SpellCost(1))) return best;
     const float heal = WMinimumRawHeal(SpellRank(1), player.AP());
@@ -919,7 +919,7 @@ inline WPlan BuildEmergencyWPlan() {
 inline WPlan BuildCombatWPlan(const AIHeroClient& target,
                               bool retreat) {
     WPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || RuntimeWAmmo() <= 0 ||
         !HasCurrentResource(SpellCost(1))) return plan;
     AIHeroClient receiver = player;
@@ -949,7 +949,7 @@ inline WPlan BuildCombatWPlan(const AIHeroClient& target,
 
 inline WPlan BuildGroundShrinePlan(bool objectiveSetup) {
     WPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int ammo = RuntimeWAmmo();
     if (!player.IsValid() || ammo <= 0 || !HasCurrentResource(SpellCost(1)) ||
         HasEnemyChampionNear(objectiveSetup ? 1200.0f : 950.0f)) {
@@ -1033,7 +1033,7 @@ inline EPlan BuildPortalPlan(const Vector3& desired,
                              bool defensive,
                              bool playerRequested) {
     EPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2) || PlayerMobilityLocked() ||
         !HasCurrentResource(SpellCost(2))) return best;
     Vector3 base = SharedGeometry::Direction2D(player.Position(), desired);
@@ -1114,7 +1114,7 @@ inline bool CastEPlan(const EPlan& plan, bool reactive = false) {
 inline std::vector<StasisUnit> BuildStasisUnits(float predictionSeconds) {
     std::vector<StasisUnit> units;
     units.reserve(48);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto appendAlly = [&](const AIHeroClient& ally) {
         if (!ally.IsValid() || ally.IsDead()) return;
         StasisUnit unit{};
@@ -1201,7 +1201,7 @@ inline RPlan EvaluateRPlanAt(const Vector3& center,
                              const StasisContext& context,
                              bool manual = false) {
     RPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || !center.IsValid() ||
         center.IsZero()) return plan;
     const float distance = player.Position().Distance2D(center);
@@ -1221,7 +1221,7 @@ inline RPlan EvaluateRPlanAt(const Vector3& center,
 inline RPlan BuildCatchRPlan(const AIHeroClient& preferred,
                              bool flee = false) {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3)) return best;
     const float maximumRange = static_cast<float>(
         Slider(RMenu, "MaximumCatchRange", 1650));
@@ -1266,7 +1266,7 @@ inline RPlan BuildCatchRPlan(const AIHeroClient& preferred,
 
 inline RPlan BuildSaveRPlan() {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || !Bool(RMenu, "SaveAlly", true)) {
         return best;
     }
@@ -1310,7 +1310,7 @@ inline RPlan BuildInterruptRPlan() {
         !Bool(RMenu, "Interrupt", true)) return plan;
     const AIHeroClient target = RawEnemyById(InterruptTargetId);
     if (!target.IsValid()) return plan;
-    const float distance = ObjectManager::Player().Position().Distance2D(
+    const float distance = GameObjects::Player().Position().Distance2D(
         target.Position());
     const float impact = RImpactSeconds(distance);
     if (Now() + static_cast<int>(impact * 1000.0f) > InterruptExpireTick) {
@@ -1327,7 +1327,7 @@ inline RPlan BuildInterruptRPlan() {
 
 inline RPlan BuildDiveTurretRPlan() {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) ||
         !Key(RMenu, "DiveTurret", false)) return best;
     for (const auto& turret : GameObjects::EnemyTurrets()) {
@@ -1349,7 +1349,7 @@ inline RPlan BuildDiveTurretRPlan() {
 
 inline RPlan BuildObjectiveRPlan() {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) ||
         !Key(RMenu, "ObjectiveDeny", false)) return best;
     for (const auto& monster : GameObjects::Jungle()) {
@@ -1412,7 +1412,7 @@ inline bool ContinueStasisExitQ() {
     const float remaining = static_cast<float>(
         stasis->EndTick - Now()) / 1000.0f;
     const float travel = std::max(
-        0.0f, ObjectManager::Player().Position().Distance2D(
+        0.0f, GameObjects::Player().Position().Distance2D(
             target.Position()) - target.BoundingRadius() - kQHalfWidth);
     const float waitSeconds = QCastDelayForStasisExit(
         remaining, travel,
@@ -1470,7 +1470,7 @@ inline bool ContinuePortalExitQ() {
     const float remaining = std::max(
         0.0f, static_cast<float>(PortalTravellerUntil - Now()) / 1000.0f);
     const float travelDistance = std::max(
-        0.0f, ObjectManager::Player().Position().Distance2D(
+        0.0f, GameObjects::Player().Position().Distance2D(
             PortalTravellerExit) - target.BoundingRadius() - kQHalfWidth);
     const float delay = QCastDelayForStasisExit(
         remaining, travelDistance,
@@ -1485,7 +1485,7 @@ inline bool ContinuePortalExitQ() {
 }
 
 inline AIHeroClient CursorEnemy(float range = kRCastRange) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIHeroClient best{};
     float bestCursorDistance = 560.0f;
@@ -1509,7 +1509,7 @@ inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
 
 inline Posture DeterminePosture(Mode mode,
                                 const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return Posture::Neutral;
     if (mode == Mode::Flee) return Posture::Disengage;
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
@@ -1541,7 +1541,7 @@ inline Posture DeterminePosture(Mode mode,
 
 inline RPlan BuildBacklineIsolationRPlan() {
     RPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) ||
         !Bool(RMenu, "BacklineIsolation", true)) return best;
     const float maximumRange = static_cast<float>(
@@ -1584,7 +1584,7 @@ inline AIMinionClient MinionById(int networkId) {
 
 inline QPlan BuildFarmQPlan(Mode mode) {
     QPlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0) ||
         !HasCurrentResource(SpellCost(0))) return best;
     const bool jungle = mode == Mode::Jungle;
@@ -1705,7 +1705,7 @@ inline bool TryReactive(Mode mode) {
         if (CastRPlan(interrupt, true)) return true;
     }
 
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const bool urgent = player.IsValid() &&
         (mode == Mode::Flee || GapcloserExpireTick >= Now() ||
          player.HealthPercent() <= Slider(TacticsMenu, "DefensiveHp", 42));
@@ -1743,7 +1743,7 @@ inline bool TryManualInputs(const AIHeroClient& selected) {
 
 inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
 
     const float distance = player.Position().Distance2D(target.Position());
@@ -2008,7 +2008,7 @@ inline void RecordThreatOnAlly(
 
 inline void RecordCombatIntent(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid()) return;
     const std::uint32_t playerTeam =
         static_cast<std::uint32_t>(player.Team());
@@ -2115,7 +2115,7 @@ inline void ObserveLocalSpell(
         if (primary.IsValid()) {
             PendingRPrimaryId = static_cast<int>(primary.NetworkId());
             PendingRImpactTick = now + static_cast<int>(
-                RImpactSeconds(ObjectManager::Player().Position().Distance2D(
+                RImpactSeconds(GameObjects::Player().Position().Distance2D(
                     center)) * 1000.0f);
             PendingRManual = true;
             SequenceTargetId = PendingRPrimaryId;
@@ -2209,7 +2209,7 @@ inline void UpdateBardBuffState(
             record->StartTick = now;
             record->EndTick = added
                 ? ControllerHelpers::BuffExpireTick(args, 2500) : now;
-            const auto player = ObjectManager::Player();
+            const auto player = GameObjects::Player();
             record->Allied = player.IsValid() &&
                 args.Sender.Team ==
                     static_cast<std::uint32_t>(player.Team());
@@ -2262,7 +2262,7 @@ inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid()) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int id = static_cast<int>(args.Sender.NetworkId);
     const int now = Now();
@@ -2347,7 +2347,7 @@ inline const char* SequenceName(Sequence sequence) {
 
 inline const ChimeRecord* BestChimeSuggestion(float& score) {
     score = -FLT_MAX;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return nullptr;
     const AIHeroClient carry = RawAllyById(ProtectedAllyId);
     const Vector3 destination = Game::CursorPos();
@@ -2385,7 +2385,7 @@ inline const ChimeRecord* BestChimeSuggestion(float& score) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (Bool(CoachMenu, "DrawRanges", true)) {
         Drawing::DrawCircle(player.Position(), kQInitialTargetRange,

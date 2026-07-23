@@ -88,7 +88,7 @@ public:
         if (point.IsZero() || !point.IsValid()) {
             return false;
         }
-        for (const auto& hero : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
+        for (const auto& hero : GameObjects::Get<SDK::AIHeroClient>()) {
             const SDK::AIBaseClient barrier(hero.Handle());
             if (!IsActiveOpposingBarrier(caster, barrier)) {
                 continue;
@@ -415,7 +415,7 @@ public:
                     addUnit(SDK::AIBaseClient(hero.Handle()));
                 }
             } else {
-                const int playerId = SDK::ObjectManager::Player().NetworkId();
+                const int playerId = GameObjects::Player().NetworkId();
                 for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
                     const SDK::AIBaseClient unit(hero.Handle());
                     // The local player is the prospective victim, not a
@@ -431,8 +431,8 @@ public:
             float height = 0.0f;
             if (skillshot.Native->Caster.IsValid()) {
                 height = skillshot.Native->Caster.Position().y;
-            } else if (SDK::ObjectManager::Player().IsValid()) {
-                height = SDK::ObjectManager::Player().Position().y;
+            } else if (GameObjects::Player().IsValid()) {
+                height = GameObjects::Player().Position().y;
             }
             const bool cacheMatches = skillshot.TerrainCollisionCached &&
                 skillshot.TerrainCollisionPathStart.DistanceSqr(pathStart) <=
@@ -734,7 +734,7 @@ public:
             std::initializer_list<const char*> buffNames,
             float barrierRadius,
             std::vector<SourceCollisionEvent>& events) {
-        for (const auto& hero : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
+        for (const auto& hero : GameObjects::Get<SDK::AIHeroClient>()) {
             const SDK::AIBaseClient barrier(hero.Handle());
             if (!IsActiveOpposingBarrier(caster, barrier) ||
                 _stricmp(barrier.CharacterName().c_str(), championName) != 0 ||

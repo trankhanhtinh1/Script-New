@@ -333,7 +333,7 @@ private:
             return cached;
         }
 
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         return player.IsValid() ? player.CharacterName() : std::string();
     }
 

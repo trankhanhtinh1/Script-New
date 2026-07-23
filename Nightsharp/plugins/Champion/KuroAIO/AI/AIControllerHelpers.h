@@ -20,7 +20,7 @@
 namespace Plugins::KuroAIO::AI::ControllerHelpers {
 
 inline bool IsLocalPlayer(const ::Core::Events::ObjectInfo& sender) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && sender.IsValid() &&
            sender.NetworkId == static_cast<std::uint32_t>(player.NetworkId());
 }
@@ -106,7 +106,7 @@ inline const Record* FindValidRecordById(
 }
 
 inline float CurrentResource(float maximum = FLT_MAX) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0.0f;
     return std::min(
         std::max(0.0f, player.Mana()),
@@ -117,11 +117,11 @@ inline float CurrentResource(float maximum = FLT_MAX) {
 // for their own policy thresholds. Keep the player lookup and invalid-player
 // fallback in one place; each controller still owns the actual threshold.
 inline float PlayerManaPercent() {
-    return Engine::ManaPercent(ObjectManager::Player());
+    return Engine::ManaPercent(GameObjects::Player());
 }
 
 inline bool PlayerMobilityLocked() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() &&
         (SDK::HasBuffOfType(player, SDK::BuffType::Grounded) ||
          SDK::HasBuffOfType(player, SDK::BuffType::Snare) ||
@@ -133,14 +133,14 @@ inline bool PlayerMobilityLocked() {
 
 inline float AutoAttackRange(const AIBaseClient& target,
                              float bonusRange = 0.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     return player.AttackRange() + target.BoundingRadius() + std::max(0.0f, bonusRange);
 }
 
 inline bool InAutoAttackRange(const AIBaseClient& target,
                               float bonusRange = 0.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return false;
     const float range = AutoAttackRange(target, bonusRange);
     return player.Position().DistanceSqr2D(target.Position()) <=
@@ -276,7 +276,7 @@ inline int MaximumBuffCount(
 
 inline int SpellRank(int index) {
     if (index < 0 || index >= 4 || !Engine::ActiveProfile) return 0;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     const auto spell = player.Spellbook().GetSpell(
         Engine::ActiveProfile->Spells[index].Slot);
@@ -284,7 +284,7 @@ inline int SpellRank(int index) {
 }
 
 inline float SpellCost(int index) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || index < 0 || index >= 4 || !Engine::ActiveProfile) {
         return 0.0f;
     }
@@ -337,7 +337,7 @@ inline AIHeroClient RawEnemyHeroByNetworkId(int networkId) {
 
 inline AIHeroClient RawAllyHeroByNetworkId(int networkId) {
     if (networkId == 0) return {};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.IsValid() &&
         static_cast<int>(player.NetworkId()) == networkId) return player;
     for (const auto& ally : GameObjects::AllyHeroes()) {
@@ -348,7 +348,7 @@ inline AIHeroClient RawAllyHeroByNetworkId(int networkId) {
 
 inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
                                          float range = 1400.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIHeroClient best = Engine::ValidEnemy(fallback, range)
         ? fallback
@@ -377,7 +377,7 @@ inline bool HasEnemyChampionNear(float range) {
 inline int CountAlliedFollowup(const Vector3& position,
                                float range,
                                bool includePlayer = false) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid()) return 0;
     const float rangeSqr = std::max(0.0f, range) *
                            std::max(0.0f, range);
@@ -415,7 +415,7 @@ inline AIHeroClient SelectProtectionAlly(
     int recentlyTargetedUntilTick = 0,
     float nearbyThreatWeight = 240.0f,
     float targetedWeight = 520.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     AIHeroClient best{};
     float bestScore = -FLT_MAX;
@@ -489,13 +489,13 @@ inline bool NearTerrain(const Vector3& position,
 
 inline AIBaseClient UnitByNetworkId(int networkId) {
     return networkId != 0
-        ? ObjectManager::GetUnitByNetworkId<AIBaseClient>(networkId)
+        ? GameObjects::GetUnitByNetworkId<AIBaseClient>(networkId)
         : AIBaseClient{};
 }
 
 inline bool ValidHostileUnit(const AIBaseClient& unit,
                              float range = FLT_MAX) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return unit.IsValid() && !unit.IsDead() && unit.IsEnemy() &&
            unit.IsTargetable() && player.IsValid() &&
            player.Position().Distance2D(unit.Position()) <= range;
@@ -506,7 +506,7 @@ inline bool ValidHostileUnit(const AIBaseClient& unit,
 // this exact rule instead of cloning a local ValidFarmUnit wrapper.
 inline bool ValidHostileUnitInGameplayRange(const AIBaseClient& unit,
                                             float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return unit.IsValid() && !unit.IsDead() && unit.IsEnemy() &&
            unit.IsTargetable() && player.IsValid() &&
            player.Position().Distance2D(unit.Position()) <=
@@ -514,7 +514,7 @@ inline bool ValidHostileUnitInGameplayRange(const AIBaseClient& unit,
 }
 
 inline bool HasNearbyJungleTarget(float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     for (const auto& monster : GameObjects::Jungle()) {
         if (monster.IsValid() && !monster.IsDead() &&
@@ -528,7 +528,7 @@ inline bool HasNearbyJungleTarget(float range) {
 
 inline bool ObjectEventIsAllied(
     const SDK::Events::ObjectEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() &&
         (args.Sender.Team == 0 ||
          args.Sender.Team == static_cast<std::uint32_t>(player.Team()));
@@ -546,7 +546,7 @@ inline bool IsEpicMonster(const AIBaseClient& unit) {
 // Nearby epic-objective presence is a champion-neutral map observation.
 // Controllers retain all setup, contest and spell-commit policy locally.
 inline bool HasNearbyEpicMonster(float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     for (const auto& monster : GameObjects::Jungle()) {
         if (monster.IsValid() && !monster.IsDead() &&
@@ -572,7 +572,7 @@ inline AIMinionClient SelectJungleTarget(
     float range,
     float currentHealthWeight = 0.15f,
     float epicBonus = 100000.0f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIMinionClient best{};
     if (!player.IsValid()) return best;
     float bestScore = -FLT_MAX;
@@ -656,7 +656,7 @@ inline Vector3 PredictPosition(const AIBaseClient& target, float delaySeconds) {
 
 inline bool CursorDirectionAgrees(const Vector3& destination,
                                   float minimumDot = -0.08f) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const Vector3 desired = SharedGeometry::Direction2D(
         player.Position(), destination);
@@ -686,7 +686,7 @@ inline bool ProjectileWallBlocks(const Vector3& source,
 
 inline bool ProjectileWallBlocksFromPlayer(const Vector3& destination,
                                            float missileRadius) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && ProjectileWallBlocks(
         player.Position(), destination, missileRadius);
 }
@@ -726,7 +726,7 @@ inline bool ProjectileWallFirstContactFromPlayer(
     float missileRadius,
     Vector3& contact,
     int iterations = 18) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && ProjectileWallFirstContact(
         player.Position(), destination, missileRadius,
         contact, iterations);
@@ -809,7 +809,7 @@ inline bool HasReadyDashHazardAt(const Vector3& position,
 }
 
 inline bool MissileEventIsLocal(const SDK::Events::ObjectEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const std::uint32_t playerId = static_cast<std::uint32_t>(player.NetworkId());
     if (args.SourceNetworkId != 0) return args.SourceNetworkId == playerId;
@@ -872,7 +872,7 @@ inline EnemyCastAnalysis AnalyzeEnemyCast(
     int commitmentMaximumMs = 1500,
     int lineThreatWindowMs = 420) {
     EnemyCastAnalysis result{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid() ||
         IsLocalPlayer(args.Sender)) {
         return result;
@@ -1001,7 +1001,7 @@ inline bool CaptureGapcloser(
     int& expireTick,
     float nearbyEndpointRange,
     int lifetimeMs) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     if (!args.IsDirectedToPlayer &&
         (!args.End.IsValid() || args.End.IsZero() ||

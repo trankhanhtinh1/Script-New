@@ -764,7 +764,7 @@ private:
     int m_nextCircleTick = 0;
 
     bool Spawn(SourceSkillshotDetector& detector, bool circle) const {
-        const SDK::AIHeroClient player = SDK::ObjectManager::Player();
+        const SDK::AIHeroClient player = GameObjects::Player();
         if (!player.IsValid()) {
             return false;
         }

@@ -175,20 +175,20 @@ inline float QCost() { return SpellCost(0); }
 inline float ECost() { return SpellCost(2); }
 
 inline bool HasPassiveWeapon() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() &&
            (player.HasBuff("AkaliPWeapon") || player.HasBuff("akalipweapon") ||
             PassiveWeaponReady);
 }
 
 inline bool HasPassiveRingBuff() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return ControllerHelpers::HasAnyBuff(
         player, { "AkaliPZoneGround", "akalipzoneground" });
 }
 
 inline bool HasStealthShroudBuff() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() &&
            (player.HasBuff("AkaliW") || player.HasBuff("AkaliWStealthTracker") ||
             player.HasBuff("akaliw") || player.HasBuff("akaliwstealthtracker"));
@@ -213,7 +213,7 @@ inline bool HasPointClickLockdownAt(const Vector3& position) {
 }
 
 inline bool MordekaiserCanPunishShroud() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (ChampionIs(enemy, "Mordekaiser") &&
             enemy.Position().Distance2D(player.Position()) <= 750.0f &&
@@ -225,7 +225,7 @@ inline bool MordekaiserCanPunishShroud() {
 }
 
 inline bool HasReliableRevealThreat() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, 1200.0f)) continue;
         const float distance = enemy.Position().Distance2D(player.Position());
@@ -253,7 +253,7 @@ inline bool SafePoint(const Vector3& destination,
     if (Engine::UnderEnemyTurret(destination) && !lethal) return false;
     const int allowed = std::max(1, Slider(ExecutionMenu, "MaxCommitEnemies", 2));
     const int enemies = Engine::CountEnemiesAt(destination, 625.0f);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (enemies > allowed && !(lethal || escaping || player.HealthPercent() > 84.0f)) {
         return false;
     }
@@ -268,13 +268,13 @@ inline bool SafePoint(const Vector3& destination,
 }
 
 inline float EffectivePassiveAaRange(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.AttackRange() * 2.0f + player.BoundingRadius() +
            target.BoundingRadius() + 20.0f;
 }
 
 inline bool TargetInPassiveAaRange(const AIHeroClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return Engine::ValidEnemy(target) &&
            player.Position().Distance2D(target.Position()) <= EffectivePassiveAaRange(target);
 }
@@ -352,7 +352,7 @@ inline bool E1Available() {
 }
 
 inline bool CanCommitOn(const AIHeroClient& target, bool lethal) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Engine::ValidEnemy(target) || TargetCannotBeDamaged(target)) return false;
     if (player.HealthPercent() < Slider(ExecutionMenu, "MinCommitHP", 30) && !lethal) {
         return false;
@@ -364,7 +364,7 @@ inline bool CanCommitOn(const AIHeroClient& target, bool lethal) {
 }
 
 inline Posture DeterminePosture(const AIHeroClient& selected) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return Posture::Neutral;
     if (player.HealthPercent() <= Slider(ExecutionMenu, "EscapeHP", 27) ||
         (RWindowActive && RWindowExpireTick - SDK::Variables::TickCount() < 1150 &&
@@ -395,7 +395,7 @@ inline void StartPassiveCandidate(const AIHeroClient& target) {
 
 inline void StartPassiveRing(const AIHeroClient& target, bool confirmed) {
     if (!Engine::ValidEnemy(target)) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     PassiveTargetId = static_cast<int>(target.NetworkId());
     PassiveRingOrigin = Geometry::PassiveRingCenter(player.Position(), target.Position());
     PassiveRingExpireTick = SDK::Variables::TickCount() + kPassiveRingMs;
@@ -438,7 +438,7 @@ inline bool CastQ(const AIHeroClient& target,
         !bufferDuringDash && !killSecure) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
     const Vector3 predicted = prediction.GetCastPosition().IsValid() &&
         !prediction.GetCastPosition().IsZero()
@@ -479,7 +479,7 @@ inline bool CastQ(const AIHeroClient& target,
 }
 
 inline Vector3 ChooseShroudPosition(const AIHeroClient& target, bool defensive) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     Vector3 direction = defensive
         ? Direction2D(player.Position(), Game::CursorPos())
         : Direction2D(player.Position(), target.Position());
@@ -489,7 +489,7 @@ inline Vector3 ChooseShroudPosition(const AIHeroClient& target, bool defensive) 
 }
 
 inline bool playerOrTargetClose(const AIHeroClient& target, float range) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return Engine::ValidEnemy(target) &&
            player.Position().Distance2D(target.Position()) <= range +
                player.BoundingRadius() + target.BoundingRadius();
@@ -519,7 +519,7 @@ inline bool CastW(const AIHeroClient& target,
     PendingShroudPosition = ChooseShroudPosition(target, defensive);
     if (Engine::ControllerCastPosition(1, PendingShroudPosition)) {
         WCastTick = SDK::Variables::TickCount();
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::W);
         const int rank = spell.IsValid() ? std::clamp(spell.Level(), 1, 5) : 1;
         WExpireTick = WCastTick + 5000 + (rank - 1) * 500;
@@ -541,7 +541,7 @@ inline bool CastE1Raw(const Vector3& castPosition,
         (intendedHit && TargetCannotBeDamaged(target))) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 direction = Direction2D(player.Position(), castPosition);
     if (direction.IsZero()) return false;
     const Vector3 backflip = ShurikenBackflipEnd(
@@ -601,7 +601,7 @@ inline bool CastEToShroud(const AIHeroClient& threat, Mode mode) {
         !Bool(FlipMenu, "UseShroudAnchor", true)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (player.Position().Distance2D(ShroudCenter) > kERange) return false;
     const Vector3 towardShroud = Direction2D(player.Position(), ShroudCenter);
     const Vector3 backflip = ShurikenBackflipEnd(player.Position(), towardShroud);
@@ -618,7 +618,7 @@ inline bool E2DestinationSafe(const AIHeroClient& target, bool lethal) {
     if (!Engine::ValidEnemy(target) || !target.IsVisible() || !target.IsTargetable()) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 destination = PredictPosition(target, 0.18f);
     const bool exitReady = R2Unlocked() || WActive ||
         (R1Available() && target.Position().Distance2D(player.Position()) <= kR1Range);
@@ -642,7 +642,7 @@ inline bool TryE2(const AIHeroClient& fallback, Mode mode) {
         return false;
     }
     if (CurrentEMark == EMarkKind::Shroud) {
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!ShroudCenter.IsZero() && SafePoint(ShroudCenter, fallback, 2, false, true) &&
             (mode == Mode::Flee || player.HealthPercent() <= Slider(ExecutionMenu, "EscapeHP", 27) ||
              Engine::CountEnemiesAt(player.Position(), 575.0f) >= 2)) {
@@ -693,7 +693,7 @@ inline bool CastR1(const AIHeroClient& target,
         !Engine::ValidEnemy(target, kR1Range + 20.0f) || TargetCannotBeDamaged(target)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 predicted = PredictPosition(target, 0.08f);
     const Vector3 landing = R1LandingPoint(player.Position(), predicted);
     if (!SafePoint(landing, target, 3, lethal, escapeRoute)) return false;
@@ -738,7 +738,7 @@ inline R2Route FindR2Route(const AIHeroClient& target,
                            bool requireHit,
                            bool lethal,
                            bool escape) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     const Vector3 source = player.Position();
     const Vector3 predicted = Engine::ValidEnemy(target)
@@ -822,7 +822,7 @@ inline bool TryR2Execute(const AIHeroClient& target, Mode mode) {
 
 inline bool TryR2Exit(const AIHeroClient& threat, Mode mode, bool forced = false) {
     if (!R2Unlocked()) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     const bool windowEnding = RWindowExpireTick - now <=
         Slider(ExecutionMenu, "ExitBeforeExpiryMs", 1200);
@@ -837,7 +837,7 @@ inline bool TryPassiveWeave(const AIHeroClient& fallback, Mode mode) {
     const int now = SDK::Variables::TickCount();
     AIHeroClient target = HeroByNetworkId(PassiveTargetId);
     if (!Engine::ValidEnemy(target)) target = fallback;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
 
     if (HasPassiveWeapon()) {
         PassiveWeaponReady = true;
@@ -875,7 +875,7 @@ inline bool TryPassiveWeave(const AIHeroClient& fallback, Mode mode) {
 }
 
 inline bool TryDefensiveW(const AIHeroClient& threat, Mode mode) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     const bool line = IncomingThreatUntil > now || IncomingHardCCUntil > now;
     const bool overwhelmed = Engine::CountEnemiesAt(player.Position(), 600.0f) >= 2;
@@ -1017,7 +1017,7 @@ inline bool TryCombo(const AIHeroClient& target) {
 
     const bool lethal = LethalWith(target, ShortComboDamage(
         target, E1Available(), R1Available()));
-    const float distance = ObjectManager::Player().Position().Distance2D(target.Position());
+    const float distance = GameObjects::Player().Position().Distance2D(target.Position());
     if (R1Available() && distance <= kR1Range + 18.0f &&
         Bool(ExecutionMenu, "UseR1Engage", true) &&
         (CurrentPosture == Posture::Assassinate || CurrentPosture == Posture::Cleanup ||
@@ -1043,8 +1043,8 @@ inline bool TryCombo(const AIHeroClient& target) {
         (WActive || (Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsReady()) ||
          R1Available() || R2Unlocked()) &&
         !HasPointClickLockdownAt(target.Position())) {
-        const Vector3 away = ObjectManager::Player().Position() -
-            Direction2D(ObjectManager::Player().Position(), target.Position()) * 600.0f;
+        const Vector3 away = GameObjects::Player().Position() -
+            Direction2D(GameObjects::Player().Position(), target.Position()) * 600.0f;
         if (CastE1Raw(away, target, Mode::Combo, false, false)) return true;
     }
     (void)now;
@@ -1069,7 +1069,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 }
 
 inline bool TryFlee(const AIHeroClient& fallback) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const AIHeroClient threat = NearestEnemyToPlayer(fallback, 1300.0f);
     if (TryDefensiveW(threat, Mode::Flee)) return true;
     if (ESecondCastAvailable() && CurrentEMark == EMarkKind::Shroud &&
@@ -1096,7 +1096,7 @@ struct FarmAim {
 };
 
 inline FarmAim BestFarmQ(const std::vector<AIBaseClient>& units, bool lastHitOnly) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     FarmAim best{};
     for (const auto& candidate : units) {
         if (!ValidHostileUnit(candidate, kQEdgeRange)) continue;
@@ -1152,7 +1152,7 @@ inline bool TryObjectiveE1(const AIBaseClient& objective) {
         objective.HealthPercent() > Slider(FarmMenu, "ObjectiveMarkHP", 38)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const auto prediction = Engine::RuntimeSpells[2]->GetPrediction(objective);
     if (!prediction.CollisionObjects.empty() ||
         prediction.Hitchance < SDK::HitChance::High) {
@@ -1191,7 +1191,7 @@ inline bool TryObjectiveE2() {
         ClearEMark();
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int travelMs = std::clamp(
         250 + static_cast<int>(player.Position().Distance2D(objective.Position()) /
                                1500.0f * 1000.0f),
@@ -1240,7 +1240,7 @@ inline bool TryFarm(bool lastHitOnly) {
         (lastHitOnly ? 1 : Slider(FarmMenu, "QMinions", 3));
     if (best.Hits < minimum || best.Direction.IsZero() ||
         (lastHitOnly && best.LastHits == 0)) return false;
-    const Vector3 endpoint = ObjectManager::Player().Position() + best.Direction * kQRange;
+    const Vector3 endpoint = GameObjects::Player().Position() + best.Direction * kQRange;
     if (Engine::ControllerCastPosition(0, endpoint)) {
         QCastTick = SDK::Variables::TickCount();
         QTargetId = 0;
@@ -1251,7 +1251,7 @@ inline bool TryFarm(bool lastHitOnly) {
 }
 
 inline void RefreshState() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     if (!player.IsValid()) return;
 
@@ -1370,7 +1370,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 }
 
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid()) return;
     const int now = SDK::Variables::TickCount();
 
@@ -1592,8 +1592,8 @@ inline const char* EMarkName(EMarkKind mark) {
 }
 
 inline void OnDraw() {
-    if (!CoachMenu || !ObjectManager::Player().IsValid()) return;
-    const auto player = ObjectManager::Player();
+    if (!CoachMenu || !GameObjects::Player().IsValid()) return;
+    const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
     if (Bool(CoachMenu, "DrawPassiveRing", true) && PassiveRingActive &&
         PassiveRingOrigin.IsValid() && !PassiveRingOrigin.IsZero()) {

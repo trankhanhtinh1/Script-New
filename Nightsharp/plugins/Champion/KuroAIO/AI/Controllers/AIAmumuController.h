@@ -207,7 +207,7 @@ inline constexpr int kQSequenceGraceMs = 500;
 inline constexpr float kWDrainPerSecond = 8.0f;
 
 inline int RuntimeQCharges() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::Q);
     if (spell.IsValid()) {
@@ -231,14 +231,14 @@ inline bool JungleRole() {
     const int role = List(RoleMenu, "Role", 0);
     return role == 1 ||
         (role == 0 && ControllerHelpers::HeroHasSmite(
-            ObjectManager::Player()));
+            GameObjects::Player()));
 }
 
 inline bool SupportRole() {
     const int role = List(RoleMenu, "Role", 0);
     return role == 2 ||
         (role == 0 && !ControllerHelpers::HeroHasSmite(
-            ObjectManager::Player()));
+            GameObjects::Player()));
 }
 
 inline void MarkCurse(int networkId, int durationMs = kCurseDurationMs) {
@@ -281,20 +281,20 @@ inline float QRawDamage() {
     static constexpr float base[] = {
         0.0f, 70.0f, 95.0f, 120.0f, 145.0f, 170.0f,
     };
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return base[std::clamp(SpellRank(0), 0, 5)] +
            player.AP() * 0.85f;
 }
 
 inline float QDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && target.IsValid()
         ? player.CalculateMagicDamage(target, QRawDamage())
         : 0.0f;
 }
 
 inline float EDamage(const AIBaseClient& target) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     return player.IsValid() && target.IsValid()
         ? player.CalculateMagicDamage(
               target, TantrumRawDamage(SpellRank(2), player.AP()))
@@ -302,7 +302,7 @@ inline float EDamage(const AIBaseClient& target) {
 }
 
 inline float RDamage(const AIBaseClient& target, bool cursedBeforeCast) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
     const float raw = UltimateRawDamage(SpellRank(3), player.AP());
     return player.CalculateMagicDamage(target, raw) +
@@ -312,7 +312,7 @@ inline float RDamage(const AIBaseClient& target, bool cursedBeforeCast) {
 inline float ConservativeComboDamage(const AIHeroClient& target,
                                      bool includeUltimate = true) {
     if (!Engine::ValidEnemy(target)) return 0.0f;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     float damage = SDK::Damage::GetAutoAttackDamage(player, target, true);
     const int charges = RuntimeQCharges();
     if (Ready(0) && charges > 0) {
@@ -402,7 +402,7 @@ inline std::vector<LineUnit> BandageCollisionUnits(float delaySeconds) {
 inline bool ArrivalSafe(const Vector3& position,
                         BandagePurpose purpose,
                         const AIHeroClient& target = {}) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid() || position.IsZero() ||
         SDK::NavMesh::IsWall(position)) {
         return false;
@@ -459,7 +459,7 @@ inline BandagePlan BuildBandagePlan(
     BandagePurpose purpose,
     bool allowSpellShieldMobility = false) {
     BandagePlan best{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !intended.IsValid() || intended.IsDead() ||
         !intended.IsTargetable() || !Ready(0)) {
         return best;
@@ -695,7 +695,7 @@ inline bool CastBandage(const AIBaseClient& intended,
 
     if (hero.IsValid() && purpose == BandagePurpose::Engage &&
         !Engine::IsHardCrowdControlled(hero) && !hero.IsDashing()) {
-        const float distance = ObjectManager::Player().Position().Distance2D(
+        const float distance = GameObjects::Player().Position().Distance2D(
             hero.Position());
         const float maximum = static_cast<float>(
             Slider(BandageMenu, "MaximumNakedRange", 1000));
@@ -722,7 +722,7 @@ inline bool CastBandage(const AIBaseClient& intended,
     QStunUntil = QExpectedImpactTick + kBandageStunMs;
     QPendingArrival = true;
     QDashObserved = false;
-    QCastOrigin = ObjectManager::Player().Position();
+    QCastOrigin = GameObjects::Player().Position();
     LastBandagePlan = plan;
     LastBandagePurpose = purpose;
     if (QObservedAmmo > 0) --QObservedAmmo;
@@ -774,7 +774,7 @@ inline float DespairReserve(Mode mode) {
 
 inline int HostileAuraCount(bool includeLaneMinions,
                             bool includeJungle) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     int count = 0;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -808,7 +808,7 @@ inline int HostileAuraCount(bool includeLaneMinions,
 }
 
 inline bool EpicMonsterInAura() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& monster : GameObjects::Jungle()) {
         if (monster.IsValid() && !monster.IsDead() &&
             monster.IsTargetable() && IsEpicMonster(monster) &&
@@ -880,7 +880,7 @@ inline bool TryManageDespair(Mode mode,
 
 inline void RecordIncomingAttack(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid() || !args.Sender.IsValid() ||
         IsLocalPlayer(args.Sender) || !args.IsAutoAttack) {
         return;
@@ -934,7 +934,7 @@ inline int IncomingAttackCount(int withinMs) {
 }
 
 inline float TantrumCooldownRemaining() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return FLT_MAX;
     const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::E);
     if (!spell.IsValid()) return FLT_MAX;
@@ -958,7 +958,7 @@ inline bool CastTantrum(const AIBaseClient& target,
         !HasCurrentResource(SpellCost(2))) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (target.IsValid()) {
         const Vector3 predicted = PredictPosition(target, 0.25f);
         if (!TantrumHits(player.Position(), predicted,
@@ -1036,7 +1036,7 @@ inline bool CastUltimate(UltimateReason reason,
         !CastThrottleReady(3, fastFollowup)) {
         return false;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Vector3 center = expectedCenter.IsValid() &&
             !expectedCenter.IsZero()
         ? expectedCenter
@@ -1170,7 +1170,7 @@ inline bool TryLayerSecondBandage(const AIHeroClient& target,
 
 inline bool HandleBandageSequence(Mode mode,
                                   const AIHeroClient& selected) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     AIHeroClient contact = HeroByNetworkId(QTargetId);
     AIHeroClient follow = HeroByNetworkId(QFollowChampionId);
     if (!Engine::ValidEnemy(follow)) follow = selected;
@@ -1267,7 +1267,7 @@ inline bool TryInterrupt() {
         InterruptTargetId = 0;
         return true;
     }
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (Bool(UltimateMenu, "InterruptR", true) &&
         CurseHits(player.Position(), PredictPosition(target, 0.25f),
                   target.BoundingRadius()) &&
@@ -1286,7 +1286,7 @@ inline bool TryPeel(const AIHeroClient& ally,
         return false;
     }
     CurrentPosture = Posture::Peel;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float allyDistance = threat.Position().Distance2D(ally.Position());
     const bool critical = ally.HealthPercent() <=
             static_cast<float>(Slider(UltimateMenu, "PeelAllyHp", 42)) ||
@@ -1320,7 +1320,7 @@ inline bool TryPeel(const AIHeroClient& ally,
 inline bool TryReactiveUltimate(const AIHeroClient& selected,
                                 Mode mode) {
     if (!UltimateReady()) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const Mode castMode = mode == Mode::Combo
         ? Mode::Combo
         : Mode::Automatic;
@@ -1384,7 +1384,7 @@ inline bool TryReactiveUltimate(const AIHeroClient& selected,
 }
 
 inline AIBaseClient BestBridgeAnchor(const AIHeroClient& champion) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!Engine::ValidEnemy(champion) || RuntimeQCharges() < 2 ||
         player.Position().Distance2D(champion.Position()) <=
             kBandageRange - 40.0f ||
@@ -1431,7 +1431,7 @@ inline AIBaseClient BestBridgeAnchor(const AIHeroClient& champion) {
 }
 
 inline AIBaseClient BestEscapeAnchor(const AIHeroClient& pursuer) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
     const Vector3 cursorDirection = SharedGeometry::Direction2D(
         player.Position(), Game::CursorPos());
@@ -1484,7 +1484,7 @@ inline AIBaseClient BestEscapeAnchor(const AIHeroClient& pursuer) {
 inline bool TryFlee(const AIHeroClient& selected) {
     CurrentPosture = Posture::Disengage;
     const AIHeroClient pursuer = NearestEnemyToPlayer(selected, 1300.0f);
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (Bool(UltimateMenu, "FleeR", true) &&
         Engine::CountEnemiesAt(player.Position(), kCurseRadius + 65.0f) >=
             Slider(UltimateMenu, "FleeTargets", 2) &&
@@ -1511,7 +1511,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
 
 inline bool TryCombo(const AIHeroClient& selected) {
     if (!Engine::ValidEnemy(selected)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(selected.Position());
     CurrentPosture = distance > 650.0f
         ? Posture::Gank
@@ -1577,7 +1577,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
     CurrentPosture = SupportRole()
         ? Posture::SupportLane
         : Posture::Followup;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float manaPercent = Engine::ManaPercent(player);
     if (manaPercent < Slider(BandageMenu, "HarassMana", 55)) {
         return false;
@@ -1603,7 +1603,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
 }
 
 inline int JungleUnitsInTantrum() {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     int count = 0;
     for (const auto& monster : GameObjects::Jungle()) {
         if (monster.IsValid() && !monster.IsDead() &&
@@ -1623,7 +1623,7 @@ inline bool TryJungle() {
     if (!monster.IsValid()) return false;
     CurrentPosture = Posture::Jungle;
     const AIBaseClient unit(monster.Address());
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(monster.Position());
 
     if (Ready(2) && Bool(FarmMenu, "JungleE", true) &&
@@ -1658,7 +1658,7 @@ struct LaneTantrumPlan {
 
 inline LaneTantrumPlan BuildLaneTantrumPlan() {
     LaneTantrumPlan plan{};
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const float raw = TantrumRawDamage(SpellRank(2), player.AP());
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (!minion.IsValid() || minion.IsDead() ||
@@ -1680,7 +1680,7 @@ inline LaneTantrumPlan BuildLaneTantrumPlan() {
 
 inline bool TryLaneFarm(Mode mode) {
     if (!Bool(FarmMenu, "LaneE", true) || !Ready(2)) return false;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (Engine::ManaPercent(player) < Slider(FarmMenu, "LaneMana", 55)) {
         return false;
     }
@@ -1706,7 +1706,7 @@ inline Posture ChoosePosture(Mode mode,
     }
     if (mode == Mode::Harass && SupportRole()) return Posture::SupportLane;
     if (mode == Mode::Combo && Engine::ValidEnemy(selected)) {
-        const float distance = ObjectManager::Player().Position().Distance2D(
+        const float distance = GameObjects::Player().Position().Distance2D(
             selected.Position());
         if (Engine::CountEnemiesAt(selected.Position(), 700.0f) >= 2) {
             return Posture::TeamfightEngage;
@@ -1718,7 +1718,7 @@ inline Posture ChoosePosture(Mode mode,
 
 inline void ResolvePendingUltimate() {
     if (!RPendingResolve || Now() < RPendingMarkTick) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     LastUltimatePlan = BuildUltimatePlan(
         player.Position(), 0.0f, RCastTargetId);
     for (const int id : LastUltimatePlan.HitIds) {
@@ -1734,7 +1734,7 @@ inline void ResolvePendingUltimate() {
 
 inline void RefreshCurseFromDespair() {
     if (!WActive) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (Engine::ValidEnemy(enemy) && DespairHits(
                 player.Position(), enemy.Position(),
@@ -1748,7 +1748,7 @@ inline void RefreshCurseFromDespair() {
 inline void RefreshState() {
     const int now = Now();
     (void)RuntimeQCharges();
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
 
     const bool buffW = player.HasBuff("AuraofDespair") ||
                        player.HasBuff("AuraOfDespair") ||
@@ -1828,7 +1828,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 
 inline void ObserveManualBandage(
     const SDK::Events::ProcessSpellEventArgs& args) {
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     Vector3 aim = args.EndPosition.IsValid() && !args.EndPosition.IsZero()
         ? args.EndPosition
         : args.CastPosition;
@@ -1932,7 +1932,7 @@ inline void ObserveLocalSpell(
             LastUltimateReason = UltimateReason::None;
             ManualRFlashWindowUntil = RResolveTick + 80;
             LastUltimatePlan = BuildUltimatePlan(
-                ObjectManager::Player().Position(), 0.25f, 0);
+                GameObjects::Player().Position(), 0.25f, 0);
         }
         return;
     }
@@ -1949,7 +1949,7 @@ inline void ObserveEnemyCast(
     const SDK::Events::ProcessSpellEventArgs& args) {
     RecordIncomingAttack(args);
     if (!args.Sender.IsValid() || IsLocalPlayer(args.Sender)) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     const std::uint32_t targetId = args.TargetNetworkId != 0
         ? args.TargetNetworkId
         : args.Target.NetworkId;
@@ -2097,7 +2097,7 @@ inline const char* UltimateReasonName(UltimateReason reason) {
 
 inline void OnDraw() {
     if (!CoachMenu) return;
-    const auto player = ObjectManager::Player();
+    const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
     if (Bool(CoachMenu, "DrawQ", true)) {
@@ -2377,7 +2377,7 @@ inline void OnLoad() {
     QPendingArrival = QDashObserved = false;
     QCastOrigin = {};
     LastBandagePlan = {};
-    WActive = ObjectManager::Player().HasBuff("AuraofDespair");
+    WActive = GameObjects::Player().HasBuff("AuraofDespair");
     WToggleTick = WLastContactTick = WExpectedContactUntil = 0;
     ECastTick = ETargetId = 0;
     RCastTick = RResolveTick = RStunUntil = RPendingMarkTick = 0;

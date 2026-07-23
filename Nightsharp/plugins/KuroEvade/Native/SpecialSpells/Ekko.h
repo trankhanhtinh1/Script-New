@@ -10,7 +10,7 @@ struct Ekko {
             return false;
         }
 
-        for (const auto& minion : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
+        for (const auto& minion : GameObjects::Get<SDK::AIMinionClient>()) {
             if (!minion.IsValid() || minion.IsDead() || !minion.IsEnemy()) {
                 continue;
             }
