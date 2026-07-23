@@ -614,6 +614,7 @@ namespace detail {
 
     inline void OnNativeObjectDelete(const SDK::Events::ObjectEventArgs& args) {
         if (args.Sender.IsValid()) {
+            StaticStringCache::Clear(static_cast<std::uint32_t>(args.Sender.Index & 0xFFFFu));
             OnObjectDelete(static_cast<int>(args.Sender.NetworkId));
         }
         DispatchLifecycle(DeleteHandlers, args);

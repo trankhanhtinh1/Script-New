@@ -68,10 +68,11 @@ public:
                 bool result = false;
             };
             static thread_local std::vector<Memo> memo;
-            const int frame = static_cast<int>(CoreBuffs::ResolveGameTime() * 1000.0f);
+            const int frame = ::CoreAiManager::FrameCacheKey();
             const uintptr_t addr = hero.Address();
             const uint32_t paramKey =
                 (static_cast<uint32_t>(damageType) << 1) | (ignoreShields ? 1u : 0u);
+            
             for (auto& m : memo) {
                 if (m.addr == addr && m.paramKey == paramKey) {
                     if (m.frame != frame) {
@@ -80,6 +81,9 @@ public:
                     }
                     return m.result;
                 }
+            }
+            if (memo.size() > 32) {
+                memo.clear();
             }
             const bool result = ComputeCheck(hero, damageType, ignoreShields, damage);
             memo.push_back({ addr, paramKey, frame, result });

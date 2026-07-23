@@ -106,6 +106,17 @@ private:
             return;
         }
 
+        if (spells->size() > 64) {
+            const float now = static_cast<float>(::SDK::Variables::TickCount());
+            for (auto it = spells->begin(); it != spells->end(); ) {
+                if (now - it->second.StartTime > 15000.0f) {
+                    it = spells->erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         auto [it, inserted] = spells->try_emplace(args.Sender.NetworkId, LastCastedSpellEntry(args));
         if (!inserted) {
             it->second = LastCastedSpellEntry(args);
