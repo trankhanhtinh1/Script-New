@@ -340,17 +340,9 @@ private:
 
 namespace ObjectDetail {
     inline bool EqualsAny(const std::string& text, std::initializer_list<const char*> values) {
-        std::string lowerText = text;
-        std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
+        if (text.empty()) return false;
         for (const char* value : values) {
-            if (!value) continue;
-            std::string lowerVal = value;
-            std::transform(lowerVal.begin(), lowerVal.end(), lowerVal.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
-            });
-            if (lowerText == lowerVal) {
+            if (value && _stricmp(text.c_str(), value) == 0) {
                 return true;
             }
         }
@@ -470,74 +462,8 @@ namespace ObjectDetail {
 } // namespace ObjectDetail
 
 // ---------------------------------------------------------------------------
-// StaticStringCache — populated once on OnCreateObject, cleared on OnDeleteObject.
-// Stores the fields that NEVER change during a unit's lifetime:
-//   - team       (never changes mid-game)
-//   - minionClass (set at spawn, never updated)
-// Name/characterName reads removed — classification is type-based.
-// All other properties (health, position, etc.) are read inline via raw
-// pointer dereference directly from the game object each time they are needed.
+// Obsolete StaticStringCache removed — replaced by FastObjectCache.
 // ---------------------------------------------------------------------------
-namespace StaticStringCache {
-    constexpr int kMaxIndex = 10000;
-    struct Entry {
-        bool valid        = false;
-        std::string characterName;  // populated once for heroes/minions/structures
-        std::string name;           // populated once for units
-        uint32_t    team       = 0;
-        int         minionClass = 0;
-    };
-    inline Entry entries[kMaxIndex] = {};
-
-    inline Entry* GetMutable(uint32_t index) {
-        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
-        return &entries[index];
-    }
-
-    inline const Entry* Get(uint32_t index) {
-        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
-        return entries[index].valid ? &entries[index] : nullptr;
-    }
-
-    inline void Populate(uintptr_t address, uint32_t index,
-                         ::Core::Objects::ObjectType type) {
-        if (index >= static_cast<uint32_t>(kMaxIndex) || !address) return;
-        Entry& e = entries[index];
-        e.valid = true;
-
-        if (e.characterName.empty() && (
-            type == ::Core::Objects::ObjectType::AIHeroClient ||
-            type == ::Core::Objects::ObjectType::AIMinionClient ||
-            type == ::Core::Objects::ObjectType::AITurretClient ||
-            type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-            type == ::Core::Objects::ObjectType::HQClient)) {
-            char charBuf[96] = {};
-            if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
-                e.characterName = charBuf;
-        }
-
-        if (e.name.empty()) {
-            char nameBuf[96] = {};
-            if (::Core::Objects::ReadName(address, nameBuf, static_cast<int>(sizeof(nameBuf))))
-                e.name = nameBuf;
-        }
-
-        if (e.team == 0) {
-            e.team = ::Core::Objects::ReadTeamValue(address);
-        }
-
-        if (e.minionClass == 0 && (
-            type == ::Core::Objects::ObjectType::AIMinionClient ||
-            type == ::Core::Objects::ObjectType::NeutralMinionCampClient)) {
-            e.minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(address));
-        }
-    }
-
-    inline void Clear(uint32_t index) {
-        if (index >= static_cast<uint32_t>(kMaxIndex)) return;
-        entries[index] = {};
-    }
-} // namespace StaticStringCache
 
 // ---------------------------------------------------------------------------
 // WaypointCache — per-frame cache for AiManager-derived data only.
@@ -631,9 +557,73 @@ namespace WaypointCache {
     }
 } // namespace WaypointCache
 
+namespace ObjectCache = WaypointCache;
+
 // Keep ObjectCache as a thin alias so any existing call-sites that reference
 // ObjectCache::GetWaypoints / ObjectCache::GetServerPosition still compile.
-namespace ObjectCache = WaypointCache;
+// ---------------------------------------------------------------------------
+// StaticStringCache — populated once on OnCreateObject / GameObjects scan.
+// Stores fields that NEVER change during a unit's lifetime (Name, CharacterName, Team, MinionClass).
+// ---------------------------------------------------------------------------
+namespace StaticStringCache {
+    constexpr int kMaxIndex = 10000;
+    struct Entry {
+        bool valid = false;
+        std::string characterName;
+        std::string name;
+        uint32_t team = 0;
+        int minionClass = 0;
+    };
+    inline Entry entries[kMaxIndex] = {};
+
+    inline Entry* GetMutable(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
+        return &entries[index];
+    }
+
+    inline const Entry* Get(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
+        return entries[index].valid ? &entries[index] : nullptr;
+    }
+
+    inline void Populate(uintptr_t address, uint32_t index, ::Core::Objects::ObjectType type) {
+        if (index >= static_cast<uint32_t>(kMaxIndex) || !address) return;
+        Entry& e = entries[index];
+        e.valid = true;
+
+        if (e.characterName.empty() && (
+            type == ::Core::Objects::ObjectType::AIHeroClient ||
+            type == ::Core::Objects::ObjectType::AIMinionClient ||
+            type == ::Core::Objects::ObjectType::AITurretClient ||
+            type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+            type == ::Core::Objects::ObjectType::HQClient)) {
+            char charBuf[96] = {};
+            if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
+                e.characterName = charBuf;
+        }
+
+        if (e.name.empty()) {
+            char nameBuf[96] = {};
+            if (::Core::Objects::ReadName(address, nameBuf, static_cast<int>(sizeof(nameBuf))))
+                e.name = nameBuf;
+        }
+
+        if (e.team == 0) {
+            e.team = ::Core::Objects::ReadTeamValue(address);
+        }
+
+        if (e.minionClass == 0 && (
+            type == ::Core::Objects::ObjectType::AIMinionClient ||
+            type == ::Core::Objects::ObjectType::NeutralMinionCampClient)) {
+            e.minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(address));
+        }
+    }
+
+    inline void Clear(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return;
+        entries[index] = {};
+    }
+}
 
 
 
@@ -689,15 +679,10 @@ public:
 
     GameObjectTeam Team() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && sc->team != 0) {
+        if (const auto* sc = StaticStringCache::Get(idx)) {
+            if (sc->team != 0) {
                 return ObjectDetail::MapTeam(sc->team);
             }
-            const uintptr_t a = Address();
-            if (!a) return GameObjectTeam::Unknown;
-            sc->team = ::Core::Objects::ReadTeamValue(a);
-            sc->valid = true;
-            return ObjectDetail::MapTeam(sc->team);
         }
         const uintptr_t a = Address();
         if (!a) return GameObjectTeam::Unknown;
@@ -850,49 +835,38 @@ public:
         return {}; // direction requires vfunc chain; use AIBaseClient::Direction() instead
     }
 
-    // String reads from StaticStringCache (populated once on OnCreateObject).
-    // Returns empty string if the cache hasn't been populated yet (rare —
-    // only possible if the object existed before script injection).
     const std::string& Name() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && !sc->name.empty()) return sc->name;
-            const uintptr_t a = Address();
-            if (Globals::IsValidPtr(a)) {
-                char nameBuf[96] = {};
-                if (::Core::Objects::ReadName(a, nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-                    sc->name = nameBuf;
-                    sc->valid = true;
-                    return sc->name;
-                }
-            }
+        if (const auto* sc = StaticStringCache::Get(idx)) {
             if (!sc->name.empty()) return sc->name;
         }
-
+        const uintptr_t a = Address();
+        if (Globals::IsValidPtr(a)) {
+            char nameBuf[96] = {};
+            if (::Core::Objects::ReadName(a, nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+                thread_local std::string tls_name;
+                tls_name = nameBuf;
+                return tls_name;
+            }
+        }
         static const std::string kEmpty;
         return kEmpty;
     }
 
     const std::string& CharacterName() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && !sc->characterName.empty()) return sc->characterName;
-            const uintptr_t a = Address();
-            if (Globals::IsValidPtr(a)) {
-                char charBuf[96] = {};
-                if (::Core::Objects::ReadCharacterName(a, charBuf, sizeof(charBuf)) && charBuf[0]) {
-                    sc->characterName = charBuf;
-                    sc->valid = true;
-                    return sc->characterName;
-                }
-                if (Globals::IsValidPtr(CoreRuntime::g_ctx.localPlayer) && a == CoreRuntime::g_ctx.localPlayer) {
-                    s_cachedChampionName = charBuf;
-                    return s_cachedChampionName;
-                }
-            }
+        if (const auto* sc = StaticStringCache::Get(idx)) {
             if (!sc->characterName.empty()) return sc->characterName;
         }
-
+        const uintptr_t a = Address();
+        if (Globals::IsValidPtr(a)) {
+            char charBuf[96] = {};
+            if (::Core::Objects::ReadCharacterName(a, charBuf, sizeof(charBuf)) && charBuf[0]) {
+                thread_local std::string tls_charName;
+                tls_charName = charBuf;
+                return tls_charName;
+            }
+        }
         static const std::string kEmpty;
         return kEmpty;
     }
@@ -987,22 +961,8 @@ public:
         if (!IsMinion() || IsClone()) {
             return false;
         }
-
-        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && sc->minionClass != 0) {
-                return static_cast<::Core::Objects::MinionClass>(sc->minionClass) ==
-                       ::Core::Objects::MinionClass::Pet;
-            }
-            const uintptr_t a = Address();
-            if (a) {
-                sc->minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(a));
-                sc->valid = true;
-                return static_cast<::Core::Objects::MinionClass>(sc->minionClass) ==
-                       ::Core::Objects::MinionClass::Pet;
-            }
-        }
-        return false;
+        const uintptr_t a = Address();
+        return a && ::Core::Objects::ReadMinionClass(a) == ::Core::Objects::MinionClass::Pet;
     }
 
 
@@ -1552,17 +1512,10 @@ public:
 
     ::Core::Objects::MinionClass GetMinionClass() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && sc->minionClass != 0) {
+        if (const auto* sc = StaticStringCache::Get(idx)) {
+            if (sc->minionClass != 0) {
                 return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
             }
-            const uintptr_t a = Address();
-            if (a) {
-                sc->minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(a));
-                sc->valid = true;
-                return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
-            }
-            return ::Core::Objects::MinionClass::Unset;
         }
         const uintptr_t a = Address();
         return a ? ::Core::Objects::ReadMinionClass(a) : ::Core::Objects::MinionClass::Unset;
@@ -1800,6 +1753,10 @@ public:
     int CasterNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(CasterIndex())); }
     int TargetNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(TargetIndex())); }
     std::string SpellName() const {
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && !sc->name.empty()) return sc->name;
+        }
         const uintptr_t a = Address();
         if (!a) return {};
         char buf[96] = {};
@@ -1815,9 +1772,19 @@ public:
                 buf,
                 static_cast<int>(sizeof(buf)));
         }
+        if (buf[0]) {
+            if (auto* sc = StaticStringCache::GetMutable(idx)) {
+                sc->name = buf;
+                sc->valid = true;
+            }
+        }
         return buf;
     }
     std::string MissileName() const {
+        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
+        if (auto* sc = StaticStringCache::GetMutable(idx)) {
+            if (sc->valid && !sc->characterName.empty()) return sc->characterName;
+        }
         const uintptr_t a = Address();
         if (!a) return {};
         char buf[96] = {};
@@ -1832,6 +1799,12 @@ public:
                 a + Offset::MissileClient::MissileName,
                 buf,
                 static_cast<int>(sizeof(buf)));
+        }
+        if (buf[0]) {
+            if (auto* sc = StaticStringCache::GetMutable(idx)) {
+                sc->characterName = buf;
+                sc->valid = true;
+            }
         }
         return buf;
     }

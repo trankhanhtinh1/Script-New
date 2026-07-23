@@ -20,6 +20,7 @@
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../../sdk/Extensions/AIBaseClientExtensions.h"
 #include "../../../core/CoreControl.h"
+#include "../../../DebugLog.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,9 +39,6 @@ class OrbwalkerBase : public IOrbwalker {
 public:
     explicit OrbwalkerBase(Menu* parentMenu);
     ~OrbwalkerBase() override;
-
-    void DebugPrint(const char* text);
-    void ClearDebugConsole();
 
     AttackableUnit ForceTarget() const override;
     void ForceTarget(const AttackableUnit& target) override;
@@ -106,16 +104,18 @@ private:
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
     static void OnMissileCreateStatic(const Events::ObjectEventArgs& args);
+    static void OnCreateObjectStatic(const Events::ObjectEventArgs& args);
+    static void OnDeleteObjectStatic(const Events::ObjectEventArgs& args);
     static void OnDrawStatic();
-    static void OnDebugDrawStatic();
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
     void OnMissileCreate(const Events::ObjectEventArgs& args);
+    void OnCreateObject(const Events::ObjectEventArgs& args);
+    void OnDeleteObject(const Events::ObjectEventArgs& args);
     void OnDraw();
-    void OnDebugDraw();
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
@@ -140,8 +140,6 @@ private:
     void ReadAttackTimingsFromMemory(const AIHeroClient& player);
     int AttackCastReadyTick(const AIHeroClient& player);
     int AttackReadyTick(const AIHeroClient& player);
-    void PushDebugConsoleLine(const char* text, int tick);
-    void DrawLiveAttackDebugOverlay();
     void TryShowFakeClick(Hud::ClickType type, const Vector3& position, int now, int& lastTick);
     void TrackFakeCursorClick(const Vector3& position, int now);
     bool EnsureFakeCursorTexture();

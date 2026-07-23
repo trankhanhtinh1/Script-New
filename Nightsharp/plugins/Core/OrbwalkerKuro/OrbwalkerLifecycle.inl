@@ -12,8 +12,9 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     // Events::AddOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Events::AddOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
+    Events::AddOnCreateObject(&OrbwalkerBase::OnCreateObjectStatic);
+    Events::AddOnDeleteObject(&OrbwalkerBase::OnDeleteObjectStatic);
     Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
-    Drawing::AddOnAlwaysDraw(&OrbwalkerBase::OnDebugDrawStatic);
 }
 
 inline OrbwalkerBase::~OrbwalkerBase() {
@@ -39,7 +40,6 @@ inline void OrbwalkerBase::ClearPendingAttackState() {
     context_.pendingAttack = false;
     context_.pendingAttackTick = 0;
     context_.pendingAttackTargetNetworkId = 0;
-    context_.pendingProcessSpellList.clear();
     ClearDoCastMoveGate();
 }
 
@@ -68,18 +68,6 @@ inline void OrbwalkerBase::SetMoveServerPauseTime(int time) { SetMovePauseTime(t
 
 inline void OrbwalkerBase::ResetAutoAttackTimer() {
     const int now = Tick();
-    char resetLine[kOrbwalkerDebugConsoleLineLength] = {};
-    _snprintf_s(
-        resetLine,
-        sizeof(resetLine),
-        _TRUNCATE,
-        "[AA reset] tick=%d lastAA=%d pending=%d confirmed=%d castComplete=%d",
-        now,
-        context_.lastAutoAttackTick,
-        context_.pendingAttack ? 1 : 0,
-        context_.hasConfirmedAttack ? 1 : 0,
-        context_.attackCastComplete ? 1 : 0);
-    DebugPrint(resetLine);
 
     context_.lastAutoAttackTick = 0;
     context_.lastAttackOrderTick = 0;
@@ -102,8 +90,9 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     // Events::RemoveOnStopCast(&OrbwalkerBase::OnStopCastStatic);
     Events::RemoveOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
+    Events::RemoveOnCreateObject(&OrbwalkerBase::OnCreateObjectStatic);
+    Events::RemoveOnDeleteObject(&OrbwalkerBase::OnDeleteObjectStatic);
     Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
-    Drawing::RemoveOnAlwaysDraw(&OrbwalkerBase::OnDebugDrawStatic);
     if (context_.fakeCursorTexture.Texture) {
         UI::Icons::ReleaseTexture(context_.fakeCursorTexture);
     }
