@@ -174,7 +174,7 @@ template <typename T>
 inline const std::vector<T>& GetRef() {
     thread_local int s_frame = -1;
     thread_local std::vector<T> s_cache;
-    const int frame = static_cast<int>(CoreBuffs::ResolveGameTime() * 1000.0f);
+    const int frame = ::CoreAiManager::FrameCacheKey();
     if (s_frame != frame) {
         s_frame = frame;
         s_cache = GetUncached<T>();

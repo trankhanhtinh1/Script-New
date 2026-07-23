@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Plugins::KuroAIO::AI::Engine {
@@ -110,15 +111,14 @@ inline bool TextContains(const char* value, const char* token) {
     if (!value || !token || !value[0] || !token[0]) {
         return false;
     }
-    std::string left(value);
-    std::string right(token);
-    std::transform(left.begin(), left.end(), left.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    std::transform(right.begin(), right.end(), right.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return left.find(right) != std::string::npos;
+    const std::string_view left(value);
+    const std::size_t tokenLen = std::strlen(token);
+    auto it = std::search(left.begin(), left.end(), token, token + tokenLen,
+        [](char c1, char c2) {
+            return std::tolower(static_cast<unsigned char>(c1)) ==
+                   std::tolower(static_cast<unsigned char>(c2));
+        });
+    return it != left.end();
 }
 
 inline float ClampPercent(float value) {

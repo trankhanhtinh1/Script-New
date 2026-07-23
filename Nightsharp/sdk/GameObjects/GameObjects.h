@@ -865,27 +865,26 @@ inline std::vector<T> Get() {
     } else if constexpr (std::is_same_v<T, AttackableUnit>) {
         return AttackableUnits();
     } else if constexpr (std::is_same_v<T, AIBaseClient>) {
+        detail::Lock lk(detail::g_mutex);
         std::vector<T> result;
-        const auto ally = Ally();
-        const auto enemy = Enemy();
-        result.reserve(ally.size() + enemy.size());
-        result.insert(result.end(), ally.begin(), ally.end());
-        result.insert(result.end(), enemy.begin(), enemy.end());
+        result.reserve(detail::AllyList.size() + detail::EnemyList.size());
+        result.insert(result.end(), detail::AllyList.begin(), detail::AllyList.end());
+        result.insert(result.end(), detail::EnemyList.begin(), detail::EnemyList.end());
         return result;
     } else if constexpr (std::is_same_v<T, AIHeroClient>) {
         return Heroes();
     } else if constexpr (std::is_same_v<T, AIMinionClient>) {
-        std::vector<T> result = Minions();
-        const auto wards = Wards();
-        const auto jungle = Jungle();
-        const auto plants = Plants();
-        const auto pets = Pets();
-        const auto clones = Clones();
-        result.insert(result.end(), wards.begin(), wards.end());
-        result.insert(result.end(), jungle.begin(), jungle.end());
-        result.insert(result.end(), plants.begin(), plants.end());
-        result.insert(result.end(), pets.begin(), pets.end());
-        result.insert(result.end(), clones.begin(), clones.end());
+        detail::Lock lk(detail::g_mutex);
+        std::vector<T> result;
+        result.reserve(detail::MinionsList.size() + detail::WardsList.size() +
+                       detail::JungleList.size() + detail::PlantsList.size() +
+                       detail::PetsList.size() + detail::ClonesList.size());
+        result.insert(result.end(), detail::MinionsList.begin(), detail::MinionsList.end());
+        result.insert(result.end(), detail::WardsList.begin(), detail::WardsList.end());
+        result.insert(result.end(), detail::JungleList.begin(), detail::JungleList.end());
+        result.insert(result.end(), detail::PlantsList.begin(), detail::PlantsList.end());
+        result.insert(result.end(), detail::PetsList.begin(), detail::PetsList.end());
+        result.insert(result.end(), detail::ClonesList.begin(), detail::ClonesList.end());
         return result;
     } else if constexpr (std::is_same_v<T, AITurretClient>) {
         return Turrets();

@@ -349,38 +349,29 @@ namespace ObjectDetail {
         return false;
     }
 
-    inline bool ContainsAny(const std::string& text, std::initializer_list<const char*> values) {
-        std::string lowerText = text;
-        std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
-        for (const char* value : values) {
-            if (!value) continue;
-            std::string lowerVal = value;
-            std::transform(lowerVal.begin(), lowerVal.end(), lowerVal.begin(), [](unsigned char c) {
-                return static_cast<char>(std::tolower(c));
+    inline bool ContainsInsensitive(std::string_view text, const char* token) {
+        if (!token || !token[0] || text.empty()) {
+            return false;
+        }
+        const std::size_t tokenLen = std::strlen(token);
+        auto it = std::search(text.begin(), text.end(), token, token + tokenLen,
+            [](char c1, char c2) {
+                return std::tolower(static_cast<unsigned char>(c1)) ==
+                       std::tolower(static_cast<unsigned char>(c2));
             });
-            if (lowerText.find(lowerVal) != std::string::npos) {
+        return it != text.end();
+    }
+
+    inline bool ContainsAny(std::string_view text, std::initializer_list<const char*> values) {
+        if (text.empty()) {
+            return false;
+        }
+        for (const char* value : values) {
+            if (value && ContainsInsensitive(text, value)) {
                 return true;
             }
         }
         return false;
-    }
-
-    inline bool ContainsInsensitive(const std::string& text, const char* token) {
-        if (!token || !token[0] || text.empty()) {
-            return false;
-        }
-
-        std::string lhs = text;
-        std::string rhs = token;
-        std::transform(lhs.begin(), lhs.end(), lhs.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
-        std::transform(rhs.begin(), rhs.end(), rhs.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
-        return lhs.find(rhs) != std::string::npos;
     }
 
     inline GameObjectTeam MapTeam(std::uint32_t team) {

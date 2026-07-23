@@ -23,6 +23,7 @@
 #include <memory>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -765,7 +766,7 @@ private:
         SpecialSpells::RefreshSkillshotGeometry(*skillshot.Native);
     }
 
-    static bool ContainsInsensitive(const std::string& text, const std::string& value) {
+    static bool ContainsInsensitive(std::string_view text, std::string_view value) {
         if (text.empty() || value.empty()) {
             return false;
         }
@@ -784,10 +785,10 @@ private:
         if (!name || !name[0]) {
             return false;
         }
-        const std::string value(name);
+        std::string_view value(name);
         return ContainsInsensitive(value, "basicattack") ||
                ContainsInsensitive(value, "critattack") ||
-               SDK::Orbwalker::IsAutoAttack(value);
+               SDK::Orbwalker::IsAutoAttack(name);
     }
 
     static bool ContainsName(const std::vector<std::string>& values,
