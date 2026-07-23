@@ -26,20 +26,35 @@ public:
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {
+        s_instance = this;
         enabled_ = true;
         maxRange_ = 400;
         trackedObjectTicks_.clear();
         SDK::Events::AddOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
+        SDK::Events::AddOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
     }
 
     void OnUnload() override {
         SDK::Events::RemoveOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
+        SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
+        s_instance = nullptr;
     }
 
     void OnUpdate() override {
         if (!enabled_) {
             pKeyPressedLast_ = false;
             return;
+        }
+
+        if (trackedObjectTicks_.size() > 128) {
+            const int now = SDK::Variables::TickCount();
+            for (auto it = trackedObjectTicks_.begin(); it != trackedObjectTicks_.end(); ) {
+                if (now - it->second > 15000) {
+                    it = trackedObjectTicks_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
         }
 
         bool isDown = (GetAsyncKeyState('P') & 0x8000) != 0;
@@ -420,6 +435,7 @@ private:
     bool filterClutter_ = true;
     std::unordered_map<std::uint32_t, int> trackedObjectTicks_;
     bool pKeyPressedLast_ = false;
+    static inline DeveloperToolsPlugin* s_instance = nullptr;
 
     std::vector<SDK::GameObject> GetObjectsToScan() const {
         std::vector<SDK::GameObject> result;
@@ -496,6 +512,12 @@ private:
             return true;
         }
         return false;
+    }
+
+    static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        if (s_instance && args.Sender.NetworkId != 0) {
+            s_instance->trackedObjectTicks_.erase(static_cast<std::uint32_t>(args.Sender.NetworkId));
+        }
     }
 
     static void OnProcessSpellCast(const SDK::Events::ProcessSpellEventArgs& args) {

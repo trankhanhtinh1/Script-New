@@ -52,7 +52,20 @@ namespace detail {
             }
         }
 
-        if (!create || DetectedDashCount >= 64) {
+        if (!create) {
+            return nullptr;
+        }
+
+        const int now = TickCount();
+        if (DetectedDashCount >= 64) {
+            for (int i = 0; i < DetectedDashCount; ++i) {
+                if (!DetectedDashes[i].IsDash || (DetectedDashes[i].EndTick > 0 && now > DetectedDashes[i].EndTick + 1000)) {
+                    DashArgs& entry = DetectedDashes[i];
+                    entry = {};
+                    entry.NetworkId = networkId;
+                    return &entry;
+                }
+            }
             return nullptr;
         }
 
