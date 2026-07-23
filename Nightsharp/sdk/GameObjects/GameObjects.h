@@ -911,6 +911,11 @@ inline std::vector<T> GetNative() {
     return SDK::ObjectManager::Get<T>();
 }
 
+template <typename T>
+inline T GetUnitByNetworkId(int networkId) {
+    return SDK::ObjectManager::GetUnitByNetworkId<T>(networkId);
+}
+
 } // namespace SDK::GameObjects
 
 namespace SDK::ObjectManager {

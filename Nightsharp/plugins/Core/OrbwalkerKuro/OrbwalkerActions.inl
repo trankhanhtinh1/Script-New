@@ -412,7 +412,7 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
     bool shouldExpire = false;
 
     if (context_.pendingAttackTargetNetworkId != 0) {
-        const auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(context_.pendingAttackTargetNetworkId);
+        const auto target = GameObjects::GetUnitByNetworkId<AttackableUnit>(context_.pendingAttackTargetNetworkId);
         if (!target.IsValid() || target.IsDead() || !target.IsTargetable()) {
             shouldExpire = true;
         }
@@ -457,12 +457,25 @@ inline float OrbwalkerBase::ChampionExtraAttackDelayMs(const AIHeroClient& playe
     return 0.0f;
 }
 
+inline bool OrbwalkerBase::IsSpecialAfterAttack(const std::string& nameLower) const {
+    static const char* specialAttacks[] = {
+        "lucianpassiveshot",
+        "rengarqattack",
+        "rengarqempattack",
+        "rengarq",
+        "rengarqemp",
+        nullptr
+    };
+    for (int i = 0; specialAttacks[i]; ++i) {
+        if (nameLower.find(specialAttacks[i]) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const {
-    return _stricmp(player.CharacterName().c_str(), "Rengar") == 0 &&
-           (player.HasBuff("RengarQ") ||
-            player.HasBuff("RengarQEmp") ||
-            player.HasBuff("rengarqbase") ||
-            player.HasBuff("rengarqemp"));
+    return false;
 }
 
 inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
@@ -486,6 +499,15 @@ inline float OrbwalkerBase::AttackSafetyMs() const {
 }
 
 inline float OrbwalkerBase::MoveSafetyMs() const {
+    const auto player = GameObjects::Player();
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+        if (player.HasBuff("RengarQ") ||
+            player.HasBuff("RengarQEmp") ||
+            player.HasBuff("rengarqbase") ||
+            player.HasBuff("rengarqemp")) {
+            return 0.0f; // Instant zero-delay move for Q attacks only
+        }
+    }
     return context_.hasConfirmedAttack ? kMoveSafetyMs : kMoveSafetyMs + std::min(OneWayPingMs(), 15.0f);
 }
 

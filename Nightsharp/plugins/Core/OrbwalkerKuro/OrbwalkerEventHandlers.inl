@@ -187,12 +187,20 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         context_.lastTarget = target;
     }
 
-    context_.attackCastComplete = true;
+    std::string spellNameStr = args.SpellName ? args.SpellName : "";
+    for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
+    const bool isSpecialAfterAA = IsSpecialAfterAttack(spellNameStr);
+    if (isSpecialAfterAA) {
+        context_.attackWindupMs = 0.0f;
+        context_.attackCastComplete = true;
+        context_.lastAttackDoCastComplete = true;
+    } else {
+        context_.attackCastComplete = false;
+    }
     ReadAttackTimingsFromMemory(player);
 
     if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
-        std::string spellNameStr = args.SpellName ? args.SpellName : "";
-        for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
         const bool isAkshanSecondAttack =
             spellNameStr.find("akshanpassive") != std::string::npos ||
             spellNameStr.find("akshanpattack") != std::string::npos;
@@ -207,17 +215,27 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
                 context_.pendingAkshanSecondShotTick = now;
             }
         }
+    } else if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+        if (spellNameStr.find("spell5") != std::string::npos || spellNameStr.find("rengarpassive") != std::string::npos) {
+            const float dist = context_.lastTarget.IsValid() ? player.Distance(context_.lastTarget) : 0.0f;
+            const float flightDelayMs = (std::min)(dist / 1.5f, 600.0f);
+            context_.lastAutoAttackTick = static_cast<int>(now - OneWayPingMs() * 0.5f + flightDelayMs);
+        }
     }
 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
-    if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
-        context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
-        OrbwalkingActionArgs afterArgs(
-            OrbwalkingType::AfterAttack,
-            eventTarget,
-            eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-            "Kuro");
-        OrbwalkingDetail::FireAfterAttack(afterArgs);
+
+    // Fire AfterAttack immediately ONLY for SpecialAfterAA spells (e.g. lucianpassiveshot, rengarqattack, rengarqempattack)
+    if (isSpecialAfterAA) {
+        if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
+            context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+            OrbwalkingActionArgs afterArgs(
+                OrbwalkingType::AfterAttack,
+                eventTarget,
+                eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+                "Kuro");
+            OrbwalkingDetail::FireAfterAttack(afterArgs);
+        }
     }
 }
 

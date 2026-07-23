@@ -120,6 +120,7 @@ private:
     bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
     bool IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const;
+    bool IsSpecialAfterAttack(const std::string& nameLower) const;
     AttackableUnit ResolveAttackTarget(const Events::ProcessSpellEventArgs& args) const;
     AttackableUnit ResolveAttackTarget(const Events::ObjectEventArgs& args) const;
     void ClearDoCastMoveGate();

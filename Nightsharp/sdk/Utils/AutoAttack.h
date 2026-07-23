@@ -170,7 +170,7 @@ private:
             "reksaiq",
             "rellw","rellw_dismount","rellferromancymountup",
             "renektonpreexecute",
-            "rengarq","rengarqemp",
+            "rengarq","rengarqemp","rengarqattack","rengarqempattack","rengarqbase",
             "riventricleave",
             "samirap","samiradaredevilimpulse",
             "sejuanie","sejuaninorthernwinds",
@@ -207,6 +207,7 @@ private:
             "itemtitanichydracleave","itemtiamatcleave",
             "kennenmegaproc","masteryidoublestrike",
             "quinnwenhanced","renektonexecute","renektonsuperexecute",
+            "rengarqattack","rengarqempattack","rengarqbase",
             "trundleq","viktorqbuff",
             "xinzhaoqthrust1","xinzhaoqthrust2","xinzhaoqthrust3",
             nullptr

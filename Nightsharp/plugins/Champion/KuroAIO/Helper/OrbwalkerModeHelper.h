@@ -20,4 +20,12 @@ inline bool IsLastHitMode() {
     return Orbwalker::ActiveMode() == OrbwalkingMode::LastHit;
 }
 
+inline bool CanAttack(int maxWaitMs = 250) {
+    if (Orbwalker::CanAttack()) {
+        return true;
+    }
+    const int cd = Orbwalker::AttackCooldownRemaining();
+    return cd >= 0 && cd <= maxWaitMs;
+}
+
 } // namespace Plugins::KuroAIO

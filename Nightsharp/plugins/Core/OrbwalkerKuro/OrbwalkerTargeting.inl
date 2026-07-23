@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../sdk/GameObjects/ObjectManager.h"
+#include "../../../sdk/GameObjects/GameObjects.h"
 
 using namespace ::SDK;
 
@@ -685,11 +685,11 @@ inline AttackableUnit OrbwalkerBase::ResolveAttackTarget(const Events::ProcessSp
         return AttackableUnit(args.Target.Ptr);
     }
     if (args.TargetNetworkId != 0 && args.TargetNetworkId != 0xFFFFFFFFu) {
-        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
     }
     if (context_.pendingAttackTargetNetworkId != 0) {
-        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
             context_.pendingAttackTargetNetworkId);
     }
     return {};
@@ -700,11 +700,11 @@ inline AttackableUnit OrbwalkerBase::ResolveAttackTarget(const Events::ObjectEve
         return AttackableUnit(args.Target.Ptr);
     }
     if (args.TargetNetworkId != 0 && args.TargetNetworkId != 0xFFFFFFFFu) {
-        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
     }
     if (context_.pendingAttackTargetNetworkId != 0) {
-        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
             context_.pendingAttackTargetNetworkId);
     }
     return {};

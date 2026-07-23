@@ -724,6 +724,9 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\FioraDatabase.h">
       <Filter>Plugins\Champion\KuroAIO\Champion\Fiora</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Jinx.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
@@ -731,6 +734,9 @@
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Lucian.h">
+      <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Rengar.h">
       <Filter>Plugins\Champion\KuroAIO\Champion</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h">

@@ -200,15 +200,15 @@ inline std::vector<::SDK::AIMinionClient> GetAzirSandSoldiers(
 
     const ::SDK::GameObjectTeam playerTeam = player.Team();
 
-    for (const auto& obj : ::SDK::ObjectManager::Get<::SDK::GameObject>()) {
-        if (!obj.IsValid() || obj.IsDead() || obj.Team() != playerTeam) {
+    for (const auto& minion : ::SDK::GameObjects::Minions()) {
+        if (!minion.IsValid() || minion.IsDead() || minion.Team() != playerTeam) {
             continue;
         }
 
-        const auto charName = obj.CharacterName();
-        const auto name = obj.Name();
+        const std::string charName = minion.CharacterName();
+        const std::string name = minion.Name();
         if (IsSandSoldierName(charName) || IsSandSoldierName(name)) {
-            result.push_back(::SDK::AIMinionClient(obj.Handle()));
+            result.push_back(minion);
         }
     }
 
