@@ -1227,8 +1227,14 @@ public:
             spell.spellName = "GalioQ";
             spell.spellType = ZDSpellType::Circular;
             spell.ccType = CCType::Slow;
-            spell.extraMissileNames = { "GalioQMissileR" };
-            spell.collisionObjects = { ZDCollisionObjectType::EnemyChampions, ZDCollisionObjectType::EnemyMinions };
+            spell.extraMissileNames = {
+                "GalioQMissileR",
+                "GalioQMissileIn"
+            };
+            spell.hasEndExplosion = true;
+            spell.secondaryRadius = 225.0f;
+            spell.endExplosionDelay = 0;
+            spell.endExplosionDuration = 2000;
             Spells.push_back(spell);
         }
         {

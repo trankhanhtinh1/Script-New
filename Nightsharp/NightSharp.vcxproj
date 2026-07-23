@@ -411,7 +411,8 @@
     <ClInclude Include="Plugins\Utility\YasuoWallDebugPlugin.h" />
     <ClInclude Include="Plugins\ZDEvade\Core\Situation.h" />
     <ClInclude Include="Plugins\ZDEvade\Debug\CandidateDebug.h" />
-    <ClInclude Include="Plugins\ZDEvade\Debug\ZDLog.h" />
+    <ClInclude Include="Plugins\ZDEvade\Debug\SelfSkillDebug.h" />
+    <ClInclude Include="Plugins\ZDEvade\Debug\SelfSkillDebugPolicy.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellData.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\SpellData.h" />

@@ -1159,7 +1159,10 @@
     <ClInclude Include="Plugins\ZDEvade\Debug\CandidateDebug.h">
       <Filter>Plugins\ZDEvade\Debug</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\ZDEvade\Debug\ZDLog.h">
+    <ClInclude Include="Plugins\ZDEvade\Debug\SelfSkillDebug.h">
+      <Filter>Plugins\ZDEvade\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\ZDEvade\Debug\SelfSkillDebugPolicy.h">
       <Filter>Plugins\ZDEvade\Debug</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellData.h">

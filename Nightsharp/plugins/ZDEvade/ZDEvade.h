@@ -9,14 +9,12 @@
 
 #include "../IPlugin.h"
 #include "../PluginRegistry.h"
-#include "../../Core/Globals.h"
-#include "../../DebugLog.h"
 #include "../../SDK/SDK.h"
 #include "../../SDK/UI/IMenu/Menu.h"
 
 #include "ZDEvadeActivationPolicy.h"
-#include "Debug/ZDLog.h"
 #include "Debug/CandidateDebug.h"
+#include "Debug/SelfSkillDebug.h"
 #include "Detection/ThreatDetector.h"
 #include "Evade/EvadeController.h"
 #include "Database/SpellData.h"
@@ -36,8 +34,6 @@
 
 namespace Plugins {
 
-using ZDEvade::ZDLog;
-
 class ZDEvadePlugin final : public IPlugin {
 public:
     const char* GetName() const override { return "ZDEvade"; }
@@ -56,14 +52,26 @@ public:
         CreateMenu();
         RefreshOtherEvadeSuspension();
 
+        const auto player = SDK::ObjectManager::Player();
+        m_selfSkillDebug.Configure(
+            player.IsValid()
+                ? static_cast<std::uint32_t>(player.NetworkId())
+                : 0u,
+            player.IsValid()
+                ? player.CharacterName().c_str()
+                : "");
         SDK::Events::AddOnGameUpdate(&ZDEvadePlugin::OnGameUpdateStatic);
+        SDK::Events::AddOnProcessSpell(&ZDEvadePlugin::OnProcessSpellStatic);
+        SDK::Events::AddOnMissileCreate(&ZDEvadePlugin::OnMissileCreateStatic);
+        SDK::Events::AddOnMissileDelete(&ZDEvadePlugin::OnMissileDeleteStatic);
         SDK::Game::AddOnWndProc(&ZDEvadePlugin::OnWndProcStatic);
         SDK::Orbwalker::OnBeforeMove += &ZDEvadePlugin::OnBeforeMoveStatic;
-
-        ZDLog("[ZDEvade] loaded engine=new");
     }
 
     void OnUnload() override {
+        SDK::Events::RemoveOnMissileDelete(&ZDEvadePlugin::OnMissileDeleteStatic);
+        SDK::Events::RemoveOnMissileCreate(&ZDEvadePlugin::OnMissileCreateStatic);
+        SDK::Events::RemoveOnProcessSpell(&ZDEvadePlugin::OnProcessSpellStatic);
         SDK::Events::RemoveOnGameUpdate(&ZDEvadePlugin::OnGameUpdateStatic);
         SDK::Orbwalker::OnBeforeMove -= &ZDEvadePlugin::OnBeforeMoveStatic;
         SDK::Game::RemoveOnWndProc(&ZDEvadePlugin::OnWndProcStatic);
@@ -79,60 +87,126 @@ public:
         if (s_instance == this) {
             s_instance = nullptr;
         }
-        ZDLog("[ZDEvade] unloaded");
     }
 
     void OnRender() override {
-        if (!Enabled() || !ImGui::GetCurrentContext()) return;
+        if (!ImGui::GetCurrentContext()) return;
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) return;
         const float planeY = player.Position().y;
         const int now = SDK::Variables::TickCount();
-        const auto threats = ZDEvade::ThreatDetector::Snapshot();
-        const RenderState renderState = GetRenderState();
+        if (Enabled()) {
+            const auto threats = ZDEvade::ThreatDetector::Snapshot();
+            const RenderState renderState = GetRenderState();
 
-        if (DrawSpells()) {
-            for (const auto& threat : threats) {
-                ZDEvade::ThreatRenderer::Draw(threat, now, planeY);
+            if (DrawSpells()) {
+                for (const auto& threat : threats) {
+                    ZDEvade::ThreatRenderer::Draw(threat, now, planeY);
+                }
+            }
+
+            if (DrawCandidates()) {
+                const int count = std::min(140, static_cast<int>(renderState.candidates.size()));
+                for (int index = 0; index < count; ++index) {
+                    const auto& candidate = renderState.candidates[static_cast<std::size_t>(index)];
+                    const std::uint32_t color = candidate.strictSafe
+                        ? 0xFF22DD55
+                        : candidate.walkable ? 0xFFFFAA22 : 0xFF777777;
+                    SDK::Drawing::DrawCircle(Vec3::From2D(candidate.position, planeY), 18.0f, color, 1.5f, 24);
+                }
+            }
+
+            if (renderState.locked.valid) {
+                const ZDEvade::LockedTargetVisualDispatch targetVisual =
+                    ZDEvade::GetLockedTargetVisualDispatch(
+                        renderState.locked.strictSafe,
+                        player.BoundingRadius());
+                // The locked marker is the hero's target footprint, not skill padding.
+                SDK::Drawing::DrawCircle(
+                    Vec3::From2D(renderState.locked.position, planeY),
+                    targetVisual.footprintRadius,
+                    targetVisual.color,
+                    3.0f);
+                SDK::Drawing::DrawLine(
+                    player.ServerPosition(),
+                    Vec3::From2D(renderState.locked.position, planeY),
+                    targetVisual.color,
+                    2.0f);
             }
         }
 
-        if (DrawCandidates()) {
-            const int count = std::min(140, static_cast<int>(renderState.candidates.size()));
-            for (int index = 0; index < count; ++index) {
-                const auto& candidate = renderState.candidates[static_cast<std::size_t>(index)];
-                const std::uint32_t color = candidate.strictSafe
-                    ? 0xFF22DD55
-                    : candidate.walkable ? 0xFFFFAA22 : 0xFF777777;
-                SDK::Drawing::DrawCircle(Vec3::From2D(candidate.position, planeY), 18.0f, color, 1.5f, 24);
+        const ZDEvade::SelfSkillDebugVisibility debugVisibility =
+            SelfDebugVisibility();
+        if (debugVisibility.masterEnabled) {
+            for (const auto& snapshot : m_selfSkillDebug.Snapshot()) {
+                if (!ZDEvade::ShouldDrawSelfSkillPhase(
+                        debugVisibility,
+                        snapshot.phase)) {
+                    continue;
+                }
+                ZDEvade::SelfSkillDebug::Draw(
+                    snapshot,
+                    now,
+                    planeY,
+                    DrawOwnLabels(),
+                    DrawOwnEndpoints());
             }
-        }
-
-        if (renderState.locked.valid) {
-            const ZDEvade::LockedTargetVisualDispatch targetVisual =
-                ZDEvade::GetLockedTargetVisualDispatch(
-                    renderState.locked.strictSafe,
-                    player.BoundingRadius());
-            // The locked marker is the hero's target footprint, not skill padding.
-            SDK::Drawing::DrawCircle(
-                Vec3::From2D(renderState.locked.position, planeY),
-                targetVisual.footprintRadius,
-                targetVisual.color,
-                3.0f);
-            SDK::Drawing::DrawLine(
-                player.ServerPosition(),
-                Vec3::From2D(renderState.locked.position, planeY),
-                targetVisual.color,
-                2.0f);
         }
     }
 
     void OnMenu() override {
         if (!m_menu) return;
         m_menu->DrawImGui();
+        if (!DebugMode()) return;
+
+        const ZDEvade::SelfSkillDebug::Diagnostics debug =
+            m_selfSkillDebug.ReadDiagnostics();
         const RenderState renderState = GetRenderState();
         ImGui::Separator();
+        ImGui::TextColored(
+            ImVec4(0.0f, 0.9f, 1.0f, 1.0f),
+            "SELF SKILLS ARE DRAW ONLY - NEVER FED TO EVADE");
+        ImGui::Text(
+            "Local champion: %s  DB entries: %d",
+            debug.champion[0] ? debug.champion : "?",
+            static_cast<int>(debug.databaseEntries));
+        ImGui::Text(
+            "Self debug: pending=%d live=%d terminal=%d",
+            static_cast<int>(debug.pending),
+            static_cast<int>(debug.live),
+            static_cast<int>(debug.terminal));
+        if (ShowDebugCounters()) {
+            ImGui::Text(
+                "Process: seen=%llu matched=%llu rejected=%llu unmatched=%llu",
+                static_cast<unsigned long long>(debug.counters.processSeen),
+                static_cast<unsigned long long>(debug.counters.processMatched),
+                static_cast<unsigned long long>(debug.counters.processRejected),
+                static_cast<unsigned long long>(debug.counters.processUnmatched));
+            ImGui::Text(
+                "Missile create: matched=%llu orphan=%llu duplicate=%llu rejected=%llu unmatched=%llu",
+                static_cast<unsigned long long>(debug.counters.missileCreateMatched),
+                static_cast<unsigned long long>(debug.counters.missileCreateOrphan),
+                static_cast<unsigned long long>(debug.counters.missileCreateDuplicate),
+                static_cast<unsigned long long>(debug.counters.missileCreateRejected),
+                static_cast<unsigned long long>(debug.counters.missileCreateUnmatched));
+            ImGui::Text(
+                "Missile delete: matched=%llu unmatched=%llu",
+                static_cast<unsigned long long>(debug.counters.missileDeleteMatched),
+                static_cast<unsigned long long>(debug.counters.missileDeleteUnmatched));
+            ImGui::Text(
+                "Timeouts=%llu  capacity drops=%llu",
+                static_cast<unsigned long long>(debug.counters.timeouts),
+                static_cast<unsigned long long>(debug.counters.capacityDrops));
+            ImGui::Text(
+                "Last process matched='%s' unmatched='%s'",
+                debug.lastMatchedProcess[0] ? debug.lastMatchedProcess : "-",
+                debug.lastUnmatchedProcess[0] ? debug.lastUnmatchedProcess : "-");
+            ImGui::Text(
+                "Last missile matched='%s' unmatched='%s'",
+                debug.lastMatchedMissile[0] ? debug.lastMatchedMissile : "-",
+                debug.lastUnmatchedMissile[0] ? debug.lastUnmatchedMissile : "-");
+        }
         ImGui::Text("Tracked threats: %d", static_cast<int>(ZDEvade::ThreatDetector::Snapshot().size()));
         ImGui::Text("Detector serial: %d", ZDEvade::ThreatDetector::ChangeSerial());
         ImGui::Text("Detector dropped: %d", ZDEvade::ThreatDetector::DroppedRawEvents());
@@ -190,6 +264,13 @@ private:
     MenuBool* m_fallbackMenu = nullptr;
     MenuBool* m_drawSpellsMenu = nullptr;
     MenuBool* m_drawCandidatesMenu = nullptr;
+    MenuBool* m_debugModeMenu = nullptr;
+    MenuBool* m_drawOwnPendingMenu = nullptr;
+    MenuBool* m_drawOwnLiveMenu = nullptr;
+    MenuBool* m_drawOwnLabelsMenu = nullptr;
+    MenuBool* m_drawOwnEndpointsMenu = nullptr;
+    MenuBool* m_showDebugCountersMenu = nullptr;
+    MenuSlider* m_terminalHoldMenu = nullptr;
     MenuSlider* m_minDangerMenu = nullptr;
     MenuSlider* m_evadeSpellDangerMenu = nullptr;
     MenuSlider* m_evadeSpellMarginMenu = nullptr;
@@ -205,6 +286,7 @@ private:
     MenuSlider* m_replanIntervalMenu = nullptr;
 
     ZDEvade::EvadeController m_controller;
+    ZDEvade::SelfSkillDebug m_selfSkillDebug;
     std::unordered_map<std::string, SpellMenuBinding> m_spellBindings;
     std::unordered_map<std::string, EvadeSpellMenuBinding> m_evadeSpellBindings;
     ZDEvade::ThreatRuleMap m_threatRules;
@@ -218,9 +300,50 @@ private:
     bool Enabled() const { return !m_enabledMenu || m_enabledMenu->Value; }
     bool DrawSpells() const { return !m_drawSpellsMenu || m_drawSpellsMenu->Value; }
     bool DrawCandidates() const { return m_drawCandidatesMenu && m_drawCandidatesMenu->Value; }
+    bool DebugMode() const { return m_debugModeMenu && m_debugModeMenu->Value; }
+    bool DrawOwnLabels() const { return !m_drawOwnLabelsMenu || m_drawOwnLabelsMenu->Value; }
+    bool DrawOwnEndpoints() const { return !m_drawOwnEndpointsMenu || m_drawOwnEndpointsMenu->Value; }
+    bool ShowDebugCounters() const {
+        return !m_showDebugCountersMenu || m_showDebugCountersMenu->Value;
+    }
+    int TerminalHoldMs() const {
+        return m_terminalHoldMenu ? m_terminalHoldMenu->Value : 250;
+    }
+    ZDEvade::SelfSkillDebugVisibility SelfDebugVisibility() const {
+        return {
+            DebugMode(),
+            !m_drawOwnPendingMenu || m_drawOwnPendingMenu->Value,
+            !m_drawOwnLiveMenu || m_drawOwnLiveMenu->Value,
+        };
+    }
 
     static void OnGameUpdateStatic(const SDK::Events::GameUpdateEventArgs&) {
         if (s_instance) s_instance->Tick();
+    }
+
+    static void OnProcessSpellStatic(
+            const SDK::Events::ProcessSpellEventArgs& args) {
+        if (!s_instance || !s_instance->DebugMode()) return;
+        s_instance->m_selfSkillDebug.OnProcessSpell(
+            args,
+            SDK::Variables::TickCount());
+    }
+
+    static void OnMissileCreateStatic(
+            const SDK::Events::ObjectEventArgs& args) {
+        if (!s_instance || !s_instance->DebugMode()) return;
+        s_instance->m_selfSkillDebug.OnMissileCreate(
+            args,
+            SDK::Variables::TickCount());
+    }
+
+    static void OnMissileDeleteStatic(
+            const SDK::Events::ObjectEventArgs& args) {
+        if (!s_instance || !s_instance->DebugMode()) return;
+        s_instance->m_selfSkillDebug.OnMissileDelete(
+            args,
+            SDK::Variables::TickCount(),
+            s_instance->TerminalHoldMs());
     }
 
     static void OnBeforeMoveStatic(SDK::OrbwalkingActionArgs& args) {
@@ -284,6 +407,9 @@ private:
     }
 
     void Tick() {
+        if (DebugMode())
+            m_selfSkillDebug.OnGameUpdate(
+                SDK::Variables::TickCount());
         if (RefreshOtherEvadeSuspension(true)) return;
 
         RefreshThreatRules();
@@ -320,11 +446,7 @@ private:
             AcquireSRWLockExclusive(&m_renderStateLock);
             m_renderState = {};
             ReleaseSRWLockExclusive(&m_renderStateLock);
-            ZDLog(
-                "[ZDEvade] suspended: %s",
-                ZDEvade::OtherEvadeReasonName(decision.reason));
         } else if (decision.releaseNow) {
-            ZDLog("[ZDEvade] suspension released");
             m_suspendReason = ZDEvade::OtherEvadeReason::None;
         }
         m_suspended = decision.suspended;
@@ -381,6 +503,41 @@ private:
         auto* draw = m_menu->AddSubMenu(new Menu("draw", "Draw"));
         m_drawSpellsMenu = draw->Add(new MenuBool("drawSpells", "Draw Skillshots", true));
         m_drawCandidatesMenu = draw->Add(new MenuBool("drawCandidates", "Draw Candidates", false));
+
+        auto* debug = m_menu->AddSubMenu(new Menu("debug", "Debug"));
+        m_debugModeMenu = debug->Add(
+            new MenuBool("debugMode", "Debug Mode", false));
+        m_drawOwnPendingMenu = debug->Add(new MenuBool(
+            "drawOwnPending",
+            "Draw Own Pending Casts",
+            true));
+        m_drawOwnLiveMenu = debug->Add(new MenuBool(
+            "drawOwnLive",
+            "Draw Own Live Missiles",
+            true));
+        m_drawOwnLabelsMenu = debug->Add(new MenuBool(
+            "drawOwnLabels",
+            "Draw Own Labels",
+            true));
+        m_drawOwnEndpointsMenu = debug->Add(new MenuBool(
+            "drawOwnEndpoints",
+            "Draw Own Endpoints",
+            true));
+        m_showDebugCountersMenu = debug->Add(new MenuBool(
+            "showDebugCounters",
+            "Show Debug Counters",
+            true));
+        m_terminalHoldMenu = debug->Add(new MenuSlider(
+            "terminalHold",
+            "Terminal Hold (ms)",
+            250,
+            0,
+            1000));
+        debug->Add(new MenuButton(
+            "clearDebugState",
+            "Clear Debug State",
+            "Clear",
+            [this]() { m_selfSkillDebug.Clear(); }));
 
         m_menu->Attach();
     }
@@ -477,6 +634,13 @@ private:
         m_fallbackMenu = nullptr;
         m_drawSpellsMenu = nullptr;
         m_drawCandidatesMenu = nullptr;
+        m_debugModeMenu = nullptr;
+        m_drawOwnPendingMenu = nullptr;
+        m_drawOwnLiveMenu = nullptr;
+        m_drawOwnLabelsMenu = nullptr;
+        m_drawOwnEndpointsMenu = nullptr;
+        m_showDebugCountersMenu = nullptr;
+        m_terminalHoldMenu = nullptr;
         m_minDangerMenu = nullptr;
         m_evadeSpellDangerMenu = nullptr;
         m_evadeSpellMarginMenu = nullptr;

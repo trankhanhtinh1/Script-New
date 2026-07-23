@@ -1,5 +1,6 @@
 #include "tests/ZDEvadeTestSupport.h"
 #include "plugins/ZDEvade/Database/ThreatDatabase.h"
+#include "plugins/ZDEvade/Debug/SelfSkillDebugPolicy.h"
 #include "plugins/ZDEvade/Detection/ThreatDetectionPolicy.h"
 
 #include <algorithm>
@@ -3544,6 +3545,617 @@ int main() {
                wiredDirection.x,
                -0.8f);
     ExpectNear("legacy Sion perpendicular wiring y", wiredDirection.y, 0.6f);
+
+    const SpellData* ownEzrealQ =
+        ThreatDatabase::FindAny("EzrealQ", "Ezreal");
+    ExpectTrue("self debug champion-scoped DB lookup finds local Ezreal Q",
+               ownEzrealQ != nullptr &&
+                   ownEzrealQ->charName == "Ezreal");
+    ExpectTrue("self debug champion-scoped DB lookup rejects another champion",
+               ThreatDatabase::FindAny("EzrealQ", "Veigar") == nullptr);
+    ExpectTrue("self debug exact local source accepts local network ID",
+               IsExactLocalSelfSource(1001u, 1001u));
+    ExpectTrue("self debug exact local source rejects zero and remote IDs",
+               !IsExactLocalSelfSource(1001u, 0u) &&
+                   !IsExactLocalSelfSource(1001u, 1002u));
+
+    const Vec2 selfProcessStart(500.0f, 500.0f);
+    const Vec2 selfProcessEnd(900.0f, 800.0f);
+    const Vec2 selfProcessReverseCast(100.0f, 200.0f);
+    const SelfSkillProcessGeometry endPreferredGeometry =
+        ResolveSelfSkillProcessGeometry(
+            selfProcessStart,
+            Vec2(510.0f, 510.0f),
+            selfProcessEnd,
+            selfProcessReverseCast);
+    ExpectTrue("self debug process geometry prefers decoded EndPosition",
+               endPreferredGeometry.valid &&
+                   endPreferredGeometry.start == selfProcessStart &&
+                   endPreferredGeometry.end == selfProcessEnd);
+
+    const Vec2 selfProcessCastFallback(850.0f, 725.0f);
+    const SelfSkillProcessGeometry castFallbackGeometry =
+        ResolveSelfSkillProcessGeometry(
+            selfProcessStart,
+            Vec2(510.0f, 510.0f),
+            Vec2(),
+            selfProcessCastFallback);
+    ExpectTrue("self debug process geometry falls back to CastPosition",
+               castFallbackGeometry.valid &&
+                   castFallbackGeometry.start == selfProcessStart &&
+                   castFallbackGeometry.end == selfProcessCastFallback);
+
+    const Vec2 selfProcessSenderStart(540.0f, 520.0f);
+    const SelfSkillProcessGeometry senderFallbackGeometry =
+        ResolveSelfSkillProcessGeometry(
+            Vec2(),
+            selfProcessSenderStart,
+            selfProcessEnd,
+            selfProcessReverseCast);
+    ExpectTrue("self debug process geometry falls back to sender position",
+               senderFallbackGeometry.valid &&
+                   senderFallbackGeometry.start == selfProcessSenderStart &&
+                   senderFallbackGeometry.end == selfProcessEnd);
+
+    const SelfSkillProcessGeometry noEndpointGeometry =
+        ResolveSelfSkillProcessGeometry(
+            selfProcessStart,
+            Vec2(510.0f, 510.0f),
+            Vec2(),
+            Vec2());
+    const SelfSkillProcessGeometry sameEndpointGeometry =
+        ResolveSelfSkillProcessGeometry(
+            selfProcessStart,
+            Vec2(510.0f, 510.0f),
+            selfProcessStart,
+            selfProcessStart);
+    ExpectTrue("self debug process geometry rejects missing or zero-length endpoints",
+               !noEndpointGeometry.valid &&
+                   !sameEndpointGeometry.valid);
+
+    const SpellData* selfAhriQ =
+        ThreatDatabase::FindAny("AhriQ", "Ahri");
+    const Vec2 outboundDirection =
+        (selfProcessEnd - selfProcessStart).Normalized();
+    const Vec2 pendingAhriEnd = selfAhriQ
+        ? ResolveSelfSkillDebugEnd(
+            *selfAhriQ,
+            endPreferredGeometry.start,
+            endPreferredGeometry.end)
+        : Vec2();
+    const Vec2 pendingAhriDirection =
+        (pendingAhriEnd - endPreferredGeometry.start).Normalized();
+    ExpectTrue("self debug Ahri Q pending corridor follows outbound direction",
+               selfAhriQ != nullptr &&
+                   pendingAhriDirection.Dot(outboundDirection) > 0.99f &&
+                   pendingAhriDirection.Dot(outboundDirection * -1.0f) < 0.0f);
+
+    SpellData selfLine = ZDEvadeTest::MakeSpell(ZDSpellType::Line);
+    selfLine.charName = "TestChampion";
+    selfLine.spellName = "TestLine";
+    selfLine.spellKey = ZDSpellSlot::Q;
+    SelfSkillDebugStore<4> processThenCreate;
+    SelfSkillProcessObservation ownProcess;
+    ownProcess.localPlayerNetworkId = 1001u;
+    ownProcess.sourceNetworkId = 1001u;
+    ownProcess.data = &selfLine;
+    ownProcess.matchDisposition = ProcessSpellMatchDisposition::Matched;
+    ownProcess.slot = static_cast<int>(ZDSpellSlot::Q);
+    ownProcess.tick = 1000;
+    ownProcess.start = Vec2(100.0f, 100.0f);
+    ownProcess.end = Vec2(1100.0f, 100.0f);
+    const SelfSkillDebugResult processResult =
+        processThenCreate.ObserveProcess(ownProcess);
+    ExpectTrue("self debug Process creates one pending record",
+               processResult.accepted &&
+                   processThenCreate.Count(SelfSkillDebugPhase::Pending) == 1);
+
+    SelfSkillMissileObservation ownMissile;
+    ownMissile.localPlayerNetworkId = 1001u;
+    ownMissile.sourceNetworkId = 1001u;
+    ownMissile.data = &selfLine;
+    ownMissile.matchDisposition = MissileMatchDisposition::Matched;
+    ownMissile.tick = 1250;
+    ownMissile.start = Vec2(100.0f, 100.0f);
+    ownMissile.end = Vec2(1100.0f, 100.0f);
+    ownMissile.head = Vec2(140.0f, 100.0f);
+    ownMissile.missileNetworkId = 5001u;
+    ownMissile.missileObjectIdentity = 0xAA01u;
+    const SelfSkillDebugResult createResult =
+        processThenCreate.ObserveMissileCreate(ownMissile);
+    ExpectTrue("self debug Process then Create keeps one live record",
+               createResult.accepted &&
+                   processThenCreate.Size() == 1 &&
+                   processThenCreate.Count(SelfSkillDebugPhase::Live) == 1);
+
+    SelfSkillDebugStore<4> createThenProcess;
+    ExpectTrue("self debug Create-first creates one orphan live record",
+               createThenProcess.ObserveMissileCreate(ownMissile).accepted &&
+                   createThenProcess.Size() == 1);
+    SelfSkillProcessObservation lateProcess = ownProcess;
+    lateProcess.tick = 1260;
+    ExpectTrue("self debug Create then Process merges into one record",
+               createThenProcess.ObserveProcess(lateProcess).accepted &&
+                   createThenProcess.Size() == 1 &&
+                   createThenProcess.Count(SelfSkillDebugPhase::Live) == 1);
+
+    SelfSkillSparseMissileInput sparseInput;
+    sparseInput.localPlayerNetworkId = 1001u;
+    sparseInput.eventSourceNetworkId = 0u;
+    sparseInput.eventSourceObjectNetworkId = 0u;
+    sparseInput.runtimeCasterNetworkId = 1001u;
+    sparseInput.eventStart = {};
+    sparseInput.runtimeStart = Vec2(100.0f, 100.0f);
+    sparseInput.eventEnd = {};
+    sparseInput.runtimeEnd = Vec2(1100.0f, 100.0f);
+    sparseInput.eventHead = {};
+    sparseInput.runtimeHead = Vec2(180.0f, 100.0f);
+    const SelfSkillSparseMissileFields sparseFields =
+        ResolveSelfSkillSparseMissileFields(sparseInput);
+    ExpectTrue("self debug sparse create resolves exact local wrapper source",
+               sparseFields.sourceNetworkId == 1001u &&
+                   sparseFields.exactLocalSource);
+    ExpectTrue("self debug sparse create resolves wrapper geometry and head",
+               sparseFields.start.DistanceSqr(
+                       sparseInput.runtimeStart) <= 0.001f &&
+                   sparseFields.end.DistanceSqr(
+                       sparseInput.runtimeEnd) <= 0.001f &&
+                   sparseFields.head.DistanceSqr(
+                       sparseInput.runtimeHead) <= 0.001f);
+    const MissileMatchInput sparseNames =
+        BuildSelfSkillMissileMatchInput(
+            "",
+            "EzrealMysticShotMissile",
+            "",
+            "EzrealQ",
+            0u,
+            0u);
+    ExpectTrue("self debug sparse create preserves runtime missile and spell names",
+               ProcessSpellNamesEqualNoCase(
+                   sparseNames.names[1],
+                   "EzrealMysticShotMissile") &&
+                   ProcessSpellNamesEqualNoCase(
+                       sparseNames.names[3],
+                       "EzrealQ"));
+
+    SelfSkillProcessObservation remoteProcess = ownProcess;
+    remoteProcess.sourceNetworkId = 2002u;
+    SelfSkillDebugStore<4> rejectedStore;
+    ExpectTrue("self debug remote Process is filtered before storage",
+               !rejectedStore.ObserveProcess(remoteProcess).accepted &&
+                   rejectedStore.Size() == 0 &&
+                   rejectedStore.Counters().processSeen == 0 &&
+                   rejectedStore.Counters().processRejected == 0);
+    SelfSkillProcessObservation basicProcess = ownProcess;
+    basicProcess.data = nullptr;
+    basicProcess.matchDisposition =
+        ProcessSpellMatchDisposition::RejectBasicAttack;
+    ExpectTrue("self debug basic attacks are rejected",
+               !rejectedStore.ObserveProcess(basicProcess).accepted);
+    SpellData noProcessSelf = selfLine;
+    noProcessSelf.noProcess = true;
+    SelfSkillProcessObservation noProcessObservation = ownProcess;
+    noProcessObservation.data = &noProcessSelf;
+    ExpectTrue("self debug noProcess records are rejected",
+               !rejectedStore.ObserveProcess(noProcessObservation).accepted);
+    SpellData arcSelf = selfLine;
+    arcSelf.spellType = ZDSpellType::Arc;
+    SelfSkillProcessObservation arcObservation = ownProcess;
+    arcObservation.data = &arcSelf;
+    ExpectTrue("self debug unsupported Arc records are rejected",
+               !rejectedStore.ObserveProcess(arcObservation).accepted);
+    SelfSkillProcessObservation targetedProcess = ownProcess;
+    targetedProcess.hasTarget = true;
+    ExpectTrue("self debug targeted process records are rejected",
+               !rejectedStore.ObserveProcess(
+                   targetedProcess).accepted);
+    SelfSkillProcessObservation autoFlaggedProcess =
+        ownProcess;
+    autoFlaggedProcess.attackOrUtility = true;
+    ExpectTrue("self debug auto-attack or utility flags reject DB matches",
+               !rejectedStore.ObserveProcess(
+                   autoFlaggedProcess).accepted);
+    SelfSkillMissileObservation targetedMissile =
+        ownMissile;
+    targetedMissile.hasTarget = true;
+    ExpectTrue("self debug targeted missiles are rejected",
+               !rejectedStore.ObserveMissileCreate(
+                   targetedMissile).accepted);
+    SelfSkillMissileObservation utilityMissile =
+        ownMissile;
+    utilityMissile.attackOrUtility = true;
+    ExpectTrue("self debug utility missiles reject DB matches",
+               !rejectedStore.ObserveMissileCreate(
+                   utilityMissile).accepted);
+
+    SpellData spreadSelf = selfLine;
+    spreadSelf.multipleNumber = 3;
+    spreadSelf.multipleAngle = 28.0f;
+    SelfSkillDebugStore<8> spreadStore;
+    SelfSkillProcessObservation spreadProcess =
+        ownProcess;
+    spreadProcess.data = &spreadSelf;
+    ExpectTrue("self debug multi-projectile cast creates three lanes",
+               spreadStore.ObserveProcess(spreadProcess).accepted &&
+                   spreadStore.Size() == 3);
+    SelfSkillMissileObservation spreadLeftMissile =
+        ownMissile;
+    spreadLeftMissile.data = &spreadSelf;
+    const float spreadRadians =
+        -28.0f * 3.14159265358979323846f / 180.0f;
+    const Vec2 spreadLeftDirection(
+        std::cos(spreadRadians),
+        std::sin(spreadRadians));
+    spreadLeftMissile.end =
+        spreadLeftMissile.start +
+        spreadLeftDirection * spreadSelf.range;
+    spreadLeftMissile.missileNetworkId = 6001u;
+    spreadLeftMissile.missileObjectIdentity = 0xCC01u;
+    ExpectTrue("self debug left missile binds exactly one authored lane",
+               spreadStore.ObserveMissileCreate(
+                   spreadLeftMissile).accepted &&
+                   spreadStore.Count(SelfSkillDebugPhase::Live) == 1 &&
+                   spreadStore.Count(SelfSkillDebugPhase::Pending) == 2);
+    SelfSkillMissileObservation spreadRightMissile =
+        spreadLeftMissile;
+    const float rightSpreadRadians =
+        28.0f * 3.14159265358979323846f / 180.0f;
+    const Vec2 spreadRightDirection(
+        std::cos(rightSpreadRadians),
+        std::sin(rightSpreadRadians));
+    spreadRightMissile.end =
+        spreadRightMissile.start +
+        spreadRightDirection * spreadSelf.range;
+    spreadRightMissile.missileNetworkId = 6002u;
+    spreadRightMissile.missileObjectIdentity = 0xCC02u;
+    ExpectTrue("self debug right missile cannot cross-bind left lane",
+               spreadStore.ObserveMissileCreate(
+                   spreadRightMissile).accepted &&
+                   spreadStore.Count(SelfSkillDebugPhase::Live) == 2 &&
+                   spreadStore.Count(SelfSkillDebugPhase::Pending) == 1);
+
+    SelfSkillDebugStore<4> invalidBindingStore;
+    SelfSkillMissileObservation invalidBindingMissile =
+        ownMissile;
+    invalidBindingMissile.tick = 3000;
+    invalidBindingMissile.missileNetworkId = 7001u;
+    invalidBindingMissile.missileObjectIdentity = 0xDD01u;
+    const SelfSkillDebugResult invalidBindingCreate =
+        invalidBindingStore.ObserveMissileCreate(
+            invalidBindingMissile);
+    for (int tick = 3100; tick <= 13000; tick += 100)
+        invalidBindingStore.MarkMissilePositionUnavailable(
+            invalidBindingCreate.recordId,
+            tick);
+    invalidBindingStore.Update(13000);
+    ExpectEq("self debug invalid binding stays through exact safety deadline",
+             static_cast<int>(invalidBindingStore.Size()), 1);
+    invalidBindingStore.MarkMissilePositionUnavailable(
+        invalidBindingCreate.recordId,
+        13001);
+    invalidBindingStore.Update(13001);
+    ExpectTrue("self debug repeated invalid binding expires after creation deadline",
+               invalidBindingStore.Size() == 0 &&
+                   invalidBindingStore.Counters().timeouts == 1);
+    SelfSkillDebugStore<4> debugOffMissedDeleteStore;
+    SelfSkillMissileObservation debugOffMissile =
+        ownMissile;
+    debugOffMissile.tick = 14000;
+    debugOffMissile.missileNetworkId = 7002u;
+    debugOffMissile.missileObjectIdentity = 0xDD02u;
+    ExpectTrue("self debug-off missed-delete fixture starts live",
+               debugOffMissedDeleteStore.ObserveMissileCreate(
+                   debugOffMissile).accepted);
+    debugOffMissedDeleteStore.Update(24001);
+    ExpectTrue("self debug-off missed delete expires on first resumed update",
+               debugOffMissedDeleteStore.Size() == 0 &&
+                   debugOffMissedDeleteStore.Counters().timeouts == 1);
+
+    SelfSkillDebugStore<4> deleteFilterStore;
+    SelfSkillMissileObservation ownedSparseMissile =
+        ownMissile;
+    ownedSparseMissile.missileNetworkId = 7101u;
+    ownedSparseMissile.missileObjectIdentity = 0xDE01u;
+    ExpectTrue("self debug sparse-owned missile fixture is live",
+               deleteFilterStore.ObserveMissileCreate(
+                   ownedSparseMissile).accepted);
+    const auto deleteCountersBefore =
+        deleteFilterStore.Counters();
+    const bool enemyDeleteOwned =
+        deleteFilterStore.OwnsMissile(
+            8101u,
+            0xEE01u);
+    ExpectTrue("self debug unrelated enemy delete is filtered without counters",
+               !ShouldProcessSelfMissileDelete(
+                    1001u,
+                    2002u,
+                    enemyDeleteOwned) &&
+                   deleteFilterStore.Counters().missileDeleteMatched ==
+                       deleteCountersBefore.missileDeleteMatched &&
+                   deleteFilterStore.Counters().missileDeleteUnmatched ==
+                       deleteCountersBefore.missileDeleteUnmatched);
+    const bool sparseDeleteOwned =
+        deleteFilterStore.OwnsMissile(
+            7101u,
+            0xDE01u);
+    ExpectTrue("self debug sparse owned delete passes ownership filter",
+               ShouldProcessSelfMissileDelete(
+                   1001u,
+                   0u,
+                   sparseDeleteOwned));
+    ExpectTrue("self debug sparse owned delete succeeds without event source",
+               deleteFilterStore.ObserveMissileDelete(
+                   7101u,
+                   0xDE01u,
+                   1500,
+                   250).accepted &&
+                   deleteFilterStore.Count(
+                       SelfSkillDebugPhase::Terminal) == 1);
+
+    SelfSkillDebugStore<2> holdZeroStore;
+    SelfSkillMissileObservation holdZeroCreate =
+        ownMissile;
+    holdZeroCreate.tick = 4000;
+    holdZeroCreate.missileNetworkId = 7151u;
+    holdZeroCreate.missileObjectIdentity = 0xDE51u;
+    ExpectTrue("self debug hold-zero fixture creates orphan live",
+               holdZeroStore.ObserveMissileCreate(
+                   holdZeroCreate).accepted);
+    const SelfSkillDebugResult holdZeroDelete =
+        holdZeroStore.ObserveMissileDelete(
+            7151u,
+            0xDE51u,
+            4010,
+            0);
+    ExpectTrue("self debug hold-zero delete retains one hidden tombstone",
+               holdZeroDelete.accepted &&
+                   holdZeroStore.Size() == 1 &&
+                   holdZeroStore.HiddenTombstoneCount() == 1 &&
+                   holdZeroStore.Snapshot().empty() &&
+                   holdZeroStore.Count(
+                       SelfSkillDebugPhase::Pending) == 0 &&
+                   holdZeroStore.Count(
+                       SelfSkillDebugPhase::Live) == 0 &&
+                   holdZeroStore.Count(
+                       SelfSkillDebugPhase::Terminal) == 0);
+    SelfSkillProcessObservation holdZeroProcess =
+        ownProcess;
+    holdZeroProcess.tick = 4020;
+    ExpectTrue("self debug hold-zero delayed Process attaches hidden tombstone",
+               holdZeroStore.ObserveProcess(
+                   holdZeroProcess).accepted &&
+                   holdZeroStore.Size() == 1 &&
+                   holdZeroStore.HiddenTombstoneCount() == 1 &&
+                   holdZeroStore.Snapshot().empty() &&
+                   holdZeroStore.Count(
+                       SelfSkillDebugPhase::Pending) == 0 &&
+                   holdZeroStore.Count(
+                       SelfSkillDebugPhase::Live) == 0 &&
+                   holdZeroStore.Count(
+                       SelfSkillDebugPhase::Terminal) == 0 &&
+                   holdZeroStore.Counters().missileDeleteMatched == 1);
+    const int holdZeroDeadline = WrappingTickAdd(
+        4010,
+        SelfSkillDebugStore<2>::kHiddenTombstoneMinimumRetentionMs);
+    holdZeroStore.Update(holdZeroDeadline);
+    ExpectEq("self debug hidden tombstone survives exact deadline",
+             static_cast<int>(holdZeroStore.Size()), 1);
+    holdZeroStore.Update(WrappingTickAdd(holdZeroDeadline, 1));
+    ExpectEq("self debug hidden tombstone expires after deadline",
+             static_cast<int>(holdZeroStore.Size()), 0);
+
+    SelfSkillDebugStore<1> wrapTombstoneStore;
+    SelfSkillMissileObservation wrapTombstoneCreate =
+        ownMissile;
+    wrapTombstoneCreate.tick =
+        std::numeric_limits<int>::max() - 100;
+    wrapTombstoneCreate.missileNetworkId = 7152u;
+    wrapTombstoneCreate.missileObjectIdentity = 0xDE52u;
+    ExpectTrue("self debug wrap tombstone fixture creates live",
+               wrapTombstoneStore.ObserveMissileCreate(
+                   wrapTombstoneCreate).accepted);
+    const int wrapDeleteTick =
+        std::numeric_limits<int>::max() - 50;
+    ExpectTrue("self debug wrap hold-zero delete creates tombstone",
+               wrapTombstoneStore.ObserveMissileDelete(
+                   7152u,
+                   0xDE52u,
+                   wrapDeleteTick,
+                   0).accepted &&
+                   wrapTombstoneStore.HiddenTombstoneCount() == 1);
+    const int wrapTombstoneDeadline = WrappingTickAdd(
+        wrapDeleteTick,
+        SelfSkillDebugStore<1>::kHiddenTombstoneMinimumRetentionMs);
+    wrapTombstoneStore.Update(wrapTombstoneDeadline);
+    ExpectEq("self debug wrap tombstone survives exact deadline",
+             static_cast<int>(wrapTombstoneStore.Size()), 1);
+    wrapTombstoneStore.Update(
+        WrappingTickAdd(wrapTombstoneDeadline, 1));
+    ExpectEq("self debug wrap tombstone expires after deadline",
+             static_cast<int>(wrapTombstoneStore.Size()), 0);
+
+    SelfSkillDebugStore<1> tombstoneCapacityStore;
+    SelfSkillMissileObservation capacityTombstoneCreate =
+        ownMissile;
+    capacityTombstoneCreate.tick = 8000;
+    capacityTombstoneCreate.missileNetworkId = 7153u;
+    capacityTombstoneCreate.missileObjectIdentity = 0xDE53u;
+    ExpectTrue("self debug capacity tombstone fixture creates live",
+               tombstoneCapacityStore.ObserveMissileCreate(
+                   capacityTombstoneCreate).accepted);
+    ExpectTrue("self debug capacity fixture creates hidden tombstone",
+               tombstoneCapacityStore.ObserveMissileDelete(
+                   7153u,
+                   0xDE53u,
+                   8010,
+                   0).accepted);
+    SelfSkillProcessObservation capacityTombstoneProcess =
+        ownProcess;
+    capacityTombstoneProcess.tick = 8020;
+    ExpectTrue("self debug capacity tombstone accepts delayed Process",
+               tombstoneCapacityStore.ObserveProcess(
+                   capacityTombstoneProcess).accepted);
+    SelfSkillMissileObservation replacementMissile =
+        ownMissile;
+    replacementMissile.tick = 8030;
+    replacementMissile.missileNetworkId = 7154u;
+    replacementMissile.missileObjectIdentity = 0xDE54u;
+    ExpectTrue("self debug allocator reclaims associated hidden tombstone",
+               tombstoneCapacityStore.ObserveMissileCreate(
+                   replacementMissile).accepted &&
+                   tombstoneCapacityStore.Size() == 1 &&
+                   tombstoneCapacityStore.HiddenTombstoneCount() == 0 &&
+                   tombstoneCapacityStore.Count(
+                       SelfSkillDebugPhase::Live) == 1);
+
+    SelfSkillDebugStore<4> flushedLifecycleStore;
+    SelfSkillMissileObservation flushedCreate =
+        ownMissile;
+    flushedCreate.tick = 5000;
+    flushedCreate.missileNetworkId = 7201u;
+    flushedCreate.missileObjectIdentity = 0xDF01u;
+    ExpectTrue("self debug flush creates one orphan live record",
+               flushedLifecycleStore.ObserveMissileCreate(
+                   flushedCreate).accepted);
+    ExpectTrue("self debug flush delete makes orphan terminal",
+               flushedLifecycleStore.ObserveMissileDelete(
+                   7201u,
+                   0xDF01u,
+                   5010,
+                   250).accepted);
+    ExpectTrue("self debug hold-250 terminal remains visible",
+               flushedLifecycleStore.Snapshot().size() == 1 &&
+                   flushedLifecycleStore.Count(
+                       SelfSkillDebugPhase::Terminal) == 1 &&
+                   flushedLifecycleStore.HiddenTombstoneCount() == 0);
+    SelfSkillProcessObservation flushedProcess =
+        ownProcess;
+    flushedProcess.tick = 5020;
+    ExpectTrue("self debug Create Delete Process attaches terminal without ghost",
+               flushedLifecycleStore.ObserveProcess(
+                   flushedProcess).accepted &&
+                   flushedLifecycleStore.Size() == 1 &&
+                   flushedLifecycleStore.Count(
+                       SelfSkillDebugPhase::Terminal) == 1 &&
+                   flushedLifecycleStore.Count(
+                       SelfSkillDebugPhase::Pending) == 0);
+
+    SelfSkillDebugStore<4> createCounterStore;
+    SelfSkillMissileObservation unmatchedCreate =
+        ownMissile;
+    unmatchedCreate.data = nullptr;
+    unmatchedCreate.matchDisposition =
+        MissileMatchDisposition::Unmatched;
+    const SelfSkillDebugResult unmatchedCreateResult =
+        createCounterStore.ObserveMissileCreate(
+            unmatchedCreate);
+    SelfSkillMissileObservation rejectedCreate =
+        ownMissile;
+    rejectedCreate.matchDisposition =
+        MissileMatchDisposition::RejectBasicAttack;
+    const SelfSkillDebugResult rejectedCreateResult =
+        createCounterStore.ObserveMissileCreate(
+            rejectedCreate);
+    SelfSkillMissileObservation matchedCreate =
+        ownMissile;
+    matchedCreate.missileNetworkId = 7301u;
+    matchedCreate.missileObjectIdentity = 0xE001u;
+    const SelfSkillDebugResult matchedCreateResult =
+        createCounterStore.ObserveMissileCreate(
+            matchedCreate);
+    const SelfSkillDebugResult duplicateCreateResult =
+        createCounterStore.ObserveMissileCreate(
+            matchedCreate);
+    ExpectTrue("self debug create counters classify unmatched and rejected",
+               createCounterStore.Counters().missileCreateUnmatched == 1 &&
+                   createCounterStore.Counters().missileCreateRejected == 1 &&
+                   !IsMatchedSelfSkillMissileCreate(
+                       unmatchedCreateResult) &&
+                   !IsMatchedSelfSkillMissileCreate(
+                       rejectedCreateResult));
+    ExpectTrue("self debug duplicate remains matched and duplicate",
+               createCounterStore.Counters().missileCreateMatched == 2 &&
+                   createCounterStore.Counters().missileCreateOrphan == 1 &&
+                   createCounterStore.Counters().missileCreateDuplicate == 1 &&
+                   IsMatchedSelfSkillMissileCreate(
+                       matchedCreateResult) &&
+                   IsMatchedSelfSkillMissileCreate(
+                       duplicateCreateResult) &&
+                   duplicateCreateResult.duplicate);
+
+    ExpectTrue("self debug delete rejects reused ID with wrong identity",
+               !processThenCreate.ObserveMissileDelete(
+                   5001u, 0xBB02u, 1400, 250).accepted &&
+                   processThenCreate.Count(SelfSkillDebugPhase::Live) == 1);
+    ExpectTrue("self debug delete accepts exact missile ownership",
+               processThenCreate.ObserveMissileDelete(
+                   5001u, 0xAA01u, 1400, 250).accepted &&
+                   processThenCreate.Count(SelfSkillDebugPhase::Terminal) == 1);
+    processThenCreate.Update(1650);
+    ExpectEq("self debug terminal is retained through exact hold deadline",
+             static_cast<int>(processThenCreate.Size()), 1);
+    processThenCreate.Update(1651);
+    ExpectEq("self debug terminal expires after hold deadline",
+             static_cast<int>(processThenCreate.Size()), 0);
+
+    SelfSkillDebugStore<1> capacityStore;
+    SelfSkillProcessObservation wrapProcess = ownProcess;
+    wrapProcess.tick = std::numeric_limits<int>::max() - 100;
+    ExpectTrue("self debug accepts cast before signed tick wrap",
+               capacityStore.ObserveProcess(wrapProcess).accepted);
+    capacityStore.Update(std::numeric_limits<int>::min() + 100);
+    ExpectEq("self debug wrap-safe age does not expire fresh pending cast",
+             static_cast<int>(capacityStore.Size()), 1);
+    capacityStore.Update(std::numeric_limits<int>::min() + 1600);
+    ExpectEq("self debug wrap-safe timeout expires old pending cast",
+             static_cast<int>(capacityStore.Size()), 0);
+    wrapProcess.tick = 2000;
+    ExpectTrue("self debug bounded store accepts first record",
+               capacityStore.ObserveProcess(wrapProcess).accepted);
+    SelfSkillProcessObservation secondLane = wrapProcess;
+    secondLane.tick = 2300;
+    secondLane.end = Vec2(100.0f, 1100.0f);
+    ExpectTrue("self debug bounded store drops over-capacity record",
+               !capacityStore.ObserveProcess(secondLane).accepted &&
+                   capacityStore.Counters().capacityDrops == 1 &&
+                   capacityStore.Size() == 1);
+
+    SelfSkillDebugVisibility visibility;
+    visibility.masterEnabled = false;
+    ExpectTrue("self debug master off suppresses every phase",
+               !ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Pending) &&
+                   !ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Live) &&
+                   !ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Terminal));
+    visibility.masterEnabled = true;
+    ExpectTrue("self debug defaults draw pending live and terminal",
+               ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Pending) &&
+                   ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Live) &&
+                   ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Terminal));
+    visibility.drawPending = false;
+    visibility.drawLive = false;
+    ExpectTrue("self debug phase toggles suppress pending live and terminal",
+               !ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Pending) &&
+                   !ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Live) &&
+                   !ShouldDrawSelfSkillPhase(
+                    visibility, SelfSkillDebugPhase::Terminal));
+
+    std::vector<Threat> detectorIsolationSnapshot(1);
+    detectorIsolationSnapshot.front().id = 991;
+    const int detectorIsolationSerial = 77;
+    createThenProcess.Clear();
+    ExpectTrue("clearing self debug store cannot mutate detector seam",
+               detectorIsolationSnapshot.size() == 1 &&
+                   detectorIsolationSnapshot.front().id == 991 &&
+                   detectorIsolationSerial == 77 &&
+                   createThenProcess.Size() == 0);
 
     return ZDEvadeTest::Finish("ZDEVADE DETECTOR POLICY");
 }

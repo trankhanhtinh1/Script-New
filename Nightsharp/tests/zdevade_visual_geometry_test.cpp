@@ -1,5 +1,6 @@
 #include "tests/ZDEvadeTestSupport.h"
 #include "plugins/ZDEvade/Database/ThreatDatabase.h"
+#include "plugins/ZDEvade/Debug/SelfSkillDebugPolicy.h"
 #include "plugins/ZDEvade/Detection/ThreatDetectionPolicy.h"
 #include "plugins/ZDEvade/Visual/TargetVisualDispatch.h"
 #include "plugins/ZDEvade/Visual/ThreatVisualDispatch.h"
@@ -531,6 +532,25 @@ int main() {
     ExpectNear("line authored collision radius remains uninflated",
                preLaunchLine.AuthoredRadius(),
                50.0f);
+    SelfSkillDebugStore<4> selfVisualStore;
+    SelfSkillProcessObservation selfLineObservation;
+    selfLineObservation.localPlayerNetworkId = 77u;
+    selfLineObservation.sourceNetworkId = 77u;
+    selfLineObservation.data = &preLaunchLineData;
+    selfLineObservation.matchDisposition =
+        ProcessSpellMatchDisposition::Matched;
+    selfLineObservation.tick = 1000;
+    selfLineObservation.start = Vec2(100.0f, 100.0f);
+    selfLineObservation.end = Vec2(1100.0f, 100.0f);
+    ExpectTrue("self debug line creates tested renderer input",
+               selfVisualStore.ObserveProcess(
+                   selfLineObservation).accepted);
+    const auto selfLineVisuals = selfVisualStore.Snapshot();
+    ExpectTrue("self debug line visual uses same effective +6 radius",
+               selfLineVisuals.size() == 1 &&
+                   std::fabs(
+                       selfLineVisuals.front().visual.Radius() -
+                       56.0f) < 0.001f);
 
     SpellData effectiveCircleData =
         ZDEvadeTest::MakeSpell(ZDSpellType::Circular);
@@ -545,6 +565,19 @@ int main() {
                effectiveCirclePath.points[0].Distance(
                    effectiveCircle.endPos),
                100.0f);
+    selfVisualStore.Clear();
+    SelfSkillProcessObservation selfCircleObservation =
+        selfLineObservation;
+    selfCircleObservation.data = &effectiveCircleData;
+    ExpectTrue("self debug circle creates tested renderer input",
+               selfVisualStore.ObserveProcess(
+                   selfCircleObservation).accepted);
+    const auto selfCircleVisuals = selfVisualStore.Snapshot();
+    ExpectTrue("self debug circle visual keeps authored radius",
+               selfCircleVisuals.size() == 1 &&
+                   std::fabs(
+                       selfCircleVisuals.front().visual.Radius() -
+                       100.0f) < 0.001f);
 
     SpellData effectiveRingData =
         ZDEvadeTest::MakeSpell(ZDSpellType::Ring);

@@ -11,7 +11,6 @@
 
 #include "PositionInfo.h"
 #include "../Debug/CandidateDebug.h"
-#include "../Debug/ZDLog.h"
 #include "../Detection/SpellDetector.h"
 #include "../../../SDK/SDK.h"
 #include "../../../Core/CoreNavGrid.h"
