@@ -1705,6 +1705,12 @@ static void OnUnload() {
     Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
 
+    FioraPrePassiveObjects.clear();
+    FioraPassiveObjects.clear();
+    FioraUltiPassiveObjects.clear();
+    DetectedTargets.clear();
+    DetectedDashes.clear();
+
     RemoveMenu();
     Loaded = false;
 }
