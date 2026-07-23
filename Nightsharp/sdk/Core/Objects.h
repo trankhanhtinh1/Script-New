@@ -830,6 +830,7 @@ public:
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
         if (const auto* sc = StaticStringCache::Get(idx)) {
             if (!sc->name.empty()) return sc->name;
+            if (!sc->characterName.empty()) return sc->characterName;
         }
         const uintptr_t a = Address();
         if (Globals::IsValidPtr(a)) {
@@ -838,6 +839,12 @@ public:
                 thread_local std::string tls_name;
                 tls_name = nameBuf;
                 return tls_name;
+            }
+            char charBuf[96] = {};
+            if (::Core::Objects::ReadCharacterName(a, charBuf, sizeof(charBuf)) && charBuf[0]) {
+                thread_local std::string tls_nameFallback;
+                tls_nameFallback = charBuf;
+                return tls_nameFallback;
             }
         }
         static const std::string kEmpty;
@@ -848,6 +855,7 @@ public:
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
         if (const auto* sc = StaticStringCache::Get(idx)) {
             if (!sc->characterName.empty()) return sc->characterName;
+            if (!sc->name.empty()) return sc->name;
         }
         const uintptr_t a = Address();
         if (Globals::IsValidPtr(a)) {
@@ -856,6 +864,12 @@ public:
                 thread_local std::string tls_charName;
                 tls_charName = charBuf;
                 return tls_charName;
+            }
+            char nameBuf[96] = {};
+            if (::Core::Objects::ReadName(a, nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
+                thread_local std::string tls_charNameFallback;
+                tls_charNameFallback = nameBuf;
+                return tls_charNameFallback;
             }
         }
         static const std::string kEmpty;
