@@ -1918,6 +1918,9 @@
     <ClInclude Include="SDK\Utils\DynamicInitializer.h">
       <Filter>SDK\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\Utils\HashUtils.h">
+      <Filter>SDK\Utils</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\Utils\IFilter.h">
       <Filter>SDK\Utils</Filter>
     </ClInclude>

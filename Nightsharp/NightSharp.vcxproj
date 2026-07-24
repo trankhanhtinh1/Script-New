@@ -664,6 +664,7 @@
     <ClInclude Include="SDK\Utils\Cursor.h" />
     <ClInclude Include="SDK\Utils\DelayAction.h" />
     <ClInclude Include="SDK\Utils\DynamicInitializer.h" />
+    <ClInclude Include="SDK\Utils\HashUtils.h" />
     <ClInclude Include="SDK\Utils\IFilter.h" />
     <ClInclude Include="SDK\Utils\Invulnerable.h" />
     <ClInclude Include="SDK\Utils\Items.h" />
