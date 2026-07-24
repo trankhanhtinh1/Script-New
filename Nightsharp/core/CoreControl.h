@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreBypass.h"
+#include "CoreControlTypes.h"
 #include "CoreEvadeState.h"
 #include "CoreObjects.h"
 #include "CoreRuntime.h"
@@ -418,10 +419,11 @@ inline void RestoreHudAttackInput(uintptr_t hudInput,
         originalSelectedNetId);
 }
 
-inline bool IssueOrder(OrderType order,
-                       const Vec3& requestedPosition,
-                       uintptr_t target = 0,
-                       bool triggerEvent = true) {
+inline OrderIssueResult IssueOrderDetailed(
+    OrderType order,
+    const Vec3& requestedPosition,
+    uintptr_t target = 0,
+    bool triggerEvent = true) {
     auto& ctx = CoreRuntime::g_ctx;
     if (!CoreRuntime::IsWritePhase() || !CanIssueOrder()) {
         // This is the hot path while an orbwalking key (Space/C/V/X) is held: Orbwalk()
@@ -449,7 +451,7 @@ inline bool IssueOrder(OrderType order,
             AppendIssueOrderDebug(buf, /*channel=*/0);
         }
         CoreValidation::MarkIssueOrderResult(false);
-        return false;
+        return OrderIssueResult::Blocked;
     }
 
     if (NeedsTarget(order) && !Globals::IsValidPtr(target)) {
@@ -457,7 +459,7 @@ inline bool IssueOrder(OrderType order,
             AppendIssueOrderDebug("[NightSharp][IssueOrder] blocked missing target\r\n", /*channel=*/0);
         }
         CoreValidation::MarkIssueOrderResult(false);
-        return false;
+        return OrderIssueResult::Blocked;
     }
 
     Vec3 position = requestedPosition;
@@ -474,13 +476,13 @@ inline bool IssueOrder(OrderType order,
     const bool isAttack = IsAttackCommand(order);
     if (isAttack && CoreEvadeState::IsComboBlocked(static_cast<int>(GetTickCount()))) {
         CoreValidation::MarkIssueOrderResult(false);
-        return false;
+        return OrderIssueResult::Blocked;
     }
     if (!ReserveMoveOrderWindow(order, GetTickCount())) {
         // This is an intentional high-level throttle, not a failed native
         // IssueOrder call. Do not poison CoreValidation with a synthetic
         // failure when another script already used the shared move window.
-        return false;
+        return OrderIssueResult::Throttled;
     }
     const bool isPet = IsPetOrder(order);
     bool ok = false;
@@ -574,11 +576,31 @@ inline bool IssueOrder(OrderType order,
     }
 
     CoreValidation::MarkIssueOrderResult(ok);
-    return ok;
+    return ok
+        ? OrderIssueResult::Issued
+        : OrderIssueResult::Failed;
+}
+
+inline bool IssueOrder(OrderType order,
+                       const Vec3& requestedPosition,
+                       uintptr_t target = 0,
+                       bool triggerEvent = true) {
+    return IssueOrderDetailed(
+               order,
+               requestedPosition,
+               target,
+               triggerEvent) == OrderIssueResult::Issued;
+}
+
+inline OrderIssueResult IssueMoveDetailed(
+    const Vec3& position,
+    bool triggerEvent = true) {
+    return IssueOrderDetailed(MoveTo, position, 0, triggerEvent);
 }
 
 inline bool MoveToPos(const Vec3& position, bool triggerEvent = true) {
-    return IssueOrder(MoveTo, position, 0, triggerEvent);
+    return IssueMoveDetailed(position, triggerEvent) ==
+        OrderIssueResult::Issued;
 }
 
 inline bool AttackObject(uintptr_t target,
@@ -592,7 +614,8 @@ inline bool AttackMoveTo(const Vec3& position, bool triggerEvent = true) {
 }
 
 inline bool IssueMove(const Vec3& position, bool triggerEvent = true) {
-    return MoveToPos(position, triggerEvent);
+    return IssueMoveDetailed(position, triggerEvent) ==
+        OrderIssueResult::Issued;
 }
 
 inline bool IssueAttackMove(const Vec3& position, bool triggerEvent = true) {

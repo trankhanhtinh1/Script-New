@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <unordered_map>
 
 // ── SpellSlot enum (matches LeagueSharp/EnsoulSharp) ────────────────────────
 enum class EvadeSpellSlot {
@@ -49,6 +50,15 @@ enum class EvadeType {
     WindWall,
 };
 
+enum class HoldProtectionKind {
+    None,
+    SpeedBuff,
+    Shield,
+    Displacement,
+    Untargetable,
+    Invulnerable,
+};
+
 // ── EvadeSpellData struct (1-1 mapping from C#) ──────────────────────────────
 struct EvadeSpellData {
     std::string charName;
@@ -81,3 +91,68 @@ struct EvadeSpellData {
         : charName(charName), name(name), spellKey(spellKey),
           evadeType(evadeType), dangerlevel(dangerlevel) {}
 };
+
+inline bool EvadeSpellNameEqualsNoCase(const std::string& left,
+                                       const std::string& right) {
+    if (left.empty() || right.empty() || left.size() != right.size())
+        return false;
+    for (std::size_t index = 0; index < left.size(); ++index) {
+        unsigned char leftCharacter =
+            static_cast<unsigned char>(left[index]);
+        unsigned char rightCharacter =
+            static_cast<unsigned char>(right[index]);
+        if (leftCharacter >= 'A' && leftCharacter <= 'Z')
+            leftCharacter = static_cast<unsigned char>(
+                leftCharacter - 'A' + 'a');
+        if (rightCharacter >= 'A' && rightCharacter <= 'Z')
+            rightCharacter = static_cast<unsigned char>(
+                rightCharacter - 'A' + 'a');
+        if (leftCharacter != rightCharacter) return false;
+    }
+    return true;
+}
+
+inline bool StrictEvadeSpellNameMatches(
+        const EvadeSpellData& data,
+        const std::string& runtimeName,
+        const std::string& runtimeScriptName,
+        const std::string& runtimeIconName) {
+    const std::string* runtimeNames[] = {
+        &runtimeName,
+        &runtimeScriptName,
+        &runtimeIconName,
+    };
+    for (const std::string* runtime : runtimeNames) {
+        if (EvadeSpellNameEqualsNoCase(*runtime, data.spellName) ||
+            EvadeSpellNameEqualsNoCase(*runtime, data.name))
+            return true;
+    }
+    return false;
+}
+
+inline HoldProtectionKind HoldProtectionFor(const EvadeSpellData& data) {
+    if (data.untargetable) return HoldProtectionKind::Untargetable;
+    switch (data.evadeType) {
+    case EvadeType::Invulnerability:
+        return HoldProtectionKind::Invulnerable;
+    case EvadeType::Dash:
+    case EvadeType::Blink:
+        return HoldProtectionKind::Displacement;
+    case EvadeType::Shield:
+    case EvadeType::SpellShield:
+    case EvadeType::WindWall:
+        return HoldProtectionKind::Shield;
+    case EvadeType::MovementSpeedBuff:
+        return HoldProtectionKind::SpeedBuff;
+    default:
+        return HoldProtectionKind::None;
+    }
+}
+
+struct EvadeSpellRule {
+    bool enabled = true;
+    int danger = 1;
+    bool wardJump = true;
+};
+
+using EvadeSpellRuleMap = std::unordered_map<std::string, EvadeSpellRule>;

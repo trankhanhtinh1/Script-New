@@ -19,8 +19,7 @@ public:
     static const SpellData* FindAny(const char* name, const char* championName) {
         if (!name || !name[0]) return nullptr;
         for (const auto& s : SpellDatabase::Spells) {
-            if (s.charName != championName && s.charName != "AllChampions")
-                continue;
+            if (!MatchChampion(s.charName, championName)) continue;
             if (MatchName(s.spellName, name)) return &s;
             if (!s.missileName.empty() && MatchName(s.missileName, name)) return &s;
             for (const auto& es : s.extraSpellNames)
@@ -34,8 +33,7 @@ public:
     static const SpellData* FindMissile(const char* name, const char* championName) {
         if (!name || !name[0]) return nullptr;
         for (const auto& s : SpellDatabase::Spells) {
-            if (s.charName != championName && s.charName != "AllChampions")
-                continue;
+            if (!MatchChampion(s.charName, championName)) continue;
             if (!s.missileName.empty() && MatchName(s.missileName, name)) return &s;
             for (const auto& em : s.extraMissileNames)
                 if (MatchName(em, name)) return &s;
@@ -46,8 +44,7 @@ public:
     static const SpellData* FindCast(const char* spellSlotName, const char* championName) {
         if (!spellSlotName || !spellSlotName[0]) return nullptr;
         for (const auto& s : SpellDatabase::Spells) {
-            if (s.charName != championName && s.charName != "AllChampions")
-                continue;
+            if (!MatchChampion(s.charName, championName)) continue;
             if (MatchName(s.spellName, spellSlotName)) return &s;
             for (const auto& es : s.extraSpellNames)
                 if (MatchName(es, spellSlotName)) return &s;
@@ -56,6 +53,13 @@ public:
     }
 
 private:
+    static bool MatchChampion(const std::string& authored,
+                              const char* runtime) {
+        return !runtime || !runtime[0] ||
+            MatchName(authored, runtime) ||
+            MatchName(authored, "AllChampions");
+    }
+
     static bool MatchName(const std::string& a, const char* b) {
         if (a.empty() || !b || !b[0]) return false;
 #ifdef _WIN32

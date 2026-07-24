@@ -102,6 +102,9 @@ struct ObjectEventArgs {
     ObjectInfo Source = {};
     // Populated for missile events when the payload exposes a target index.
     ObjectInfo Target = {};
+    // Original cast payload when missile creation exposes one. This remains
+    // zero for lifecycle paths that only expose the missile's copied payload.
+    uintptr_t CastIdentity = 0;
     uint32_t SourceIndex = 0;
     uint32_t SourceNetworkId = 0;
     uint32_t TargetIndex = 0;
@@ -178,6 +181,7 @@ struct ProcessSpellEventArgs {
     bool IsSpell = false;
     bool IsAutoAttack = false;
     bool IsSpecialAttack = false;
+    bool SpellNameFromSlotFallback = false;
     char SpellName[96] = {};
     char MissileName[96] = {};
     char ScriptName[96] = {};
@@ -1252,6 +1256,7 @@ namespace detail {
                     args.SpellName,
                     static_cast<int>(sizeof(args.SpellName)),
                     args.SpellSlotName);
+                args.SpellNameFromSlotFallback = true;
             }
         }
 
@@ -1388,6 +1393,7 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     uintptr_t payload = 0;
     if (raw.Id == Hooks::OnMissileCreate) {
         payload = static_cast<uintptr_t>(raw.Rdx);
+        args.CastIdentity = payload;
         detail::Read(
             payload +
                 Offset::MissileEventLayout::CreatePacketCasterIndex,
