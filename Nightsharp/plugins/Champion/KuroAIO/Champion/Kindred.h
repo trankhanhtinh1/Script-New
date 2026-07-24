@@ -680,22 +680,14 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
     }
 
     const AIBaseClient attacked(args.Target.Handle());
-    if (attacked.IsValid() && !attacked.IsHero()) {
-        return;
-    }
-
-    AIHeroClient target = attacked.IsValid()
+    AIHeroClient target = (attacked.IsValid() && attacked.IsHero())
         ? AIHeroClient(attacked.Handle())
-        : AIHeroClient();
-    if (!ValidHeroTarget(target)) {
-        target = KindredTarget(
-            AutoAttack::GetRealAutoAttackRange(player) + Q.Range + 150.0f);
-    }
-    if (!ValidHeroTarget(target)) {
-        return;
-    }
+        : KindredTarget(AutoAttack::GetRealAutoAttackRange(player) + Q.Range + 150.0f);
 
-    Vector3 position = FindDashPosition(target, false);
+    Vector3 position = {};
+    if (ValidHeroTarget(target)) {
+        position = FindDashPosition(target, false);
+    }
     if (position.IsZero()) {
         position = Game::CursorPos();
     }

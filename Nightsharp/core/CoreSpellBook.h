@@ -326,12 +326,13 @@ inline bool CastSpellOnTarget(uintptr_t owner,
                               std::int32_t slot,
                               uintptr_t target) {
     if (!detail::IsLocalOwner(owner) ||
-        !Globals::IsValidPtr(target) ||
+        target == 0 ||
         slot < 0 ||
-        slot > CoreCastSpell::SlotSummonerF) {
+        slot > CoreCastSpell::SlotTrinket) {
         return false;
     }
 
+    detail::ScopedWritePhase writePhase;
     return CoreNewCastSpell::CastTargetSpellMethod2(slot, target);
 }
 

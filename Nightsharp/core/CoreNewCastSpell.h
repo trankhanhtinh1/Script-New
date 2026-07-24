@@ -311,6 +311,47 @@ namespace CoreNewCastSpell {
             return true;
         }
 
+        inline bool ExecuteTargetCastNativeDispatch(
+            CoreCastSpell::CastTrace& trace,
+            uintptr_t castVectorFn,
+            std::uint8_t slot,
+            const CoreCastSpell::NativeVec3Xyz* start,
+            const CoreCastSpell::NativeVec3Xyz* end,
+            std::uint32_t targetNetId,
+            bool& bypassTouched) {
+            bool nativeException = false;
+            __try {
+                NightSharpDebug::CrashTrace::Record(
+                    nscrash::TraceTag::SpellCast,
+                    static_cast<std::uint64_t>(slot),
+                    static_cast<std::uint64_t>(CoreCastSpell::CastKind::Target));
+                trace.bypassPrepared = CoreBypass::PrepareCastSpell();
+                bypassTouched = true;
+
+                using FnCastSpellVector = void(__fastcall*)(
+                    uintptr_t spellbook,
+                    uintptr_t slotObject,
+                    std::int32_t slot,
+                    const CoreCastSpell::NativeVec3Xyz* startPosition,
+                    const CoreCastSpell::NativeVec3Xyz* endPosition,
+                    std::uint32_t targetNetId);
+
+                spoof_call(
+                    reinterpret_cast<void*>(trace.spoofTrampoline),
+                    reinterpret_cast<FnCastSpellVector>(castVectorFn),
+                    trace.spellbook,
+                    trace.spellSlot,
+                    static_cast<std::int32_t>(slot),
+                    start,
+                    end,
+                    targetNetId);
+            }
+            __except (1) {
+                nativeException = true;
+            }
+            return !nativeException;
+        }
+
         inline bool CastTargetSpellNative(std::uint8_t slot, uintptr_t target) {
             if (!CoreCastSpell::detail::ResolveCommon(
                     CoreCastSpell::CastKind::Target,
@@ -323,80 +364,77 @@ namespace CoreNewCastSpell {
                 return false;
             }
 
-            if (!Globals::IsValidPtr(target)) {
+            uintptr_t targetAddress = 0;
+            std::uint32_t targetNetId = 0;
+
+            if (Globals::IsValidPtr(target)) {
+                targetAddress = target;
+                targetNetId = Globals::Read<std::uint32_t>(targetAddress + Offset::All::NetworkId);
+            } else if (target != 0 && target != 0xFFFFFFFFu) {
+                targetNetId = static_cast<std::uint32_t>(target);
+                targetAddress = ::Core::ObjectManager::FindByNetworkId(targetNetId);
+            }
+
+            if (targetNetId == 0 || targetNetId == 0xFFFFFFFFu) {
                 Fail(CoreCastSpell::CastFailure::InvalidTarget);
                 return false;
             }
 
             auto& trace = CoreCastSpell::g_lastTrace;
-            trace.targetNetworkId =
-                Globals::Read<std::uint32_t>(target + Offset::All::NetworkId);
-            trace.endPosition =
-                Globals::Read<Vec3>(target + Offset::All::Position);
+            trace.targetNetworkId = targetNetId;
+            if (Globals::IsValidPtr(targetAddress)) {
+                trace.endPosition = Globals::Read<Vec3>(targetAddress + Offset::All::Position);
+                trace.targetObjectIndex = Globals::Read<std::uint32_t>(targetAddress + Offset::All::Index);
+            } else {
+                trace.endPosition = trace.startPosition;
+            }
+
             trace.virtualCursorApplied = false;
             trace.virtualCursorScreen = {};
 
-            if (trace.targetNetworkId == 0 || trace.targetNetworkId == 0xFFFFFFFFu) {
-                Fail(CoreCastSpell::CastFailure::InvalidTarget);
-                return false;
-            }
+            const uintptr_t castVectorFn =
+                CoreRuntime::ResolveRva(Offset::ControlRuntime::CastSpellVector);
 
-            const uintptr_t canCastCheckFn =
-                CoreRuntime::ResolveRva(Offset::ControlRuntime::CanCastCheck);
-            const uintptr_t castSpellSafeFn =
-                CoreRuntime::ResolveRva(Offset::ControlRuntime::CastSpellSafe);
+            trace.canCastCheck = 0;
+            trace.castSpellSafe = castVectorFn;
 
-            trace.canCastCheck = canCastCheckFn;
-            trace.castSpellSafe = castSpellSafeFn;
-
-            if (!Globals::IsValidPtr(canCastCheckFn) ||
-                !Globals::IsValidPtr(castSpellSafeFn)) {
+            if (!Globals::IsValidPtr(castVectorFn)) {
                 Fail(CoreCastSpell::CastFailure::MissingNativeFunction);
                 return false;
             }
 
-            bool nativeException = false;
+            const CoreCastSpell::NativeVec3Xyz start{
+                trace.startPosition.x,
+                trace.startPosition.y,
+                trace.startPosition.z
+            };
+
+            const CoreCastSpell::NativeVec3Xyz end{
+                trace.endPosition.x,
+                trace.endPosition.y,
+                trace.endPosition.z
+            };
+
             bool bypassTouched = false;
 
-            __try {
-                NightSharpDebug::CrashTrace::Record(
-                    nscrash::TraceTag::SpellCast,
-                    static_cast<std::uint64_t>(slot),
-                    static_cast<std::uint64_t>(CoreCastSpell::CastKind::Target));
-                trace.bypassPrepared = CoreBypass::PrepareCastSpell();
-                bypassTouched = true;
-
-                trace.canCastAccepted = spoof_call(
-                    reinterpret_cast<void*>(trace.spoofTrampoline),
-                    reinterpret_cast<CoreCastSpell::FnCanCastCheck>(canCastCheckFn),
-                    trace.castContext,
-                    trace.spellInput,
-                    trace.targetNetworkId);
-
-                if (trace.canCastAccepted) {
-                    trace.nativeResult = spoof_call(
-                        reinterpret_cast<void*>(trace.spoofTrampoline),
-                        reinterpret_cast<CoreCastSpell::FnCastSpellSafe>(castSpellSafeFn),
-                        trace.castContext,
-                        trace.spellInput);
-                }
-            }
-            __except (1) {
-                nativeException = true;
-            }
+            const bool dispatchSuccess = ExecuteTargetCastNativeDispatch(
+                trace,
+                castVectorFn,
+                slot,
+                &start,
+                &end,
+                targetNetId,
+                bypassTouched);
 
             CoreCastSpell::detail::ClearBypassFlag(bypassTouched);
 
-            if (nativeException) {
+            if (!dispatchSuccess) {
                 Fail(CoreCastSpell::CastFailure::NativeException);
                 return false;
             }
 
-            if (!trace.canCastAccepted) {
-                Fail(CoreCastSpell::CastFailure::CanCastRejected);
-                return false;
-            }
-
+            trace.canCastAccepted = true;
+            trace.nativeResult = 1;
             trace.failure = CoreCastSpell::CastFailure::None;
             trace.success = true;
             CoreValidation::MarkCastResult(true);

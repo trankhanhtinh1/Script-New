@@ -391,6 +391,11 @@ static bool TryEQR(const AIHeroClient& target, const Vector3& castPosition) {
         return false;
     }
 
+    // Check turret safety for R position
+    if (!AllowTurret() && UnderTower(castPosition)) {
+        return false;
+    }
+
     if (player.IsDashing()) {
         if (CastEQCircleQ()) {
             return R.Cast(castPosition);
@@ -415,13 +420,12 @@ static bool TryEQR(const AIHeroClient& target, const Vector3& castPosition) {
 }
 
 static bool TryR() {
-    if (!R.IsReady() || !Bool(RMenu, "RCombo")) {
+    if (!R.IsReady() || !Bool(RMenu, "RCombo") || !Bool(RMenu, "REQR", true)) {
         return false;
     }
 
     R.Range = static_cast<float>(Slider(RangeMenu, "RRange", 1400));
     const int maxHealth = Slider(RMenu, "RHealth", 100);
-    const int delay = Slider(RMenu, "RDelay", 0);
 
     for (const auto& target : EnemyHeroesByHealth(R.Range)) {
         if (!IsAirborne(target) || target.HealthPercent() > static_cast<float>(maxHealth)) {
@@ -433,26 +437,10 @@ static bool TryR() {
             continue;
         }
 
+        // ONLY execute EQR (E+Q before R). Normal R is manual only by user decision.
         if (TryEQR(target, castPosition)) {
             return true;
         }
-
-        const float remaining = AirborneRemaining(target);
-        if (delay > 0 && remaining > 0.0f &&
-            remaining < static_cast<float>(delay) / 1000.0f + 0.1f) {
-            continue;
-        }
-
-        if (delay > 0) {
-            SDK::Utils::DelayAction::Add(delay, [castPosition]() {
-                if (R.IsReady()) {
-                    R.Cast(castPosition);
-                }
-            });
-            return true;
-        }
-
-        return R.Cast(castPosition);
     }
     return false;
 }

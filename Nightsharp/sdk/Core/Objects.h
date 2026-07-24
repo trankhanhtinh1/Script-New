@@ -308,14 +308,21 @@ public:
             endPosition);
     }
 
+    template <typename T>
     bool CastSpell(SpellSlot slot,
-                   uintptr_t target,
+                   const T& target,
                    bool triggerEvent = true) const {
         (void)triggerEvent;
+        uintptr_t addr = 0;
+        if constexpr (std::is_integral_v<std::decay_t<T>> || std::is_pointer_v<std::decay_t<T>>) {
+            addr = static_cast<uintptr_t>(target);
+        } else {
+            addr = target.Address();
+        }
         return ::CoreSpellBook::CastSpellOnTarget(
             owner_,
             static_cast<std::int32_t>(slot),
-            target);
+            addr);
     }
 
     bool CastSpell(SpellSlot slot,
