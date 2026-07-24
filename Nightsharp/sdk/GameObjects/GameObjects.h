@@ -354,8 +354,74 @@ namespace detail {
         }), vec.end());
     }
 
+    template <typename T>
+    inline void CleanInvalid(std::vector<T>& vec) {
+        if (vec.empty()) return;
+        vec.erase(std::remove_if(vec.begin(), vec.end(), [](const T& obj) {
+            return !obj.IsValid();
+        }), vec.end());
+    }
+
+    inline void CleanInvalidObjects() {
+        CleanInvalid(GameObjectsList);
+        CleanInvalid(AttackableUnitsList);
+        CleanInvalid(AllyList);
+        CleanInvalid(EnemyList);
+
+        CleanInvalid(HeroesList);
+        CleanInvalid(AllyHeroesList);
+        CleanInvalid(EnemyHeroesList);
+
+        CleanInvalid(MinionsList);
+        CleanInvalid(AllyMinionsList);
+        CleanInvalid(EnemyMinionsList);
+        CleanInvalid(AllyLaneMinionsList);
+        CleanInvalid(EnemyLaneMinionsList);
+        CleanInvalid(AllySpecialMinionsList);
+        CleanInvalid(EnemySpecialMinionsList);
+        CleanInvalid(AllyIgnoredMinionsList);
+        CleanInvalid(EnemyIgnoredMinionsList);
+        CleanInvalid(WardsList);
+        CleanInvalid(AllyWardsList);
+        CleanInvalid(EnemyWardsList);
+        CleanInvalid(JungleList);
+        CleanInvalid(JungleSmallList);
+        CleanInvalid(JungleLargeList);
+        CleanInvalid(JungleLegendaryList);
+        CleanInvalid(PlantsList);
+        CleanInvalid(ClonesList);
+        CleanInvalid(AllyClonesList);
+        CleanInvalid(EnemyClonesList);
+        CleanInvalid(PetsList);
+        CleanInvalid(AllyPetsList);
+        CleanInvalid(EnemyPetsList);
+
+        CleanInvalid(TurretsList);
+        CleanInvalid(AllyTurretsList);
+        CleanInvalid(EnemyTurretsList);
+
+        CleanInvalid(InhibitorsList);
+        CleanInvalid(AllyInhibitorsList);
+        CleanInvalid(EnemyInhibitorsList);
+        CleanInvalid(NexusList);
+        if (!AllyNexusObject.IsValid()) AllyNexusObject = {};
+        if (!EnemyNexusObject.IsValid()) EnemyNexusObject = {};
+
+        CleanInvalid(ShopsList);
+        CleanInvalid(AllyShopsList);
+        CleanInvalid(EnemyShopsList);
+        CleanInvalid(SpawnPointsList);
+        CleanInvalid(AllySpawnPointsList);
+        CleanInvalid(EnemySpawnPointsList);
+        CleanInvalid(ParticleEmittersList);
+        CleanInvalid(MissilesList);
+    }
+
     inline void OnObjectAdd(const GameObject& object) {
         if (!object.IsValid()) return;
+        Lock lk(g_mutex);
+        CleanInvalidObjects();
+
         PopulateStatic(object);
 
         const int netId = object.NetworkId();
@@ -493,6 +559,7 @@ namespace detail {
 
     inline void OnObjectDelete(int netId, ::Core::Objects::ObjectType type = ::Core::Objects::ObjectType::Unknown) {
         if (netId == 0) return;
+        Lock lk(g_mutex);
 
         EraseByNetworkId(GameObjectsList, netId);
         EraseByNetworkId(AttackableUnitsList, netId);
