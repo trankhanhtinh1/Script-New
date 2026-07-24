@@ -16,6 +16,8 @@
 #include "Globals.h"
 #include "offset.h"
 
+#include "../sdk/Utils/HashUtils.h"
+
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
@@ -30,33 +32,13 @@ namespace CoreBuffs {
     // Offset of the `char*` name field inside ScriptBaseBuff
     constexpr uintptr_t kScriptBaseNameOffset = 0x8;
 
-    // ── FNV-1a Case-Insensitive Hash Helpers ──
-
-    constexpr uint32_t HashName(const char* str) {
-        if (!str) return 0;
-        uint32_t hash = 0x811c9dc5u;
-        for (size_t i = 0; str[i] != '\0'; ++i) {
-            char c = str[i];
-            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
-            hash ^= static_cast<uint32_t>(static_cast<unsigned char>(c));
-            hash *= 0x01000193u;
-        }
-        return hash;
-    }
-
-    constexpr uint32_t HashNameLen(const char* str, size_t len) {
-        if (!str) return 0;
-        uint32_t hash = 0x811c9dc5u;
-        for (size_t i = 0; i < len; ++i) {
-            char c = str[i];
-            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + 32);
-            hash ^= static_cast<uint32_t>(static_cast<unsigned char>(c));
-            hash *= 0x01000193u;
-        }
-        return hash;
-    }
+    // ── Reuse Shared FNV-1a Hash Helpers from SDK::Utils ──
+    using SDK::Utils::HashName;
+    using SDK::Utils::HashNameLen;
+    using SDK::Utils::StrEqualInsensitive;
 
     inline constexpr uint32_t kRecallHash = HashName("recall");
+
 
     struct BuffRef {
         uintptr_t address = 0;
@@ -203,6 +185,24 @@ namespace CoreBuffs {
     };
 #endif
 
+    inline bool IsEventCacheEnabled() {
+        return EventCacheEnabled;
+    }
+
+    inline void SetEventCacheEnabled(bool enabled) {
+        EventCacheEnabled = enabled;
+    }
+
+    inline void ClearEventCache() {
+#if defined(_WIN32)
+        CachedBuffExclusiveLock lock;
+#endif
+        std::memset(CachedBuffEntries, 0, sizeof(CachedBuffEntries));
+        CachedBuffCursor = 0;
+    }
+
+
+
     // ── Manager accessors ──
 
     inline uintptr_t ResolveBuffManagerOffset(uintptr_t obj) {
@@ -308,22 +308,61 @@ namespace CoreBuffs {
         return false;
     }
 
-    inline bool StrEqualInsensitive(const char* a, const char* b) {
-#if defined(_WIN32)
-        return lstrcmpiA(a, b) == 0;
-#else
-        if (!a || !b) return false;
-        while (*a && *b) {
-            char ca = *a;
-            char cb = *b;
-            if (ca >= 'A' && ca <= 'Z') ca = static_cast<char>(ca - 'A' + 'a');
-            if (cb >= 'A' && cb <= 'Z') cb = static_cast<char>(cb - 'A' + 'a');
-            if (ca != cb) return false;
-            ++a; ++b;
+    inline void CopyStringSafe(char* dest, const char* src, size_t destSize) {
+        if (!dest || destSize == 0) return;
+        if (!src) { dest[0] = '\0'; return; }
+        size_t i = 0;
+        for (; i + 1 < destSize && src[i] != '\0'; ++i) {
+            dest[i] = src[i];
         }
-        return *a == 0 && *b == 0;
-#endif
+        dest[i] = '\0';
     }
+
+    inline void ApplyBuffAddEvent(uintptr_t obj, const char* name, int count, uintptr_t buffAddress) {
+        if (!EventCacheEnabled || !Globals::IsValidPtr(obj) || !name || !name[0]) return;
+#if defined(_WIN32)
+        CachedBuffExclusiveLock lock;
+#endif
+        for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
+            if (CachedBuffEntries[i].object == obj && CachedBuffEntries[i].address == buffAddress) {
+                CachedBuffEntries[i].count = count;
+                if (name[0] != '\0') {
+                    CopyStringSafe(CachedBuffEntries[i].name, name, sizeof(CachedBuffEntries[i].name));
+                    CachedBuffEntries[i].hash = HashName(name);
+                }
+                return;
+            }
+        }
+        for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
+            if (CachedBuffEntries[i].object == 0) {
+                CachedBuffEntries[i].object = obj;
+                CachedBuffEntries[i].address = buffAddress;
+                CachedBuffEntries[i].count = count;
+                CopyStringSafe(CachedBuffEntries[i].name, name, sizeof(CachedBuffEntries[i].name));
+                CachedBuffEntries[i].hash = HashName(name);
+                return;
+            }
+        }
+    }
+
+    inline void ApplyBuffRemoveEvent(uintptr_t obj, const char* name, uintptr_t buffAddress) {
+        if (!EventCacheEnabled || !Globals::IsValidPtr(obj)) return;
+#if defined(_WIN32)
+        CachedBuffExclusiveLock lock;
+#endif
+        for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
+            if (CachedBuffEntries[i].object == obj &&
+                (buffAddress != 0 ? CachedBuffEntries[i].address == buffAddress : (name && StrEqualInsensitive(CachedBuffEntries[i].name, name)))) {
+                CachedBuffEntries[i] = {};
+                return;
+            }
+        }
+    }
+
+    inline void ApplyBuffUpdateEvent(uintptr_t obj, const char* name, int count, uintptr_t buffAddress) {
+        ApplyBuffAddEvent(obj, name, count, buffAddress);
+    }
+
 
     inline float ResolveGameTime() {
         const auto& ctx = CoreRuntime::GetContext();
@@ -586,6 +625,11 @@ namespace CoreBuffs {
         }
         return {};
     }
+
+    inline bool HasBuffRaw(uintptr_t obj, const char* name) {
+        return FindRawByName(obj, name).IsValid();
+    }
+
 
     inline bool HasBuffType(uintptr_t obj, int type) {
         const float gameTime = ResolveGameTime();
