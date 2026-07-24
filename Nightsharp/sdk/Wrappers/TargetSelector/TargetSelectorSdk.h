@@ -25,7 +25,12 @@ class TargetSelectorSdk final : public ITargetSelector {
 public:
     explicit TargetSelectorSdk(Menu* parentMenu) {
         internalMenu_ = new Menu("targetselector", "Target Selector");
-        parentMenu->Add(internalMenu_);
+        if (parentMenu) {
+            parentMenu->Add(internalMenu_);
+        } else {
+            internalMenu_->Root = true;
+            internalMenu_->Attach();
+        }
 
         selected_ = new TargetSelectorSelected(internalMenu_);
         humanizer_ = new TargetSelectorHumanizer(internalMenu_);

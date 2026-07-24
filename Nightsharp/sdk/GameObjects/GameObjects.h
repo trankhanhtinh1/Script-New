@@ -211,80 +211,100 @@ namespace detail {
         });
     }
 
-    inline bool IsWardObject(const AIMinionClient& minion) {
+    inline bool IsWardObject(const AIMinionClient& minion, const std::string& name) {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        const std::string name = BestNameOf(minion);
         return HasFlag(minion.GetMinionType(), MinionTypes::Ward) ||
                ContainsAny(name, {
                    "ward", "jammerdevice", "trinket", "sightward", "visionward"
                });
     }
 
-    inline bool IsPlantObject(const AIMinionClient& minion) {
+    inline bool IsWardObject(const AIMinionClient& minion) {
+        return IsWardObject(minion, BestNameOf(minion));
+    }
+
+    inline bool IsPlantObject(const AIMinionClient& minion, const std::string& name) {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        const std::string name = BestNameOf(minion);
         const float maxHp = minion.MaxHealth();
         return minion.GetJungleType() == JungleType::Plant ||
                IsKnownJunglePlantName(name) ||
                (TeamValue(minion) == 300 && maxHp > 0.0f && maxHp <= 6.0f);
     }
 
-    inline bool IsJungleObject(const AIMinionClient& minion) {
+    inline bool IsPlantObject(const AIMinionClient& minion) {
+        return IsPlantObject(minion, BestNameOf(minion));
+    }
+
+    inline bool IsJungleObject(const AIMinionClient& minion, const std::string& name) {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        if (TeamValue(minion) != 300 || IsPlantObject(minion)) {
+        if (TeamValue(minion) != 300 || IsPlantObject(minion, name)) {
             return false;
         }
         const float maxHp = minion.MaxHealth();
         if (maxHp <= 6.0f) {
             return false;
         }
-        const std::string name = BestNameOf(minion);
         return minion.IsJungle() || IsKnownJungleMonsterName(name);
     }
 
-    inline bool IsLaneMinionObject(const AIMinionClient& minion) {
+    inline bool IsJungleObject(const AIMinionClient& minion) {
+        return IsJungleObject(minion, BestNameOf(minion));
+    }
+
+    inline bool IsLaneMinionObject(const AIMinionClient& minion, const std::string& name) {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        if (TeamValue(minion) == 300 || IsPlantObject(minion)) {
+        if (TeamValue(minion) == 300 || IsPlantObject(minion, name)) {
             return false;
         }
         const float maxHp = minion.MaxHealth();
         if (maxHp <= 0.0f || maxHp >= 10000.0f) {
             return false;
         }
-        const std::string name = BestNameOf(minion);
         if (IsKnownJungleMonsterName(name)) {
             return false;
         }
         return minion.IsMinion() || IsLaneMinionName(name);
     }
 
-    inline bool IsCloneObject(const AIMinionClient& minion) {
+    inline bool IsLaneMinionObject(const AIMinionClient& minion) {
+        return IsLaneMinionObject(minion, BestNameOf(minion));
+    }
+
+    inline bool IsCloneObject(const AIMinionClient& minion, const std::string& name) {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        return minion.IsClone() || EqualsAny(BestNameOf(minion), {
+        return minion.IsClone() || EqualsAny(name, {
             "leblanc", "monkeyking", "neeko", "shaco"
         });
     }
 
-    inline bool IsPetObject(const AIMinionClient& minion) {
-        return minion.IsValid() && !minion.IsDead() &&
-               !IsPlantObject(minion) && minion.IsPet();
+    inline bool IsCloneObject(const AIMinionClient& minion) {
+        return IsCloneObject(minion, BestNameOf(minion));
     }
 
-    inline bool IsSpecialMinionObject(const AIMinionClient& minion) {
+    inline bool IsPetObject(const AIMinionClient& minion, const std::string& name) {
+        return minion.IsValid() && !minion.IsDead() &&
+               !IsPlantObject(minion, name) && minion.IsPet();
+    }
+
+    inline bool IsPetObject(const AIMinionClient& minion) {
+        return IsPetObject(minion, BestNameOf(minion));
+    }
+
+    inline bool IsSpecialMinionObject(const AIMinionClient& minion, const std::string& name) {
         if (!minion.IsValid() || minion.IsDead()) {
             return false;
         }
-        return EqualsAny(BestNameOf(minion), {
+        return EqualsAny(name, {
             "annietibbers", "elisespiderling", "heimertyellow",
             "heimertblue", "ivernminion", "malzaharvoidling",
             "shacobox", "teemomushroom", "yorickghoulmelee",
@@ -292,26 +312,34 @@ namespace detail {
         });
     }
 
-    inline bool IsIgnoredMinionObject(const AIMinionClient& minion) {
-        return minion.IsValid() && EqualsAny(BestNameOf(minion), {
+    inline bool IsSpecialMinionObject(const AIMinionClient& minion) {
+        return IsSpecialMinionObject(minion, BestNameOf(minion));
+    }
+
+    inline bool IsIgnoredMinionObject(const AIMinionClient& minion, const std::string& name) {
+        return minion.IsValid() && EqualsAny(name, {
             "jarvanivstandard"
         });
+    }
+
+    inline bool IsIgnoredMinionObject(const AIMinionClient& minion) {
+        return IsIgnoredMinionObject(minion, BestNameOf(minion));
     }
 
 
 
     template <typename T>
     inline bool ContainsByNetworkId(const std::vector<T>& vec, int netId) {
-        if (netId == 0) return false;
+        if (netId == 0 || vec.empty()) return false;
         for (const auto& item : vec) {
-            if (item.NetworkId() == netId) return true;
+            if (static_cast<int>(item.Handle().networkId) == netId) return true;
         }
         return false;
     }
 
     template <typename T>
     inline void PushUniqueByNetworkId(std::vector<T>& vec, const T& obj) {
-        const int netId = obj.NetworkId();
+        const int netId = static_cast<int>(obj.Handle().networkId);
         if (netId != 0 && ContainsByNetworkId(vec, netId)) {
             return;
         }
@@ -320,8 +348,9 @@ namespace detail {
 
     template <typename T>
     inline void EraseByNetworkId(std::vector<T>& vec, int netId) {
+        if (vec.empty()) return;
         vec.erase(std::remove_if(vec.begin(), vec.end(), [netId](const T& obj) {
-            return obj.NetworkId() == netId;
+            return static_cast<int>(obj.Handle().networkId) == netId;
         }), vec.end());
     }
 
@@ -364,19 +393,21 @@ namespace detail {
             const AIMinionClient minion(object.Handle());
             if (minion.IsDead()) break;
 
-            if (IsWardObject(minion)) {
+            const std::string name = BestNameOf(minion);
+
+            if (IsWardObject(minion, name)) {
                 PushUniqueByNetworkId(WardsList, minion);
                 if (enemy) PushUniqueByNetworkId(EnemyWardsList, minion);
                 else PushUniqueByNetworkId(AllyWardsList, minion);
                 break;
             }
 
-            if (IsPlantObject(minion)) {
+            if (IsPlantObject(minion, name)) {
                 PushUniqueByNetworkId(PlantsList, minion);
                 break;
             }
 
-            if (IsJungleObject(minion)) {
+            if (IsJungleObject(minion, name)) {
                 PushUniqueByNetworkId(JungleList, minion);
                 const JungleType jungleType = minion.GetJungleType();
                 if (jungleType == JungleType::Small) {
@@ -389,33 +420,33 @@ namespace detail {
                 break;
             }
 
-            if (IsCloneObject(minion)) {
+            if (IsCloneObject(minion, name)) {
                 PushUniqueByNetworkId(ClonesList, minion);
                 if (enemy) PushUniqueByNetworkId(EnemyClonesList, minion);
                 else PushUniqueByNetworkId(AllyClonesList, minion);
                 break;
             }
 
-            if (IsPetObject(minion)) {
+            if (IsPetObject(minion, name)) {
                 PushUniqueByNetworkId(PetsList, minion);
                 if (enemy) PushUniqueByNetworkId(EnemyPetsList, minion);
                 else PushUniqueByNetworkId(AllyPetsList, minion);
                 break;
             }
 
-            if (IsSpecialMinionObject(minion)) {
+            if (IsSpecialMinionObject(minion, name)) {
                 if (enemy) PushUniqueByNetworkId(EnemySpecialMinionsList, minion);
                 else PushUniqueByNetworkId(AllySpecialMinionsList, minion);
                 break;
             }
 
-            if (IsIgnoredMinionObject(minion)) {
+            if (IsIgnoredMinionObject(minion, name)) {
                 if (enemy) PushUniqueByNetworkId(EnemyIgnoredMinionsList, minion);
                 else PushUniqueByNetworkId(AllyIgnoredMinionsList, minion);
                 break;
             }
 
-            if (IsLaneMinionObject(minion)) {
+            if (IsLaneMinionObject(minion, name)) {
                 PushUniqueByNetworkId(MinionsList, minion);
                 if (enemy) {
                     PushUniqueByNetworkId(EnemyMinionsList, minion);
@@ -460,46 +491,111 @@ namespace detail {
         }
     }
 
-    inline void OnObjectDelete(int netId) {
+    inline void OnObjectDelete(int netId, ::Core::Objects::ObjectType type = ::Core::Objects::ObjectType::Unknown) {
         if (netId == 0) return;
+
         EraseByNetworkId(GameObjectsList, netId);
         EraseByNetworkId(AttackableUnitsList, netId);
-        EraseByNetworkId(AllyList, netId);
-        EraseByNetworkId(EnemyList, netId);
-        EraseByNetworkId(HeroesList, netId);
-        EraseByNetworkId(AllyHeroesList, netId);
-        EraseByNetworkId(EnemyHeroesList, netId);
-        EraseByNetworkId(MinionsList, netId);
-        EraseByNetworkId(AllyMinionsList, netId);
-        EraseByNetworkId(EnemyMinionsList, netId);
-        EraseByNetworkId(AllyLaneMinionsList, netId);
-        EraseByNetworkId(EnemyLaneMinionsList, netId);
-        EraseByNetworkId(AllySpecialMinionsList, netId);
-        EraseByNetworkId(EnemySpecialMinionsList, netId);
-        EraseByNetworkId(AllyIgnoredMinionsList, netId);
-        EraseByNetworkId(EnemyIgnoredMinionsList, netId);
-        EraseByNetworkId(WardsList, netId);
-        EraseByNetworkId(AllyWardsList, netId);
-        EraseByNetworkId(EnemyWardsList, netId);
-        EraseByNetworkId(JungleList, netId);
-        EraseByNetworkId(JungleSmallList, netId);
-        EraseByNetworkId(JungleLargeList, netId);
-        EraseByNetworkId(JungleLegendaryList, netId);
-        EraseByNetworkId(PlantsList, netId);
-        EraseByNetworkId(ClonesList, netId);
-        EraseByNetworkId(AllyClonesList, netId);
-        EraseByNetworkId(EnemyClonesList, netId);
-        EraseByNetworkId(PetsList, netId);
-        EraseByNetworkId(AllyPetsList, netId);
-        EraseByNetworkId(EnemyPetsList, netId);
-        EraseByNetworkId(TurretsList, netId);
-        EraseByNetworkId(AllyTurretsList, netId);
-        EraseByNetworkId(EnemyTurretsList, netId);
-        EraseByNetworkId(InhibitorsList, netId);
-        EraseByNetworkId(AllyInhibitorsList, netId);
-        EraseByNetworkId(EnemyInhibitorsList, netId);
-        EraseByNetworkId(NexusList, netId);
-        EraseByNetworkId(MissilesList, netId);
+
+        switch (type) {
+        case ::Core::Objects::ObjectType::AIHeroClient:
+            EraseByNetworkId(AllyList, netId);
+            EraseByNetworkId(EnemyList, netId);
+            EraseByNetworkId(HeroesList, netId);
+            EraseByNetworkId(AllyHeroesList, netId);
+            EraseByNetworkId(EnemyHeroesList, netId);
+            break;
+
+        case ::Core::Objects::ObjectType::AIMinionClient:
+        case ::Core::Objects::ObjectType::NeutralMinionCampClient:
+            EraseByNetworkId(AllyList, netId);
+            EraseByNetworkId(EnemyList, netId);
+            EraseByNetworkId(MinionsList, netId);
+            EraseByNetworkId(AllyMinionsList, netId);
+            EraseByNetworkId(EnemyMinionsList, netId);
+            EraseByNetworkId(AllyLaneMinionsList, netId);
+            EraseByNetworkId(EnemyLaneMinionsList, netId);
+            EraseByNetworkId(AllySpecialMinionsList, netId);
+            EraseByNetworkId(EnemySpecialMinionsList, netId);
+            EraseByNetworkId(AllyIgnoredMinionsList, netId);
+            EraseByNetworkId(EnemyIgnoredMinionsList, netId);
+            EraseByNetworkId(WardsList, netId);
+            EraseByNetworkId(AllyWardsList, netId);
+            EraseByNetworkId(EnemyWardsList, netId);
+            EraseByNetworkId(JungleList, netId);
+            EraseByNetworkId(JungleSmallList, netId);
+            EraseByNetworkId(JungleLargeList, netId);
+            EraseByNetworkId(JungleLegendaryList, netId);
+            EraseByNetworkId(PlantsList, netId);
+            EraseByNetworkId(ClonesList, netId);
+            EraseByNetworkId(AllyClonesList, netId);
+            EraseByNetworkId(EnemyClonesList, netId);
+            EraseByNetworkId(PetsList, netId);
+            EraseByNetworkId(AllyPetsList, netId);
+            EraseByNetworkId(EnemyPetsList, netId);
+            break;
+
+        case ::Core::Objects::ObjectType::AITurretClient:
+            EraseByNetworkId(TurretsList, netId);
+            EraseByNetworkId(AllyTurretsList, netId);
+            EraseByNetworkId(EnemyTurretsList, netId);
+            break;
+
+        case ::Core::Objects::ObjectType::BarracksDampenerClient:
+            EraseByNetworkId(InhibitorsList, netId);
+            EraseByNetworkId(AllyInhibitorsList, netId);
+            EraseByNetworkId(EnemyInhibitorsList, netId);
+            break;
+
+        case ::Core::Objects::ObjectType::HQClient:
+            EraseByNetworkId(NexusList, netId);
+            if (static_cast<int>(AllyNexusObject.Handle().networkId) == netId) AllyNexusObject = {};
+            if (static_cast<int>(EnemyNexusObject.Handle().networkId) == netId) EnemyNexusObject = {};
+            break;
+
+        case ::Core::Objects::ObjectType::MissileClient:
+            EraseByNetworkId(MissilesList, netId);
+            break;
+
+        default:
+            EraseByNetworkId(AllyList, netId);
+            EraseByNetworkId(EnemyList, netId);
+            EraseByNetworkId(HeroesList, netId);
+            EraseByNetworkId(AllyHeroesList, netId);
+            EraseByNetworkId(EnemyHeroesList, netId);
+            EraseByNetworkId(MinionsList, netId);
+            EraseByNetworkId(AllyMinionsList, netId);
+            EraseByNetworkId(EnemyMinionsList, netId);
+            EraseByNetworkId(AllyLaneMinionsList, netId);
+            EraseByNetworkId(EnemyLaneMinionsList, netId);
+            EraseByNetworkId(AllySpecialMinionsList, netId);
+            EraseByNetworkId(EnemySpecialMinionsList, netId);
+            EraseByNetworkId(AllyIgnoredMinionsList, netId);
+            EraseByNetworkId(EnemyIgnoredMinionsList, netId);
+            EraseByNetworkId(WardsList, netId);
+            EraseByNetworkId(AllyWardsList, netId);
+            EraseByNetworkId(EnemyWardsList, netId);
+            EraseByNetworkId(JungleList, netId);
+            EraseByNetworkId(JungleSmallList, netId);
+            EraseByNetworkId(JungleLargeList, netId);
+            EraseByNetworkId(JungleLegendaryList, netId);
+            EraseByNetworkId(PlantsList, netId);
+            EraseByNetworkId(ClonesList, netId);
+            EraseByNetworkId(AllyClonesList, netId);
+            EraseByNetworkId(EnemyClonesList, netId);
+            EraseByNetworkId(PetsList, netId);
+            EraseByNetworkId(AllyPetsList, netId);
+            EraseByNetworkId(EnemyPetsList, netId);
+            EraseByNetworkId(TurretsList, netId);
+            EraseByNetworkId(AllyTurretsList, netId);
+            EraseByNetworkId(EnemyTurretsList, netId);
+            EraseByNetworkId(InhibitorsList, netId);
+            EraseByNetworkId(AllyInhibitorsList, netId);
+            EraseByNetworkId(EnemyInhibitorsList, netId);
+            EraseByNetworkId(NexusList, netId);
+            EraseByNetworkId(MissilesList, netId);
+            break;
+        }
     }
 
     inline void Clear() {
@@ -587,7 +683,8 @@ namespace detail {
         return GameObject(handle);
     }
 
-    inline void DispatchLifecycle(std::vector<LifecycleHandler>& source,
+    inline void DispatchLifecycle(const char* eventName,
+                                  std::vector<LifecycleHandler>& source,
                                   const SDK::Events::ObjectEventArgs& args) {
         if (!args.Sender.IsValid()) {
             return;
@@ -598,26 +695,37 @@ namespace detail {
             handlers = source; // copy so a handler may (un)subscribe re-entrantly
         }
         const GameObject object = ObjectFromArgs(args);
-        for (const auto handler : handlers) {
+        for (size_t i = 0; i < handlers.size(); ++i) {
+            const auto handler = handlers[i];
             if (handler) {
+                const auto perfStart = NightSharpPerf::Now();
                 handler(object);
+                const double ms = NightSharpPerf::MsSince(perfStart);
+                NightSharpPerf::AddEventHandlerTiming(
+                    eventName, static_cast<int>(i), reinterpret_cast<const void*>(handler), ms);
             }
         }
     }
 
     inline void OnNativeObjectCreate(const SDK::Events::ObjectEventArgs& args) {
         if (args.Sender.IsValid()) {
+            const auto start = NightSharpPerf::Now();
             OnObjectAdd(ObjectFromArgs(args));
+            const double ms = NightSharpPerf::MsSince(start);
+            NightSharpPerf::AddEventHandlerTiming("GameObjects::OnObjectAdd", 0, reinterpret_cast<const void*>(&OnObjectAdd), ms);
         }
-        DispatchLifecycle(CreateHandlers, args);
+        DispatchLifecycle("GameObjects::OnCreate", CreateHandlers, args);
     }
 
     inline void OnNativeObjectDelete(const SDK::Events::ObjectEventArgs& args) {
         if (args.Sender.IsValid()) {
             StaticStringCache::Clear(static_cast<std::uint32_t>(args.Sender.Index & 0xFFFFu));
-            OnObjectDelete(static_cast<int>(args.Sender.NetworkId));
+            const auto start = NightSharpPerf::Now();
+            OnObjectDelete(static_cast<int>(args.Sender.NetworkId), args.Sender.Type);
+            const double ms = NightSharpPerf::MsSince(start);
+            NightSharpPerf::AddEventHandlerTiming("GameObjects::OnObjectDelete", 0, reinterpret_cast<const void*>(&OnObjectDelete), ms);
         }
-        DispatchLifecycle(DeleteHandlers, args);
+        DispatchLifecycle("GameObjects::OnDelete", DeleteHandlers, args);
     }
 
     // Subscribe our forwarders to the (deferred, update-tick) native lifecycle

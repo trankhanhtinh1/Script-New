@@ -582,28 +582,31 @@ namespace StaticStringCache {
         Entry& e = entries[index];
         e.valid = true;
 
-        if (e.characterName.empty() && (
+        const bool isMainType = (
             type == ::Core::Objects::ObjectType::AIHeroClient ||
             type == ::Core::Objects::ObjectType::AIMinionClient ||
             type == ::Core::Objects::ObjectType::AITurretClient ||
             type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-            type == ::Core::Objects::ObjectType::HQClient)) {
+            type == ::Core::Objects::ObjectType::HQClient ||
+            type == ::Core::Objects::ObjectType::MissileClient);
+
+        if (e.characterName.empty() && isMainType) {
             char charBuf[96] = {};
             if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
                 e.characterName = charBuf;
         }
 
-        if (e.name.empty()) {
+        if (e.name.empty() && isMainType) {
             char nameBuf[96] = {};
             if (::Core::Objects::ReadName(address, nameBuf, static_cast<int>(sizeof(nameBuf))))
                 e.name = nameBuf;
         }
 
-        if (e.team == 0) {
+        if (e.team == 0 && isMainType) {
             e.team = ::Core::Objects::ReadTeamValue(address);
         }
 
-        if (e.minionClass == 0 && (
+        if (e.minionClass == 0 && isMainType && (
             type == ::Core::Objects::ObjectType::AIMinionClient ||
             type == ::Core::Objects::ObjectType::NeutralMinionCampClient)) {
             e.minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(address));
@@ -669,12 +672,6 @@ public:
     }
 
     GameObjectTeam Team() const {
-        const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (const auto* sc = StaticStringCache::Get(idx)) {
-            if (sc->team != 0) {
-                return ObjectDetail::MapTeam(sc->team);
-            }
-        }
         const uintptr_t a = Address();
         if (!a) return GameObjectTeam::Unknown;
         return ObjectDetail::MapTeam(::Core::Objects::ReadTeamValue(a));

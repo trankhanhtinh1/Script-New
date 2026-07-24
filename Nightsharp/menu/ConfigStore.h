@@ -84,15 +84,25 @@ namespace ConfigStore {
         return r.empty() ? std::string("plugin") : r;
     }
 
+    inline bool IsChampionRoot(Menu* root) {
+        if (!root) return false;
+        const int idx = PluginRegistry::FindByInternalId(root->Name.c_str());
+        if (idx >= 0 && PluginRegistry::Plugins[idx].Category == PluginRegistry::PluginCategory::Champion) {
+            return true;
+        }
+        std::string name = root->Name.c_str();
+        for (char& c : name) c = static_cast<char>(::tolower(c));
+        if (name.find("champion") != std::string::npos) {
+            return true;
+        }
+        return false;
+    }
+
     // File key for a root menu: internalId, plus ".<champion>" for Champion plugins.
     inline std::string FileKeyForRoot(Menu* root) {
         std::string key = root->Name.c_str();
 
-        const int idx = PluginRegistry::FindByInternalId(root->Name.c_str());
-        const bool isChampion =
-            idx >= 0 &&
-            PluginRegistry::Plugins[idx].Category ==
-                PluginRegistry::PluginCategory::Champion;
+        const bool isChampion = IsChampionRoot(root);
 
         if (isChampion && g_ChampionNameFn) {
             const char* champ = g_ChampionNameFn();
@@ -389,29 +399,36 @@ namespace ConfigStore {
         for (int i = 0; i < mm.Menus.size(); ++i) ApplyLoaded(mm.Menus[i]);
     }
 
+    inline std::map<std::string, ImVec2> g_runtimePositions;
+
     // ── Core settings (Config:: globals) ────────────────────────────────────
     struct CoreSnap {
         bool  zoomEnabled;  float zoomMax;
         bool  skinEnabled;  // skinId is per-champion now (skins.ini), not core.ini
         bool  bypassObs;    bool  clickThrough;
-        bool  permaEnabled; int   permaW, permaInd, permaX, permaY; bool permaPosInit;
+        bool  permaEnabled; bool  permaAllowDrag; int permaW, permaInd, permaX, permaY; bool permaPosInit;
+        int   menuX, menuY; bool  menuPosInit;
         int   langIndex;
     };
 
     inline CoreSnap CaptureCore() {
         CoreSnap s{};
-        s.zoomEnabled  = Config::ZoomHack::enabled;
-        s.zoomMax      = Config::ZoomHack::maxZoom;
-        s.skinEnabled  = Config::SkinChanger::enabled;
-        s.bypassObs    = Config::StreamProtection::bypassObs;
-        s.clickThrough = Config::OverlayInput::clickThrough;
-        s.permaEnabled = Config::PermaShow::enabled;
-        s.permaW       = Config::PermaShow::width;
-        s.permaInd     = Config::PermaShow::indicatorWidth;
-        s.permaX       = Config::PermaShow::x;
-        s.permaY       = Config::PermaShow::y;
-        s.permaPosInit = Config::PermaShow::positionInitialized;
-        s.langIndex    = Config::Language::index;
+        s.zoomEnabled    = Config::ZoomHack::enabled;
+        s.zoomMax        = Config::ZoomHack::maxZoom;
+        s.skinEnabled    = Config::SkinChanger::enabled;
+        s.bypassObs      = Config::StreamProtection::bypassObs;
+        s.clickThrough   = Config::OverlayInput::clickThrough;
+        s.permaEnabled   = Config::PermaShow::enabled;
+        s.permaAllowDrag = Config::PermaShow::allowDrag;
+        s.permaW         = Config::PermaShow::width;
+        s.permaInd       = Config::PermaShow::indicatorWidth;
+        s.permaX         = Config::PermaShow::x;
+        s.permaY         = Config::PermaShow::y;
+        s.permaPosInit   = Config::PermaShow::positionInitialized;
+        s.menuX          = Config::MenuPosition::x;
+        s.menuY          = Config::MenuPosition::y;
+        s.menuPosInit    = Config::MenuPosition::positionInitialized;
+        s.langIndex      = Config::Language::index;
         return s;
     }
 
@@ -419,9 +436,10 @@ namespace ConfigStore {
         return a.zoomEnabled == b.zoomEnabled && a.zoomMax == b.zoomMax &&
                a.skinEnabled == b.skinEnabled &&
                a.bypassObs == b.bypassObs && a.clickThrough == b.clickThrough &&
-               a.permaEnabled == b.permaEnabled && a.permaW == b.permaW &&
-               a.permaInd == b.permaInd && a.permaX == b.permaX &&
+               a.permaEnabled == b.permaEnabled && a.permaAllowDrag == b.permaAllowDrag &&
+               a.permaW == b.permaW && a.permaInd == b.permaInd && a.permaX == b.permaX &&
                a.permaY == b.permaY && a.permaPosInit == b.permaPosInit &&
+               a.menuX == b.menuX && a.menuY == b.menuY && a.menuPosInit == b.menuPosInit &&
                a.langIndex == b.langIndex;
     }
 
@@ -435,12 +453,25 @@ namespace ConfigStore {
         doc.Set("StreamProtection", "bypassObs", FmtInt(Config::StreamProtection::bypassObs ? 1 : 0));
         doc.Set("Overlay", "clickThrough", FmtInt(Config::OverlayInput::clickThrough ? 1 : 0));
         doc.Set("PermaShow", "enabled", FmtInt(Config::PermaShow::enabled ? 1 : 0));
+        doc.Set("PermaShow", "allowDrag", FmtInt(Config::PermaShow::allowDrag ? 1 : 0));
         doc.Set("PermaShow", "width", FmtInt(Config::PermaShow::width));
         doc.Set("PermaShow", "indicatorWidth", FmtInt(Config::PermaShow::indicatorWidth));
         doc.Set("PermaShow", "x", FmtInt(Config::PermaShow::x));
         doc.Set("PermaShow", "y", FmtInt(Config::PermaShow::y));
         doc.Set("PermaShow", "positionInitialized", FmtInt(Config::PermaShow::positionInitialized ? 1 : 0));
+        doc.Set("MenuPosition", "x", FmtInt(Config::MenuPosition::x));
+        doc.Set("MenuPosition", "y", FmtInt(Config::MenuPosition::y));
+        doc.Set("MenuPosition", "positionInitialized", FmtInt(Config::MenuPosition::positionInitialized ? 1 : 0));
         doc.Set("Language", "index", FmtInt(Config::Language::index));
+
+        for (const auto& [name, pos] : g_runtimePositions) {
+            char keyX[128] = {}, keyY[128] = {};
+            std::snprintf(keyX, sizeof(keyX), "%s_x", name.c_str());
+            std::snprintf(keyY, sizeof(keyY), "%s_y", name.c_str());
+            doc.Set("RuntimePositions", keyX, FmtInt(static_cast<int>(pos.x)));
+            doc.Set("RuntimePositions", keyY, FmtInt(static_cast<int>(pos.y)));
+        }
+
         WriteDoc(CoreFilePath(), doc);
         g_lastCore = CaptureCore();
     }
@@ -459,16 +490,10 @@ namespace ConfigStore {
             Config::ZoomHack::maxZoom           = F("ZoomHack", "maxZoom", Config::ZoomHack::maxZoom);
             Config::SkinChanger::enabled        = B("SkinChanger", "enabled", Config::SkinChanger::enabled);
             Config::StreamProtection::bypassObs = B("StreamProtection", "bypassObs", Config::StreamProtection::bypassObs);
-            // Older builds wrote clickThrough=1 by default even though there
-            // was no menu control to turn it back off.  That made the visible
-            // menu permanently non-interactive.  Treat the persisted value as
-            // legacy and migrate it to menu capture mode.
             Config::OverlayInput::clickThrough  = false;
             Config::PermaShow::enabled          = B("PermaShow", "enabled", Config::PermaShow::enabled);
+            Config::PermaShow::allowDrag        = B("PermaShow", "allowDrag", Config::PermaShow::allowDrag);
             const int loadedPermaWidth = I("PermaShow", "width", Config::PermaShow::width);
-            // The retired NightSharp panel forced width >= 500 and stored X as
-            // its left edge. Reset that incompatible geometry once instead of
-            // interpreting the old coordinates as EnsoulSharp center-X values.
             const bool legacyPermaGeometry = loadedPermaWidth < 100 || loadedPermaWidth > 400;
             if (legacyPermaGeometry) {
                 Config::PermaShow::width = 300;
@@ -485,10 +510,45 @@ namespace ConfigStore {
                 Config::PermaShow::y = I("PermaShow", "y", Config::PermaShow::y);
                 Config::PermaShow::positionInitialized = B("PermaShow", "positionInitialized", Config::PermaShow::positionInitialized);
             }
+            Config::MenuPosition::x = I("MenuPosition", "x", Config::MenuPosition::x);
+            Config::MenuPosition::y = I("MenuPosition", "y", Config::MenuPosition::y);
+            Config::MenuPosition::positionInitialized = B("MenuPosition", "positionInitialized", Config::MenuPosition::positionInitialized);
             Config::Language::index             = I("Language", "index", Config::Language::index);
+
+            for (const auto& sec : doc.secs) {
+                if (sec.name != "RuntimePositions") continue;
+                for (const auto& kv : sec.kvs) {
+                    const std::string& k = kv.key;
+                    if (k.length() > 2 && k.substr(k.length() - 2) == "_x") {
+                        std::string baseName = k.substr(0, k.length() - 2);
+                        g_runtimePositions[baseName].x = static_cast<float>(ParseInt(kv.val, 0));
+                    } else if (k.length() > 2 && k.substr(k.length() - 2) == "_y") {
+                        std::string baseName = k.substr(0, k.length() - 2);
+                        g_runtimePositions[baseName].y = static_cast<float>(ParseInt(kv.val, 0));
+                    }
+                }
+            }
         }
         g_lastCore   = CaptureCore();
         g_coreLoaded = true;
+    }
+    inline bool GetRuntimePosition(const char* name, ImVec2& outPos) {
+        if (!name || !name[0]) return false;
+        auto it = g_runtimePositions.find(name);
+        if (it != g_runtimePositions.end()) {
+            outPos = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    inline void SetRuntimePosition(const char* name, const ImVec2& pos) {
+        if (!name || !name[0]) return;
+        auto& existing = g_runtimePositions[name];
+        if (std::abs(existing.x - pos.x) > 1.0f || std::abs(existing.y - pos.y) > 1.0f) {
+            existing = pos;
+            SaveCore();
+        }
     }
 
     // ── Per-champion skin settings (skins.ini) ──────────────────────────────
@@ -579,8 +639,31 @@ namespace ConfigStore {
         return static_cast<int>(GetTickCount() - due) >= 0;
     }
 
+    inline std::string g_lastChampionName = "";
+
     inline void Tick() {
         if (!g_coreLoaded) return;
+
+        const char* champRaw = g_ChampionNameFn ? g_ChampionNameFn() : nullptr;
+        const std::string currentChamp = champRaw ? champRaw : "";
+        if (currentChamp != g_lastChampionName) {
+            g_lastChampionName = currentChamp;
+            if (!currentChamp.empty()) {
+                auto it = g_skinByChampion.find(currentChamp);
+                Config::SkinChanger::skinId = (it != g_skinByChampion.end()) ? it->second : 0;
+                g_skinLastId = Config::SkinChanger::skinId;
+                g_skinChampion = currentChamp;
+
+                auto& mm = MenuManager::Instance();
+                for (int i = 0; i < mm.Menus.size(); ++i) {
+                    Menu* root = mm.Menus[i];
+                    if (IsChampionRoot(root)) {
+                        ApplyLoaded(root);
+                    }
+                }
+            }
+        }
+
         TickSkins();
         CheckCoreChanged();
         if (g_menuDirty && Elapsed(g_menuDueTick)) {

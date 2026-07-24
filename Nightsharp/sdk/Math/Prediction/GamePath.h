@@ -86,6 +86,14 @@ namespace detail {
         }
     }
 
+    inline void OnObjectDelete(const ::SDK::Events::ObjectEventArgs& args) {
+        if (args.Sender.IsValid()) {
+            if (auto* paths = detail::PathStore()) {
+                paths->erase(args.Sender.NetworkId);
+            }
+        }
+    }
+
     inline void OnNewPath(const ::SDK::Events::NewPathEventArgs& args) {
         if (!args.Sender.IsValid() || args.PathCount <= 0) {
             return;
@@ -100,6 +108,7 @@ inline void Initialize() {
     (void)detail::PathStore();
     if (!detail::g_hooksRegistered) {
         ::SDK::Events::hook.OnNewPath += detail::OnNewPath;
+        ::SDK::Events::hook.OnDeleteObject += detail::OnObjectDelete;
         detail::g_hooksRegistered = true;
     }
 }
@@ -107,6 +116,7 @@ inline void Initialize() {
 inline void Reset() {
     if (detail::g_hooksRegistered) {
         ::SDK::Events::hook.OnNewPath -= detail::OnNewPath;
+        ::SDK::Events::hook.OnDeleteObject -= detail::OnObjectDelete;
         detail::g_hooksRegistered = false;
     }
     if (detail::PathStore()) {

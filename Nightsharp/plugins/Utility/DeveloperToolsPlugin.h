@@ -32,11 +32,30 @@ public:
         trackedObjectTicks_.clear();
         SDK::Events::AddOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
         SDK::Events::AddOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
+
+        DestroyNativeMenu();
+        menu_ = new SDK::UI::Menu(GetInternalId(), GetName(), true);
+        menuEnabled_ = menu_->Add(new SDK::UI::MenuBool("Enabled", "Enable Developer Tools", enabled_));
+        menuMaxRange_ = menu_->Add(new SDK::UI::MenuSlider("MaxRange", "Max Scan Range", maxRange_, 100, 1500));
+        menuProvider_ = menu_->Add(new SDK::UI::MenuList("Provider", "Scan Provider", { "SDK::ObjectManager (Raw RAM)", "SDK::GameObjects Facade" }, scanProviderIndex_));
+
+        auto* filters = menu_->AddSubMenu(new SDK::UI::Menu("Filters", "Category Filters"));
+        menuScanAll_ = filters->Add(new SDK::UI::MenuBool("ScanAll", "Scan All GameObjects", scanRawGameObjects_));
+        menuScanHeroes_ = filters->Add(new SDK::UI::MenuBool("ScanHeroes", "Heroes (AIHeroClient)", scanHeroes_));
+        menuScanMinions_ = filters->Add(new SDK::UI::MenuBool("ScanMinions", "Minions & Pets", scanMinions_));
+        menuScanTurrets_ = filters->Add(new SDK::UI::MenuBool("ScanTurrets", "Turrets", scanTurrets_));
+        menuScanMissiles_ = filters->Add(new SDK::UI::MenuBool("ScanMissiles", "Missiles", scanMissiles_));
+        menuFilterClutter_ = filters->Add(new SDK::UI::MenuBool("FilterClutter", "Filter Clutter (FX, MoveTo)", filterClutter_));
+
+        menuInspector_ = menu_->Add(new SDK::UI::MenuRuntime("LiveInspector", "Open Live Object Inspector", &OnMenuBridge, this, 620.0f));
+
+        menu_->Attach();
     }
 
     void OnUnload() override {
         SDK::Events::RemoveOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
         SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
+        DestroyNativeMenu();
         s_instance = nullptr;
     }
 
@@ -620,6 +639,43 @@ private:
         default: return "Unknown";
         }
     }
+
+    static void OnMenuBridge(void* userData) {
+        if (auto* self = static_cast<DeveloperToolsPlugin*>(userData)) {
+            self->OnMenu();
+        }
+    }
+
+    void DestroyNativeMenu() {
+        if (menu_) {
+            SDK::UI::MenuManager::Instance().Remove(menu_);
+            delete menu_;
+            menu_ = nullptr;
+            menuEnabled_ = nullptr;
+            menuMaxRange_ = nullptr;
+            menuProvider_ = nullptr;
+            menuScanAll_ = nullptr;
+            menuScanHeroes_ = nullptr;
+            menuScanMinions_ = nullptr;
+            menuScanTurrets_ = nullptr;
+            menuScanMissiles_ = nullptr;
+            menuFilterClutter_ = nullptr;
+            menuInspector_ = nullptr;
+        }
+    }
+
+private:
+    SDK::UI::Menu* menu_ = nullptr;
+    SDK::UI::MenuBool* menuEnabled_ = nullptr;
+    SDK::UI::MenuSlider* menuMaxRange_ = nullptr;
+    SDK::UI::MenuList* menuProvider_ = nullptr;
+    SDK::UI::MenuBool* menuScanAll_ = nullptr;
+    SDK::UI::MenuBool* menuScanHeroes_ = nullptr;
+    SDK::UI::MenuBool* menuScanMinions_ = nullptr;
+    SDK::UI::MenuBool* menuScanTurrets_ = nullptr;
+    SDK::UI::MenuBool* menuScanMissiles_ = nullptr;
+    SDK::UI::MenuBool* menuFilterClutter_ = nullptr;
+    SDK::UI::MenuRuntime* menuInspector_ = nullptr;
 };
 
 inline DeveloperToolsPlugin* s_instance = nullptr;

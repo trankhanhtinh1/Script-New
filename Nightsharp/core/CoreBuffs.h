@@ -64,10 +64,26 @@ namespace CoreBuffs {
         }
 
         int GetStacks() const {
-            const int stacks = Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacks);
-            if (stacks > 0) return stacks;
-            return Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacksAlt);
+            if (!IsValid()) return 0;
+
+            const auto begin = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffStackArrayBegin);
+            const auto end = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffStacks);
+
+            if (Globals::IsValidPtr(begin) && Globals::IsValidPtr(end) && end >= begin) {
+                const auto count = static_cast<int>((end - begin) / Offset::BuffScriptInstanceLayout::EntryStride);
+                if (count >= 0 && count < 1000) {
+                    return count;
+                }
+            }
+
+            const int alt = Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacksAlt);
+            if (alt > 0 && alt < 1000) {
+                return alt;
+            }
+
+            return 0;
         }
+
         int GetCounterCurrent() const {
             return Globals::Read<int>(address + Offset::BuffDataLayout::BuffCounterCurrent);
         }
@@ -103,16 +119,8 @@ namespace CoreBuffs {
         bool IsActive(float gameTime) const {
             if (!IsValid()) return false;
 
-            // Authoritative liveness: the game zeroes the buff's LIVE count
-            // (BuffStacks, +0x38) the instant the buff is removed/cancelled.
-            // Verified in live memory (CheatEngine, League 26.x): the
-            // XerathLocusOfPower2 R buff goes +0x38: 1 -> 0 on an abrupt R cancel
-            // while endTime (+0x1C) stays in the future and stacksAlt (+0x3C)
-            // stays 1. Use the RAW count here, NOT GetStacks(): GetStacks() falls
-            // back to stacksAlt (+0x3C), which the game does NOT clear on removal,
-            // so it would keep abruptly-cancelled channel/toggle buffs "active"
-            // forever (Xerath unable to cast after ending R; recall lingering).
-            if (Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacks) <= 0) {
+            const int liveCount = Globals::Read<int>(address + 0x38);
+            if (liveCount <= 0 && GetStacks() <= 0) {
                 return false;
             }
 
@@ -138,10 +146,6 @@ namespace CoreBuffs {
             }
 
             const auto charPtr = Globals::Read<uintptr_t>(scriptBase + kScriptBaseNameOffset);
-            if (!Globals::IsValidPtr(charPtr)) {
-                out[0] = 0;
-                return false;
-            }
             return Globals::ReadCString(charPtr, out, maxOut);
         }
 
@@ -156,9 +160,9 @@ namespace CoreBuffs {
                 address + Offset::BuffDataLayout::BuffStackArrayBegin);
             if (!Globals::IsValidPtr(arrayBegin)) return 0;
 
-            const auto count = Globals::Read<int>(
-                address + Offset::BuffDataLayout::BuffStackCount);
-            if (count <= 0) return 0;
+            const auto arrayEnd = Globals::Read<uintptr_t>(
+                address + Offset::BuffDataLayout::BuffStacks);
+            if (!Globals::IsValidPtr(arrayEnd) || arrayEnd <= arrayBegin) return 0;
 
             // First entry: {BuffScriptInstance*, refcount*}
             const auto scriptInstance = Globals::Read<uintptr_t>(arrayBegin);
@@ -210,23 +214,26 @@ namespace CoreBuffs {
 
     // ── Manager accessors ──
 
+    inline uintptr_t ResolveBuffManagerOffset(uintptr_t obj) {
+        static uintptr_t s_cachedOffset = Offset::BuffManagerRuntime::BuffManagerOffset;
+        return s_cachedOffset;
+    }
+
     inline uintptr_t GetBuffManager(uintptr_t obj) {
         if (!Globals::IsValidPtr(obj)) return 0;
-        return obj + Offset::BuffManagerRuntime::BuffManagerOffset;
+        return obj + ResolveBuffManagerOffset(obj);
     }
 
     // Walk `[EntriesStart, EntriesEnd)` writing each entry's `buff*` into `out`.
-    // Condition 1 of the active-check is implicitly applied here: the game
-    // maintains the entries array so only live buffs are inside the range.
     inline int Enumerate(uintptr_t obj, uintptr_t* out, int maxOut) {
-        if (!out || maxOut <= 0) return 0;
+        if (!out || maxOut <= 0 || !Globals::IsValidPtr(obj)) return 0;
 
         const auto manager = GetBuffManager(obj);
         if (!Globals::IsValidPtr(manager)) return 0;
 
         const auto begin = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesStart);
-        const auto end = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
-        if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end < begin) {
+        const auto end   = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
+        if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end <= begin) {
             return 0;
         }
 
@@ -347,9 +354,9 @@ namespace CoreBuffs {
     }
 
     inline bool TryReadLiveBuffSnapshot(uintptr_t obj,
-        const char* name,
-        int eventCount,
-        CachedBuffEntry& out) {
+                                        const char* name,
+                                        int eventCount,
+                                        CachedBuffEntry& out) {
         if (!Globals::IsValidPtr(obj) || !name || !name[0]) {
             return false;
         }
@@ -381,10 +388,10 @@ namespace CoreBuffs {
     }
 
     inline bool TryReadBuffSnapshot(uintptr_t obj,
-        uintptr_t buffAddress,
-        const char* fallbackName,
-        int eventCount,
-        CachedBuffEntry& out) {
+                                    uintptr_t buffAddress,
+                                    const char* fallbackName,
+                                    int eventCount,
+                                    CachedBuffEntry& out) {
         if (!Globals::IsValidPtr(obj) || !Globals::IsValidPtr(buffAddress)) {
             return false;
         }
@@ -437,8 +444,8 @@ namespace CoreBuffs {
     }
 
     inline bool TryGetCachedBuff(uintptr_t obj,
-        const char* name,
-        CachedBuffEntry& out);
+                                 const char* name,
+                                 CachedBuffEntry& out);
 
     inline void StoreCachedBuff(const CachedBuffEntry& value) {
         if (!Globals::IsValidPtr(value.object) || !value.name[0]) {
@@ -457,10 +464,10 @@ namespace CoreBuffs {
     }
 
     inline void ApplyBuffEvent(uintptr_t obj,
-        const char* name,
-        int count,
-        bool forceInactive,
-        uintptr_t buffAddress = 0) {
+                               const char* name,
+                               int count,
+                               bool forceInactive,
+                               uintptr_t buffAddress = 0) {
         if (!EventCacheEnabled || !Globals::IsValidPtr(obj) || !name || !name[0]) {
             return;
         }
@@ -498,8 +505,8 @@ namespace CoreBuffs {
     }
 
     inline bool TryGetCachedBuff(uintptr_t obj,
-        const char* name,
-        CachedBuffEntry& out) {
+                                 const char* name,
+                                 CachedBuffEntry& out) {
         if (!EventCacheEnabled || !Globals::IsValidPtr(obj) || !name || !name[0]) {
             return false;
         }
@@ -556,6 +563,101 @@ namespace CoreBuffs {
         return false;
     }
 
+    namespace BuffPerf {
+        inline thread_local uint64_t TotalQueries = 0;
+        inline thread_local uint64_t CacheHits = 0;
+        inline thread_local uint64_t CacheMisses = 0;
+        inline thread_local double TotalTimeMs = 0.0;
+        inline thread_local DWORD LastLogTick = 0;
+
+        inline void Record(bool isHit, double elapsedMs) {
+            TotalQueries++;
+            if (isHit) CacheHits++;
+            else CacheMisses++;
+            TotalTimeMs += elapsedMs;
+
+            const DWORD now = GetTickCount();
+            if (LastLogTick == 0) LastLogTick = now;
+            if (now - LastLogTick >= 1000) {
+                LastLogTick = now;
+                char line[256] = {};
+                const double hitRate = TotalQueries > 0 ? static_cast<double>(CacheHits) * 100.0 / static_cast<double>(TotalQueries) : 0.0;
+                snprintf(line, sizeof(line), "[CoreBuffs/1s] Queries: %llu | Hits: %llu (%.1f%%) | Misses: %llu | Time: %.3f ms\r\n",
+                    static_cast<unsigned long long>(TotalQueries),
+                    static_cast<unsigned long long>(CacheHits),
+                    hitRate,
+                    static_cast<unsigned long long>(CacheMisses),
+                    TotalTimeMs);
+
+                HANDLE hFile = CreateFileA("C:\\Users\\Public\\nightsharp_buff_debug.txt",
+                    FILE_APPEND_DATA, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                if (hFile != INVALID_HANDLE_VALUE) {
+                    DWORD written = 0;
+                    WriteFile(hFile, line, static_cast<DWORD>(strlen(line)), &written, NULL);
+                    CloseHandle(hFile);
+                }
+
+                TotalQueries = 0;
+                CacheHits = 0;
+                CacheMisses = 0;
+                TotalTimeMs = 0.0;
+            }
+        }
+    }
+
+    struct LiveBuffCacheEntry {
+        uintptr_t address;
+        char name[64];
+        float startTime;
+        float endTime;
+        int stacks;
+        uint8_t type;
+        bool isActive;
+    };
+
+    struct ThreadFrameBuffSnapshot {
+        uintptr_t object = 0;
+        float gameTime = -1.0f;
+        int count = 0;
+        LiveBuffCacheEntry entries[64] = {};
+    };
+
+    inline const ThreadFrameBuffSnapshot* GetOrBuildFrameBuffSnapshot(uintptr_t obj, float gameTime, bool* outIsHit = nullptr) {
+        if (!Globals::IsValidPtr(obj)) return nullptr;
+        if (gameTime <= 0.0f) gameTime = ResolveGameTime();
+
+        constexpr int kSlots = 16;
+        static thread_local ThreadFrameBuffSnapshot s_frameCache[kSlots] = {};
+        const size_t slot = (obj >> 4) & (kSlots - 1);
+
+        ThreadFrameBuffSnapshot& snap = s_frameCache[slot];
+        if (snap.object == obj && fabsf(snap.gameTime - gameTime) < 0.0001f) {
+            if (outIsHit) *outIsHit = true;
+            return &snap;
+        }
+
+        if (outIsHit) *outIsHit = false;
+        snap.object = obj;
+        snap.gameTime = gameTime;
+        snap.count = 0;
+
+        uintptr_t buffs[128] = {};
+        const int numBuffs = Enumerate(obj, buffs, 128);
+        for (int i = 0; i < numBuffs && snap.count < 64; ++i) {
+            BuffRef buff{ buffs[i] };
+            LiveBuffCacheEntry& e = snap.entries[snap.count];
+            e.address = buffs[i];
+            if (!buff.ReadName(e.name, static_cast<int>(sizeof(e.name)))) continue;
+            e.startTime = buff.GetStartTime();
+            e.endTime = buff.GetEndTime();
+            e.stacks = buff.GetStacks();
+            e.type = static_cast<uint8_t>(buff.GetType());
+            e.isActive = buff.IsActive(gameTime);
+            snap.count++;
+        }
+        return &snap;
+    }
+
     // ── Query API ──
 
     // Raw API: returns true if a buff matching `name` exists in the list at all
@@ -581,19 +683,33 @@ namespace CoreBuffs {
         CachedBuffEntry cached = {};
         if (TryGetCachedBuff(obj, name, cached)) {
             return IsCachedBuffActive(cached, gameTime) &&
-                !IsSuppressedByLiveState(obj, cached.name);
+                   !IsSuppressedByLiveState(obj, cached.name);
         }
 
-        uintptr_t buffs[256] = {};
-        const int count = Enumerate(obj, buffs, 256);
-        char buf[96] = {};
-        for (int i = 0; i < count; ++i) {
-            BuffRef buff{ buffs[i] };
-            if (!buff.IsActive(gameTime)) continue;
-            if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) continue;
-            if (IsSuppressedByLiveState(obj, buf)) continue;
-            if (NameMatchesQuery(buf, name)) return true;
+        LARGE_INTEGER tStart, tEnd, freq;
+        QueryPerformanceCounter(&tStart);
+        bool isHit = false;
+
+        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime, &isHit);
+        if (snap) {
+            for (int i = 0; i < snap->count; ++i) {
+                const auto& e = snap->entries[i];
+                if (!e.isActive) continue;
+                if (IsSuppressedByLiveState(obj, e.name)) continue;
+                if (NameMatchesQuery(e.name, name)) {
+                    QueryPerformanceCounter(&tEnd);
+                    QueryPerformanceFrequency(&freq);
+                    double ms = static_cast<double>(tEnd.QuadPart - tStart.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart);
+                    BuffPerf::Record(isHit, ms);
+                    return true;
+                }
+            }
         }
+
+        QueryPerformanceCounter(&tEnd);
+        QueryPerformanceFrequency(&freq);
+        double ms = static_cast<double>(tEnd.QuadPart - tStart.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart);
+        BuffPerf::Record(isHit, ms);
         return false;
     }
 
@@ -604,19 +720,33 @@ namespace CoreBuffs {
         CachedBuffEntry cached = {};
         if (TryGetCachedBuff(obj, name, cached)) {
             return IsCachedBuffActive(cached, gameTime) &&
-                !IsSuppressedByLiveState(obj, cached.name);
+                   !IsSuppressedByLiveState(obj, cached.name);
         }
 
-        uintptr_t buffs[256] = {};
-        const int count = Enumerate(obj, buffs, 256);
-        char buf[96] = {};
-        for (int i = 0; i < count; ++i) {
-            BuffRef buff{ buffs[i] };
-            if (!buff.IsActive(gameTime)) continue;
-            if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) continue;
-            if (IsSuppressedByLiveState(obj, buf)) continue;
-            if (NameMatchesQuery(buf, name)) return true;
+        LARGE_INTEGER tStart, tEnd, freq;
+        QueryPerformanceCounter(&tStart);
+        bool isHit = false;
+
+        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime, &isHit);
+        if (snap) {
+            for (int i = 0; i < snap->count; ++i) {
+                const auto& e = snap->entries[i];
+                if (!e.isActive) continue;
+                if (IsSuppressedByLiveState(obj, e.name)) continue;
+                if (NameMatchesQuery(e.name, name)) {
+                    QueryPerformanceCounter(&tEnd);
+                    QueryPerformanceFrequency(&freq);
+                    double ms = static_cast<double>(tEnd.QuadPart - tStart.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart);
+                    BuffPerf::Record(isHit, ms);
+                    return true;
+                }
+            }
         }
+
+        QueryPerformanceCounter(&tEnd);
+        QueryPerformanceFrequency(&freq);
+        double ms = static_cast<double>(tEnd.QuadPart - tStart.QuadPart) * 1000.0 / static_cast<double>(freq.QuadPart);
+        BuffPerf::Record(isHit, ms);
         return false;
     }
 
@@ -624,16 +754,15 @@ namespace CoreBuffs {
         if (!token || !token[0]) return false;
 
         const float gameTime = ResolveGameTime();
-        uintptr_t buffs[256] = {};
-        const int count = Enumerate(obj, buffs, 256);
-        char buf[96] = {};
-        for (int i = 0; i < count; ++i) {
-            BuffRef buff{ buffs[i] };
-            if (!buff.IsActive(gameTime)) continue;
-            if (requiredType >= 0 && buff.GetType() != requiredType) continue;
-            if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) continue;
-            if (IsSuppressedByLiveState(obj, buf)) continue;
-            if (NameContainsInsensitive(buf, token)) return true;
+        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snap) return false;
+
+        for (int i = 0; i < snap->count; ++i) {
+            const auto& e = snap->entries[i];
+            if (!e.isActive) continue;
+            if (requiredType >= 0 && static_cast<int>(e.type) != requiredType) continue;
+            if (IsSuppressedByLiveState(obj, e.name)) continue;
+            if (NameContainsInsensitive(e.name, token)) return true;
         }
         return false;
     }

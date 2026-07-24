@@ -43,6 +43,21 @@ inline bool IsGangplankBarrel(const AIMinionClient& minion) {
     return _stricmp(minion.CharacterName().c_str(), "gangplankbarrel") == 0;
 }
 
+inline bool HasGangplankInGame() {
+    static bool checked = false;
+    static bool hasGp = false;
+    if (!checked) {
+        for (const auto& hero : GameObjects::Heroes()) {
+            if (hero.IsValid() && _stricmp(hero.CharacterName().c_str(), "Gangplank") == 0) {
+                hasGp = true;
+                break;
+            }
+        }
+        if (!GameObjects::Heroes().empty()) checked = true;
+    }
+    return hasGp;
+}
+
 inline bool IsIgnoredMinion(const AIMinionClient& minion) {
     return _stricmp(minion.CharacterName().c_str(), "jarvanivstandard") == 0;
 }
@@ -226,8 +241,8 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         append(wardMinions);
     }
 
-    if (menu.AttackBarrels()) {
-        for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
+    if (menu.AttackBarrels() && HasGangplankInGame()) {
+        for (const auto& minion : GameObjects::Minions()) {
             if (IsGangplankBarrel(minion) &&
                 minion.Health() <= 1.0f &&
                 IsValidCurrentAttackTarget(
@@ -331,8 +346,8 @@ inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
         }
     }
 
-    if (menu.AttackBarrels()) {
-        for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
+    if (menu.AttackBarrels() && HasGangplankInGame()) {
+        for (const auto& minion : GameObjects::Minions()) {
             if (IsGangplankBarrel(minion) &&
                 minion.Health() <= 1.0f &&
                 IsValidCurrentAttackTarget(

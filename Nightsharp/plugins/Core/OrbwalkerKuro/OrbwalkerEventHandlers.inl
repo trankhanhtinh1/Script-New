@@ -54,6 +54,7 @@ inline void OrbwalkerBase::OnDrawStatic() {
 }
 
 inline void OrbwalkerBase::OnGameUpdate() {
+    NightSharpPerf::ScopedTimer timer("OrbwalkerKuro::OnGameUpdate");
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
         context_.activeMode = OrbwalkingMode::None;

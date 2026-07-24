@@ -21,6 +21,7 @@
 #include "../../../sdk/Extensions/AIBaseClientExtensions.h"
 #include "../../../core/CoreControl.h"
 #include "../../../DebugLog.h"
+#include "../../../FpsDropDebug.h"
 
 #include <algorithm>
 #include <cmath>

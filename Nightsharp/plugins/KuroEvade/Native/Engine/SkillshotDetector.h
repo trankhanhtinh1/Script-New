@@ -473,6 +473,10 @@ public:
         if (!args.Sender.Ptr) {
             return;
         }
+        if (args.Sender.Type != ::Core::Objects::ObjectType::AIMinionClient &&
+            args.Sender.Type != ::Core::Objects::ObjectType::EffectEmitter) {
+            return;
+        }
         SDK::GameObject object(args.Sender.Ptr, args.Sender.Type);
         if (!object.IsValid() || (object.IsAlly() && !m_sameTeam)) {
             return;

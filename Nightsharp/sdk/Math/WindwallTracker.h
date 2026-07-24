@@ -10,6 +10,7 @@
 #include "../Core/Objects.h"
 #include "../Core/Variables.h"
 #include "../Events/Events.h"
+#include "../GameObjects/GameObjects.h"
 #include "WindwallGeometry.h"
 
 #include <algorithm>
@@ -30,6 +31,21 @@ namespace detail {
 inline std::vector<Wall> g_walls;
 inline bool g_subscribed = false;
 
+inline bool HasYasuoInGame() {
+    static bool checked = false;
+    static bool hasYasuo = false;
+    if (!checked) {
+        for (const auto& hero : GameObjects::Heroes()) {
+            if (hero.IsValid() && _stricmp(hero.CharacterName().c_str(), "Yasuo") == 0) {
+                hasYasuo = true;
+                break;
+            }
+        }
+        if (!GameObjects::Heroes().empty()) checked = true;
+    }
+    return hasYasuo;
+}
+
 // emitter name is often empty via Name(); fall back to raw name reads.
 inline std::string ResolveName(uintptr_t address, const char* eventName) {
     if (eventName && eventName[0]) {
@@ -44,6 +60,9 @@ inline std::string ResolveName(uintptr_t address, const char* eventName) {
 }
 
 inline void OnCreate(const Events::ObjectEventArgs& args) {
+    if (!HasYasuoInGame()) {
+        return;
+    }
     if (!args.Sender.Ptr) {
         return;
     }
@@ -70,6 +89,9 @@ inline void OnCreate(const Events::ObjectEventArgs& args) {
 }
 
 inline void OnDelete(const Events::ObjectEventArgs& args) {
+    if (!HasYasuoInGame()) {
+        return;
+    }
     const int networkId = static_cast<int>(args.Sender.NetworkId);
     g_walls.erase(
         std::remove_if(g_walls.begin(), g_walls.end(), [&](const Wall& w) {

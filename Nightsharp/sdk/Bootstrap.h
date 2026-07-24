@@ -42,20 +42,18 @@ public:
         GameObjects::Initialize();
         Utils::Logging::Write()(LogLevel::Info, "[SDK Bootstrap] GameObjects Initialized.");
 
-        Variables::EnsoulSharpMenu = new Menu("EnsoulSharp", "EnsoulSharp", true);
-        Variables::EnsoulSharpMenu->Attach();
-        Utils::Logging::Write()(LogLevel::Info, "[SDK Bootstrap] EnsoulSharp Menu Created.");
+        Variables::EnsoulSharpMenu = nullptr;
 
-        Variables::TargetSelector = new ::SDK::TargetSelector(Variables::EnsoulSharpMenu);
+        Variables::TargetSelector = new ::SDK::TargetSelector(nullptr);
         Utils::Logging::Write()(LogLevel::Info, "[SDK Bootstrap] TargetSelector Initialized.");
 
-        Variables::Orbwalker = new ::SDK::Orbwalker(Variables::EnsoulSharpMenu);
+        Variables::Orbwalker = new ::SDK::Orbwalker(nullptr);
         Utils::Logging::Write()(LogLevel::Info, "[SDK Bootstrap] Orbwalker Initialized.");
 
-        InitializeNotifications(Variables::EnsoulSharpMenu);
+        InitializeNotifications(nullptr);
         Utils::Logging::Write()(LogLevel::Info, "[SDK Bootstrap] Notifications Initialized.");
 
-        UI::PermaShow::Initialize(Variables::EnsoulSharpMenu);
+        UI::PermaShow::Initialize(nullptr);
         Utils::Logging::Write()(LogLevel::Info, "[SDK Bootstrap] Permashow Initialized.");
 
         Damage::Initialize(Variables::GameVersion);

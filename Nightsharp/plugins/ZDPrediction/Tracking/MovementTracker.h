@@ -520,6 +520,18 @@ private:
             }
             while (track.samples.size() > 96) track.samples.pop_front();
         }
+
+        static int lastPruneTick = 0;
+        if (now - lastPruneTick > 5000) {
+            lastPruneTick = now;
+            for (auto it = tracks_.begin(); it != tracks_.end(); ) {
+                if (now - it->second.lastSampleTick > 10000 && now - it->second.lastPathTick > 10000) {
+                    it = tracks_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
         ReleaseSRWLockExclusive(&lock_);
     }
 
