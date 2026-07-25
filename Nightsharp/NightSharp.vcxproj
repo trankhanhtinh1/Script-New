@@ -126,6 +126,7 @@
     <ClInclude Include="Core\CoreBypass.h" />
     <ClInclude Include="Core\CoreCastSpell.h" />
     <ClInclude Include="Core\CoreControl.h" />
+    <ClInclude Include="Core\CoreControlTypes.h" />
     <ClInclude Include="Core\CoreEvadeState.h" />
     <ClInclude Include="Core\CoreEvents.h" />
     <ClInclude Include="Core\CoreGame.h" />
@@ -414,9 +415,6 @@
     <ClInclude Include="Plugins\Utility\VisibilityInvulnerabilityOffsetPlugin.h" />
     <ClInclude Include="Plugins\Utility\YasuoWallDebugPlugin.h" />
     <ClInclude Include="Plugins\ZDEvade\Core\Situation.h" />
-    <ClInclude Include="Plugins\ZDEvade\Debug\CandidateDebug.h" />
-    <ClInclude Include="Plugins\ZDEvade\Debug\SelfSkillDebug.h" />
-    <ClInclude Include="Plugins\ZDEvade\Debug\SelfSkillDebugPolicy.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellData.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\EvadeSpellDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\SpellData.h" />
@@ -425,8 +423,8 @@
     <ClInclude Include="Plugins\ZDEvade\Database\ThreatDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\Database\WindupSpellData.h" />
     <ClInclude Include="Plugins\ZDEvade\Detection\SpellDetector.h" />
-    <ClInclude Include="Plugins\ZDEvade\Detection\ThreatDetectionPolicy.h" />
     <ClInclude Include="Plugins\ZDEvade\Detection\Threat.h" />
+    <ClInclude Include="Plugins\ZDEvade\Detection\ThreatDetectionPolicy.h" />
     <ClInclude Include="Plugins\ZDEvade\Detection\ThreatDetector.h" />
     <ClInclude Include="Plugins\ZDEvade\Detection\TrackedSpell.h" />
     <ClInclude Include="Plugins\ZDEvade\Evade\EvadeCommand.h" />
@@ -444,10 +442,14 @@
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellDatabase.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellEngine.h" />
     <ClInclude Include="Plugins\ZDEvade\EvadeSpells\EvadeSpellManager.h" />
+    <ClInclude Include="Plugins\ZDEvade\Visual\TargetVisualDispatch.h" />
     <ClInclude Include="Plugins\ZDEvade\Visual\ThreatRenderer.h" />
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualDispatch.h" />
     <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualGeometry.h" />
+    <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualPlan.h" />
     <ClInclude Include="Plugins\ZDEvade\Visual\ThreatVisualStyle.h" />
     <ClInclude Include="Plugins\ZDEvade\ZDEvade.h" />
+    <ClInclude Include="Plugins\ZDEvade\ZDEvadeActivationPolicy.h" />
     <ClInclude Include="Plugins\ZDPrediction\Analysis\AoeOptimizer.h" />
     <ClInclude Include="Plugins\ZDPrediction\Analysis\ConfidenceEvaluator.h" />
     <ClInclude Include="Plugins\ZDPrediction\Analysis\MovementPatternAnalyzer.h" />
@@ -696,12 +698,6 @@
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorSdk.h" />
     <ClInclude Include="SDK\Wrappers\TargetSelector\TargetSelectorSelected.h" />
     <ClInclude Include="SectionProfiler.h" />
-    <ClInclude Include="tests\ZDEvadeTestSupport.h" />
-    <ClInclude Include="tests\zdevade_controller_policy_test.cpp" />
-    <ClInclude Include="tests\zdevade_detector_policy_test.cpp" />
-    <ClInclude Include="tests\zdevade_geometry_runtime_test.cpp" />
-    <ClInclude Include="tests\zdevade_routing_policy_test.cpp" />
-    <ClInclude Include="tests\zdevade_visual_geometry_test.cpp" />
     <ClInclude Include="Third_Party\clipper\clipper.h" />
     <ClInclude Include="Third_Party\clipper\clipper.hpp" />
   </ItemGroup>

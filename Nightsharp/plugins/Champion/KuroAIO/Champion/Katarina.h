@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -44,7 +45,8 @@ static bool IsHiddenMinion(const GameObject& object) {
         return false;
     }
     const std::string name = GetObjectName(object);
-    return EqualsIgnoreCase(name.c_str(), "Katarina_Base_W_Indicator_Ally");
+    static const std::regex pattern("^Katarina_.*_W_Indicator_Ally$", std::regex_constants::icase);
+    return std::regex_match(name, pattern);
 }
 
 static bool HaveRBuff() {
@@ -930,8 +932,8 @@ static void OnDraw() {
             if (!IsOwnDagger(dagger)) {
                 continue;
             }
-            Render::DrawRingImGui(dagger.Position, 340.0f + 150.0f, 340.0f, 0xFFFFD700u, 60);
-            Drawing::DrawCircle(dagger.Position, 150.0f, 0xFF7FFF00u, 1.5f, 64);
+            const ImU32 color = IsDaggerReady(dagger) ? 0xFF00FF00u : 0xFFFFD700u;
+            Render::DrawRingImGui(dagger.Position, 340.0f + 150.0f, 340.0f, color, 4);
         }
     }
 
