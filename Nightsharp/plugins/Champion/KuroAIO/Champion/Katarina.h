@@ -34,6 +34,9 @@ inline bool Loaded = false;
 inline bool UpdateR = false;
 inline int LastR = 0;
 inline int LastCastE = 0;
+inline int LastCastQ = 0;
+inline int LastCastW = 0;
+inline int LastBasicAttackTick = 0;
 inline std::vector<Dagger> Daggers;
 
 static std::string RuntimeName(const GameObject& object) {
@@ -50,7 +53,61 @@ static bool IsHiddenMinion(const GameObject& object) {
 }
 
 static bool HaveRBuff() {
-    return Player().HasBuff("KatarinaRSound");
+    static bool lastResult = false;
+    static float lastLogTime = 0.0f;
+    static float buffFirstDetectedTime = 0.0f;
+    static int buffFirstDetectedTick = 0;
+
+    const auto player = Player();
+    bool hasBuff = player.HasBuff("KatarinaRSound");
+    float gameTime = Game::Time();
+
+    if (!hasBuff) {
+        buffFirstDetectedTime = 0.0f;
+        buffFirstDetectedTick = 0;
+        lastResult = false;
+        return false;
+    }
+
+    const int tick = SDK::Variables::TickCount();
+
+    if (buffFirstDetectedTime == 0.0f) {
+        buffFirstDetectedTime = gameTime;
+        buffFirstDetectedTick = tick;
+    }
+
+    // Nếu vừa mới cast Q, W, E hoặc đánh thường SAU KHI chiêu R bắt đầu được niệm, thì coi như đã mất R
+    if (LastCastQ > buffFirstDetectedTick || 
+        LastCastW > buffFirstDetectedTick || 
+        LastCastE > buffFirstDetectedTick ||
+        LastBasicAttackTick > buffFirstDetectedTick) {
+        buffFirstDetectedTime = 0.0f;
+        buffFirstDetectedTick = 0;
+        lastResult = false;
+        return false;
+    }
+
+    bool result = true;
+    int reason = 4; // Default: normal channel
+    bool isMoving = player.IsMoving();
+    bool isDashing = player.IsDashing();
+
+    // Nếu đã qua thời gian cast ban đầu (250ms) thì mới kiểm tra di chuyển để phát hiện cancel sớm
+    if (gameTime - buffFirstDetectedTime > 0.25f) {
+        if (isMoving || isDashing) {
+            result = false;
+            reason = 3; // Moved/Dashed after windup
+        }
+    }
+
+    if (result != lastResult || gameTime - lastLogTime > 0.5f) {
+        lastResult = result;
+        lastLogTime = gameTime;
+        NightSharpDebug::Logf("[Katarina R Debug] R_Active=%d (Reason=%d) | HasBuff=1 | Age=%.2fs | IsMoving=%d | IsDashing=%d",
+            result, reason, gameTime - buffFirstDetectedTime, isMoving, isDashing);
+    }
+
+    return result;
 }
 
 
@@ -883,9 +940,18 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 }
 
 static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    if (Events::IsLocalPlayer(args.Sender) &&
-        args.Slot == static_cast<int>(SpellSlot::E)) {
-        LastCastE = SDK::Variables::TickCount();
+    if (Events::IsLocalPlayer(args.Sender)) {
+        const int slot = args.Slot;
+        const int tick = SDK::Variables::TickCount();
+        if (slot == static_cast<int>(SpellSlot::Q)) {
+            LastCastQ = tick;
+        } else if (slot == static_cast<int>(SpellSlot::W)) {
+            LastCastW = tick;
+        } else if (slot == static_cast<int>(SpellSlot::E)) {
+            LastCastE = tick;
+        } else if (slot == 64) {
+            LastBasicAttackTick = tick;
+        }
     }
 }
 
@@ -1032,7 +1098,10 @@ static void OnGameLoad() {
 
     BuildMenu();
 
+    LastCastQ = 0;
+    LastCastW = 0;
     LastCastE = 0;
+    LastBasicAttackTick = 0;
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Events::hook.OnDoCast += &OnDoCast;
     GameObjects::AddOnCreate(&OnObjectCreate);
@@ -1058,7 +1127,10 @@ static void OnUnload() {
     Orbwalker::SetOrbwalkerPosition({});
 
     Daggers.clear();
+    LastCastQ = 0;
+    LastCastW = 0;
     LastCastE = 0;
+    LastBasicAttackTick = 0;
     RemoveMenu();
     Loaded = false;
 }
