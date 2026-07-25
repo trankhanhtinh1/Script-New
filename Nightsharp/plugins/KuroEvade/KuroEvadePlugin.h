@@ -35,15 +35,7 @@ public:
 
     std::string GetHeroCharacterName(const SDK::AIHeroClient& hero) const {
         if (!hero.IsValid()) return "";
-        std::string name = hero.CharacterName();
-        if (!name.empty()) {
-            return name;
-        }
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadCharacterName(hero.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return "";
+        return hero.CharacterName();
     }
 
     void OnLoad() override {
@@ -106,10 +98,10 @@ public:
         KuroEvade::SpellDrawer::Draw(
             m_detector.Skillshots(), m_spellVisuals, DrawingStyleSnapshot());
         if (Enabled() && DrawEvadeRoute() && m_evadeIntervening && m_evade.HasMoveTarget()) {
-            const auto player = SDK::ObjectManager::Player();
+            const auto player = GameObjects::Player();
             if (player.IsValid()) {
                 KuroEvade::SpellDrawer::DrawRoute(
-                    player.ServerPosition().To2D(),
+                    player.Position().To2D(),
                     m_evade.MoveTarget(),
                     RouteColor(),
                     m_evade.IsWaitingForWindup());
@@ -438,7 +430,7 @@ private:
             }
 
             if (args.Msg == WM_RBUTTONDOWN || args.Msg == WM_RBUTTONDBLCLK) {
-                const auto player = SDK::ObjectManager::Player();
+                const auto player = GameObjects::Player();
                 if (player.IsValid() && !player.IsDead()) {
                     const auto settings = s_instance->SettingsSnapshot();
                     if (settings.Enabled) {
@@ -591,14 +583,14 @@ private:
         m_spellVisuals.clear();
         m_spellVisuals.reserve(m_detector.Skillshots().size());
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!player.IsValid() || player.IsDead()) {
             return;
         }
 
         KuroEvade::EvadeSettings visualSettings = settings;
 
-        const Vec2 heroPos = player.ServerPosition().To2D();
+        const Vec2 heroPos = player.Position().To2D();
         const float boundingRadius = player.BoundingRadius();
         const float moveSpeed = std::max(50.0f, player.MoveSpeed());
         const float directWindow = 1200.0f;
@@ -642,7 +634,7 @@ private:
     void Tick() {
         bool needRebuild = false;
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (player.IsValid()) {
             const std::string selfName = GetHeroCharacterName(player);
             if (!selfName.empty()) {
@@ -709,7 +701,7 @@ private:
         m_currentDangerousThreat = false;
         m_currentDangerLevel = 0;
         if (player.IsValid()) {
-            const Vec2 position = player.ServerPosition().To2D();
+            const Vec2 position = player.Position().To2D();
             for (const auto& skillshot : m_detector.Skillshots()) {
                 if (!skillshot ||
                     !KuroEvade::SourceEvader::ShouldConsider(skillshot, settings) ||
@@ -725,7 +717,7 @@ private:
         }
         std::vector<Vec2> observedPath;
         if (player.IsValid()) {
-            observedPath.push_back(player.ServerPosition().To2D());
+            observedPath.push_back(player.Position().To2D());
             for (const Vec3& point : player.Path()) {
                 const Vec2 value = point.To2D();
                 if (!value.IsZero() &&
@@ -826,7 +818,7 @@ private:
     }
 
     void RunPlannerBenchmark() {
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         m_benchmarkResult = m_benchmark.Run(
             player, m_detector.Skillshots(), SettingsSnapshot(), 100);
         std::snprintf(m_lastEvent, sizeof(m_lastEvent),
@@ -972,7 +964,7 @@ private:
             "DisableFow", "Disable fog of war dodging", false));
         m_showEvadeStatusMenu = misc->Add(new MenuBool(
             "ShowEvadeStatus", "Show Evade Status", false));
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (player.IsValid() && _stricmp(GetHeroCharacterName(player).c_str(), "Olaf") == 0) {
             m_disableOlafRMenu = misc->Add(new MenuBool(
                 "DisableEvadeForOlafR", "Automatic disable Evade when Olaf's ulti is active!", true));
@@ -1057,7 +1049,7 @@ private:
         }
 
         std::unordered_set<std::string> allyChampions;
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (player.IsValid()) {
             const std::string name = GetHeroCharacterName(player);
             if (!name.empty()) {
@@ -1152,7 +1144,7 @@ private:
         m_smoothEvadeSpellMenu = m_evadeSpellsMenu->Add(new MenuBool(
             "SmoothEvadeSpell", "Use 'Smooth Evade Spell'", true));
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!player.IsValid()) {
             return;
         }
@@ -1250,7 +1242,7 @@ private:
         m_smoothEvadeSpellMenu = m_evadeSpellsMenu->Add(new MenuBool(
             "SmoothEvadeSpell", "Use 'Smooth Evade Spell'", true));
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!player.IsValid()) {
             return;
         }

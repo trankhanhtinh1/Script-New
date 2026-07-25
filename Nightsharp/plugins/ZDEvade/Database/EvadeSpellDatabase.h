@@ -135,20 +135,6 @@ public:
         {
             EvadeSpellData spell;
             spell.charName = "Ambessa";
-            spell.dangerlevel = 4;
-            spell.name = "Sundering Strike";
-            spell.spellName = "AmbessaE";
-            spell.spellDelay = 50.0f;
-            spell.range = 450.0f;
-            spell.fixedRange = true;
-            spell.spellKey = EvadeSpellSlot::E;
-            spell.evadeType = EvadeType::Dash;
-            spell.castType = EvadeCastType::Position;
-            Spells.push_back(spell);
-        }
-        {
-            EvadeSpellData spell;
-            spell.charName = "Ambessa";
             spell.dangerlevel = 5;
             spell.name = "Public Execution";
             spell.spellName = "AmbessaR";
@@ -170,22 +156,6 @@ public:
             spell.spellName = "AuroraE";
             spell.spellDelay = 50.0f;
             spell.range = 400.0f;
-            spell.fixedRange = true;
-            spell.spellKey = EvadeSpellSlot::E;
-            spell.evadeType = EvadeType::Dash;
-            spell.castType = EvadeCastType::Position;
-            Spells.push_back(spell);
-        }
-
-        // === Belveth ===
-        {
-            EvadeSpellData spell;
-            spell.charName = "Belveth";
-            spell.dangerlevel = 3;
-            spell.name = "Abyssal Dive";
-            spell.spellName = "BelvethE";
-            spell.spellDelay = 50.0f;
-            spell.range = 350.0f;
             spell.fixedRange = true;
             spell.spellKey = EvadeSpellSlot::E;
             spell.evadeType = EvadeType::Dash;
@@ -470,12 +440,13 @@ public:
             EvadeSpellData spell;
             spell.charName = "Galio";
             spell.dangerlevel = 4;
-            spell.name = "Righteous Gust";
-            spell.spellName = "GalioRighteousGust";
-            spell.spellDelay = 250.0f;
-            spell.speedArray = { 30.0f, 35.0f, 40.0f, 45.0f, 50.0f };
+            spell.name = "Justice Punch";
+            spell.spellName = "GalioE";
+            spell.spellDelay = 400.0f;
+            spell.range = 650.0f;
+            spell.speed = 2300.0f;
             spell.spellKey = EvadeSpellSlot::E;
-            spell.evadeType = EvadeType::MovementSpeedBuff;
+            spell.evadeType = EvadeType::Dash;
             spell.castType = EvadeCastType::Position;
             Spells.push_back(spell);
         }
@@ -1446,22 +1417,6 @@ public:
             Spells.push_back(spell);
         }
 
-        // === Seraphine ===
-        {
-            EvadeSpellData spell;
-            spell.charName = "Seraphine";
-            spell.dangerlevel = 3;
-            spell.name = "Surround Sound";
-            spell.spellName = "SeraphineE";
-            spell.spellDelay = 250.0f;
-            spell.range = 900.0f;
-            spell.speedArray = { 20.0f, 25.0f, 30.0f, 35.0f, 40.0f };
-            spell.spellKey = EvadeSpellSlot::E;
-            spell.evadeType = EvadeType::MovementSpeedBuff;
-            spell.castType = EvadeCastType::Position;
-            Spells.push_back(spell);
-        }
-
         // === Sett ===
         {
             EvadeSpellData spell;
@@ -1606,21 +1561,6 @@ public:
             spell.range = 250.0f;
             spell.fixedRange = true;
             spell.spellKey = EvadeSpellSlot::R;
-            spell.evadeType = EvadeType::Dash;
-            spell.castType = EvadeCastType::Position;
-            Spells.push_back(spell);
-        }
-
-        // === Taliyah ===
-        {
-            EvadeSpellData spell;
-            spell.charName = "Taliyah";
-            spell.dangerlevel = 4;
-            spell.name = "Seismic Shove";
-            spell.spellName = "TaliyahW";
-            spell.spellDelay = 250.0f;
-            spell.range = 900.0f;
-            spell.spellKey = EvadeSpellSlot::W;
             spell.evadeType = EvadeType::Dash;
             spell.castType = EvadeCastType::Position;
             Spells.push_back(spell);

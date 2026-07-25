@@ -122,11 +122,12 @@ static AIHeroClient GetTarget(float range, DamageType damageType) {
 }
 
 static bool IsUnderEnemyTurretPos(const Vector3& position) {
-    for (const auto& turret : GameObjects::EnemyTurrets()) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*for (const auto& turret : GameObjects::EnemyTurrets()) {
         if (turret.IsValid() && !turret.IsDead() && turret.Position().Distance(position) <= 900.0f) {
             return true;
         }
-    }
+    }*/
     return false;
 }
 
@@ -136,7 +137,7 @@ static AIHeroClient GetTargetNoCollision(Spell& spell) {
 }
 
 // Dựng AIHeroClient từ ObjectInfo (named-field, không phụ thuộc thứ tự struct).
-static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
+static AIHeroClient HeroFromInfo(const ::Core::Events::ObjectInfo& info) {
     ::Core::Objects::ObjectHandle handle{};
     handle.address = info.Ptr;
     handle.index = info.Index;

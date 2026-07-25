@@ -52,6 +52,10 @@ public:
     }
 
     void OnRender() override {
+        // Buff state is refreshed during OnUpdate
+    }
+
+    void OnMenu() override {
         if (!ImGui::GetCurrentContext()) {
             return;
         }
@@ -65,13 +69,6 @@ public:
         const auto player = SDK::ObjectManager::Player();
         const float gameTime = SDK::Game::Time();
         const int now = SDK::Game::TickCount();
-
-        ImGui::SetNextWindowBgAlpha(0.86f);
-        ImGui::SetNextWindowSize(ImVec2(900.0f, 0.0f), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("NightSharp Player Buff Debug")) {
-            ImGui::End();
-            return;
-        }
 
         ImGui::Text("Player: %s  ptr=0x%llX  net=%d",
                     player.IsValid() ? player.CharacterName().c_str() : "--",
@@ -91,18 +88,10 @@ public:
             ResetEntries();
         }
 
-        DrawTable(entries, count, gameTime, now);
-        ImGui::End();
-    }
-
-    void OnMenu() override {
-        ImGui::Checkbox("Log buff state changes", &m_logChanges);
-        ImGui::Checkbox("Show inactive recent buffs", &m_showInactiveRecent);
         ImGui::SliderInt("Refresh ms", &m_refreshMs, 50, 1000);
         ImGui::SliderFloat("Recent seconds", &m_keepRecentSeconds, 1.0f, 15.0f);
-        if (ImGui::Button("Clear player buff debug")) {
-            ResetEntries();
-        }
+
+        DrawTable(entries, count, gameTime, now);
     }
 
 private:

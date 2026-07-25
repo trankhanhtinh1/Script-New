@@ -22,6 +22,9 @@
 #include "Champion/Viktor.h"
 #include "Champion/Yasuo/Yasuo.h"
 #include "Champion/Fiora/Fiora.h"
+#include "Champion/Jinx.h"
+#include "Champion/Rengar.h"
+#include "AI/AIChampionCatalog.h"
 
 namespace Plugins::KuroAIO::ChampionMenuTheme {
 
@@ -32,6 +35,12 @@ struct Palette {
 };
 
 inline Palette GetPalette(const char* championName) {
+    if (_stricmp(championName, "Rengar") == 0) {
+        return { IM_COL32(217, 4, 41, 255), IM_COL32(255, 107, 0, 255), 1.10f };
+    }
+    if (_stricmp(championName, "Jinx") == 0) {
+        return { IM_COL32(255, 42, 112, 255), IM_COL32(0, 229, 255, 255), 1.10f };
+    }
     if (_stricmp(championName, "Katarina") == 0) {
         return { IM_COL32(255, 59, 92, 255), IM_COL32(157, 78, 221, 255), 1.05f };
     }
@@ -68,6 +77,12 @@ inline Palette GetPalette(const char* championName) {
 inline SDK::UI::Menu* GetRoot(const char* championName) {
     if (!championName || !championName[0]) {
         return nullptr;
+    }
+    if (_stricmp(championName, "Rengar") == 0) {
+        return ::Plugins::KuroAIO::Rengar::MenuRoot;
+    }
+    if (_stricmp(championName, "Jinx") == 0) {
+        return ::Plugins::KuroAIO::Jinx::MenuRoot;
     }
     if (_stricmp(championName, "Katarina") == 0) {
         return ::Plugins::KuroAIO::Katarina::MenuRoot;
@@ -178,6 +193,8 @@ public:
     const char* GetName() const override { return "KuroAIO"; }
     const char* GetInternalId() const override {
         const std::string champ = CurrentChampionName();
+        if (_stricmp(champ.c_str(), "Rengar") == 0) return "champion.kuroaio.rengar";
+        if (_stricmp(champ.c_str(), "Jinx") == 0) return "champion.kuroaio.jinx";
         if (_stricmp(champ.c_str(), "Katarina") == 0) {
             return "champion.kuroaio.katarina";
         }
@@ -223,7 +240,11 @@ public:
             return;
         }
 
-        if (_stricmp(champ.c_str(), "Katarina") == 0) {
+        if (_stricmp(champ.c_str(), "Rengar") == 0) {
+            KuroAIO::Rengar::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Jinx") == 0) {
+            KuroAIO::Jinx::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Katarina") == 0) {
             KuroAIO::Katarina::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Kindred") == 0) {
             KuroAIO::Kindred::OnGameLoad();
@@ -268,6 +289,8 @@ public:
     }
 
     void OnUnload() override {
+        KuroAIO::Rengar::OnUnload();
+        KuroAIO::Jinx::OnUnload();
         KuroAIO::Katarina::OnUnload();
         KuroAIO::Kindred::OnUnload();
         KuroAIO::Lucian::OnUnload();
@@ -289,7 +312,9 @@ private:
 
     static bool IsSupportedChampionName(const char* championName) {
         return championName && championName[0] &&
-            (_stricmp(championName, "Katarina") == 0 ||
+            (_stricmp(championName, "Rengar") == 0 ||
+             _stricmp(championName, "Jinx") == 0 ||
+             _stricmp(championName, "Katarina") == 0 ||
              _stricmp(championName, "Kindred") == 0 ||
              _stricmp(championName, "Lucian") == 0 ||
              _stricmp(championName, "Samira") == 0 ||
@@ -307,7 +332,7 @@ private:
             return cached;
         }
 
-        const auto player = ObjectManager::Player();
+        const auto player = GameObjects::Player();
         return player.IsValid() ? player.CharacterName() : std::string();
     }
 
@@ -318,6 +343,8 @@ private:
 
     static const char* CurrentSupportedChampionName() {
         const std::string championName = CurrentChampionName();
+        if (_stricmp(championName.c_str(), "Rengar") == 0) return "Rengar";
+        if (_stricmp(championName.c_str(), "Jinx") == 0) return "Jinx";
         if (_stricmp(championName.c_str(), "Katarina") == 0) {
             return "Katarina";
         }

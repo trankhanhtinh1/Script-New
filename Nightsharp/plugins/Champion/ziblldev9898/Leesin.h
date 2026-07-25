@@ -371,6 +371,8 @@ static bool GetInsecDestination(const AIHeroClient& target, Vec3& position) {
     }
 
     closestDistance = FLT_MAX;
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*
     for (const auto& turret : GameObjects::AllyTurrets()) {
         if (!turret.IsValid() || turret.IsDead()) {
             continue;
@@ -383,6 +385,7 @@ static bool GetInsecDestination(const AIHeroClient& target, Vec3& position) {
             found = true;
         }
     }
+    */
     return found;
 }
 

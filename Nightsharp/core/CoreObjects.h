@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreAIHeroClient.h"
 #include "CoreAttackableUnit.h"
@@ -7,12 +7,12 @@
 #include "Vector.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
-
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 
 #ifndef NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS
 #define NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS 0
@@ -159,13 +159,13 @@ inline bool IsAttackable(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
-    case ObjectType::AITurretClient:
+    //case ObjectType::AITurretClient:
     case ObjectType::AITurretCommon:
     case ObjectType::AnimatedBuildingClient:
     case ObjectType::Barracks:
-    case ObjectType::BarracksDampenerClient:
+    //case ObjectType::BarracksDampenerClient:
     case ObjectType::BuildingClient:
-    case ObjectType::HQClient:
+    //case ObjectType::HQClient:
     case ObjectType::LevelPropAIClient:
     case ObjectType::NeutralMinionCampClient:
     case ObjectType::Pawn:
@@ -180,7 +180,7 @@ inline bool IsAIBase(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
-    case ObjectType::AITurretClient:
+    //case ObjectType::AITurretClient:
     case ObjectType::AITurretCommon:
     case ObjectType::LevelPropAIClient:
     case ObjectType::NeutralMinionCampClient:
@@ -213,39 +213,25 @@ inline bool IsLifecycleType(ObjectType type) {
 }
 
 inline bool EqualsInsensitive(const char* lhs, const char* rhs) {
-    if (!lhs || !rhs) {
-        return false;
-    }
-    while (*lhs && *rhs) {
-        if (std::tolower(static_cast<unsigned char>(*lhs)) !=
-            std::tolower(static_cast<unsigned char>(*rhs))) {
-            return false;
-        }
-        ++lhs;
-        ++rhs;
-    }
-    return *lhs == 0 && *rhs == 0;
+    if (!lhs || !rhs) return lhs == rhs;
+    return _stricmp(lhs, rhs) == 0;
 }
 
 inline bool ContainsInsensitive(const char* value, const char* needle) {
     if (!value || !needle || !*needle) {
         return false;
     }
-
-    for (const char* start = value; *start; ++start) {
-        const char* a = start;
-        const char* b = needle;
-        while (*a && *b &&
-               std::tolower(static_cast<unsigned char>(*a)) ==
-                   std::tolower(static_cast<unsigned char>(*b))) {
-            ++a;
-            ++b;
+    const std::string_view v(value);
+    const std::string_view n(needle);
+    auto it = std::search(
+        v.begin(), v.end(),
+        n.begin(), n.end(),
+        [](char c1, char c2) {
+            return std::tolower(static_cast<unsigned char>(c1)) ==
+                   std::tolower(static_cast<unsigned char>(c2));
         }
-        if (!*b) {
-            return true;
-        }
-    }
-    return false;
+    );
+    return it != v.end();
 }
 
 inline bool IsClone(const ObjectSnapshot& snapshot) {
@@ -313,9 +299,9 @@ inline const char* TypeName(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient: return "AIHeroClient";
     case ObjectType::AIMinionClient: return "AIMinionClient";
-    case ObjectType::AITurretClient: return "AITurretClient";
-    case ObjectType::BarracksDampenerClient: return "BarracksDampenerClient";
-    case ObjectType::HQClient: return "HQClient";
+    //case ObjectType::AITurretClient: return "AITurretClient";
+    //case ObjectType::BarracksDampenerClient: return "BarracksDampenerClient";
+    //case ObjectType::HQClient: return "HQClient";
     case ObjectType::MissileClient: return "MissileClient";
     case ObjectType::EffectEmitter: return "EffectEmitter";
     case ObjectType::Obj_SpawnPoint: return "Obj_SpawnPoint";

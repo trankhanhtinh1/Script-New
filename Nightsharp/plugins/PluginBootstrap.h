@@ -10,6 +10,7 @@
 
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
+#include "Core/Orbwalker7UP/Orbwalker7UP.h"
 #include "Core/TargetSelectorImpulse/TargetSelectorImpulsePlugin.h"
 #include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
@@ -37,6 +38,7 @@
 #include "ZDPrediction/ZDPrediction.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
+#include "../menu/NightSharpMenu.h"
 #include "../DebugLog.h"
 
 #ifndef NIGHTSHARP_ENABLE_SDK_WRAPPERS
@@ -141,6 +143,7 @@ namespace PluginBootstrap {
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
         PluginManager::Get().Register<OrbwalkerKuroPlugin>();
+        PluginManager::Get().Register<Orbwalker7UPPlugin>();
         PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
         PluginManager::Get().Register<PlayerBuffDebugPlugin>();
@@ -188,6 +191,9 @@ namespace PluginBootstrap {
         NightSharpDebug::Logf("[PluginBootstrap] ConfigStore init begin");
         ConfigStore::Init(&ChampionNameProvider);
         NightSharpDebug::Logf("[PluginBootstrap] ConfigStore init complete");
+
+        // Ensure NightSharp Core Menu is initialized and attached FIRST before plugins load
+        NightSharpMenu::EnsureEnsoulCoreMenu();
 
         NightSharpDebug::Logf("[PluginBootstrap] LoadAuto begin");
         PluginManager::Get().LoadAuto();

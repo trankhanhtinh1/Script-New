@@ -1,8 +1,8 @@
 #pragma once
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 inline void OrbwalkerBase::OnGameUpdateStatic(const Events::GameUpdateEventArgs& args) {
     (void)args;
@@ -35,21 +35,26 @@ inline void OrbwalkerBase::OnMissileCreateStatic(const Events::ObjectEventArgs& 
     }
 }
 
+inline void OrbwalkerBase::OnCreateObjectStatic(const Events::ObjectEventArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnCreateObject(args);
+    }
+}
+
+inline void OrbwalkerBase::OnDeleteObjectStatic(const Events::ObjectEventArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnDeleteObject(args);
+    }
+}
+
 inline void OrbwalkerBase::OnDrawStatic() {
     if (OrbwalkingDetail::RuntimeInstance) {
         OrbwalkingDetail::RuntimeInstance->OnDraw();
     }
 }
 
-inline void OrbwalkerBase::OnDebugDrawStatic() {
-    if (OrbwalkingDetail::RuntimeInstance) {
-        OrbwalkingDetail::RuntimeInstance->OnDebugDraw();
-    }
-}
-
-// OrbProbe (TEMP accumulator profiler) is defined in OrbwalkerActions.inl —
-// included before this file — so it is available here too.
 inline void OrbwalkerBase::OnGameUpdate() {
+    NightSharpPerf::ScopedTimer timer("OrbwalkerKuro::OnGameUpdate");
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
         context_.activeMode = OrbwalkingMode::None;
@@ -63,19 +68,19 @@ inline void OrbwalkerBase::OnGameUpdate() {
         return;
     }
 
-    // Keep processing attack events, but do not let a new orbwalker order
-    // replace KuroEvade's windup hold or active dodge command.
     const int now = Tick();
+
+
+
     if (EvadeOwnsActions(now)) {
         ExpirePendingAttack();
         if (menu_.CoordinateKuroEvade() &&
             Plugins::KuroCombatCoordination::Coordinator::
                 AllowsStationaryAttacks(now)) {
-            // KuroEvade proved that standing here is safer than taking a
-            // sharp wall-side detour. Run only target selection + attack;
-            // never call Orbwalk/Move from this coordination phase.
+
             const AttackableUnit stationaryTarget =
                 CanAttack() ? GetTarget() : AttackableUnit();
+
             if (stationaryTarget.IsValid()) {
                 Attack(stationaryTarget);
             }
@@ -86,6 +91,70 @@ inline void OrbwalkerBase::OnGameUpdate() {
     const Vector3 position = context_.orbwalkerPosition.IsZero() ? Game::CursorPos() : context_.orbwalkerPosition;
     const AttackableUnit target = CanAttack() ? GetTarget() : AttackableUnit();
     Orbwalk(target, position);
+}
+
+inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
+    const bool isAttack = IsLocalAutoAttack(args);
+    const bool isAttackReset = IsLocalAutoAttackReset(args);
+    if (!isAttack) {
+        if (isAttackReset) {
+            const int now = Tick();
+            if (now - context_.lastAutoAttackResetTick >= 150) {
+                ResetAutoAttackTimer();
+            }
+        }
+        return;
+    }
+
+    const int now = Tick();
+
+    if (!context_.pendingAttack &&
+        context_.lastAutoAttackResetTick > 0 &&
+        now - context_.lastAutoAttackResetTick >= 0 &&
+        now - context_.lastAutoAttackResetTick <= PendingAttackTimeoutMs()) {
+        return;
+    }
+
+    const bool hadPendingAttack = context_.pendingAttack;
+    const auto player = GameObjects::Player();
+    const bool isAzirSoldierAttack =
+        OrbwalkingDetail::IsAzirSoldierAttackEvent(args) ||
+        OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender);
+    const int estimatedAttackStartTick = now - static_cast<int>(context_.attackWindupMs);
+    const int attackStartTick = hadPendingAttack
+        ? (isAzirSoldierAttack
+            ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
+            : std::max(
+                context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
+                now))
+        : estimatedAttackStartTick;
+    const AttackableUnit target = ResolveAttackTarget(args);
+    if (target.IsValid()) {
+        context_.lastTarget = target;
+    }
+
+    context_.pendingAttack = false;
+    context_.pendingAttackTick = 0;
+    context_.pendingAttackTargetNetworkId = 0;
+    context_.lastAttackConfirmTick = now;
+    context_.lastAutoAttackResetTick = 0;
+    context_.hasConfirmedAttack = true;
+    context_.attackCastComplete = false;
+    if (context_.lastAttackRequiresDoCastBeforeMove) {
+        context_.lastAttackDoCastComplete = true;
+        context_.lastAttackDoCastWaitTick = 0;
+    }
+
+    context_.lastAutoAttackTick = attackStartTick;
+    ReadAttackTimingsFromMemory(player);
+
+    const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
+    OrbwalkingActionArgs attackArgs(
+        OrbwalkingType::OnAttack,
+        eventTarget,
+        eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+        "Kuro");
+    OrbwalkingDetail::FireOnAttack(attackArgs);
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
@@ -105,6 +174,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
 
     const int now = Tick();
+
     if (!context_.pendingAttack &&
         context_.lastAutoAttackResetTick > 0 &&
         now - context_.lastAutoAttackResetTick >= 0 &&
@@ -112,111 +182,61 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         return;
     }
 
-    const bool hadPendingAttack = context_.pendingAttack;
     const auto player = GameObjects::Player();
-    const bool isAzirSoldierAttack =
-        OrbwalkingDetail::IsAzirSoldierAttackEvent(args) ||
-        OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender);
-    const int attackStartTick = hadPendingAttack
-        ? (isAzirSoldierAttack
-            ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
-            : std::max(
-                context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
-                now))
-        : now;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
         context_.lastTarget = target;
     }
 
-    if (!hadPendingAttack &&
-        context_.hasConfirmedAttack &&
-        context_.lastAutoAttackTick > 0 &&
-        now - context_.lastAttackConfirmTick <= kDuplicateAttackEventMs) {
-        ReadAttackTimingsFromMemory(player);
-        return;
-    }
+    std::string spellNameStr = args.SpellName ? args.SpellName : "";
+    for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 
-    context_.lastAutoAttackTick = attackStartTick;
-    context_.lastAttackConfirmTick = now;
-    context_.pendingAttack = false;
-    context_.pendingAttackTick = 0;
-    context_.pendingAttackTargetNetworkId = 0;
-    context_.lastAutoAttackResetTick = 0;
-    context_.hasConfirmedAttack = true;
-    context_.attackCastComplete = false;
+    const bool isSpecialAfterAA = IsSpecialAfterAttack(spellNameStr);
+    if (isSpecialAfterAA) {
+        context_.attackWindupMs = 0.0f;
+        context_.attackCastComplete = true;
+        context_.lastAttackDoCastComplete = true;
+    } else {
+        context_.attackCastComplete = false;
+    }
     ReadAttackTimingsFromMemory(player);
 
-    const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
-    OrbwalkingActionArgs attackArgs(
-        OrbwalkingType::OnAttack,
-        eventTarget,
-        eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-        "Kuro");
-    OrbwalkingDetail::FireOnAttack(attackArgs);
-}
-
-inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    const bool isAttack = IsLocalAutoAttack(args);
-    const bool isAttackReset = IsLocalAutoAttackReset(args);
-    if (!isAttack) {
-        if (isAttackReset) {
-            const int now = Tick();
-            if (now - context_.lastAutoAttackResetTick >= 150) {
-                ResetAutoAttackTimer();
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+        const bool isAkshanSecondAttack =
+            spellNameStr.find("akshanpassive") != std::string::npos ||
+            spellNameStr.find("akshanpattack") != std::string::npos;
+        if (isAkshanSecondAttack) {
+            context_.isAkshanSecondShotPending = false;
+            context_.isAkshanSecondShotActive = true;
+            context_.lastAutoAttackTick = now;
+        } else if (isAttack) {
+            const int passiveMode = menu_.AkshanPassiveMode();
+            if (passiveMode == 0 || passiveMode == 2) {
+                context_.isAkshanSecondShotPending = true;
+                context_.pendingAkshanSecondShotTick = now;
             }
         }
-        return;
+    } else if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+        if (spellNameStr.find("spell5") != std::string::npos || spellNameStr.find("rengarpassive") != std::string::npos) {
+            const float dist = context_.lastTarget.IsValid() ? player.Distance(context_.lastTarget) : 0.0f;
+            const float flightDelayMs = (std::min)(dist / 1.5f, 600.0f);
+            context_.lastAutoAttackTick = static_cast<int>(now - OneWayPingMs() * 0.5f + flightDelayMs);
+        }
     }
 
-    const int now = Tick();
-    if (!context_.pendingAttack &&
-        context_.lastAutoAttackResetTick > 0 &&
-        now - context_.lastAutoAttackResetTick >= 0 &&
-        now - context_.lastAutoAttackResetTick <= PendingAttackTimeoutMs()) {
-        return;
-    }
+    const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
 
-    ReadAttackTimingsFromMemory(GameObjects::Player());
-    const int estimatedAttackStartTick = now - static_cast<int>(context_.attackWindupMs);
-    const int attackStartTick = context_.pendingAttack
-        ? std::max(
-            context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
-            estimatedAttackStartTick)
-        : 0;
-    const AttackableUnit target = ResolveAttackTarget(args);
-    if (target.IsValid()) {
-        context_.lastTarget = target;
-    }
-
-    context_.pendingAttack = false;
-    context_.pendingAttackTick = 0;
-    context_.pendingAttackTargetNetworkId = 0;
-    context_.lastAttackConfirmTick = now;
-    context_.lastAutoAttackResetTick = 0;
-    context_.hasConfirmedAttack = true;
-    context_.attackCastComplete = true;
-    if (context_.lastAttackRequiresDoCastBeforeMove) {
-        context_.lastAttackDoCastComplete = true;
-        context_.lastAttackDoCastWaitTick = 0;
-    }
-
-    if (attackStartTick > 0) {
-        context_.lastAutoAttackTick = attackStartTick;
-    } else if (context_.lastAutoAttackTick <= 0 || now - context_.lastAutoAttackTick > 300) {
-        context_.lastAutoAttackTick = std::max(0, now - static_cast<int>(context_.attackWindupMs));
-    }
-
-    if (context_.lastAutoAttackTick > 0 &&
-        context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
-        const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
-        OrbwalkingActionArgs afterArgs(
-            OrbwalkingType::AfterAttack,
-            eventTarget,
-            eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-            "Kuro");
-        OrbwalkingDetail::FireAfterAttack(afterArgs);
-        context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+    // Fire AfterAttack immediately ONLY for SpecialAfterAA spells (e.g. lucianpassiveshot, rengarqattack, rengarqempattack)
+    if (isSpecialAfterAA) {
+        if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
+            context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+            OrbwalkingActionArgs afterArgs(
+                OrbwalkingType::AfterAttack,
+                eventTarget,
+                eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+                "Kuro");
+            OrbwalkingDetail::FireAfterAttack(afterArgs);
+        }
     }
 }
 
@@ -271,6 +291,37 @@ inline void OrbwalkerBase::OnStopCast(const Events::StopCastEventArgs& args) {
 }
 
 inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) {
+    if (!IsLocalAutoAttackMissile(args)) {
+        return;
+    }
+
+    const AttackableUnit target = ResolveAttackTarget(args);
+    if (target.IsValid()) {
+        context_.lastTarget = target;
+    }
+
+    context_.pendingAttack = false;
+    context_.pendingAttackTick = 0;
+    context_.pendingAttackTargetNetworkId = 0;
+    context_.hasConfirmedAttack = true;
+    context_.attackCastComplete = true;
+
+    const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
+    OrbwalkingActionArgs afterArgs(
+        OrbwalkingType::AfterAttack,
+        eventTarget,
+        eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+        "Kuro");
+    OrbwalkingDetail::FireAfterAttack(afterArgs);
+    context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+}
+
+inline void OrbwalkerBase::OnCreateObject(const Events::ObjectEventArgs& args) {
+    OrbwalkingDetail::OnObjectCreate(args);
+}
+
+inline void OrbwalkerBase::OnDeleteObject(const Events::ObjectEventArgs& args) {
+    OrbwalkingDetail::OnObjectDelete(args);
 }
 
 namespace OrbwalkingDetail {
@@ -383,8 +434,21 @@ inline bool IsKnownAutoAttackResetSlot(
 inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const {
     const auto player = GameObjects::Player();
     if (Events::IsLocalPlayer(args.Sender)) {
-        return args.IsAutoAttack ||
-               (OrbwalkingDetail::IsAzirPlayer(player) &&
+        if (args.IsAutoAttack) return true;
+        if (args.SpellName && IsAutoAttack(args.SpellName)) return true;
+        if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+            if (args.SpellName) {
+                std::string sName = args.SpellName;
+                for (auto& c : sName) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+                if (sName.find("akshanpassive") != std::string::npos ||
+                    sName.find("akshanpattack") != std::string::npos ||
+                    sName.find("akshanattack") != std::string::npos ||
+                    sName.find("akshancrit") != std::string::npos) {
+                    return true;
+                }
+            }
+        }
+        return (OrbwalkingDetail::IsAzirPlayer(player) &&
                 OrbwalkingDetail::IsAzirSoldierAttackEvent(args));
     }
 
@@ -422,8 +486,19 @@ inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::Obje
 inline bool OrbwalkerBase::IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const {
     const auto player = GameObjects::Player();
     if (Events::IsLocalPlayer(args.Source)) {
-        return IsAutoAttack(args.SpellName) || IsAutoAttack(args.MissileName) ||
-               (OrbwalkingDetail::IsAzirPlayer(player) &&
+        if (args.SpellName[0] && IsAutoAttack(args.SpellName)) return true;
+        if (args.MissileName[0] && IsAutoAttack(args.MissileName)) return true;
+        if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+            std::string mName = args.MissileName[0] ? args.MissileName : (args.SpellName[0] ? args.SpellName : "");
+            for (auto& c : mName) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+            if (mName.find("akshanpassive") != std::string::npos ||
+                mName.find("akshanpattack") != std::string::npos ||
+                mName.find("akshanattack") != std::string::npos ||
+                mName.find("akshancrit") != std::string::npos) {
+                return true;
+            }
+        }
+        return (OrbwalkingDetail::IsAzirPlayer(player) &&
                 OrbwalkingDetail::IsAzirSoldierAttackMissileName(args));
     }
 
@@ -443,8 +518,10 @@ inline void OrbwalkerBase::OnDraw() {
 
     if (menu_.DrawAARange()) {
         DrawAutoAttackRangeFade(player);
-    }
-    if (menu_.DrawAzirSoldierRanges()) {
+        if (OrbwalkingDetail::IsAzirPlayer(player)) {
+            DrawAzirSoldierRanges(player);
+        }
+    } else if (menu_.DrawAzirSoldierRanges()) {
         DrawAzirSoldierRanges(player);
     }
 
@@ -510,160 +587,6 @@ inline void OrbwalkerBase::OnDraw() {
                 32);
         }
     }
-}
-
-inline void OrbwalkerBase::OnDebugDraw() {
-    DrawLiveAttackDebugOverlay();
-}
-
-inline void OrbwalkerBase::PushDebugConsoleLine(const char* text, int tick) {
-    const int index = context_.debugConsoleNextLine;
-    strncpy_s(
-        context_.debugConsoleLines[index].text,
-        text ? text : "",
-        _TRUNCATE);
-    context_.debugConsoleLines[index].tick = tick;
-
-    context_.debugConsoleNextLine =
-        (context_.debugConsoleNextLine + 1) % kOrbwalkerDebugConsoleMaxLines;
-    if (context_.debugConsoleLineCount < kOrbwalkerDebugConsoleMaxLines) {
-        ++context_.debugConsoleLineCount;
-    }
-}
-
-inline void OrbwalkerBase::DebugPrint(const char* text) {
-    if (!text || !text[0]) {
-        return;
-    }
-
-    const int now = static_cast<int>(::GetTickCount());
-    char line[kOrbwalkerDebugConsoleLineLength] = {};
-    int length = 0;
-
-    for (const char* cursor = text;; ++cursor) {
-        const char ch = *cursor;
-        if (ch == '\0') {
-            if (length > 0) {
-                line[length] = '\0';
-                PushDebugConsoleLine(line, now);
-            }
-            break;
-        }
-
-        if (ch == '\r' || ch == '\n') {
-            line[length] = '\0';
-            PushDebugConsoleLine(line, now);
-            length = 0;
-            if (ch == '\r' && cursor[1] == '\n') {
-                ++cursor;
-            }
-            continue;
-        }
-
-        const unsigned char value = static_cast<unsigned char>(ch);
-        line[length++] = (value >= 0x20 && value <= 0x7E) ? ch : '?';
-        if (length + 1 >= kOrbwalkerDebugConsoleLineLength) {
-            line[length] = '\0';
-            PushDebugConsoleLine(line, now);
-            length = 0;
-        }
-    }
-}
-
-inline void OrbwalkerBase::ClearDebugConsole() {
-    for (int i = 0; i < kOrbwalkerDebugConsoleMaxLines; ++i) {
-        context_.debugConsoleLines[i].text[0] = '\0';
-        context_.debugConsoleLines[i].tick = 0;
-    }
-    context_.debugConsoleNextLine = 0;
-    context_.debugConsoleLineCount = 0;
-}
-
-inline void OrbwalkerBase::DrawLiveAttackDebugOverlay() {
-    if (!menu_.DrawLiveDebugConsole()) {
-        return;
-    }
-
-    if (!ImGui::GetCurrentContext()) {
-        return;
-    }
-
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-    if (!draw) {
-        return;
-    }
-
-    const int now = static_cast<int>(::GetTickCount());
-    const int visibleLines = std::max(
-        kOrbwalkerDebugConsoleDefaultVisibleLines,
-        std::min(menu_.DrawLiveDebugConsoleLines(), 24));
-    const float fontSize = ImGui::GetFontSize();
-    const float lineHeight = std::max(15.0f, fontSize + 2.0f);
-    const float padding = 7.0f;
-    const float headerHeight = lineHeight + 2.0f;
-    float width = 720.0f;
-    const Vec2 rendererSize = Drawing::GetRendererSize();
-    if (rendererSize.x > 0.0f) {
-        width = std::min(width, std::max(360.0f, rendererSize.x - 36.0f));
-    }
-
-    const ImVec2 pos(18.0f, 108.0f);
-    const ImVec2 boxMin(pos.x - padding, pos.y - padding);
-    const ImVec2 boxMax(
-        boxMin.x + width,
-        boxMin.y + padding * 2.0f + headerHeight + lineHeight * visibleLines);
-
-    draw->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 145), 4.0f);
-    draw->AddRect(boxMin, boxMax, IM_COL32(255, 209, 102, 160), 4.0f);
-
-    char title[96] = {};
-    _snprintf_s(
-        title,
-        sizeof(title),
-        _TRUNCATE,
-        "Orbwalker Live Debug Console  %d/%d",
-        context_.debugConsoleLineCount,
-        kOrbwalkerDebugConsoleMaxLines);
-    draw->AddText(ImVec2(pos.x + 1.0f, pos.y + 1.0f), IM_COL32(0, 0, 0, 230), title);
-    draw->AddText(pos, IM_COL32(255, 209, 102, 255), title);
-
-    const int storedLines = context_.debugConsoleLineCount;
-    const int linesToDraw = std::min(storedLines, visibleLines);
-    const int emptyRows = visibleLines - linesToDraw;
-    const int oldestIndex =
-        (context_.debugConsoleNextLine - storedLines + kOrbwalkerDebugConsoleMaxLines) %
-        kOrbwalkerDebugConsoleMaxLines;
-    const int firstRelativeLine = storedLines - linesToDraw;
-
-    draw->PushClipRect(
-        ImVec2(boxMin.x + 4.0f, pos.y + headerHeight - 1.0f),
-        ImVec2(boxMax.x - 4.0f, boxMax.y - 4.0f),
-        true);
-
-    if (storedLines == 0) {
-        const ImVec2 waitingPos(pos.x, pos.y + headerHeight + lineHeight * (visibleLines - 1));
-        const char* waiting = "waiting for debug output...";
-        draw->AddText(ImVec2(waitingPos.x + 1.0f, waitingPos.y + 1.0f), IM_COL32(0, 0, 0, 220), waiting);
-        draw->AddText(waitingPos, IM_COL32(184, 231, 255, 230), waiting);
-        draw->PopClipRect();
-        return;
-    }
-
-    for (int row = emptyRows; row < visibleLines; ++row) {
-        const int relativeLine = firstRelativeLine + (row - emptyRows);
-        const int lineIndex =
-            (oldestIndex + relativeLine) % kOrbwalkerDebugConsoleMaxLines;
-        const OrbwalkerDebugConsoleLine& entry = context_.debugConsoleLines[lineIndex];
-        const int age = entry.tick > 0 ? now - entry.tick : 999999;
-        const ImU32 color = age >= 0 && age <= 4000
-            ? IM_COL32(255, 244, 204, 255)
-            : IM_COL32(210, 230, 238, 225);
-        const ImVec2 linePos(pos.x, pos.y + headerHeight + lineHeight * row);
-        draw->AddText(ImVec2(linePos.x + 1.0f, linePos.y + 1.0f), IM_COL32(0, 0, 0, 220), entry.text);
-        draw->AddText(linePos, color, entry.text);
-    }
-
-    draw->PopClipRect();
 }
 
 } // namespace OrbwalkerKuro

@@ -11,11 +11,14 @@ public:
     int DefaultWeight() const override { return 10; }
     float GetValue(const AIHeroClient& hero) override {
         float aggroCount = 0.0f;
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        /*
         for (const auto& t : GameObjects::AllyTurrets()) {
             if (!t.IsDead() && t.Distance(hero) <= t.AttackRange() + 100.0f) {
                 aggroCount += 3.0f;
             }
         }
+        */
         for (const auto& m : GameObjects::AllyMinions()) {
             if (!m.IsDead() && m.Distance(hero) <= m.AttackRange() + 100.0f) {
                 aggroCount += 1.0f;

@@ -8,7 +8,7 @@
 
 namespace SDK::Events::BuffTracker {
 
-using BuffCallback = std::function<void(const AIBaseClient&, const SDK::Events::BuffEventArgs&)>;
+using BuffCallback = std::function<void(const AIBaseClient&, const ::SDK::Events::BuffEventArgs&)>;
 
 namespace detail {
 
@@ -17,7 +17,7 @@ inline BuffCallback s_handlers[kMaxCallbacks] = {};
 inline int s_count = 0;
 inline bool s_registered = false;
 
-inline void Dispatch(const SDK::Events::BuffEventArgs& args) {
+inline void Dispatch(const ::SDK::Events::BuffEventArgs& args) {
     if (s_count <= 0 || !args.Sender.IsValid()) {
         return;
     }
@@ -34,7 +34,7 @@ inline void Dispatch(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdateThunk(const SDK::Events::BuffEventArgs& args) {
+inline void OnBuffUpdateThunk(const ::SDK::Events::BuffEventArgs& args) {
     __try {
         Dispatch(args);
     } __except (1) {
@@ -45,7 +45,7 @@ inline void OnBuffUpdateThunk(const SDK::Events::BuffEventArgs& args) {
 
 inline void Initialize() {
     if (!detail::s_registered) {
-        SDK::Events::OnBuffUpdate(&detail::OnBuffUpdateThunk);
+        ::SDK::Events::OnBuffUpdate(&detail::OnBuffUpdateThunk);
         detail::s_registered = true;
     }
 }
@@ -54,7 +54,7 @@ inline void Update() {
 }
 
 inline void Reset() {
-    SDK::Events::RemoveOnBuffUpdate(&detail::OnBuffUpdateThunk);
+    ::SDK::Events::RemoveOnBuffUpdate(&detail::OnBuffUpdateThunk);
     for (int i = 0; i < detail::s_count; ++i) {
         detail::s_handlers[i] = nullptr;
     }
@@ -70,8 +70,8 @@ inline void OnBuffUpdate(BuffCallback cb) {
 }
 
 inline void OnBuffGain(BuffCallback cb) {
-    OnBuffUpdate([cb = std::move(cb)](const AIBaseClient& sender,
-                                      const SDK::Events::BuffEventArgs& args) {
+    OnBuffUpdate([cb](const AIBaseClient& sender,
+                      const ::SDK::Events::BuffEventArgs& args) {
         if (cb && args.Count > 0) {
             cb(sender, args);
         }
@@ -79,8 +79,8 @@ inline void OnBuffGain(BuffCallback cb) {
 }
 
 inline void OnBuffLose(BuffCallback cb) {
-    OnBuffUpdate([cb = std::move(cb)](const AIBaseClient& sender,
-                                      const SDK::Events::BuffEventArgs& args) {
+    OnBuffUpdate([cb](const AIBaseClient& sender,
+                      const ::SDK::Events::BuffEventArgs& args) {
         if (cb && args.Count == 0) {
             cb(sender, args);
         }

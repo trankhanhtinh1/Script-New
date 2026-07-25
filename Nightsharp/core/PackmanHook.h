@@ -35,6 +35,17 @@
 
 #pragma warning(disable: 4996)
 
+// ── Master switch: CRC Bypass ────────────────────────────────────────────────
+// 0 = DISABLED (mặc định). Tắt toàn bộ CRC Bypass:
+//     - CRCBypass::Install / Uninstall / AddPatchAddress / CheckMemoryBlocks
+//       trở thành no-op (không hook stub.dll, không đăng ký faked region).
+//     - DeferredCRCInstallThread thoát ngay, không scan pattern, không patch.
+//     - Corehook.h cũng bỏ qua bước AddPatchAddress khi install inline hook.
+// 1 = ENABLED (legacy behavior).
+#ifndef NIGHTSHARP_ENABLE_CRC_BYPASS
+#define NIGHTSHARP_ENABLE_CRC_BYPASS 0
+#endif
+
 // ── Logging ──────────────────────────────────────────────────────────────────
 // Ghi vào %TEMP%\ph.log + OutputDebugString. Đường dẫn %TEMP% là user-scope,
 // ít bị anti-cheat sweep hơn C:\Users\Public. Tên file ngắn, không có
@@ -656,7 +667,9 @@ inline bool InitProtect() {
 
 inline bool InitWrite() {
     if (g_ntWrite) return true;
-    if (!InitSyscall(IDX_WRITE)) return false;
+    if (!InitSyscall(IDX_WRITE)) {
+        return false;
+    }
     g_writeStub = g_syscalls[IDX_WRITE].stub;
     g_writeSsn  = g_syscalls[IDX_WRITE].ssn;
     g_ntWrite   = reinterpret_cast<NtWriteFn>(g_writeStub);
@@ -1239,6 +1252,10 @@ inline FakedMemoryRegion* FindFakedRegion(uintptr_t address) {
 // Hot path: KHÔNG cấp phát heap / log gì cả.
 
 inline void __fastcall CheckMemoryBlocks(uintptr_t r14, uintptr_t /*rbp*/) {
+#if !NIGHTSHARP_ENABLE_CRC_BYPASS
+    (void)r14;
+    return;
+#else
     if (!g_fakedReady) return;
     for (size_t i = 0; i < kCRCCheckCount; ++i) {
         uintptr_t* slot = reinterpret_cast<uintptr_t*>(r14 + i * sizeof(uintptr_t));
@@ -1249,6 +1266,7 @@ inline void __fastcall CheckMemoryBlocks(uintptr_t r14, uintptr_t /*rbp*/) {
             *slot = reinterpret_cast<uintptr_t>(fake->bytes.data() + offset);
         }
     }
+#endif
 }
 
 // SEH-memcpy helper (vì __try không xài chung lock_guard).
@@ -1262,6 +1280,10 @@ inline bool SafeMemCpyRead(void* dst, const void* src, size_t size) {
 }
 
 inline void AddPatchAddress(uintptr_t address) {
+#if !NIGHTSHARP_ENABLE_CRC_BYPASS
+    (void)address;
+    return;
+#else
     std::lock_guard<std::mutex> lock(g_patchMutex);
     if (FindFakedRegion(address)) return;
 
@@ -1278,6 +1300,7 @@ inline void AddPatchAddress(uintptr_t address) {
         return;
     }
     g_fakedRegions.push_back(std::move(fake));
+#endif
 }
 
 // ── BuildHookStub ────────────────────────────────────────────────────────────
@@ -1428,6 +1451,10 @@ static bool WriteStubJmp(uintptr_t address, uintptr_t destination, size_t size) 
 // ── Install / Uninstall ──────────────────────────────────────────────────────
 
 inline bool Install() {
+#if !NIGHTSHARP_ENABLE_CRC_BYPASS
+    DbgLog("[CRC] Install: CRC bypass DISABLED -> skip (no-op)\r\n");
+    return false;
+#else
     if (InterlockedCompareExchange(&g_installed, 1, 0) != 0) {
         DbgLog("[CRC] Install: đã cài rồi, bỏ qua\r\n");
         return true;
@@ -1505,10 +1532,16 @@ inline bool Install() {
     DbgLogFmt("[CRC]   fakedReady   = %d\r\n", (int)g_fakedReady);
     DbgLogFmt("[CRC] ============================\r\n");
     return true;
+#endif
 }
 
 inline void Uninstall() {
-    if (InterlockedCompareExchange(&g_installed, 0, 1) != 1) return;
+#if !NIGHTSHARP_ENABLE_CRC_BYPASS
+    return;
+#else
+    if (InterlockedCompareExchange(&g_installed, 0, 1) != 1) {
+        return;
+    }
     if (!g_hookAddr || g_originalStubBytes.size() != kHookSize) return;
 
     DWORD oldProt = 0;
@@ -1542,6 +1575,7 @@ inline void Uninstall() {
         g_hookStub = nullptr;
     }
     InterlockedExchange(&g_fakedReady, 0);
+#endif
 }
 
 } // namespace CRCBypass
@@ -1563,6 +1597,10 @@ inline void RequestDeferredCRCInstallShutdown() {
 // spawn riêng, không gộp vào BootstrapWorker). Hiện không dùng trong
 // dllmain.cpp vì BootstrapWorker đã cover logic này. Giữ lại cho reference.
 inline DWORD WINAPI DeferredCRCInstallThread(LPVOID) {
+#if !NIGHTSHARP_ENABLE_CRC_BYPASS
+    DbgLogTs("[CRC] Deferred thread: CRC bypass DISABLED -> exit immediately\r\n");
+    return 0;
+#else
     InterlockedExchange(&g_crcInstallStarted, 1);
     DbgLogTs("[CRC] Deferred thread: init direct syscalls...\r\n");
     DirectSyscall::InitAll();
@@ -1592,6 +1630,7 @@ inline DWORD WINAPI DeferredCRCInstallThread(LPVOID) {
     DbgLogTs("[CRC] Deferred: stub.dll KHÔNG load trong 60s, bỏ\r\n");
     InterlockedExchange(&g_crcInstallStarted, 0);
     return 0;
+#endif
 }
 
 // ── Init log ─────────────────────────────────────────────────────────────────

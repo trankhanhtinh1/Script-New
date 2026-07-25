@@ -116,9 +116,13 @@ inline Vector3 ServerPositionOrPosition(const AIBaseClient& unit) {
 
 inline bool IsStructureObject(const GameObject& object) {
     const auto type = object.Type();
-    return type == ::Core::Objects::ObjectType::AITurretClient ||
-           type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-           type == ::Core::Objects::ObjectType::HQClient;
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // return type == ::Core::Objects::ObjectType::AITurretClient ||
+    //        type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+    //        type == ::Core::Objects::ObjectType::HQClient;
+    // REMOVED: Turret/Inhibitor/Nexus disabled
+    (void)type;
+    return false;
 }
 
 inline bool ContainsAnyLower(const std::string& value,
@@ -134,12 +138,7 @@ inline bool ContainsAnyLower(const std::string& value,
 inline std::string RuntimeMinionName(const AIMinionClient& minion) {
     std::string name = minion.CharacterName();
     if (name.empty()) {
-        char buffer[96] = {};
-        const uintptr_t address = minion.Address();
-        if (::Core::Objects::ReadCharacterName(address, buffer, static_cast<int>(sizeof(buffer))) ||
-            ::Core::Objects::ReadName(address, buffer, static_cast<int>(sizeof(buffer)))) {
-            name = buffer;
-        }
+        name = minion.Name();
     }
     return ToLower(std::move(name));
 }
@@ -561,6 +560,8 @@ inline void ProcessBuildings(std::vector<AIBaseClient>& result,
     const Vec2 position2D = position.To2D();
     const Vec2 from2D = from.To2D();
 
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*
     for (const auto& turret : GameObjects::Turrets()) {
         if (!IsValidCollisionTarget(turret, input, range)) {
             continue;
@@ -583,6 +584,7 @@ inline void ProcessBuildings(std::vector<AIBaseClient>& result,
             AddPlayerSentinel(result);
         }
     }
+    */
 }
 
 inline void ProcessWalls(std::vector<AIBaseClient>& result,

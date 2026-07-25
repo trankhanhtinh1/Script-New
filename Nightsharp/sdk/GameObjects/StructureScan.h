@@ -59,15 +59,18 @@ inline StructureKind ClassifyStructureVtable(uintptr_t vtable) {
     if (!vtable || !Globals::base) {
         return StructureKind::None;
     }
-    if (vtable == Globals::base + Offset::StructureVTable::AITurretClient) {
-        return StructureKind::Turret;
-    }
-    if (vtable == Globals::base + Offset::StructureVTable::BarracksDampenerClient) {
-        return StructureKind::Inhibitor;
-    }
-    if (vtable == Globals::base + Offset::StructureVTable::HQClient) {
-        return StructureKind::Nexus;
-    }
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // if (vtable == Globals::base + Offset::StructureVTable::AITurretClient) {
+    //     return StructureKind::Turret;
+    // }
+    // if (vtable == Globals::base + Offset::StructureVTable::BarracksDampenerClient) {
+    //     return StructureKind::Inhibitor;
+    // }
+    // if (vtable == Globals::base + Offset::StructureVTable::HQClient) {
+    //     return StructureKind::Nexus;
+    // }
+    // REMOVED: Turret/Inhibitor/Nexus disabled
+    (void)vtable;
     return StructureKind::None;
 }
 

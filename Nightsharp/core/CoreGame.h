@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreBypass.h"
 #include "CoreMap.h"
@@ -591,7 +591,8 @@ inline bool SendPing(PingCategory /*pingType*/, const Vec2& /*position*/, std::u
 }
 
 inline bool SendPing(PingCategory pingType, const Vec3& position, std::uint32_t targetNetworkId = 0) {
-    return SendPing(pingType, Vec2(position.x, position.z), targetNetworkId);
+    const bool result = SendPing(pingType, Vec2(position.x, position.z), targetNetworkId);
+    return result;
 }
 
 inline bool ShowPing(PingCategory /*pingType*/,
@@ -636,16 +637,19 @@ inline bool SendEmote(EmoteId emoteId) {
     default:
         return false;
     }
-    return IsGameFocused() && detail::SendCtrlKey(key);
+    const bool result = IsGameFocused() && detail::SendCtrlKey(key);
+    return result;
 }
 
 inline bool SendMasteryBadge() {
-    return IsGameFocused() && detail::SendCtrlKey('6');
+    const bool result = IsGameFocused() && detail::SendCtrlKey('6');
+    return result;
 }
 
 inline bool SendSummonerEmote(SummonerEmoteSlot slot) {
     if (slot == SummonerEmoteSlot::Mastery) {
-        return SendMasteryBadge();
+        const bool mastery = SendMasteryBadge();
+        return mastery;
     }
 
     detail::LogOnce(

@@ -43,7 +43,7 @@ static float EffectivePhysicalHealth(const AIBaseClient& unit) {
     return unit.Health() + unit.PhysicalShield();
 }
 
-static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
+static AIHeroClient HeroFromInfo(const ::Core::Events::ObjectInfo& info) {
     ::Core::Objects::ObjectHandle handle{};
     handle.address = info.Ptr;
     handle.index = info.Index;
@@ -91,7 +91,8 @@ static int CountEnemyHeroesNear(const Vector3& position, float range) {
 static bool PointUnderTurret(const Vector3& position, bool enemyTurret) {
     const auto player = Player();
     const float radius = player.IsValid() ? player.BoundingRadius() : 65.0f;
-    const auto turrets = enemyTurret
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*const auto turrets = enemyTurret
         ? GameObjects::EnemyTurrets()
         : GameObjects::AllyTurrets();
     for (const auto& turret : turrets) {
@@ -102,7 +103,7 @@ static bool PointUnderTurret(const Vector3& position, bool enemyTurret) {
         if (turret.Position().DistanceSqr2D(position) <= range * range) {
             return true;
         }
-    }
+    }*/
     return false;
 }
 
@@ -680,22 +681,14 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
     }
 
     const AIBaseClient attacked(args.Target.Handle());
-    if (attacked.IsValid() && !attacked.IsHero()) {
-        return;
-    }
-
-    AIHeroClient target = attacked.IsValid()
+    AIHeroClient target = (attacked.IsValid() && attacked.IsHero())
         ? AIHeroClient(attacked.Handle())
-        : AIHeroClient();
-    if (!ValidHeroTarget(target)) {
-        target = KindredTarget(
-            AutoAttack::GetRealAutoAttackRange(player) + Q.Range + 150.0f);
-    }
-    if (!ValidHeroTarget(target)) {
-        return;
-    }
+        : KindredTarget(AutoAttack::GetRealAutoAttackRange(player) + Q.Range + 150.0f);
 
-    Vector3 position = FindDashPosition(target, false);
+    Vector3 position = {};
+    if (ValidHeroTarget(target)) {
+        position = FindDashPosition(target, false);
+    }
     if (position.IsZero()) {
         position = Game::CursorPos();
     }

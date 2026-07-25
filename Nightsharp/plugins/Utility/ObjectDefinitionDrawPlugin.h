@@ -578,9 +578,12 @@ private:
         for (const auto& minion : SDK::GameObjects::AllyMinions()) {
             AddMissileSource(sources, minion, false);
         }
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        /*
         for (const auto& turret : SDK::GameObjects::Turrets()) {
             AddMissileSource(sources, turret, true);
         }
+        */
 
         AcquireSRWLockExclusive(&lock_);
         missileSources_ = std::move(sources);
@@ -716,6 +719,8 @@ private:
             }
             break;
         case ModeTurrets: {
+            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+            /*
             NightSharpDebug::Logf("[ODraw] turrets: calling ScanTurrets");
             auto turrets = SDK::GameObjects::ScanTurrets();
             NightSharpDebug::Logf("[ODraw] turrets: got %zu, adding rows", turrets.size());
@@ -724,17 +729,24 @@ private:
                 AddObjectRow(object, "Turret", 0xFFFF625Eu);
             }
             NightSharpDebug::Logf("[ODraw] turrets: rows done=%zu", rows_.size());
+            */
             break;
         }
         case ModeInhibitors:
+            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+            /*
             for (const auto& object : SDK::GameObjects::ScanInhibitors()) {
                 AddObjectRow(object, "Inhibitor", 0xFFFF8A3Du);
             }
+            */
             break;
         case ModeNexus:
+            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+            /*
             for (const auto& object : SDK::GameObjects::ScanNexuses()) {
                 AddObjectRow(object, "Nexus", 0xFFFF3D9Au);
             }
+            */
             break;
         case ModeMissiles:
             PruneMissileRows(GetTickCount());

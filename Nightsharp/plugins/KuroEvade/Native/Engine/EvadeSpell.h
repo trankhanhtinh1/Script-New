@@ -550,7 +550,7 @@ private:
             const SourceSkillshotList& skillshots,
             const EvadeSettings& settings) {
         int best = baselineThreats;
-        for (const auto& minion : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
+        for (const auto& minion : GameObjects::Get<SDK::AIMinionClient>()) {
             const std::string objectName = EvadeUtils::GetObjectName(minion);
             const std::string characterName =
                 EvadeUtils::GetObjectCharacterName(minion);
@@ -717,7 +717,7 @@ private:
                            maxRemainingThreats);
         }
         if (IsNamed(data, "Chronobreak", "EkkoR")) {
-            for (const auto& minion : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
+            for (const auto& minion : GameObjects::Get<SDK::AIMinionClient>()) {
                 const std::string objectName = EvadeUtils::GetObjectName(minion);
                 const std::string characterName =
                     EvadeUtils::GetObjectCharacterName(minion);
@@ -881,10 +881,10 @@ private:
                 for (const auto& unit : SDK::GameObjects::EnemyMinions()) add(SDK::AIBaseClient(unit.Handle()));
                 break;
             case SpellTargets::Targetables:
-                for (const auto& unit : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
+                for (const auto& unit : GameObjects::Get<SDK::AIMinionClient>()) {
                     add(SDK::AIBaseClient(unit.Handle()));
                 }
-                for (const auto& unit : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
+                for (const auto& unit : GameObjects::Get<SDK::AIHeroClient>()) {
                     add(SDK::AIBaseClient(unit.Handle()));
                 }
                 if (wardJump) {
@@ -952,13 +952,16 @@ private:
         if (text.empty() || !value || !value[0]) {
             return false;
         }
-        std::string lhs = text;
-        std::string rhs = value;
-        std::transform(lhs.begin(), lhs.end(), lhs.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        std::transform(rhs.begin(), rhs.end(), rhs.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return lhs.find(rhs) != std::string::npos;
+        const std::string_view n(value);
+        auto it = std::search(
+            text.begin(), text.end(),
+            n.begin(), n.end(),
+            [](char c1, char c2) {
+                return std::tolower(static_cast<unsigned char>(c1)) ==
+                       std::tolower(static_cast<unsigned char>(c2));
+            }
+        );
+        return it != text.end();
     }
 
     static bool IsNamed(const Database::EvadeSpellData& data,

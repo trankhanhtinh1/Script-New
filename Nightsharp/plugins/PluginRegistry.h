@@ -59,7 +59,6 @@ namespace PluginRegistry {
         CreateDirectoryA(dirPath, nullptr);
 
         wsprintfA(outPath, "%s\\plugins.ini", dirPath);
-        NightSharpDebug::Logf("[PluginRegistry] Config path=%s", outPath ? outPath : "");
     }
 
     inline void SaveConfig() {
@@ -210,6 +209,10 @@ namespace PluginRegistry {
     inline bool HasRuntime(int idx) {
         return idx >= 0 && idx < PluginCount &&
             (Plugins[idx].RuntimeLoad || Plugins[idx].RuntimeUnload || Plugins[idx].RuntimeMenu);
+    }
+
+    inline bool HasPluginMenuCallback(int idx) {
+        return idx >= 0 && idx < PluginCount && Plugins[idx].RuntimeMenu != nullptr;
     }
 
     inline int FindByInternalId(const char* internalId) {

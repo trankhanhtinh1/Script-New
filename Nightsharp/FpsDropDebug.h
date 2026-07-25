@@ -35,9 +35,9 @@ struct EventSample {
     DWORD LastTick = 0;
 };
 
-inline bool Enabled = false;
-inline bool OverlayVisible = false;
-inline bool LogEnabled = false;
+inline bool Enabled = true;
+inline bool OverlayVisible = true;
+inline bool LogEnabled = true;
 inline double SlowFrameMs = 33.0;
 inline double SlowPhaseMs = 6.0;
 inline double SlowPluginMs = 2.0;

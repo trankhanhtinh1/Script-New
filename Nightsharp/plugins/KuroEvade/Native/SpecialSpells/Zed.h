@@ -10,7 +10,7 @@ struct Zed {
             return false;
         }
 
-        for (const auto& emitter : SDK::ObjectManager::Get<SDK::EffectEmitter>()) {
+        for (const auto& emitter : GameObjects::Get<SDK::EffectEmitter>()) {
             if (!emitter.IsValid() || !emitter.IsEnemy()) {
                 continue;
             }

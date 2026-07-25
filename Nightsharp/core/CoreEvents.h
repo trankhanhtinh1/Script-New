@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreAiManager.h"
 #include "CoreBuffs.h"
@@ -9,7 +9,6 @@
 #include "Vector.h"
 #include "offset.h"
 #include "../CrashReporter.h"
-
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -102,6 +101,9 @@ struct ObjectEventArgs {
     ObjectInfo Source = {};
     // Populated for missile events when the payload exposes a target index.
     ObjectInfo Target = {};
+    // Original cast payload when missile creation exposes one. This remains
+    // zero for lifecycle paths that only expose the missile's copied payload.
+    uintptr_t CastIdentity = 0;
     uint32_t SourceIndex = 0;
     uint32_t SourceNetworkId = 0;
     uint32_t TargetIndex = 0;
@@ -174,10 +176,15 @@ struct ProcessSpellEventArgs {
     Vec3 EndPosition = {};
     Vec3 CastPosition = {};
     float CastDelay = 0.0f;
+    // CastTime = ExtraTimeForCast (0x98) + DesignerCastTime (0x9C)
+    // IDA 13337: sub_9BAEE0 gọi sub_975A00 (0x98) + sub_9B5920 (0x9C) liên tiếp,
+    // khớp pattern EnsoulSharp OnDoCastNative: castTime = num + num2.
+    float CastTime = 0.0f;
     float MissileSpeed = 0.0f;
     bool IsSpell = false;
     bool IsAutoAttack = false;
     bool IsSpecialAttack = false;
+    bool SpellNameFromSlotFallback = false;
     char SpellName[96] = {};
     char MissileName[96] = {};
     char ScriptName[96] = {};
@@ -1149,6 +1156,14 @@ namespace detail {
             castInfo + Offset::SpellCastInfoEventLayout::CastPos,
             args.CastPosition);
         Read(castInfo + Offset::SpellCastInfoEventLayout::CastDelay, args.CastDelay);
+        // CastTime = ExtraTimeForCast + DesignerCastTime (port 1-1 từ EnsoulSharp
+        // OnDoCastNative: num2 = ExtraTimeForCast; num = DesignerCastTime;
+        // args.CastTime = (float)((double)num + (double)num2))
+        float extraTimeForCast = 0.0f;
+        float designerCastTime = 0.0f;
+        Read(castInfo + Offset::SpellCastInfoEventLayout::ExtraTimeForCast, extraTimeForCast);
+        Read(castInfo + Offset::SpellCastInfoEventLayout::DesignerCastTime, designerCastTime);
+        args.CastTime = extraTimeForCast + designerCastTime;
         args.IsSpell = ReadBoolByte(castInfo + Offset::SpellCastInfoEventLayout::IsSpell);
         args.IsSpecialAttack =
             ReadBoolByte(castInfo + Offset::SpellCastInfoEventLayout::IsSpecialAttack) ||
@@ -1252,6 +1267,7 @@ namespace detail {
                     args.SpellName,
                     static_cast<int>(sizeof(args.SpellName)),
                     args.SpellSlotName);
+                args.SpellNameFromSlotFallback = true;
             }
         }
 
@@ -1388,6 +1404,7 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
     uintptr_t payload = 0;
     if (raw.Id == Hooks::OnMissileCreate) {
         payload = static_cast<uintptr_t>(raw.Rdx);
+        args.CastIdentity = payload;
         detail::Read(
             payload +
                 Offset::MissileEventLayout::CreatePacketCasterIndex,

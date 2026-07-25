@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreRuntime.h"
 #include "Globals.h"

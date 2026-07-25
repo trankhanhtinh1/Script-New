@@ -72,14 +72,15 @@ inline bool UnderTower(const Vector3& position) {
     const float range = 850.0f + extraRadius;
     const float rangeSqr = range * range;
 
-    for (const auto& turret : GameObjects::EnemyTurrets()) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*for (const auto& turret : GameObjects::EnemyTurrets()) {
         if (!turret.IsValid() || turret.IsDead()) {
             continue;
         }
         if (turret.Position().DistanceSqr2D(position) <= rangeSqr) {
             return true;
         }
-    }
+    }*/
 
     for (const auto& spawn : GameObjects::EnemySpawnPoints()) {
         if (spawn.IsValid() && spawn.Position().DistanceSqr2D(position) <= rangeSqr) {

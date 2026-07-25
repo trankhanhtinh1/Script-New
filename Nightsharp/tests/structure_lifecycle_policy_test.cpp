@@ -13,6 +13,8 @@ void Expect(bool condition, const char* name) {
     }
 }
 
+// REMOVED: Turret/Inhibitor/Nexus disabled by user request
+/*
 void TestStructuresUseSnapshotPolling() {
     using Core::Objects::ObjectType;
     using SDK::Events::detail::ShouldQueueObjectLifecycle;
@@ -24,6 +26,8 @@ void TestStructuresUseSnapshotPolling() {
     Expect(!ShouldQueueObjectLifecycle(ObjectType::HQClient),
            "nexuses skip lifecycle queue");
 }
+*/
+// REMOVED: Turret/Inhibitor/Nexus disabled
 
 void TestOtherObjectsKeepNativeLifecycle() {
     using Core::Objects::ObjectType;
@@ -42,7 +46,8 @@ void TestOtherObjectsKeepNativeLifecycle() {
 } // namespace
 
 int main() {
-    TestStructuresUseSnapshotPolling();
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // TestStructuresUseSnapshotPolling();
     TestOtherObjectsKeepNativeLifecycle();
 
     if (failures == 0) {

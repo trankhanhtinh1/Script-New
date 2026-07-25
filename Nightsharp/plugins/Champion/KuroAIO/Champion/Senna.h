@@ -217,7 +217,8 @@ static std::vector<AIBaseClient> QCastTargets() {
     for (const auto& minion : GameObjects::AllyMinions()) add(minion);
     for (const auto& monster : GameObjects::Jungle()) add(monster);
     for (const auto& hero : GameObjects::EnemyHeroes()) add(hero);
-    for (const auto& turret : GameObjects::Turrets()) add(turret);
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    //for (const auto& turret : GameObjects::Turrets()) add(turret);
     for (const auto& ward : GameObjects::Wards()) add(ward);
 
     return result;

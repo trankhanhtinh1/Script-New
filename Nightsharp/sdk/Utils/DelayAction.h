@@ -25,7 +25,7 @@ public:
     DelayActionItem() = default;
     DelayActionItem(int time, std::function<void()> func, CancellationToken token = {})
         : Function(std::move(func)),
-          Time(SDK::Variables::TickCount() + time),
+          Time(::SDK::Variables::TickCount() + time),
           Token(token) {}
 
     std::function<void()> Function = {};
@@ -62,8 +62,8 @@ private:
         return items;
     }
 
-    static void OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
-        const int now = SDK::Variables::TickCount();
+    static void OnUpdate(const ::SDK::Events::GameUpdateEventArgs&) {
+        const int now = ::SDK::Variables::TickCount();
         auto& items = Items();
         for (std::size_t i = 0; i < items.size();) {
             auto item = items[i];
@@ -80,7 +80,7 @@ private:
             try {
                 item.Function();
             } catch (...) {
-                Logging::Write()(LogLevel::Error, "DelayAction callback crashed");
+                ::SDK::Utils::Logging::Write()(::SDK::LogLevel::Error, "DelayAction callback crashed");
             }
         }
     }
@@ -89,7 +89,7 @@ private:
         static bool installed = false;
         if (!installed) {
             installed = true;
-            SDK::Events::AddOnGameUpdate(&OnUpdate);
+            ::SDK::Events::AddOnGameUpdate(&OnUpdate);
         }
     }
 };

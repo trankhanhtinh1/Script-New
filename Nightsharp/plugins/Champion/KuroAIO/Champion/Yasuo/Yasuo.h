@@ -292,20 +292,33 @@ static bool CastQDuringDash() {
     }
 
     const int now = SDK::Variables::TickCount();
-    if (now - LastQ < 250) {
+    if (now - LastQ < 200) {
         return false;
     }
 
     const float radius = static_cast<float>(Slider(RangeMenu, "EQRange", 240));
+
+    // Check enemy heroes in EQ radius
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (ValidHeroTarget(enemy) &&
-            enemy.Position().Distance2D(player.Position()) <= radius + enemy.BoundingRadius()) {
+            enemy.Position().Distance2D(player.Position()) <= radius + enemy.BoundingRadius() + 30.0f) {
             if (Q.Cast(player.Position())) {
                 LastQ = now;
                 return true;
             }
         }
     }
+
+    // Check minions in EQ radius when in clear mode
+    if (IsClearMode() && Bool(ClearMenu, "QClear")) {
+        for (const auto& minion : ClearUnits(radius + 30.0f)) {
+            if (Q.Cast(player.Position())) {
+                LastQ = now;
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
@@ -391,6 +404,11 @@ static bool TryEQR(const AIHeroClient& target, const Vector3& castPosition) {
         return false;
     }
 
+    // Check turret safety for R position
+    if (!AllowTurret() && UnderTower(castPosition)) {
+        return false;
+    }
+
     if (player.IsDashing()) {
         if (CastEQCircleQ()) {
             return R.Cast(castPosition);
@@ -415,13 +433,12 @@ static bool TryEQR(const AIHeroClient& target, const Vector3& castPosition) {
 }
 
 static bool TryR() {
-    if (!R.IsReady() || !Bool(RMenu, "RCombo")) {
+    if (!R.IsReady() || !Bool(RMenu, "RCombo") || !Bool(RMenu, "REQR", true)) {
         return false;
     }
 
     R.Range = static_cast<float>(Slider(RangeMenu, "RRange", 1400));
     const int maxHealth = Slider(RMenu, "RHealth", 100);
-    const int delay = Slider(RMenu, "RDelay", 0);
 
     for (const auto& target : EnemyHeroesByHealth(R.Range)) {
         if (!IsAirborne(target) || target.HealthPercent() > static_cast<float>(maxHealth)) {
@@ -433,32 +450,16 @@ static bool TryR() {
             continue;
         }
 
+        // ONLY execute EQR (E+Q before R). Normal R is manual only by user decision.
         if (TryEQR(target, castPosition)) {
             return true;
         }
-
-        const float remaining = AirborneRemaining(target);
-        if (delay > 0 && remaining > 0.0f &&
-            remaining < static_cast<float>(delay) / 1000.0f + 0.1f) {
-            continue;
-        }
-
-        if (delay > 0) {
-            SDK::Utils::DelayAction::Add(delay, [castPosition]() {
-                if (R.IsReady()) {
-                    R.Cast(castPosition);
-                }
-            });
-            return true;
-        }
-
-        return R.Cast(castPosition);
     }
     return false;
 }
 
 static bool TryEQToTarget(const AIHeroClient& target) {
-    if (!Bool(EQMenu, "UseEQ") || !E.IsReady() || !Q.IsReady(500) ||
+    if (!Bool(EQMenu, "UseEQ") || !E.IsReady() || !Q.IsReady(300) ||
         !ValidHeroTarget(target, static_cast<float>(Slider(RangeMenu, "EGapRange", 925)))) {
         return false;
     }
@@ -467,6 +468,7 @@ static bool TryEQToTarget(const AIHeroClient& target) {
     const float bonus = static_cast<float>(Slider(EQMenu, "EBonus", 65));
     const bool preferFarthest = List(EMenu, "EMode", 0) == 1;
     const Vector3 desired = PredictedPosition(CurrentQ(), target);
+
     AIBaseClient dash = BestCachedDashObjectNear(
         desired,
         eqRange + bonus + target.BoundingRadius(),
@@ -477,30 +479,32 @@ static bool TryEQToTarget(const AIHeroClient& target) {
         return false;
     }
 
+    // Cast E on dash target. Q will be dynamically triggered by CastQDuringDash() / OnDash
+    // when Yasuo comes within EQ radius of the target!
     if (CastE(dash)) {
-        SDK::Utils::DelayAction::Add(45, []() {
-            Q.Cast(Player().Position());
-        });
         return true;
     }
     return false;
 }
 
 static bool TryEGapClose(const AIHeroClient& target) {
-
-    if (Orbwalker::IsAutoAttacking() || (Orbwalker::AttackCooldownRemaining() <= 250 && Orbwalker::GetTarget().IsValid()))
-        return false;
-
-    const float gapRange = static_cast<float>(Slider(RangeMenu, "EGapRange", 925));
-
-    if (!Bool(EMenu, "UseE") ||
-        !E.IsReady() ||
-        !ValidHeroTarget(target, gapRange)) {
+    if (Orbwalker::IsAutoAttacking() ||
+        (Orbwalker::AttackCooldownRemaining() <= 200 && Orbwalker::GetTarget().IsValid())) {
         return false;
     }
 
     const auto player = Player();
-    if (!player.IsValid()) {
+    if (!player.IsValid() || !E.IsReady() || !Bool(EMenu, "UseE")) {
+        return false;
+    }
+
+    // Do NOT dash E to gapclose if already in auto attack range of the target!
+    if (AutoAttack::InAutoAttackRange(target)) {
+        return false;
+    }
+
+    const float gapRange = static_cast<float>(Slider(RangeMenu, "EGapRange", 925));
+    if (!ValidHeroTarget(target, gapRange)) {
         return false;
     }
 
@@ -514,6 +518,12 @@ static bool TryEGapClose(const AIHeroClient& target) {
 
     const float currentDistance = player.Position().Distance2D(desired);
 
+    // Direct E on target if target is in E range and not in AA range
+    if (ValidTarget(target, E.Range) && CanE(target) && AllowDashTo(target, allowTower)) {
+        return CastE(target);
+    }
+
+    // Minion / Monster gapclose E
     AIBaseClient dash = BestCachedDashObjectNear(
         desired,
         Q.Range,
@@ -531,8 +541,7 @@ static bool TryEGapClose(const AIHeroClient& target) {
     }
 
     const float afterDistance = after.Distance2D(desired);
-
-    constexpr float minImproveDistance = 10.0f;
+    constexpr float minImproveDistance = 120.0f;
 
     if (afterDistance + minImproveDistance >= currentDistance) {
         return false;

@@ -173,16 +173,7 @@ private:
             return nullptr;
         }
 
-        std::string characterName = source.CharacterName();
-        if (characterName.empty()) {
-            char directName[64] = {};
-            if (::Core::Objects::ReadCharacterName(
-                    source.Address(),
-                    directName,
-                    static_cast<int>(sizeof(directName)))) {
-                characterName = directName;
-            }
-        }
+        const std::string characterName = source.CharacterName();
 
         const auto* champ = DamageData::FindChampion(characterName.c_str());
         if (!champ) {

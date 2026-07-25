@@ -39,7 +39,7 @@ public:
               char* lastEvent,
               std::size_t lastEventSize) {
         const int now = SDK::Variables::TickCount();
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
 
         // The detector and drawer are intentionally not touched here. Turning
         // Evade off means no movement, no cast and no command interception.
@@ -357,7 +357,7 @@ public:
                          const EvadeSettings& settings,
                          const SourceSkillshotList& skillshots,
                          bool remember = true) {
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!settings.Enabled || !CanRun(player, settings) ||
             destination.IsZero()) {
             return false;

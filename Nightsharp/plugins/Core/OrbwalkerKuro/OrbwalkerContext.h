@@ -4,15 +4,11 @@
 #include "../../../sdk/UI/Icons.h"
 
 #include <string>
-
-namespace OrbwalkerKuro {
+#include <vector>
 
 using namespace ::SDK;
 
-struct OrbwalkerDebugConsoleLine {
-    char text[kOrbwalkerDebugConsoleLineLength] = {};
-    int tick = 0;
-};
+namespace OrbwalkerKuro {
 
 struct OrbwalkerRuntimeContext {
     AttackableUnit forceTarget = {};
@@ -36,6 +32,7 @@ struct OrbwalkerRuntimeContext {
     int lastAfterAttackStartTick = 0;
     int lastAttackDoCastWaitTick = 0;
     int lastAutoAttackResetTick = 0;
+    int pendingAkshanSecondShotTick = 0;
     int lastFakeMoveClickTick = 0;
     int lastFakeAttackClickTick = 0;
     int fakeClickExpireTick = 0;
@@ -47,13 +44,14 @@ struct OrbwalkerRuntimeContext {
     int cachedTargetTick = -1;
     int cachedTargetForceTargetNetworkId = 0;
     int cachedShouldWaitTick = -1;
-    OrbwalkerDebugConsoleLine debugConsoleLines[kOrbwalkerDebugConsoleMaxLines] = {};
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
-
-    int debugConsoleNextLine = 0;
-    int debugConsoleLineCount = 0;
+    float visualWindupWeight = 0.0f;
+    float visualReadyWeight = 1.0f;
+    float visualCooldownWeight = 0.0f;
+    float visualSmoothProgress = 1.0f;
+    int visualLastDrawTick = 0;
 
     bool attackEnabled = true;
     bool moveEnabled = true;
@@ -62,6 +60,8 @@ struct OrbwalkerRuntimeContext {
     bool attackCastComplete = false;
     bool lastAttackRequiresDoCastBeforeMove = false;
     bool lastAttackDoCastComplete = false;
+    bool isAkshanSecondShotPending = false;
+    bool isAkshanSecondShotActive = false;
     bool fakeCursorScreenValid = false;
     bool fakeCursorTextureLoadTried = false;
     bool cachedShouldWait = false;

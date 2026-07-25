@@ -39,22 +39,24 @@ inline float AutoAttackDamageOverrideMod(const AIBaseClient& source,
     } else if (HasFlag(minionType, MinionTypes::Ranged) && !HasFlag(minionType, MinionTypes::Siege)) {
         result = 0.7f * minion.MaxHealth();
     } else if (HasFlag(minionType, MinionTypes::Siege)) {
-        AITurretClient turret(source.Address());
-        TurretType tt = SDK::Extensions::GetTurretType(turret);
-        switch (tt) {
-        case TurretType::TierOne:
-            result = 0.14f * minion.MaxHealth();
-            break;
-        case TurretType::TierTwo:
-            result = 0.11f * minion.MaxHealth();
-            break;
-        case TurretType::TierThree:
-        case TurretType::TierFour:
-            result = 0.08f * minion.MaxHealth();
-            break;
-        default:
-            break;
-        }
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        // AITurretClient turret(source.Address());
+        // TurretType tt = SDK::Extensions::GetTurretType(turret);
+        // switch (tt) {
+        // case TurretType::TierOne:
+        //     result = 0.14f * minion.MaxHealth();
+        //     break;
+        // case TurretType::TierTwo:
+        //     result = 0.11f * minion.MaxHealth();
+        //     break;
+        // case TurretType::TierThree:
+        // case TurretType::TierFour:
+        //     result = 0.08f * minion.MaxHealth();
+        //     break;
+        // default:
+        //     break;
+        // }
+        // REMOVED: Turret/Inhibitor/Nexus disabled
     } else if (HasFlag(minionType, MinionTypes::Super)) {
         result = 0.05f * minion.MaxHealth();
     }
@@ -69,13 +71,15 @@ inline float GetAutoAttackDamage(const AIBaseClient& source,
                                  const AIBaseClient& target) {
     if (!source.IsValid() || !target.IsValid()) return 0.0f;
 
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
     // Turret → minion: use override mod (% max HP formula)
-    if (source.Type() == ::Core::Objects::ObjectType::AITurretClient
-        && target.Type() == ::Core::Objects::ObjectType::AIMinionClient) {
-        AITurretClient turret(source.Address());
-        AIMinionClient minion(target.Address());
-        return AutoAttackDamageOverrideMod(turret, minion, source.TotalAttackDamage());
-    }
+    // if (source.Type() == ::Core::Objects::ObjectType::AITurretClient
+    //     && target.Type() == ::Core::Objects::ObjectType::AIMinionClient) {
+    //     AITurretClient turret(source.Address());
+    //     AIMinionClient minion(target.Address());
+    //     return AutoAttackDamageOverrideMod(turret, minion, source.TotalAttackDamage());
+    // }
+    // REMOVED: Turret/Inhibitor/Nexus disabled
 
     // All other cases: delegate to DamageLibrary (handles minion→minion, hero, etc.)
     return DamageLibrary::GetAutoAttackDamage(source, target);
@@ -148,8 +152,10 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     // (turret damage override, GetAggroTurret/HasTurretAggro/HasMinionAggro).
     AIBaseClient sender(
         senderPtr,
-        isTurret ? ::Core::Objects::ObjectType::AITurretClient
-                 : ::Core::Objects::ObjectType::AIMinionClient);
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        // isTurret ? ::Core::Objects::ObjectType::AITurretClient
+        //          : ::Core::Objects::ObjectType::AIMinionClient
+        ::Core::Objects::ObjectType::AIMinionClient);
 
     if (!sender.IsValid()) { ++Diag.rejSender; return; }
     if (!sender.IsAlly() || (!isMinion && !isTurret)) {
@@ -235,8 +241,9 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     pd.ProjectileSpeed = sender.IsMelee()
         ? std::numeric_limits<int>::max()
         : static_cast<int>(args.MissileSpeed);
-    pd.AnimationTime = ::CoreControl::GetAttackDelay(sender.Address()) * 1000.0f
-        - (sender.Type() == ::Core::Objects::ObjectType::AITurretClient ? 70.0f : 0.0f);
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    pd.AnimationTime = ::CoreControl::GetAttackDelay(sender.Address()) * 1000.0f;
+    // - (sender.Type() == ::Core::Objects::ObjectType::AITurretClient ? 70.0f : 0.0f);
     pd.TargetBoundingRadius = sender.BoundingRadius();
     pd.Damage = GetAutoAttackDamage(sender, target);
     pd.Delay = ::CoreControl::GetAttackWindup(sender.Address()) * 1000.0f;
@@ -423,16 +430,18 @@ inline float GetPrediction(const AIBaseClient& unit,
 
 // ── GetAggroTurret ───────────────────────────────────────────────────────────
 inline AIBaseClient GetAggroTurret(const AIMinionClient& minion) {
-    if (!minion.IsValid()) return AIBaseClient();
-
-    for (auto& [key, pd] : detail::ActiveAttacks) {
-        if (!pd.Source.IsValid()) continue;
-        if (pd.Source.Type() != ::Core::Objects::ObjectType::AITurretClient) continue;
-        if (pd.Target.Compare(minion)) {
-            return pd.Source;
-        }
-    }
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // if (!minion.IsValid()) return AIBaseClient();
+    //
+    // for (auto& [key, pd] : detail::ActiveAttacks) {
+    //     if (!pd.Source.IsValid()) continue;
+    //     if (pd.Source.Type() != ::Core::Objects::ObjectType::AITurretClient) continue;
+    //     if (pd.Target.Compare(minion)) {
+    //         return pd.Source;
+    //     }
+    // }
     return AIBaseClient();
+    // REMOVED: Turret/Inhibitor/Nexus disabled
 }
 
 // ── HasMinionAggro ───────────────────────────────────────────────────────────
@@ -449,26 +458,30 @@ inline bool HasMinionAggro(const AIMinionClient& minion) {
 
 // ── HasTurretAggro ───────────────────────────────────────────────────────────
 inline bool HasTurretAggro(const AIMinionClient& minion) {
-    if (!minion.IsValid()) return false;
-
-    for (auto& [key, pd] : detail::ActiveAttacks) {
-        if (!pd.Source.IsValid()) continue;
-        if (pd.Source.Type() != ::Core::Objects::ObjectType::AITurretClient) continue;
-        if (pd.Target.Compare(minion)) return true;
-    }
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // if (!minion.IsValid()) return false;
+    //
+    // for (auto& [key, pd] : detail::ActiveAttacks) {
+    //     if (!pd.Source.IsValid()) continue;
+    //     if (pd.Source.Type() != ::Core::Objects::ObjectType::AITurretClient) continue;
+    //     if (pd.Target.Compare(minion)) return true;
+    // }
     return false;
+    // REMOVED: Turret/Inhibitor/Nexus disabled
 }
 
 // ── TurretAggroStartTick ─────────────────────────────────────────────────────
 inline int TurretAggroStartTick(const AIMinionClient& minion) {
-    if (!minion.IsValid()) return 0;
-
-    for (auto& [key, pd] : detail::ActiveAttacks) {
-        if (!pd.Source.IsValid()) continue;
-        if (pd.Source.Type() != ::Core::Objects::ObjectType::AITurretClient) continue;
-        if (pd.Target.Compare(minion)) return pd.StartTick;
-    }
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // if (!minion.IsValid()) return 0;
+    //
+    // for (auto& [key, pd] : detail::ActiveAttacks) {
+    //     if (!pd.Source.IsValid()) continue;
+    //     if (pd.Source.Type() != ::Core::Objects::ObjectType::AITurretClient) continue;
+    //     if (pd.Target.Compare(minion)) return pd.StartTick;
+    // }
     return 0;
+    // REMOVED: Turret/Inhibitor/Nexus disabled
 }
 
 } // namespace SDK::Prediction::Health

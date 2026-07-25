@@ -23,6 +23,7 @@
 #include <memory>
 #include <regex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -234,7 +235,7 @@ public:
         if (!args.Sender.IsValid()) {
             return;
         }
-        SDK::AIBaseClient caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+        SDK::AIBaseClient caster = GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
             static_cast<int>(args.Sender.NetworkId));
         if (!IsValidCaster(caster)) {
             return;
@@ -285,7 +286,7 @@ public:
         // object-create payloads can still retain the original source object.
         SDK::AIBaseClient caster;
         if (missile.CasterNetworkId() != 0) {
-            caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            caster = GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
                 missile.CasterNetworkId());
         }
         if (!caster.IsValid()) {
@@ -366,7 +367,7 @@ public:
                     collisionTarget = FindImpactUnit(*skillshot, impact);
                 }
                 if (collisionTarget.IsValid()) {
-                    const Vec2 center = collisionTarget.ServerPosition().To2D();
+                    const Vec2 center = collisionTarget.Position().To2D();
                     skillshot->CollisionKind = SourceCollisionKind::Unit;
                     skillshot->CollisionStopped = true;
                     skillshot->CollisionHitCount = std::max(
@@ -427,7 +428,9 @@ public:
                         skillshot->StartTick(),
                         skillshot->SpellData().SpellName });
                 }
-                if (!skillshot->HasEndExplosionArea()) {
+                const bool remainActiveOnGround = skillshot->IsActive() ||
+                    skillshot->ExtraDurationMs() > 0;
+                if (!skillshot->HasEndExplosionArea() && !remainActiveOnGround) {
                     return true;
                 }
                 skillshot->ProjectileTerminated = true;
@@ -468,6 +471,10 @@ public:
             return;
         }
         if (!args.Sender.Ptr) {
+            return;
+        }
+        if (args.Sender.Type != ::Core::Objects::ObjectType::AIMinionClient &&
+            args.Sender.Type != ::Core::Objects::ObjectType::EffectEmitter) {
             return;
         }
         SDK::GameObject object(args.Sender.Ptr, args.Sender.Type);
@@ -537,7 +544,7 @@ private:
         if (!caster.IsValid()) {
             return false;
         }
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (player.IsValid() && caster.NetworkId() == player.NetworkId()) {
             return m_sameTeam;
         }
@@ -546,7 +553,7 @@ private:
 
     static SDK::AIBaseClient MakeCaster(const ::Core::Events::ObjectInfo& info) {
         if (info.NetworkId != 0 && info.NetworkId != 0xFFFFFFFFu) {
-            auto caster = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            auto caster = GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
                 static_cast<int>(info.NetworkId));
             if (caster.IsValid()) {
                 return caster;
@@ -590,7 +597,7 @@ private:
                 unit.NetworkId() == skillshot.Native->Caster.NetworkId()) {
                 return;
             }
-            const Vec2 center = unit.ServerPosition().To2D();
+            const Vec2 center = unit.Position().To2D();
             if (center.IsZero() || !center.IsValid()) {
                 return;
             }
@@ -613,7 +620,7 @@ private:
                 for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
                     consider(SDK::AIBaseClient(hero.Handle()));
                 }
-                const auto player = SDK::ObjectManager::Player();
+                const auto player = GameObjects::Player();
                 if (player.IsValid()) {
                     consider(SDK::AIBaseClient(player.Handle()));
                 }
@@ -705,13 +712,13 @@ private:
             return;
         }
         const SDK::AIBaseClient target =
-            SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
+            GameObjects::GetUnitByNetworkId<SDK::AIBaseClient>(
                 skillshot.CollisionUnitNetworkId);
         if (!target.IsValid()) {
             return;
         }
         if (skillshot.Data.EndExplosionFollowsUnit) {
-            const Vec2 center = target.ServerPosition().To2D();
+            const Vec2 center = target.Position().To2D();
             if (!center.IsZero() && center.IsValid()) {
                 skillshot.CollisionUnitCenter = center;
             }
@@ -763,27 +770,29 @@ private:
         SpecialSpells::RefreshSkillshotGeometry(*skillshot.Native);
     }
 
-    static bool ContainsInsensitive(const std::string& text, const std::string& value) {
+    static bool ContainsInsensitive(std::string_view text, std::string_view value) {
         if (text.empty() || value.empty()) {
             return false;
         }
-        std::string haystack = text;
-        std::string needle = value;
-        std::transform(haystack.begin(), haystack.end(), haystack.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        std::transform(needle.begin(), needle.end(), needle.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        return haystack.find(needle) != std::string::npos;
+        auto it = std::search(
+            text.begin(), text.end(),
+            value.begin(), value.end(),
+            [](char c1, char c2) {
+                return std::tolower(static_cast<unsigned char>(c1)) ==
+                       std::tolower(static_cast<unsigned char>(c2));
+            }
+        );
+        return it != text.end();
     }
 
     static bool IsBasicAttackName(const char* name) {
         if (!name || !name[0]) {
             return false;
         }
-        const std::string value(name);
+        std::string_view value(name);
         return ContainsInsensitive(value, "basicattack") ||
                ContainsInsensitive(value, "critattack") ||
-               SDK::Orbwalker::IsAutoAttack(value);
+               SDK::Orbwalker::IsAutoAttack(name);
     }
 
     static bool ContainsName(const std::vector<std::string>& values,
@@ -881,24 +890,6 @@ private:
             }
         }
 
-        const bool validSlot = args.Slot >= 0 && args.Slot <= 3;
-        const bool validCast = (args.CastPosition.IsValid() && !args.CastPosition.IsZero()) ||
-                               (args.EndPosition.IsValid() && !args.EndPosition.IsZero());
-        const bool safeFallback = validSlot && validCast && args.PayloadSpellName[0] &&
-                                  !args.IsAutoAttack && args.TargetNetworkId == 0 &&
-                                  args.TargetIndex <= 0 &&
-                                  !IsBasicAttackName(args.SpellName) &&
-                                  !IsUtilityName(args.SpellName) &&
-                                  !IsUtilityName(args.ScriptName) &&
-                                  !IsUtilityName(args.MissileName);
-
-        if (safeFallback && args.SpellSlotName[0]) {
-            if (const auto* data = FindBySpellName(args.SpellSlotName);
-                data && !data->DontProcess) {
-                return data;
-            }
-        }
-
         return nullptr;
     }
 
@@ -953,8 +944,7 @@ private:
             }
         }
 
-        const std::string champion = EvadeUtils::GetObjectCharacterName(caster);
-        return FindUniqueByChampionAndSlot(champion.c_str(), slot);
+        return nullptr;
     }
 
     static bool RegexMatch(const std::string& text, const std::string& pattern) {
@@ -992,7 +982,7 @@ private:
         if (!raw.IsZero()) {
             return raw;
         }
-        return caster.IsValid() ? caster.ServerPosition().To2D() : Vec2();
+        return caster.IsValid() ? caster.Position().To2D() : Vec2();
     }
 
     static Vec2 ResolveDirection(const SDK::AIBaseClient& caster,
@@ -1003,9 +993,9 @@ private:
             direction = caster.Direction().To2D().Normalized();
         }
         if (direction.IsZero()) {
-            const auto player = SDK::ObjectManager::Player();
+            const auto player = GameObjects::Player();
             if (player.IsValid()) {
-                direction = (player.ServerPosition().To2D() - start).Normalized();
+                direction = (player.Position().To2D() - start).Normalized();
             }
         }
         return direction.IsZero() ? Vec2(1.0f, 0.0f) : direction;
@@ -1016,9 +1006,7 @@ private:
                            const Vec2& start,
                            const Vec2& primary,
                            const Vec2& secondary) {
-        Vec2 end = SDK::IsCircleSpellType(data.Runtime.SpellType) && !secondary.IsZero()
-            ? secondary
-            : primary;
+        Vec2 end = !primary.IsZero() ? primary : secondary;
         if (end.IsZero()) {
             end = secondary;
         }
@@ -1099,9 +1087,9 @@ private:
         }
 
         const float range = static_cast<float>(std::max(1, source.Runtime.Range));
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         if (!source.HasTrap && player.IsValid() &&
-            player.ServerPosition().To2D().Distance(start) > range + 1200.0f) {
+            player.Position().To2D().Distance(start) > range + 1200.0f) {
             return {};
         }
 
@@ -1266,7 +1254,7 @@ private:
         }
         SDK::Skillshot& native = *skillshot.Native;
         if (skillshot.Data.FollowCaster && native.Caster.IsValid()) {
-            const Vec2 position = native.Caster.ServerPosition().To2D();
+            const Vec2 position = native.Caster.Position().To2D();
             if (SDK::IsCircleSpellType(native.SData.SpellType)) {
                 native.EndPosition = position;
             } else {
@@ -1292,7 +1280,7 @@ private:
         }
         if (native.SData.MissileFollowsCaster && native.Caster.IsValid() &&
             native.Caster.IsVisible()) {
-            native.EndPosition = native.Caster.ServerPosition().To2D();
+            native.EndPosition = native.Caster.Position().To2D();
             native.Direction = (native.EndPosition - native.StartPosition).Normalized();
             skillshot.OriginalEnd = native.EndPosition;
             skillshot.CollisionEnd = native.EndPosition;

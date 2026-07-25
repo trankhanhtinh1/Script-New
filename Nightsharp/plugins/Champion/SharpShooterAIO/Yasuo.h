@@ -165,11 +165,14 @@ static int CountEnemyHeroesAround(const Vector3& pos, float range) {
 }
 
 static bool IsUnderEnemyTurretPos(const Vector3& pos) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*
     for (const auto& t : GameObjects::EnemyTurrets()) {
         if (t.IsValid() && !t.IsDead() && t.Position().Distance(pos) <= 900.0f) {
             return true;
         }
     }
+    */
     return false;
 }
 

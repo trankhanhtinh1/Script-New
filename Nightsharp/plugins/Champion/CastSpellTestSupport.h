@@ -652,6 +652,9 @@ protected:
         CloseHandle(hFile);
     }
 
+protected:
+    CoreCastSpell::CastTrace m_lastTrace = {};
+
 private:
     static inline CastSpellTestPluginBase* s_active = nullptr;
 
@@ -664,7 +667,6 @@ private:
     volatile long long m_processSpellLocal = 0;
     volatile long long m_stopCastLocal = 0;
     DWORD m_lastBlockedLog = 0;
-    CoreCastSpell::CastTrace m_lastTrace = {};
 
     void CreateMenu() {
         DestroyMenu();
@@ -672,7 +674,7 @@ private:
         m_menu = new Menu(GetInternalId(), GetName(), true);
         auto* settings = m_menu->AddSubMenu(new Menu("settings", "Settings"));
         m_enabledMenu = settings->Add(new MenuBool("enabled", "Enabled", true));
-        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write debug log", false));
+        m_writeLogMenu = settings->Add(new MenuBool("writeLog", "Write debug log", true));
         BuildChampionMenu(settings);
         settings->Add(new MenuButton(
             "resetCounters",

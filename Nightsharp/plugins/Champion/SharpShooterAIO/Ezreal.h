@@ -465,6 +465,8 @@ static void OnNonKillableMinion(OrbwalkingActionArgs& args) {
 
 // C#: Orbwalker.OnBeforeAttack — W lên trụ khi LaneClear (safe check).
 static void OnBeforeAttack(OrbwalkingActionArgs& args) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*
     if (Orbwalker::ActiveMode() != OrbwalkingMode::LaneClear) {
         return;
     }
@@ -505,6 +507,8 @@ static void OnBeforeAttack(OrbwalkingActionArgs& args) {
     }
 
     W.Cast(turret.Position());
+    */
+    // REMOVED: Turret/Inhibitor/Nexus disabled
 }
 
 static void LastHit() {

@@ -4,80 +4,75 @@ namespace OrbwalkerKuro::OrbwalkingDetail {
 
 using namespace ::SDK;
 
-struct AzirSoldierRuntimeCache {
+struct AzirSoldierFrameCache {
     int tick = -1;
-    int playerNetworkId = 0;
     std::vector<AIMinionClient> soldiers;
 };
-
-inline AzirSoldierRuntimeCache& AzirSoldierCache() {
-    static AzirSoldierRuntimeCache cache;
-    return cache;
-}
 
 inline bool IsAzirPlayer(const AIHeroClient& player) {
     return player.IsValid() &&
            AzirSoldierSupport::IsAzirChampionName(player.CharacterName());
 }
 
-inline bool IsAzirSandSoldier(const AIMinionClient& minion) {
-    return minion.IsValid() &&
-           (AzirSoldierSupport::IsSandSoldierName(minion.CharacterName()) ||
-            AzirSoldierSupport::IsSandSoldierName(minion.Name()));
+inline bool IsAzirSandSoldier(const GameObject& obj) {
+    return obj.IsValid() &&
+           (AzirSoldierSupport::IsSandSoldierName(obj.CharacterName()) ||
+            AzirSoldierSupport::IsSandSoldierName(obj.Name()));
 }
 
 inline AzirSoldierSupport::Point2 PlanarPoint(const Vector3& position) {
     return { position.x, position.z };
 }
 
-inline const std::vector<AIMinionClient>& GetAzirSandSoldiers(
+inline void OnObjectCreate(const Events::ObjectEventArgs& args) {
+    (void)args;
+}
+
+inline void OnObjectDelete(const Events::ObjectEventArgs& args) {
+    (void)args;
+}
+
+inline std::vector<AIMinionClient> GetAzirSandSoldiers(
     const AIHeroClient& player
 ) {
-    auto& cache = AzirSoldierCache();
-    const int now = Game::TickCount();
-    const int playerNetworkId = player.IsValid() ? player.NetworkId() : 0;
-    if (cache.tick == now && cache.playerNetworkId == playerNetworkId) {
-        return cache.soldiers;
+    if (!IsAzirPlayer(player)) {
+        return {};
+    }
+    static AzirSoldierFrameCache frameCache;
+    const int now = Variables::TickCount();
+    if (frameCache.tick == now) {
+        return frameCache.soldiers;
     }
 
-    cache.tick = now;
-    cache.playerNetworkId = playerNetworkId;
-    cache.soldiers.clear();
-    if (!IsAzirPlayer(player) || player.IsDead()) {
-        return cache.soldiers;
-    }
-
-    const GameObjectTeam playerTeam = player.Team();
-    for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
-        if (!minion.IsValid() || minion.IsDead() ||
-            minion.Team() != playerTeam || !IsAzirSandSoldier(minion)) {
-            continue;
-        }
-        cache.soldiers.push_back(minion);
-    }
-    return cache.soldiers;
+    frameCache.soldiers = AzirSoldierSupport::GetAzirSandSoldiers(player);
+    frameCache.tick = now;
+    return frameCache.soldiers;
 }
 
 inline bool IsCommandableAzirSandSoldier(const AIHeroClient& player,
-                                         const AIMinionClient& soldier) {
+                                         const GameObject& soldier) {
+    const float soldierRadius = AIBaseClient(soldier.Handle()).BoundingRadius();
+    const float playerRadius = player.BoundingRadius();
     return IsAzirPlayer(player) && soldier.IsValid() && !soldier.IsDead() &&
            soldier.Team() == player.Team() && IsAzirSandSoldier(soldier) &&
            AzirSoldierSupport::IsCommandable(
                PlanarPoint(player.Position()),
-               PlanarPoint(soldier.Position()));
+               PlanarPoint(soldier.Position()),
+               soldierRadius,
+               playerRadius);
 }
 
 inline bool IsStructureTarget(const AttackableUnit& target) {
     using ObjectType = ::Core::Objects::ObjectType;
     switch (target.Type()) {
-    case ObjectType::AITurretClient:
-    case ObjectType::AITurretCommon:
+    // case ObjectType::AITurretClient:
+    // case ObjectType::AITurretCommon:
     case ObjectType::AnimatedBuildingClient:
-    case ObjectType::Barracks:
-    case ObjectType::BarracksDampenerClient:
+    // case ObjectType::Barracks:
+    // case ObjectType::BarracksDampenerClient:
     case ObjectType::BuildingClient:
-    case ObjectType::HQClient:
-    case ObjectType::Turret:
+    // case ObjectType::HQClient:
+    // case ObjectType::Turret:
         return true;
     default:
         return false;
@@ -123,9 +118,11 @@ inline int AzirSoldierAttackCount(const AIHeroClient& player,
     const float attackRange = AzirSoldierSupport::kPrimaryAttackRange *
                               std::max(0.0f, rangeScale);
     int count = 0;
+    const float playerRadius = player.BoundingRadius();
     for (const auto& soldier : GetAzirSandSoldiers(player)) {
+        const float soldierRadius = soldier.BoundingRadius();
         if (!AzirSoldierSupport::IsCommandable(
-                playerPoint, PlanarPoint(soldier.Position())) ||
+                playerPoint, PlanarPoint(soldier.Position()), soldierRadius, playerRadius) ||
             !AzirSoldierSupport::CanReachPrimaryTarget(
                 PlanarPoint(soldier.Position()),
                 targetPoint,
@@ -209,7 +206,6 @@ inline bool IsOwnedAzirSoldierSender(
     const ::Core::Events::ObjectInfo& sender
 ) {
     if (!IsAzirPlayer(player) || !sender.IsValid() ||
-        sender.Type != ::Core::Objects::ObjectType::AIMinionClient ||
         sender.Team != static_cast<std::uint32_t>(player.Team()) ||
         (!AzirSoldierSupport::IsSandSoldierName(sender.CharacterName) &&
          !AzirSoldierSupport::IsSandSoldierName(sender.Name))) {

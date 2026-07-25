@@ -48,7 +48,20 @@ namespace detail {
             }
         }
 
-        if (!create || TeleportDataCount >= 64) {
+        if (!create) {
+            return nullptr;
+        }
+
+        if (TeleportDataCount >= 64) {
+            const int now = static_cast<int>(GetTickCount64() & 0x7FFFFFFF);
+            for (int i = 0; i < TeleportDataCount; ++i) {
+                if (TeleportData[i].Start > 0 && now - TeleportData[i].Start > 10000) {
+                    TeleportEventArgs& entry = TeleportData[i];
+                    entry = {};
+                    entry.NetworkId = networkId;
+                    return &entry;
+                }
+            }
             return nullptr;
         }
 

@@ -60,7 +60,8 @@ namespace Plugins {
             PluginRegistry::Plugins[idx].HasRuntimeMenuUI =
                 !std::is_same_v<decltype(&T::OnMenu), decltype(&IPlugin::OnMenu)>;
             PluginRegistry::BindRuntime(idx, raw, &PluginManager::LoadThunk,
-                &PluginManager::UnloadThunk, &PluginManager::MenuThunk,
+                &PluginManager::UnloadThunk,
+                PluginRegistry::Plugins[idx].HasRuntimeMenuUI ? &PluginManager::MenuThunk : nullptr,
                 &PluginManager::CanLoadThunk);
 
             m_plugins.push_back(std::move(plugin));

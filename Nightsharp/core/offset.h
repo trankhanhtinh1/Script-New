@@ -35,9 +35,9 @@ namespace VTable {
 // GetName@0x68 and GetPosition@0x25C, so only the vtable RVA needed correcting.
 // NOTE: patch-specific — re-dump these RVAs when the client updates.
 namespace StructureVTable {
-    constexpr auto AITurretClient         = 0x19F6120;
-    constexpr auto BarracksDampenerClient = 0x1ABF6F8; // real inhibitor (was 0x1AC01B8 = Barracks spawner)
-    constexpr auto HQClient               = 0x1AC2130;
+    //constexpr auto AITurretClient         = 0x19F6120;
+    //constexpr auto BarracksDampenerClient = 0x1ABF6F8; // real inhibitor (was 0x1AC01B8 = Barracks spawner)
+    //constexpr auto HQClient               = 0x1AC2130;
 } // namespace StructureVTable
 
     namespace ObjectManagerRuntime {
@@ -867,6 +867,12 @@ namespace SpellBookLayout {
         constexpr auto IsSpecialAttack  = 0x13E;
         constexpr auto IsAuto           = 0x141;
         constexpr auto Slot             = 0x14C;
+        // IDA 13337: sub_975A00 = movss xmm0,[rcx+0x98]; ret
+        // (xref from sub_9BAEE0 cùng sub_9B5920 — pattern castTime = Extra + Designer)
+        constexpr auto ExtraTimeForCast = 0x98; // F3 0F 10 81 98 00 00 00 C3
+        // IDA 13337: sub_9B5920 = movss xmm0,[rcx+0x9C]; ret (DesignerCastTime)
+        constexpr auto DesignerCastTime = 0x9C; // F3 0F 10 81 9C 00 00 00 C3
+        //F3 0F 10 81 ?? 00 00 00 C3 sử dụng cho cả 2
         // IDA 13337 hotfix path sub_982120 reads the same logical fields here.
         constexpr auto IsSpecialAttackAlt = 0x149;
         constexpr auto IsAutoAlt          = 0x14A;

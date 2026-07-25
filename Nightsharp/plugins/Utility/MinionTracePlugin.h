@@ -63,11 +63,14 @@ public:
             const auto type = SDK::ObjectManager::detail::InferExtendedType(addr);
             const bool dropped = (type != ::Core::Objects::ObjectType::AIHeroClient &&
                                   type != ::Core::Objects::ObjectType::AIMinionClient &&
-                                  type != ::Core::Objects::ObjectType::AITurretClient &&
+                                  // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+                                  // type != ::Core::Objects::ObjectType::AITurretClient &&
                                   type != ::Core::Objects::ObjectType::ShopClient &&
-                                  type != ::Core::Objects::ObjectType::Obj_SpawnPoint &&
-                                  type != ::Core::Objects::ObjectType::BarracksDampenerClient &&
-                                  type != ::Core::Objects::ObjectType::HQClient);
+                                  type != ::Core::Objects::ObjectType::Obj_SpawnPoint
+                                  // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+                                  // && type != ::Core::Objects::ObjectType::BarracksDampenerClient
+                                  // && type != ::Core::Objects::ObjectType::HQClient
+                                  );
             RecordObject(addr, type, dropped);
         }
     }

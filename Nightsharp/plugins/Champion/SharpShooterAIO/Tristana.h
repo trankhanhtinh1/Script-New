@@ -318,7 +318,7 @@ static void OnBeforeAttack(OrbwalkingActionArgs& args) {
 }
 
 // Dựng AIHeroClient từ ObjectInfo (named-field, không phụ thuộc thứ tự struct).
-static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
+static AIHeroClient HeroFromInfo(const ::Core::Events::ObjectInfo& info) {
     ::Core::Objects::ObjectHandle handle{};
     handle.address = info.Ptr;
     handle.index = info.Index;

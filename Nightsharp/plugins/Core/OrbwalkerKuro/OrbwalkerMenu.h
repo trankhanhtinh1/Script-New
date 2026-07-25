@@ -8,9 +8,9 @@
 
 #include <algorithm>
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 class OrbwalkerMenu {
 public:
@@ -32,12 +32,6 @@ public:
     bool ShowFakeClick() const { return BoolValue(showFakeClick_, false); }
     bool ShowFakeCursor() const { return BoolValue(showFakeCursor_, false); }
     int FakeCursorSize() const { return SliderValue(fakeCursorSize_, 22); }
-    bool DrawLiveDebugConsole() const { return BoolValue(drawLiveDebugConsole_, true); }
-    int DrawLiveDebugConsoleLines() const {
-        return std::max(
-            kOrbwalkerDebugConsoleDefaultVisibleLines,
-            SliderValue(drawLiveDebugConsoleLines_, kOrbwalkerDebugConsoleDefaultVisibleLines));
-    }
 
     bool MovementRandomize() const { return BoolValue(movementRandomize_, true); }
     int MovementExtraHold() const { return SliderValue(movementExtraHold_, 0); }
@@ -59,6 +53,7 @@ public:
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
     bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
+    int AkshanPassiveMode() const { return ListValue(akshanPassiveMode_, 0); }
 
     OrbwalkingMode ActiveMode() const {
         if (!Enabled() || Game::IsChatOpen() || Game::IsShopOpen()) {
@@ -127,9 +122,6 @@ private:
             showFakeClick_ = drawingsMenu_->Add(new MenuBool("ShowFakeClick", "Show Fake Click", false));
             showFakeCursor_ = drawingsMenu_->Add(new MenuBool("ShowFakeCursor", "Show Fake Cursor", false));
             fakeCursorSize_ = drawingsMenu_->Add(new MenuSlider("FakeCursorSize", "Fake Cursor Size", 22, 12, 42));
-            drawLiveDebugConsole_ = drawingsMenu_->Add(new MenuBool("drawLiveDebugConsole", "Live Debug Console", false));
-            drawLiveDebugConsoleLines_ = drawingsMenu_->Add(
-                new MenuSlider("drawLiveDebugConsoleLines", "Live Debug Console Lines", 10, 10, 24));
         }
 
         advancedMenu_ = menu_->AddSubMenu(new Menu("advanced", "Advanced"));
@@ -166,6 +158,11 @@ private:
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
             attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
 
+            advancedMenu_->Add(new MenuSeparator("separatorAkshan", "Akshan Passive"));
+            akshanPassiveMode_ = advancedMenu_->Add(new MenuList(
+                "akshanPassiveMode", "Akshan Passive",
+                { "Always 2-Hit", "Always 1-Hit", "Smart" }, 0));
+
         }
 
         menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
@@ -192,8 +189,6 @@ private:
     MenuBool* showFakeClick_ = nullptr;
     MenuBool* showFakeCursor_ = nullptr;
     MenuSlider* fakeCursorSize_ = nullptr;
-    MenuBool* drawLiveDebugConsole_ = nullptr;
-    MenuSlider* drawLiveDebugConsoleLines_ = nullptr;
 
     MenuList* movementLogic_ = nullptr;
     MenuBool* coordinateKuroEvade_ = nullptr;
@@ -215,6 +210,7 @@ private:
     MenuBool* attackBarrels_ = nullptr;
     MenuBool* attackClones_ = nullptr;
     MenuBool* attackSpecialMinions_ = nullptr;
+    MenuList* akshanPassiveMode_ = nullptr;
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;

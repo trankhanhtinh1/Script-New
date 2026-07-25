@@ -27,7 +27,7 @@ struct RenderCircle final : RenderObject {
     }
 
     void Draw() override {
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = GameObjects::Player();
         const float height = player.IsValid() ? player.Position().y : 0.0f;
         SDK::Drawing::DrawCircle(Vec3::From2D(renderPosition, height),
                                  static_cast<float>(radius),

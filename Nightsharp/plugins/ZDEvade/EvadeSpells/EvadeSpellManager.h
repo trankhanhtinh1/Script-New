@@ -4,6 +4,7 @@
 #include "EvadeSpellDatabase.h"
 #include "../Evade/EvadeHelper.h"
 #include "../Detection/SpellDetector.h"
+#include "../Detection/Threat.h"
 #include "../../../Core/CoreEvadeState.h"
 #include "../../../SDK/SDK.h"
 
@@ -48,7 +49,9 @@ public:
         if (!evadeSpellsEnabled || evadeSpells.empty()) return false;
 
         const int now = SDK::Variables::TickCount();
-        if (lastEvadeSpellCastTick > 0 && now - lastEvadeSpellCastTick < kEvadeSpellCastInterval) return false;
+        if (lastEvadeSpellCastTick > 0 &&
+            TickDifference(now, lastEvadeSpellCastTick) <
+                kEvadeSpellCastInterval) return false;
 
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) return false;
@@ -132,7 +135,8 @@ private:
 
         const int now = SDK::Variables::TickCount();
         if (lastEvadeSpellCastTick > 0 && slot == lastEvadeSpellSlot &&
-            now - lastEvadeSpellCastTick < kEvadeSpellCastInterval) return false;
+            TickDifference(now, lastEvadeSpellCastTick) <
+                kEvadeSpellCastInterval) return false;
 
         const float planeY = player.ServerPosition().y;
         const Vec3 worldPos = Vec3::From2D(pos, planeY);

@@ -1,8 +1,8 @@
 #pragma once
 
-namespace OrbwalkerKuro {
-
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 inline bool OrbwalkerBase::EvadeOwnsActions(int now) const {
     return menu_.CoordinateKuroEvade() &&
@@ -51,17 +51,9 @@ struct OrbProbe {
         const DWORD now = GetTickCount();
         if (now - g_orbAccLast >= 1000) {
             g_orbAccLast = now;
-            char b[1536];
-            int p = std::snprintf(b, sizeof(b), "[OrbAcc/1s] ");
-            for (int i = 0; i < g_orbAccN && p < static_cast<int>(sizeof(b)) - 48; ++i) {
-                p += std::snprintf(b + p, sizeof(b) - p, "%s=%.2f/%u ",
-                                   g_orbAcc[i].n, g_orbAcc[i].ms, g_orbAcc[i].cnt);
+            for (int i = 0; i < g_orbAccN; ++i) {
                 g_orbAcc[i].ms = 0.0; g_orbAcc[i].cnt = 0;
             }
-            p += std::snprintf(b + p, sizeof(b) - p, "\r\n");
-            HANDLE h = CreateFileA("C:\\Users\\Public\\nightsharp_fps_drop_debug.txt",
-                                   FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (h != INVALID_HANDLE_VALUE) { DWORD w = 0; WriteFile(h, b, static_cast<DWORD>(p), &w, nullptr); CloseHandle(h); }
         }
     }
 };
@@ -99,6 +91,32 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     return static_cast<float>(now) + extraWindup >= readyAt;
 }
 
+inline void OrbwalkerBase::CheckAfterAttack() {
+    if (context_.lastAutoAttackTick <= 0) {
+        return;
+    }
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) {
+        return;
+    }
+    ReadAttackTimingsFromMemory(player);
+    const int now = Tick();
+    const int windupEnd = context_.lastAutoAttackTick + static_cast<int>(context_.attackWindupMs);
+    if (now >= windupEnd) {
+        context_.attackCastComplete = true;
+        if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
+            context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+            const AttackableUnit eventTarget = context_.lastTarget.IsValid() ? context_.lastTarget : AttackableUnit();
+            OrbwalkingActionArgs afterArgs(
+                OrbwalkingType::AfterAttack,
+                eventTarget,
+                eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
+                "Kuro");
+            OrbwalkingDetail::FireAfterAttack(afterArgs);
+        }
+    }
+}
+
 inline bool OrbwalkerBase::CanMove() { return CanMove(0.0f, false); }
 
 inline bool OrbwalkerBase::IsAutoAttacking() {
@@ -107,6 +125,7 @@ inline bool OrbwalkerBase::IsAutoAttacking() {
 
 inline bool OrbwalkerBase::IsWindingUp() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return false;
@@ -122,11 +141,13 @@ inline bool OrbwalkerBase::IsWindingUp() {
 
 inline bool OrbwalkerBase::IsAttackCastComplete() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     return context_.lastAutoAttackTick > 0 && context_.attackCastComplete;
 }
 
 inline int OrbwalkerBase::AttackCastDelayRemaining() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return 0;
@@ -140,6 +161,7 @@ inline int OrbwalkerBase::AttackCastDelayRemaining() {
 
 inline int OrbwalkerBase::NextAttackReadyTick() {
     ExpirePendingAttack();
+    CheckAfterAttack();
     const auto player = GameObjects::Player();
     if (!context_.attackEnabled || !player.IsValid() || player.IsDead()) {
         return 0;
@@ -155,6 +177,7 @@ inline int OrbwalkerBase::AttackCooldownRemaining() {
 inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) {
     (void)disableMissileCheck;
     ExpirePendingAttack();
+    CheckAfterAttack();
     const int now = Tick();
     if (EvadeBlocksMovement(now) || !context_.moveEnabled ||
         now < context_.allPauseTick || now < context_.movePauseTick) {
@@ -201,6 +224,44 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
 
         ClearDoCastMoveGate();
     }
+    // Akshan Passive 2-Hit Double Shot movement gate
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+        const int passiveMode = menu_.AkshanPassiveMode(); // 0 = Always 2-Hit, 1 = Always 1-Hit, 2 = Smart
+        if (context_.isAkshanSecondShotPending) {
+            const int elapsed = now - context_.pendingAkshanSecondShotTick;
+            if (elapsed >= 0 && elapsed <= 500) {
+                if (passiveMode == 1) {
+                    context_.isAkshanSecondShotPending = false;
+                } else if (passiveMode == 2 && context_.activeMode == OrbwalkingMode::Flee) {
+                    context_.isAkshanSecondShotPending = false;
+                } else {
+                    const auto target = context_.lastTarget;
+                    if (target.IsValid() && target.IsDead()) {
+                        context_.isAkshanSecondShotPending = false;
+                    } else {
+                        return false; // Hold movement unconditionally until 2nd shot fires!
+                    }
+                }
+            } else {
+                context_.isAkshanSecondShotPending = false;
+            }
+        }
+
+        if (context_.isAkshanSecondShotActive) {
+            const float secondShotWindup = context_.attackWindupMs * 0.48f + MoveSafetyMs();
+            if (static_cast<float>(now - context_.lastAutoAttackTick) < secondShotWindup) {
+                return false; // Waiting for second shot windup
+            }
+            context_.isAkshanSecondShotActive = false;
+        }
+    }
+
+    // Strict Windup Protection: Never allow movement if current time is strictly less than attack windup end!
+    const float strictWindupEnd = static_cast<float>(attackTick) + context_.attackWindupMs;
+    if (static_cast<float>(now) < strictWindupEnd) {
+        return false;
+    }
+
     if (!pending && context_.attackCastComplete) {
         return true;
     }
@@ -351,7 +412,7 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
     bool shouldExpire = false;
 
     if (context_.pendingAttackTargetNetworkId != 0) {
-        const auto target = ObjectManager::GetUnitByNetworkId<AttackableUnit>(context_.pendingAttackTargetNetworkId);
+        const auto target = GameObjects::GetUnitByNetworkId<AttackableUnit>(context_.pendingAttackTargetNetworkId);
         if (!target.IsValid() || target.IsDead() || !target.IsTargetable()) {
             shouldExpire = true;
         }
@@ -396,12 +457,25 @@ inline float OrbwalkerBase::ChampionExtraAttackDelayMs(const AIHeroClient& playe
     return 0.0f;
 }
 
+inline bool OrbwalkerBase::IsSpecialAfterAttack(const std::string& nameLower) const {
+    static const char* specialAttacks[] = {
+        "lucianpassiveshot",
+        "rengarqattack",
+        "rengarqempattack",
+        "rengarq",
+        "rengarqemp",
+        nullptr
+    };
+    for (int i = 0; specialAttacks[i]; ++i) {
+        if (nameLower.find(specialAttacks[i]) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
 inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const {
-    return _stricmp(player.CharacterName().c_str(), "Rengar") == 0 &&
-           (player.HasBuff("RengarQ") ||
-            player.HasBuff("RengarQEmp") ||
-            player.HasBuff("rengarqbase") ||
-            player.HasBuff("rengarqemp"));
+    return false;
 }
 
 inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
@@ -425,6 +499,15 @@ inline float OrbwalkerBase::AttackSafetyMs() const {
 }
 
 inline float OrbwalkerBase::MoveSafetyMs() const {
+    const auto player = GameObjects::Player();
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+        if (player.HasBuff("RengarQ") ||
+            player.HasBuff("RengarQEmp") ||
+            player.HasBuff("rengarqbase") ||
+            player.HasBuff("rengarqemp")) {
+            return 0.0f; // Instant zero-delay move for Q attacks only
+        }
+    }
     return context_.hasConfirmedAttack ? kMoveSafetyMs : kMoveSafetyMs + std::min(OneWayPingMs(), 15.0f);
 }
 
@@ -435,8 +518,6 @@ inline void OrbwalkerBase::ReadAttackTimingsFromMemory(const AIHeroClient& playe
         return;
     }
 
-    // OrbwalkerKuro deliberately bypasses CoreControl's timing cache. A failed
-    // memory read falls back to a fixed safe default, never to a stale sample.
     const float attackDelay = CoreControl::ReadAttackDelayFor(player.Address());
     const float attackWindup = CoreControl::ReadAttackWindupFor(player.Address());
     context_.attackDelayMs = attackDelay > 0.0f

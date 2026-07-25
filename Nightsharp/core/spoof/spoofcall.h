@@ -18,7 +18,7 @@ namespace detail
 	template <std::size_t Argc, typename>
 	struct argument_remapper
 	{
-		// At least 5 params
+		// 5 or more params: invoke directly to preserve correct stack argument alignment
 		template<
 			typename Ret,
 			typename First,
@@ -37,25 +37,15 @@ namespace detail
 				Pack... pack
 			) -> Ret
 		{
-			return shellcode_stub_helper<
-				Ret,
-				First,
-				Second,
-				Third,
-				Fourth,
-				void*,
-				void*,
-				Pack...
-			>(
-				shell,
-				first,
-				second,
-				third,
-				fourth,
-				shell_param,
-				nullptr,
-				pack...
-				);
+			struct shell_params
+			{
+				void* trampoline;
+				void* function;
+				void* rbx;
+			};
+			auto* p = static_cast<shell_params*>(shell_param);
+			auto fn = reinterpret_cast<Ret(*)(First, Second, Third, Fourth, Pack...)>(p->function);
+			return fn(first, second, third, fourth, pack...);
 		}
 	};
 

@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
+#include <vector>
 
 namespace CoreNavGrid {
 
@@ -585,6 +586,258 @@ struct GridRef {
     bool IsNearWall(const Vec3& pos, float distance = 50.0f) const {
         return CountWallsInRadius(pos, distance, 25.0f) > 0;
     }
+
+    // --------------------------------------------------------------------
+    // A* pathfinding trên NavGrid cells (8-directional, Euclidean heuristic).
+    // Tương đương hành vi với EnsoulSharp AIBaseClient.GetPath(start, end):
+    //   - trả về danh sách waypoint từ start -> end đi vòng qua cell wall.
+    //   - KHÔNG gọi native PathController::CreatePath (chưa bind trên x64);
+    //     thay vào đó tự implement A* trên CoreNavGrid — an toàn, không crash
+    //     native, fidelity tốt (đi vòng tường thật theo grid).
+    //   - smoothPath: line-of-sight simplification (bỏ waypoint trung gian nằm
+    //     trên đường thẳng không cắt tường) — xấp xỉ PathController::SmoothPath.
+    // Trả vector rỗng nếu grid không hợp lệ hoặc không tìm được đường (fallback
+    // caller nên dùng straight line start->end).
+    // --------------------------------------------------------------------
+    bool IsCellWalkable(int x, int y) const {
+        if (!IsValid() || x < 0 || y < 0 || x >= width || y >= height) {
+            return false;
+        }
+        return !RawHasWall(GetRawCellFlags(x, y));
+    }
+
+    std::vector<Vec3> FindPath(const Vec3& start, const Vec3& end,
+                               bool smoothPath = false) const {
+        std::vector<Vec3> path;
+        if (!IsValid() || !start.IsValid() || !end.IsValid()) {
+            return path;
+        }
+
+        int sx = 0, sy = 0, ex = 0, ey = 0;
+        if (!WorldToCell(start, sx, sy, true) ||
+            !WorldToCell(end, ex, ey, true)) {
+            return path;
+        }
+
+        // Trivial: cùng cell hoặc kề cell -> straight line.
+        if (sx == ex && sy == ey) {
+            path.push_back(start);
+            path.push_back(end);
+            return path;
+        }
+
+        // Nếu start/end cell là wall, clamp ra cell walkable gần nhất (để A*
+        // không bị kẹt ngay từ đầu). Nếu không tìm được, fallback straight.
+        if (!IsCellWalkable(sx, sy)) {
+            int bx = sx, by = sy;
+            if (!NearestWalkableCell(sx, sy, bx, by, 6)) {
+                path.push_back(start);
+                path.push_back(end);
+                return path;
+            }
+            sx = bx; sy = by;
+        }
+        if (!IsCellWalkable(ex, ey)) {
+            int bx = ex, by = ey;
+            if (!NearestWalkableCell(ex, ey, bx, by, 6)) {
+                path.push_back(start);
+                path.push_back(end);
+                return path;
+            }
+            ex = bx; ey = by;
+        }
+
+        // A* trên grid. Node index = y * width + x.
+        const int totalCells = width * height;
+        if (totalCells <= 0) {
+            return path;
+        }
+
+        struct AStarNode {
+            int parent = -1;
+            float g = 0.0f;       // cost from start
+            float f = 0.0f;       // g + heuristic
+            bool closed = false;
+            bool opened = false;
+        };
+
+        std::vector<AStarNode> nodes(totalCells);
+        // Min-heap (f, index). Dùng lambda so sánh qua vector nodes.
+        auto idxF = [&](int i) { return nodes[i].f; };
+        struct HeapItem { int index; float f; };
+        auto heapCmp = [&](const HeapItem& a, const HeapItem& b) {
+            return a.f > b.f; // min-heap
+        };
+        std::vector<HeapItem> openHeap;
+        openHeap.reserve(256);
+
+        const int startIdx = sy * width + sx;
+        const int goalIdx = ey * width + ex;
+        nodes[startIdx].g = 0.0f;
+        nodes[startIdx].f = Heuristic2D(sx, sy, ex, ey);
+        nodes[startIdx].opened = true;
+        openHeap.push_back({ startIdx, nodes[startIdx].f });
+        std::push_heap(openHeap.begin(), openHeap.end(), heapCmp);
+
+        // 8 hướng: N, S, E, W, NE, NW, SE, SW (diagonal cost = sqrt2 ~1.4142)
+        static const int kDx[8] = { 0, 0, 1, -1, 1, -1, 1, -1 };
+        static const int kDy[8] = { 1, -1, 1, 1, 1, -1, -1, -1 };
+        static const float kCost[8] = { 1.0f, 1.0f, 1.0f, 1.0f,
+                                        1.4142135f, 1.4142135f, 1.4142135f, 1.4142135f };
+
+        const int maxExpansions = 20000; // giới hạn để tránh stall trên grid lớn
+        int expansions = 0;
+        bool found = false;
+
+        while (!openHeap.empty()) {
+            std::pop_heap(openHeap.begin(), openHeap.end(), heapCmp);
+            const HeapItem current = openHeap.back();
+            openHeap.pop_back();
+
+            const int curIdx = current.index;
+            if (nodes[curIdx].closed) {
+                continue; // stale entry
+            }
+            nodes[curIdx].closed = true;
+
+            if (curIdx == goalIdx) {
+                found = true;
+                break;
+            }
+
+            const int cx = curIdx % width;
+            const int cy = curIdx / width;
+            const float curG = nodes[curIdx].g;
+
+            for (int d = 0; d < 8; ++d) {
+                const int nx = cx + kDx[d];
+                const int ny = cy + kDy[d];
+                if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+                    continue;
+                }
+                if (!IsCellWalkable(nx, ny)) {
+                    continue;
+                }
+                // Ngăn diagonal "cut corner" qua tường: 2 cell orthogonal phải
+                // walkable để đi chéo (tránh slip qua góc tường).
+                if (d >= 4) {
+                    const int ax = cx + kDx[d];
+                    const int ay = cy; // horizontal neighbor
+                    const int bx = cx;
+                    const int by = cy + kDy[d]; // vertical neighbor
+                    if (!IsCellWalkable(ax, ay) || !IsCellWalkable(bx, by)) {
+                        continue;
+                    }
+                }
+
+                const int nIdx = ny * width + nx;
+                if (nodes[nIdx].closed) {
+                    continue;
+                }
+
+                const float tentativeG = curG + kCost[d];
+                if (!nodes[nIdx].opened || tentativeG < nodes[nIdx].g) {
+                    nodes[nIdx].parent = curIdx;
+                    nodes[nIdx].g = tentativeG;
+                    nodes[nIdx].f = tentativeG + Heuristic2D(nx, ny, ex, ey);
+                    nodes[nIdx].opened = true;
+                    openHeap.push_back({ nIdx, nodes[nIdx].f });
+                    std::push_heap(openHeap.begin(), openHeap.end(), heapCmp);
+                }
+            }
+
+            if (++expansions >= maxExpansions) {
+                break;
+            }
+        }
+
+        if (!found) {
+            // Không tìm được đường (goal bị bao quanh tường) -> fallback straight.
+            path.push_back(start);
+            path.push_back(end);
+            return path;
+        }
+
+        // Reconstruct cell path (goal -> start), then reverse.
+        std::vector<GridPoint> cellPath;
+        cellPath.reserve(64);
+        int trace = goalIdx;
+        while (trace >= 0) {
+            const int tx = trace % width;
+            const int ty = trace / width;
+            cellPath.push_back({ tx, ty });
+            if (trace == startIdx) {
+                break;
+            }
+            trace = nodes[trace].parent;
+        }
+        std::reverse(cellPath.begin(), cellPath.end());
+
+        // Map cell -> world. Giữ height của start cho mọi waypoint (path 2D).
+        path.reserve(cellPath.size());
+        for (const GridPoint& gp : cellPath) {
+            path.push_back(CellToWorld(gp.x, gp.y, start.y));
+        }
+        // Đảm bảo endpoint chính xác là `end` (cell-center có thể lệch nhỏ).
+        if (!path.empty()) {
+            path.front() = start;
+            path.back() = end;
+        }
+
+        if (smoothPath && path.size() > 2) {
+            SmoothPathLineOfSight(path);
+        }
+        return path;
+    }
+
+private:
+    static float Heuristic2D(int x0, int y0, int x1, int y1) {
+        const float dx = static_cast<float>(x1 - x0);
+        const float dy = static_cast<float>(y1 - y0);
+        return std::sqrt(dx * dx + dy * dy);
+    }
+
+    bool NearestWalkableCell(int cx, int cy, int& outX, int& outY, int maxRadius) const {
+        // BFS ring mở rộng từ (cx,cy) tìm cell walkable gần nhất.
+        for (int r = 1; r <= maxRadius; ++r) {
+            for (int dy = -r; dy <= r; ++dy) {
+                for (int dx = -r; dx <= r; ++dx) {
+                    if (std::abs(dx) != r && std::abs(dy) != r) {
+                        continue; // chỉ duyệt vành ngoài
+                    }
+                    const int x = cx + dx;
+                    const int y = cy + dy;
+                    if (IsCellWalkable(x, y)) {
+                        outX = x;
+                        outY = y;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    void SmoothPathLineOfSight(std::vector<Vec3>& path) const {
+        // Line-of-sight simplification: giữ waypoint[i] chỉ nếu có tường giữa
+        // waypoint[i-1] và waypoint[i+1] (nếu không, waypoint[i] dư -> bỏ).
+        if (path.size() <= 2) {
+            return;
+        }
+        std::vector<Vec3> smoothed;
+        smoothed.reserve(path.size());
+        smoothed.push_back(path.front());
+        std::size_t anchor = 0;
+        for (std::size_t i = 1; i + 1 < path.size(); ++i) {
+            if (IsWallBetween(path[anchor], path[i + 1])) {
+                // không thể đi thẳng từ anchor -> i+1, phải giữ waypoint i
+                smoothed.push_back(path[i]);
+                anchor = i;
+            }
+        }
+        smoothed.push_back(path.back());
+        path.swap(smoothed);
+    }
 };
 
 inline GridRef Get() {
@@ -663,6 +916,9 @@ inline bool IsWallBetween(const Vec3& from, const Vec3& to, float step = 40.0f) 
 }
 inline bool FindWallCollision(const Vec3& from, const Vec3& to, Vec3& hitPoint, float step = 10.0f) {
     return Get().FindWallCollision(from, to, hitPoint, step);
+}
+inline std::vector<Vec3> FindPath(const Vec3& start, const Vec3& end, bool smoothPath = false) {
+    return Get().FindPath(start, end, smoothPath);
 }
 inline int CountWallsInRadius(const Vec3& center, float radius, float step = 25.0f) {
     return Get().CountWallsInRadius(center, radius, step);

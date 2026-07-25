@@ -226,7 +226,7 @@ static void FioraPassiveUpdate() {
     FioraPassiveObjects.clear();
     FioraUltiPassiveObjects.clear();
 
-    for (const auto& emitter : SDK::ObjectManager::Get<EffectEmitter>()) {
+    for (const auto& emitter : GameObjects::ParticleEmitters()) {
         if (!emitter.IsValid() || emitter.IsDead()) continue;
         std::string name = GetObjectName(emitter);
         if (IsPrePassiveMarkName(name)) {
@@ -1303,7 +1303,7 @@ static void OnObjectDelete(const GameObject& object) {
     if (object.Type() == ::Core::Objects::ObjectType::MissileClient) {
         MissileClient missile(object.Handle());
         if (missile.IsValid()) {
-            auto caster = ObjectManager::GetUnitByNetworkId<AIBaseClient>(missile.CasterNetworkId());
+            auto caster = GameObjects::GetUnitByNetworkId<AIBaseClient>(missile.CasterNetworkId());
             if (caster.IsValid() && caster.Team() != Player().Team() && GetObjectName(missile) == "FizzMarinerDoomMissile") {
                 FizzFishEndPos = missile.Position().To2D();
             }
@@ -1704,6 +1704,12 @@ static void OnUnload() {
     Game::OnWndProc -= &OnWndProc;
     Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
+
+    FioraPrePassiveObjects.clear();
+    FioraPassiveObjects.clear();
+    FioraUltiPassiveObjects.clear();
+    DetectedTargets.clear();
+    DetectedDashes.clear();
 
     RemoveMenu();
     Loaded = false;

@@ -162,15 +162,16 @@ namespace SDK::DamageMod {
             }
         }
 
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
         // Siege minion with Baron buff vs turret: 2x damage
-        if (sourceIsMinion &&
+        /*if (sourceIsMinion &&
             target.Type() == ::Core::Objects::ObjectType::AITurretClient) {
             const AIMinionClient minionSource(source.Address());
             if (HasFlag(minionSource.GetMinionType(), MinionTypes::Siege) &&
                 minionSource.HasBuff("exaltedwithbaronnashorminion")) {
                 amount *= 2.0f;
             }
-        }
+        }*/
 
         // Champion-specific damage reduction from CDragon latest.
         if (targetIsHero) {
@@ -286,15 +287,16 @@ namespace SDK::DamageMod {
 
                 const auto meditate = CoreBuffs::FindByName(heroTarget.Address(), "Meditate");
                 if (meditate.IsValid()) {
-                    const float elapsed = SDK::Game::Time() - meditate.GetStartTime();
+                    const float elapsed = ::SDK::Game::Time() - meditate.GetStartTime();
                     if (elapsed >= 0.0f && elapsed < 0.5f) {
                         reduction += SpellRankValue(MasterYiWInitialExtra, spellLevel);
                     }
                 }
 
-                if (source.Type() == ::Core::Objects::ObjectType::AITurretClient) {
+                // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+                /*if (source.Type() == ::Core::Objects::ObjectType::AITurretClient) {
                     reduction *= 0.5f;
-                }
+                }*/
                 amount *= PercentToMultiplier(reduction);
             }
 

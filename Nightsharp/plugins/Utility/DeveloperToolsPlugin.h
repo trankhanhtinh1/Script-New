@@ -26,14 +26,37 @@ public:
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {
+        s_instance = this;
         enabled_ = true;
         maxRange_ = 400;
         trackedObjectTicks_.clear();
         SDK::Events::AddOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
+        SDK::Events::AddOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
+
+        DestroyNativeMenu();
+        menu_ = new SDK::UI::Menu(GetInternalId(), GetName(), true);
+        menuEnabled_ = menu_->Add(new SDK::UI::MenuBool("Enabled", "Enable Developer Tools", enabled_));
+        menuMaxRange_ = menu_->Add(new SDK::UI::MenuSlider("MaxRange", "Max Scan Range", maxRange_, 100, 1500));
+        menuProvider_ = menu_->Add(new SDK::UI::MenuList("Provider", "Scan Provider", { "SDK::ObjectManager (Raw RAM)", "SDK::GameObjects Facade" }, scanProviderIndex_));
+
+        auto* filters = menu_->AddSubMenu(new SDK::UI::Menu("Filters", "Category Filters"));
+        menuScanAll_ = filters->Add(new SDK::UI::MenuBool("ScanAll", "Scan All GameObjects", scanRawGameObjects_));
+        menuScanHeroes_ = filters->Add(new SDK::UI::MenuBool("ScanHeroes", "Heroes (AIHeroClient)", scanHeroes_));
+        menuScanMinions_ = filters->Add(new SDK::UI::MenuBool("ScanMinions", "Minions & Pets", scanMinions_));
+        menuScanTurrets_ = filters->Add(new SDK::UI::MenuBool("ScanTurrets", "Turrets", scanTurrets_));
+        menuScanMissiles_ = filters->Add(new SDK::UI::MenuBool("ScanMissiles", "Missiles", scanMissiles_));
+        menuFilterClutter_ = filters->Add(new SDK::UI::MenuBool("FilterClutter", "Filter Clutter (FX, MoveTo)", filterClutter_));
+
+        menuInspector_ = menu_->Add(new SDK::UI::MenuRuntime("LiveInspector", "Open Live Object Inspector", &OnMenuBridge, this, 620.0f));
+
+        menu_->Attach();
     }
 
     void OnUnload() override {
         SDK::Events::RemoveOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
+        SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
+        DestroyNativeMenu();
+        s_instance = nullptr;
     }
 
     void OnUpdate() override {
@@ -42,53 +65,62 @@ public:
             return;
         }
 
+        if (trackedObjectTicks_.size() > 128) {
+            const int now = SDK::Variables::TickCount();
+            for (auto it = trackedObjectTicks_.begin(); it != trackedObjectTicks_.end(); ) {
+                if (now - it->second > 15000) {
+                    it = trackedObjectTicks_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         bool isDown = (GetAsyncKeyState('P') & 0x8000) != 0;
         if (isDown && !pKeyPressedLast_) {
             const Vec3 cursorPos = SDK::Game::CursorPos();
-            float closestDist = 999999.0f;
-            SDK::GameObject closestObj;
+            const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
+            const int now = SDK::Variables::TickCount();
 
-            for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
+            std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
+            int count = 0;
+
+            for (const auto& obj : GetObjectsToScan()) {
                 if (!obj.IsValid()) continue;
+
+                const Vec3 pos = obj.Position();
+                if (pos.DistanceSqr(cursorPos) >= rangeSqr) continue;
 
                 std::string name = GetObjectName(obj);
                 std::string charName = GetObjectCharacterName(obj);
-                if (name.empty() && charName.empty()) continue;
-                if (name == "missile" || name.find("MoveTo") != std::string::npos ||
-                    charName.find("Grass") != std::string::npos || charName.find("FX") != std::string::npos ||
-                    charName.find("LevelProp") != std::string::npos || charName.find("emitter") != std::string::npos) {
-                    continue;
-                }
+                if (IsClutter(obj, name, charName)) continue;
 
-                float dist = obj.Position().Distance(cursorPos);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestObj = obj;
-                }
-            }
+                std::string typeStr = ObjectTypeToString(obj.Type());
+                std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
+                std::string teamStr = TeamToString(obj);
+                std::string statusStr = StatusToString(obj);
 
-            if (closestObj.IsValid() && closestDist <= static_cast<float>(maxRange_)) {
-                std::string name = GetObjectName(closestObj);
-                std::string charName = GetObjectCharacterName(closestObj);
-                std::string typeStr = ObjectTypeToString(closestObj.Type());
-                std::uint32_t netId = static_cast<std::uint32_t>(closestObj.NetworkId());
-                
                 float age = 0.0f;
                 auto it = trackedObjectTicks_.find(netId);
                 if (it != trackedObjectTicks_.end()) {
-                    age = static_cast<float>(SDK::Variables::TickCount() - it->second) / 1000.0f;
+                    age = static_cast<float>(now - it->second) / 1000.0f;
                 }
 
-                char copyBuf[512];
-                std::snprintf(copyBuf, sizeof(copyBuf),
-                              "Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Age: %.1fs | Position: (%.1f, %.1f, %.1f)",
-                              name.c_str(), charName.c_str(), netId,
-                              static_cast<unsigned long long>(closestObj.Address()),
-                              typeStr.c_str(), age,
-                              closestObj.Position().x, closestObj.Position().y, closestObj.Position().z);
+                char lineBuf[512];
+                std::snprintf(lineBuf, sizeof(lineBuf),
+                              "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
+                              ++count, name.c_str(), charName.c_str(), netId,
+                              static_cast<unsigned long long>(obj.Address()),
+                              typeStr.c_str(), teamStr.c_str(), statusStr.c_str(), age,
+                              pos.x, pos.y, pos.z);
+                copyText += lineBuf;
+            }
 
-                ImGui::SetClipboardText(copyBuf);
-                SDK::Orbwalker::DebugPrint("[Dev] Copied to Clipboard: %s", name.c_str());
+            if (count > 0) {
+                ImGui::SetClipboardText(copyText.c_str());
+                NightSharpDebug::Logf("[Dev] Copied ALL %d objects in table to Clipboard!", count);
+            } else {
+                NightSharpDebug::Logf("[Dev] No objects in range to copy!");
             }
         }
         pKeyPressedLast_ = isDown;
@@ -99,14 +131,11 @@ public:
             return;
         }
 
-        const auto player = SDK::ObjectManager::Player();
-        const bool hasPlayer = player.IsValid();
-        const Vec3 playerPosition = hasPlayer ? player.Position() : Vec3{};
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
         const int now = SDK::Variables::TickCount();
 
-        for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
+        for (const auto& obj : GetObjectsToScan()) {
             if (!obj.IsValid()) {
                 continue;
             }
@@ -119,17 +148,8 @@ public:
             std::string name = GetObjectName(obj);
             std::string charName = GetObjectCharacterName(obj);
 
-            // Skip clutter objects
-            if (name.empty() && charName.empty()) {
+            if (IsClutter(obj, name, charName)) {
                 continue;
-            }
-            if (name == "missile" || name.find("MoveTo") != std::string::npos ||
-                charName.find("Grass") != std::string::npos || charName.find("FX") != std::string::npos ||
-                charName.find("LevelProp") != std::string::npos || charName.find("emitter") != std::string::npos) {
-                continue;
-            }
-            if (obj.IsTurret() && (name.find("Turret_") == std::string::npos && charName.find("Turret") == std::string::npos)) {
-                // Skip base spawn/nexus turrets if they clutter
             }
 
             // Track age
@@ -287,13 +307,29 @@ public:
         ImGui::SliderInt("Max object dist from cursor", &maxRange_, 100, 1500);
 
         ImGui::Separator();
+        ImGui::Text("Scan Source Provider:");
+        ImGui::RadioButton("SDK::ObjectManager (Raw RAM)", &scanProviderIndex_, 0); ImGui::SameLine();
+        ImGui::RadioButton("SDK::GameObjects Facade", &scanProviderIndex_, 1);
+
+        ImGui::Separator();
+        ImGui::Text("Category Filters:");
+        ImGui::Checkbox("Scan All Raw GameObjects (Scan Everything)", &scanRawGameObjects_);
+        if (!scanRawGameObjects_) {
+            ImGui::Checkbox("Heroes (AIHeroClient)", &scanHeroes_); ImGui::SameLine();
+            ImGui::Checkbox("Minions & Pets (AIMinionClient)", &scanMinions_);
+            ImGui::Checkbox("Turrets (AITurretClient)", &scanTurrets_); ImGui::SameLine();
+            ImGui::Checkbox("Missiles (MissileClient)", &scanMissiles_);
+        }
+        ImGui::Checkbox("Filter Clutter (FX, Grass, Emitters, MoveTo)", &filterClutter_);
+
+        ImGui::Separator();
         ImGui::Text("Active Objects Near Cursor (On Screen):");
 
         std::vector<SDK::GameObject> activeObjects;
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
 
-        for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
+        for (const auto& obj : GetObjectsToScan()) {
             if (!obj.IsValid()) continue;
 
             const Vec3 pos = obj.Position();
@@ -302,12 +338,7 @@ public:
             std::string name = GetObjectName(obj);
             std::string charName = GetObjectCharacterName(obj);
 
-            if (name.empty() && charName.empty()) continue;
-            if (name == "missile" || name.find("MoveTo") != std::string::npos ||
-                charName.find("Grass") != std::string::npos || charName.find("FX") != std::string::npos ||
-                charName.find("LevelProp") != std::string::npos || charName.find("emitter") != std::string::npos) {
-                continue;
-            }
+            if (IsClutter(obj, name, charName)) continue;
 
             activeObjects.push_back(obj);
         }
@@ -317,13 +348,49 @@ public:
             return;
         }
 
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Hotkey Hint: Hover an object and press key 'P' to copy its details.");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Hotkey Hint: Press key 'P' to copy ALL objects in table below to Clipboard.");
 
-        if (ImGui::BeginTable("OnScreenObjectsTable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300))) {
+        if (ImGui::Button("Copy Entire Table to Clipboard (Key 'P')")) {
+            std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
+            int count = 0;
+            const int now = SDK::Variables::TickCount();
+            for (const auto& obj : activeObjects) {
+                std::string name = GetObjectName(obj);
+                std::string charName = GetObjectCharacterName(obj);
+                std::string typeStr = ObjectTypeToString(obj.Type());
+                std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
+                std::string teamStr = TeamToString(obj);
+                std::string statusStr = StatusToString(obj);
+
+                float age = 0.0f;
+                auto it = trackedObjectTicks_.find(netId);
+                if (it != trackedObjectTicks_.end()) {
+                    age = static_cast<float>(now - it->second) / 1000.0f;
+                }
+
+                const Vec3 pos = obj.Position();
+                char lineBuf[512];
+                std::snprintf(lineBuf, sizeof(lineBuf),
+                              "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
+                              ++count, name.c_str(), charName.c_str(), netId,
+                              static_cast<unsigned long long>(obj.Address()),
+                              typeStr.c_str(), teamStr.c_str(), statusStr.c_str(), age,
+                              pos.x, pos.y, pos.z);
+                copyText += lineBuf;
+            }
+            if (count > 0) {
+                ImGui::SetClipboardText(copyText.c_str());
+                NightSharpDebug::Logf("[Dev] Copied ALL %d objects in table to Clipboard!", count);
+            }
+        }
+
+        if (ImGui::BeginTable("OnScreenObjectsTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300))) {
             ImGui::TableSetupColumn("Name");
             ImGui::TableSetupColumn("CharName");
             ImGui::TableSetupColumn("NetId");
             ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Team");
+            ImGui::TableSetupColumn("Status");
             ImGui::TableSetupColumn("Dist to Mouse");
             ImGui::TableSetupColumn("Age (s)");
             ImGui::TableSetupColumn("Action");
@@ -334,6 +401,8 @@ public:
                 std::string name = GetObjectName(obj);
                 std::string charName = GetObjectCharacterName(obj);
                 std::string typeStr = ObjectTypeToString(obj.Type());
+                std::string teamStr = TeamToString(obj);
+                std::string statusStr = StatusToString(obj);
                 float dist = obj.Position().Distance(cursorPos);
 
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
@@ -353,6 +422,10 @@ public:
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(typeStr.c_str());
                 ImGui::TableNextColumn();
+                ImGui::TextUnformatted(teamStr.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(statusStr.c_str());
+                ImGui::TableNextColumn();
                 ImGui::Text("%.1f", dist);
                 ImGui::TableNextColumn();
                 ImGui::Text("%.1fs", age);
@@ -361,8 +434,8 @@ public:
                 char btnId[64];
                 std::snprintf(btnId, sizeof(btnId), "Log##%u", netId);
                 if (ImGui::Button(btnId)) {
-                    SDK::Orbwalker::DebugPrint("[Dev] Name: %s | CharName: %s | NetId: %u | Age: %.1fs",
-                                               name.c_str(), charName.c_str(), netId, age);
+                    NightSharpDebug::Logf("[Dev] Name: %s | CharName: %s | NetId: %u | Team: %s | Status: %s | Age: %.1fs",
+                                               name.c_str(), charName.c_str(), netId, teamStr.c_str(), statusStr.c_str(), age);
                 }
             }
             ImGui::EndTable();
@@ -372,8 +445,101 @@ public:
 private:
     bool enabled_ = true;
     int maxRange_ = 400;
+    int scanProviderIndex_ = 0; // 0 = ObjectManager, 1 = GameObjects Facade
+    bool scanRawGameObjects_ = true;
+    bool scanHeroes_ = true;
+    bool scanMinions_ = true;
+    bool scanTurrets_ = true;
+    bool scanMissiles_ = true;
+    bool filterClutter_ = true;
     std::unordered_map<std::uint32_t, int> trackedObjectTicks_;
     bool pKeyPressedLast_ = false;
+    static inline DeveloperToolsPlugin* s_instance = nullptr;
+
+    std::vector<SDK::GameObject> GetObjectsToScan() const {
+        std::vector<SDK::GameObject> result;
+        if (scanProviderIndex_ == 0) {
+            // Using SDK::ObjectManager::Get
+            if (scanRawGameObjects_) {
+                for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
+                    if (obj.IsValid()) result.push_back(obj);
+                }
+            } else {
+                if (scanHeroes_) {
+                    for (const auto& obj : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
+                        if (obj.IsValid()) result.push_back(obj);
+                    }
+                }
+                if (scanMinions_) {
+                    for (const auto& obj : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
+                        if (obj.IsValid()) result.push_back(obj);
+                    }
+                }
+                // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
+                // if (scanTurrets_) {
+                //     for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
+                //         if (obj.IsValid()) result.push_back(obj);
+                //     }
+                // }
+                if (scanMissiles_) {
+                    for (const auto& obj : SDK::ObjectManager::Get<SDK::MissileClient>()) {
+                        if (obj.IsValid()) result.push_back(obj);
+                    }
+                }
+            }
+        } else {
+            // Using SDK::GameObjects Facade
+            if (scanRawGameObjects_) {
+                for (const auto& obj : SDK::GameObjects::AllGameObjects()) {
+                    if (obj.IsValid()) result.push_back(obj);
+                }
+            } else {
+                if (scanHeroes_) {
+                    for (const auto& obj : SDK::GameObjects::Heroes()) {
+                        if (obj.IsValid()) result.push_back(obj);
+                    }
+                }
+                if (scanMinions_) {
+                    for (const auto& obj : SDK::GameObjects::Minions()) {
+                        if (obj.IsValid()) result.push_back(obj);
+                    }
+                }
+                // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
+                // if (scanTurrets_) {
+                //     for (const auto& obj : SDK::GameObjects::Turrets()) {
+                //         if (obj.IsValid()) result.push_back(obj);
+                //     }
+                // }
+                if (scanMissiles_) {
+                    for (const auto& obj : SDK::GameObjects::Missiles()) {
+                        if (obj.IsValid()) result.push_back(obj);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    bool IsClutter(const SDK::GameObject& obj, const std::string& name, const std::string& charName) const {
+        if (!filterClutter_) {
+            return false;
+        }
+        if (name.empty() && charName.empty()) {
+            return true;
+        }
+        if (name == "missile" || name.find("MoveTo") != std::string::npos ||
+            charName.find("Grass") != std::string::npos || charName.find("FX") != std::string::npos ||
+            charName.find("LevelProp") != std::string::npos || charName.find("emitter") != std::string::npos) {
+            return true;
+        }
+        return false;
+    }
+
+    static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        if (s_instance && args.Sender.NetworkId != 0) {
+            s_instance->trackedObjectTicks_.erase(static_cast<std::uint32_t>(args.Sender.NetworkId));
+        }
+    }
 
     static void OnProcessSpellCast(const SDK::Events::ProcessSpellEventArgs& args) {
         const auto player = SDK::ObjectManager::Player();
@@ -382,13 +548,17 @@ private:
             std::snprintf(debugMsg, sizeof(debugMsg), "Detected Spell Name: %s Issued By: %s",
                           args.SpellName[0] ? args.SpellName : args.ScriptName,
                           player.CharacterName().c_str());
-            SDK::Orbwalker::DebugPrint("%s", debugMsg);
+            NightSharpDebug::Logf("%s", debugMsg);
         }
     }
 
     static std::string GetObjectName(const SDK::GameObject& object) {
         if (!object.IsValid()) {
             return {};
+        }
+        std::string name = object.Name();
+        if (!name.empty()) {
+            return name;
         }
         char nameBuf[96] = {};
         if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
@@ -401,15 +571,7 @@ private:
         if (!object.IsValid()) {
             return {};
         }
-        std::string name = object.CharacterName();
-        if (!name.empty()) {
-            return name;
-        }
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return {};
+        return object.CharacterName();
     }
 
     static void GetMissileSpeedAndRange(const SDK::GameObject& obj, float& speed, float& range) {
@@ -432,6 +594,38 @@ private:
         speed = Globals::Read<float>(resource + 0x518); // Offset::SpellDataResourceLayout::ResMissileSpeed
     }
 
+    static std::string TeamToString(const SDK::GameObject& obj) {
+        if (!obj.IsValid()) return "Unknown";
+        if (obj.IsAlly()) return "Ally";
+        if (obj.IsEnemy()) return "Enemy";
+        const auto team = obj.Team();
+        if (team == SDK::GameObjectTeam::Neutral) return "Neutral";
+        if (team == SDK::GameObjectTeam::Order) return "Blue (100)";
+        if (team == SDK::GameObjectTeam::Chaos) return "Red (200)";
+        return "Unknown";
+    }
+
+    static std::string StatusToString(const SDK::GameObject& obj) {
+        std::string status;
+        if (obj.IsDead()) status += "Dead";
+        else status += "Alive";
+
+        if (!obj.IsVisible()) status += ", Fog";
+        if (!obj.IsTargetable()) status += ", Untargetable";
+        if (obj.IsInvulnerable()) status += ", Invulnerable";
+
+        if (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) {
+            SDK::AIBaseClient ai(obj.Handle());
+            if (ai.IsValid()) {
+                char hpBuf[64];
+                std::snprintf(hpBuf, sizeof(hpBuf), ", HP:%.0f/%.0f(%.0f%%)",
+                              ai.Health(), ai.MaxHealth(), ai.HealthPercent());
+                status += hpBuf;
+            }
+        }
+        return status;
+    }
+
     static std::string ObjectTypeToString(::Core::Objects::ObjectType type) {
         switch (type) {
         case ::Core::Objects::ObjectType::GameObject: return "GameObject";
@@ -447,6 +641,43 @@ private:
         default: return "Unknown";
         }
     }
+
+    static void OnMenuBridge(void* userData) {
+        if (auto* self = static_cast<DeveloperToolsPlugin*>(userData)) {
+            self->OnMenu();
+        }
+    }
+
+    void DestroyNativeMenu() {
+        if (menu_) {
+            SDK::UI::MenuManager::Instance().Remove(menu_);
+            delete menu_;
+            menu_ = nullptr;
+            menuEnabled_ = nullptr;
+            menuMaxRange_ = nullptr;
+            menuProvider_ = nullptr;
+            menuScanAll_ = nullptr;
+            menuScanHeroes_ = nullptr;
+            menuScanMinions_ = nullptr;
+            menuScanTurrets_ = nullptr;
+            menuScanMissiles_ = nullptr;
+            menuFilterClutter_ = nullptr;
+            menuInspector_ = nullptr;
+        }
+    }
+
+private:
+    SDK::UI::Menu* menu_ = nullptr;
+    SDK::UI::MenuBool* menuEnabled_ = nullptr;
+    SDK::UI::MenuSlider* menuMaxRange_ = nullptr;
+    SDK::UI::MenuList* menuProvider_ = nullptr;
+    SDK::UI::MenuBool* menuScanAll_ = nullptr;
+    SDK::UI::MenuBool* menuScanHeroes_ = nullptr;
+    SDK::UI::MenuBool* menuScanMinions_ = nullptr;
+    SDK::UI::MenuBool* menuScanTurrets_ = nullptr;
+    SDK::UI::MenuBool* menuScanMissiles_ = nullptr;
+    SDK::UI::MenuBool* menuFilterClutter_ = nullptr;
+    SDK::UI::MenuRuntime* menuInspector_ = nullptr;
 };
 
 inline DeveloperToolsPlugin* s_instance = nullptr;

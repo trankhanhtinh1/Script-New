@@ -403,7 +403,8 @@ namespace detail {
     inline void EventInterruptableSpell(const ProcessSpellEventArgs& args);
     inline void EventInterruptableSpell(const StopCastEventArgs& args);
     inline void EventInterruptableSpell();
-    inline void EventTurret(const ProcessSpellEventArgs& args);
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // inline void EventTurret(const ProcessSpellEventArgs& args);
     inline void EventTurretConstruct();
     inline void ResetDerivedEvents();
     inline bool HasLoadHandlers();
@@ -882,9 +883,12 @@ namespace detail {
             if (HasInterruptableConsumers()) {
                 EventInterruptableSpell(spellArgs);
             }
+            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+            /*
             if (HasTurretConsumers()) {
                 EventTurret(spellArgs);
             }
+            */
         }
         for (int i = 0; i < kMaxQueuedEventsPerFrame &&
                         PendingProcessSpells.Pop(spellArgs); ++i) {
@@ -1932,7 +1936,8 @@ struct HookEvents {
         &AddOnInterruptableTarget,
         &RemoveOnInterruptableTarget
     };
-    EventSlot<Turret::TurretArgs> OnTurretAttack{ &AddOnTurretAttack, &RemoveOnTurretAttack };
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    // EventSlot<Turret::TurretArgs> OnTurretAttack{ &AddOnTurretAttack, &RemoveOnTurretAttack };
 };
 
 inline HookEvents hook{};

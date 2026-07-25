@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../../../sdk/GameObjects/ObjectManager.h"
-
-namespace OrbwalkerKuro::OrbwalkingDetail {
+#include "../../../sdk/GameObjects/GameObjects.h"
 
 using namespace ::SDK;
+
+namespace OrbwalkerKuro::OrbwalkingDetail {
 
 inline constexpr float kLaneClearWaitTime = 1.7f;
 
@@ -14,8 +14,7 @@ inline bool IsValidAttackTarget(const AIHeroClient& player,
     if (!player.IsValid() || !target.IsValid()) {
         return false;
     }
-    if ((!target.IsEnemy() && target.Team() != GameObjectTeam::Neutral) ||
-        (!target.IsZombie() && target.IsDead())) {
+    if ((!target.IsEnemy() && target.Team() != GameObjectTeam::Neutral) || (!target.IsZombie() && target.IsDead())) {
         return false;
     }
     if (!target.IsVisible() || !target.IsTargetable() || target.IsInvulnerable()) {
@@ -42,6 +41,21 @@ inline bool IsValidCurrentAttackTarget(const AttackableUnit& target) {
 
 inline bool IsGangplankBarrel(const AIMinionClient& minion) {
     return _stricmp(minion.CharacterName().c_str(), "gangplankbarrel") == 0;
+}
+
+inline bool HasGangplankInGame() {
+    static bool checked = false;
+    static bool hasGp = false;
+    if (!checked) {
+        for (const auto& hero : GameObjects::Heroes()) {
+            if (hero.IsValid() && _stricmp(hero.CharacterName().c_str(), "Gangplank") == 0) {
+                hasGp = true;
+                break;
+            }
+        }
+        if (!GameObjects::Heroes().empty()) checked = true;
+    }
+    return hasGp;
 }
 
 inline bool IsIgnoredMinion(const AIMinionClient& minion) {
@@ -227,8 +241,8 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         append(wardMinions);
     }
 
-    if (menu.AttackBarrels()) {
-        for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
+    if (menu.AttackBarrels() && HasGangplankInGame()) {
+        for (const auto& minion : GameObjects::Minions()) {
             if (IsGangplankBarrel(minion) &&
                 minion.Health() <= 1.0f &&
                 IsValidCurrentAttackTarget(
@@ -279,28 +293,22 @@ inline AttackableUnit GetKillableMinion(const AIHeroClient& player,
 
 inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
     if (auto* selector = TargetSelector::Instance()) {
-        const auto hero = selector->GetTarget(-1.0f, DamageType::True);
+        const auto targets = selector->GetTargets(FLT_MAX, DamageType::True);
+        for (const auto& hero : targets) {
+            const AttackableUnit target(hero.Handle());
+            if (IsValidCurrentAttackTarget(player, target)) {
+                return target;
+            }
+        }
+    }
+
+    for (const auto& hero : GameObjects::EnemyHeroes()) {
         const AttackableUnit target(hero.Handle());
         if (IsValidCurrentAttackTarget(player, target)) {
             return target;
         }
     }
-
-    AttackableUnit best;
-    float bestDistance = FLT_MAX;
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
-        const AttackableUnit target(hero.Handle());
-        if (!IsValidCurrentAttackTarget(player, target)) {
-            continue;
-        }
-
-        const float distance = player.Distance(target);
-        if (distance < bestDistance) {
-            best = target;
-            bestDistance = distance;
-        }
-    }
-    return best;
+    return {};
 }
 
 inline bool HasEnemyHeroNearAutoAttackRange(const AIHeroClient& player) {
@@ -338,8 +346,8 @@ inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
         }
     }
 
-    if (menu.AttackBarrels()) {
-        for (const auto& minion : GameObjects::Get<AIMinionClient>()) {
+    if (menu.AttackBarrels() && HasGangplankInGame()) {
+        for (const auto& minion : GameObjects::Minions()) {
             if (IsGangplankBarrel(minion) &&
                 minion.Health() <= 1.0f &&
                 IsValidCurrentAttackTarget(
@@ -420,8 +428,6 @@ inline bool HasSoonKillableMinion(const AIHeroClient& player,
 
 namespace OrbwalkerKuro {
 
-using namespace ::SDK;
-
 inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int now = Tick();
     const auto player = GameObjects::Player();
@@ -443,10 +449,16 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int forceTargetNetworkId = context_.forceTarget.IsValid()
         ? context_.forceTarget.NetworkId()
         : 0;
-    if (context_.cachedTargetTick == now &&
+    constexpr int kTargetSelectionThrottleMs = 35;
+    if (context_.cachedTargetTick > 0 &&
+        now - context_.cachedTargetTick >= 0 &&
+        now - context_.cachedTargetTick < kTargetSelectionThrottleMs &&
         context_.cachedTargetMode == mode &&
         context_.cachedTargetForceTargetNetworkId == forceTargetNetworkId) {
-        return context_.cachedTarget;
+        if (!context_.cachedTarget.IsValid() ||
+            OrbwalkingDetail::IsValidCurrentAttackTarget(player, context_.cachedTarget)) {
+            return context_.cachedTarget;
+        }
     }
 
     auto cacheTarget = [&](const AttackableUnit& target) -> AttackableUnit {
@@ -524,24 +536,24 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
 
     if (mode == OrbwalkingMode::LaneClear &&
         (!menu_.PrioritizeMinions() || minions.empty())) {
-        for (const auto& turret : GameObjects::EnemyTurrets()) {
-            const AttackableUnit target(turret.Handle());
-            if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
-                return cacheTarget(target);
-            }
-        }
-        for (const auto& inhibitor : GameObjects::EnemyInhibitors()) {
-            const AttackableUnit target(inhibitor.Handle());
-            if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
-                return cacheTarget(target);
-            }
-        }
-        const auto nexus = GameObjects::EnemyNexus();
-        const AttackableUnit nexusTarget(nexus.Handle());
-        if (OrbwalkingDetail::IsValidCurrentAttackTarget(
-                player, nexusTarget)) {
-            return cacheTarget(nexusTarget);
-        }
+        // for (const auto& turret : GameObjects::EnemyTurrets()) {
+        //     const AttackableUnit target(turret.Handle());
+        //     if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
+        //         return cacheTarget(target);
+        //     }
+        // }
+        // for (const auto& inhibitor : GameObjects::EnemyInhibitors()) {
+        //     const AttackableUnit target(inhibitor.Handle());
+        //     if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
+        //         return cacheTarget(target);
+        //     }
+        // }
+        // const auto nexus = GameObjects::EnemyNexus();
+        // const AttackableUnit nexusTarget(nexus.Handle());
+        // if (OrbwalkingDetail::IsValidCurrentAttackTarget(
+        //         player, nexusTarget)) {
+        //     return cacheTarget(nexusTarget);
+        // }
     }
 
     if (mode != OrbwalkingMode::LastHit) {
@@ -571,42 +583,42 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     }
 
     if (farmMode) {
-        std::vector<AIMinionClient> turretMinions;
-        turretMinions.reserve(minions.size());
-        for (const auto& minion : minions) {
-            if (minion.Team() != GameObjectTeam::Neutral &&
-                minion.IsMinion() &&
-                minion.IsUnderAllyTurret()) {
-                turretMinions.push_back(minion);
-            }
-        }
-
-        if (!turretMinions.empty()) {
-            const auto& allyTurrets = GameObjects::AllyTurrets();
-            for (const auto& minion : turretMinions) {
-                if (HealthPrediction::HasMinionAggro(minion)) {
-                    continue;
-                }
-
-                const float playerDamage =
-                    OrbwalkingDetail::GetCurrentAutoAttackDamage(player, minion);
-                if (playerDamage <= 0.0f) {
-                    continue;
-                }
-
-                for (const auto& turret : allyTurrets) {
-                    if (!turret.IsValid() ||
-                        turret.IsDead() ||
-                        turret.Position().DistanceSqr2D(minion.Position()) > 950.0f * 950.0f) {
-                        continue;
-                    }
-                    const float turretDamage = std::max(1.0f, turret.GetAutoAttackDamage(minion, false));
-                    if (std::fmod(std::max(0.0f, minion.Health()), turretDamage) > playerDamage) {
-                        return cacheTarget(AttackableUnit(minion.Handle()));
-                    }
-                }
-            }
-        }
+        // std::vector<AIMinionClient> turretMinions;
+        // turretMinions.reserve(minions.size());
+        // for (const auto& minion : minions) {
+        //     if (minion.Team() != GameObjectTeam::Neutral &&
+        //         minion.IsMinion() &&
+        //         minion.IsUnderAllyTurret()) {
+        //         turretMinions.push_back(minion);
+        //     }
+        // }
+        //
+        // if (!turretMinions.empty()) {
+        //     const auto& allyTurrets = GameObjects::AllyTurrets();
+        //     for (const auto& minion : turretMinions) {
+        //         if (HealthPrediction::HasMinionAggro(minion)) {
+        //             continue;
+        //         }
+        //
+        //         const float playerDamage =
+        //             OrbwalkingDetail::GetCurrentAutoAttackDamage(player, minion);
+        //         if (playerDamage <= 0.0f) {
+        //             continue;
+        //         }
+        //
+        //         for (const auto& turret : allyTurrets) {
+        //             if (!turret.IsValid() ||
+        //                 turret.IsDead() ||
+        //                 turret.Position().DistanceSqr2D(minion.Position()) > 950.0f * 950.0f) {
+        //                 continue;
+        //             }
+        //             const float turretDamage = std::max(1.0f, turret.GetAutoAttackDamage(minion, false));
+        //             if (std::fmod(std::max(0.0f, minion.Health()), turretDamage) > playerDamage) {
+        //                 return cacheTarget(AttackableUnit(minion.Handle()));
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     if (mode == OrbwalkingMode::LaneClear) {
@@ -688,11 +700,26 @@ inline AttackableUnit OrbwalkerBase::ResolveAttackTarget(const Events::ProcessSp
         return AttackableUnit(args.Target.Ptr);
     }
     if (args.TargetNetworkId != 0 && args.TargetNetworkId != 0xFFFFFFFFu) {
-        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
             static_cast<int>(args.TargetNetworkId));
     }
     if (context_.pendingAttackTargetNetworkId != 0) {
-        return ObjectManager::GetUnitByNetworkId<AttackableUnit>(
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
+            context_.pendingAttackTargetNetworkId);
+    }
+    return {};
+}
+
+inline AttackableUnit OrbwalkerBase::ResolveAttackTarget(const Events::ObjectEventArgs& args) const {
+    if (args.Target.IsValid()) {
+        return AttackableUnit(args.Target.Ptr);
+    }
+    if (args.TargetNetworkId != 0 && args.TargetNetworkId != 0xFFFFFFFFu) {
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
+            static_cast<int>(args.TargetNetworkId));
+    }
+    if (context_.pendingAttackTargetNetworkId != 0) {
+        return GameObjects::GetUnitByNetworkId<AttackableUnit>(
             context_.pendingAttackTargetNetworkId);
     }
     return {};

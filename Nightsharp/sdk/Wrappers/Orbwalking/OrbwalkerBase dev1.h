@@ -2621,8 +2621,13 @@ protected:
         record.MissileNetworkId = static_cast<int>(args.MissileNetworkId);
         record.SourceIsTurret = sourceIsTurret;
         record.SourceIsMinion = sourceIsMinion;
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        // record.Damage = sourceIsTurret
+        //     ? Prediction::Health::GetAutoAttackDamage(AITurretClient(source.Handle()), target)
+        //     : source.GetAutoAttackDamage(target, true);
+        // REMOVED: Turret/Inhibitor/Nexus disabled
         record.Damage = sourceIsTurret
-            ? Prediction::Health::GetAutoAttackDamage(AITurretClient(source.Handle()), target)
+            ? 0.0f
             : source.GetAutoAttackDamage(target, true);
         record.ExpireTick = now + (sourceIsTurret ? 1800 : 1400);
 
@@ -3187,7 +3192,8 @@ protected:
         return damage;
     }
 
-    AIMinionClient TrackedTurretTarget(const AITurretClient& turret,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*AIMinionClient TrackedTurretTarget(const AITurretClient& turret,
                                        const std::vector<AIMinionClient>& candidates) const {
         if (!turret.IsValid()) {
             return {};
@@ -3205,7 +3211,7 @@ protected:
             }
         }
         return {};
-    }
+    }*/
 
     int FarmMissileVersion() const { return farmMissileVersion_; }
 

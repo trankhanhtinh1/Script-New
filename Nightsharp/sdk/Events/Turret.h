@@ -67,6 +67,8 @@ namespace detail {
     }
 
     inline void SeedFromGameObjects() {
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        /*
         for (const auto& turret : SDK::GameObjects::Turrets()) {
             if (!turret.IsValid()) {
                 continue;
@@ -82,10 +84,12 @@ namespace detail {
             entry->NetworkId = key;
             entry->IsWindingUp = turret.Spellbook().IsWindingUp();
         }
+        */
     }
 } // namespace detail
 
-inline bool AddOnTurretAttack(TurretHandler handler) {
+// REMOVED: Turret/Inhibitor/Nexus disabled by user request
+/*inline bool AddOnTurretAttack(TurretHandler handler) {
     if (!handler) {
         return false;
     }
@@ -103,9 +107,10 @@ inline bool AddOnTurretAttack(TurretHandler handler) {
         SDK::Events::detail::ReleaseDoCastRawIfUnused();
     }
     return added;
-}
+}*/
 
-inline bool RemoveOnTurretAttack(TurretHandler handler) {
+// REMOVED: Turret/Inhibitor/Nexus disabled by user request
+/*inline bool RemoveOnTurretAttack(TurretHandler handler) {
     const bool removed = detail::TurretHandlers.Remove(handler);
     if (removed && !detail::TurretHandlers.HasHandlers()) {
         if (SDK::Events::detail::TurretConsumerRefs > 0) {
@@ -114,21 +119,26 @@ inline bool RemoveOnTurretAttack(TurretHandler handler) {
         SDK::Events::detail::ReleaseDoCastRawIfUnused();
     }
     return removed;
-}
+}*/
 
-inline bool OnTurretAttack(TurretHandler handler) {
+// REMOVED: Turret/Inhibitor/Nexus disabled by user request
+/*inline bool OnTurretAttack(TurretHandler handler) {
     return AddOnTurretAttack(handler);
-}
+}*/
 
 } // namespace SDK::Events::Turret
 
 namespace SDK::Events {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*
     inline bool AddOnTurretAttack(Turret::TurretHandler handler) { return Turret::AddOnTurretAttack(handler); }
     inline bool RemoveOnTurretAttack(Turret::TurretHandler handler) { return Turret::RemoveOnTurretAttack(handler); }
     inline bool OnTurretAttack(Turret::TurretHandler handler) { return Turret::OnTurretAttack(handler); }
+    */
 
 namespace detail {
-    inline void EventTurret(const ProcessSpellEventArgs& args) {
+// REMOVED: Turret/Inhibitor/Nexus disabled by user request
+/*inline void EventTurret(const ProcessSpellEventArgs& args) {
         if (args.Sender.Type != ::Core::Objects::ObjectType::AITurretClient ||
             !args.IsAutoAttack ||
             args.TargetNetworkId == 0 ||
@@ -163,7 +173,7 @@ namespace detail {
         turret->Raw = args;
 
         Turret::detail::TurretHandlers.Fire(*turret);
-    }
+    }*/
 
     inline void EventTurretConstruct() {
         Turret::detail::SeedFromGameObjects();

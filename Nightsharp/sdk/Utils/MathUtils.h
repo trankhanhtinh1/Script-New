@@ -181,6 +181,14 @@ private:
         if (!WaypointTracker::Installed) {
             WaypointTracker::Installed = true;
             SDK::Events::AddOnNewPath(&OnNewPath);
+            SDK::Events::AddOnDeleteObject(&OnObjectDelete);
+        }
+    }
+
+    static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        if (args.Sender.NetworkId) {
+            WaypointTracker::StoredPaths.erase(args.Sender.NetworkId);
+            WaypointTracker::StoredTick.erase(args.Sender.NetworkId);
         }
     }
 
@@ -190,6 +198,18 @@ private:
             return;
         }
 
+        const int now = SDK::Variables::TickCount();
+        if (WaypointTracker::StoredTick.size() > 128) {
+            for (auto it = WaypointTracker::StoredTick.begin(); it != WaypointTracker::StoredTick.end(); ) {
+                if (now - it->second > 10000) {
+                    WaypointTracker::StoredPaths.erase(it->first);
+                    it = WaypointTracker::StoredTick.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         std::vector<Vec2> path;
         path.reserve(static_cast<std::size_t>(std::max(0, args.PathCount)));
         for (int i = 0; i < args.PathCount; ++i) {
@@ -197,7 +217,7 @@ private:
         }
 
         WaypointTracker::StoredPaths[networkId] = std::move(path);
-        WaypointTracker::StoredTick[networkId] = SDK::Variables::TickCount();
+        WaypointTracker::StoredTick[networkId] = now;
     }
 };
 

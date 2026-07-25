@@ -82,6 +82,10 @@ namespace TypeCache {
 // EnsureReady no longer forces RefreshReadState on every manager access.
 // The overlay calls CoreRuntime::TickRead() once per frame before plugins run,
 // so the context is always fresh by the time enumeration happens.
+// Forward declarations for structure filter (defined below)
+inline ObjectType InferType(uintptr_t object);
+inline ObjectType InferLifecycleType(uintptr_t object);
+
 inline bool EnsureReady() {
     if (!CoreRuntime::EnsureInitialized()) {
         return false;
@@ -179,6 +183,15 @@ inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
     for (std::uint32_t i = 0; i < view.count && written < maxOut; ++i) {
         const uintptr_t entry = Globals::Read<uintptr_t>(view.items + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
         if (!IsLiveEntry(entry)) {
+            continue;
+        }
+
+        // REMOVED: Filter out Turret/Inhibitor/Nexus objects from enumeration
+        // so plugins never receive structure objects (user request).
+        const ObjectType otype = InferLifecycleType(entry);
+        if (otype == ObjectType::AITurretClient ||
+            otype == ObjectType::BarracksDampenerClient ||
+            otype == ObjectType::HQClient) {
             continue;
         }
 
@@ -546,7 +559,8 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
     } else if (Core::Objects::ContainsInsensitive(name, "nexus") ||
                Core::Objects::ContainsInsensitive(name, "hq")) {
         resolved = ObjectType::HQClient;
-    } else if (Core::Objects::ContainsInsensitive(name, "shop")) {
+    }
+    if (Core::Objects::ContainsInsensitive(name, "shop")) {
         resolved = ObjectType::ShopClient;
     } else if (Core::Objects::ContainsInsensitive(name, "spawnpoint") ||
                Core::Objects::ContainsInsensitive(name, "spawn_point")) {

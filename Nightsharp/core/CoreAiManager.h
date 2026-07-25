@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreBypass.h"
 #include "CoreRuntime.h"
@@ -7,7 +7,6 @@
 #include "offset.h"
 #include "spoof/spoofcall.h"
 #include "../imgui/imgui.h"
-
 #include <algorithm>
 #include <cstdint>
 #include <vector>

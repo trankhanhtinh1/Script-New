@@ -11,9 +11,9 @@ namespace SDK {
 
 // ── Item helpers (delegates to CoreItem + Spellbook) ──
 
-inline SDK::SpellSlot GetItemSlot(const AIHeroClient& source, int itemId) {
+inline ::SDK::SpellSlot GetItemSlot(const AIHeroClient& source, int itemId) {
     if (!source.IsValid() || itemId <= 0) {
-        return SDK::SpellSlot::Unknown;
+        return ::SDK::SpellSlot::Unknown;
     }
     const auto items = source.InventoryItems();
     for (const auto& slot : items) {
@@ -21,13 +21,13 @@ inline SDK::SpellSlot GetItemSlot(const AIHeroClient& source, int itemId) {
             return slot.GetSpellSlot();
         }
     }
-    return SDK::SpellSlot::Unknown;
+    return ::SDK::SpellSlot::Unknown;
 }
 
 inline bool CanUseItem(const AIHeroClient& source, int itemId) {
     if (!source.IsValid()) return false;
-    const SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
-    if (spellSlot == SDK::SpellSlot::Unknown) return false;
+    const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
+    if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
     const auto spell = source.Spellbook().GetSpell(spellSlot);
     if (!spell.IsValid()) return false;
@@ -36,24 +36,24 @@ inline bool CanUseItem(const AIHeroClient& source, int itemId) {
 
 inline bool UseItem(const AIHeroClient& source, int itemId) {
     if (!source.IsValid()) return false;
-    const SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
-    if (spellSlot == SDK::SpellSlot::Unknown) return false;
+    const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
+    if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
     return source.Spellbook().CastSpell(spellSlot);
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId, const AIBaseClient& target) {
     if (!source.IsValid() || !target.IsValid()) return false;
-    const SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
-    if (spellSlot == SDK::SpellSlot::Unknown) return false;
+    const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
+    if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
     return source.Spellbook().CastSpell(spellSlot, target.Address());
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId, Vector3 position) {
     if (!source.IsValid()) return false;
-    const SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
-    if (spellSlot == SDK::SpellSlot::Unknown) return false;
+    const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
+    if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
     return source.Spellbook().CastSpell(spellSlot, position);
 }

@@ -580,6 +580,8 @@ protected:
             return {};
         }
 
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        /*
         for (const auto& turret : GameObjects::EnemyTurrets()) {
             if (!turret.IsValid() || turret.IsDead() ||
                 turret.IsFountainTurret() || turret.IsShurimaTurret()) {
@@ -605,6 +607,7 @@ protected:
                 return target;
             }
         }
+        */
         return {};
     }
 
@@ -692,22 +695,27 @@ protected:
         }
 
         const auto player = GameObjects::Player();
-        AITurretClient tower;
-        float towerDistance = FLT_MAX;
-        for (const auto& turret : GameObjects::AllyTurrets()) {
-            if (!turret.IsValid() || turret.IsDead()) {
-                continue;
-            }
-            const float distance = turret.Distance(player);
-            if (distance < towerDistance && distance <= 1500.0f) {
-                tower = turret;
-                towerDistance = distance;
-            }
-        }
-        if (!tower.IsValid()) {
-            return {};
-        }
+        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+        // AITurretClient tower;
+        // float towerDistance = FLT_MAX;
+        // for (const auto& turret : GameObjects::AllyTurrets()) {
+        //     if (!turret.IsValid() || turret.IsDead()) {
+        //         continue;
+        //     }
+        //     const float distance = turret.Distance(player);
+        //     if (distance < towerDistance && distance <= 1500.0f) {
+        //         tower = turret;
+        //         towerDistance = distance;
+        //     }
+        // }
+        // if (!tower.IsValid()) {
+        //     return {};
+        // }
+        // REMOVED: Turret/Inhibitor/Nexus disabled
+        (void)player;
+        return {};
 
+        /* REMOVED: Turret/Inhibitor/Nexus disabled by user request
         std::vector<AIMinionClient> source = lane;
         source.erase(
             std::remove_if(source.begin(), source.end(), [&](const AIMinionClient& minion) {
@@ -764,6 +772,7 @@ protected:
             }
         }
         return GetTurretNoAggroSetupTarget(tower, source);
+    */
     }
 
     AttackableUnit GetLaneClearTarget(const std::vector<AIMinionClient>& minions) {
@@ -1061,12 +1070,15 @@ protected:
                 continue;
             }
 
+            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+            /*
             if (ShouldWaitForTurretFarm(minion)) {
                 bestName = minion.CharacterName();
                 bestHealth = minion.Health();
                 bestDamage = damage;
                 return logResult(true, "turret-farm");
             }
+            */
 
             // EnsoulSharp NewOrbwalker ShouldWait: the Simulated prediction below
             // already folds in incoming ally/turret damage, so we wait based on it
@@ -1212,15 +1224,17 @@ protected:
         return true;
     }
 
-    float GetTurretAutoAttackDamage(const AITurretClient& tower,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*float GetTurretAutoAttackDamage(const AITurretClient& tower,
                                     const AIMinionClient& minion) const {
         if (!tower.IsValid() || !minion.IsValid()) {
             return 0.0f;
         }
         return Prediction::Health::GetAutoAttackDamage(tower, minion);
-    }
+    }*/
 
-    float GetTurretAttackImpact(const AITurretClient& tower,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*float GetTurretAttackImpact(const AITurretClient& tower,
                                 const AIMinionClient& minion) const {
         if (!tower.IsValid() || !minion.IsValid()) {
             return 1000.0f;
@@ -1236,9 +1250,10 @@ protected:
             std::max(0.0f, minion.Distance(tower) - tower.BoundingRadius()) /
             turretMissileSpeed;
         return std::max(0.0f, windup + travel);
-    }
+    }*/
 
-    AttackableUnit GetTurretSetupTarget(const AITurretClient& tower,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*AttackableUnit GetTurretSetupTarget(const AITurretClient& tower,
                                         const std::vector<AIMinionClient>& source,
                                         const AIMinionClient& aggroMinion,
                                         float turretImpact) const {
@@ -1277,9 +1292,10 @@ protected:
             }
         }
         return {};
-    }
+    }*/
 
-    AttackableUnit GetTurretNoAggroSetupTarget(const AITurretClient& tower,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*AttackableUnit GetTurretNoAggroSetupTarget(const AITurretClient& tower,
                                                const std::vector<AIMinionClient>& source) const {
         if (!tower.IsValid() || source.empty()) {
             return {};
@@ -1309,9 +1325,10 @@ protected:
             return AttackableUnit(minion.Handle());
         }
         return {};
-    }
+    }*/
 
-    bool IsTurretFocusedMinion(const AITurretClient& tower,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*bool IsTurretFocusedMinion(const AITurretClient& tower,
                                const AIMinionClient& minion) const {
         if (!tower.IsValid() || !minion.IsValid()) {
             return false;
@@ -1325,7 +1342,7 @@ protected:
 
         const AIBaseClient aggroTurret = HealthPrediction::GetAggroTurret(minion);
         return !aggroTurret.IsValid() || aggroTurret.NetworkId() == tower.NetworkId();
-    }
+    }*/
 
     int TurretFarmSetupShots(const AIMinionClient& minion) const {
         const MinionTypes type = minion.GetMinionType();
@@ -1338,7 +1355,8 @@ protected:
         return 0;
     }
 
-    bool CanLastHitTurretMinionNow(const AITurretClient& tower,
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*bool CanLastHitTurretMinionNow(const AITurretClient& tower,
                                    const AIMinionClient& minion) const {
         if (!IsTurretFocusedMinion(tower, minion)) {
             return false;
@@ -1365,9 +1383,10 @@ protected:
         }
 
         return prediction > 0.0f && prediction <= damage;
-    }
+    }*/
 
-    bool ShouldWaitForTurretFarm(const AIMinionClient& minion) const {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*bool ShouldWaitForTurretFarm(const AIMinionClient& minion) const {
         const auto player = GameObjects::Player();
         if (!player.IsValid() ||
             player.Level() >= Slider(farmMenu_, "TurretFramMaxLevel", 13) ||
@@ -1419,7 +1438,7 @@ protected:
         }
 
         return false;
-    }
+    }*/
 
     bool cachedShouldWait_ = false;
     bool cachedShouldWaitFastLaneClear_ = false;

@@ -69,10 +69,7 @@ public:
         const std::vector<AIHeroClient>* ignoreChampions = nullptr)
     {
         if (!spell) return {};
-        float maxBounding = 50.0f;
-        for (const auto& hero : GameObjects::EnemyHeroes()) {
-            if (hero.BoundingRadius() > maxBounding) maxBounding = hero.BoundingRadius();
-        }
+        constexpr float maxBounding = 80.0f;
         return GetTarget(
             spell->Range + spell->Width + maxBounding,
             spell->DamageType,

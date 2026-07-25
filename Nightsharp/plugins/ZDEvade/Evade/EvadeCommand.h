@@ -5,6 +5,7 @@
 #include "../../../Core/CoreEvadeState.h"
 #include "../../../Core/CoreNavGrid.h"
 #include "../../../SDK/Wrappers/Orbwalking/Orbwalker.h"
+#include "../Detection/Threat.h"
 
 namespace ZDEvade {
 
@@ -87,8 +88,9 @@ struct EvadeCommandManager {
         const bool samePosition = lastMoveSucceeded && targetDeltaSqr < kSameMoveDistanceSqr;
         const bool nearPosition = lastMoveSucceeded && targetDeltaSqr < kNearMoveDistanceSqr;
         const bool sameAttempt = lastMoveAttemptTick > 0 && attemptDeltaSqr < kNearMoveDistanceSqr;
-        const int elapsed = now - lastMoveTick;
-        const int attemptElapsed = now - lastMoveAttemptTick;
+        const std::int64_t elapsed = TickDifference(now, lastMoveTick);
+        const std::int64_t attemptElapsed =
+            TickDifference(now, lastMoveAttemptTick);
 
         if (sameAttempt && attemptElapsed < (force ? kForceMoveInterval : kMinMoveInterval)) return lastMoveSucceeded;
 

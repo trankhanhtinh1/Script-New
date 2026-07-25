@@ -43,6 +43,13 @@ namespace Config {
         inline int  x = 0;
         inline int  y = 0;
         inline bool positionInitialized = false;
+        inline bool allowDrag = true;
+    }
+
+    namespace MenuPosition {
+        inline int x = 30;
+        inline int y = 30;
+        inline bool positionInitialized = false;
     }
 
     namespace MenuStyle {

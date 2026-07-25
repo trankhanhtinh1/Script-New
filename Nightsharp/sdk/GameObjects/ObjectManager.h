@@ -21,14 +21,15 @@ namespace detail {
             return ::Core::Objects::ObjectType::AIHeroClient;
         } else if constexpr (std::is_same_v<T, AIMinionClient>) {
             return ::Core::Objects::ObjectType::AIMinionClient;
-        } else if constexpr (std::is_same_v<T, AITurretClient>) {
-            return ::Core::Objects::ObjectType::AITurretClient;
+        // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
+        // } else if constexpr (std::is_same_v<T, AITurretClient>) {
+        //     return ::Core::Objects::ObjectType::AITurretClient;
         } else if constexpr (std::is_same_v<T, MissileClient>) {
             return ::Core::Objects::ObjectType::MissileClient;
-        } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
-            return ::Core::Objects::ObjectType::BarracksDampenerClient;
-        } else if constexpr (std::is_same_v<T, HQClient>) {
-            return ::Core::Objects::ObjectType::HQClient;
+        // } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
+        //     return ::Core::Objects::ObjectType::BarracksDampenerClient;
+        // } else if constexpr (std::is_same_v<T, HQClient>) {
+        //     return ::Core::Objects::ObjectType::HQClient;
         } else if constexpr (std::is_same_v<T, ShopClient>) {
             return ::Core::Objects::ObjectType::ShopClient;
         } else if constexpr (std::is_same_v<T, Obj_SpawnPoint>) {
@@ -89,8 +90,9 @@ namespace detail {
             count = ::Core::ObjectManager::EnumerateHeroes(entries, 8192);
         } else if constexpr (std::is_same_v<T, AIMinionClient>) {
             count = ::Core::ObjectManager::EnumerateMinions(entries, 8192);
-        } else if constexpr (std::is_same_v<T, AITurretClient>) {
-            count = ::Core::ObjectManager::EnumerateTurrets(entries, 8192);
+        // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
+        // } else if constexpr (std::is_same_v<T, AITurretClient>) {
+        //     count = ::Core::ObjectManager::EnumerateTurrets(entries, 8192);
         } else if constexpr (std::is_same_v<T, MissileClient>) {
             count = ::Core::ObjectManager::EnumerateMissiles(entries, 8192);
         }
@@ -145,7 +147,8 @@ template <typename T>
 inline std::vector<T> GetUncached() {
     if constexpr (std::is_same_v<T, AIHeroClient> ||
                   std::is_same_v<T, AIMinionClient> ||
-                  std::is_same_v<T, AITurretClient> ||
+                  // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
+                  // std::is_same_v<T, AITurretClient> ||
                   std::is_same_v<T, MissileClient>) {
         return detail::EnumerateSpecificManager<T>();
     } else {
@@ -171,15 +174,20 @@ inline std::vector<T> GetUncached() {
 // (OnGameUpdate) and render thread (OnDraw) keep independent caches with no lock
 // and no data race. Still returns a copy, so callers may freely sort/mutate it.
 template <typename T>
-inline std::vector<T> Get() {
-    thread_local int s_frame = -1;   // game time is always >= 0, so -1 never aliases
+inline const std::vector<T>& GetRef() {
+    thread_local int s_frame = -1;
     thread_local std::vector<T> s_cache;
-    const int frame = static_cast<int>(CoreBuffs::ResolveGameTime() * 1000.0f);
+    const int frame = ::CoreAiManager::FrameCacheKey();
     if (s_frame != frame) {
         s_frame = frame;
         s_cache = GetUncached<T>();
     }
     return s_cache;
+}
+
+template <typename T>
+inline std::vector<T> Get() {
+    return GetRef<T>();
 }
 
 } // namespace SDK::ObjectManager

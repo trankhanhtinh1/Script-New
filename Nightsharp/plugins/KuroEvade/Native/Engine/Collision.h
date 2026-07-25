@@ -88,7 +88,7 @@ public:
         if (point.IsZero() || !point.IsValid()) {
             return false;
         }
-        for (const auto& hero : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
+        for (const auto& hero : GameObjects::Get<SDK::AIHeroClient>()) {
             const SDK::AIBaseClient barrier(hero.Handle());
             if (!IsActiveOpposingBarrier(caster, barrier)) {
                 continue;
@@ -109,7 +109,7 @@ public:
             if (!active) {
                 continue;
             }
-            const Vec2 center = barrier.ServerPosition().To2D();
+            const Vec2 center = barrier.Position().To2D();
             if (!center.IsZero() &&
                 center.Distance(point) <= radius +
                     std::max(0.0f, projectileRadius)) {
@@ -329,7 +329,7 @@ public:
                 return;
             }
 
-            Vec2 position = unit.ServerPosition().To2D();
+            Vec2 position = unit.Position().To2D();
             const auto waypoints3 = unit.GetWaypoints();
             std::vector<Vec2> waypoints;
             if (waypoints3.size() >= 2 && unit.MoveSpeed() > 0.0f) {
@@ -415,7 +415,7 @@ public:
                     addUnit(SDK::AIBaseClient(hero.Handle()));
                 }
             } else {
-                const int playerId = SDK::ObjectManager::Player().NetworkId();
+                const int playerId = GameObjects::Player().NetworkId();
                 for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
                     const SDK::AIBaseClient unit(hero.Handle());
                     // The local player is the prospective victim, not a
@@ -430,9 +430,9 @@ public:
         if (has(SDK::CollisionableObjects::Walls)) {
             float height = 0.0f;
             if (skillshot.Native->Caster.IsValid()) {
-                height = skillshot.Native->Caster.ServerPosition().y;
-            } else if (SDK::ObjectManager::Player().IsValid()) {
-                height = SDK::ObjectManager::Player().ServerPosition().y;
+                height = skillshot.Native->Caster.Position().y;
+            } else if (GameObjects::Player().IsValid()) {
+                height = GameObjects::Player().Position().y;
             }
             const bool cacheMatches = skillshot.TerrainCollisionCached &&
                 skillshot.TerrainCollisionPathStart.DistanceSqr(pathStart) <=
@@ -734,14 +734,14 @@ public:
             std::initializer_list<const char*> buffNames,
             float barrierRadius,
             std::vector<SourceCollisionEvent>& events) {
-        for (const auto& hero : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
+        for (const auto& hero : GameObjects::Get<SDK::AIHeroClient>()) {
             const SDK::AIBaseClient barrier(hero.Handle());
             if (!IsActiveOpposingBarrier(caster, barrier) ||
                 _stricmp(barrier.CharacterName().c_str(), championName) != 0 ||
                 !HasAnyBuff(barrier, buffNames)) {
                 continue;
             }
-            const Vec2 center = barrier.ServerPosition().To2D();
+            const Vec2 center = barrier.Position().To2D();
             Vec2 contact;
             float distance = FLT_MAX;
             if (FirstCircleContact(

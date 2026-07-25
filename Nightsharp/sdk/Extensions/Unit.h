@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Core/Game.h"
 #include "../Core/Objects.h"
@@ -7,7 +7,6 @@
 #include "../Events/InterruptableSpell.h"
 #include "../Events/Teleport.h"
 #include "../GameObjects/ObjectManager.h"
-
 #include <algorithm>
 #include <array>
 #include <cfloat>
@@ -156,7 +155,8 @@ namespace SDK::Extensions {
         return unit.GetSpellSlot(name);
     }
 
-    inline TurretType GetTurretType(const AITurretClient& turret) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*inline TurretType GetTurretType(const AITurretClient& turret) {
         const std::string name = turret.CharacterName();
         if (detail::IsNameIn(name, detail::kTurretsTierOne)) {
             return TurretType::TierOne;
@@ -171,7 +171,7 @@ namespace SDK::Extensions {
             return TurretType::TierFour;
         }
         return TurretType::Unknown;
-    }
+    }*/
 
     inline bool IsFacing(const AIBaseClient& source, const AIBaseClient& target) {
         if (!source.IsValid() || !target.IsValid()) {
@@ -253,6 +253,161 @@ namespace SDK::Extensions {
 
     inline bool IsCastingInterruptableSpell(const AIHeroClient& unit, bool checkMovementInterruption = false) {
         return Interrupter::IsCastingInterruptableSpell(unit, checkMovementInterruption);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Auto-attack range helpers — port 1-1 từ EnsoulSharp.SDK
+    // (AIBaseClientExtensions.GetCurrentAutoAttackRange +
+    //  AttackUnitExtensions.InCurrentAutoAttackRange).
+    // Nguồn: EnsoulSharp.SDK.dll (decompiled via ILSpy MCP).
+    // Không cần offset mới — mọi primitive đã có trong SDK.
+    // ---------------------------------------------------------------------------
+
+    // Workaround cho `GameObjects.AzirSoldiers` (MISSAPI): SDK không có list
+    // riêng, filter ParticleEmitters() theo regex `Azir_.+_P_Soldier_Ring`
+    // (port 1-1 từ EnsoulSharp.SDK.GameObjects SoldierRegex).
+    namespace detail {
+        // Port 1-1 từ C# `Regex("Azir_.+_P_Soldier_Ring").IsMatch(name)`.
+        // Pattern: literal "Azir_" + >=1 char + literal "_P_Soldier_Ring".
+        inline bool IsAzirSoldierEmitter(const EffectEmitter& emitter) {
+            if (!emitter.IsValid() || emitter.IsDead()) return false;
+            const std::string& name = emitter.Name();
+            const std::string prefix = "Azir_";
+            const std::string suffix = "_P_Soldier_Ring";
+            // Tìm prefix
+            if (name.size() < prefix.size() + 1 + suffix.size()) return false;
+            if (name.compare(0, prefix.size(), prefix) != 0) return false;
+            // Giữa prefix và suffix phải có >=1 char (regex `.+`)
+            const std::size_t suffixStart = name.size() - suffix.size();
+            if (suffixStart <= prefix.size()) return false;  // không đủ char ở giữa
+            if (name.compare(suffixStart, suffix.size(), suffix) != 0) return false;
+            return true;
+        }
+
+        // Port 1-1 từ C# CaitlynRegex / CaitlynRegex2 / CaitlynRegex3
+        // (Caitlyn_.+_ace_beam / Caitlyn_.+_W_E_Tar_Headshot_Beam /
+        //  Caitlyn_.+_LRHeadshotTarget_Beam).
+        inline bool IsCaitlynHeadshotBeamEmitter(const EffectEmitter& emitter) {
+            if (!emitter.IsValid() || emitter.IsDead()) return false;
+            const std::string& name = emitter.Name();
+
+            auto matchSuffixPattern = [](const std::string& s,
+                                         const std::string& prefix,
+                                         const std::string& suffix) {
+                if (s.size() < prefix.size() + 1 + suffix.size()) return false;
+                if (s.compare(0, prefix.size(), prefix) != 0) return false;
+                const std::size_t suffixStart = s.size() - suffix.size();
+                if (suffixStart <= prefix.size()) return false;
+                return s.compare(suffixStart, suffix.size(), suffix) == 0;
+            };
+            if (matchSuffixPattern(name, "Caitlyn_", "_ace_beam")) return true;
+            if (matchSuffixPattern(name, "Caitlyn_", "_W_E_Tar_Headshot_Beam")) return true;
+            if (matchSuffixPattern(name, "Caitlyn_", "_LRHeadshotTarget_Beam")) return true;
+            return false;
+        }
+
+        // Port 1-1 từ C# `GameObjects.CaitlynHeadshotBeams[target.NetworkId]`
+        // `.Any(b => b.IsValid && !b.IsDead)`.
+        // C# build dict NetworkId->HashSet<EffectEmitter> khi OnCreate:
+        //   - Tìm AIBaseClient gần beamPos nhất (Position.SetZ(0).Distance <
+        //     BoundingRadius), ưu tiên target có buff CaitlynWSnare hoặc
+        //     CaitlynEMissile (caster != me) — rồi key=dict[target.NetId].
+        // SDK không có dict riêng; workaround: kiểm beam active + target có buff
+        // CaitlynWSnare/CaitlynEMissile (đúng logic filter C# line 398-399).
+        // Đúng hơn C# nhưng vẫn đúng ý: chỉ active khi target đang có snare/EMissile
+        // buff gây ra bởi player Caitlyn.
+        inline bool HasCaitlynHeadshotBeamOn(const AttackableUnit& target) {
+            if (!target.IsValid() || target.IsDead()) return false;
+            const AIBaseClient base(target.Handle());
+            if (!base.IsValid()) return false;
+            // Target phải có CaitlynWSnare hoặc CaitlynEMissile buff (filter C#)
+            const bool hasSnare = base.HasBuff("CaitlynWSnare");
+            const bool hasEMissile = base.HasBuff("CaitlynEMissile");
+            if (!hasSnare && !hasEMissile) return false;
+            // Có ít nhất 1 headshot beam emitter active trong game
+            for (const auto& emitter : GameObjects::ParticleEmitters()) {
+                if (IsCaitlynHeadshotBeamEmitter(emitter)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    // Port 1-1 từ AIBaseClientExtensions.GetCurrentAutoAttackRange(sender, target)
+    inline float GetCurrentAutoAttackRange(const AIBaseClient& sender,
+                                           const AttackableUnit& target) {
+        if (!sender.IsValid()) {
+            return 0.0f;
+        }
+        if (sender.IsTurret()) {
+            return 900.0f;
+        }
+        float num = sender.AttackRange() + sender.BoundingRadius();
+        if (target.IsValid()) {
+            // sender as AIHeroClient + IsValidTarget(FLT_MAX, checkTeam=false)
+            const AIHeroClient hero(sender.Address());
+            if (hero.IsValid() && IsValidTarget(hero, FLT_MAX, false)) {
+                if (hero.CharacterName() == "Aphelios") {
+                    const AIBaseClient targetBase(target.Handle());
+                    if (targetBase.IsValid() &&
+                        targetBase.HasBuff("aphelioscalibrumbonusrangedebuff") &&
+                        hero.HasBuff("aphelioscalibrumbonusrangebuff")) {
+                        num = 1800.0f;
+                    }
+                }
+                if (hero.CharacterName() == "Caitlyn") {
+                    if (detail::HasCaitlynHeadshotBeamOn(target)) {
+                        num = 1300.0f;
+                    }
+                }
+            }
+            num += target.BoundingRadius()
+                 - std::min(static_cast<float>(Game::Ping()) / 4.0f, 10.0f)
+                 - 5.0f;
+        }
+        return num;
+    }
+
+    // Port 1-1 từ AttackUnitExtensions.GetCurrentAutoAttackRange(target)
+    // Gọi player.GetCurrentAutoAttackRange(target == player ? null : target)
+    inline float GetCurrentAutoAttackRange(const AttackableUnit& target) {
+        const auto player = ObjectManager::Player();
+        if (target.Compare(player)) {
+            return GetCurrentAutoAttackRange(player, AttackableUnit());
+        }
+        return GetCurrentAutoAttackRange(player, target);
+    }
+
+    // Port 1-1 từ AttackUnitExtensions.InCurrentAutoAttackRange(target, extraRange, checkTeam)
+    inline bool InCurrentAutoAttackRange(const AttackableUnit& target,
+                                         float extraRange = 0.0f,
+                                         bool checkTeam = true) {
+        if (!IsValidTarget(target, FLT_MAX, checkTeam)) {
+            return false;
+        }
+        const auto player = ObjectManager::Player();
+        // Azir special case: player là Azir + target là minion/hero
+        if (player.IsValid() && player.CharacterName() == "Azir" &&
+            (target.IsMinion() || target.IsHero())) {
+            // soldiers.Any(!IsDead && DistanceSquared(player.ServerPos) <= 770²
+            //              && target.DistanceSquared(soldier) <= 350²)
+            const Vector3 playerServerPos = player.ServerPosition();
+            for (const auto& soldier : GameObjects::ParticleEmitters()) {
+                if (!detail::IsAzirSoldierEmitter(soldier)) continue;
+                if (detail::DistanceSquared2D(playerServerPos, soldier.Position()) >
+                    770.0f * 770.0f) continue;
+                if (detail::DistanceSquared2D(target.Position(), soldier.Position()) >
+                    350.0f * 350.0f) continue;
+                return true;
+            }
+        }
+        const float num = GetCurrentAutoAttackRange(target) + extraRange;
+        const Vector3 targetPos = target.IsHero() || target.IsMinion()
+            ? AIBaseClient(target.Handle()).ServerPosition()
+            : target.Position();
+        return detail::DistanceSquared2D(targetPos, player.ServerPosition()) <=
+               num * num;
     }
 
 } // namespace SDK::Extensions

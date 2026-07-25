@@ -24,8 +24,8 @@ public:
         }
 
         Initialized() = true;
-        Events::AddOnDoCast(&AIHeroClient_OnDoCast);
-        Events::AddOnProcessCastSpell(&OnCastSpell);
+        ::SDK::Events::AddOnDoCast(&AIHeroClient_OnDoCast);
+        ::SDK::Events::AddOnProcessCastSpell(&OnCastSpell);
     }
 
     static void Shutdown() {
@@ -33,27 +33,40 @@ public:
             return;
         }
 
-        Events::RemoveOnProcessCastSpell(&OnCastSpell);
-        Events::RemoveOnDoCast(&AIHeroClient_OnDoCast);
+        ::SDK::Events::RemoveOnProcessCastSpell(&OnCastSpell);
+        ::SDK::Events::RemoveOnDoCast(&AIHeroClient_OnDoCast);
         if (auto* spells = CastedSpells()) {
             spells->clear();
         }
-        LastCastPacketSentStorage() = LastCastPacketSentEntry();
         Initialized() = false;
     }
 
-    static LastCastedSpellEntry GetLastCastedSpell(const AIHeroClient& target) {
-        Initialize();
+    static const LastCastedSpellEntry* Get(const AIBaseClient& target) {
+        if (!target.IsValid()) {
+            return nullptr;
+        }
+
         auto* spells = CastedSpells();
         if (!spells) {
-            return LastCastedSpellEntry();
+            return nullptr;
         }
-        const auto it = spells->find(static_cast<std::uint32_t>(target.NetworkId()));
-        return it != spells->end() ? it->second : LastCastedSpellEntry();
+
+        const auto it = spells->find(target.NetworkId());
+        if (it == spells->end() || !it->second.IsValid) {
+            return nullptr;
+        }
+
+        return &it->second;
+    }
+
+    static LastCastedSpellEntry GetLastCastedSpell(const AIBaseClient& target) {
+        if (const auto* ptr = Get(target)) {
+            return *ptr;
+        }
+        return {};
     }
 
     static const LastCastPacketSentEntry& LastCastPacketSent() {
-        Initialize();
         return LastCastPacketSentStorage();
     }
 
@@ -63,9 +76,9 @@ private:
         return initialized;
     }
 
-    static std::unordered_map<std::uint32_t, LastCastedSpellEntry>*& CastedSpellsStorage() {
-        static auto* castedSpells = new(std::nothrow) std::unordered_map<std::uint32_t, LastCastedSpellEntry>();
-        return castedSpells;
+    static std::unordered_map<std::uint32_t, LastCastedSpellEntry>* CastedSpellsStorage() {
+        static std::unordered_map<std::uint32_t, LastCastedSpellEntry> storage;
+        return &storage;
     }
 
     static std::unordered_map<std::uint32_t, LastCastedSpellEntry>* CastedSpells() {
@@ -77,7 +90,7 @@ private:
         return entry;
     }
 
-    static void AIHeroClient_OnDoCast(const Events::ProcessSpellEventArgs& args) {
+    static void AIHeroClient_OnDoCast(const ::SDK::Events::ProcessSpellEventArgs& args) {
         if (!args.Sender.IsValid()) {
             return;
         }
@@ -93,14 +106,25 @@ private:
             return;
         }
 
+        if (spells->size() > 64) {
+            const float now = static_cast<float>(::SDK::Variables::TickCount());
+            for (auto it = spells->begin(); it != spells->end(); ) {
+                if (now - it->second.StartTime > 15000.0f) {
+                    it = spells->erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         auto [it, inserted] = spells->try_emplace(args.Sender.NetworkId, LastCastedSpellEntry(args));
         if (!inserted) {
             it->second = LastCastedSpellEntry(args);
         }
     }
 
-    static void OnCastSpell(const Events::CastSpellEventArgs& args) {
-        if (!Events::IsLocalPlayer(args.Sender)) {
+    static void OnCastSpell(const ::SDK::Events::CastSpellEventArgs& args) {
+        if (!::SDK::Events::IsLocalPlayer(args.Sender)) {
             return;
         }
 

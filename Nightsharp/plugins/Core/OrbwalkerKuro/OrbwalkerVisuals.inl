@@ -1,8 +1,11 @@
 #pragma once
 
-namespace OrbwalkerKuro {
+#include <algorithm>
+#include <cmath>
 
 using namespace ::SDK;
+
+namespace OrbwalkerKuro {
 
 inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
     if (!player.IsValid() || !Drawing::IsEnabled()) {
@@ -26,41 +29,119 @@ inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
         return;
     }
 
-    // Build a world-space annulus, then project every vertex.  This keeps the
-    // fill on the ground plane instead of turning it into a flat screen circle.
+    const int now = Tick();
+    const bool ready = CanAttack();
+    const bool windingUp = IsWindingUp();
+
+    // Determine target state weights (one-hot state vector)
+    const float targetWindup = windingUp ? 1.0f : 0.0f;
+    const float targetReady = (!windingUp && ready) ? 1.0f : 0.0f;
+    const float targetCooldown = (!windingUp && !ready) ? 1.0f : 0.0f;
+
+    // Time delta for smooth frame-to-frame crossfade
+    float dt = 0.016f;
+    if (context_.visualLastDrawTick > 0 && now > context_.visualLastDrawTick) {
+        dt = std::clamp(static_cast<float>(now - context_.visualLastDrawTick) / 1000.0f, 0.001f, 0.1f);
+    }
+    context_.visualLastDrawTick = now;
+
+    // Smooth lerp factor (~120ms transition speed for seamless state cross-fading)
+    const float lerpFactor = std::clamp(dt * 8.5f, 0.02f, 1.0f);
+
+    context_.visualWindupWeight += (targetWindup - context_.visualWindupWeight) * lerpFactor;
+    context_.visualReadyWeight += (targetReady - context_.visualReadyWeight) * lerpFactor;
+    context_.visualCooldownWeight += (targetCooldown - context_.visualCooldownWeight) * lerpFactor;
+
+    const float totalWeight = context_.visualWindupWeight + context_.visualReadyWeight + context_.visualCooldownWeight;
+    const float wWindup = totalWeight > 0.0001f ? context_.visualWindupWeight / totalWeight : targetWindup;
+    const float wReady = totalWeight > 0.0001f ? context_.visualReadyWeight / totalWeight : targetReady;
+    const float wCooldown = totalWeight > 0.0001f ? context_.visualCooldownWeight / totalWeight : targetCooldown;
+
+    // Compute raw attack progress
+    float rawAttackProgress = 1.0f;
+    if (windingUp) {
+        const int attackTick = context_.pendingAttack ? context_.pendingAttackTick : context_.lastAutoAttackTick;
+        if (attackTick > 0 && context_.attackWindupMs > 0.0f) {
+            const float elapsed = static_cast<float>(now - attackTick);
+            rawAttackProgress = std::clamp(elapsed / context_.attackWindupMs, 0.0f, 1.0f);
+        } else {
+            rawAttackProgress = 0.5f;
+        }
+    } else if (!ready) {
+        const int attackTick = context_.pendingAttack ? context_.pendingAttackTick : context_.lastAutoAttackTick;
+        if (attackTick > 0) {
+            ReadAttackTimingsFromMemory(player);
+            const float totalDelay = context_.attackDelayMs +
+                                     ChampionExtraAttackDelayMs(player) +
+                                     AttackSafetyMs();
+            if (totalDelay > 0.0f) {
+                const float elapsed = static_cast<float>(now - attackTick);
+                rawAttackProgress = std::clamp(elapsed / totalDelay, 0.0f, 1.0f);
+            }
+        }
+    }
+
+    // Smoothly interpolate progress position for continuous radial wave movement
+    context_.visualSmoothProgress += (rawAttackProgress - context_.visualSmoothProgress) * lerpFactor;
+    const float attackProgress = std::clamp(context_.visualSmoothProgress, 0.0f, 1.0f);
+
     constexpr int kSegments = 64;
-    constexpr int kRings = 12;
+    constexpr int kRings = 16;
     constexpr int kVerticesPerRing = kSegments + 1;
     constexpr int kVertexCount = (kRings + 1) * kVerticesPerRing;
     constexpr int kIndexCount = kRings * kSegments * 6;
     ImVec2 vertices[kVertexCount] = {};
     ImU32 colors[kVertexCount] = {};
 
-    unsigned char r = 255, g = 255, b = 255;
-    if (IsWindingUp()) {
-        // Attack winding up (orange-red)
-        r = 255;
-        g = 80;
-        b = 0;
-    } else if (CanAttack()) {
-        // Can attack (vibrant green)
-        r = 0;
-        g = 255;
-        b = 100;
-    } else {
-        // Cooldown (sleek light-blue/cyan)
-        r = 150;
-        g = 200;
-        b = 255;
-    }
-
     const Vector3 center = player.Position();
     const float innerRadius = std::max(0.0f, outerRadius - fadeWidth);
+
     for (int ring = 0; ring <= kRings; ++ring) {
-        const float progress = static_cast<float>(ring) / static_cast<float>(kRings);
-        const float radius = innerRadius + fadeWidth * progress;
-        const int alpha = static_cast<int>(std::lround(static_cast<float>(maxAlpha) * progress));
-        const ImU32 color = IM_COL32(r, g, b, alpha);
+        const float ringProgress = static_cast<float>(ring) / static_cast<float>(kRings);
+        const float radius = innerRadius + fadeWidth * ringProgress;
+
+        // 1. Windup state parameters (Amber/Orange energy flow)
+        const float waveWindup = 0.5f + 0.5f * std::sin(static_cast<float>(now) * 0.012f - ringProgress * 4.0f);
+        const float rWindup = 255.0f;
+        const float gWindup = std::max(0.0f, 200.0f - 140.0f * ringProgress);
+        const float bWindup = 10.0f;
+        const float aWindup = (0.35f + 0.65f * ringProgress) * (0.85f + 0.15f * waveWindup);
+
+        // 2. Ready state parameters (Vibrant Emerald/Neon Green with soft pulse)
+        const float pulseReady = 0.5f + 0.5f * std::sin(static_cast<float>(now) * 0.005f - ringProgress * 3.0f);
+        const float rReady = 0.0f;
+        const float gReady = 200.0f + 55.0f * ringProgress;
+        const float bReady = 160.0f - 40.0f * ringProgress;
+        const float aReady = ringProgress * (0.85f + 0.15f * pulseReady);
+
+        // 3. Cooldown state parameters (Expanding gradient wave from inside to outside)
+        const float wavePos = attackProgress;
+        const float dist = ringProgress - wavePos;
+        const float crest = std::max(0.0f, 1.0f - std::abs(dist) * 4.5f);
+        const float t = std::clamp((wavePos - ringProgress) * 4.0f + 0.5f, 0.0f, 1.0f);
+
+        const float targetR = (1.0f - t) * 70.0f + t * 0.0f;
+        const float targetG = (1.0f - t) * 130.0f + t * (200.0f + 55.0f * ringProgress);
+        const float targetB = (1.0f - t) * 240.0f + t * (160.0f - 40.0f * ringProgress);
+
+        const float rCooldown = std::min(255.0f, targetR + crest * 90.0f);
+        const float gCooldown = std::min(255.0f, targetG + crest * 90.0f);
+        const float bCooldown = std::min(255.0f, targetB + crest * 90.0f);
+        const float aCooldown = std::clamp(ringProgress * (0.5f + 0.5f * t) + crest * 0.35f, 0.0f, 1.0f);
+
+        // Weighted blend across all 3 states for perfectly smooth transition
+        const float r = wWindup * rWindup + wReady * rReady + wCooldown * rCooldown;
+        const float g = wWindup * gWindup + wReady * gReady + wCooldown * gCooldown;
+        const float b = wWindup * bWindup + wReady * bReady + wCooldown * wCooldown;
+        const float alphaFactor = wWindup * aWindup + wReady * aReady + wCooldown * aCooldown;
+
+        const int alpha = static_cast<int>(
+            std::lround(static_cast<float>(maxAlpha) * std::clamp(alphaFactor, 0.0f, 1.0f)));
+        const ImU32 color = IM_COL32(
+            static_cast<unsigned char>(std::clamp(r, 0.0f, 255.0f)),
+            static_cast<unsigned char>(std::clamp(g, 0.0f, 255.0f)),
+            static_cast<unsigned char>(std::clamp(b, 0.0f, 255.0f)),
+            alpha);
 
         for (int segment = 0; segment <= kSegments; ++segment) {
             const float angle =
@@ -115,26 +196,55 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
 
     bool hasCommandableSoldier = false;
     for (const auto& soldier : OrbwalkingDetail::GetAzirSandSoldiers(player)) {
-        if (!OrbwalkingDetail::IsCommandableAzirSandSoldier(player, soldier)) {
+        if (!soldier.IsValid() || soldier.IsDead()) {
             continue;
         }
-        hasCommandableSoldier = true;
+
+        const bool isCommandable = OrbwalkingDetail::IsCommandableAzirSandSoldier(player, soldier);
+        const Vector3 pos = soldier.Position();
+
+        // 1. Draw Ring right at soldier base position
+        const float ringRadius = soldier.BoundingRadius() > 0.0f ? soldier.BoundingRadius() : 50.0f;
+        const ImU32 ringColor = isCommandable ? 0xFF00FFFFu : 0x88888888u; // Gold-Cyan ring when active, gray when out of range
         Drawing::DrawCircle(
-            soldier.Position(),
-            AzirSoldierSupport::kPrimaryAttackRange,
-            0xFFE1B84Bu,
-            1.75f,
-            64);
-        Drawing::DrawLine(
-            player.Position(), soldier.Position(), 0x889E7D2Du, 1.0f);
+            pos,
+            ringRadius,
+            ringColor,
+            2.5f,
+            32);
+
+        if (isCommandable) {
+            hasCommandableSoldier = true;
+
+            // 2. Draw Auto-Attack Range around soldier (375 range)
+            Drawing::DrawCircle(
+                pos,
+                AzirSoldierSupport::kPrimaryAttackRange,
+                0xFF00E5FFu, // Gold/Cyan AA range
+                2.0f,
+                64);
+
+            // 3. Draw tether line from Azir to soldier
+            Drawing::DrawLine(
+                player.Position(), pos, 0xAA00E5FFu, 1.5f);
+        } else {
+            // Out of command range (dimmed circle)
+            Drawing::DrawCircle(
+                pos,
+                AzirSoldierSupport::kPrimaryAttackRange,
+                0x55888888u,
+                1.0f,
+                32);
+        }
     }
 
+    // 4. Draw Azir W tether command radius (660 range) around Azir
     if (hasCommandableSoldier) {
         Drawing::DrawCircle(
             player.Position(),
             AzirSoldierSupport::kCommandRadius,
-            0x667A5C20u,
-            1.0f,
+            0x4400E5FFu,
+            1.25f,
             72);
     }
 }

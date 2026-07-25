@@ -21,8 +21,8 @@ public:
         }
 
         Initialized() = true;
-        Events::AddOnGameUpdate(&Game_OnUpdate);
-        Events::AddOnMissileDelete(&MissileClient_OnDelete);
+        ::SDK::Events::AddOnGameUpdate(&Game_OnUpdate);
+        ::SDK::Events::AddOnMissileDelete(&MissileClient_OnDelete);
         Detector::AddOnDetectSkillshot(&Detector_OnDetectSkillshot);
     }
 
@@ -32,8 +32,8 @@ public:
         }
 
         Detector::RemoveOnDetectSkillshot(&Detector_OnDetectSkillshot);
-        Events::RemoveOnMissileDelete(&MissileClient_OnDelete);
-        Events::RemoveOnGameUpdate(&Game_OnUpdate);
+        ::SDK::Events::RemoveOnMissileDelete(&MissileClient_OnDelete);
+        ::SDK::Events::RemoveOnGameUpdate(&Game_OnUpdate);
         DetectedSkillshots().clear();
         Initialized() = false;
     }
@@ -78,7 +78,7 @@ private:
         return handlers;
     }
 
-    static void MissileClient_OnDelete(const Events::ObjectEventArgs& args) {
+    static void MissileClient_OnDelete(const ::SDK::Events::ObjectEventArgs& args) {
         auto& skillshots = DetectedSkillshots();
         for (auto it = skillshots.begin(); it != skillshots.end();) {
             auto missileSkillshot = std::dynamic_pointer_cast<SkillshotMissile>(*it);
@@ -104,7 +104,7 @@ private:
         }
     }
 
-    static void Game_OnUpdate(const Events::GameUpdateEventArgs&) {
+    static void Game_OnUpdate(const ::SDK::Events::GameUpdateEventArgs&) {
         auto& skillshots = DetectedSkillshots();
         skillshots.erase(
             std::remove_if(skillshots.begin(), skillshots.end(), [](const std::shared_ptr<Skillshot>& skillshot) {
@@ -120,41 +120,11 @@ private:
     }
 
     static void Detector_OnDetectSkillshot(const std::shared_ptr<Skillshot>& skillshot) {
-        bool isAlreadyDetected = false;
-        for (const auto& detectedSkillshot : DetectedSkillshots()) {
-            if (!detectedSkillshot ||
-                detectedSkillshot->SData.SpellName != skillshot->SData.SpellName ||
-                detectedSkillshot->Caster.NetworkId() != skillshot->Caster.NetworkId()) {
-                continue;
-            }
-
-            if (Skillshot::AngleBetween(skillshot->Direction, detectedSkillshot->Direction) < 5.0f) {
-                isAlreadyDetected = true;
-
-                if (skillshot->DetectionType == SkillshotDetectionType::MissileCreate) {
-                    auto detectedMissile = std::dynamic_pointer_cast<SkillshotMissile>(detectedSkillshot);
-                    auto newMissile = std::dynamic_pointer_cast<SkillshotMissile>(skillshot);
-                    if (detectedMissile && newMissile) {
-                        detectedMissile->Missile = newMissile->Missile;
-                    } else {
-                        Utils::Logging::Write()(LogLevel::Warn,
-                            "Wrong SpellType for Skillshot %s, a Missile Type was expected",
-                            skillshot->SData.SpellName.c_str());
-                    }
-                }
-            }
-        }
-
-        if (isAlreadyDetected) {
+        if (!skillshot) {
             return;
         }
 
-        skillshot->PrintSpellData();
         DetectedSkillshots().push_back(skillshot);
-        TriggerOnDetectSkillshot(skillshot);
-    }
-
-    static void TriggerOnDetectSkillshot(const std::shared_ptr<Skillshot>& skillshot) {
         for (auto handler : Handlers()) {
             if (handler) {
                 handler(skillshot);

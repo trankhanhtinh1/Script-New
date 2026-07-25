@@ -10,27 +10,17 @@
 namespace Plugins::KuroAIO {
 
 inline AIHeroClient Player() {
-    return ObjectManager::Player();
+    return GameObjects::Player();
 }
 
 inline std::string GetObjectName(const GameObject& object) {
     if (!object.IsValid()) return {};
-    char nameBuf[96] = {};
-    if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-        return nameBuf;
-    }
-    return {};
+    return object.Name();
 }
 
 inline std::string GetObjectCharacterName(const GameObject& object) {
     if (!object.IsValid()) return {};
-    std::string name = object.CharacterName();
-    if (!name.empty()) return name;
-    char nameBuf[96] = {};
-    if (::Core::Objects::ReadCharacterName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-        return nameBuf;
-    }
-    return {};
+    return object.CharacterName();
 }
 
 inline bool Recent(int tick, int windowMs) {

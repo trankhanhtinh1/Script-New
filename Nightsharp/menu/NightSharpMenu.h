@@ -106,14 +106,23 @@ namespace NightSharpMenu {
     inline SDK::UI::MenuBool* ensoulZoomHack = nullptr;
     inline SDK::UI::MenuSliderF* ensoulMaxZoom = nullptr;
     inline SDK::UI::MenuBool* ensoulPermaShow = nullptr;
+    inline SDK::UI::MenuBool* ensoulPermaAllowDrag = nullptr;
     inline SDK::UI::MenuSlider* ensoulPermaX = nullptr;
     inline SDK::UI::MenuSlider* ensoulPermaY = nullptr;
     inline SDK::UI::MenuSlider* ensoulPermaWidth = nullptr;
     inline SDK::UI::MenuSlider* ensoulPermaIndicatorWidth = nullptr;
+    inline SDK::UI::MenuSlider* ensoulMenuX = nullptr;
+    inline SDK::UI::MenuSlider* ensoulMenuY = nullptr;
     inline SDK::UI::MenuBool* ensoulBypassObs = nullptr;
+    inline SDK::UI::MenuBool* ensoulClickThrough = nullptr;
     inline SDK::UI::MenuBool* ensoulProfiler = nullptr;
     inline SDK::UI::MenuBool* ensoulProfilerLog = nullptr;
+    inline SDK::UI::MenuRuntime* ensoulProfilerRuntime = nullptr;
     inline SDK::UI::Menu* ensoulRuntimeMenus = nullptr;
+
+    inline void DrawProfilerRuntimeBridge(void*) {
+        NightSharpPerf::DrawStatsBody();
+    }
 
     inline SDK::UI::MenuColor* ensoulTextColor = nullptr;
     inline SDK::UI::MenuColor* ensoulHoverColor = nullptr;
@@ -168,13 +177,18 @@ namespace NightSharpMenu {
         ensoulZoomHack = nullptr;
         ensoulMaxZoom = nullptr;
         ensoulPermaShow = nullptr;
+        ensoulPermaAllowDrag = nullptr;
         ensoulPermaX = nullptr;
         ensoulPermaY = nullptr;
         ensoulPermaWidth = nullptr;
         ensoulPermaIndicatorWidth = nullptr;
+        ensoulMenuX = nullptr;
+        ensoulMenuY = nullptr;
         ensoulBypassObs = nullptr;
+        ensoulClickThrough = nullptr;
         ensoulProfiler = nullptr;
         ensoulProfilerLog = nullptr;
+        ensoulProfilerRuntime = nullptr;
         ensoulRuntimeMenus = nullptr;
         ensoulTextColor = nullptr;
         ensoulHoverColor = nullptr;
@@ -286,6 +300,8 @@ namespace NightSharpMenu {
         case 4: Config::StreamProtection::bypassObs = value; break;
         case 5: NightSharpPerf::Enabled = value; break;
         case 6: NightSharpPerf::LogEnabled = value; break;
+        case 7: Config::PermaShow::allowDrag = value; break;
+        case 8: Config::OverlayInput::clickThrough = value; break;
         default: break;
         }
     }
@@ -314,6 +330,36 @@ namespace NightSharpMenu {
 
     inline void OnPermaShowReset(SDK::UI::MenuButton*, void*) {
         ResetPermaShowGeometry();
+    }
+
+    inline void ResetMenuPositionGeometry() {
+        Config::MenuPosition::x = 30;
+        Config::MenuPosition::y = 30;
+        Config::MenuPosition::positionInitialized = true;
+        EnsoulSharpTheme::PositionX = 30.0f;
+        EnsoulSharpTheme::PositionY = 30.0f;
+        menuPosX = 30.0f;
+        menuPosY = 30.0f;
+        if (ensoulMenuX) ensoulMenuX->Value = Config::MenuPosition::x;
+        if (ensoulMenuY) ensoulMenuY->Value = Config::MenuPosition::y;
+    }
+
+    inline void OnMenuPositionGeometryChanged(SDK::UI::MenuItem* sender, void* userData) {
+        const int value = static_cast<SDK::UI::MenuSlider*>(sender)->Value;
+        switch (static_cast<int>(reinterpret_cast<intptr_t>(userData))) {
+        case 1: Config::MenuPosition::x = value; break;
+        case 2: Config::MenuPosition::y = value; break;
+        default: return;
+        }
+        Config::MenuPosition::positionInitialized = true;
+        EnsoulSharpTheme::PositionX = static_cast<float>(Config::MenuPosition::x);
+        EnsoulSharpTheme::PositionY = static_cast<float>(Config::MenuPosition::y);
+        menuPosX = static_cast<float>(Config::MenuPosition::x);
+        menuPosY = static_cast<float>(Config::MenuPosition::y);
+    }
+
+    inline void OnMenuPositionReset(SDK::UI::MenuButton*, void*) {
+        ResetMenuPositionGeometry();
     }
 
     inline void OnThemeColorChanged(SDK::UI::MenuItem* sender, void* userData) {
@@ -423,6 +469,27 @@ namespace NightSharpMenu {
         item->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(settingId));
     }
 
+    inline void KeepCoreMenuFirst() {
+        if (!ensoulCoreRoot) return;
+        auto& menus = SDK::UI::MenuManager::Instance().Menus;
+        if (menus.empty() || menus[0] == ensoulCoreRoot) return;
+
+        int idx = -1;
+        for (int i = 0; i < menus.size(); ++i) {
+            if (menus[i] == ensoulCoreRoot) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx > 0) {
+            SDK::UI::Menu* core = menus[idx];
+            for (int i = idx; i > 0; --i) {
+                menus[i] = menus[i - 1];
+            }
+            menus[0] = core;
+        }
+    }
+
     inline void EnsureEnsoulCoreMenu() {
         SDK::UI::g_MenuSystemResetHook = &ResetMenuSystem;
         if (ensoulCoreRoot) {
@@ -434,40 +501,44 @@ namespace NightSharpMenu {
         EnsureNightSharpMenuLogo();
         ensoulCoreRoot->SetLogo("nightsharp_menu_logo");
 
-        auto* language = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("Language", "Language"));
-        ensoulLanguage = language->Add(new SDK::UI::MenuList(
-            "SelectedLanguage",
-            "Select Language",
-            { "English", "Vietnamese" },
-            CoreLanguageToListIndex()));
-        ensoulLanguage->ValueChanged = &OnCoreLanguageChanged;
-
-        auto* settings = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("Menu", "Menu Settings"));
-        ensoulSkinChanger = settings->Add(new SDK::UI::MenuBool(
+        // 1. Features & Tools (Skin Changer, Zoom Hack, OBS Bypass)
+        auto* features = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("Features", "Features & Tools"));
+        ensoulSkinChanger = features->Add(new SDK::UI::MenuBool(
             "SkinChanger", "Skin Changer", Config::SkinChanger::enabled));
         BindCoreBool(ensoulSkinChanger, 1);
-        ensoulSkinId = settings->Add(new SDK::UI::MenuSlider(
+        ensoulSkinId = features->Add(new SDK::UI::MenuSlider(
             "SkinId", "Skin ID", Config::SkinChanger::skinId, 0, 100));
         ensoulSkinId->ValueChanged = &OnCoreSkinIdChanged;
-        ensoulZoomHack = settings->Add(new SDK::UI::MenuBool(
+        ensoulZoomHack = features->Add(new SDK::UI::MenuBool(
             "ZoomHack", "Zoom Hack", Config::ZoomHack::enabled));
         BindCoreBool(ensoulZoomHack, 2);
-        ensoulMaxZoom = settings->Add(new SDK::UI::MenuSliderF(
+        ensoulMaxZoom = features->Add(new SDK::UI::MenuSliderF(
             "MaxZoom", "Maximum Zoom", Config::ZoomHack::maxZoom, 1000.0f, 10000.0f));
         ensoulMaxZoom->ValueChanged = &OnCoreZoomChanged;
+        ensoulBypassObs = features->Add(new SDK::UI::MenuBool(
+            "BypassObs", "Bypass OBS (Stream Protection)", Config::StreamProtection::bypassObs));
+        BindCoreBool(ensoulBypassObs, 4);
+        ensoulClickThrough = features->Add(new SDK::UI::MenuBool(
+            "ClickThrough", "Click-Through Input Mode", Config::OverlayInput::clickThrough));
+        BindCoreBool(ensoulClickThrough, 8);
+
+        // 2. Permashow Configuration
         if (!Config::PermaShow::positionInitialized) {
             ResetPermaShowGeometry();
         }
         const ImVec2 display = GetOverlayDisplaySize();
         const int displayWidth = display.x > 1.0f ? static_cast<int>(display.x) : 1;
         const int displayHeight = display.y > 1.0f ? static_cast<int>(display.y) : 1;
-        auto* permaShow = settings->AddSubMenu(
+
+        auto* permaShow = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("PermaShow", "Permashow"));
         ensoulPermaShow = permaShow->Add(new SDK::UI::MenuBool(
-            "Enabled", "Enable", Config::PermaShow::enabled));
+            "Enabled", "Enable Permashow", Config::PermaShow::enabled));
         BindCoreBool(ensoulPermaShow, 3);
+        ensoulPermaAllowDrag = permaShow->Add(new SDK::UI::MenuBool(
+            "AllowDrag", "Enable Dragging", Config::PermaShow::allowDrag));
+        BindCoreBool(ensoulPermaAllowDrag, 7);
         ensoulPermaX = permaShow->Add(new SDK::UI::MenuSlider(
             "X", "Position (X)", Config::PermaShow::x, 0, displayWidth));
         ensoulPermaX->ValueChanged = &OnPermaShowGeometryChanged;
@@ -488,46 +559,63 @@ namespace NightSharpMenu {
             reinterpret_cast<void*>(static_cast<intptr_t>(4));
         permaShow->Add(new SDK::UI::MenuButton(
             "Reset", "Reset to Default", "Reset", &OnPermaShowReset));
-        ensoulBypassObs = settings->Add(new SDK::UI::MenuBool(
-            "BypassObs", "Bypass OBS", Config::StreamProtection::bypassObs));
-        BindCoreBool(ensoulBypassObs, 4);
 
-        auto* theme = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("ThemeStyle", "Theme Settings"));
+        // 3. Menu Settings & Theme
+        auto* settings = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("MenuSettings", "Menu Settings & Theme"));
+        ensoulLanguage = settings->Add(new SDK::UI::MenuList(
+            "SelectedLanguage",
+            "Language",
+            { "English", "Vietnamese" },
+            CoreLanguageToListIndex()));
+        ensoulLanguage->ValueChanged = &OnCoreLanguageChanged;
 
-        ensoulThemePreset = theme->Add(new SDK::UI::MenuList(
-            "ThemePreset",
-            "Theme Preset",
-            { "Custom", "Default DX9", "Pitch Black", "Dark Minimal" },
-            EnsoulSharpTheme::SelectedPresetIndex));
-        ensoulThemePreset->ValueChanged = &OnThemePresetChanged;
-
-        ensoulMenuStyle = theme->Add(new SDK::UI::MenuList(
+        ensoulMenuStyle = settings->Add(new SDK::UI::MenuList(
             "MenuStyle",
             "Menu Style",
             { "EnsoulSharp", "BGX" },
             Config::MenuStyle::index));
         ensoulMenuStyle->ValueChanged = &OnMenuStyleChanged;
 
+        auto* menuPos = settings->AddSubMenu(
+            new SDK::UI::Menu("MenuPosition", "Menu Position"));
+        ensoulMenuX = menuPos->Add(new SDK::UI::MenuSlider(
+            "X", "Position (X)", Config::MenuPosition::x, 0, displayWidth));
+        ensoulMenuX->ValueChanged = &OnMenuPositionGeometryChanged;
+        ensoulMenuX->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(1));
+        ensoulMenuY = menuPos->Add(new SDK::UI::MenuSlider(
+            "Y", "Position (Y)", Config::MenuPosition::y, 0, displayHeight));
+        ensoulMenuY->ValueChanged = &OnMenuPositionGeometryChanged;
+        ensoulMenuY->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(2));
+        menuPos->Add(new SDK::UI::MenuButton(
+            "Reset", "Reset to Default", "Reset", &OnMenuPositionReset));
+
+        ensoulThemePreset = settings->Add(new SDK::UI::MenuList(
+            "ThemePreset",
+            "Theme Preset",
+            { "Custom", "Default DX9", "Pitch Black", "Dark Minimal" },
+            EnsoulSharpTheme::SelectedPresetIndex));
+        ensoulThemePreset->ValueChanged = &OnThemePresetChanged;
+
         {
-            const float displayHeight = GetOverlayDisplaySize().y;
-            int maxAllowed = static_cast<int>(displayHeight / EnsoulSharpTheme::ContainerHeight) - 2;
+            const float displayH = GetOverlayDisplaySize().y;
+            int maxAllowed = static_cast<int>(displayH / EnsoulSharpTheme::ContainerHeight) - 2;
             if (maxAllowed < 10) maxAllowed = 10;
             if (maxAllowed > 40) maxAllowed = 40;
-            ensoulMaxItemsPerColumn = theme->Add(new SDK::UI::MenuSlider(
+            ensoulMaxItemsPerColumn = settings->Add(new SDK::UI::MenuSlider(
                 "MaxItemsPerColumn", "Max Items per Column",
                 Config::MenuStyle::maxItemsPerColumn, 10, maxAllowed));
             ensoulMaxItemsPerColumn->ValueChanged = &OnMaxItemsPerColumnChanged;
         }
 
-        ensoulFontFamily = theme->Add(new SDK::UI::MenuList(
+        ensoulFontFamily = settings->Add(new SDK::UI::MenuList(
             "FontFamily",
             "Font Family",
             { "Tonos Mono", "Tahoma", "Arial", "Consolas", "Segoe UI", "Ubuntu" },
             EnsoulSharpTheme::SelectedFontIndex));
         ensoulFontFamily->ValueChanged = &OnThemeFontFamilyChanged;
 
-        auto* colors = theme->AddSubMenu(
+        auto* colors = settings->AddSubMenu(
             new SDK::UI::Menu("Colors", "Menu Colors"));
 
         ensoulTextColor = colors->Add(new SDK::UI::MenuColor(
@@ -590,7 +678,7 @@ namespace NightSharpMenu {
         ensoulButtonHoverColor->ValueChanged = &OnThemeColorChanged;
         ensoulButtonHoverColor->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(12));
 
-        auto* sizes = theme->AddSubMenu(
+        auto* sizes = settings->AddSubMenu(
             new SDK::UI::Menu("Sizes", "Menu Sizes"));
 
         ensoulThemeFontSize = sizes->Add(new SDK::UI::MenuSliderF(
@@ -613,30 +701,7 @@ namespace NightSharpMenu {
         ensoulThemeTextPadding->ValueChanged = &OnThemeSliderFChanged;
         ensoulThemeTextPadding->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(4));
 
-        auto* debug = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("DebugInfo", "Debug Info"));
-        debug->SetFontColor(IM_COL32(120, 235, 120, 255));
-        debug->Add(new SDK::UI::MenuSeparator("Build", "NightSharp " __DATE__ " " __TIME__));
-        debug->Add(new SDK::UI::MenuSeparator("Theme", "EnsoulSharp default DX9 theme"));
-        ensoulProfiler = debug->Add(new SDK::UI::MenuBool(
-            "Profiler", "Performance Profiler", NightSharpPerf::Enabled));
-        BindCoreBool(ensoulProfiler, 5);
-        ensoulProfilerLog = debug->Add(new SDK::UI::MenuBool(
-            "ProfilerLog", "Write profiler log", NightSharpPerf::LogEnabled));
-        BindCoreBool(ensoulProfilerLog, 6);
-        auto* themeTests = debug->AddSubMenu(
-            new SDK::UI::Menu("ThemeTests", "Theme Tests"));
-        themeTests->SetLogo("nightsharp_menu_logo");
-        themeTests->Add(new SDK::UI::MenuSeparator(
-            "GradientText", "Animated Gradient Text"))
-            ->SetAnimatedGradientText(
-                IM_COL32(255, 170, 64, 255),
-                IM_COL32(156, 64, 255, 255),
-                1.0f);
-        themeTests->Add(new SDK::UI::MenuBool(
-            "CustomColor", "Custom component font color", true))
-            ->SetFontColor(IM_COL32(64, 210, 255, 255));
-
+        // 4. Plugins Manager
         auto* plugins = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("Plugins", "Plugins"));
         ensoulPluginBindingCount = 0;
@@ -672,7 +737,67 @@ namespace NightSharpMenu {
         }
 
         ensoulRuntimeMenus = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("RuntimeMenus", "Runtime Menus"));
+            new SDK::UI::Menu("RuntimeMenus", "Runtime Panels"));
+        for (int i = 0;
+             i < PluginRegistry::PluginCount &&
+             ensoulRuntimeBindingCount < PluginRegistry::MAX_PLUGINS;
+             ++i) {
+            auto& plugin = PluginRegistry::Plugins[i];
+            if (!plugin.Name || !plugin.InternalId) {
+                continue;
+            }
+            if (plugin.Category == PluginRegistry::PluginCategory::Champion &&
+                !PluginRegistry::CanPluginLoad(i)) {
+                continue;
+            }
+            if (!PluginRegistry::HasPluginMenuCallback(i)) {
+                continue;
+            }
+
+            auto* runtimeMenu = ensoulRuntimeMenus->AddSubMenu(
+                new SDK::UI::Menu(plugin.InternalId, plugin.Name));
+            auto* runtime = runtimeMenu->Add(new SDK::UI::MenuRuntime(
+                "RuntimePanel",
+                "Open Runtime Panel",
+                &DrawRuntimeMenuBridge,
+                reinterpret_cast<void*>(static_cast<intptr_t>(i + 1)),
+                360.0f));
+            runtimeMenu->Visible = plugin.Loaded;
+            ensoulRuntimeBindings[ensoulRuntimeBindingCount++] = {
+                i, runtimeMenu, runtime
+            };
+        }
+
+        // 5. Debug & Profiler
+        auto* debug = ensoulCoreRoot->AddSubMenu(
+            new SDK::UI::Menu("DebugInfo", "Debug & Profiler"));
+        debug->SetFontColor(IM_COL32(120, 235, 120, 255));
+        debug->Add(new SDK::UI::MenuSeparator("Build", "NightSharp " __DATE__ " " __TIME__));
+        debug->Add(new SDK::UI::MenuSeparator("Theme", "EnsoulSharp default DX9 theme"));
+        ensoulProfiler = debug->Add(new SDK::UI::MenuBool(
+            "Profiler", "Performance Profiler", NightSharpPerf::Enabled));
+        BindCoreBool(ensoulProfiler, 5);
+        ensoulProfilerLog = debug->Add(new SDK::UI::MenuBool(
+            "ProfilerLog", "Write profiler log", NightSharpPerf::LogEnabled));
+        BindCoreBool(ensoulProfilerLog, 6);
+        ensoulProfilerRuntime = debug->Add(new SDK::UI::MenuRuntime(
+            "ProfilerLivePanel",
+            "Open Live Profiler Panel",
+            &DrawProfilerRuntimeBridge,
+            nullptr,
+            550.0f));
+        auto* themeTests = debug->AddSubMenu(
+            new SDK::UI::Menu("ThemeTests", "Theme Tests"));
+        themeTests->SetLogo("nightsharp_menu_logo");
+        themeTests->Add(new SDK::UI::MenuSeparator(
+            "GradientText", "Animated Gradient Text"))
+            ->SetAnimatedGradientText(
+                IM_COL32(255, 170, 64, 255),
+                IM_COL32(156, 64, 255, 255),
+                1.0f);
+        themeTests->Add(new SDK::UI::MenuBool(
+            "CustomColor", "Custom component font color", true))
+            ->SetFontColor(IM_COL32(64, 210, 255, 255));
         ensoulRuntimeBindingCount = 0;
         for (int i = 0;
              i < PluginRegistry::PluginCount &&
@@ -698,15 +823,7 @@ namespace NightSharpMenu {
         }
 
         ensoulCoreRoot->Attach();
-
-        // Keep NightSharp first, matching the previous menu's Core-first order.
-        auto& menus = SDK::UI::MenuManager::Instance().Menus;
-        if (menus.size() > 1 && menus[menus.size() - 1] == ensoulCoreRoot) {
-            for (int i = menus.size() - 1; i > 0; --i) {
-                menus[i] = menus[i - 1];
-            }
-            menus[0] = ensoulCoreRoot;
-        }
+        KeepCoreMenuFirst();
     }
 
     inline void SyncEnsoulCoreMenu() {
@@ -725,6 +842,7 @@ namespace NightSharpMenu {
         ensoulPermaWidth->Value = Config::PermaShow::width;
         ensoulPermaIndicatorWidth->Value = Config::PermaShow::indicatorWidth;
         ensoulBypassObs->Value = Config::StreamProtection::bypassObs;
+        if (ensoulClickThrough) ensoulClickThrough->Value = Config::OverlayInput::clickThrough;
         ensoulProfiler->Value = NightSharpPerf::Enabled;
         ensoulProfilerLog->Value = NightSharpPerf::LogEnabled;
 
@@ -787,12 +905,13 @@ namespace NightSharpMenu {
         { "Core" },
     };
 
-    constexpr int CORE_SECONDARY_COUNT = 4;
+    constexpr int CORE_SECONDARY_COUNT = 5;
     inline const SidebarEntry CORE_SECONDARY[CORE_SECONDARY_COUNT] = {
-        { "Language" },
-        { "Menu" },
-        { "Debug Info" },
+        { "Features & Tools" },
+        { "Permashow" },
+        { "Menu & Theme" },
         { "Plugins" },
+        { "Debug & Profiler" },
     };
 
     inline float MaxF(float a, float b) {
@@ -844,6 +963,13 @@ namespace NightSharpMenu {
             Config::PermaShow::y, 0, static_cast<int>(display.y));
     }
 
+    inline constexpr float PermaShowFontHeight = 16.0f;
+    inline constexpr float PermaShowRowHeight = PermaShowFontHeight * 1.4f;
+
+    inline bool isPermaDragging = false;
+    inline float permaDragOffX = 0.0f;
+    inline float permaDragOffY = 0.0f;
+
     inline bool IsPointInside(float x, float y) {
         if (!showMenu) {
             return false;
@@ -866,11 +992,30 @@ namespace NightSharpMenu {
             return true;
         }
 
-        const bool insideMenu = EnsoulSharpTheme::ContainsPoint(x, y);
+        if (isPermaDragging) {
+            return true;
+        }
 
-        // EnsoulSharp PermaShow itself has no drag/click surface; its position
-        // is managed by the X/Y sliders in the PermaShow settings submenu.
-        return insideMenu;
+        const bool insideMenu = EnsoulSharpTheme::ContainsPoint(x, y);
+        if (insideMenu) {
+            return true;
+        }
+
+        if (Config::PermaShow::enabled && Config::PermaShow::allowDrag && SDK::UI::PermaShow::Count() > 0) {
+            const int rows = SDK::UI::PermaShow::Count();
+            const ImVec2 display = GetOverlayDisplaySize();
+            const float xFactor = display.x / 1366.0f;
+            const float width = static_cast<float>(Config::PermaShow::width) * xFactor;
+            const float centerX = static_cast<float>(Config::PermaShow::x);
+            const float top = static_cast<float>(Config::PermaShow::y);
+            const float left = centerX - width * 0.5f;
+            const float height = static_cast<float>(rows) * PermaShowRowHeight;
+            if (x >= left && x <= left + width && y >= top && y <= top + height) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     inline void ResetMouseInputCapture() {
@@ -1088,34 +1233,9 @@ namespace NightSharpMenu {
         ImGui::Separator();
     }
 
-    inline void DrawLanguageSection() {
-        DrawSectionTitle("Language");
-        const char* langs[] = { "EN", "CN", "VN" };
+    inline void DrawFeaturesSection() {
+        DrawSectionTitle("Features & Tools");
 
-        SDK::UI::BeginFunctionalMenuRow("##lang_row");
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Select Language");
-        ImGui::SameLine();
-        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 186.0f;
-        if (targetX > ImGui::GetCursorPosX()) {
-            ImGui::SetCursorPosX(targetX);
-        }
-
-        for (int i = 0; i < 3; ++i) {
-            ImGui::PushID(langs[i]);
-            if (DrawStateButton(langs[i], langs[i], Config::Language::index == i, true, 56.0f)) {
-                Config::Language::index = i;
-            }
-            ImGui::PopID();
-            if (i < 2) {
-                ImGui::SameLine(0, 8);
-            }
-        }
-        SDK::UI::EndFunctionalMenuRow();
-    }
-
-    inline void DrawMenuSection() {
-        DrawSectionTitle("Menu Settings");
         DrawOnOffEditor("Skin Changer", Config::SkinChanger::enabled, "menu_skin");
         if (Config::SkinChanger::enabled) {
             SDK::UI::BeginFunctionalMenuRow("##skin_id_row");
@@ -1127,7 +1247,9 @@ namespace NightSharpMenu {
                 ImGui::SetCursorPosX(targetX);
             }
             ImGui::SetNextItemWidth(120.0f);
-            ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "%d");
+            if (ImGui::SliderInt("##skin_id", &Config::SkinChanger::skinId, 0, 100, "%d")) {
+                if (ensoulSkinId) ensoulSkinId->Value = Config::SkinChanger::skinId;
+            }
             SDK::UI::EndFunctionalMenuRow();
 
             SDK::UI::BeginFunctionalMenuRow("##skin_champ_row");
@@ -1140,28 +1262,168 @@ namespace NightSharpMenu {
 
         DrawOnOffEditor("Zoom Hack", Config::ZoomHack::enabled, "zoom_hack");
         if (Config::ZoomHack::enabled) {
-            SDK::UI::BeginFunctionalMenuRow("##zoom_hack_info");
+            SDK::UI::BeginFunctionalMenuRow("##zoom_hack_row");
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Lan chuot de zoom xa tuy y");
+            ImGui::TextUnformatted("Maximum Zoom");
+            ImGui::SameLine();
+            float targetXZ = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 140.0f;
+            if (targetXZ > ImGui::GetCursorPosX()) {
+                ImGui::SetCursorPosX(targetXZ);
+            }
+            ImGui::SetNextItemWidth(140.0f);
+            if (ImGui::SliderFloat("##max_zoom", &Config::ZoomHack::maxZoom, 1000.0f, 10000.0f, "%.0f")) {
+                if (ensoulMaxZoom) ensoulMaxZoom->Value = Config::ZoomHack::maxZoom;
+            }
             SDK::UI::EndFunctionalMenuRow();
         }
 
-        DrawOnOffEditor("PermaShow", Config::PermaShow::enabled, "perma_show");
-        DrawOnOffEditor("Bypass OBS", Config::StreamProtection::bypassObs, "bypass_obs");
+        DrawOnOffEditor("Bypass OBS (Stream Protection)", Config::StreamProtection::bypassObs, "bypass_obs");
 
         SDK::UI::BeginFunctionalMenuRow("##bypass_obs_info1");
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
         SDK::UI::EndFunctionalMenuRow();
+    }
 
-        SDK::UI::BeginFunctionalMenuRow("##bypass_obs_info2");
+    inline void DrawPermaShowSection() {
+        DrawSectionTitle("Permashow");
+
+        DrawOnOffEditor("Enable Permashow", Config::PermaShow::enabled, "perma_show");
+        bool oldAllowDrag = Config::PermaShow::allowDrag;
+        DrawOnOffEditor("Enable Dragging", Config::PermaShow::allowDrag, "perma_allow_drag");
+        if (oldAllowDrag != Config::PermaShow::allowDrag && ensoulPermaAllowDrag) {
+            ensoulPermaAllowDrag->Value = Config::PermaShow::allowDrag;
+        }
+
+        const ImVec2 display = GetOverlayDisplaySize();
+        SDK::UI::BeginFunctionalMenuRow("##perma_pos_x_row");
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(requires Win10 2004+)");
+        ImGui::TextUnformatted("Position (X)");
+        ImGui::SameLine();
+        float tX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+        if (tX > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(tX);
+        ImGui::SetNextItemWidth(120.0f);
+        if (ImGui::SliderInt("##perma_pos_x", &Config::PermaShow::x, 0, static_cast<int>(display.x))) {
+            if (ensoulPermaX) ensoulPermaX->Value = Config::PermaShow::x;
+        }
         SDK::UI::EndFunctionalMenuRow();
 
-        SDK::UI::BeginFunctionalMenuRow("##bypass_obs_info3");
+        SDK::UI::BeginFunctionalMenuRow("##perma_pos_y_row");
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click-through always on: clicks pass through the overlay.");
+        ImGui::TextUnformatted("Position (Y)");
+        ImGui::SameLine();
+        float tY = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+        if (tY > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(tY);
+        ImGui::SetNextItemWidth(120.0f);
+        if (ImGui::SliderInt("##perma_pos_y", &Config::PermaShow::y, 0, static_cast<int>(display.y))) {
+            if (ensoulPermaY) ensoulPermaY->Value = Config::PermaShow::y;
+        }
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##perma_width_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Width");
+        ImGui::SameLine();
+        float tW = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+        if (tW > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(tW);
+        ImGui::SetNextItemWidth(120.0f);
+        if (ImGui::SliderInt("##perma_width", &Config::PermaShow::width, 100, 400)) {
+            if (ensoulPermaWidth) ensoulPermaWidth->Value = Config::PermaShow::width;
+        }
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##perma_ind_w_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Indicator Width");
+        ImGui::SameLine();
+        float tIW = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+        if (tIW > ImGui::GetCursorPosX()) ImGui::SetCursorPosX(tIW);
+        ImGui::SetNextItemWidth(120.0f);
+        if (ImGui::SliderInt("##perma_ind_w", &Config::PermaShow::indicatorWidth, 30, 90)) {
+            if (ensoulPermaIndicatorWidth) ensoulPermaIndicatorWidth->Value = Config::PermaShow::indicatorWidth;
+        }
+        SDK::UI::EndFunctionalMenuRow();
+    }
+
+    inline void DrawMenuSection() {
+        DrawSectionTitle("Menu Settings & Theme");
+
+        const char* langs[] = { "EN", "CN", "VN" };
+        SDK::UI::BeginFunctionalMenuRow("##lang_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Language");
+        ImGui::SameLine();
+        float targetX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 186.0f;
+        if (targetX > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetX);
+        }
+        for (int i = 0; i < 3; ++i) {
+            ImGui::PushID(langs[i]);
+            if (DrawStateButton(langs[i], langs[i], Config::Language::index == i, true, 56.0f)) {
+                Config::Language::index = i;
+                if (ensoulLanguage) ensoulLanguage->Index = CoreLanguageToListIndex();
+            }
+            ImGui::PopID();
+            if (i < 2) {
+                ImGui::SameLine(0, 8);
+            }
+        }
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##menu_style_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Menu Style");
+        ImGui::SameLine();
+        float targetXStyle = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 140.0f;
+        if (targetXStyle > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetXStyle);
+        }
+        ImGui::SetNextItemWidth(140.0f);
+        const char* styles[] = { "EnsoulSharp", "BGX" };
+        int currentStyle = Config::MenuStyle::index;
+        if (ImGui::Combo("##menu_style_combo", &currentStyle, styles, 2)) {
+            Config::MenuStyle::index = currentStyle;
+            if (ensoulMenuStyle) ensoulMenuStyle->Index = currentStyle;
+        }
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##menu_pos_x_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Menu Position (X)");
+        ImGui::SameLine();
+        float targetXX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+        if (targetXX > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetXX);
+        }
+        ImGui::SetNextItemWidth(120.0f);
+        const ImVec2 display = GetOverlayDisplaySize();
+        int posX = Config::MenuPosition::x;
+        if (ImGui::SliderInt("##menu_pos_x", &posX, 0, static_cast<int>(display.x))) {
+            Config::MenuPosition::x = posX;
+            Config::MenuPosition::positionInitialized = true;
+            EnsoulSharpTheme::PositionX = static_cast<float>(posX);
+            menuPosX = static_cast<float>(posX);
+            if (ensoulMenuX) ensoulMenuX->Value = posX;
+        }
+        SDK::UI::EndFunctionalMenuRow();
+
+        SDK::UI::BeginFunctionalMenuRow("##menu_pos_y_row");
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Menu Position (Y)");
+        ImGui::SameLine();
+        float targetXY = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 120.0f;
+        if (targetXY > ImGui::GetCursorPosX()) {
+            ImGui::SetCursorPosX(targetXY);
+        }
+        ImGui::SetNextItemWidth(120.0f);
+        int posY = Config::MenuPosition::y;
+        if (ImGui::SliderInt("##menu_pos_y", &posY, 0, static_cast<int>(display.y))) {
+            Config::MenuPosition::y = posY;
+            Config::MenuPosition::positionInitialized = true;
+            EnsoulSharpTheme::PositionY = static_cast<float>(posY);
+            menuPosY = static_cast<float>(posY);
+            if (ensoulMenuY) ensoulMenuY->Value = posY;
+        }
         SDK::UI::EndFunctionalMenuRow();
     }
 
@@ -1398,8 +1660,6 @@ namespace NightSharpMenu {
     // (Tahoma 16), a 1.4x row height, and screenWidth / 1366 width scaling.
     // ----------------------------------------------------------------
 
-    inline constexpr float PermaShowFontHeight = 16.0f;
-    inline constexpr float PermaShowRowHeight = PermaShowFontHeight * 1.4f;
     inline constexpr ImU32 PermaShowBackground = IM_COL32(0, 0, 0, 102);
     inline constexpr ImU32 PermaShowEnabledBox = IM_COL32(0, 100, 0, 150);
     inline constexpr ImU32 PermaShowDisabledBox = IM_COL32(139, 0, 0, 150);
@@ -1547,10 +1807,39 @@ namespace NightSharpMenu {
         const float width = static_cast<float>(Config::PermaShow::width) * xFactor;
         const float indicatorWidth =
             static_cast<float>(Config::PermaShow::indicatorWidth) * xFactor;
-        const float centerX = static_cast<float>(Config::PermaShow::x);
-        const float top = static_cast<float>(Config::PermaShow::y);
-        const float left = centerX - width * 0.5f;
+        float centerX = static_cast<float>(Config::PermaShow::x);
+        float top = static_cast<float>(Config::PermaShow::y);
+        float left = centerX - width * 0.5f;
         const float height = static_cast<float>(rows) * PermaShowRowHeight;
+
+        if (Config::PermaShow::allowDrag && showMenu) {
+            ImVec2 mouse = ImGui::GetIO().MousePos;
+            const bool inPermaRect =
+                mouse.x >= left && mouse.x <= (left + width) &&
+                mouse.y >= top && mouse.y <= (top + height);
+
+            if (ImGui::IsMouseClicked(0) && inPermaRect &&
+                !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive() && !isDragging && !EnsoulSharpTheme::RootDragging) {
+                isPermaDragging = true;
+                permaDragOffX = mouse.x - centerX;
+                permaDragOffY = mouse.y - top;
+            }
+            if (!ImGui::IsMouseDown(0)) {
+                isPermaDragging = false;
+            }
+            if (isPermaDragging) {
+                Config::PermaShow::x = static_cast<int>(mouse.x - permaDragOffX);
+                Config::PermaShow::y = static_cast<int>(mouse.y - permaDragOffY);
+                Config::PermaShow::positionInitialized = true;
+                if (ensoulPermaX) ensoulPermaX->Value = Config::PermaShow::x;
+                if (ensoulPermaY) ensoulPermaY->Value = Config::PermaShow::y;
+                centerX = static_cast<float>(Config::PermaShow::x);
+                top = static_cast<float>(Config::PermaShow::y);
+                left = centerX - width * 0.5f;
+            }
+        } else {
+            isPermaDragging = false;
+        }
 
         permaShowBoundsRight = left + width;
         permaShowBoundsBottom = top + height;
@@ -1574,15 +1863,17 @@ namespace NightSharpMenu {
 
     inline void DrawCoreContentPanel(int secondaryIdx) {
         if (secondaryIdx == 0) {
-            DrawLanguageSection();
+            DrawFeaturesSection();
         } else if (secondaryIdx == 1) {
-            DrawMenuSection();
+            DrawPermaShowSection();
         } else if (secondaryIdx == 2) {
-            DrawDebugSection();
+            DrawMenuSection();
         } else if (secondaryIdx == 3) {
             DrawPluginsSection();
+        } else if (secondaryIdx == 4) {
+            DrawDebugSection();
         } else {
-            DrawLanguageSection();
+            DrawFeaturesSection();
         }
     }
 
@@ -1970,6 +2261,7 @@ namespace NightSharpMenu {
         ConfigStore::Tick();
         EnsureEnsoulCoreMenu();
         SyncEnsoulCoreMenu();
+        KeepCoreMenuFirst();
 
         DrawPermaShowOverlay();
 
@@ -2061,6 +2353,13 @@ namespace NightSharpMenu {
         if (isDragging) {
             menuPosX = mouse.x - dragOffX;
             menuPosY = mouse.y - dragOffY;
+            Config::MenuPosition::x = static_cast<int>(menuPosX);
+            Config::MenuPosition::y = static_cast<int>(menuPosY);
+            Config::MenuPosition::positionInitialized = true;
+            EnsoulSharpTheme::PositionX = menuPosX;
+            EnsoulSharpTheme::PositionY = menuPosY;
+            if (ensoulMenuX) ensoulMenuX->Value = Config::MenuPosition::x;
+            if (ensoulMenuY) ensoulMenuY->Value = Config::MenuPosition::y;
         }
 
         ImDrawList* dl = ImGui::GetForegroundDrawList();
@@ -2315,7 +2614,7 @@ namespace NightSharpMenu {
         // Height = laid-out content only (row count * ITEM_H), not a fixed panel.
         const float measuredBodyH = ImGui::GetCursorPosY() + 4.0f;
         if (measuredBodyH > 0.5f) {
-            contentPanelBodyH = MaxF(contentPanelBodyH, measuredBodyH);
+            contentPanelBodyH = MaxF(ITEM_H, measuredBodyH);
         }
 
         ImGui::End();

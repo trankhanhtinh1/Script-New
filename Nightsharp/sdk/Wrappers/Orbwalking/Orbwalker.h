@@ -2,6 +2,7 @@
 
 #include "OrbwalkerSelector.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 
@@ -43,11 +44,16 @@ public:
         if (OrbwalkingDetail::Implementation == &sdkImplementation_) {
             OrbwalkingDetail::Implementation = nullptr;
             OrbwalkingDetail::SelectedImplementationName.clear();
+            ++ImplementationGenerationStorage();
         }
     }
 
     static IOrbwalker* Implementation() {
         return OrbwalkingDetail::Implementation;
+    }
+
+    static std::uint64_t ImplementationGeneration() {
+        return ImplementationGenerationStorage();
     }
 
     static bool AddOrbwalker(const std::string& name, IOrbwalker* implementation) {
@@ -59,6 +65,7 @@ public:
         if (!OrbwalkingDetail::Implementation) {
             OrbwalkingDetail::Implementation = implementation;
             OrbwalkingDetail::SelectedImplementationName = name;
+            ++ImplementationGenerationStorage();
         }
         return true;
     }
@@ -67,6 +74,9 @@ public:
         auto it = OrbwalkingDetail::Implementations.find(name);
         if (it == OrbwalkingDetail::Implementations.end() || !it->second) {
             return false;
+        }
+        if (OrbwalkingDetail::Implementation != it->second) {
+            ++ImplementationGenerationStorage();
         }
         OrbwalkingDetail::Implementation = it->second;
         OrbwalkingDetail::SelectedImplementationName = name;
@@ -96,6 +106,7 @@ public:
                 OrbwalkingDetail::Implementation = nullptr;
                 OrbwalkingDetail::SelectedImplementationName.clear();
             }
+            ++ImplementationGenerationStorage();
         }
         return true;
     }
@@ -396,6 +407,11 @@ public:
     inline static EventSlot OnNonKillableMinion{ &AddOnNonKillableMinion, &RemoveOnNonKillableMinion };
 
 private:
+    static std::uint64_t& ImplementationGenerationStorage() {
+        static std::uint64_t generation = 1;
+        return generation;
+    }
+
     static IOrbwalker* Current() {
         return OrbwalkingDetail::Implementation;
     }

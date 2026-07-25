@@ -146,20 +146,22 @@ static int CountAlliesAround(const Vector3& pos, float range) {
 
 // MISSING API: vị trí .IsUnderAllyTurret() — helper cục bộ qua turret list (~900).
 static bool IsUnderAllyTurretPos(const Vector3& pos) {
-    for (const auto& t : GameObjects::AllyTurrets()) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*for (const auto& t : GameObjects::AllyTurrets()) {
         if (t.IsValid() && !t.IsDead() && t.Position().Distance(pos) <= 900.0f) {
             return true;
         }
-    }
+    }*/
     return false;
 }
 
 static bool IsUnderEnemyTurretPos(const Vector3& pos) {
-    for (const auto& t : GameObjects::EnemyTurrets()) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*for (const auto& t : GameObjects::EnemyTurrets()) {
         if (t.IsValid() && !t.IsDead() && t.Position().Distance(pos) <= 900.0f) {
             return true;
         }
-    }
+    }*/
     return false;
 }
 

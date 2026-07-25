@@ -75,7 +75,8 @@ static float NearestEnemyDistance(const Vector3& position) {
 static bool UnderEnemyTurret(const Vector3& position) {
     const auto player = Player();
     const float playerRadius = player.IsValid() ? player.BoundingRadius() : 65.0f;
-    for (const auto& turret : GameObjects::EnemyTurrets()) {
+    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
+    /*for (const auto& turret : GameObjects::EnemyTurrets()) {
         if (!turret.IsValid() || turret.IsDead()) {
             continue;
         }
@@ -83,7 +84,7 @@ static bool UnderEnemyTurret(const Vector3& position) {
         if (turret.Position().DistanceSqr2D(position) <= range * range) {
             return true;
         }
-    }
+    }*/
     return false;
 }
 

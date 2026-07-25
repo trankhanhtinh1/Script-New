@@ -558,6 +558,7 @@ public:
         chargedCastedT_ = 0;
         Range = static_cast<float>(maxRange);
 
+        CoreSpellBook::RegisterChargedBuffName(buffName.c_str());
         RegisterChargedSpell(this);
         return *this;
     }

@@ -91,7 +91,7 @@ static bool HitchanceAtLeast(HitChance actual, HitChance needed) {
     return static_cast<int>(actual) >= static_cast<int>(needed);
 }
 
-static AIHeroClient HeroFromInfo(const Core::Events::ObjectInfo& info) {
+static AIHeroClient HeroFromInfo(const ::Core::Events::ObjectInfo& info) {
     ::Core::Objects::ObjectHandle handle{};
     handle.address = info.Ptr;
     handle.index = info.Index;

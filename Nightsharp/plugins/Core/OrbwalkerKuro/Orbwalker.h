@@ -272,29 +272,6 @@ public:
         return OrbwalkerBase::IsAutoAttackReset(spellName);
     }
 
-    static void DebugPrint(const char* text) {
-        if (OrbwalkingDetail::RuntimeInstance) {
-            OrbwalkingDetail::RuntimeInstance->DebugPrint(text);
-        }
-    }
-
-    static void DebugPrint(const std::string& text) {
-        DebugPrint(text.c_str());
-    }
-
-    template <typename... Args>
-    static void DebugPrint(const char* fmt, Args... args) {
-        char buffer[kOrbwalkerDebugConsoleLineLength] = {};
-        _snprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt ? fmt : "", args...);
-        DebugPrint(buffer);
-    }
-
-    static void DebugClear() {
-        if (OrbwalkingDetail::RuntimeInstance) {
-            OrbwalkingDetail::RuntimeInstance->ClearDebugConsole();
-        }
-    }
-
     static bool AddOnBeforeAttack(EventHandler handler) {
         return OrbwalkingDetail::BeforeAttackHandlers.Add(handler);
     }

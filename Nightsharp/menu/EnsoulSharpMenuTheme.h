@@ -12,6 +12,7 @@
 #include <Windows.h>
 #include <unordered_map>
 #include <vector>
+#include "MenuConfig.h"
 #include "TonosMonoFont.h"
 #include "BgxUbuntuFont.h"
 
@@ -849,7 +850,7 @@ inline void DrawSliderButton(ImDrawList* draw,
 }
 
 inline void DrawRuntime(ImDrawList* draw, MenuRuntime* item, const Rect& row) {
-    if (OpenRuntime == item) {
+    if (item->Open || OpenRuntime == item) {
         FillRect(draw, row, ContainerSelectedColor);
     } else if (Hovered(row)) {
         FillRect(draw, row, HoverColor);
@@ -863,11 +864,12 @@ inline void DrawRuntime(ImDrawList* draw, MenuRuntime* item, const Rect& row) {
         TextColor,
         ArrowText);
     if (Clicked(row)) {
-        OpenRuntime = OpenRuntime == item ? nullptr : item;
+        item->Open = !item->Open;
+        OpenRuntime = item->Open ? item : nullptr;
         OpenList = nullptr;
         OpenColor = nullptr;
     }
-    if (OpenRuntime == item) {
+    if (OpenRuntime == item || item->Open) {
         RuntimeSource = row;
     }
     QueueTooltip(item, row);
@@ -1251,49 +1253,100 @@ inline void DrawTooltip(ImDrawList* draw) {
     IncludeBounds(tooltip);
 }
 
-inline void DrawRuntimePopup() {
-    if (!OpenRuntime || !OpenRuntime->DrawCallback) return;
+inline void DrawSingleRuntimePopup(MenuRuntime* runtime, int windowIndex) {
+    if (!runtime || !runtime->Open || !runtime->DrawCallback) return;
 
-    ImGui::SetNextWindowPos(
-        ImVec2(RuntimeSource.x + RuntimeSource.w, RuntimeSource.y),
-        ImGuiCond_Always);
+    ImVec2 savedPos;
+    bool hasSavedPos = ConfigStore::GetRuntimePosition(runtime->Name.c_str(), savedPos);
+
+    if (hasSavedPos) {
+        ImGui::SetNextWindowPos(savedPos, ImGuiCond_FirstUseEver);
+    } else {
+        const float cascadeOffsetX = (windowIndex * 35.0f);
+        const float cascadeOffsetY = (windowIndex * 35.0f);
+
+        ImVec2 initPos;
+        if (RuntimeSource.w > 0.0f) {
+            initPos = ImVec2(RuntimeSource.x + RuntimeSource.w + 10.0f + cascadeOffsetX, PositionY + cascadeOffsetY);
+        } else {
+            initPos = ImVec2(PositionX + 450.0f + cascadeOffsetX, PositionY + cascadeOffsetY);
+        }
+
+        const auto* vp = ImGui::GetMainViewport();
+        if (vp) {
+            if (initPos.x > vp->Size.x - 300.0f) initPos.x = vp->Size.x - 350.0f;
+            if (initPos.y > vp->Size.y - 200.0f) initPos.y = vp->Size.y - 250.0f;
+        }
+
+        ImGui::SetNextWindowPos(initPos, ImGuiCond_FirstUseEver);
+    }
+
     ImGui::SetNextWindowSizeConstraints(
-        ImVec2(OpenRuntime->MinimumWidth, ContainerHeight),
+        ImVec2(runtime->MinimumWidth, ContainerHeight),
         ImVec2(
-            ImGui::GetMainViewport()->Size.x * 0.8f,
-            ImGui::GetMainViewport()->Size.y * 0.8f));
+            ImGui::GetMainViewport()->Size.x * 0.85f,
+            ImGui::GetMainViewport()->Size.y * 0.85f));
 
-    char windowId[64] = {};
-    std::snprintf(windowId, sizeof(windowId), "##NightSharpRuntime_%p", OpenRuntime);
+    char windowId[128] = {};
+    std::snprintf(windowId, sizeof(windowId), "%s##NightSharpRuntime_%p", runtime->DisplayName.c_str(), runtime);
+
     ImGui::PushFont(Font());
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 8.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 7.0f));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 62.0f / 255.0f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.08f, 0.94f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.35f, 0.35f, 0.45f, 0.80f));
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.12f, 0.12f, 0.16f, 0.95f));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.20f, 0.22f, 0.30f, 0.95f));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.20f, 0.20f, 0.20f, 0.90f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.20f));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.39f, 0.39f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.67f, 0.67f, 0.67f, 0.78f));
+
     const ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_AlwaysAutoResize;
-    if (ImGui::Begin(windowId, nullptr, flags)) {
-        OpenRuntime->DrawCallback(OpenRuntime->DrawUserData);
+
+    if (ImGui::Begin(windowId, &runtime->Open, flags)) {
+        runtime->DrawCallback(runtime->DrawUserData);
         const ImVec2 pos = ImGui::GetWindowPos();
         const ImVec2 size = ImGui::GetWindowSize();
         IncludeBounds(Rect{ pos.x, pos.y, size.x, size.y });
+
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseDragging(0)) {
+            ConfigStore::SetRuntimePosition(runtime->Name.c_str(), pos);
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor(7);
     ImGui::PopStyleVar(6);
     ImGui::PopFont();
+}
+
+inline void CollectAndDrawRuntimePopups(Menu* menu, int& windowIndex) {
+    if (!menu) return;
+    for (int i = 0; i < static_cast<int>(menu->Components.size()); ++i) {
+        auto* comp = menu->Components[i];
+        if (!comp) continue;
+        if (comp->IsMenu()) {
+            CollectAndDrawRuntimePopups(static_cast<Menu*>(comp), windowIndex);
+        } else if (comp->Kind() == MenuValueType::Runtime) {
+            auto* r = static_cast<MenuRuntime*>(comp);
+            if (r->Open) {
+                DrawSingleRuntimePopup(r, windowIndex++);
+            }
+        }
+    }
+}
+
+inline void DrawRuntimePopup() {
+    int windowIndex = 0;
+    auto& mm = MenuManager::Instance();
+    for (int i = 0; i < static_cast<int>(mm.Menus.size()); ++i) {
+        CollectAndDrawRuntimePopups(mm.Menus[i], windowIndex);
+    }
 }
 
 inline void PreparePopupInput() {
@@ -1389,6 +1442,9 @@ inline void UpdateRootDrag(const Rect& rootPanel) {
             }
             PositionX = nextX;
             PositionY = nextY;
+            Config::MenuPosition::x = static_cast<int>(PositionX);
+            Config::MenuPosition::y = static_cast<int>(PositionY);
+            Config::MenuPosition::positionInitialized = true;
         }
         return;
     }
@@ -1406,6 +1462,11 @@ inline void Render() {
     ImDrawList* draw = ImGui::GetForegroundDrawList();
     if (!draw) {
         return;
+    }
+
+    if (Config::MenuPosition::positionInitialized) {
+        PositionX = static_cast<float>(Config::MenuPosition::x);
+        PositionY = static_cast<float>(Config::MenuPosition::y);
     }
 
     PreparePopupInput();

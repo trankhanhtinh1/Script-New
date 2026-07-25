@@ -283,16 +283,32 @@ public:
         }
 
         switch (ModeIndex()) {
-        case 0:
-            std::sort(source.begin(), source.end(), [this, damageType](const auto& a, const auto& b) {
-                return AaIndicator(a, damageType) < AaIndicator(b, damageType);
+        case 0: {
+            struct Scored { SDK::AIHeroClient hero; int score; };
+            std::vector<Scored> scored;
+            scored.reserve(source.size());
+            for (const auto& h : source) {
+                scored.push_back({ h, AaIndicator(h, damageType) });
+            }
+            std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) {
+                return a.score < b.score;
             });
+            for (size_t i = 0; i < source.size(); ++i) source[i] = scored[i].hero;
             break;
-        case 1:
-            std::sort(source.begin(), source.end(), [this, damageType](const auto& a, const auto& b) {
-                return GetRealHeath(a, damageType) < GetRealHeath(b, damageType);
+        }
+        case 1: {
+            struct Scored { SDK::AIHeroClient hero; float score; };
+            std::vector<Scored> scored;
+            scored.reserve(source.size());
+            for (const auto& h : source) {
+                scored.push_back({ h, GetRealHeath(h, damageType) });
+            }
+            std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) {
+                return a.score < b.score;
             });
+            for (size_t i = 0; i < source.size(); ++i) source[i] = scored[i].hero;
             break;
+        }
         case 2:
             std::sort(source.begin(), source.end(), [this](const auto& a, const auto& b) {
                 return GetPriority(a) > GetPriority(b);

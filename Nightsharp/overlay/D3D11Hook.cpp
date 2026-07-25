@@ -361,7 +361,8 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     }
 
     // Dispatch to SDK WndProc subscribers (cursor, target selector, chat, plugins, etc.)
-    SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
+    const bool processInput =
+        SDK::Game::DispatchWndProc(hWnd, msg, wParam, lParam);
 
     // Block keybind activation while the chat box is open — typing must not
     // toggle keybinds (Fly Hack / Auto W) or hold the combo key.
@@ -370,6 +371,7 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     // Dispatch key/mouse events to MenuKeyBind state machines.
     SDK::UI::MenuManager::Instance().DispatchInput(msg, wParam, lParam);
 
+    if (!processInput) return TRUE;
     // Forward to original game WndProc
     return g_originalWndProc
         ? CallWindowProcW(g_originalWndProc, hWnd, msg, wParam, lParam)
@@ -806,7 +808,7 @@ static void ShutdownPluginsSafe() {
 
 static void ShutdownCoreEventsSafe() {
     __try {
-        Core::Events::Shutdown();
+        ::Core::Events::Shutdown();
     }
     __except (1) {
     }
