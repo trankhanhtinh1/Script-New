@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreCastSpell.h"
-#include "CoreNewCastSpell.h"
+// #include "CoreNewCastSpell.h"
 #include "CoreSpellDataInst.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
@@ -205,59 +205,68 @@ inline bool IsChanneling(uintptr_t owner, float gameTime = 0.0f) {
     return channelStart > 0.0f && channelEnd > channelStart && gameTime <= channelEnd;
 }
 
-inline std::vector<std::string>& GetRegisteredChargedBuffs() {
-    static std::vector<std::string> s_registeredChargedBuffs;
-    return s_registeredChargedBuffs;
+// inline std::vector<std::string>& GetRegisteredChargedBuffs() {
+//     static std::vector<std::string> s_registeredChargedBuffs;
+//     return s_registeredChargedBuffs;
+// }
+//
+// inline void RegisterChargedBuffName(const char* buffName) {
+//     if (!buffName || !buffName[0]) return;
+//     auto& list = GetRegisteredChargedBuffs();
+//     for (const auto& name : list) {
+//         if (name == buffName) return;
+//     }
+//     list.push_back(buffName);
+// }
+//
+// inline bool IsCharging(uintptr_t owner) {
+//     if (!Globals::IsValidPtr(owner)) return false;
+//
+//     // Check dynamically registered charged buff names
+//     for (const auto& buffName : GetRegisteredChargedBuffs()) {
+//         if (CoreBuffs::HasBuff(owner, buffName.c_str())) {
+//             return true;
+//         }
+//     }
+//
+//     const auto active = ActiveSpell(owner);
+//     if (active.IsValid()) {
+//         const float channelStart = ChannelStartTime(active);
+//         const float channelEnd = ChannelEndTime(active);
+//         const float gameTime = CoreRuntime::GetContext().gameTime;
+//         if (channelStart > 0.0f && channelEnd > channelStart && gameTime <= channelEnd) {
+//             return true;
+//         }
+//     }
+//
+//     const std::int32_t slot = ActiveSlot(owner);
+//     if (IsValidSlot(slot)) {
+//         const auto ref = GetSpell(owner, slot);
+//         if (ref.IsValid()) {
+//             const uintptr_t fn = CoreRuntime::ResolveRva(
+//                 Offset::ControlRuntime::SpellTypeClassify);
+//             if (Globals::IsExecutablePtrCached(fn, 16)) {
+//                 using FnSpellTypeClassify = std::uint8_t(__fastcall*)(uintptr_t);
+//                 __try {
+//                     if (reinterpret_cast<FnSpellTypeClassify>(fn)(ref.slot) == 18) {
+//                         return true;
+//                     }
+//                 }
+//                 __except (1) {}
+//             }
+//         }
+//     }
+//
+//     return false;
+// }
+
+inline bool IsCharging(uintptr_t owner) {
+    (void)owner;
+    return false;
 }
 
 inline void RegisterChargedBuffName(const char* buffName) {
-    if (!buffName || !buffName[0]) return;
-    auto& list = GetRegisteredChargedBuffs();
-    for (const auto& name : list) {
-        if (name == buffName) return;
-    }
-    list.push_back(buffName);
-}
-
-inline bool IsCharging(uintptr_t owner) {
-    if (!Globals::IsValidPtr(owner)) return false;
-
-    // Check dynamically registered charged buff names
-    for (const auto& buffName : GetRegisteredChargedBuffs()) {
-        if (CoreBuffs::HasBuff(owner, buffName.c_str())) {
-            return true;
-        }
-    }
-
-    const auto active = ActiveSpell(owner);
-    if (active.IsValid()) {
-        const float channelStart = ChannelStartTime(active);
-        const float channelEnd = ChannelEndTime(active);
-        const float gameTime = CoreRuntime::GetContext().gameTime;
-        if (channelStart > 0.0f && channelEnd > channelStart && gameTime <= channelEnd) {
-            return true;
-        }
-    }
-
-    const std::int32_t slot = ActiveSlot(owner);
-    if (IsValidSlot(slot)) {
-        const auto ref = GetSpell(owner, slot);
-        if (ref.IsValid()) {
-            const uintptr_t fn = CoreRuntime::ResolveRva(
-                Offset::ControlRuntime::SpellTypeClassify);
-            if (Globals::IsExecutablePtrCached(fn, 16)) {
-                using FnSpellTypeClassify = std::uint8_t(__fastcall*)(uintptr_t);
-                __try {
-                    if (reinterpret_cast<FnSpellTypeClassify>(fn)(ref.slot) == 18) {
-                        return true;
-                    }
-                }
-                __except (1) {}
-            }
-        }
-    }
-
-    return false;
+    (void)buffName;
 }
 
 namespace detail {
@@ -304,7 +313,8 @@ inline bool CastSpell(uintptr_t owner, std::int32_t slot, const Vec3& position) 
         return false;
     }
 
-    return CoreNewCastSpell::CastPositionSpellMethod2(slot, position);
+    // CoreNewCastSpell::CastPositionSpellMethod2 removed — stubbed
+    return false;
 }
 
 inline bool CastSpell(uintptr_t owner,
@@ -332,19 +342,30 @@ inline bool CastSpellOnTarget(uintptr_t owner,
         return false;
     }
 
-    detail::ScopedWritePhase writePhase;
-    return CoreNewCastSpell::CastTargetSpellMethod2(slot, target);
+    // CoreNewCastSpell::CastTargetSpellMethod2 removed — stubbed
+    return false;
 }
+
+// inline bool UpdateChargedSpell(uintptr_t owner,
+//                                std::int32_t slot,
+//                                const Vec3& position,
+//                                bool releaseCast) {
+//     if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+//         return false;
+//     }
+//
+//     return CoreNewCastSpell::UpdateChargedSpellMethod1(slot, position, releaseCast);
+// }
 
 inline bool UpdateChargedSpell(uintptr_t owner,
                                std::int32_t slot,
                                const Vec3& position,
                                bool releaseCast) {
-    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
-        return false;
-    }
-
-    return CoreNewCastSpell::UpdateChargedSpellMethod1(slot, position, releaseCast);
+    (void)owner;
+    (void)slot;
+    (void)position;
+    (void)releaseCast;
+    return false;
 }
 
 } // namespace CoreSpellBook

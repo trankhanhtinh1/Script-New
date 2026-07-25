@@ -29,8 +29,6 @@ namespace CoreCastSpell {
         Target,
         Self,
         Vector,
-        ChargeBegin,
-        ChargeRelease,
     };
 
     enum class CastFailure : std::uint8_t {
@@ -47,7 +45,6 @@ namespace CoreCastSpell {
         MissingCastContext,
         MissingNativeFunction,
         MissingSpoofTrampoline,
-        MissingChargeState,
         MissingMouseInput,
         PositionProjectionFailed,
         CanCastRejected,
@@ -115,11 +112,9 @@ namespace CoreCastSpell {
     inline constexpr std::int32_t kHudModeSmartCast = 2;
     inline constexpr std::int64_t kHudKeyPress = 1;
     inline constexpr std::int64_t kHudKeyRelease = 2;
-    inline constexpr uintptr_t kHudChargeSpellInput = 0x38;
 
     // Minimum interval between fire-casts of the same slot, so holding a combo key
-    // (e.g. space) doesn't spam the native cast every frame. Charge begin/release
-    // are exempt (they have their own state gating). Matches the SDK Spell wrapper.
+    // (e.g. space) doesn't spam the native cast every frame. Matches the SDK Spell wrapper.
     inline constexpr int kCastThrottleMs = 120;
 
     inline const CastTrace& LastTrace() {
@@ -132,8 +127,6 @@ namespace CoreCastSpell {
         case CastKind::Target: return "target";
         case CastKind::Self: return "self";
         case CastKind::Vector: return "vector";
-        case CastKind::ChargeBegin: return "charge-begin";
-        case CastKind::ChargeRelease: return "charge-release";
         default: return "unknown";
         }
     }
@@ -153,7 +146,6 @@ namespace CoreCastSpell {
         case CastFailure::MissingCastContext: return "missing-cast-context";
         case CastFailure::MissingNativeFunction: return "missing-native-function";
         case CastFailure::MissingSpoofTrampoline: return "missing-spoof-trampoline";
-        case CastFailure::MissingChargeState: return "missing-charge-state";
         case CastFailure::MissingMouseInput: return "missing-mouse-input";
         case CastFailure::PositionProjectionFailed: return "position-projection-failed";
         case CastFailure::CanCastRejected: return "can-cast-rejected";
@@ -788,9 +780,6 @@ namespace CoreCastSpell {
         const Vec3& endPosition) {
         return detail::DispatchVector(slot, startPosition, endPosition);
     }
-
-    // Targeted casts perform direct native CastTargetSpell call via CoreNewCastSpell.
-    bool CastTargetSpell(std::uint8_t slot, uintptr_t target);
 
     inline bool CastSelfSpell(std::uint8_t slot) {
         return detail::CastValidated(CastKind::Self, slot, {}, 0);

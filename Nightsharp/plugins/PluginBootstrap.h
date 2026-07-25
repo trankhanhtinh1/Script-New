@@ -26,7 +26,7 @@
 #include "Champion/EzrealSemiPlugin.h"
 #include "Champion/EzrealMissileLifecyclePlugin.h"
 #include "Champion/JaxSemiPlugin.h"
-#include "Champion/XerathSemiCastNew.h"
+// #include "Champion/XerathSemiCastNew.h"
 #include "Champion/XerathSemiPlugin.h"
 #include "Champion/7UPAIO/7UPAIO.h"
 #include "Champion/KuroAIO/KuroAIO.h"
@@ -78,7 +78,7 @@ namespace PluginBootstrap {
             "champion.ezreal_cast_test",
             "champion.ezreal_q_missile_lifecycle",
             "champion.jax_cast_test",
-            "champion.xerath_semi_cast_new",
+            // "champion.xerath_semi_cast_new",
             "champion.xerath_cast_test",
             "core.object_delete_lifecycle_test",
             "utility.object_definition_draw",
@@ -165,7 +165,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<EzrealSemiPlugin>();
         PluginManager::Get().Register<EzrealMissileLifecyclePlugin>();
         PluginManager::Get().Register<JaxSemiPlugin>();
-        PluginManager::Get().Register<XerathSemiCastNew>();
+        // PluginManager::Get().Register<XerathSemiCastNew>();
         PluginManager::Get().Register<XerathSemiPlugin>();
         PluginManager::Get().Register<AIO7UPPlugin>();
         PluginManager::Get().Register<KuroAIOPlugin>();

@@ -16,9 +16,9 @@
 // === Champion includes (uncomment khi port xong) ===
 #include "Ezreal.h"
 #include "Jinx.h"
-#include "Kalista.h"
+// #include "Kalista.h"
 #include "Viktor.h"
-#include "Xerath.h"
+// #include "Xerath.h"
 #include "Zed.h"
 // #include "Vayne.h"
 // #include "Caitlyn.h"
@@ -83,7 +83,7 @@ public:
         // else if (champ == "Jayce")      { Jayce::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Jinx") == 0) { AIO7UP::Jinx::OnGameLoad(); }
         // else if (champ == "KSante")     { KSante::OnGameLoad(); }
-        else if (_stricmp(champ.c_str(), "Kalista") == 0) { AIO7UP::Kalista::OnGameLoad(); }
+        // else if (_stricmp(champ.c_str(), "Kalista") == 0) { AIO7UP::Kalista::OnGameLoad(); }
         // else if (champ == "Fizz")       { Fizz::OnGameLoad(); }
         // else if (champ == "Karthus")    { Karthus::OnGameLoad(); }
         // else if (champ == "KogMaw")     { KogMaw::OnGameLoad(); }
@@ -103,7 +103,7 @@ public:
         // else if (champ == "Shyvana")    { Shyvana::OnGameLoad(); }
         // else if (champ == "Sylas")      { Sylas::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Viktor") == 0) { AIO7UP::Viktor::OnGameLoad(); }
-        else if (_stricmp(champ.c_str(), "Xerath") == 0) { AIO7UP::Xerath::OnGameLoad(); }
+        // else if (_stricmp(champ.c_str(), "Xerath") == 0) { AIO7UP::Xerath::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Zed") == 0) { AIO7UP::Zed::OnGameLoad(); }
         else {
             return;
@@ -116,9 +116,9 @@ public:
     void OnUnload() override {
         AIO7UP::Ezreal::OnUnload();
         AIO7UP::Jinx::OnUnload();
-        AIO7UP::Kalista::OnUnload();
+        // AIO7UP::Kalista::OnUnload();
         AIO7UP::Viktor::OnUnload();
-        AIO7UP::Xerath::OnUnload();
+        // AIO7UP::Xerath::OnUnload();
         AIO7UP::Zed::OnUnload();
     }
 
@@ -127,9 +127,9 @@ private:
         return championName && championName[0] &&
             (_stricmp(championName, "Ezreal") == 0 ||
              _stricmp(championName, "Jinx") == 0 ||
-             _stricmp(championName, "Kalista") == 0 ||
+             // _stricmp(championName, "Kalista") == 0 ||
              _stricmp(championName, "Viktor") == 0 ||
-             _stricmp(championName, "Xerath") == 0 ||
+             // _stricmp(championName, "Xerath") == 0 ||
              _stricmp(championName, "Zed") == 0);
     }
 
@@ -156,15 +156,15 @@ private:
         if (_stricmp(championName.c_str(), "Jinx") == 0) {
             return "Jinx";
         }
-        if (_stricmp(championName.c_str(), "Xerath") == 0) {
-            return "Xerath";
-        }
+        // if (_stricmp(championName.c_str(), "Xerath") == 0) {
+        //     return "Xerath";
+        // }
         if (_stricmp(championName.c_str(), "Viktor") == 0) {
             return "Viktor";
         }
-        if (_stricmp(championName.c_str(), "Kalista") == 0) {
-            return "Kalista";
-        }
+        // if (_stricmp(championName.c_str(), "Kalista") == 0) {
+        //     return "Kalista";
+        // }
         if (_stricmp(championName.c_str(), "Zed") == 0) {
             return "Zed";
         }
