@@ -16,6 +16,58 @@
 
 namespace Plugins {
 
+enum class GameObjectListType : int {
+    UseCategoryFilters = 0,
+    AllGameObjects,
+    AttackableUnits,
+    Ally,
+    Enemy,
+    Heroes,
+    AllyHeroes,
+    EnemyHeroes,
+    Minions,
+    AllyMinions,
+    EnemyMinions,
+    AllyLaneMinions,
+    EnemyLaneMinions,
+    AllySpecialMinions,
+    EnemySpecialMinions,
+    AllyIgnoredMinions,
+    EnemyIgnoredMinions,
+    Wards,
+    AllyWards,
+    EnemyWards,
+    Jungle,
+    JungleSmall,
+    JungleLarge,
+    JungleLegendary,
+    Plants,
+    Clones,
+    AllyClones,
+    EnemyClones,
+    Pets,
+    AllyPets,
+    EnemyPets,
+    Turrets,
+    AllyTurrets,
+    EnemyTurrets,
+    Inhibitors,
+    AllyInhibitors,
+    EnemyInhibitors,
+    Nexuses,
+    AllyNexus,
+    EnemyNexus,
+    Shops,
+    AllyShops,
+    EnemyShops,
+    SpawnPoints,
+    AllySpawnPoints,
+    EnemySpawnPoints,
+    ParticleEmitters,
+    Missiles,
+    Player
+};
+
 class DeveloperToolsPlugin final : public IPlugin {
 public:
     const char* GetName() const override { return "Developer Tools"; }
@@ -30,6 +82,8 @@ public:
         enabled_ = true;
         maxRange_ = 400;
         trackedObjectTicks_.clear();
+        scanCache_.reserve(256);
+        activeObjectsCache_.reserve(128);
         SDK::Events::AddOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
         SDK::Events::AddOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
 
@@ -38,6 +92,11 @@ public:
         menuEnabled_ = menu_->Add(new SDK::UI::MenuBool("Enabled", "Enable Developer Tools", enabled_));
         menuMaxRange_ = menu_->Add(new SDK::UI::MenuSlider("MaxRange", "Max Scan Range", maxRange_, 100, 1500));
         menuProvider_ = menu_->Add(new SDK::UI::MenuList("Provider", "Scan Provider", { "SDK::ObjectManager (Raw RAM)", "SDK::GameObjects Facade" }, scanProviderIndex_));
+
+        auto* specificSub = menu_->AddSubMenu(new SDK::UI::Menu("SpecificLists", "GameObjects Specific Lists"));
+        for (auto& opt : listOptions_) {
+            opt.MenuControl = specificSub->Add(new SDK::UI::MenuBool(opt.Name, opt.DisplayName, opt.Enabled));
+        }
 
         auto* filters = menu_->AddSubMenu(new SDK::UI::Menu("Filters", "Category Filters"));
         menuScanAll_ = filters->Add(new SDK::UI::MenuBool("ScanAll", "Scan All GameObjects", scanRawGameObjects_));
@@ -59,7 +118,23 @@ public:
         s_instance = nullptr;
     }
 
+    void SyncMenuSettings() {
+        if (menuEnabled_) enabled_ = menuEnabled_->Value;
+        if (menuMaxRange_) maxRange_ = menuMaxRange_->Value;
+        if (menuProvider_) scanProviderIndex_ = menuProvider_->Index;
+        for (auto& opt : listOptions_) {
+            if (opt.MenuControl) opt.Enabled = opt.MenuControl->Value;
+        }
+        if (menuScanAll_) scanRawGameObjects_ = menuScanAll_->Value;
+        if (menuScanHeroes_) scanHeroes_ = menuScanHeroes_->Value;
+        if (menuScanMinions_) scanMinions_ = menuScanMinions_->Value;
+        if (menuScanTurrets_) scanTurrets_ = menuScanTurrets_->Value;
+        if (menuScanMissiles_) scanMissiles_ = menuScanMissiles_->Value;
+        if (menuFilterClutter_) filterClutter_ = menuFilterClutter_->Value;
+    }
+
     void OnUpdate() override {
+        SyncMenuSettings();
         if (!enabled_) {
             pKeyPressedLast_ = false;
             return;
@@ -85,20 +160,23 @@ public:
             std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
             int count = 0;
 
-            for (const auto& obj : GetObjectsToScan()) {
+            PopulateScanCache();
+
+            for (const auto& obj : scanCache_) {
                 if (!obj.IsValid()) continue;
 
                 const Vec3 pos = obj.Position();
                 if (pos.DistanceSqr(cursorPos) >= rangeSqr) continue;
 
-                std::string name = GetObjectName(obj);
-                std::string charName = GetObjectCharacterName(obj);
+                const std::string& name = GetObjectName(obj);
+                const std::string& charName = GetObjectCharacterName(obj);
                 if (IsClutter(obj, name, charName)) continue;
 
-                std::string typeStr = ObjectTypeToString(obj.Type());
+                const char* typeStr = ObjectTypeToString(obj.Type());
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-                std::string teamStr = TeamToString(obj);
-                std::string statusStr = StatusToString(obj);
+                const char* teamStr = TeamToString(obj);
+                char statusBuf[256];
+                GetStatusString(obj, statusBuf, sizeof(statusBuf));
 
                 float age = 0.0f;
                 auto it = trackedObjectTicks_.find(netId);
@@ -111,7 +189,7 @@ public:
                               "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
                               ++count, name.c_str(), charName.c_str(), netId,
                               static_cast<unsigned long long>(obj.Address()),
-                              typeStr.c_str(), teamStr.c_str(), statusStr.c_str(), age,
+                              typeStr, teamStr, statusBuf, age,
                               pos.x, pos.y, pos.z);
                 copyText += lineBuf;
             }
@@ -127,6 +205,7 @@ public:
     }
 
     void OnRender() override {
+        SyncMenuSettings();
         if (!enabled_ || !SDK::Drawing::IsEnabled()) {
             return;
         }
@@ -135,7 +214,9 @@ public:
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
         const int now = SDK::Variables::TickCount();
 
-        for (const auto& obj : GetObjectsToScan()) {
+        PopulateScanCache();
+
+        for (const auto& obj : scanCache_) {
             if (!obj.IsValid()) {
                 continue;
             }
@@ -145,8 +226,8 @@ public:
                 continue;
             }
 
-            std::string name = GetObjectName(obj);
-            std::string charName = GetObjectCharacterName(obj);
+            const std::string& name = GetObjectName(obj);
+            const std::string& charName = GetObjectCharacterName(obj);
 
             if (IsClutter(obj, name, charName)) {
                 continue;
@@ -168,22 +249,20 @@ public:
             }
 
             // Draw text directly on screen
-            std::string displayName = obj.IsHero() || obj.IsMinion() || obj.IsTurret() ? charName : name;
-            if (displayName.empty()) {
-                displayName = name.empty() ? charName : name;
-            }
+            const std::string& displayName = (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) ? charName : name;
+            const std::string& fallbackName = displayName.empty() ? (name.empty() ? charName : name) : displayName;
 
             float currentY = screen.y;
             const float stepY = 15.0f;
             const std::uint32_t textColor = 0xFF00CED1u; // DarkTurquoise
 
             // 1. Name / CharName
-            SDK::Drawing::DrawText(Vec2(screen.x, currentY), displayName.c_str(), textColor, false, true);
+            SDK::Drawing::DrawText(Vec2(screen.x, currentY), fallbackName.c_str(), textColor, false, true);
             currentY += stepY;
 
             // 2. Object Type
-            std::string typeStr = ObjectTypeToString(obj.Type());
-            SDK::Drawing::DrawText(Vec2(screen.x, currentY), typeStr.c_str(), textColor, false, true);
+            const char* typeStr = ObjectTypeToString(obj.Type());
+            SDK::Drawing::DrawText(Vec2(screen.x, currentY), typeStr, textColor, false, true);
             currentY += stepY;
 
             // 3. NetworkID
@@ -300,50 +379,101 @@ public:
     }
 
     void OnMenu() override {
-        ImGui::Checkbox("Enable Developer Tools", &enabled_);
+        if (ImGui::Checkbox("Enable Developer Tools", &enabled_)) {
+            if (menuEnabled_) menuEnabled_->SetValue(enabled_);
+        }
         if (!enabled_) {
             return;
         }
-        ImGui::SliderInt("Max object dist from cursor", &maxRange_, 100, 1500);
+        if (ImGui::SliderInt("Max object dist from cursor", &maxRange_, 100, 1500)) {
+            if (menuMaxRange_) menuMaxRange_->SetValue(maxRange_);
+        }
 
         ImGui::Separator();
         ImGui::Text("Scan Source Provider:");
-        ImGui::RadioButton("SDK::ObjectManager (Raw RAM)", &scanProviderIndex_, 0); ImGui::SameLine();
-        ImGui::RadioButton("SDK::GameObjects Facade", &scanProviderIndex_, 1);
-
-        ImGui::Separator();
-        ImGui::Text("Category Filters:");
-        ImGui::Checkbox("Scan All Raw GameObjects (Scan Everything)", &scanRawGameObjects_);
-        if (!scanRawGameObjects_) {
-            ImGui::Checkbox("Heroes (AIHeroClient)", &scanHeroes_); ImGui::SameLine();
-            ImGui::Checkbox("Minions & Pets (AIMinionClient)", &scanMinions_);
-            ImGui::Checkbox("Turrets (AITurretClient)", &scanTurrets_); ImGui::SameLine();
-            ImGui::Checkbox("Missiles (MissileClient)", &scanMissiles_);
+        if (ImGui::RadioButton("SDK::ObjectManager (Raw RAM)", &scanProviderIndex_, 0)) {
+            if (menuProvider_) menuProvider_->SetValue(scanProviderIndex_);
         }
-        ImGui::Checkbox("Filter Clutter (FX, Grass, Emitters, MoveTo)", &filterClutter_);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("SDK::GameObjects Facade", &scanProviderIndex_, 1)) {
+            if (menuProvider_) menuProvider_->SetValue(scanProviderIndex_);
+        }
+
+        bool anySpecificListSelected = false;
+        if (scanProviderIndex_ == 1) {
+            for (const auto& opt : listOptions_) {
+                if (opt.Enabled) {
+                    anySpecificListSelected = true;
+                    break;
+                }
+            }
+        }
+
+        if (scanProviderIndex_ == 1) {
+            ImGui::Separator();
+            if (ImGui::CollapsingHeader("GameObjects Specific Lists")) {
+                ImGui::Columns(2, "SpecificListsColumns", true);
+                for (auto& opt : listOptions_) {
+                    if (ImGui::Checkbox(opt.DisplayName, &opt.Enabled)) {
+                        if (opt.MenuControl) opt.MenuControl->SetValue(opt.Enabled);
+                    }
+                    ImGui::NextColumn();
+                }
+                ImGui::Columns(1);
+            }
+        }
+
+        if (scanProviderIndex_ == 0 || !anySpecificListSelected) {
+            ImGui::Separator();
+            ImGui::Text("Category Filters:");
+            if (ImGui::Checkbox("Scan All Raw GameObjects (Scan Everything)", &scanRawGameObjects_)) {
+                if (menuScanAll_) menuScanAll_->SetValue(scanRawGameObjects_);
+            }
+            if (!scanRawGameObjects_) {
+                if (ImGui::Checkbox("Heroes (AIHeroClient)", &scanHeroes_)) {
+                    if (menuScanHeroes_) menuScanHeroes_->SetValue(scanHeroes_);
+                }
+                ImGui::SameLine();
+                if (ImGui::Checkbox("Minions & Pets (AIMinionClient)", &scanMinions_)) {
+                    if (menuScanMinions_) menuScanMinions_->SetValue(scanMinions_);
+                }
+                if (ImGui::Checkbox("Turrets (AITurretClient)", &scanTurrets_)) {
+                    if (menuScanTurrets_) menuScanTurrets_->SetValue(scanTurrets_);
+                }
+                ImGui::SameLine();
+                if (ImGui::Checkbox("Missiles (MissileClient)", &scanMissiles_)) {
+                    if (menuScanMissiles_) menuScanMissiles_->SetValue(scanMissiles_);
+                }
+            }
+        }
+        if (ImGui::Checkbox("Filter Clutter (FX, Grass, Emitters, MoveTo)", &filterClutter_)) {
+            if (menuFilterClutter_) menuFilterClutter_->SetValue(filterClutter_);
+        }
 
         ImGui::Separator();
         ImGui::Text("Active Objects Near Cursor (On Screen):");
 
-        std::vector<SDK::GameObject> activeObjects;
+        PopulateScanCache();
+
+        activeObjectsCache_.clear();
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
 
-        for (const auto& obj : GetObjectsToScan()) {
+        for (const auto& obj : scanCache_) {
             if (!obj.IsValid()) continue;
 
             const Vec3 pos = obj.Position();
             if (pos.DistanceSqr(cursorPos) >= rangeSqr) continue;
 
-            std::string name = GetObjectName(obj);
-            std::string charName = GetObjectCharacterName(obj);
+            const std::string& name = GetObjectName(obj);
+            const std::string& charName = GetObjectCharacterName(obj);
 
             if (IsClutter(obj, name, charName)) continue;
 
-            activeObjects.push_back(obj);
+            activeObjectsCache_.push_back(obj);
         }
 
-        if (activeObjects.empty()) {
+        if (activeObjectsCache_.empty()) {
             ImGui::Text("No objects near cursor.");
             return;
         }
@@ -354,13 +484,14 @@ public:
             std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
             int count = 0;
             const int now = SDK::Variables::TickCount();
-            for (const auto& obj : activeObjects) {
-                std::string name = GetObjectName(obj);
-                std::string charName = GetObjectCharacterName(obj);
-                std::string typeStr = ObjectTypeToString(obj.Type());
+            for (const auto& obj : activeObjectsCache_) {
+                const std::string& name = GetObjectName(obj);
+                const std::string& charName = GetObjectCharacterName(obj);
+                const char* typeStr = ObjectTypeToString(obj.Type());
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-                std::string teamStr = TeamToString(obj);
-                std::string statusStr = StatusToString(obj);
+                const char* teamStr = TeamToString(obj);
+                char statusBuf[256];
+                GetStatusString(obj, statusBuf, sizeof(statusBuf));
 
                 float age = 0.0f;
                 auto it = trackedObjectTicks_.find(netId);
@@ -374,7 +505,7 @@ public:
                               "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
                               ++count, name.c_str(), charName.c_str(), netId,
                               static_cast<unsigned long long>(obj.Address()),
-                              typeStr.c_str(), teamStr.c_str(), statusStr.c_str(), age,
+                              typeStr, teamStr, statusBuf, age,
                               pos.x, pos.y, pos.z);
                 copyText += lineBuf;
             }
@@ -397,12 +528,13 @@ public:
             ImGui::TableHeadersRow();
 
             const int now = SDK::Variables::TickCount();
-            for (const auto& obj : activeObjects) {
-                std::string name = GetObjectName(obj);
-                std::string charName = GetObjectCharacterName(obj);
-                std::string typeStr = ObjectTypeToString(obj.Type());
-                std::string teamStr = TeamToString(obj);
-                std::string statusStr = StatusToString(obj);
+            for (const auto& obj : activeObjectsCache_) {
+                const std::string& name = GetObjectName(obj);
+                const std::string& charName = GetObjectCharacterName(obj);
+                const char* typeStr = ObjectTypeToString(obj.Type());
+                const char* teamStr = TeamToString(obj);
+                char statusBuf[256];
+                GetStatusString(obj, statusBuf, sizeof(statusBuf));
                 float dist = obj.Position().Distance(cursorPos);
 
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
@@ -420,11 +552,11 @@ public:
                 ImGui::TableNextColumn();
                 ImGui::Text("%u", netId);
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(typeStr.c_str());
+                ImGui::TextUnformatted(typeStr);
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(teamStr.c_str());
+                ImGui::TextUnformatted(teamStr);
                 ImGui::TableNextColumn();
-                ImGui::TextUnformatted(statusStr.c_str());
+                ImGui::TextUnformatted(statusBuf);
                 ImGui::TableNextColumn();
                 ImGui::Text("%.1f", dist);
                 ImGui::TableNextColumn();
@@ -435,7 +567,7 @@ public:
                 std::snprintf(btnId, sizeof(btnId), "Log##%u", netId);
                 if (ImGui::Button(btnId)) {
                     NightSharpDebug::Logf("[Dev] Name: %s | CharName: %s | NetId: %u | Team: %s | Status: %s | Age: %.1fs",
-                                               name.c_str(), charName.c_str(), netId, teamStr.c_str(), statusStr.c_str(), age);
+                                               name.c_str(), charName.c_str(), netId, teamStr, statusBuf, age);
                 }
             }
             ImGui::EndTable();
@@ -446,6 +578,64 @@ private:
     bool enabled_ = true;
     int maxRange_ = 400;
     int scanProviderIndex_ = 0; // 0 = ObjectManager, 1 = GameObjects Facade
+    struct ListOption {
+        const char* Name;
+        const char* DisplayName;
+        GameObjectListType Type;
+        bool Enabled;
+        SDK::UI::MenuBool* MenuControl;
+    };
+
+    mutable ListOption listOptions_[48] = {
+        { "AllGameObjects", "All Game Objects (AllGameObjects)", GameObjectListType::AllGameObjects, false, nullptr },
+        { "AttackableUnits", "Attackable Units (AttackableUnits)", GameObjectListType::AttackableUnits, false, nullptr },
+        { "Ally", "Allies (Ally)", GameObjectListType::Ally, false, nullptr },
+        { "Enemy", "Enemies (Enemy)", GameObjectListType::Enemy, false, nullptr },
+        { "Heroes", "Heroes (Heroes)", GameObjectListType::Heroes, false, nullptr },
+        { "AllyHeroes", "Ally Heroes (AllyHeroes)", GameObjectListType::AllyHeroes, false, nullptr },
+        { "EnemyHeroes", "Enemy Heroes (EnemyHeroes)", GameObjectListType::EnemyHeroes, false, nullptr },
+        { "Minions", "Minions (Minions)", GameObjectListType::Minions, false, nullptr },
+        { "AllyMinions", "Ally Minions (AllyMinions)", GameObjectListType::AllyMinions, false, nullptr },
+        { "EnemyMinions", "Enemy Minions (EnemyMinions)", GameObjectListType::EnemyMinions, false, nullptr },
+        { "AllyLaneMinions", "Ally Lane Minions (AllyLaneMinions)", GameObjectListType::AllyLaneMinions, false, nullptr },
+        { "EnemyLaneMinions", "Enemy Lane Minions (EnemyLaneMinions)", GameObjectListType::EnemyLaneMinions, false, nullptr },
+        { "AllySpecialMinions", "Ally Special Minions (AllySpecialMinions)", GameObjectListType::AllySpecialMinions, false, nullptr },
+        { "EnemySpecialMinions", "Enemy Special Minions (EnemySpecialMinions)", GameObjectListType::EnemySpecialMinions, false, nullptr },
+        { "AllyIgnoredMinions", "Ally Ignored Minions (AllyIgnoredMinions)", GameObjectListType::AllyIgnoredMinions, false, nullptr },
+        { "EnemyIgnoredMinions", "Enemy Ignored Minions (EnemyIgnoredMinions)", GameObjectListType::EnemyIgnoredMinions, false, nullptr },
+        { "Wards", "Wards (Wards)", GameObjectListType::Wards, false, nullptr },
+        { "AllyWards", "Ally Wards (AllyWards)", GameObjectListType::AllyWards, false, nullptr },
+        { "EnemyWards", "Enemy Wards (EnemyWards)", GameObjectListType::EnemyWards, false, nullptr },
+        { "Jungle", "Jungle Minions (Jungle)", GameObjectListType::Jungle, false, nullptr },
+        { "JungleSmall", "Jungle Small (JungleSmall)", GameObjectListType::JungleSmall, false, nullptr },
+        { "JungleLarge", "Jungle Large (JungleLarge)", GameObjectListType::JungleLarge, false, nullptr },
+        { "JungleLegendary", "Jungle Legendary (JungleLegendary)", GameObjectListType::JungleLegendary, false, nullptr },
+        { "Plants", "Plants (Plants)", GameObjectListType::Plants, false, nullptr },
+        { "Clones", "Clones (Clones)", GameObjectListType::Clones, false, nullptr },
+        { "AllyClones", "Ally Clones (AllyClones)", GameObjectListType::AllyClones, false, nullptr },
+        { "EnemyClones", "Enemy Clones (EnemyClones)", GameObjectListType::EnemyClones, false, nullptr },
+        { "Pets", "Pets (Pets)", GameObjectListType::Pets, false, nullptr },
+        { "AllyPets", "Ally Pets (AllyPets)", GameObjectListType::AllyPets, false, nullptr },
+        { "EnemyPets", "Enemy Pets (EnemyPets)", GameObjectListType::EnemyPets, false, nullptr },
+        { "Turrets", "Turrets (Turrets)", GameObjectListType::Turrets, false, nullptr },
+        { "AllyTurrets", "Ally Turrets (AllyTurrets)", GameObjectListType::AllyTurrets, false, nullptr },
+        { "EnemyTurrets", "Enemy Turrets (EnemyTurrets)", GameObjectListType::EnemyTurrets, false, nullptr },
+        { "Inhibitors", "Inhibitors (Inhibitors)", GameObjectListType::Inhibitors, false, nullptr },
+        { "AllyInhibitors", "Ally Inhibitors (AllyInhibitors)", GameObjectListType::AllyInhibitors, false, nullptr },
+        { "EnemyInhibitors", "Enemy Inhibitors (EnemyInhibitors)", GameObjectListType::EnemyInhibitors, false, nullptr },
+        { "Nexuses", "Nexuses (Nexuses)", GameObjectListType::Nexuses, false, nullptr },
+        { "AllyNexus", "Ally Nexus (AllyNexus)", GameObjectListType::AllyNexus, false, nullptr },
+        { "EnemyNexus", "Enemy Nexus (EnemyNexus)", GameObjectListType::EnemyNexus, false, nullptr },
+        { "Shops", "Shops (Shops)", GameObjectListType::Shops, false, nullptr },
+        { "AllyShops", "Ally Shops (AllyShops)", GameObjectListType::AllyShops, false, nullptr },
+        { "EnemyShops", "Enemy Shops (EnemyShops)", GameObjectListType::EnemyShops, false, nullptr },
+        { "SpawnPoints", "Spawn Points (SpawnPoints)", GameObjectListType::SpawnPoints, false, nullptr },
+        { "AllySpawnPoints", "Ally Spawn Points (AllySpawnPoints)", GameObjectListType::AllySpawnPoints, false, nullptr },
+        { "EnemySpawnPoints", "Enemy Spawn Points (EnemySpawnPoints)", GameObjectListType::EnemySpawnPoints, false, nullptr },
+        { "ParticleEmitters", "Particle Emitters (ParticleEmitters)", GameObjectListType::ParticleEmitters, false, nullptr },
+        { "Missiles", "Missiles (Missiles)", GameObjectListType::Missiles, false, nullptr },
+        { "Player", "Player Object (Player)", GameObjectListType::Player, false, nullptr }
+    };
     bool scanRawGameObjects_ = true;
     bool scanHeroes_ = true;
     bool scanMinions_ = true;
@@ -454,70 +644,247 @@ private:
     bool filterClutter_ = true;
     std::unordered_map<std::uint32_t, int> trackedObjectTicks_;
     bool pKeyPressedLast_ = false;
+    mutable std::vector<SDK::GameObject> scanCache_;
+    mutable std::vector<SDK::GameObject> activeObjectsCache_;
     static inline DeveloperToolsPlugin* s_instance = nullptr;
 
-    std::vector<SDK::GameObject> GetObjectsToScan() const {
-        std::vector<SDK::GameObject> result;
+    template <typename T>
+    void AddUniqueObjectsFromSource(std::vector<SDK::GameObject>& dest, const std::vector<T>& source) const {
+        for (const auto& obj : source) {
+            if (!obj.IsValid()) continue;
+            auto it = std::find_if(dest.begin(), dest.end(), [&obj](const SDK::GameObject& item) {
+                return item.IsValid() && item.Address() == obj.Address();
+            });
+            if (it == dest.end()) {
+                dest.push_back(SDK::GameObject(obj.Handle()));
+            }
+        }
+    }
+
+    void AddUniqueObject(std::vector<SDK::GameObject>& dest, const SDK::GameObject& obj) const {
+        if (!obj.IsValid()) return;
+        auto it = std::find_if(dest.begin(), dest.end(), [&obj](const SDK::GameObject& item) {
+            return item.IsValid() && item.Address() == obj.Address();
+        });
+        if (it == dest.end()) {
+            dest.push_back(obj);
+        }
+    }
+
+    void PopulateScanCache() const {
+        scanCache_.clear();
         if (scanProviderIndex_ == 0) {
             // Using SDK::ObjectManager::Get
             if (scanRawGameObjects_) {
                 for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
-                    if (obj.IsValid()) result.push_back(obj);
+                    if (obj.IsValid()) scanCache_.push_back(obj);
                 }
             } else {
                 if (scanHeroes_) {
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
-                        if (obj.IsValid()) result.push_back(obj);
+                        if (obj.IsValid()) scanCache_.push_back(obj);
                     }
                 }
                 if (scanMinions_) {
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
-                        if (obj.IsValid()) result.push_back(obj);
+                        if (obj.IsValid()) scanCache_.push_back(obj);
                     }
                 }
-                // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-                // if (scanTurrets_) {
-                //     for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
-                //         if (obj.IsValid()) result.push_back(obj);
-                //     }
-                // }
+                if (scanTurrets_) {
+                    for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
+                        if (obj.IsValid()) scanCache_.push_back(obj);
+                    }
+                }
                 if (scanMissiles_) {
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::MissileClient>()) {
-                        if (obj.IsValid()) result.push_back(obj);
+                        if (obj.IsValid()) scanCache_.push_back(obj);
                     }
                 }
             }
         } else {
             // Using SDK::GameObjects Facade
-            if (scanRawGameObjects_) {
-                for (const auto& obj : SDK::GameObjects::AllGameObjects()) {
-                    if (obj.IsValid()) result.push_back(obj);
+            std::lock_guard<std::recursive_mutex> lk(SDK::GameObjects::detail::g_mutex);
+
+            bool anySpecificListSelected = false;
+            for (const auto& opt : listOptions_) {
+                if (opt.Enabled) {
+                    anySpecificListSelected = true;
+                    break;
+                }
+            }
+
+            if (anySpecificListSelected) {
+                for (const auto& opt : listOptions_) {
+                    if (opt.Enabled) {
+                        switch (opt.Type) {
+                        case GameObjectListType::AllGameObjects:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::GameObjectsList);
+                            break;
+                        case GameObjectListType::AttackableUnits:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AttackableUnitsList);
+                            break;
+                        case GameObjectListType::Ally:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyList);
+                            break;
+                        case GameObjectListType::Enemy:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyList);
+                            break;
+                        case GameObjectListType::Heroes:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::HeroesList);
+                            break;
+                        case GameObjectListType::AllyHeroes:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyHeroesList);
+                            break;
+                        case GameObjectListType::EnemyHeroes:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyHeroesList);
+                            break;
+                        case GameObjectListType::Minions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MinionsList);
+                            break;
+                        case GameObjectListType::AllyMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyMinionsList);
+                            break;
+                        case GameObjectListType::EnemyMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyMinionsList);
+                            break;
+                        case GameObjectListType::AllyLaneMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyLaneMinionsList);
+                            break;
+                        case GameObjectListType::EnemyLaneMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyLaneMinionsList);
+                            break;
+                        case GameObjectListType::AllySpecialMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllySpecialMinionsList);
+                            break;
+                        case GameObjectListType::EnemySpecialMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemySpecialMinionsList);
+                            break;
+                        case GameObjectListType::AllyIgnoredMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyIgnoredMinionsList);
+                            break;
+                        case GameObjectListType::EnemyIgnoredMinions:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyIgnoredMinionsList);
+                            break;
+                        case GameObjectListType::Wards:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::WardsList);
+                            break;
+                        case GameObjectListType::AllyWards:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyWardsList);
+                            break;
+                        case GameObjectListType::EnemyWards:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyWardsList);
+                            break;
+                        case GameObjectListType::Jungle:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::JungleList);
+                            break;
+                        case GameObjectListType::JungleSmall:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::JungleSmallList);
+                            break;
+                        case GameObjectListType::JungleLarge:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::JungleLargeList);
+                            break;
+                        case GameObjectListType::JungleLegendary:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::JungleLegendaryList);
+                            break;
+                        case GameObjectListType::Plants:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::PlantsList);
+                            break;
+                        case GameObjectListType::Clones:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ClonesList);
+                            break;
+                        case GameObjectListType::AllyClones:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyClonesList);
+                            break;
+                        case GameObjectListType::EnemyClones:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyClonesList);
+                            break;
+                        case GameObjectListType::Pets:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::PetsList);
+                            break;
+                        case GameObjectListType::AllyPets:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyPetsList);
+                            break;
+                        case GameObjectListType::EnemyPets:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyPetsList);
+                            break;
+                        case GameObjectListType::Turrets:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                            break;
+                        case GameObjectListType::AllyTurrets:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyTurretsList);
+                            break;
+                        case GameObjectListType::EnemyTurrets:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyTurretsList);
+                            break;
+                        case GameObjectListType::Inhibitors:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::InhibitorsList);
+                            break;
+                        case GameObjectListType::AllyInhibitors:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyInhibitorsList);
+                            break;
+                        case GameObjectListType::EnemyInhibitors:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyInhibitorsList);
+                            break;
+                        case GameObjectListType::Nexuses:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::NexusList);
+                            break;
+                        case GameObjectListType::AllyNexus:
+                            AddUniqueObject(scanCache_, SDK::GameObjects::detail::AllyNexusObject);
+                            break;
+                        case GameObjectListType::EnemyNexus:
+                            AddUniqueObject(scanCache_, SDK::GameObjects::detail::EnemyNexusObject);
+                            break;
+                        case GameObjectListType::Shops:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ShopsList);
+                            break;
+                        case GameObjectListType::AllyShops:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyShopsList);
+                            break;
+                        case GameObjectListType::EnemyShops:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyShopsList);
+                            break;
+                        case GameObjectListType::SpawnPoints:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::SpawnPointsList);
+                            break;
+                        case GameObjectListType::AllySpawnPoints:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllySpawnPointsList);
+                            break;
+                        case GameObjectListType::EnemySpawnPoints:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemySpawnPointsList);
+                            break;
+                        case GameObjectListType::ParticleEmitters:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ParticleEmittersList);
+                            break;
+                        case GameObjectListType::Missiles:
+                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MissilesList);
+                            break;
+                        case GameObjectListType::Player:
+                            AddUniqueObject(scanCache_, SDK::GameObjects::detail::PlayerObject);
+                            break;
+                        default:
+                            break;
+                        }
+                    }
                 }
             } else {
-                if (scanHeroes_) {
-                    for (const auto& obj : SDK::GameObjects::Heroes()) {
-                        if (obj.IsValid()) result.push_back(obj);
+                if (scanRawGameObjects_) {
+                    AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::GameObjectsList);
+                } else {
+                    if (scanHeroes_) {
+                        AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::HeroesList);
                     }
-                }
-                if (scanMinions_) {
-                    for (const auto& obj : SDK::GameObjects::Minions()) {
-                        if (obj.IsValid()) result.push_back(obj);
+                    if (scanMinions_) {
+                        AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MinionsList);
                     }
-                }
-                // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-                // if (scanTurrets_) {
-                //     for (const auto& obj : SDK::GameObjects::Turrets()) {
-                //         if (obj.IsValid()) result.push_back(obj);
-                //     }
-                // }
-                if (scanMissiles_) {
-                    for (const auto& obj : SDK::GameObjects::Missiles()) {
-                        if (obj.IsValid()) result.push_back(obj);
+                    if (scanTurrets_) {
+                        AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                    }
+                    if (scanMissiles_) {
+                        AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MissilesList);
                     }
                 }
             }
         }
-        return result;
     }
 
     bool IsClutter(const SDK::GameObject& obj, const std::string& name, const std::string& charName) const {
@@ -552,24 +919,18 @@ private:
         }
     }
 
-    static std::string GetObjectName(const SDK::GameObject& object) {
+    static const std::string& GetObjectName(const SDK::GameObject& object) {
         if (!object.IsValid()) {
-            return {};
+            static const std::string empty;
+            return empty;
         }
-        std::string name = object.Name();
-        if (!name.empty()) {
-            return name;
-        }
-        char nameBuf[96] = {};
-        if (::Core::Objects::ReadName(object.Address(), nameBuf, sizeof(nameBuf)) && nameBuf[0]) {
-            return nameBuf;
-        }
-        return {};
+        return object.Name();
     }
 
-    static std::string GetObjectCharacterName(const SDK::GameObject& object) {
+    static const std::string& GetObjectCharacterName(const SDK::GameObject& object) {
         if (!object.IsValid()) {
-            return {};
+            static const std::string empty;
+            return empty;
         }
         return object.CharacterName();
     }
@@ -594,7 +955,7 @@ private:
         speed = Globals::Read<float>(resource + 0x518); // Offset::SpellDataResourceLayout::ResMissileSpeed
     }
 
-    static std::string TeamToString(const SDK::GameObject& obj) {
+    static const char* TeamToString(const SDK::GameObject& obj) {
         if (!obj.IsValid()) return "Unknown";
         if (obj.IsAlly()) return "Ally";
         if (obj.IsEnemy()) return "Enemy";
@@ -605,28 +966,29 @@ private:
         return "Unknown";
     }
 
-    static std::string StatusToString(const SDK::GameObject& obj) {
-        std::string status;
-        if (obj.IsDead()) status += "Dead";
-        else status += "Alive";
+    static void GetStatusString(const SDK::GameObject& obj, char* buf, size_t maxLen) {
+        if (!obj.IsValid()) {
+            std::snprintf(buf, maxLen, "Unknown");
+            return;
+        }
+        int len = 0;
+        if (obj.IsDead()) len += std::snprintf(buf + len, maxLen - len, "Dead");
+        else len += std::snprintf(buf + len, maxLen - len, "Alive");
 
-        if (!obj.IsVisible()) status += ", Fog";
-        if (!obj.IsTargetable()) status += ", Untargetable";
-        if (obj.IsInvulnerable()) status += ", Invulnerable";
+        if (!obj.IsVisible()) len += std::snprintf(buf + len, maxLen - len, ", Fog");
+        if (!obj.IsTargetable()) len += std::snprintf(buf + len, maxLen - len, ", Untargetable");
+        if (obj.IsInvulnerable()) len += std::snprintf(buf + len, maxLen - len, ", Invulnerable");
 
         if (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) {
             SDK::AIBaseClient ai(obj.Handle());
             if (ai.IsValid()) {
-                char hpBuf[64];
-                std::snprintf(hpBuf, sizeof(hpBuf), ", HP:%.0f/%.0f(%.0f%%)",
-                              ai.Health(), ai.MaxHealth(), ai.HealthPercent());
-                status += hpBuf;
+                len += std::snprintf(buf + len, maxLen - len, ", HP:%.0f/%.0f(%.0f%%)",
+                                     ai.Health(), ai.MaxHealth(), ai.HealthPercent());
             }
         }
-        return status;
     }
 
-    static std::string ObjectTypeToString(::Core::Objects::ObjectType type) {
+    static const char* ObjectTypeToString(::Core::Objects::ObjectType type) {
         switch (type) {
         case ::Core::Objects::ObjectType::GameObject: return "GameObject";
         case ::Core::Objects::ObjectType::AIHeroClient: return "AIHeroClient";
@@ -656,6 +1018,9 @@ private:
             menuEnabled_ = nullptr;
             menuMaxRange_ = nullptr;
             menuProvider_ = nullptr;
+            for (auto& opt : listOptions_) {
+                opt.MenuControl = nullptr;
+            }
             menuScanAll_ = nullptr;
             menuScanHeroes_ = nullptr;
             menuScanMinions_ = nullptr;
