@@ -314,9 +314,31 @@ namespace ChatViewControllerLayout {
 
 namespace ControlRuntime {
     constexpr auto IssueOrder = 0x289BF0;
-    // sub_984130(clientSpellMgr, spellSlot, slotIndex, position, releaseFlag)
-    // is the native charge update/release packet sender.
-    constexpr auto UpdateChargeableSpell = 0x980F80;
+    // sub_98E310(spellbook, spellSlot, slotIndex, Vector3f* position, releaseFlag)
+    // is the native charge update/release packet sender. It serializes the three
+    // floats at *position verbatim into the packet and sends via SendNetworkPacket,
+    // so the aim never touches the HUD cursor / PrimeCastPosition.
+    //   releaseFlag = 0 -> charge begin/update (caller: charge tick sub_BEDE90)
+    //   releaseFlag = 1 -> release            (callers: HudSpellHandler sub_BD01F0,
+    //                                                    ReleaseActiveCharge sub_BC3B00)
+    // spellbook is GetPlayerClient() + SpellBookOffset (0x3108); slotIndex is the
+    // 0..63 spellbook index, i.e. the same value as the slot for Q/W/E/R.
+    // Verified against the running client: base+0x98E310 begins
+    //   48 8B C4 44 89 40 18 48 89 48 08 ... 48 83 BA 30 01 00 00 (cmp [rdx+130h],0)
+    // which matches sub_98E310's `if (*(_QWORD *)(a2 + 304))` guard.
+    // NOTE: this was previously 0x980F80, which is an unrelated vision/unit-count
+    // helper (`v1 = *(_DWORD *)(a1 + 208)`). Charge release therefore sent no packet
+    // at all, and Hooks::OnUpdateChargeableSpell hooked the wrong function.
+    constexpr auto UpdateChargeableSpell = 0x98E310;
+
+    // sub_98EA10(spellbook, Vector3f* position) — opcode 1195 (mov eax, 4ABh in the
+    // prologue), a bare "where the charge is currently aimed" packet holding one
+    // Vec3. While a charge is open the client's charge tick (sub_BEDE90) calls this
+    // EVERY frame with the HUD cursor world position (hud->input + 0x34), so the
+    // charge visibly tracks the mouse even when the begin and release packets carry
+    // our own coordinates. Send it ourselves with the predicted position to keep the
+    // server's view of the aim on target for the duration of the charge.
+    constexpr auto UpdateChargeAim = 0x98EA10;
 
     // ─────────────────────────────────────────────────────────────────────
     // Cast spell pipeline (verified IDB 13337 via EnsoulSharp.dll ILSpy map).

@@ -968,6 +968,18 @@ inline PredictionOutput GetPrediction(PredictionInput input, bool ft, bool check
 
     // Collision check: EnsoulSharp checks only CastPosition here and respects
     // MaxCollisionCount. Broader collision probes belong in Collisions callers.
+    //
+    // input.Collision stays the single gate. Forcing the projectile-wall group to
+    // run whenever it is false was tried and reverted: in this codebase champions
+    // pass collision=false to mean "ground-targeted / cannot be intercepted", not
+    // "projectile that minions ignore", so it wall-gated Tristana W's self-dash,
+    // Aatrox Q's ground sweep, Xerath W/R artillery, Cassiopeia Q/W/R, Viktor W/R,
+    // Thresh E, Caitlyn W and Kog'Maw R — none of which a Wind Wall can stop.
+    //
+    // A spell that a wall does block but minions do not is expressed with the
+    // existing API instead: collision=true plus
+    // SetCollisionObjects({YasuoWall, SamiraWall, MelWall}), which reaches
+    // ProcessProjectileWalls while skipping the unit passes.
     if (checkCollision && input.Collision && result.Hitchance > HitChance::None) {
         std::vector<Vector3> positions = { result.GetCastPosition() };
         auto collision = SDK::Collision::GetCollision(positions, input);

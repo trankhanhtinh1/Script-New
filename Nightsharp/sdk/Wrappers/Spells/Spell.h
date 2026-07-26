@@ -2,12 +2,11 @@
 
 #include "Database/SpellDatabase.h"
 #include "../../../Core/CoreEvadeState.h"
+#include "../../../Core/CoreNewCastSpell.h"
 
 #include "../../Core/Game.h"
-#include "../../Core/NavMesh.h"
 #include "../../Core/Objects.h"
 #include "../../Core/Variables.h"
-#include "../../Enumerations/CastStates.h"
 #include "../../Enumerations/CastStates.h"
 #include "../../Enumerations/CollisionableObjects.h"
 #include "../../Enumerations/DamageType.h"
@@ -108,12 +107,12 @@ public:
     bool AddHitBox = true;
     float MaxCollisionCount = 0.0f;
     bool PredictionCloserPosition = false;
+    // Guide default: Minions | Heroes | YasuoWall. YasuoWall expands to Samira's
+    // and Mel's walls too, so the three no longer need spelling out here.
     CollisionObjectsBridge CollisionObjects =
         CollisionableObjects::Minions |
         CollisionableObjects::Heroes |
-        CollisionableObjects::YasuoWall |
-        CollisionableObjects::SamiraWall |
-        CollisionableObjects::MelWall;
+        CollisionableObjects::YasuoWall;
     bool Collision = false;
     DamageType DamageType = DamageType::Physical;
     float Delay = 0.0f;
@@ -134,24 +133,20 @@ public:
         return player.IsValid() ? player.Spellbook().GetSpell(Slot) : SpellDataInstClient();
     }
 
-    // bool IsCharging() const {
-    //     if (!IsChargedSpell) {
-    //         return false;
-    //     }
-    //
-    //     const auto player = GameObjects::Player();
-    //     const int now = Variables::TickCount();
-    //     const bool charging =
-    //         (player.IsValid() && !ChargedBuffName.empty() &&
-    //          player.HasBuff(ChargedBuffName.c_str())) ||
-    //         (chargedCastedT_ > 0 && now - chargedCastedT_ < 300 + Game::Ping()) ||
-    //         (chargedReqSentT_ > 0 && now - chargedReqSentT_ < 300 + Game::Ping());
-    //     SyncChargedRange(charging);
-    //     return charging;
-    // }
-
     bool IsCharging() const {
-        return false;
+        if (!IsChargedSpell) {
+            return false;
+        }
+
+        // The client's own charge state (castContext + 0x38, which InitChargeState
+        // sets and the release clears) is the authority. This used to be driven by
+        // the champion buff, but the buff outlives the release by a few frames, so a
+        // finished charge kept reporting as charging and the follow-up release then
+        // failed against a charge state that was already gone.
+        const bool charging =
+            CoreNewCastSpell::IsCharging(static_cast<std::int32_t>(Slot));
+        SyncChargedRange(charging);
+        return charging;
     }
 
     int Level() const {
@@ -180,7 +175,7 @@ public:
     }
 
     ~Spell() {
-        // UnregisterChargedSpell(this);
+        UnregisterChargedSpell(this);
     }
 
     Vector3 SourcePosition() const {
@@ -548,35 +543,23 @@ public:
                (IsChargedSpell && t == 0 && IsCharging());
     }
 
-    // Spell& SetCharged(const std::string& spellName,
-    //                   const std::string& buffName,
-    //                   int minRange,
-    //                   int maxRange,
-    //                   float deltaT) {
-    //     IsChargedSpell = true;
-    //     ChargedSpellName = spellName;
-    //     ChargedBuffName = buffName;
-    //     ChargedMinRange = minRange;
-    //     ChargedMaxRange = maxRange;
-    //     ChargeDuration = static_cast<int>(deltaT * 1000.0f);
-    //     chargedCastedT_ = 0;
-    //     Range = static_cast<float>(maxRange);
-    //
-    //     CoreSpellBook::RegisterChargedBuffName(buffName.c_str());
-    //     RegisterChargedSpell(this);
-    //     return *this;
-    // }
-
     Spell& SetCharged(const std::string& spellName,
                       const std::string& buffName,
                       int minRange,
                       int maxRange,
                       float deltaT) {
-        (void)spellName;
-        (void)buffName;
-        (void)minRange;
-        (void)maxRange;
-        (void)deltaT;
+        IsChargedSpell = true;
+        ChargedSpellName = spellName;
+        ChargedBuffName = buffName;
+        ChargedMinRange = minRange;
+        ChargedMaxRange = maxRange;
+        ChargeDuration = static_cast<int>(deltaT * 1000.0f);
+        chargedCastedT_ = 0;
+        chargedReqSentT_ = 0;
+        Range = static_cast<float>(maxRange);
+
+        CoreSpellBook::RegisterChargedBuffName(buffName.c_str());
+        RegisterChargedSpell(this);
         return *this;
     }
 
@@ -676,72 +659,46 @@ public:
         return *this;
     }
 
-    // bool StartCharging() {
-    //     if (IsCharging() || Variables::TickCount() - chargedReqSentT_ <= 400 + Game::Ping()) {
-    //         return false;
-    //     }
-    //
-    //     const int now = Variables::TickCount();
-    //     const bool result =
-    //         GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, Game::CursorPos(), false);
-    //     if (result) {
-    //         chargedReqSentT_ = now;
-    //         chargedCastedT_ = now;
-    //         LastCastAttemptT = now;
-    //         SyncChargedRange(true);
-    //     }
-    //     return result;
-    // }
-
     bool StartCharging() {
-        return false;
+        return StartCharging(SourcePosition());
     }
 
-    // bool StartCharging(const Vector3& position) {
-    //     if (IsCharging() || Variables::TickCount() - chargedReqSentT_ <= 400 + Game::Ping()) {
-    //         return false;
-    //     }
-    //
-    //     const int now = Variables::TickCount();
-    //     const bool result =
-    //         GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, position, false);
-    //     if (result) {
-    //         chargedReqSentT_ = now;
-    //         chargedCastedT_ = now;
-    //         LastCastAttemptT = now;
-    //         SyncChargedRange(true);
-    //     }
-    //     return result;
-    // }
+    // Parity with EnsoulSharp.SDK.Spell, which offers StartCharging() plus both a
+    // Vector2 and a Vector3 overload (ShootChargedSpell already had both).
+    bool StartCharging(Vector2 position) {
+        return StartCharging(Vector3::From2D(position));
+    }
 
     bool StartCharging(const Vector3& position) {
-        (void)position;
-        return false;
-    }
+        if (IsCharging() || Variables::TickCount() - chargedReqSentT_ <= 400 + Game::Ping()) {
+            return false;
+        }
 
-    // bool ShootChargedSpell(Vector2 position) {
-    //     return ShootChargedSpell(Vector3::From2D(position));
-    // }
+        const int now = Variables::TickCount();
+        const bool result =
+            GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, position, false);
+        if (result) {
+            chargedReqSentT_ = now;
+            chargedCastedT_ = now;
+            LastCastAttemptT = now;
+            SyncChargedRange(true);
+        }
+        return result;
+    }
 
     bool ShootChargedSpell(Vector2 position) {
-        (void)position;
-        return false;
+        return ShootChargedSpell(Vector3::From2D(position));
     }
 
-    // bool ShootChargedSpell(Vector3 position) {
-    //     LastCastAttemptT = Variables::TickCount();
-    //     const bool result =
-    //         GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, position, true);
-    //     if (result) {
-    //         chargedReqSentT_ = 0;
-    //         SyncChargedRange(false);
-    //     }
-    //     return result;
-    // }
-
     bool ShootChargedSpell(Vector3 position) {
-        (void)position;
-        return false;
+        LastCastAttemptT = Variables::TickCount();
+        const bool result =
+            GameObjects::Player().Spellbook().UpdateChargedSpell(Slot, position, true);
+        if (result) {
+            chargedReqSentT_ = 0;
+            SyncChargedRange(false);
+        }
+        return result;
     }
 
     void UpdateSourcePosition(Vector3 fromVector3 = {}, Vector3 rangeCheckFromVector3 = {}) {
@@ -783,39 +740,43 @@ public:
 private:
     static constexpr int kCastRequestThrottleMs = 120;
 
-    // float ChargedRange(bool charging) const {
-    //     if (!IsChargedSpell) {
-    //         return Range;
-    //     }
-    //
-    //     if (!charging) {
-    //         return static_cast<float>(ChargedMaxRange);
-    //     }
-    //
-    //     const int now = Variables::TickCount();
-    //     const int startTick = chargedCastedT_ > 0 ? chargedCastedT_ : chargedReqSentT_;
-    //     const int elapsed = startTick > 0 ? std::max(0, now - startTick) : 0;
-    //     const float delta = static_cast<float>(ChargedMaxRange - ChargedMinRange);
-    //     return static_cast<float>(ChargedMinRange) +
-    //            std::min(delta,
-    //                     (static_cast<float>(elapsed) * delta /
-    //                      static_cast<float>(std::max(1, ChargeDuration))) -
-    //                     150.0f);
-    // }
-
     float ChargedRange(bool charging) const {
-        (void)charging;
-        return Range;
+        if (!IsChargedSpell) {
+            return Range;
+        }
+
+        if (!charging) {
+            return static_cast<float>(ChargedMaxRange);
+        }
+
+        // Prefer the moment the client recorded the charge as opening. The local
+        // request ticks only know about charges this wrapper started, so they drift
+        // whenever the charge came from somewhere else — the player's own key, say.
+        int elapsed = 0;
+        const float chargeStart =
+            CoreNewCastSpell::ChargeStartTime(static_cast<std::int32_t>(Slot));
+        if (chargeStart > 0.0f) {
+            elapsed = static_cast<int>((Game::Time() - chargeStart) * 1000.0f);
+        } else {
+            const int now = Variables::TickCount();
+            const int startTick =
+                chargedCastedT_ > 0 ? chargedCastedT_ : chargedReqSentT_;
+            elapsed = startTick > 0 ? now - startTick : 0;
+        }
+        elapsed = std::max(0, elapsed);
+
+        const float delta = static_cast<float>(ChargedMaxRange - ChargedMinRange);
+        return static_cast<float>(ChargedMinRange) +
+               std::min(delta,
+                        (static_cast<float>(elapsed) * delta /
+                         static_cast<float>(std::max(1, ChargeDuration))) -
+                        150.0f);
     }
 
-    // void SyncChargedRange(bool charging) const {
-    //     if (IsChargedSpell) {
-    //         Range = ChargedRange(charging);
-    //     }
-    // }
-
     void SyncChargedRange(bool charging) const {
-        (void)charging;
+        if (IsChargedSpell) {
+            Range = ChargedRange(charging);
+        }
     }
 
     static int CastThrottleSlotIndex(SpellSlot slot) {
@@ -854,79 +815,52 @@ private:
         return true;
     }
 
-    // static void ShootChargedSpell(SpellSlot slot, Vector3 position, bool releaseCast = true) {
-    //     position.y = NavMesh::GetHeightForPosition(position.x, position.z);
-    //     auto spellbook = GameObjects::Player().Spellbook();
-    //     spellbook.UpdateChargedSpell(slot, position, releaseCast, false);
-    //     spellbook.CastSpell(slot, position, false);
-    // }
+    static std::vector<Spell*>& ChargedSpellRegistry() {
+        static std::vector<Spell*> registry;
+        return registry;
+    }
 
-    // static std::vector<Spell*>& ChargedSpellRegistry() {
-    //     static std::vector<Spell*> registry;
-    //     return registry;
-    // }
+    static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args) {
+        for (Spell* spell : ChargedSpellRegistry()) {
+            if (spell) {
+                spell->OnDoCast(args);
+            }
+        }
+    }
 
-    // static void RegisterChargedSpell(Spell* spell) {
-    //     if (!spell) {
-    //         return;
-    //     }
-    //
-    //     auto& registry = ChargedSpellRegistry();
-    //     if (std::find(registry.begin(), registry.end(), spell) == registry.end()) {
-    //         registry.push_back(spell);
-    //     }
-    //
-    //     Events::AddOnDoCast(&OnDoCastStatic);
-    //     Events::AddOnProcessCastSpell(&OnProcessCastSpellStatic);
-    // }
+    static void RegisterChargedSpell(Spell* spell) {
+        if (!spell) {
+            return;
+        }
 
-    // static void UnregisterChargedSpell(Spell* spell) {
-    //     auto& registry = ChargedSpellRegistry();
-    //     registry.erase(std::remove(registry.begin(), registry.end(), spell), registry.end());
-    //     if (registry.empty()) {
-    //         Events::RemoveOnProcessCastSpell(&OnProcessCastSpellStatic);
-    //         Events::RemoveOnDoCast(&OnDoCastStatic);
-    //     }
-    // }
+        auto& registry = ChargedSpellRegistry();
+        if (std::find(registry.begin(), registry.end(), spell) == registry.end()) {
+            registry.push_back(spell);
+        }
 
-    // static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args) {
-    //     for (Spell* spell : ChargedSpellRegistry()) {
-    //         if (spell) {
-    //             spell->OnDoCast(args);
-    //         }
-    //     }
-    // }
+        Events::AddOnDoCast(&OnDoCastStatic);
+    }
 
-    // static void OnProcessCastSpellStatic(const Events::CastSpellEventArgs& args) {
-    //     for (Spell* spell : ChargedSpellRegistry()) {
-    //         if (spell) {
-    //             spell->OnProcessCastSpell(args);
-    //         }
-    //     }
-    // }
+    static void UnregisterChargedSpell(Spell* spell) {
+        auto& registry = ChargedSpellRegistry();
+        registry.erase(std::remove(registry.begin(), registry.end(), spell), registry.end());
+        if (registry.empty()) {
+            Events::RemoveOnDoCast(&OnDoCastStatic);
+        }
+    }
 
-    // void OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    //     const auto player = GameObjects::Player();
-    //     if (!player.IsValid() ||
-    //         args.Sender.NetworkId != player.NetworkId() ||
-    //         ChargedSpellName.empty() ||
-    //         ChargedSpellName != args.SpellName) {
-    //         return;
-    //     }
-    //
-    //     chargedCastedT_ = Variables::TickCount();
-    //     SyncChargedRange(true);
-    // }
+    void OnDoCast(const Events::ProcessSpellEventArgs& args) {
+        const auto player = GameObjects::Player();
+        if (!player.IsValid() ||
+            args.Sender.NetworkId != player.NetworkId() ||
+            ChargedSpellName.empty() ||
+            ChargedSpellName != args.SpellName) {
+            return;
+        }
 
-    // void OnProcessCastSpell(const Events::CastSpellEventArgs& args) {
-    //     if (args.Slot != static_cast<int>(Slot) ||
-    //         Variables::TickCount() - chargedReqSentT_ <= 500 ||
-    //         !IsCharging()) {
-    //         return;
-    //     }
-    //
-    //     Cast(args.EndPosition);
-    // }
+        chargedCastedT_ = Variables::TickCount();
+        SyncChargedRange(true);
+    }
 
     static Vector2 Rotate2D(const Vector2& value, float angle) {
         const float c = std::cos(angle);
@@ -950,8 +884,8 @@ private:
         return point.DistanceSqr(projection);
     }
 
-    // int chargedCastedT_ = 0;
-    // int chargedReqSentT_ = 0;
+    int chargedCastedT_ = 0;
+    int chargedReqSentT_ = 0;
     float minManaPercent_ = 0.0f;
 };
 

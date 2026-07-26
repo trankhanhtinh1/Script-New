@@ -105,12 +105,68 @@ private:
             wall.endpointA.networkId,
             wall.endpointB.networkId);
         DrawTextWorld(wall.center, label, kTextColor, -18.0f);
+
+        // Ownership readout. `team` is what the tracker resolved for the caster
+        // and is what collision filters on; `raw` is the emitter's own team byte,
+        // kept visible because it reads 0 on every windwall object and is the
+        // reason ownership has to come from the co-located visual instead.
+        DrawTextWorld(wall.center, BuildTeamLabel(wall), kTeamTextColor, -34.0f);
+    }
+
+    static const char* BuildTeamLabel(
+        const SDK::YasuoWallTracker::WallSnapshot& wall) {
+        static char label[240] = {};
+
+        const auto player = SDK::GameObjects::Player();
+        const int playerTeam = player.IsValid()
+            ? static_cast<int>(player.Team())
+            : -1;
+
+        // Nearest Yasuo, i.e. the presumed caster.
+        int yasuoTeam = -1;
+        int yasuoEnemy = -1;
+        float yasuoDistance = -1.0f;
+        for (const auto& hero : SDK::GameObjects::Heroes()) {
+            if (!hero.IsValid() ||
+                _stricmp(hero.CharacterName().c_str(), "Yasuo") != 0) {
+                continue;
+            }
+            const float distance = hero.Position().Distance(wall.center);
+            if (yasuoDistance < 0.0f || distance < yasuoDistance) {
+                yasuoDistance = distance;
+                yasuoTeam = static_cast<int>(hero.Team());
+                yasuoEnemy = hero.IsEnemy() ? 1 : 0;
+            }
+        }
+
+        const std::uint32_t localTeam = SDK::YasuoWallTracker::LocalTeam();
+        const bool blocksOurCasts = SDK::YasuoWallTracker::WallMatchesOwner(
+            wall,
+            SDK::YasuoWallTracker::WallOwner::Enemy);
+
+        std::snprintf(
+            label,
+            sizeof(label),
+            "team=%u local=%u %s | raw m=%u a=%u b=%u | player=%d | yasuo team=%d enemy=%d d=%.0f",
+            wall.team,
+            localTeam,
+            wall.team == 0 ? "UNKNOWN"
+                           : (blocksOurCasts ? "ENEMY-blocks-us" : "ALLY-passes"),
+            ::Core::Objects::ReadTeam(wall.main.address),
+            ::Core::Objects::ReadTeam(wall.endpointA.address),
+            ::Core::Objects::ReadTeam(wall.endpointB.address),
+            playerTeam,
+            yasuoTeam,
+            yasuoEnemy,
+            yasuoDistance);
+        return label;
     }
 
     static constexpr std::uint32_t kWallColor = 0xFFFF5050u;
     static constexpr std::uint32_t kEndpointColor = 0xFF50FF50u;
     static constexpr std::uint32_t kCenterColor = 0xFFFFD24Au;
     static constexpr std::uint32_t kTextColor = 0xFFFFFFFFu;
+    static constexpr std::uint32_t kTeamTextColor = 0xFF4AD2FFu;
 };
 
 } // namespace Plugins

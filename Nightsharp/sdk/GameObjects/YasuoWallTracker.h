@@ -14,6 +14,18 @@
 
 namespace SDK::YasuoWallTracker {
 
+// Which Yasuo owns the wall, relative to the local player. A Wind Wall stops the
+// projectiles of the owner's enemies only, so a caller has to say whose
+// projectile it is testing: our own casts are stopped by Enemy walls, while an
+// enemy skillshot flying at us is stopped by an Ally wall. The parameter is
+// mandatory precisely so that a missed call site fails to compile instead of
+// silently inheriting the wrong side.
+enum class WallOwner : std::uint8_t {
+    Any,
+    Enemy,
+    Ally,
+};
+
 struct WallSnapshot {
     ::Core::Objects::ObjectHandle main = {};
     ::Core::Objects::ObjectHandle endpointA = {};
@@ -23,6 +35,8 @@ struct WallSnapshot {
     Vec3 center = {};
     Vec3 start = {};
     Vec3 end = {};
+    // Raw team slot of the caster; 0 when ownership could not be established.
+    std::uint32_t team = 0;
 
     float Span() const {
         return start.To2D().Distance(end.To2D());
@@ -87,7 +101,12 @@ inline void ObserveLocked(
     const Vec3 position = info.Position.IsValid()
         ? info.Position
         : ::Core::Objects::ReadPosition(info.Ptr);
-    g_registry.OnCreate(ToIdentity(info), now, name, position.To2D());
+    g_registry.OnCreate(
+        ToIdentity(info),
+        now,
+        name,
+        position.To2D(),
+        ::Core::Objects::ReadTeam(info.Ptr));
 }
 
 inline bool HasYasuoInGame() {
@@ -140,7 +159,8 @@ inline void SeedLocked(int now) {
             ToIdentity(handle),
             now,
             name,
-            ::Core::Objects::ReadPosition(objects[i]).To2D());
+            ::Core::Objects::ReadPosition(objects[i]).To2D(),
+            ::Core::Objects::ReadTeam(objects[i]));
     }
 
     g_seeded = true;
@@ -183,7 +203,8 @@ inline void RefreshLocked(int now) {
             ToIdentity(handle),
             now,
             name,
-            ::Core::Objects::ReadPosition(handle.address).To2D());
+            ::Core::Objects::ReadPosition(handle.address).To2D(),
+            ::Core::Objects::ReadTeam(handle.address));
     }
     g_registry.Refresh(now);
 
@@ -209,6 +230,7 @@ inline void RefreshLocked(int now) {
             mainPosition,
             Vec3(wall.start.x, mainPosition.y, wall.start.y),
             Vec3(wall.end.x, mainPosition.y, wall.end.y),
+            wall.team,
         });
     }
 }
@@ -248,11 +270,40 @@ inline std::vector<WallSnapshot> ActiveWalls() {
     return detail::g_active;
 }
 
+// Local player's raw team slot, used to tell an owner's side apart.
+inline std::uint32_t LocalTeam() {
+    const auto& ctx = CoreRuntime::GetContext();
+    return Globals::IsValidPtr(ctx.localPlayer)
+        ? ::Core::Objects::ReadTeam(ctx.localPlayer)
+        : 0;
+}
+
+// A wall whose owner could not be established (team 0) is counted for either
+// side: refusing to cast is recoverable, walking a skillshot into an unseen wall
+// or evading into one is not.
+inline bool WallMatchesOwner(const WallSnapshot& wall, WallOwner owner) {
+    if (owner == WallOwner::Any || wall.team == 0) {
+        return true;
+    }
+
+    const std::uint32_t local = LocalTeam();
+    if (local == 0) {
+        return true;
+    }
+
+    return owner == WallOwner::Ally ? wall.team == local : wall.team != local;
+}
+
 inline bool Intersects(
     const Vec3& pathStart,
     const Vec3& pathEnd,
-    float radius) {
+    float radius,
+    WallOwner owner) {
     for (const auto& wall : ActiveWalls()) {
+        if (!WallMatchesOwner(wall, owner)) {
+            continue;
+        }
+
         YasuoWallModel::WallSegment segment;
         segment.start = wall.start.To2D();
         segment.end = wall.end.To2D();
