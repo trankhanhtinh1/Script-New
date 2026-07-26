@@ -326,6 +326,9 @@ inline bool HasAnyBuff(const AIBaseClient& unit, std::initializer_list<const cha
     return false;
 }
 
+// This path serves the local player's own skillshots (Spell::GetPrediction ->
+// GetCollision), so only a wall owned by an enemy Yasuo stops them. Our own wall,
+// or an ally's, lets our projectiles through.
 inline bool SegmentIntersectsYasuoWall(const Vector3& start,
                                        const Vector3& end,
                                        float projectileRadius) {
@@ -335,7 +338,8 @@ inline bool SegmentIntersectsYasuoWall(const Vector3& start,
            YasuoWallTracker::Intersects(
                start,
                end,
-               std::max(projectileRadius, 0.0f));
+               std::max(projectileRadius, 0.0f),
+               YasuoWallTracker::WallOwner::Enemy);
 }
 
 inline bool HasCircularShieldCollision(const char* championName,

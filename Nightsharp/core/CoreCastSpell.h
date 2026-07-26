@@ -29,6 +29,8 @@ namespace CoreCastSpell {
         Target,
         Self,
         Vector,
+        ChargeBegin,
+        ChargeRelease,
     };
 
     enum class CastFailure : std::uint8_t {
@@ -50,6 +52,7 @@ namespace CoreCastSpell {
         CanCastRejected,
         NativeException,
         Throttled,
+        MissingChargeState,
     };
 
     struct CastTrace {
@@ -112,6 +115,7 @@ namespace CoreCastSpell {
     inline constexpr std::int32_t kHudModeSmartCast = 2;
     inline constexpr std::int64_t kHudKeyPress = 1;
     inline constexpr std::int64_t kHudKeyRelease = 2;
+    inline constexpr uintptr_t kHudChargeSpellInput = 0x38;
 
     // Minimum interval between fire-casts of the same slot, so holding a combo key
     // (e.g. space) doesn't spam the native cast every frame. Matches the SDK Spell wrapper.
@@ -127,6 +131,8 @@ namespace CoreCastSpell {
         case CastKind::Target: return "target";
         case CastKind::Self: return "self";
         case CastKind::Vector: return "vector";
+        case CastKind::ChargeBegin: return "charge-begin";
+        case CastKind::ChargeRelease: return "charge-release";
         default: return "unknown";
         }
     }
@@ -151,6 +157,7 @@ namespace CoreCastSpell {
         case CastFailure::CanCastRejected: return "can-cast-rejected";
         case CastFailure::NativeException: return "native-exception";
         case CastFailure::Throttled: return "throttled";
+        case CastFailure::MissingChargeState: return "missing-charge-state";
         default: return "unknown";
         }
     }
@@ -264,89 +271,6 @@ namespace CoreCastSpell {
             uintptr_t address_ = 0;
             std::int32_t originalX_ = 0;
             std::int32_t originalY_ = 0;
-            bool applied_ = false;
-        };
-
-        class ScopedRuntimeSpellInput {
-        public:
-            bool Apply(uintptr_t input,
-                const Vec3& startPosition,
-                const Vec3& endPosition,
-                std::uint32_t targetNetworkId) {
-                if (!Globals::IsValidPtr(input)) {
-                    Fail(CastFailure::MissingSpellInput);
-                    return false;
-                }
-
-                address_ = input;
-                originalTargetNetworkId_ = Globals::Read<std::uint32_t>(
-                    address_ + Offset::SpellInputLayout::InputTargetNetId);
-                originalStartPosition_ = Globals::Read<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputStartPos);
-                originalEndPosition_ = Globals::Read<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos);
-                originalEndPosition2_ = Globals::Read<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3));
-                originalEndPosition3_ = Globals::Read<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2);
-                applied_ = true;
-
-                bool ok = true;
-                ok &= Globals::Write<std::uint32_t>(
-                    address_ + Offset::SpellInputLayout::InputTargetNetId,
-                    targetNetworkId);
-                ok &= Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputStartPos,
-                    startPosition);
-                ok &= Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos,
-                    endPosition);
-                ok &= Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3),
-                    endPosition);
-                ok &= Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2,
-                    endPosition);
-
-                if (!ok) {
-                    Restore();
-                    Fail(CastFailure::MissingSpellInput);
-                    return false;
-                }
-
-                return true;
-            }
-
-            void Restore() {
-                if (!applied_ || !Globals::IsValidPtr(address_)) {
-                    return;
-                }
-
-                (void)Globals::Write<std::uint32_t>(
-                    address_ + Offset::SpellInputLayout::InputTargetNetId,
-                    originalTargetNetworkId_);
-                (void)Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputStartPos,
-                    originalStartPosition_);
-                (void)Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos,
-                    originalEndPosition_);
-                (void)Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3),
-                    originalEndPosition2_);
-                (void)Globals::Write<Vec3>(
-                    address_ + Offset::SpellInputLayout::InputEndPos + sizeof(Vec3) * 2,
-                    originalEndPosition3_);
-                applied_ = false;
-            }
-
-        private:
-            uintptr_t address_ = 0;
-            std::uint32_t originalTargetNetworkId_ = 0;
-            Vec3 originalStartPosition_ = {};
-            Vec3 originalEndPosition_ = {};
-            Vec3 originalEndPosition2_ = {};
-            Vec3 originalEndPosition3_ = {};
             bool applied_ = false;
         };
 
@@ -516,8 +440,7 @@ namespace CoreCastSpell {
 
         inline bool CastValidated(CastKind kind,
             std::uint8_t slot,
-            const Vec3& endPosition,
-            uintptr_t target) {
+            const Vec3& endPosition) {
             if (!ResolveCommon(kind, slot)) {
                 return false;
             }
@@ -529,23 +452,6 @@ namespace CoreCastSpell {
 
             if (kind == CastKind::Self) {
                 g_lastTrace.endPosition = g_lastTrace.startPosition;
-            }
-            else if (kind == CastKind::Target) {
-                if (!Globals::IsValidPtr(target)) {
-                    Fail(CastFailure::InvalidTarget);
-                    return false;
-                }
-
-                g_lastTrace.targetNetworkId =
-                    Globals::Read<std::uint32_t>(target + Offset::All::NetworkId);
-                g_lastTrace.endPosition =
-                    Globals::Read<Vec3>(target + Offset::All::Position);
-
-                if (g_lastTrace.targetNetworkId == 0 ||
-                    g_lastTrace.targetNetworkId == 0xFFFFFFFFu) {
-                    Fail(CastFailure::InvalidTarget);
-                    return false;
-                }
             }
             else {
                 g_lastTrace.endPosition = endPosition;
@@ -586,7 +492,7 @@ namespace CoreCastSpell {
                     reinterpret_cast<FnCanCastCheck>(g_lastTrace.canCastCheck),
                     g_lastTrace.castContext,
                     g_lastTrace.spellInput,
-                    g_lastTrace.targetNetworkId);
+                    std::uint32_t{0});
 
                 if (g_lastTrace.canCastAccepted) {
                     g_lastTrace.nativeResult = spoof_call(
@@ -782,7 +688,7 @@ namespace CoreCastSpell {
     }
 
     inline bool CastSelfSpell(std::uint8_t slot) {
-        return detail::CastValidated(CastKind::Self, slot, {}, 0);
+        return detail::CastValidated(CastKind::Self, slot, {});
     }
 
 } // namespace CoreCastSpell

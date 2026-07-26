@@ -18,7 +18,7 @@
 #include "Jinx.h"
 // #include "Kalista.h"
 #include "Viktor.h"
-// #include "Xerath.h"
+#include "Xerath.h"
 #include "Zed.h"
 // #include "Vayne.h"
 // #include "Caitlyn.h"
@@ -103,7 +103,7 @@ public:
         // else if (champ == "Shyvana")    { Shyvana::OnGameLoad(); }
         // else if (champ == "Sylas")      { Sylas::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Viktor") == 0) { AIO7UP::Viktor::OnGameLoad(); }
-        // else if (_stricmp(champ.c_str(), "Xerath") == 0) { AIO7UP::Xerath::OnGameLoad(); }
+        else if (_stricmp(champ.c_str(), "Xerath") == 0) { AIO7UP::Xerath::OnGameLoad(); }
         else if (_stricmp(champ.c_str(), "Zed") == 0) { AIO7UP::Zed::OnGameLoad(); }
         else {
             return;
@@ -118,7 +118,7 @@ public:
         AIO7UP::Jinx::OnUnload();
         // AIO7UP::Kalista::OnUnload();
         AIO7UP::Viktor::OnUnload();
-        // AIO7UP::Xerath::OnUnload();
+        AIO7UP::Xerath::OnUnload();
         AIO7UP::Zed::OnUnload();
     }
 
@@ -129,7 +129,7 @@ private:
              _stricmp(championName, "Jinx") == 0 ||
              // _stricmp(championName, "Kalista") == 0 ||
              _stricmp(championName, "Viktor") == 0 ||
-             // _stricmp(championName, "Xerath") == 0 ||
+             _stricmp(championName, "Xerath") == 0 ||
              _stricmp(championName, "Zed") == 0);
     }
 
@@ -156,9 +156,9 @@ private:
         if (_stricmp(championName.c_str(), "Jinx") == 0) {
             return "Jinx";
         }
-        // if (_stricmp(championName.c_str(), "Xerath") == 0) {
-        //     return "Xerath";
-        // }
+        if (_stricmp(championName.c_str(), "Xerath") == 0) {
+            return "Xerath";
+        }
         if (_stricmp(championName.c_str(), "Viktor") == 0) {
             return "Viktor";
         }
