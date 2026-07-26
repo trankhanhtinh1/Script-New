@@ -51,6 +51,22 @@ constexpr bool HasFlag(CollisionableObjects value, CollisionableObjects flag) {
     return (static_cast<U>(value) & static_cast<U>(flag)) == static_cast<U>(flag);
 }
 
+// Samira's W and Mel's W stop a projectile exactly the way Yasuo's Wind Wall
+// does, so they are one concept as far as a spell is concerned. Asking for
+// YasuoWall therefore asks for the whole family: champions write the single flag
+// the collision guide documents instead of having to remember three, and a spell
+// written before Samira/Mel existed keeps working against them.
+inline constexpr CollisionableObjects ProjectileWalls =
+    CollisionableObjects::YasuoWall |
+    CollisionableObjects::SamiraWall |
+    CollisionableObjects::MelWall;
+
+constexpr CollisionableObjects NormalizeCollisionObjects(CollisionableObjects flags) {
+    return HasFlag(flags, CollisionableObjects::YasuoWall)
+        ? (flags | ProjectileWalls)
+        : flags;
+}
+
 inline CollisionableObjects ToCollisionObjectFlags(const std::vector<CollisionableObjects>& objects) {
     CollisionableObjects flags = static_cast<CollisionableObjects>(0);
     for (const auto object : objects) {
@@ -89,11 +105,14 @@ inline std::vector<CollisionableObjects> ToCollisionObjectArray(CollisionableObj
 }
 
 struct CollisionObjectsBridge {
-    CollisionableObjects Flags =
+    // Default per the collision guide: Minions | Heroes | YasuoWall. Heroes was
+    // missing here, so a spell that never called SetCollisionObjects was checked
+    // against minions and walls but not against champions standing in the way.
+    // YasuoWall expands to the whole projectile-wall family.
+    CollisionableObjects Flags = NormalizeCollisionObjects(
         CollisionableObjects::Minions |
-        CollisionableObjects::YasuoWall |
-        CollisionableObjects::SamiraWall |
-        CollisionableObjects::MelWall;
+        CollisionableObjects::Heroes |
+        CollisionableObjects::YasuoWall);
     std::vector<CollisionableObjects> Values =
         ToCollisionObjectArray(Flags);
 
@@ -135,13 +154,15 @@ struct CollisionObjectsBridge {
     }
 
     void Set(CollisionableObjects flags) {
-        Flags = flags;
-        Values = ToCollisionObjectArray(flags);
+        Flags = NormalizeCollisionObjects(flags);
+        Values = ToCollisionObjectArray(Flags);
     }
 
     void Set(const std::vector<CollisionableObjects>& objects) {
-        Values = objects;
-        Flags = ToCollisionObjectFlags(Values);
+        // Derived from the normalized flags rather than kept verbatim, so the
+        // list and the flags cannot disagree and duplicates cannot creep in.
+        Flags = NormalizeCollisionObjects(ToCollisionObjectFlags(objects));
+        Values = ToCollisionObjectArray(Flags);
     }
 
     CollisionableObjects ToFlags() const {
@@ -183,8 +204,7 @@ struct CollisionObjectsBridge {
 
     void push_back(CollisionableObjects object) {
         if (!HasFlag(Flags, object)) {
-            Values.push_back(object);
-            Flags |= object;
+            Set(Flags | object);
         }
     }
 };

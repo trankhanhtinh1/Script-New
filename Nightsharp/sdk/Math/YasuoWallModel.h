@@ -55,16 +55,53 @@ inline std::string LowerAscii(std::string_view value) {
     return out;
 }
 
+// The windwall emitter name carries the caster's skin, and the suffix is not
+// always a bare rank digit. Names read live off 16.14 with two Yasuos in the game
+// (object name at +0x68, enumerated through the object manager):
+//     Yasuo_Base_W_windwall1             base skin, rank in the last character
+//     Yasuo_Skin02_w_windwall_enemy_05   skinned caster, "_enemy_05" suffix
+//     Yasuo_Skin02_W_windwall_activate   activation effect, NOT the wall itself
+// The previous matcher required exactly "yasuo_base_w_windwall" plus one
+// character, so every Yasuo not on the base skin was invisible to the tracker and
+// its wall was never tracked, drawn, or collided against.
+// Requiring a trailing rank number rather than denylisting known siblings: both
+// real wall emitters end in digits ("windwall1", "_enemy_05") while the companion
+// particles spawned from the same ability do not ("..._W_windwall_activate").
+// Denylisting only "activate" left every other sibling in that family free to be
+// misclassified as a wall, and a level fallback would have made each one a valid
+// rank-1 wall with a bogus segment.
+inline bool IsWindwallName(std::string_view lowerName) {
+    if (lowerName.rfind("yasuo", 0) != 0) {
+        return false;
+    }
+    if (lowerName.find("_w_windwall") == std::string_view::npos) {
+        return false;
+    }
+    return !lowerName.empty() &&
+           lowerName.back() >= '0' &&
+           lowerName.back() <= '9';
+}
+
 inline int ParseMainLevel(std::string_view name) {
     const std::string lower = LowerAscii(name);
-    constexpr std::string_view prefix = "yasuo_base_w_windwall";
-    if (lower.size() != prefix.size() + 1 ||
-        lower.compare(0, prefix.size(), prefix) != 0) {
+    if (!IsWindwallName(lower)) {
         return 0;
     }
 
-    const char suffix = lower.back();
-    return suffix >= '1' && suffix <= '5' ? suffix - '0' : 0;
+    // Trailing digits are the rank: "windwall1" -> 1, "_enemy_05" -> 5.
+    std::size_t begin = lower.size();
+    while (begin > 0 && lower[begin - 1] >= '0' && lower[begin - 1] <= '9') {
+        --begin;
+    }
+
+    int level = 0;
+    for (std::size_t k = begin; k < lower.size(); ++k) {
+        level = level * 10 + (lower[k] - '0');
+        if (level > 5) {
+            return 5;
+        }
+    }
+    return std::clamp(level, 1, 5);
 }
 
 inline ObjectRole ClassifyName(std::string_view name) {
@@ -88,7 +125,16 @@ struct ObjectState {
     int createdTick = 0;
     Vec2 position = {};
     bool pendingName = false;
+    // Raw team slot off the object. The windwall emitters themselves always read
+    // 0, but the co-located YasuoW_VisualMis object carries the caster's real
+    // slot (1 / 2), which is where a wall's ownership comes from.
+    std::uint32_t team = 0;
 };
+
+// A wall's own emitter has no usable team, so ownership is taken from the nearest
+// Visual object spawned alongside it. Anything further away than this is a
+// different Yasuo's wall and must not donate its team.
+inline constexpr float kMaxVisualTeamDistance = 200.0f;
 
 struct WallSegment {
     Identity main = {};
@@ -99,6 +145,8 @@ struct WallSegment {
     Vec2 center = {};
     Vec2 start = {};
     Vec2 end = {};
+    // Raw team slot of the caster, 0 when it could not be established.
+    std::uint32_t team = 0;
 
     float Span() const {
         return start.Distance(end);
@@ -180,7 +228,8 @@ public:
         Identity identity,
         int tick,
         std::string_view name,
-        Vec2 position) {
+        Vec2 position,
+        std::uint32_t team = 0) {
         if (!identity.IsValid()) {
             return;
         }
@@ -199,21 +248,23 @@ public:
                 tick,
                 position,
                 name.empty(),
+                team,
             });
             return;
         }
 
-        Update(identity, tick, name, position);
+        Update(identity, tick, name, position, team);
     }
 
     void Update(
         Identity identity,
         int tick,
         std::string_view name,
-        Vec2 position) {
+        Vec2 position,
+        std::uint32_t team = 0) {
         auto it = Find(identity);
         if (it == entries_.end()) {
-            OnCreate(identity, tick, name, position);
+            OnCreate(identity, tick, name, position, team);
             return;
         }
 
@@ -230,6 +281,9 @@ public:
 
         if (position.IsValid()) {
             it->position = position;
+        }
+        if (team != 0) {
+            it->team = team;
         }
         it->identity = identity;
     }
@@ -281,16 +335,55 @@ private:
             });
     }
 
+    // Ownership of a wall. The emitter and the endpoints report team 0, so the
+    // caster's slot is taken from the closest YasuoW_VisualMis spawned with the
+    // wall. Verified live with an ally and an enemy Yasuo walling at once: the two
+    // Visual objects sat on their respective wall centres carrying slots 1 and 2
+    // while all three windwall emitters read 0. Endpoints are consulted first in
+    // case a build ever does populate them.
+    static std::uint32_t ResolveTeam(
+        const ObjectState* main,
+        const ObjectState* endpointA,
+        const ObjectState* endpointB,
+        const std::vector<const ObjectState*>& visuals) {
+        if (endpointA && endpointA->team != 0) {
+            return endpointA->team;
+        }
+        if (endpointB && endpointB->team != 0) {
+            return endpointB->team;
+        }
+        if (!main) {
+            return 0;
+        }
+
+        std::uint32_t team = main->team;
+        float bestDistanceSqr = kMaxVisualTeamDistance * kMaxVisualTeamDistance;
+        for (const ObjectState* visual : visuals) {
+            if (!visual || visual->team == 0) {
+                continue;
+            }
+            const float distanceSqr = visual->position.DistanceSqr(main->position);
+            if (distanceSqr <= bestDistanceSqr) {
+                bestDistanceSqr = distanceSqr;
+                team = visual->team;
+            }
+        }
+        return team;
+    }
+
     void RefreshWalls() {
         walls_.clear();
 
         std::vector<const ObjectState*> mains;
         std::vector<const ObjectState*> endpoints;
+        std::vector<const ObjectState*> visuals;
         for (const auto& item : entries_) {
             if (item.role == ObjectRole::Main) {
                 mains.push_back(&item);
             } else if (item.role == ObjectRole::Endpoint) {
                 endpoints.push_back(&item);
+            } else if (item.role == ObjectRole::Visual) {
+                visuals.push_back(&item);
             }
         }
 
@@ -384,6 +477,7 @@ private:
                 main->position,
                 a->position,
                 b->position,
+                ResolveTeam(main, a, b, visuals),
             });
             used[i] = true;
             used[j] = true;

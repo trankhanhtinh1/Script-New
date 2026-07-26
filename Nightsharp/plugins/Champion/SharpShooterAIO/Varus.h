@@ -214,9 +214,12 @@ static AIHeroClient GetWDebuffTarget(float range) {
 }
 
 // ── Q charged (tự track, kiểu Xerath) ───────────────────────────────────────
-// Đang trong lúc charge Q?
+// Đang trong lúc charge Q? Đọc castContext+0x38 của client (nguồn mà
+// InitChargeState ghi và release xoá) thay vì cờ tự track: cờ nội bộ chỉ biết các
+// charge do file này mở, nên lệch khi người chơi tự bấm Q hoặc khi charge tự hết.
 static bool QIsCharging() {
-    return s_qCharging;
+    return CoreNewCastSpell::IsCharging(static_cast<std::int32_t>(SpellSlot::Q)) ||
+           s_qCharging;
 }
 
 // Tầm Q Varus theo thời gian charge (giây). Công thức thực tế trong game:
@@ -230,13 +233,19 @@ static float VarQRangeAtTime(float chargeSec) {
     return 925.0f + 700.0f * progress;
 }
 
-// Tầm Q hiện tại theo thời gian đã charge.
+// Tầm Q hiện tại theo thời gian đã charge. Ưu tiên mốc mở charge do chính client
+// ghi lại, nên charge do người chơi tự bấm cũng đo đúng; chỉ khi không lấy được
+// mốc đó mới quay về tick nội bộ.
 static float QCurrentRange() {
-    if (!s_qCharging) {
+    if (!QIsCharging()) {
         return kVarQMaxRange;
     }
-    const float elapsedSec =
-        static_cast<float>(GetTickCount() - s_qChargeStartTick) / 1000.0f;
+
+    const float chargeStart =
+        CoreNewCastSpell::ChargeStartTime(static_cast<std::int32_t>(SpellSlot::Q));
+    const float elapsedSec = chargeStart > 0.0f
+        ? std::max(0.0f, Game::Time() - chargeStart)
+        : static_cast<float>(GetTickCount() - s_qChargeStartTick) / 1000.0f;
     return VarQRangeAtTime(elapsedSec);
 }
 

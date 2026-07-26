@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CastSpellTestSupport.h"
-// #include "../../Core/CoreNewCastSpell.h"
+#include "../../Core/CoreNewCastSpell.h"
 
 namespace Plugins {
 
@@ -83,18 +83,26 @@ private:
 
         const SDK::AIHeroClient target(targetAddress);
         const Vec3 targetPosition = target.Position();
-        // CoreNewCastSpell::CastTargetSpellMethod2 removed — stubbed
-        const bool ok = false;
+        const bool ok = CoreNewCastSpell::CastTargetSpellMethod2(
+            static_cast<std::int32_t>(SDK::SpellSlot::Q),
+            targetAddress);
 
-        // const auto& trace = CoreNewCastSpell::LastTrace();
+        const auto& trace = CoreNewCastSpell::LastTrace();
         Appendf(
-            "[JaxSemiCastNew] method2-target tick=%d target=0x%llX pos=%.1f %.1f %.1f ok=%d (CoreNewCastSpell removed)\r\n",
+            "[JaxSemiCastNew] method2-target tick=%d target=0x%llX net=%u index=0x%X pos=%.1f %.1f %.1f ok=%d canCast=%d virtualCursor=%d failure=%s nativeResult=%lld provider=0x%llX\r\n",
             SDK::Game::TickCount(),
             static_cast<unsigned long long>(targetAddress),
+            trace.targetNetworkId,
+            trace.targetObjectIndex,
             targetPosition.x,
             targetPosition.y,
             targetPosition.z,
-            ok ? 1 : 0);
+            ok ? 1 : 0,
+            trace.canCastAccepted ? 1 : 0,
+            trace.virtualCursorApplied ? 1 : 0,
+            CoreCastSpell::CastFailureName(trace.failure),
+            static_cast<long long>(trace.nativeResult),
+            static_cast<unsigned long long>(trace.runtimeInput));
 
         RecordAttempt("JaxQNewMethod2", ok, targetPosition, targetAddress);
     }
