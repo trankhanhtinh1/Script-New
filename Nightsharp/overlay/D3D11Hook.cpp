@@ -16,6 +16,7 @@
 #include "../Core/CoreEvents.h"
 #include "../Core/CoreSkinChanger.h"
 #include "../Core/CoreZoomHack.h"
+#include "../Core/CoreBypass.h"
 #include "../CrashReporter.h"
 #include "../CrashTrace.h"
 #include "../DebugLog.h"
@@ -618,12 +619,23 @@ static void RenderStatusOverlaysSafe(OverlayStatus::Mode mode) {
     }
 }
 
+// Gap 5: MainloopCheck wrapper — separate function vì __try không dùng được
+// trong hàm có C++ objects với destructors (ScopedTimer etc.)
+static void RunMainloopCheckSafe() {
+    __try {
+        CoreBypass::MainloopCheck();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+
 static void Render() {
     if (IsUnloading() ||
         InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) == 0 ||
         !g_pd3dContext ||
         !g_pRenderTargetView)
         return;
+
+    // Gap 5: Zero Packman detection flag mỗi frame
+    RunMainloopCheckSafe();
 
     NightSharpDebug::SetPhase("d3d11hook-render-begin");
     NightSharpDebug::CrashTrace::Record(

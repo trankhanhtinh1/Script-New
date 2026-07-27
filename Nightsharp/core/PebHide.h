@@ -29,6 +29,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include "PackmanHook.h"
+
 namespace PebHide {
 
 // ── PEB LDR types (Win11 x64 offsets verified) ───────────────────────────────
@@ -116,6 +118,56 @@ inline int HideAndErase(HMODULE dllBase) {
     UnlinkAndSelfLoop(&self->InMemoryOrderLinks);         ++unlinked;
     UnlinkAndSelfLoop(&self->InInitializationOrderLinks); ++unlinked;
     return unlinked;
+}
+
+// ── ErasePeHeaders (Gap 2) ───────────────────────────────────────────────────
+// Zero PE headers (DOS + NT + section headers) sau khi DLL đã load xong.
+// Anti-cheat scan memory tìm PE headers để identify injected modules.
+// Sau khi erase: VirtualQuery vẫn trả AllocationBase, nhưng memcmp với
+// "MZ" / "PE\0\0" signature → không match → scanner bỏ qua.
+//
+// Phải gọi SAU khi:
+//   1) DirectSyscall::InitAll() — cần đọc PE export table
+//   2) PebHide::HideAndErase() — cần DllBase để tìm entry
+//   3) OverlayManager đã init — không cần PE headers nữa
+//
+// Safe: code section (.text) không bị ảnh hưởng, chỉ zero headers (thường
+// 0x400-0x1000 bytes đầu module).
+inline bool ErasePeHeaders(HMODULE module) {
+    if (!module) return false;
+
+    auto* base = reinterpret_cast<uint8_t*>(module);
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        // Already erased?
+        return false;
+    }
+
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return false;
+    }
+
+    const size_t headerSize = nt->OptionalHeader.SizeOfHeaders;
+    if (headerSize == 0 || headerSize > 0x10000) return false;
+
+    // Make headers writable via direct syscall (bypass Packman hook)
+    DWORD oldProt = 0;
+    if (!DirectSyscall::VirtualProtectDirect(base, headerSize, PAGE_READWRITE, &oldProt)) {
+        // Fallback
+        if (!VirtualProtect(base, headerSize, PAGE_READWRITE, &oldProt)) {
+            return false;
+        }
+    }
+
+    // Zero everything
+    memset(base, 0, headerSize);
+
+    // Restore protection (PAGE_READONLY — headers không cần execute)
+    DWORD dummy = 0;
+    DirectSyscall::VirtualProtectDirect(base, headerSize, PAGE_READONLY, &dummy);
+
+    return true;
 }
 
 } // namespace PebHide

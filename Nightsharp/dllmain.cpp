@@ -20,6 +20,7 @@
 #include "Core/PackmanHook.h"
 #include "Core/CoreBypass.h"
 #include "Core/PebHide.h"
+#include "Core/IoctlFilter.h"
 // REMOVED: PebLink.h not available in local tree
 // #include "Core/PebLink.h"
 #pragma comment(lib, "psapi.lib")
@@ -127,6 +128,7 @@ void operator delete[](void* ptr, size_t, std::align_val_t al) noexcept {
 static volatile LONG g_workerStarted = 0;
 static volatile LONG g_selfUnloading = 0;
 static HANDLE g_crcThread = nullptr;
+static HANDLE g_ioctlThread = nullptr;
 
 static void StopDeferredCRCThread() {
     RequestDeferredCRCInstallShutdown();
@@ -137,12 +139,33 @@ static void StopDeferredCRCThread() {
         WaitForSingleObject(thread, 2500);
         CloseHandle(thread);
     }
+
+    HANDLE ioctlThread = g_ioctlThread;
+    g_ioctlThread = nullptr;
+    if (ioctlThread) {
+        WaitForSingleObject(ioctlThread, 2500);
+        CloseHandle(ioctlThread);
+    }
+}
+
+// Gap 1: Deferred IoctlFilter installer — chờ stub.dll load rồi IAT hook
+// DeviceIoControl để intercept IOCTL reports tới vgk.sys
+static DWORD WINAPI DeferredIoctlInstallThread(LPVOID) {
+    for (int i = 0; i < 120; ++i) {
+        DirectSyscall::StealthSleep(500);
+        if (GetModuleHandleA("stub.dll")) {
+            IoctlFilter::Install();
+            return 0;
+        }
+    }
+    return 0;
 }
 
 static void ShutdownNightSharpRuntime() {
     OverlayManager::ShutdownCurrent();
     StopDeferredCRCThread();
     CRCBypass::Uninstall();
+    IoctlFilter::Uninstall();
 }
 
 static DWORD WINAPI OverlayWorker(LPVOID param) {
@@ -287,6 +310,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             g_crcThread = hCrc;
         }
 
+        // Gap 1: Spawn deferred IoctlFilter installer — chờ stub.dll load
+        // rồi IAT hook DeviceIoControl để intercept IOCTL reports tới vgk.sys
+        HANDLE hIoctl = CoreBypass::CreateThreadSpoofed(DeferredIoctlInstallThread, nullptr);
+        if (hIoctl) {
+            g_ioctlThread = hIoctl;
+        }
+
         StartOverlayWorker(hModule);
 
         // Module E — PEB Ldr Unlink. Gọi CUỐI, sau khi overlay worker
@@ -298,6 +328,16 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             const int nUnlinked = PebHide::HideAndErase(hModule);
             DbgLogFmt("[PEB] HideAndErase: unlinked %d/3 list(s) for module=%p\r\n",
                       nUnlinked, hModule);
+        }
+
+        // Gap 2: Erase PE headers — zero DOS+NT+section headers sau khi
+        // tất cả init đã xong. Anti-cheat scan memory tìm "MZ"/"PE" signature
+        // để identify injected modules. Sau erase: scanner không match.
+        // Phải gọi SAU PebHide (cần DllBase để đọc SizeOfHeaders).
+        {
+            const bool erased = PebHide::ErasePeHeaders(hModule);
+            DbgLogFmt("[PEB] ErasePeHeaders: %s for module=%p\r\n",
+                      erased ? "OK" : "FAIL", hModule);
         }
         break;
     }
