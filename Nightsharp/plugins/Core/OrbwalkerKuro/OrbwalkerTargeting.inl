@@ -29,10 +29,174 @@ inline bool IsValidAttackTarget(const AttackableUnit& target, float range = FLT_
     return IsValidAttackTarget(GameObjects::Player(), target, range);
 }
 
+// ---------------------------------------------------------------------------
+// Projectile wall collision (Yasuo W, Samira W, Mel W)
+// ---------------------------------------------------------------------------
+// A projectile basic attack that has to cross an enemy Wind Wall never lands,
+// so a target behind one is not attackable even though every other validity
+// check passes: the orbwalker has to skip it and pick the next candidate
+// instead of feeding attacks to the wall. The champion lists mirror
+// sdk/Wrappers/Orbwalking/OrbwalkerBase.h so both orbwalkers block the same
+// champions.
+
+// Mirrored from the menu on every GetTarget()/Attack() call, because the
+// namespace-level helpers below have no access to the menu instance.
+inline bool WallCheckEnabled = true;
+
+inline const char* const* WindWallBrokenChampions() {
+    static const char* values[] = {
+        "annie","twistedfate","leblanc","urgot","vladimir","fiddlesticks","ryze",
+        "sivir","soraka","teemo","tristana","missfortune","ashe","morgana",
+        "zilean","twitch","karthus","anivia","sona","janna","corki","karma",
+        "veigar","swain","caitlyn","orianna","brand","vayne","cassiopeia",
+        "heimerdinger","ezreal","kennen","kogmaw","lux","xerath","ahri","graves",
+        "varus","viktor","lulu","ziggs","draven","quinn","syndra","aurelionsol",
+        "zoe","zyra","kaisa","taliyah","jhin","kindred","jinx","lucian","yuumi",
+        "thresh","kalista","xayah","aphelios","bard","ivern","nami","velkoz",
+        "lissandra","malzahar", nullptr
+    };
+    return values;
+}
+
+// Champions whose attack only becomes a wall-stoppable projectile in one of
+// their forms/stances.
+inline const char* const* SpecialWindWallChampions() {
+    static const char* values[] = {
+        "kayle","elise","nidalee","jayce","gnar","azir","neeko", nullptr
+    };
+    return values;
+}
+
+inline bool ContainsChampionName(const char* const* values, const std::string& name) {
+    for (int i = 0; values[i]; ++i) {
+        if (_stricmp(name.c_str(), values[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether the local champion currently attacks with a projectile the wall eats.
+// Cached per tick rather than once per game: Kayle levels into range, and
+// Gnar/Elise/Nidalee/Jayce/Neeko swap forms mid-fight.
+inline bool PlayerAttackHitsWall(const AIHeroClient& player) {
+    static int cachedTick = -1;
+    static bool cached = false;
+    const int now = Variables::TickCount();
+    if (cachedTick == now) {
+        return cached;
+    }
+    cachedTick = now;
+    cached = false;
+    if (!player.IsValid()) {
+        return false;
+    }
+
+    const std::string name = player.CharacterName();
+    if (ContainsChampionName(WindWallBrokenChampions(), name)) {
+        cached = true;
+    } else if (ContainsChampionName(SpecialWindWallChampions(), name)) {
+        cached =
+            (_stricmp(name.c_str(), "kayle") == 0 && player.AttackRange() >= 530.0f) ||
+            (_stricmp(name.c_str(), "elise") == 0 && !player.IsMelee()) ||
+            (_stricmp(name.c_str(), "nidalee") == 0 && !player.IsMelee()) ||
+            (_stricmp(name.c_str(), "jayce") == 0 && !player.IsMelee()) ||
+            (_stricmp(name.c_str(), "gnar") == 0 && !player.IsMelee()) ||
+            (_stricmp(name.c_str(), "neeko") == 0 && !player.HasBuff("neekowpassiveready"));
+    }
+    return cached;
+}
+
+// Samira W and Mel W only block while the buff is up, but the buff check lives
+// inside the SDK collision call. Gate on their presence in the game instead —
+// cached like HasGangplankInGame() — so the ordinary game pays nothing.
+inline bool HasShieldWallChampionInGame() {
+    static bool checked = false;
+    static bool present = false;
+    if (!checked) {
+        for (const auto& hero : GameObjects::EnemyHeroes()) {
+            if (!hero.IsValid()) {
+                continue;
+            }
+            const std::string name = hero.CharacterName();
+            if (_stricmp(name.c_str(), "Samira") == 0 ||
+                _stricmp(name.c_str(), "Mel") == 0) {
+                present = true;
+                break;
+            }
+        }
+        if (!GameObjects::EnemyHeroes().empty()) checked = true;
+    }
+    return present;
+}
+
+// Per-tick gate so the per-target segment test below only runs while something
+// can actually block: no wall up and no Samira/Mel in game costs one empty()
+// check per tick.
+inline bool AnyProjectileWallActive() {
+    static int cachedTick = -1;
+    static bool cached = false;
+    const int now = Variables::TickCount();
+    if (cachedTick == now) {
+        return cached;
+    }
+    cachedTick = now;
+    cached = !YasuoWallTracker::ActiveWalls().empty() || HasShieldWallChampionInGame();
+    return cached;
+}
+
+inline bool IsWallBlocked(const AIHeroClient& player, const AttackableUnit& target) {
+    if (!WallCheckEnabled || !player.IsValid() || !target.IsValid()) {
+        return false;
+    }
+    if (!PlayerAttackHitsWall(player) || !AnyProjectileWallActive()) {
+        return false;
+    }
+    // Azir's Sand Soldier stab is not a projectile and ignores the wall; only
+    // Azir's own bolt, cast when no soldier can reach the target, is stopped.
+    if (WillUseAzirSoldierAttack(player, target)) {
+        return false;
+    }
+
+    // GetTarget() re-tests the same units several times per tick (candidate
+    // scan, cached-target revalidation, then Attack()), so memoise the segment
+    // test per tick in a small direct-mapped table.
+    struct WallBlockCacheEntry {
+        int tick = -1;
+        int networkId = 0;
+        bool blocked = false;
+    };
+    static WallBlockCacheEntry cache[64];
+
+    const int now = Variables::TickCount();
+    const int networkId = target.NetworkId();
+    WallBlockCacheEntry* entry = networkId != 0
+        ? &cache[static_cast<unsigned>(networkId) & 63u]
+        : nullptr;
+    if (entry && entry->tick == now && entry->networkId == networkId) {
+        return entry->blocked;
+    }
+
+    Vector3 from = player.ServerPosition();
+    if (!from.IsValid() || from.IsZero()) {
+        from = player.Position();
+    }
+
+    const bool blocked = Collisions::HasProjectileWallCollision(
+        from, target.Position(), 0.0f);
+    if (entry) {
+        entry->tick = now;
+        entry->networkId = networkId;
+        entry->blocked = blocked;
+    }
+    return blocked;
+}
+
 inline bool IsValidCurrentAttackTarget(const AIHeroClient& player,
                                        const AttackableUnit& target) {
     return IsValidAttackTarget(player, target) &&
-           IsTargetWithinCurrentAttackRange(player, target);
+           IsTargetWithinCurrentAttackRange(player, target) &&
+           !IsWallBlocked(player, target);
 }
 
 inline bool IsValidCurrentAttackTarget(const AttackableUnit& target) {
@@ -430,6 +594,7 @@ namespace OrbwalkerKuro {
 
 inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int now = Tick();
+    OrbwalkingDetail::WallCheckEnabled = menu_.WindWallCheck();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead() || !menu_.Enabled()) {
         context_.cachedTargetTick = -1;

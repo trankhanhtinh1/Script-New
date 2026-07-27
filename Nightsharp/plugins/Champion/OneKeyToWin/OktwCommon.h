@@ -157,7 +157,9 @@ inline float GetEchoLudenDamage(const SDK::AIBaseClient& target) {
     if (!player.IsValid()) {
         return 0.0f;
     }
-    if (!player.HasItem(3285) && !player.HasItem(3504)) {
+    // Luden's Echo là id 6655; id 3285 (Luden's Tempest cũ) không còn tồn tại
+    // trong ItemData nên nhánh cũ là code chết, không bao giờ cộng damage.
+    if (!player.HasItem(6655) && !player.HasItem(3504)) {
         return 0.0f;
     }
     const float ap  = player.AP();

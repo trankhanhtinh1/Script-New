@@ -839,6 +839,14 @@ namespace NightSharpMenu {
         ensoulPermaY->MaxValue = display.y > 1.0f ? static_cast<int>(display.y) : 1;
         ensoulPermaX->Value = Config::PermaShow::x;
         ensoulPermaY->Value = Config::PermaShow::y;
+        if (ensoulMenuX) {
+            ensoulMenuX->MaxValue = display.x > 1.0f ? static_cast<int>(display.x) : 1;
+            ensoulMenuX->Value = Config::MenuPosition::x;
+        }
+        if (ensoulMenuY) {
+            ensoulMenuY->MaxValue = display.y > 1.0f ? static_cast<int>(display.y) : 1;
+            ensoulMenuY->Value = Config::MenuPosition::y;
+        }
         ensoulPermaWidth->Value = Config::PermaShow::width;
         ensoulPermaIndicatorWidth->Value = Config::PermaShow::indicatorWidth;
         ensoulBypassObs->Value = Config::StreamProtection::bypassObs;

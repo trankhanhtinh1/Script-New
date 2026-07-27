@@ -101,8 +101,13 @@ namespace CoreBuffs {
         bool IsActive(float gameTime) const {
             if (!IsValid()) return false;
 
-            const int liveCount = Globals::Read<int>(address + 0x38);
-            if (liveCount <= 0 && GetStacks() <= 0) {
+            const auto liveCount = Globals::Read<uintptr_t>(address + 0x38);
+            if (liveCount == 0 || GetStacks() <= 0) {
+                return false;
+            }
+
+            const auto scriptBase = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffScriptPtr);
+            if (!Globals::IsValidPtr(scriptBase)) {
                 return false;
             }
 

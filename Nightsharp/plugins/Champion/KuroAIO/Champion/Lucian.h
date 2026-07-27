@@ -152,11 +152,52 @@ static Vector3 BestDashPosition(const Vector3& desiredPosition, float distance =
     return best;
 }
 
-static bool CastE(const Vector3& position) {
-    if (!E.IsReady() || position.IsZero() || !SafeDashPosition(position)) {
-        return false;
+// E luôn lao theo hướng con trỏ. Nếu điểm đích nằm trong tường thì rút ngắn dần
+// thay vì bỏ cast — E vẫn phải nổ để reset đòn đánh.
+static Vector3 CursorDashPosition(float distance = -1.0f) {
+    const auto player = Player();
+    if (!player.IsValid()) {
+        return {};
     }
-    return E.Cast(position);
+
+    const Vector3 origin = player.Position();
+    const Vector3 cursor = Game::CursorPos();
+    if (origin.Distance2D(cursor) <= 1.0f) {
+        return {};
+    }
+
+    const float requested = std::clamp(
+        distance > 0.0f ? distance : E.Range, 30.0f, E.Range);
+    for (float step = requested; step >= 30.0f; step -= 40.0f) {
+        Vector3 candidate = origin.Extend(cursor, step);
+        candidate.y = NavMesh::GetHeightForPosition(candidate);
+        if (!NavMesh::IsWall(candidate)) {
+            return candidate;
+        }
+    }
+
+    Vector3 fallback = origin.Extend(cursor, 30.0f);
+    fallback.y = NavMesh::GetHeightForPosition(fallback);
+    return fallback;
+}
+
+// "Maximum" = luôn full tầm E, mặc định dừng đúng ở vị trí chuột.
+static float ComboDashDistance() {
+    const auto player = Player();
+    if (!player.IsValid() || List(ComboMenu, "EDistance", 0) == 1) {
+        return E.Range;
+    }
+    return player.Position().Distance2D(Game::CursorPos());
+}
+
+static bool CastE(const Vector3& position) {
+    return E.IsReady() && !position.IsZero() && E.Cast(position);
+}
+
+// Anti-gapcloser vẫn phải lọc vị trí an toàn trước khi lao.
+static bool CastSafeE(const Vector3& position) {
+    return E.IsReady() && !position.IsZero() && SafeDashPosition(position) &&
+           E.Cast(position);
 }
 
 static void UpdateQData() {
@@ -270,15 +311,6 @@ static bool CastW(const AIHeroClient& target,
     return spell.Cast(prediction.GetCastPosition());
 }
 
-static bool EnemyMeleeInRange(float range) {
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (ValidHeroTarget(enemy, range) && enemy.IsMelee()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static float PassiveShotDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
@@ -325,40 +357,45 @@ static void MarkPassiveSpellCast() {
     LastActionTick = SDK::Variables::TickCount();
 }
 
+// Mỗi đòn đánh xong phải nổ đúng một chiêu để nạp lại nội tại Lightslinger:
+// E lao tới con trỏ trước (reset đòn đánh), không được thì tới Q rồi W.
 static bool ComboAfterAttack(const AIHeroClient& target) {
     const auto player = Player();
-    if (!player.IsValid() || player.IsDead() ||
-        !ValidHeroTarget(target, W.Range)) {
+    if (!player.IsValid() || player.IsDead()) {
         return false;
     }
 
-    const bool meleeThreat = EnemyMeleeInRange(350.0f);
+    if (Bool(ComboMenu, "UseE", true) && E.IsReady() && !player.IsDashing() &&
+        CastE(CursorDashPosition(ComboDashDistance()))) {
+        MarkPassiveSpellCast();
+        return true;
+    }
 
-    // One spell per completed attack. E is intentionally attempted first so
-    // Lucian can reset his attack timer and reposition before the next double shot.
-    if (Bool(ComboMenu, "UseE", true) && E.IsReady() && !player.IsDashing()) {
-        float distance = E.Range;
-        if (List(ComboMenu, "EDistance", 1) == 1 && !meleeThreat) {
-            distance = 75.0f;
+    if (!ValidHeroTarget(target, W.Range)) {
+        return false;
+    }
+
+    if (Bool(ComboMenu, "UseQ", true) && Q.IsReady()) {
+        if (ValidHeroTarget(target, Q.Range) &&
+            Q.Cast(target) == CastStates::SuccessfullyCasted) {
+            MarkPassiveSpellCast();
+            return true;
         }
-        const Vector3 dash = BestDashPosition(Game::CursorPos(), distance);
-        if (CastE(dash)) {
+        // Ngoài tầm Q thẳng thì xuyên qua lính/quái để vẫn nạp được nội tại.
+        if (CastExtendedQThroughUnit(target)) {
             MarkPassiveSpellCast();
             return true;
         }
     }
 
-    if (Bool(ComboMenu, "UseQ", true) && Q.IsReady() &&
-        ValidHeroTarget(target, Q.Range) &&
-        Q.Cast(target) == CastStates::SuccessfullyCasted) {
-        MarkPassiveSpellCast();
-        return true;
-    }
-
-    if (Bool(ComboMenu, "UseW", true) && W.IsReady() &&
-        CastW(target, target.DistanceToPlayer() <= 425.0f, HitChance::Medium)) {
-        MarkPassiveSpellCast();
-        return true;
+    if (Bool(ComboMenu, "UseW", true) && W.IsReady()) {
+        // W nổ theo vùng quanh điểm chạm nên trong tầm đánh thường có thể bỏ
+        // qua va chạm lính mà vẫn đánh dấu được mục tiêu.
+        const bool ignoreCollision = target.DistanceToPlayer() <= 500.0f;
+        if (CastW(target, ignoreCollision, HitChance::Low)) {
+            MarkPassiveSpellCast();
+            return true;
+        }
     }
     return false;
 }
@@ -376,11 +413,9 @@ static bool Harass() {
         return true;
     }
 
-    if (Bool(HarassMenu, "UseE", false) && E.IsReady() && !HasPassive) {
-        const Vector3 dash = BestDashPosition(Game::CursorPos(), 75.0f);
-        if (CastE(dash)) {
-            return true;
-        }
+    if (Bool(HarassMenu, "UseE", false) && E.IsReady() && !HasPassive &&
+        CastE(CursorDashPosition(75.0f))) {
+        return true;
     }
 
     if (Bool(HarassMenu, "UseQ", true) && Q.IsReady()) {
@@ -480,8 +515,7 @@ static bool JungleClear() {
             if (mob.IsValid() && mob.IsJungle() &&
                 mob.Health() > PassiveShotDamage(mob) +
                     Damage::GetAutoAttackDamage(Player(), mob)) {
-                const Vector3 dash = BestDashPosition(Game::CursorPos(), 75.0f);
-                if (CastE(dash)) {
+                if (CastE(CursorDashPosition(75.0f))) {
                     return true;
                 }
             }
@@ -602,11 +636,15 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
         return;
     }
 
+    // Đánh vào lính giữa giao tranh vẫn phải weave chiêu, nên khi mục tiêu vừa
+    // đánh không phải tướng thì lấy tạm mục tiêu vật lý gần nhất.
     const AIBaseClient attacked(args.Target.Handle());
-    if (!attacked.IsValid() || !attacked.IsHero()) {
+    AIHeroClient target = attacked.IsValid() && attacked.IsHero()
+        ? AIHeroClient(attacked.Handle())
+        : GetPhysicalTarget(W.Range);
+    if (!ValidHeroTarget(target, W.Range)) {
         return;
     }
-    const AIHeroClient target(attacked.Handle());
     (void)ComboAfterAttack(target);
 }
 
@@ -624,8 +662,7 @@ static void OnNonKillableMinion(OrbwalkingActionArgs& args) {
     const float twoShotDamage = PassiveShotDamage(target) +
                                 Damage::GetAutoAttackDamage(Player(), target);
     if (target.Health() <= twoShotDamage) {
-        const Vector3 dash = BestDashPosition(Game::CursorPos(), 30.0f);
-        (void)CastE(dash);
+        (void)CastE(CursorDashPosition(30.0f));
     }
 }
 
@@ -642,7 +679,7 @@ static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args) {
 
     const Vector3 away = player.Position().Extend(sender.Position(), -E.Range);
     const Vector3 dash = BestDashPosition(away, E.Range);
-    (void)CastE(dash);
+    (void)CastSafeE(dash);
 }
 
 static void OnDraw() {
@@ -669,7 +706,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("UseW", "Use W", true));
     ComboMenu->Add(new MenuBool("UseE", "Use E", true));
     ComboMenu->Add(new MenuList(
-        "EDistance", "E dash distance", { "Maximum", "Short" }, 1));
+        "EDistance", "E dash distance", { "To cursor", "Maximum" }, 0));
     ComboMenu->Add(new MenuKeyBind(
         "SmartR", "Smart R", SDK::Keys::T, KeyBindType::Press))->Permashow();
 

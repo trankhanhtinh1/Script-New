@@ -120,14 +120,24 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const bool isAzirSoldierAttack =
         OrbwalkingDetail::IsAzirSoldierAttackEvent(args) ||
         OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender);
-    const int estimatedAttackStartTick = now - static_cast<int>(context_.attackWindupMs);
+    // OnDoCast fires at the START of the windup, so an attack the orbwalker did
+    // not order — a manual right-click, or a champion script issuing its own
+    // attack command — is starting right now. It used to be back-dated by a full
+    // windup (`now - attackWindupMs`), which is where the manual-attack cancel
+    // came from: CanMove() measured that stale tick, found the windup already
+    // over and let the very next orbwalk step send a move order that cancelled
+    // the attack before it dealt damage, while CanAttack() went ready a windup
+    // too early on top. Stamping `now` matches what the pending branch below
+    // resolves to for the orbwalker's own attacks, so both kinds of attack are
+    // gated from the same event at the same instant.
+    const int manualAttackStartTick = now;
     const int attackStartTick = hadPendingAttack
         ? (isAzirSoldierAttack
             ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
             : std::max(
                 context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
                 now))
-        : estimatedAttackStartTick;
+        : manualAttackStartTick;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
         context_.lastTarget = target;

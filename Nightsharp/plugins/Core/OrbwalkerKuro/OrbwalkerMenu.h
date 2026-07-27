@@ -54,6 +54,7 @@ public:
     bool AttackClones() const { return BoolValue(attackClones_, false); }
     bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
     int AkshanPassiveMode() const { return ListValue(akshanPassiveMode_, 0); }
+    bool WindWallCheck() const { return BoolValue(windWallCheck_, true); }
 
     OrbwalkingMode ActiveMode() const {
         if (!Enabled() || Game::IsChatOpen() || Game::IsShopOpen()) {
@@ -158,6 +159,10 @@ private:
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
             attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
 
+            advancedMenu_->Add(new MenuSeparator("separatorCollision", "Collision"));
+            windWallCheck_ = advancedMenu_->Add(new MenuBool(
+                "windWallCheck", "Wind Wall Check (Yasuo/Samira/Mel)", true));
+
             advancedMenu_->Add(new MenuSeparator("separatorAkshan", "Akshan Passive"));
             akshanPassiveMode_ = advancedMenu_->Add(new MenuList(
                 "akshanPassiveMode", "Akshan Passive",
@@ -211,6 +216,7 @@ private:
     MenuBool* attackClones_ = nullptr;
     MenuBool* attackSpecialMinions_ = nullptr;
     MenuList* akshanPassiveMode_ = nullptr;
+    MenuBool* windWallCheck_ = nullptr;
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;

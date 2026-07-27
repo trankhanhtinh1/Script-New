@@ -1223,6 +1223,36 @@ namespace detail {
         // and tried to resolve it as an object index, which always failed.
     }
 
+    // Standard Riot naming for the per-champion auto-attack spells
+    // (<Champ>BasicAttack, <Champ>BasicAttack2, <Champ>CritAttack, ...).
+    inline bool IsAutoAttackSpellName(const char* name) {
+        return name && name[0] &&
+               (::Core::Objects::ContainsInsensitive(name, "BasicAttack") ||
+                ::Core::Objects::ContainsInsensitive(name, "CritAttack"));
+    }
+
+    // Recovers the cast slot by matching a decoded spell name against the
+    // owner's spellbook slot names. Used by the OnDoCast path, whose payload
+    // does not carry the SpellCastInfo slot field (see DecodeDoCast).
+    inline int ResolveSlotBySpellName(uintptr_t owner, const char* spellName) {
+        if (!IsValidAddress(owner) || !spellName || !spellName[0]) {
+            return -1;
+        }
+        for (int slot = 0; slot <= 13; ++slot) {
+            const auto ref = ::CoreSpellDataInst::Resolve(owner, slot);
+            if (!ref.IsValid()) {
+                continue;
+            }
+            char slotName[96] = {};
+            if (::CoreSpellDataInst::ReadName(
+                    ref, slotName, static_cast<int>(sizeof(slotName))) &&
+                EqualsInsensitive(slotName, spellName)) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
     inline void ResolveSpellBookFields(ProcessSpellEventArgs& args) {
         if (!args.Sender.IsValid() || !IsSlotValid(args.Slot) || args.Slot == 64) {
             return;
@@ -1632,6 +1662,22 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
         detail::Read(args.Spellbook + Offset::SpellBookLayout::CasterNetId, args.CasterNetworkId);
     }
 
+    // Same silent-Q hazard as DecodeDoCast: ReadEventSlot() walks candidate
+    // offsets, detail::Read() zero-fills on failure, and IsSlotValid(0) accepts
+    // 0 — so a bad read reports Q instead of failing. Correct the slot only when
+    // the decoded spell name provably belongs to a different slot; when the
+    // existing decode is right the lookup returns the same slot and this is a
+    // no-op. Must run before ResolveSpellBookFields(), which consumes args.Slot
+    // and can overwrite args.SpellName with the (wrong) slot's name.
+    const int nameSlot =
+        detail::ResolveSlotBySpellName(args.Sender.Ptr, args.SpellName);
+    if (nameSlot >= 0) {
+        args.Slot = nameSlot;
+    } else if (args.Slot != 64 && detail::IsAutoAttackSpellName(args.SpellName)) {
+        args.Slot = 64;
+        args.IsAutoAttack = true;
+    }
+
     detail::ResolveSpellBookFields(args);
 
     return args;
@@ -1670,6 +1716,27 @@ inline ProcessSpellEventArgs DecodeDoCast(const RawEventArgs& raw) {
     if (args.Sender.IsValid()) {
         args.CasterNetworkId = args.Sender.NetworkId;
     }
+
+    // FillCastInfoFields cannot read a slot from this hook: RDX here is not the
+    // SpellCastInfo layout the OnProcessSpell path uses, so ReadEventSlot()
+    // reads an unrelated field. Because detail::Read() zero-fills on failure and
+    // IsSlotValid(0) is true, EVERY cast silently decoded as slot 0 (= Q).
+    // RCX is no help either — it is a pooled per-cast object, not the persistent
+    // per-slot spell; live logs show one RCX reused across KatarinaR and
+    // KatarinaE. The spell name IS decoded reliably, so derive the slot from it
+    // here, before ResolveSpellBookFields() consumes args.Slot.
+    const int nameSlot =
+        detail::ResolveSlotBySpellName(args.Sender.Ptr, args.SpellName);
+    if (nameSlot >= 0) {
+        args.Slot = nameSlot;
+    } else if (detail::IsAutoAttackSpellName(args.SpellName)) {
+        args.Slot = 64;
+        args.IsAutoAttack = true;
+    } else {
+        // Report unknown rather than lying with Q.
+        args.Slot = -1;
+    }
+
     detail::ResolveSpellBookFields(args);
     return args;
 }

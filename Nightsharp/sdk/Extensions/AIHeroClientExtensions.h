@@ -15,9 +15,13 @@ inline ::SDK::SpellSlot GetItemSlot(const AIHeroClient& source, int itemId) {
     if (!source.IsValid() || itemId <= 0) {
         return ::SDK::SpellSlot::Unknown;
     }
+    // Chuẩn hóa id giống CoreItem::HasItemId: ARAM/Arena bán bản sao trang bị
+    // dưới id = 220000 + gốc, so khớp thô sẽ không tìm ra slot nên CanUseItem/
+    // UseItem im lặng thất bại ở các chế độ đó.
+    const int wanted = ::CoreItem::NormalizeItemId(itemId);
     const auto items = source.InventoryItems();
     for (const auto& slot : items) {
-        if (slot.Id() == itemId) {
+        if (::CoreItem::NormalizeItemId(slot.Id()) == wanted) {
             return slot.GetSpellSlot();
         }
     }

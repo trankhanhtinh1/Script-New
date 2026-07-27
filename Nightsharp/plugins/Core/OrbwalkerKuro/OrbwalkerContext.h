@@ -47,11 +47,20 @@ struct OrbwalkerRuntimeContext {
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
+    // Calibration for the raw attack-timing getters — see
+    // OrbwalkerBase::CalibrateAttackTimingScale().
+    float calibrationSpeedMod = 0.0f;
+    float calibrationRawDelayMs = 0.0f;
+    float calibrationRawWindupMs = 0.0f;
     float visualWindupWeight = 0.0f;
     float visualReadyWeight = 1.0f;
     float visualCooldownWeight = 0.0f;
     float visualSmoothProgress = 1.0f;
     int visualLastDrawTick = 0;
+
+    bool rawDelayTracksSpeed = true;
+    bool rawWindupTracksSpeed = true;
+    bool attackTimingCalibrated = false;
 
     bool attackEnabled = true;
     bool moveEnabled = true;
