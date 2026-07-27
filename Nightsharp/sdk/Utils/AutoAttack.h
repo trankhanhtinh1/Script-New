@@ -50,12 +50,29 @@ public:
         return GetRealAutoAttackRange(player, target);
     }
 
+    // Port of EnsoulSharp AIBaseClientExtensions.GetRealAutoAttackRange
+    // (decompiled from EnsoulSharp.SDK.dll):
+    //
+    //     if (sender.Type == AITurretClient) return 900f;
+    //     float num = sender.AttackRange + sender.BoundingRadius;
+    //     if (target valid && !dead) {
+    //         if (sender is hero && valid) { Aphelios -> 1800f; Caitlyn -> 1300f; }
+    //         num += target.BoundingRadius;
+    //     }
+    //
+    // The sender's own bounding radius used to be missing here, which made every
+    // reported attack range roughly 65 units short of the real one and left both
+    // orbwalkers stepping in closer than they need to before attacking.
     static float GetRealAutoAttackRange(const AIBaseClient& sender, const AttackableUnit& target = AttackableUnit()) {
         if (!sender.IsValid()) {
             return 0.0f;
         }
 
-        float result = sender.AttackRange();
+        if (sender.Type() == ::Core::Objects::ObjectType::AITurretClient) {
+            return 900.0f;
+        }
+
+        float result = sender.AttackRange() + sender.BoundingRadius();
         if (target.IsValid() && !target.IsDead()) {
             const AIBaseClient targetBase(target.Handle());
             if (sender.CharacterName() == "Caitlyn" &&
