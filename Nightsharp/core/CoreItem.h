@@ -150,14 +150,28 @@ inline bool HasItem(uintptr_t object, int slotIndex) {
     return GetItemNode(object, slotIndex) != 0;
 }
 
+// ARAM/Arena bán bản sao của mỗi trang bị dưới một id riêng bằng id gốc cộng
+// 220000 (Sheen 3057 -> 223057, Iceborn Gauntlet 6662 -> 226662, Shadowflame
+// 4645 -> 224645). So khớp id thô khiến HasItemId(3057) trả false khi người chơi
+// đang cầm 223057, tức MỌI passive/logic phụ thuộc trang bị im lặng ở các chế độ
+// đó. Chuẩn hóa cả hai vế về id gốc để mọi call site khớp mà không phải tự xử lý.
+//
+// Chỉ xử lý dải 22xxxx đã đối chiếu được với ItemData.h. Các biến thể khác
+// (124011, 326621, 443060, 447111, ...) ghép chuỗi chứ không theo phép cộng cố
+// định nên không quy về được, cố ý bỏ qua.
+inline int NormalizeItemId(int itemId) {
+    return (itemId > 220000 && itemId < 230000) ? itemId - 220000 : itemId;
+}
+
 inline bool HasItemId(uintptr_t object, int itemId, bool includeTrinket = true) {
     if (!Globals::IsValidPtr(object) || itemId <= 0) {
         return false;
     }
 
+    const int wanted = NormalizeItemId(itemId);
     const int end = includeTrinket ? kTrinketSlot : kItemSlotEnd;
     for (int i = kItemSlotStart; i <= end; ++i) {
-        if (GetItemId(object, i) == itemId) {
+        if (NormalizeItemId(GetItemId(object, i)) == wanted) {
             return true;
         }
     }

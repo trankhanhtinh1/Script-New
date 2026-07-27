@@ -20,9 +20,12 @@ namespace SDK::GameObjects::detail {
 
 #include <Windows.h>
 #include <algorithm>
+#include <cctype>
+#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -97,7 +100,19 @@ public:
         trackedObjectTicks_.clear();
         scanCache_.reserve(256);
         activeObjectsCache_.reserve(128);
+        eventLog_.clear();
+        eventLog_.reserve(kMaxEventLogEntries);
         SDK::Events::AddOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
+        SDK::Events::AddOnDoCast(&DeveloperToolsPlugin::OnDoCastEvent);
+        SDK::Events::AddOnFinishCast(&DeveloperToolsPlugin::OnFinishCastEvent);
+        SDK::Events::AddOnSpellImpact(&DeveloperToolsPlugin::OnSpellImpactEvent);
+        SDK::Events::AddOnProcessCastSpell(&DeveloperToolsPlugin::OnCastSpellEvent);
+        SDK::Events::AddOnStopCast(&DeveloperToolsPlugin::OnStopCastEvent);
+        SDK::Events::AddOnPlayAnimation(&DeveloperToolsPlugin::OnPlayAnimationEvent);
+        SDK::Events::AddOnBuffAdd(&DeveloperToolsPlugin::OnBuffAddEvent);
+        SDK::Events::AddOnBuffRemove(&DeveloperToolsPlugin::OnBuffRemoveEvent);
+        SDK::Events::AddOnBuffUpdate(&DeveloperToolsPlugin::OnBuffUpdateEvent);
+        SDK::Events::AddOnNewPath(&DeveloperToolsPlugin::OnNewPathEvent);
         SDK::Events::AddOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
 
         DestroyNativeMenu();
@@ -119,6 +134,31 @@ public:
         menuScanMissiles_ = filters->Add(new SDK::UI::MenuBool("ScanMissiles", "Missiles", scanMissiles_));
         menuFilterClutter_ = filters->Add(new SDK::UI::MenuBool("FilterClutter", "Filter Clutter (FX, MoveTo)", filterClutter_));
 
+        auto* logger = menu_->AddSubMenu(new SDK::UI::Menu("EventLogger", "Event Logger"));
+        menuLogEnabled_ = logger->Add(new SDK::UI::MenuBool("LogEnabled", "Enable Event Logging", logEnabled_));
+        menuLogSource_ = logger->Add(new SDK::UI::MenuList(
+            "LogSource",
+            "Log Source",
+            { "Local Player Only", "Player + Allies", "Enemies Only", "Everyone" },
+            logSourceIndex_));
+        menuLogVerbose_ = logger->Add(new SDK::UI::MenuBool("LogVerbose", "Verbose (dump every arg field)", logVerbose_));
+        menuLogRaw_ = logger->Add(new SDK::UI::MenuBool("LogRaw", "Include Raw Registers (rcx/rdx/xmm/stack)", logRaw_));
+        menuLogSkipAA_ = logger->Add(new SDK::UI::MenuBool("LogSkipAA", "Skip Auto Attacks", logSkipAutoAttacks_));
+        menuLogToFile_ = logger->Add(new SDK::UI::MenuBool("LogToFile", "Write to Debug Log", logToFile_));
+
+        auto* loggerEvents = logger->AddSubMenu(new SDK::UI::Menu("LoggerEvents", "Tracked Events"));
+        menuLogProcessSpell_ = loggerEvents->Add(new SDK::UI::MenuBool("EvProcessSpell", "OnProcessSpell", logProcessSpell_));
+        menuLogDoCast_ = loggerEvents->Add(new SDK::UI::MenuBool("EvDoCast", "OnDoCast", logDoCast_));
+        menuLogFinishCast_ = loggerEvents->Add(new SDK::UI::MenuBool("EvFinishCast", "OnFinishCast", logFinishCast_));
+        menuLogSpellImpact_ = loggerEvents->Add(new SDK::UI::MenuBool("EvSpellImpact", "OnSpellImpact", logSpellImpact_));
+        menuLogCastSpell_ = loggerEvents->Add(new SDK::UI::MenuBool("EvCastSpell", "OnProcessCastSpell", logCastSpell_));
+        menuLogStopCast_ = loggerEvents->Add(new SDK::UI::MenuBool("EvStopCast", "OnStopCast", logStopCast_));
+        menuLogAnimation_ = loggerEvents->Add(new SDK::UI::MenuBool("EvAnimation", "OnPlayAnimation", logAnimation_));
+        menuLogBuffAdd_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffAdd", "OnBuffAdd", logBuffAdd_));
+        menuLogBuffRemove_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffRemove", "OnBuffRemove", logBuffRemove_));
+        menuLogBuffUpdate_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffUpdate", "OnBuffUpdate", logBuffUpdate_));
+        menuLogNewPath_ = loggerEvents->Add(new SDK::UI::MenuBool("EvNewPath", "OnNewPath", logNewPath_));
+
         menuInspector_ = menu_->Add(new SDK::UI::MenuRuntime("LiveInspector", "Open Live Object Inspector", &OnMenuBridge, this, 620.0f));
 
         menu_->Attach();
@@ -126,8 +166,22 @@ public:
 
     void OnUnload() override {
         SDK::Events::RemoveOnProcessSpell(&DeveloperToolsPlugin::OnProcessSpellCast);
+        SDK::Events::RemoveOnDoCast(&DeveloperToolsPlugin::OnDoCastEvent);
+        SDK::Events::RemoveOnFinishCast(&DeveloperToolsPlugin::OnFinishCastEvent);
+        SDK::Events::RemoveOnSpellImpact(&DeveloperToolsPlugin::OnSpellImpactEvent);
+        SDK::Events::RemoveOnProcessCastSpell(&DeveloperToolsPlugin::OnCastSpellEvent);
+        SDK::Events::RemoveOnStopCast(&DeveloperToolsPlugin::OnStopCastEvent);
+        SDK::Events::RemoveOnPlayAnimation(&DeveloperToolsPlugin::OnPlayAnimationEvent);
+        SDK::Events::RemoveOnBuffAdd(&DeveloperToolsPlugin::OnBuffAddEvent);
+        SDK::Events::RemoveOnBuffRemove(&DeveloperToolsPlugin::OnBuffRemoveEvent);
+        SDK::Events::RemoveOnBuffUpdate(&DeveloperToolsPlugin::OnBuffUpdateEvent);
+        SDK::Events::RemoveOnNewPath(&DeveloperToolsPlugin::OnNewPathEvent);
         SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
         DestroyNativeMenu();
+        {
+            std::lock_guard<std::mutex> lk(eventLogMutex_);
+            eventLog_.clear();
+        }
         s_instance = nullptr;
     }
 
@@ -144,6 +198,24 @@ public:
         if (menuScanTurrets_) scanTurrets_ = menuScanTurrets_->Value;
         if (menuScanMissiles_) scanMissiles_ = menuScanMissiles_->Value;
         if (menuFilterClutter_) filterClutter_ = menuFilterClutter_->Value;
+
+        if (menuLogEnabled_) logEnabled_ = menuLogEnabled_->Value;
+        if (menuLogSource_) logSourceIndex_ = menuLogSource_->Index;
+        if (menuLogVerbose_) logVerbose_ = menuLogVerbose_->Value;
+        if (menuLogRaw_) logRaw_ = menuLogRaw_->Value;
+        if (menuLogSkipAA_) logSkipAutoAttacks_ = menuLogSkipAA_->Value;
+        if (menuLogToFile_) logToFile_ = menuLogToFile_->Value;
+        if (menuLogProcessSpell_) logProcessSpell_ = menuLogProcessSpell_->Value;
+        if (menuLogDoCast_) logDoCast_ = menuLogDoCast_->Value;
+        if (menuLogFinishCast_) logFinishCast_ = menuLogFinishCast_->Value;
+        if (menuLogSpellImpact_) logSpellImpact_ = menuLogSpellImpact_->Value;
+        if (menuLogCastSpell_) logCastSpell_ = menuLogCastSpell_->Value;
+        if (menuLogStopCast_) logStopCast_ = menuLogStopCast_->Value;
+        if (menuLogAnimation_) logAnimation_ = menuLogAnimation_->Value;
+        if (menuLogBuffAdd_) logBuffAdd_ = menuLogBuffAdd_->Value;
+        if (menuLogBuffRemove_) logBuffRemove_ = menuLogBuffRemove_->Value;
+        if (menuLogBuffUpdate_) logBuffUpdate_ = menuLogBuffUpdate_->Value;
+        if (menuLogNewPath_) logNewPath_ = menuLogNewPath_->Value;
     }
 
     void OnUpdate() override {
@@ -463,6 +535,8 @@ public:
             if (menuFilterClutter_) menuFilterClutter_->SetValue(filterClutter_);
         }
 
+        DrawEventLoggerSection();
+
         ImGui::Separator();
         ImGui::Text("Active Objects Near Cursor (On Screen):");
 
@@ -587,6 +661,113 @@ public:
         }
     }
 
+    void DrawEventLoggerSection() {
+        ImGui::Separator();
+        if (!ImGui::CollapsingHeader("Event Logger (args dump)")) {
+            return;
+        }
+
+        if (ImGui::Checkbox("Enable Event Logging", &logEnabled_)) {
+            if (menuLogEnabled_) menuLogEnabled_->SetValue(logEnabled_);
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Verbose", &logVerbose_)) {
+            if (menuLogVerbose_) menuLogVerbose_->SetValue(logVerbose_);
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Raw Registers", &logRaw_)) {
+            if (menuLogRaw_) menuLogRaw_->SetValue(logRaw_);
+        }
+
+        if (ImGui::Checkbox("Skip Auto Attacks", &logSkipAutoAttacks_)) {
+            if (menuLogSkipAA_) menuLogSkipAA_->SetValue(logSkipAutoAttacks_);
+        }
+        ImGui::SameLine();
+        if (ImGui::Checkbox("Write to Debug Log", &logToFile_)) {
+            if (menuLogToFile_) menuLogToFile_->SetValue(logToFile_);
+        }
+        ImGui::SameLine();
+        ImGui::Checkbox("Auto Scroll", &logAutoScroll_);
+
+        ImGui::SetNextItemWidth(220.0f);
+        if (ImGui::Combo("Source", &logSourceIndex_,
+                         "Local Player Only\0Player + Allies\0Enemies Only\0Everyone\0")) {
+            if (menuLogSource_) menuLogSource_->SetValue(logSourceIndex_);
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(220.0f);
+        ImGui::InputText("Name Filter", logNameFilter_, sizeof(logNameFilter_));
+
+        if (ImGui::TreeNode("Tracked Events")) {
+            struct EventToggle {
+                const char* Label;
+                bool* Flag;
+                SDK::UI::MenuBool** Control;
+            };
+            EventToggle toggles[] = {
+                { "OnProcessSpell",     &logProcessSpell_, &menuLogProcessSpell_ },
+                { "OnDoCast",           &logDoCast_,       &menuLogDoCast_ },
+                { "OnFinishCast",       &logFinishCast_,   &menuLogFinishCast_ },
+                { "OnSpellImpact",      &logSpellImpact_,  &menuLogSpellImpact_ },
+                { "OnProcessCastSpell", &logCastSpell_,    &menuLogCastSpell_ },
+                { "OnStopCast",         &logStopCast_,     &menuLogStopCast_ },
+                { "OnPlayAnimation",    &logAnimation_,    &menuLogAnimation_ },
+                { "OnBuffAdd",          &logBuffAdd_,      &menuLogBuffAdd_ },
+                { "OnBuffRemove",       &logBuffRemove_,   &menuLogBuffRemove_ },
+                { "OnBuffUpdate",       &logBuffUpdate_,   &menuLogBuffUpdate_ },
+                { "OnNewPath",          &logNewPath_,      &menuLogNewPath_ },
+            };
+            ImGui::Columns(2, "EventToggleColumns", false);
+            for (auto& toggle : toggles) {
+                if (ImGui::Checkbox(toggle.Label, toggle.Flag)) {
+                    if (*toggle.Control) (*toggle.Control)->SetValue(*toggle.Flag);
+                }
+                ImGui::NextColumn();
+            }
+            ImGui::Columns(1);
+            ImGui::TreePop();
+        }
+
+        std::size_t entryCount = 0;
+        {
+            std::lock_guard<std::mutex> lk(eventLogMutex_);
+            entryCount = eventLog_.size();
+        }
+
+        if (ImGui::Button("Copy Event Log")) {
+            std::string dump = "=== DEVELOPER TOOLS EVENT LOG ===\n";
+            {
+                std::lock_guard<std::mutex> lk(eventLogMutex_);
+                for (const auto& line : eventLog_) {
+                    dump += line;
+                    dump += '\n';
+                }
+            }
+            ImGui::SetClipboardText(dump.c_str());
+            NightSharpDebug::Logf("[Dev] Copied %zu event log lines to Clipboard!", entryCount);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear Event Log")) {
+            std::lock_guard<std::mutex> lk(eventLogMutex_);
+            eventLog_.clear();
+            entryCount = 0;
+        }
+        ImGui::SameLine();
+        ImGui::Text("%zu / %zu lines", entryCount, kMaxEventLogEntries);
+
+        if (ImGui::BeginChild("EventLogScroll", ImVec2(0, 260), true,
+                              ImGuiWindowFlags_HorizontalScrollbar)) {
+            std::lock_guard<std::mutex> lk(eventLogMutex_);
+            for (const auto& line : eventLog_) {
+                ImGui::TextUnformatted(line.c_str());
+            }
+            if (logAutoScroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f) {
+                ImGui::SetScrollHereY(1.0f);
+            }
+        }
+        ImGui::EndChild();
+    }
+
 private:
     bool enabled_ = true;
     int maxRange_ = 400;
@@ -660,6 +841,31 @@ private:
     mutable std::vector<SDK::GameObject> scanCache_;
     mutable std::vector<SDK::GameObject> activeObjectsCache_;
     static inline DeveloperToolsPlugin* s_instance = nullptr;
+
+    // Event logger state. Handlers fire on the game thread, the ImGui panel
+    // reads on the render thread, so the ring buffer is mutex guarded.
+    static constexpr std::size_t kMaxEventLogEntries = 512;
+    bool logEnabled_ = true;
+    int  logSourceIndex_ = 0; // 0 = player, 1 = player+allies, 2 = enemies, 3 = everyone
+    bool logVerbose_ = true;
+    bool logRaw_ = false;
+    bool logSkipAutoAttacks_ = false;
+    bool logToFile_ = true;
+    bool logProcessSpell_ = true;
+    bool logDoCast_ = true;
+    bool logFinishCast_ = false;
+    bool logSpellImpact_ = false;
+    bool logCastSpell_ = false;
+    bool logStopCast_ = false;
+    bool logAnimation_ = false;
+    bool logBuffAdd_ = false;
+    bool logBuffRemove_ = false;
+    bool logBuffUpdate_ = false;
+    bool logNewPath_ = false;
+    char logNameFilter_[64] = {};
+    bool logAutoScroll_ = true;
+    std::mutex eventLogMutex_;
+    std::vector<std::string> eventLog_;
 
     template <typename T>
     void AddUniqueObjectsFromSource(std::vector<SDK::GameObject>& dest, const std::vector<T>& source) const {
@@ -921,15 +1127,409 @@ private:
         }
     }
 
-    static void OnProcessSpellCast(const SDK::Events::ProcessSpellEventArgs& args) {
-        const auto player = SDK::ObjectManager::Player();
-        if (player.IsValid() && args.CasterNetworkId == player.NetworkId()) {
-            char debugMsg[256];
-            std::snprintf(debugMsg, sizeof(debugMsg), "Detected Spell Name: %s Issued By: %s",
-                          args.SpellName[0] ? args.SpellName : args.ScriptName,
-                          player.CharacterName().c_str());
-            NightSharpDebug::Logf("%s", debugMsg);
+    // ---------------------------------------------------------------------
+    // Event logger
+    // ---------------------------------------------------------------------
+
+    static const char* SlotToString(int slot) {
+        switch (slot) {
+        case 0:  return "Q";
+        case 1:  return "W";
+        case 2:  return "E";
+        case 3:  return "R";
+        case 4:  return "D/Summoner1";
+        case 5:  return "F/Summoner2";
+        case 6:  return "Item1";
+        case 7:  return "Item2";
+        case 8:  return "Item3";
+        case 9:  return "Item4";
+        case 10: return "Item5";
+        case 11: return "Item6";
+        case 12: return "Trinket";
+        case 13: return "Recall";
+        case 64: return "BasicAttack";
+        case -1: return "Unknown";
+        default: return "Other";
         }
+    }
+
+    static bool ContainsNoCase(const char* haystack, const char* needle) {
+        if (!haystack || !needle || !needle[0]) return true;
+        const size_t hLen = std::strlen(haystack);
+        const size_t nLen = std::strlen(needle);
+        if (nLen > hLen) return false;
+        for (size_t i = 0; i + nLen <= hLen; ++i) {
+            size_t j = 0;
+            for (; j < nLen; ++j) {
+                if (std::tolower(static_cast<unsigned char>(haystack[i + j])) !=
+                    std::tolower(static_cast<unsigned char>(needle[j]))) {
+                    break;
+                }
+            }
+            if (j == nLen) return true;
+        }
+        return false;
+    }
+
+    bool PassesSourceFilter(const ::Core::Events::ObjectInfo& sender) const {
+        if (logSourceIndex_ == 3) {
+            return true;
+        }
+        if (!sender.IsValid()) {
+            return false;
+        }
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid()) {
+            return false;
+        }
+        const bool isPlayer = sender.NetworkId == player.NetworkId() ||
+                              sender.Ptr == player.Address();
+        const bool sameTeam = sender.Team == static_cast<std::uint32_t>(player.Team());
+        switch (logSourceIndex_) {
+        case 0:  return isPlayer;
+        case 1:  return isPlayer || sameTeam;
+        case 2:  return !sameTeam;
+        default: return true;
+        }
+    }
+
+    bool PassesNameFilter(const char* a, const char* b = nullptr, const char* c = nullptr) const {
+        if (!logNameFilter_[0]) {
+            return true;
+        }
+        return ContainsNoCase(a, logNameFilter_) ||
+               (b && ContainsNoCase(b, logNameFilter_)) ||
+               (c && ContainsNoCase(c, logNameFilter_));
+    }
+
+    void Emit(const char* line) {
+        if (!line || !line[0]) {
+            return;
+        }
+        if (logToFile_) {
+            NightSharpDebug::Logf("%s", line);
+        }
+        std::lock_guard<std::mutex> lk(eventLogMutex_);
+        if (eventLog_.size() >= kMaxEventLogEntries) {
+            eventLog_.erase(eventLog_.begin(),
+                            eventLog_.begin() + (eventLog_.size() - kMaxEventLogEntries + 1));
+        }
+        eventLog_.emplace_back(line);
+    }
+
+    void EmitF(const char* fmt, ...) {
+        char buffer[1400] = {};
+        va_list vl;
+        va_start(vl, fmt);
+        _vsnprintf_s(buffer, sizeof(buffer), _TRUNCATE, fmt, vl);
+        va_end(vl);
+        Emit(buffer);
+    }
+
+    // Dumps every field of ObjectInfo so caster/target identity is never ambiguous.
+    void EmitObjectInfo(const char* label, const ::Core::Events::ObjectInfo& info) {
+        if (!info.IsValid()) {
+            EmitF("    %-7s <invalid>", label);
+            return;
+        }
+        EmitF("    %-7s name='%s' char='%s' netId=%u idx=%u team=%u type=%s "
+              "dead=%d vis=%d clone=%d pet=%d zombie=%d ptr=0x%llX pos=(%.1f, %.1f, %.1f)",
+              label,
+              info.Name,
+              info.CharacterName,
+              info.NetworkId,
+              info.Index,
+              info.Team,
+              ObjectTypeToString(info.Type),
+              info.IsDead ? 1 : 0,
+              info.IsVisible ? 1 : 0,
+              info.IsClone ? 1 : 0,
+              info.IsPet ? 1 : 0,
+              info.IsZombie ? 1 : 0,
+              static_cast<unsigned long long>(info.Ptr),
+              info.Position.x, info.Position.y, info.Position.z);
+    }
+
+    void EmitRawArgs(const ::Core::Events::RawEventArgs& raw) {
+        if (!logRaw_) {
+            return;
+        }
+        EmitF("    raw     rcx=0x%llX rdx=0x%llX r8=0x%llX r9=0x%llX target=0x%llX hits=%lld",
+              static_cast<unsigned long long>(raw.Rcx),
+              static_cast<unsigned long long>(raw.Rdx),
+              static_cast<unsigned long long>(raw.R8),
+              static_cast<unsigned long long>(raw.R9),
+              static_cast<unsigned long long>(raw.Target),
+              raw.HitCount);
+        EmitF("    raw     xmm=[%.3f, %.3f, %.3f, %.3f] stack=[0x%llX, 0x%llX, 0x%llX, 0x%llX, 0x%llX, 0x%llX]",
+              raw.Xmm0, raw.Xmm1, raw.Xmm2, raw.Xmm3,
+              static_cast<unsigned long long>(raw.Stack0),
+              static_cast<unsigned long long>(raw.Stack1),
+              static_cast<unsigned long long>(raw.Stack2),
+              static_cast<unsigned long long>(raw.Stack3),
+              static_cast<unsigned long long>(raw.Stack4),
+              static_cast<unsigned long long>(raw.Stack5));
+    }
+
+    void LogSpellEvent(const char* tag, const SDK::Events::ProcessSpellEventArgs& args) {
+        if (!enabled_ || !logEnabled_) {
+            return;
+        }
+        if (logSkipAutoAttacks_ && (args.IsAutoAttack || args.Slot == 64)) {
+            return;
+        }
+        if (!PassesSourceFilter(args.Sender)) {
+            return;
+        }
+        if (!PassesNameFilter(args.SpellName, args.ScriptName, args.MissileName)) {
+            return;
+        }
+
+        const char* spellName = args.SpellName[0] ? args.SpellName : args.ScriptName;
+        const char* casterName = args.Sender.CharacterName[0]
+            ? args.Sender.CharacterName
+            : args.Sender.Name;
+        const char* targetName = args.Target.IsValid()
+            ? (args.Target.CharacterName[0] ? args.Target.CharacterName : args.Target.Name)
+            : "-";
+
+        EmitF("[%s] %s -> '%s' slot=%s(%d) target=%s#%u delay=%.3f castTime=%.3f speed=%.0f end=(%.0f, %.0f, %.0f)",
+              tag,
+              casterName,
+              spellName,
+              SlotToString(args.Slot), args.Slot,
+              targetName, args.TargetNetworkId,
+              args.CastDelay, args.CastTime, args.MissileSpeed,
+              args.EndPosition.x, args.EndPosition.y, args.EndPosition.z);
+
+        if (!logVerbose_) {
+            return;
+        }
+
+        EmitF("    names   spell='%s' script='%s' missile='%s' slotName='%s' payloadSpell='%s' payloadMissile='%s' slotFallback=%d",
+              args.SpellName, args.ScriptName, args.MissileName, args.SpellSlotName,
+              args.PayloadSpellName, args.PayloadMissileName,
+              args.SpellNameFromSlotFallback ? 1 : 0);
+        EmitF("    flags   IsSpell=%d IsAutoAttack=%d IsSpecialAttack=%d slot=%d(%s) srcIdx=%d tgtIdx=%d casterNetId=%u targetNetId=%u",
+              args.IsSpell ? 1 : 0,
+              args.IsAutoAttack ? 1 : 0,
+              args.IsSpecialAttack ? 1 : 0,
+              args.Slot, SlotToString(args.Slot),
+              args.SourceIndex, args.TargetIndex,
+              args.CasterNetworkId, args.TargetNetworkId);
+
+        EmitObjectInfo("caster", args.Sender);
+        EmitObjectInfo("target", args.Target);
+
+        const float travelDist = args.StartPosition.Distance(args.EndPosition);
+        const float flightTime = args.MissileSpeed > 1.0f ? travelDist / args.MissileSpeed : 0.0f;
+        EmitF("    timing  castDelay=%.3f castTime=%.3f missileSpeed=%.1f dist=%.1f flight=%.3fs total=%.3fs",
+              args.CastDelay, args.CastTime, args.MissileSpeed,
+              travelDist, flightTime, args.CastDelay + flightTime);
+        EmitF("    vectors start=(%.1f, %.1f, %.1f) end=(%.1f, %.1f, %.1f) cast=(%.1f, %.1f, %.1f)",
+              args.StartPosition.x, args.StartPosition.y, args.StartPosition.z,
+              args.EndPosition.x, args.EndPosition.y, args.EndPosition.z,
+              args.CastPosition.x, args.CastPosition.y, args.CastPosition.z);
+        EmitF("    ptrs    book=0x%llX castInfo=0x%llX input=0x%llX data=0x%llX res=0x%llX",
+              static_cast<unsigned long long>(args.Spellbook),
+              static_cast<unsigned long long>(args.CastInfo),
+              static_cast<unsigned long long>(args.SpellInput),
+              static_cast<unsigned long long>(args.SpellData),
+              static_cast<unsigned long long>(args.SpellDataResource));
+        EmitRawArgs(args.Raw);
+    }
+
+    void LogBuffEvent(const char* tag, const SDK::Events::BuffEventArgs& args) {
+        if (!enabled_ || !logEnabled_) {
+            return;
+        }
+        if (!PassesSourceFilter(args.Sender)) {
+            return;
+        }
+        if (!PassesNameFilter(args.BuffName)) {
+            return;
+        }
+
+        const char* owner = args.Sender.CharacterName[0]
+            ? args.Sender.CharacterName
+            : args.Sender.Name;
+        EmitF("[%s] %s buff='%s' stacks=%d type=%d start=%.2f end=%.2f duration=%.2f",
+              tag, owner, args.BuffName, args.Count, args.Type,
+              args.StartTime, args.EndTime, args.EndTime - args.StartTime);
+
+        if (!logVerbose_) {
+            return;
+        }
+        EmitObjectInfo("owner", args.Sender);
+        EmitF("    ptrs    buff=0x%llX bridge=0x%llX ownerComp=0x%llX traceHook=%u traceSerial=%llu",
+              static_cast<unsigned long long>(args.BuffAddress),
+              static_cast<unsigned long long>(args.EventBridge),
+              static_cast<unsigned long long>(args.OwnerComponent),
+              args.BuffTraceHookId,
+              static_cast<unsigned long long>(args.BuffTraceSerial));
+        EmitRawArgs(args.Raw);
+    }
+
+    static void OnProcessSpellCast(const SDK::Events::ProcessSpellEventArgs& args) {
+        if (s_instance && s_instance->logProcessSpell_) {
+            s_instance->LogSpellEvent("ProcessSpell", args);
+        }
+    }
+
+    static void OnDoCastEvent(const SDK::Events::ProcessSpellEventArgs& args) {
+        if (s_instance && s_instance->logDoCast_) {
+            s_instance->LogSpellEvent("DoCast", args);
+        }
+    }
+
+    static void OnFinishCastEvent(const SDK::Events::ProcessSpellEventArgs& args) {
+        if (s_instance && s_instance->logFinishCast_) {
+            s_instance->LogSpellEvent("FinishCast", args);
+        }
+    }
+
+    static void OnSpellImpactEvent(const SDK::Events::ProcessSpellEventArgs& args) {
+        if (s_instance && s_instance->logSpellImpact_) {
+            s_instance->LogSpellEvent("SpellImpact", args);
+        }
+    }
+
+    static void OnCastSpellEvent(const SDK::Events::CastSpellEventArgs& args) {
+        auto* self = s_instance;
+        if (!self || !self->enabled_ || !self->logEnabled_ || !self->logCastSpell_) {
+            return;
+        }
+        if (self->logSkipAutoAttacks_ && args.Slot == 64) {
+            return;
+        }
+        if (!self->PassesSourceFilter(args.Sender)) {
+            return;
+        }
+        const char* caster = args.Sender.CharacterName[0]
+            ? args.Sender.CharacterName
+            : args.Sender.Name;
+        if (!self->PassesNameFilter(caster)) {
+            return;
+        }
+        self->EmitF("[CastSpell] %s slot=%s(%d) targetNetId=%u start=(%.0f, %.0f, %.0f) end=(%.0f, %.0f, %.0f)",
+                    caster, SlotToString(args.Slot), args.Slot, args.TargetNetworkId,
+                    args.StartPosition.x, args.StartPosition.y, args.StartPosition.z,
+                    args.EndPosition.x, args.EndPosition.y, args.EndPosition.z);
+        if (!self->logVerbose_) {
+            return;
+        }
+        self->EmitObjectInfo("caster", args.Sender);
+        self->EmitF("    ptrs    castRequest=0x%llX",
+                    static_cast<unsigned long long>(args.CastRequest));
+        self->EmitRawArgs(args.Raw);
+    }
+
+    static void OnStopCastEvent(const SDK::Events::StopCastEventArgs& args) {
+        auto* self = s_instance;
+        if (!self || !self->enabled_ || !self->logEnabled_ || !self->logStopCast_) {
+            return;
+        }
+        if (!self->PassesSourceFilter(args.Sender)) {
+            return;
+        }
+        const char* caster = args.Sender.CharacterName[0]
+            ? args.Sender.CharacterName
+            : args.Sender.Name;
+        if (!self->PassesNameFilter(caster)) {
+            return;
+        }
+        self->EmitF("[StopCast] %s slot=%s(%d) hasBeenCast=%d keepAnim=%d destroyMissile=%d missileNetId=%d castId=%d",
+                    caster, SlotToString(args.Slot), args.Slot,
+                    args.HasBeenCast ? 1 : 0,
+                    args.KeepAnimationPlaying ? 1 : 0,
+                    args.DestroyMissile ? 1 : 0,
+                    args.MissileNetworkId,
+                    args.SpellCastId);
+        if (!self->logVerbose_) {
+            return;
+        }
+        self->EmitObjectInfo("caster", args.Sender);
+        self->EmitF("    ptrs    book=0x%llX processFlag=0x%llX casterNetId=%u",
+                    static_cast<unsigned long long>(args.Spellbook),
+                    static_cast<unsigned long long>(args.ProcessFlag),
+                    args.CasterNetworkId);
+        self->EmitRawArgs(args.Raw);
+    }
+
+    static void OnPlayAnimationEvent(const SDK::Events::PlayAnimationEventArgs& args) {
+        auto* self = s_instance;
+        if (!self || !self->enabled_ || !self->logEnabled_ || !self->logAnimation_) {
+            return;
+        }
+        if (!self->PassesSourceFilter(args.Sender)) {
+            return;
+        }
+        if (!self->PassesNameFilter(args.Animation)) {
+            return;
+        }
+        const char* owner = args.Sender.CharacterName[0]
+            ? args.Sender.CharacterName
+            : args.Sender.Name;
+        self->EmitF("[Animation] %s anim='%s' id=%d accepted=%d",
+                    owner, args.Animation, args.AnimationId, args.Accepted ? 1 : 0);
+        if (!self->logVerbose_) {
+            return;
+        }
+        self->EmitObjectInfo("owner", args.Sender);
+        self->EmitRawArgs(args.Raw);
+    }
+
+    static void OnBuffAddEvent(const SDK::Events::BuffEventArgs& args) {
+        if (s_instance && s_instance->logBuffAdd_) {
+            s_instance->LogBuffEvent("BuffAdd", args);
+        }
+    }
+
+    static void OnBuffRemoveEvent(const SDK::Events::BuffEventArgs& args) {
+        if (s_instance && s_instance->logBuffRemove_) {
+            s_instance->LogBuffEvent("BuffRemove", args);
+        }
+    }
+
+    static void OnBuffUpdateEvent(const SDK::Events::BuffEventArgs& args) {
+        if (s_instance && s_instance->logBuffUpdate_) {
+            s_instance->LogBuffEvent("BuffUpdate", args);
+        }
+    }
+
+    static void OnNewPathEvent(const SDK::Events::NewPathEventArgs& args) {
+        auto* self = s_instance;
+        if (!self || !self->enabled_ || !self->logEnabled_ || !self->logNewPath_) {
+            return;
+        }
+        if (!self->PassesSourceFilter(args.Sender)) {
+            return;
+        }
+        const char* owner = args.Sender.CharacterName[0]
+            ? args.Sender.CharacterName
+            : args.Sender.Name;
+        if (!self->PassesNameFilter(owner)) {
+            return;
+        }
+        const Vec3 dest = args.PathCount > 0 ? args.Path[args.PathCount - 1] : Vec3{};
+        self->EmitF("[NewPath] %s isDash=%d speed=%.1f waypoints=%d dest=(%.0f, %.0f, %.0f)",
+                    owner, args.IsDash ? 1 : 0, args.Speed, args.PathCount,
+                    dest.x, dest.y, dest.z);
+        if (!self->logVerbose_) {
+            return;
+        }
+        self->EmitObjectInfo("owner", args.Sender);
+        const int shown = args.PathCount < 8 ? args.PathCount : 8;
+        for (int i = 0; i < shown; ++i) {
+            self->EmitF("    wp[%d]   (%.1f, %.1f, %.1f)",
+                        i, args.Path[i].x, args.Path[i].y, args.Path[i].z);
+        }
+        if (args.PathCount > shown) {
+            self->EmitF("    wp      ... %d more waypoints omitted", args.PathCount - shown);
+        }
+        self->EmitF("    ptrs    pathArray=0x%llX",
+                    static_cast<unsigned long long>(args.PathArray));
+        self->EmitRawArgs(args.Raw);
     }
 
     static const std::string& GetObjectName(const SDK::GameObject& object) {
@@ -1041,6 +1641,23 @@ private:
             menuScanMissiles_ = nullptr;
             menuFilterClutter_ = nullptr;
             menuInspector_ = nullptr;
+            menuLogEnabled_ = nullptr;
+            menuLogSource_ = nullptr;
+            menuLogVerbose_ = nullptr;
+            menuLogRaw_ = nullptr;
+            menuLogSkipAA_ = nullptr;
+            menuLogToFile_ = nullptr;
+            menuLogProcessSpell_ = nullptr;
+            menuLogDoCast_ = nullptr;
+            menuLogFinishCast_ = nullptr;
+            menuLogSpellImpact_ = nullptr;
+            menuLogCastSpell_ = nullptr;
+            menuLogStopCast_ = nullptr;
+            menuLogAnimation_ = nullptr;
+            menuLogBuffAdd_ = nullptr;
+            menuLogBuffRemove_ = nullptr;
+            menuLogBuffUpdate_ = nullptr;
+            menuLogNewPath_ = nullptr;
         }
     }
 
@@ -1056,6 +1673,23 @@ private:
     SDK::UI::MenuBool* menuScanMissiles_ = nullptr;
     SDK::UI::MenuBool* menuFilterClutter_ = nullptr;
     SDK::UI::MenuRuntime* menuInspector_ = nullptr;
+    SDK::UI::MenuBool* menuLogEnabled_ = nullptr;
+    SDK::UI::MenuList* menuLogSource_ = nullptr;
+    SDK::UI::MenuBool* menuLogVerbose_ = nullptr;
+    SDK::UI::MenuBool* menuLogRaw_ = nullptr;
+    SDK::UI::MenuBool* menuLogSkipAA_ = nullptr;
+    SDK::UI::MenuBool* menuLogToFile_ = nullptr;
+    SDK::UI::MenuBool* menuLogProcessSpell_ = nullptr;
+    SDK::UI::MenuBool* menuLogDoCast_ = nullptr;
+    SDK::UI::MenuBool* menuLogFinishCast_ = nullptr;
+    SDK::UI::MenuBool* menuLogSpellImpact_ = nullptr;
+    SDK::UI::MenuBool* menuLogCastSpell_ = nullptr;
+    SDK::UI::MenuBool* menuLogStopCast_ = nullptr;
+    SDK::UI::MenuBool* menuLogAnimation_ = nullptr;
+    SDK::UI::MenuBool* menuLogBuffAdd_ = nullptr;
+    SDK::UI::MenuBool* menuLogBuffRemove_ = nullptr;
+    SDK::UI::MenuBool* menuLogBuffUpdate_ = nullptr;
+    SDK::UI::MenuBool* menuLogNewPath_ = nullptr;
 };
 
 inline DeveloperToolsPlugin* s_instance = nullptr;

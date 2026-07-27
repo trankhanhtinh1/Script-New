@@ -11,6 +11,7 @@
 #include "../../../sdk/Enumerations/SpellSlot.h"
 #include "../../../sdk/Events/Events.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
+#include "../../../sdk/Math/Collision.h"
 #include "../../../sdk/Math/HealthPrediction.h"
 #include "../../../sdk/UI/Drawing.h"
 #include "../../../sdk/UI/Icons.h"
@@ -93,12 +94,18 @@ private:
     static constexpr int kDuplicateAttackEventMs = 80;
     static constexpr float kMoveDuplicateDistance = 55.0f;
     static constexpr float kMaxPingLeadMs = 90.0f;
+    // Attack safety is a fraction of the current attack cycle, clamped so it
+    // stays sane at both extremes: see AttackSafetyMs().
     static constexpr float kAttackSafetyMs = 35.0f;
-    static constexpr float kHighAttackSpeedSafetyMs = 30.0f;
+    static constexpr float kMinAttackSafetyMs = 12.0f;
+    static constexpr float kAttackSafetyRatio = 0.05f;
     static constexpr float kMoveSafetyMs = 10.0f;
     static constexpr float kRangedPreCastMoveSafetyMs = 35.0f;
     static constexpr float kDefaultAttackDelayMs = 625.0f;
     static constexpr float kDefaultAttackWindupMs = 300.0f;
+    static constexpr float kMinAttackSpeedMod = 0.2f;
+    static constexpr float kMaxAttackSpeedMod = 6.0f;
+    static constexpr float kCalibrationMinShift = 0.05f;
 
     static void OnGameUpdateStatic(const Events::GameUpdateEventArgs& args);
     static void OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args);
@@ -131,6 +138,7 @@ private:
     int PendingAttackTimeoutMs();
     int DoCastMoveGateTimeoutMs();
     float OneWayPingMs() const;
+    float AttackPingLeadMs() const;
     float ChampionExtraAttackDelayMs(const AIHeroClient& player) const;
     bool ChampionRequiresDoCastBeforeMove(const AIHeroClient& player) const;
     bool ChampionCanAttack(const AIHeroClient& player) const;
@@ -139,6 +147,10 @@ private:
     bool EvadeBlocksAttack(int now) const;
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
+    float LiveAttackSpeedMod(const AIHeroClient& player) const;
+    void CalibrateAttackTimingScale(const AIHeroClient& player,
+                                    float rawDelayMs,
+                                    float rawWindupMs);
     void ReadAttackTimingsFromMemory(const AIHeroClient& player);
     int AttackCastReadyTick(const AIHeroClient& player);
     int AttackReadyTick(const AIHeroClient& player);

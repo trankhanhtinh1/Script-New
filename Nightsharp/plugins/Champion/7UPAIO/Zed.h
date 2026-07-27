@@ -894,10 +894,17 @@ inline int g_probeAccN = 0;
 inline DWORD g_probeAccLast = 0;
 
 struct ZedProbe {
+    // Off — flip to true to re-enable FPS-drop profiling. While false the ctor
+    // and dtor bodies compile away entirely, so the call sites cost nothing.
+    static constexpr bool kEnabled = false;
+
     const char* n;
-    LARGE_INTEGER s;
-    explicit ZedProbe(const char* name) : n(name) { QueryPerformanceCounter(&s); }
+    LARGE_INTEGER s{};
+    explicit ZedProbe(const char* name) : n(name) {
+        if constexpr (kEnabled) { QueryPerformanceCounter(&s); }
+    }
     ~ZedProbe() {
+        if constexpr (!kEnabled) { return; }
         LARGE_INTEGER e{}, f{};
         QueryPerformanceCounter(&e);
         QueryPerformanceFrequency(&f);

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstring>
 #include <regex>
 #include <string>
 #include <vector>
@@ -36,7 +37,13 @@ inline int LastR = 0;
 inline int LastCastE = 0;
 inline int LastCastQ = 0;
 inline int LastCastW = 0;
+inline int LastCastR = 0;
 inline int LastBasicAttackTick = 0;
+inline int LastMoveTick = 0;
+
+// Ngay sau khi bấm R, trạng thái di chuyển của frame trước còn sót lại vài chục
+// ms, nên phải có khoảng ân hạn trước khi coi di chuyển là hủy channel.
+inline constexpr int RMoveGraceMs = 250;
 inline std::vector<Dagger> Daggers;
 
 static std::string RuntimeName(const GameObject& object) {
@@ -52,59 +59,51 @@ static bool IsHiddenMinion(const GameObject& object) {
     return std::regex_match(name, pattern);
 }
 
+// Trạng thái channel R được suy ra từ mốc OnProcessSpell của chính chiêu R:
+//   - Không có buff "KatarinaRSound" -> chắc chắn không đang R.
+//   - Có buff -> R chỉ còn sống nếu SAU tick cast R không có: Q/W/E, đánh
+//     thường, hay di chuyển/lướt. Katarina bị trói suốt channel nên di chuyển
+//     đồng nghĩa R đã đứt.
+// Hàm chỉ đọc trạng thái, không đổi static nào ảnh hưởng kết quả, nên gọi bao
+// nhiêu lần trong một frame cũng cho cùng một đáp án.
 static bool HaveRBuff() {
-    static bool lastResult = false;
-    static float lastLogTime = 0.0f;
-    static float buffFirstDetectedTime = 0.0f;
-    static int buffFirstDetectedTick = 0;
-
     const auto player = Player();
-    bool hasBuff = player.HasBuff("KatarinaRSound");
-    float gameTime = Game::Time();
 
-    if (!hasBuff) {
-        buffFirstDetectedTime = 0.0f;
-        buffFirstDetectedTick = 0;
-        lastResult = false;
+    if (!player.HasBuff("KatarinaRSound")) {
         return false;
     }
 
-    const int tick = SDK::Variables::TickCount();
-
-    if (buffFirstDetectedTime == 0.0f) {
-        buffFirstDetectedTime = gameTime;
-        buffFirstDetectedTick = tick;
-    }
-
-    // Nếu vừa mới cast Q, W, E hoặc đánh thường SAU KHI chiêu R bắt đầu được niệm, thì coi như đã mất R
-    if (LastCastQ > buffFirstDetectedTick || 
-        LastCastW > buffFirstDetectedTick || 
-        LastCastE > buffFirstDetectedTick ||
-        LastBasicAttackTick > buffFirstDetectedTick) {
-        buffFirstDetectedTime = 0.0f;
-        buffFirstDetectedTick = 0;
-        lastResult = false;
+    // Buff còn nhưng chưa từng bắt được event cast R (vd. load giữa channel)
+    // -> thiếu mốc so sánh, coi như không đang R cho an toàn.
+    if (LastCastR == 0) {
         return false;
     }
 
-    bool result = true;
-    int reason = 4; // Default: normal channel
-    bool isMoving = player.IsMoving();
-    bool isDashing = player.IsDashing();
+    const bool cancelled =
+        LastCastQ > LastCastR ||
+        LastCastW > LastCastR ||
+        LastCastE > LastCastR ||
+        LastBasicAttackTick > LastCastR ||
+        LastMoveTick > LastCastR + RMoveGraceMs;
 
-    // Nếu đã qua thời gian cast ban đầu (250ms) thì mới kiểm tra di chuyển để phát hiện cancel sớm
-    if (gameTime - buffFirstDetectedTime > 0.25f) {
-        if (isMoving || isDashing) {
-            result = false;
-            reason = 3; // Moved/Dashed after windup
-        }
-    }
+    const bool result = !cancelled;
 
-    if (result != lastResult || gameTime - lastLogTime > 0.5f) {
-        lastResult = result;
+    static bool lastLoggedResult = false;
+    static float lastLogTime = 0.0f;
+    const float gameTime = Game::Time();
+    if (result != lastLoggedResult || gameTime - lastLogTime > 0.5f) {
+        lastLoggedResult = result;
         lastLogTime = gameTime;
-        NightSharpDebug::Logf("[Katarina R Debug] R_Active=%d (Reason=%d) | HasBuff=1 | Age=%.2fs | IsMoving=%d | IsDashing=%d",
-            result, reason, gameTime - buffFirstDetectedTime, isMoving, isDashing);
+        NightSharpDebug::Logf(
+            "[Katarina R Debug] R_Active=%d | HasBuff=1 | Age=%dms | dQ=%d dW=%d dE=%d dAA=%d dMove=%d (grace=%d)",
+            result,
+            SDK::Variables::TickCount() - LastCastR,
+            LastCastQ - LastCastR,
+            LastCastW - LastCastR,
+            LastCastE - LastCastR,
+            LastBasicAttackTick - LastCastR,
+            LastMoveTick - LastCastR,
+            RMoveGraceMs);
     }
 
     return result;
@@ -210,6 +209,44 @@ static float QDamage(const AIBaseClient& target) {
     return player.CalculateMagicDamage(target, baseDamage[rank] + 0.40f * player.AP());
 }
 
+// Bội số khuếch đại sát thương PHÉP từ trang bị. Áp lên sát thương SAU khi đã
+// trừ kháng phép, vì các hiệu ứng này khuếch đại sát thương cuối cùng.
+// Chỉ cần id gốc: bản sao ARAM/Arena đã được CoreItem::HasItemId chuẩn hóa.
+static float MagicDamageAmp(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 1.0f;
+    }
+
+    float amp = 1.0f;
+
+    // Shadowflame (4645) — Cinderbloom: sát thương phép và chuẩn "chí mạng" lên
+    // mục tiêu dưới 40% máu, +20% sát thương.
+    if (player.HasItem(4645) && target.HealthPercent() < 40.0f) {
+        amp *= 1.20f;
+    }
+
+    // Perplexity (4015) — Giant Slayer: tối đa +15% lên tướng có max HP cao hơn
+    // mình, đạt trần khi chênh lệch >= 3000.
+    if (target.IsHero() && player.HasItem(4015)) {
+        const float diff = target.MaxHealth() - player.MaxHealth();
+        if (diff > 0.0f) {
+            amp *= 1.0f + 0.15f * std::min(diff / 3000.0f, 1.0f);
+        }
+    }
+
+    // Lightning Braid (4013) — Chain Lightning: -20% sát thương kỹ năng.
+    if (player.HasItem(4013)) {
+        amp *= 0.80f;
+    }
+
+    // CHƯA HỖ TRỢ: Riftmaker (4633) Void Corruption (+2%/giây giao tranh, trần
+    // +8%). Cần đọc số stack của buff mà mình chưa xác minh được tên buff — đoán
+    // bừa sẽ cho ra số sai, nên tạm bỏ qua.
+
+    return amp;
+}
+
 static float EDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
@@ -222,9 +259,9 @@ static float EDamage(const AIBaseClient& target) {
         return 0.0f;
     }
 
-    return player.CalculateMagicDamage(
-        target,
-        baseDamage[rank] + 0.40f * TotalAttackDamage() + 0.25f * player.AP());
+    const float raw =
+        baseDamage[rank] + 0.40f * TotalAttackDamage() + 0.25f * player.AP();
+    return player.CalculateMagicDamage(target, raw) * MagicDamageAmp(target);
 }
 
 static float EOnHitDamage(const AIBaseClient& target) {
@@ -905,6 +942,15 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    // Ghi mốc di chuyển mỗi frame để HaveRBuff() so như các hành động hủy khác
+    // (sticky), thay vì hỏi trạng thái tức thời: IsMoving() chỉ true trong lúc
+    // đang chạy, nếu hỏi trực tiếp thì R sẽ "sống lại" ngay khi dừng chân dù
+    // channel đã đứt. Phải chạy TRƯỚC UpdateOrbwalkerState() vì hàm đó gọi
+    // HaveRBuff().
+    if (player.IsMoving() || player.IsDashing()) {
+        LastMoveTick = SDK::Variables::TickCount();
+    }
+
     PruneDaggers();
     UpdateOrbwalkerState();
 
@@ -939,19 +985,94 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 }
 
-static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
-    if (Events::IsLocalPlayer(args.Sender)) {
-        const int slot = args.Slot;
-        const int tick = SDK::Variables::TickCount();
-        if (slot == static_cast<int>(SpellSlot::Q)) {
-            LastCastQ = tick;
-        } else if (slot == static_cast<int>(SpellSlot::W)) {
-            LastCastW = tick;
-        } else if (slot == static_cast<int>(SpellSlot::E)) {
-            LastCastE = tick;
-        } else if (slot == 64) {
-            LastBasicAttackTick = tick;
+// args.Slot KHÔNG tin được. Decoder đọc slot qua ReadEventSlot(), mà
+// detail::Read() zero-fill khi fail còn IsSlotValid(0) lại là true — nên mọi
+// cast đọc hỏng đều im lặng thành slot 0 = Q. Đã quan sát trực tiếp ở đường
+// DoCast và tái hiện ở ProcessSpell. Hệ quả: các event phụ phát ra trong lúc
+// channel R bị coi là "vừa cast Q" và hủy oan R.
+//
+// Tên chiêu thì decode ĐÚNG, nên phân loại hành động theo tên.
+
+// Riot đặt tên theo PascalCase nên hậu tố hợp lệ phải rỗng hoặc bắt đầu bằng ký
+// tự không phải chữ thường: "KatarinaEDagger" khớp prefix "KatarinaE", còn
+// "KatarinaRecall" thì không khớp "KatarinaR".
+static bool SpellNameHasPrefix(const char* name, const char* prefix) {
+    if (!name || !prefix) {
+        return false;
+    }
+    const size_t prefixLen = std::strlen(prefix);
+    if (_strnicmp(name, prefix, prefixLen) != 0) {
+        return false;
+    }
+    const char suffix = name[prefixLen];
+    return suffix == '\0' || suffix < 'a' || suffix > 'z';
+}
+
+static bool SpellNameContains(const char* name, const char* token) {
+    if (!name || !token) {
+        return false;
+    }
+    const size_t nameLen = std::strlen(name);
+    const size_t tokenLen = std::strlen(token);
+    if (tokenLen == 0 || tokenLen > nameLen) {
+        return false;
+    }
+    for (size_t i = 0; i + tokenLen <= nameLen; ++i) {
+        if (_strnicmp(name + i, token, tokenLen) == 0) {
+            return true;
         }
+    }
+    return false;
+}
+
+// Trả về slot chuẩn hóa: 0=Q, 1=W, 2=E, 3=R, 64=đánh thường,
+// -1 = event không phải hành động của người chơi (sub-spell, hiệu ứng nội bộ)
+// nên KHÔNG được đụng tới trạng thái R.
+static int ClassifyCast(const Events::ProcessSpellEventArgs& args) {
+    const char* name = args.SpellName[0] ? args.SpellName : args.ScriptName;
+    if (!name || !name[0]) {
+        return args.Slot;  // không có tên -> đành tin slot thô
+    }
+    if (SpellNameContains(name, "BasicAttack") ||
+        SpellNameContains(name, "CritAttack")) {
+        return 64;
+    }
+    if (SpellNameHasPrefix(name, "KatarinaQ")) return static_cast<int>(SpellSlot::Q);
+    if (SpellNameHasPrefix(name, "KatarinaW")) return static_cast<int>(SpellSlot::W);
+    if (SpellNameHasPrefix(name, "KatarinaE")) return static_cast<int>(SpellSlot::E);
+    if (SpellNameHasPrefix(name, "KatarinaR")) return static_cast<int>(SpellSlot::R);
+    return -1;
+}
+
+static void OnProcessSpellCast(const Events::ProcessSpellEventArgs& args) {
+    if (!Events::IsLocalPlayer(args.Sender)) {
+        return;
+    }
+
+    const char* name = args.SpellName[0] ? args.SpellName : args.ScriptName;
+    const int slot = ClassifyCast(args);
+    const int tick = SDK::Variables::TickCount();
+
+    NightSharpDebug::Logf("[Katarina Cast] name='%s' rawSlot=%d -> slot=%d",
+                          name ? name : "", args.Slot, slot);
+
+    if (slot == static_cast<int>(SpellSlot::Q)) {
+        LastCastQ = tick;
+    } else if (slot == static_cast<int>(SpellSlot::W)) {
+        LastCastW = tick;
+    } else if (slot == static_cast<int>(SpellSlot::E)) {
+        LastCastE = tick;
+    } else if (slot == static_cast<int>(SpellSlot::R)) {
+        // Mốc bắt đầu channel R — HaveRBuff() so mọi hành động khác với tick này.
+        // R có thể phát nhiều event trong lúc channel, nên chỉ event ĐẦU TIÊN
+        // mới mở window mới; nếu không, một repeat giữa channel sẽ đẩy mốc lên
+        // và xóa mất cancel đã xảy ra trước đó.
+        // Channel dài 2.5s còn hồi chiêu >10s, nên 3000ms tách sạch hai ca này.
+        if (LastCastR == 0 || tick - LastCastR > 3000) {
+            LastCastR = tick;
+        }
+    } else if (slot == 64) {
+        LastBasicAttackTick = tick;
     }
 }
 
@@ -1101,9 +1222,11 @@ static void OnGameLoad() {
     LastCastQ = 0;
     LastCastW = 0;
     LastCastE = 0;
+    LastCastR = 0;
     LastBasicAttackTick = 0;
+    LastMoveTick = 0;
     Events::hook.OnGameUpdate += &Game_OnUpdate;
-    Events::hook.OnDoCast += &OnDoCast;
+    Events::hook.OnProcessSpell += &OnProcessSpellCast;
     GameObjects::AddOnCreate(&OnObjectCreate);
     GameObjects::AddOnDelete(&OnObjectDelete);
     Drawing::OnDraw += &OnDraw;
@@ -1118,7 +1241,7 @@ static void OnUnload() {
     }
 
     Events::hook.OnGameUpdate -= &Game_OnUpdate;
-    Events::hook.OnDoCast -= &OnDoCast;
+    Events::hook.OnProcessSpell -= &OnProcessSpellCast;
     GameObjects::RemoveOnCreate(&OnObjectCreate);
     GameObjects::RemoveOnDelete(&OnObjectDelete);
     Drawing::OnDraw -= &OnDraw;
@@ -1130,7 +1253,9 @@ static void OnUnload() {
     LastCastQ = 0;
     LastCastW = 0;
     LastCastE = 0;
+    LastCastR = 0;
     LastBasicAttackTick = 0;
+    LastMoveTick = 0;
     RemoveMenu();
     Loaded = false;
 }

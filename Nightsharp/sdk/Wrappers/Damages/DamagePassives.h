@@ -25,6 +25,9 @@ inline int Lvl(const AIHeroClient& h) { return std::max(1, std::min(18, h.Level(
 inline int Idx(const AIHeroClient& h) { return Lvl(h) - 1; }
 inline float Lerp18(float min, float max, const AIHeroClient& h) { return min + (max - min) / 17.0f * static_cast<float>(Idx(h)); }
 
+// Lưu ý: mọi HasItem() dưới đây chỉ cần id gốc. Bản sao ARAM/Arena
+// (id = 220000 + gốc) đã được CoreItem::HasItemId chuẩn hóa.
+
 // ── Crit multiplier (matching GetCritMultiplier in C#) ──
 inline float GetCritMultiplier(const AIHeroClient& hero, bool checkCrit = false) {
     const bool hasIE = hero.HasBuff("InfinityEdge") || hero.HasItem(3031); // Infinity Edge
@@ -98,12 +101,15 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             hasSpellblade = true;
         }
         // Trinity Force (3078) — 200% Base AD physical
-        if ((source.HasBuff("sheen") || source.HasBuff("TrinityForce")) && source.HasItem(3078)) {
+        if ((source.HasBuff("sheen") || source.HasBuff("TrinityForce")) &&
+            source.HasItem(3078)) {
             spellbladeDmgPhys = std::max(spellbladeDmgPhys, 2.0f * source.BaseAttackDamage());
             hasSpellblade = true;
         }
-        // Iceborn Gauntlet (3025) — 100% Base AD physical
-        if (source.HasBuff("itemfrozenfist") && source.HasItem(3025)) {
+        // Iceborn Gauntlet (6662) — 100% Base AD physical.
+        // Đã từng dùng id 3025; id đó KHÔNG còn tồn tại trong ItemData của bản
+        // hiện tại nên nhánh này là code chết, không bao giờ cộng damage.
+        if (source.HasBuff("itemfrozenfist") && source.HasItem(6662)) {
             spellbladeDmgPhys = std::max(spellbladeDmgPhys, source.BaseAttackDamage());
             hasSpellblade = true;
         }
@@ -113,11 +119,25 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 1.0f * source.BaseAttackDamage() + 0.5f * source.AP());
             hasSpellblade = true;
         }
-        // Bloodsong (3869) — 150% Base AD physical (support spellblade)
-        if (source.HasBuff("sheen") && source.HasItem(3869)) {
+        // Essence Reaver (3508) — 100% Base AD physical
+        if (source.HasBuff("sheen") && source.HasItem(3508)) {
+            spellbladeDmgPhys = std::max(spellbladeDmgPhys, source.BaseAttackDamage());
+            hasSpellblade = true;
+        }
+        // Bloodsong (3877) — 150% Base AD physical (support spellblade).
+        // Đã từng dùng id 3869; id đó là "Celestial Opposition", một trang bị
+        // khác hoàn toàn và không có Spellblade.
+        if (source.HasBuff("sheen") && source.HasItem(3877)) {
             spellbladeDmgPhys = std::max(spellbladeDmgPhys, 1.5f * source.BaseAttackDamage());
             hasSpellblade = true;
         }
+        // CHƯA HỖ TRỢ — cả hai đều là Spellblade có thật trong ItemData nhưng
+        // không tra được hệ số, thà bỏ sót còn hơn đoán sai số:
+        //   - Divine Sunderer (6632): mô tả chỉ là placeholder
+        //     "GeneratedTip_Item_6632_ExternalDescription".
+        //   - Dusk and Dawn (2510): "next Attack deals bonus magic damage ...
+        //     and then applies On-Hit effects an additional time" — tooltip
+        //     dùng biến nên không có con số nào trong dữ liệu.
 
         if (hasSpellblade) {
             out.Physical += spellbladeDmgPhys;
@@ -157,6 +177,12 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
         out.Magical += 30.0f;
     }
 
+    // Rageknife (6677) — Wrath: 20 magic on-hit. Không cộng dồn với Guinsoo's
+    // vì Rageknife là món ghép ra Guinsoo's, không thể giữ cả hai cùng lúc.
+    if (source.HasItem(6677)) {
+        out.Magical += 20.0f;
+    }
+
     // Terminus (3302) — 30 magic on-hit
     if (source.HasItem(3302)) {
         out.Magical += 30.0f;
@@ -179,8 +205,10 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
         }
     }
 
-    // Profane Hydra (3303) — Cleave passive: ~on-hit portion
-    if (source.HasItem(3303)) {
+    // Profane Hydra (6698) — Cleave passive: ~on-hit portion.
+    // Đã từng dùng id 3303 (không tồn tại trong ItemData) trong khi 6698 lại bị
+    // gán nhầm cho Voltaic Cyclosword — hai item bị hoán id cho nhau.
+    if (source.HasItem(6698)) {
         if (source.HasBuff("hydaborusactiveattack")) {
             out.Physical += 1.3f * source.AD(); // Active: 130% tAD
         }
@@ -190,8 +218,8 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
     // GROUP C: ENERGIZED ATTACKS
     // ───────────────────────────────────────────────
 
-    // Voltaic Cyclosword (6698) — Energized: 100 physical
-    if (source.HasItem(6698) && source.GetBuffCount("itemstatikshankcharge") >= 100) {
+    // Voltaic Cyclosword (6699) — Energized: 100 physical
+    if (source.HasItem(6699) && source.GetBuffCount("itemstatikshankcharge") >= 100) {
         out.Physical += 100.0f;
     }
 

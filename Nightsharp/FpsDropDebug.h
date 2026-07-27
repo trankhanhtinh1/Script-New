@@ -35,9 +35,12 @@ struct EventSample {
     DWORD LastTick = 0;
 };
 
-inline bool Enabled = true;
-inline bool OverlayVisible = true;
-inline bool LogEnabled = true;
+// Off by default. Enabled is the master switch gating all frame/plugin/event
+// timing collection; re-enable from the menu (Debug & Profiler > Profiler) or
+// with F10 for the overlay.
+inline bool Enabled = false;
+inline bool OverlayVisible = false;
+inline bool LogEnabled = false;
 inline double SlowFrameMs = 33.0;
 inline double SlowPhaseMs = 6.0;
 inline double SlowPluginMs = 2.0;
