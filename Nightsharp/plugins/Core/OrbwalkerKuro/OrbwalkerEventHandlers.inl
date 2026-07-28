@@ -95,14 +95,7 @@ inline void OrbwalkerBase::OnGameUpdate() {
 
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const bool isAttack = IsLocalAutoAttack(args);
-    const bool isAttackReset = IsLocalAutoAttackReset(args);
     if (!isAttack) {
-        if (isAttackReset) {
-            const int now = Tick();
-            if (now - context_.lastAutoAttackResetTick >= 150) {
-                ResetAutoAttackTimer();
-            }
-        }
         return;
     }
 
@@ -169,13 +162,31 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
     const bool isAttack = IsLocalAutoAttack(args);
-    const bool isAttackReset = IsLocalAutoAttackReset(args);
+    const AutoAttackResetMatch resetMatch = GetLocalAutoAttackResetMatch(args);
 
-    if (isAttackReset && !isAttack) {
-        const int now = Tick();
-        if (now - context_.lastAutoAttackResetTick >= 150) {
-            ResetAutoAttackTimer();
-        }
+    if (resetMatch != AutoAttackResetMatch::None && !isAttack) {
+        const auto player = GameObjects::Player();
+        const std::string championName = player.IsValid()
+            ? player.CharacterName()
+            : std::string(args.Sender.CharacterName);
+        const char* matchType = resetMatch == AutoAttackResetMatch::SpellName
+            ? "spell-name"
+            : "champion-slot";
+        const char* reason = resetMatch == AutoAttackResetMatch::SpellName
+            ? "auto-attack reset spell name"
+            : "champion/slot auto-attack reset";
+
+        ResetAutoAttackTimerWithReason(
+            reason,
+            "OnProcessSpell",
+            matchType,
+            championName.c_str(),
+            args.SpellName,
+            args.Slot,
+            args.Sender.Name,
+            args.MissileName,
+            args.Sender.NetworkId,
+            args.CasterNetworkId);
         return;
     }
 
@@ -184,6 +195,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
 
     const int now = Tick();
+    const auto player = GameObjects::Player();
 
     if (!context_.pendingAttack &&
         context_.lastAutoAttackResetTick > 0 &&
@@ -192,7 +204,6 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         return;
     }
 
-    const auto player = GameObjects::Player();
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
         context_.lastTarget = target;
@@ -226,12 +237,6 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
                 context_.pendingAkshanSecondShotTick = now;
             }
         }
-    } else if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
-        if (spellNameStr.find("spell5") != std::string::npos || spellNameStr.find("rengarpassive") != std::string::npos) {
-            const float dist = context_.lastTarget.IsValid() ? player.Distance(context_.lastTarget) : 0.0f;
-            const float flightDelayMs = (std::min)(dist / 1.5f, 600.0f);
-            context_.lastAutoAttackTick = static_cast<int>(now - OneWayPingMs() * 0.5f + flightDelayMs);
-        }
     }
 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
@@ -246,6 +251,30 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
                 eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
                 "Kuro");
             OrbwalkingDetail::FireAfterAttack(afterArgs);
+        }
+    } else {
+        const int ping = Game::Ping();
+        const int pingCheck = 33;
+        if (ping <= pingCheck) {
+            SDK::Utils::DelayAction::Add(pingCheck - ping, [eventTarget]() {
+                if (eventTarget.IsValid()) {
+                    OrbwalkingActionArgs afterArgs(
+                        OrbwalkingType::AfterAttack,
+                        eventTarget,
+                        eventTarget.Position(),
+                        "Kuro");
+                    OrbwalkingDetail::FireAfterAttack(afterArgs);
+                }
+            });
+        } else {
+            if (eventTarget.IsValid()) {
+                OrbwalkingActionArgs afterArgs(
+                    OrbwalkingType::AfterAttack,
+                    eventTarget,
+                    eventTarget.Position(),
+                    "Kuro");
+                OrbwalkingDetail::FireAfterAttack(afterArgs);
+            }
         }
     }
 }
@@ -317,13 +346,6 @@ inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) 
     context_.attackCastComplete = true;
 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
-    OrbwalkingActionArgs afterArgs(
-        OrbwalkingType::AfterAttack,
-        eventTarget,
-        eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-        "Kuro");
-    OrbwalkingDetail::FireAfterAttack(afterArgs);
-    context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
 }
 
 inline void OrbwalkerBase::OnCreateObject(const Events::ObjectEventArgs& args) {
@@ -332,6 +354,27 @@ inline void OrbwalkerBase::OnCreateObject(const Events::ObjectEventArgs& args) {
 
 inline void OrbwalkerBase::OnDeleteObject(const Events::ObjectEventArgs& args) {
     OrbwalkingDetail::OnObjectDelete(args);
+
+    const auto player = GameObjects::Player();
+    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Aphelios") == 0) {
+        if (args.Sender.IsValid() && args.Sender.Type == ::Core::Objects::ObjectType::MissileClient) {
+            if (args.SourceNetworkId == player.NetworkId() &&
+                (_stricmp(args.Sender.Name, "ApheliosCrescendumAttackMisIn") == 0 ||
+                 _stricmp(args.MissileName, "ApheliosCrescendumAttackMisIn") == 0)) {
+                ResetAutoAttackTimerWithReason(
+                    "Aphelios Crescendum return missile",
+                    "OnDeleteObject",
+                    "missile-return",
+                    player.CharacterName().c_str(),
+                    args.SpellName,
+                    -1,
+                    args.Sender.Name,
+                    args.MissileName,
+                    args.Sender.NetworkId,
+                    args.SourceNetworkId);
+            }
+        }
+    }
 }
 
 namespace OrbwalkingDetail {
@@ -467,12 +510,25 @@ inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs
             OrbwalkingDetail::IsAzirSoldierAttackEvent(args));
 }
 
-inline bool OrbwalkerBase::IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const {
+inline OrbwalkerBase::AutoAttackResetMatch OrbwalkerBase::GetLocalAutoAttackResetMatch(
+    const Events::ProcessSpellEventArgs& args
+) const {
     if (!Events::IsLocalPlayer(args.Sender)) {
-        return false;
+        return AutoAttackResetMatch::None;
     }
-    return IsAutoAttackReset(args.SpellName) ||
-           IsLocalAutoAttackResetSlot(args.Sender, args.Slot);
+    if (IsAutoAttackReset(args.SpellName)) {
+        return AutoAttackResetMatch::SpellName;
+    }
+    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
+        const auto player = GameObjects::Player();
+        if (player.IsValid() && args.SpellName[0]) {
+            auto spell = player.GetSpell(static_cast<SpellSlot>(args.Slot));
+            if (spell.IsValid() && _stricmp(spell.Name().c_str(), args.SpellName) == 0) {
+                return AutoAttackResetMatch::ChampionSlot;
+            }
+        }
+    }
+    return AutoAttackResetMatch::None;
 }
 
 inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender,
@@ -596,6 +652,65 @@ inline void OrbwalkerBase::OnDraw() {
                 1.5f,
                 32);
         }
+    }
+}
+
+inline void OrbwalkerBase::OnPlayAnimationStatic(const Events::PlayAnimationEventArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnPlayAnimation(args);
+    }
+}
+
+inline void OrbwalkerBase::OnPlayAnimation(const Events::PlayAnimationEventArgs& args) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || !Events::IsLocalPlayer(args.Sender)) {
+        return;
+    }
+
+    if (_stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+        if (_stricmp(args.Animation, "Spell5") == 0) {
+            const int now = Tick();
+            const float dist = context_.lastTarget.IsValid() ? player.Distance(context_.lastTarget) : 0.0f;
+            const float flightDelayMs = (std::min)(dist / 1.5f, 600.0f);
+            context_.lastAutoAttackTick = static_cast<int>(now - OneWayPingMs() * 0.5f + flightDelayMs);
+        }
+    }
+}
+
+inline void OrbwalkerBase::OnDashStatic(const Events::Dash::DashArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnDash(args);
+    }
+}
+
+inline void OrbwalkerBase::OnDash(const Events::Dash::DashArgs& args) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || args.NetworkId != player.NetworkId()) {
+        return;
+    }
+
+    if (_stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+        const int now = Tick();
+        if (now - context_.lastRengarLeapTick < 100) {
+            return;
+        }
+        context_.lastRengarLeapTick = now;
+
+        const float dist = context_.lastTarget.IsValid() ? player.Distance(context_.lastTarget) : 0.0f;
+        const float flightDelayMs = (std::min)(dist / 1.5f, 600.0f);
+        context_.lastAutoAttackTick = static_cast<int>(now - OneWayPingMs() * 0.5f + flightDelayMs);
+
+        const AttackableUnit eventTarget = context_.lastTarget.IsValid() ? context_.lastTarget : AttackableUnit();
+        SDK::Utils::DelayAction::Add(flightDelayMs, [eventTarget]() {
+            if (eventTarget.IsValid()) {
+                OrbwalkingActionArgs afterArgs(
+                    OrbwalkingType::AfterAttack,
+                    eventTarget,
+                    eventTarget.Position(),
+                    "Kuro");
+                OrbwalkingDetail::FireAfterAttack(afterArgs);
+            }
+        });
     }
 }
 

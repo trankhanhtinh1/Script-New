@@ -567,6 +567,14 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    if (mode != OrbwalkingMode::None) {
+        const float aaRange = AutoAttack::GetRealAutoAttackRange(player);
+        const auto aaTarget = GetPhysicalTarget(aaRange);
+        if (aaTarget.IsValid() && KuroAIO::CanAttack(250)) {
+            return;
+        }
+    }
+
     if (SmartR() || Killsteal()) {
         LastActionTick = now;
         return;

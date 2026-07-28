@@ -10,6 +10,7 @@
 #include "../../../sdk/Core/Hud.h"
 #include "../../../sdk/Enumerations/SpellSlot.h"
 #include "../../../sdk/Events/Events.h"
+#include "../../../sdk/Events/Dash.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Math/Collision.h"
 #include "../../../sdk/Math/HealthPrediction.h"
@@ -17,6 +18,7 @@
 #include "../../../sdk/UI/Icons.h"
 #include "../../../sdk/Utils/AssetInstaller.h"
 #include "../../../sdk/Utils/AutoAttack.h"
+#include "../../../sdk/Utils/DelayAction.h"
 #include "../../../sdk/Wrappers/Damages/Damage.h"
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../../sdk/Extensions/AIBaseClientExtensions.h"
@@ -28,6 +30,7 @@
 #include <cmath>
 #include <cfloat>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -86,6 +89,12 @@ protected:
     static int Tick();
 
 private:
+    enum class AutoAttackResetMatch {
+        None,
+        SpellName,
+        ChampionSlot,
+    };
+
     static constexpr int kMoveDelayMs = 25;
     static constexpr int kMoveDuplicateDelayMs = 85;
     static constexpr int kAttackOrderDelayMs = 45;
@@ -115,6 +124,8 @@ private:
     static void OnCreateObjectStatic(const Events::ObjectEventArgs& args);
     static void OnDeleteObjectStatic(const Events::ObjectEventArgs& args);
     static void OnDrawStatic();
+    static void OnPlayAnimationStatic(const Events::PlayAnimationEventArgs& args);
+    static void OnDashStatic(const Events::Dash::DashArgs& args);
 
     void OnGameUpdate();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
@@ -124,8 +135,11 @@ private:
     void OnCreateObject(const Events::ObjectEventArgs& args);
     void OnDeleteObject(const Events::ObjectEventArgs& args);
     void OnDraw();
+    void OnPlayAnimation(const Events::PlayAnimationEventArgs& args);
+    void OnDash(const Events::Dash::DashArgs& args);
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
-    bool IsLocalAutoAttackReset(const Events::ProcessSpellEventArgs& args) const;
+    AutoAttackResetMatch GetLocalAutoAttackResetMatch(
+        const Events::ProcessSpellEventArgs& args) const;
     bool IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender, int slot) const;
     bool IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const;
     bool IsSpecialAfterAttack(const std::string& nameLower) const;
@@ -133,6 +147,17 @@ private:
     AttackableUnit ResolveAttackTarget(const Events::ObjectEventArgs& args) const;
     void ClearDoCastMoveGate();
     void ClearPendingAttackState();
+    void ResetAutoAttackTimerWithReason(
+        const char* reason,
+        const char* source,
+        const char* matchType,
+        const char* championName = "",
+        const char* spellName = "",
+        int spellSlot = -1,
+        const char* senderName = "",
+        const char* missileName = "",
+        std::uint32_t senderNetworkId = 0,
+        std::uint32_t sourceNetworkId = 0);
     void ExpirePendingAttack();
     void CheckAfterAttack();
     int PendingAttackTimeoutMs();

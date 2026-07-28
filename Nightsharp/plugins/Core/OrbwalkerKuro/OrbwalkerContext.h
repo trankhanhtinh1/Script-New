@@ -44,6 +44,7 @@ struct OrbwalkerRuntimeContext {
     int cachedTargetTick = -1;
     int cachedTargetForceTargetNetworkId = 0;
     int cachedShouldWaitTick = -1;
+    int lastRengarLeapTick = 0;
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;

@@ -264,24 +264,34 @@ static bool CastQOnTarget(const AIBaseClient& target,
     }
 
     spell.Range = CurrentQRange();
-    if (!ValidTarget(target, spell.Range)) {
-        return false;
+
+    // 1. Try to Q the passed target if valid and in range
+    if (ValidTarget(target, spell.Range)) {
+        const auto prediction = spell.GetPrediction(target);
+        const Vector3 castPosition = prediction.GetCastPosition();
+        if (!castPosition.IsZero() && spell.IsInRange(castPosition) &&
+            static_cast<int>(prediction.Hitchance) >= static_cast<int>(minHitChance)) {
+            if (CastPosition(spell, castPosition)) {
+                LastQ = SDK::Variables::TickCount();
+                return true;
+            }
+        }
     }
 
-    const auto prediction = spell.GetPrediction(target);
-    const Vector3 castPosition = prediction.GetCastPosition();
-    if (castPosition.IsZero() || !spell.IsInRange(castPosition)) {
-        return false;
+    // 2. Fallback: try to Q the best target within our actual Q range
+    const auto smartTarget = GetPhysicalTarget(spell.Range);
+    if (ValidHeroTarget(smartTarget, spell.Range) && smartTarget.NetworkId() != target.NetworkId()) {
+        const auto prediction = spell.GetPrediction(smartTarget);
+        const Vector3 castPosition = prediction.GetCastPosition();
+        if (!castPosition.IsZero() && spell.IsInRange(castPosition) &&
+            static_cast<int>(prediction.Hitchance) >= static_cast<int>(minHitChance)) {
+            if (CastPosition(spell, castPosition)) {
+                LastQ = SDK::Variables::TickCount();
+                return true;
+            }
+        }
     }
 
-    if (static_cast<int>(prediction.Hitchance) < static_cast<int>(minHitChance)) {
-        return false;
-    }
-
-    if (CastPosition(spell, castPosition)) {
-        LastQ = SDK::Variables::TickCount();
-        return true;
-    }
     return false;
 }
 

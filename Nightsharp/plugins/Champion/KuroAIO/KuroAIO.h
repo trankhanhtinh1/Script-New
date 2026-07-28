@@ -18,6 +18,7 @@
 #include "Champion/Samira.h"
 #include "Champion/Senna.h"
 #include "Champion/Syndra.h"
+#include "Champion/Sylas.h"
 #include "Champion/TwistedFate.h"
 #include "Champion/Viktor.h"
 #include "Champion/Yasuo/Yasuo.h"
@@ -35,6 +36,12 @@ struct Palette {
 };
 
 inline Palette GetPalette(const char* championName) {
+    if (_stricmp(championName, "Aphelios") == 0) {
+        return { IM_COL32(0, 229, 255, 255), IM_COL32(157, 78, 221, 255), 1.0f };
+    }
+    if (_stricmp(championName, "Sylas") == 0) {
+        return { IM_COL32(0, 240, 255, 255), IM_COL32(230, 230, 250, 255), 1.0f };
+    }
     if (_stricmp(championName, "Rengar") == 0) {
         return { IM_COL32(217, 4, 41, 255), IM_COL32(255, 107, 0, 255), 1.10f };
     }
@@ -77,6 +84,12 @@ inline Palette GetPalette(const char* championName) {
 inline SDK::UI::Menu* GetRoot(const char* championName) {
     if (!championName || !championName[0]) {
         return nullptr;
+    }
+    if (::Plugins::KuroAIO::AI::Catalog::Supports(championName)) {
+        return ::Plugins::KuroAIO::AI::Engine::MenuRoot;
+    }
+    if (_stricmp(championName, "Sylas") == 0) {
+        return ::Plugins::KuroAIO::Sylas::MenuRoot;
     }
     if (_stricmp(championName, "Rengar") == 0) {
         return ::Plugins::KuroAIO::Rengar::MenuRoot;
@@ -213,6 +226,9 @@ public:
         if (_stricmp(champ.c_str(), "Syndra") == 0) {
             return "champion.kuroaio.syndra";
         }
+        if (_stricmp(champ.c_str(), "Sylas") == 0) {
+            return "champion.kuroaio.sylas";
+        }
         if (_stricmp(champ.c_str(), "Yasuo") == 0) {
             return "champion.kuroaio.yasuo";
         }
@@ -256,6 +272,8 @@ public:
             KuroAIO::Senna::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Syndra") == 0) {
             KuroAIO::Syndra::OnGameLoad();
+        } else if (_stricmp(champ.c_str(), "Sylas") == 0) {
+            KuroAIO::Sylas::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Yasuo") == 0) {
             KuroAIO::Yasuo::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Fiora") == 0) {
@@ -264,6 +282,8 @@ public:
             KuroAIO::TwistedFate::OnGameLoad();
         } else if (_stricmp(champ.c_str(), "Viktor") == 0) {
             KuroAIO::Viktor::OnGameLoad();
+        } else {
+            KuroAIO::AI::Catalog::Load(champ.c_str());
         }
 
         m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(champ.c_str());
@@ -297,10 +317,12 @@ public:
         KuroAIO::Samira::OnUnload();
         KuroAIO::Senna::OnUnload();
         KuroAIO::Syndra::OnUnload();
+        KuroAIO::Sylas::OnUnload();
         KuroAIO::Yasuo::OnUnload();
         KuroAIO::Fiora::OnUnload();
         KuroAIO::TwistedFate::OnUnload();
         KuroAIO::Viktor::OnUnload();
+        KuroAIO::AI::Catalog::Unload();
 
         m_menuThemeApplied = false;
         m_nextMenuThemeRetry = 0;
@@ -311,19 +333,25 @@ private:
     DWORD m_nextMenuThemeRetry = 0;
 
     static bool IsSupportedChampionName(const char* championName) {
-        return championName && championName[0] &&
-            (_stricmp(championName, "Rengar") == 0 ||
-             _stricmp(championName, "Jinx") == 0 ||
-             _stricmp(championName, "Katarina") == 0 ||
-             _stricmp(championName, "Kindred") == 0 ||
-             _stricmp(championName, "Lucian") == 0 ||
-             _stricmp(championName, "Samira") == 0 ||
-             _stricmp(championName, "Senna") == 0 ||
-             _stricmp(championName, "Syndra") == 0 ||
-             _stricmp(championName, "Yasuo") == 0 ||
-             _stricmp(championName, "Fiora") == 0 ||
-             _stricmp(championName, "TwistedFate") == 0 ||
-             _stricmp(championName, "Viktor") == 0);
+        if (!championName || !championName[0]) {
+            return false;
+        }
+        if (_stricmp(championName, "Rengar") == 0 ||
+            _stricmp(championName, "Jinx") == 0 ||
+            _stricmp(championName, "Katarina") == 0 ||
+            _stricmp(championName, "Kindred") == 0 ||
+            _stricmp(championName, "Lucian") == 0 ||
+            _stricmp(championName, "Samira") == 0 ||
+            _stricmp(championName, "Senna") == 0 ||
+            _stricmp(championName, "Syndra") == 0 ||
+            _stricmp(championName, "Sylas") == 0 ||
+            _stricmp(championName, "Yasuo") == 0 ||
+            _stricmp(championName, "Fiora") == 0 ||
+            _stricmp(championName, "TwistedFate") == 0 ||
+            _stricmp(championName, "Viktor") == 0) {
+            return true;
+        }
+        return KuroAIO::AI::Catalog::Supports(championName);
     }
 
     static std::string CurrentChampionName() {
@@ -363,6 +391,9 @@ private:
         if (_stricmp(championName.c_str(), "Syndra") == 0) {
             return "Syndra";
         }
+        if (_stricmp(championName.c_str(), "Sylas") == 0) {
+            return "Sylas";
+        }
         if (_stricmp(championName.c_str(), "Yasuo") == 0) {
             return "Yasuo";
         }
@@ -374,6 +405,10 @@ private:
         }
         if (_stricmp(championName.c_str(), "Viktor") == 0) {
             return "Viktor";
+        }
+
+        if (const auto* profile = KuroAIO::AI::Catalog::Find(championName.c_str())) {
+            return profile->ChampionName;
         }
 
         return nullptr;

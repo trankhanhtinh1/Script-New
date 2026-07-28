@@ -116,16 +116,6 @@ inline void OrbwalkerBase::CheckAfterAttack() {
     const int windupEnd = context_.lastAutoAttackTick + static_cast<int>(context_.attackWindupMs);
     if (now >= windupEnd) {
         context_.attackCastComplete = true;
-        if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
-            context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
-            const AttackableUnit eventTarget = context_.lastTarget.IsValid() ? context_.lastTarget : AttackableUnit();
-            OrbwalkingActionArgs afterArgs(
-                OrbwalkingType::AfterAttack,
-                eventTarget,
-                eventTarget.IsValid() ? eventTarget.Position() : Vector3(),
-                "Kuro");
-            OrbwalkingDetail::FireAfterAttack(afterArgs);
-        }
     }
 }
 
@@ -507,6 +497,10 @@ inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
     }
     if (_stricmp(player.CharacterName().c_str(), "Jhin") == 0 &&
         player.HasBuff("JhinPassiveReload")) {
+        return false;
+    }
+    if (_stricmp(player.CharacterName().c_str(), "Aphelios") == 0 &&
+        (player.HasBuff("ApheliosSeverumQ") || player.HasBuff("apheliospreload"))) {
         return false;
     }
     return true;

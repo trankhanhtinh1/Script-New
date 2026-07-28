@@ -14,6 +14,8 @@ inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     Events::AddOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
     Events::AddOnCreateObject(&OrbwalkerBase::OnCreateObjectStatic);
     Events::AddOnDeleteObject(&OrbwalkerBase::OnDeleteObjectStatic);
+    Events::AddOnPlayAnimation(&OrbwalkerBase::OnPlayAnimationStatic);
+    Events::AddOnDash(&OrbwalkerBase::OnDashStatic);
     Drawing::AddOnDraw(&OrbwalkerBase::OnDrawStatic);
 }
 
@@ -67,7 +69,59 @@ inline void OrbwalkerBase::SetMovePauseTime(int time) { context_.movePauseTick =
 inline void OrbwalkerBase::SetMoveServerPauseTime(int time) { SetMovePauseTime(time - Game::Ping() / 2); }
 
 inline void OrbwalkerBase::ResetAutoAttackTimer() {
+    ResetAutoAttackTimerWithReason(
+        "external/manual API call",
+        "IOrbwalker::ResetAutoAttackTimer",
+        "external/manual");
+}
+
+inline void OrbwalkerBase::ResetAutoAttackTimerWithReason(
+    const char* reason,
+    const char* source,
+    const char* matchType,
+    const char* championName,
+    const char* spellName,
+    int spellSlot,
+    const char* senderName,
+    const char* missileName,
+    std::uint32_t senderNetworkId,
+    std::uint32_t sourceNetworkId
+) {
     const int now = Tick();
+
+    NightSharpDebug::Logf(
+        "[OrbwalkerKuro][AAReset] reason=%s source=%s match=%s tick=%d "
+        "champion=%s spell=%s slot=%d sender=%s missile=%s senderNet=%u sourceNet=%u "
+        "pre={lastAA=%d attackOrder=%d attackOrderTarget=%d attackConfirm=%d "
+        "pending=%d pendingTick=%d pendingTarget=%d allPause=%d attackPause=%d "
+        "movePause=%d confirmed=%d castComplete=%d doCastRequired=%d "
+        "doCastComplete=%d doCastWait=%d}",
+        reason && reason[0] ? reason : "unknown",
+        source && source[0] ? source : "unknown",
+        matchType && matchType[0] ? matchType : "none",
+        now,
+        championName && championName[0] ? championName : "none",
+        spellName && spellName[0] ? spellName : "none",
+        spellSlot,
+        senderName && senderName[0] ? senderName : "none",
+        missileName && missileName[0] ? missileName : "none",
+        static_cast<unsigned>(senderNetworkId),
+        static_cast<unsigned>(sourceNetworkId),
+        context_.lastAutoAttackTick,
+        context_.lastAttackOrderTick,
+        context_.lastAttackOrderNetworkId,
+        context_.lastAttackConfirmTick,
+        context_.pendingAttack ? 1 : 0,
+        context_.pendingAttackTick,
+        context_.pendingAttackTargetNetworkId,
+        context_.allPauseTick,
+        context_.attackPauseTick,
+        context_.movePauseTick,
+        context_.hasConfirmedAttack ? 1 : 0,
+        context_.attackCastComplete ? 1 : 0,
+        context_.lastAttackRequiresDoCastBeforeMove ? 1 : 0,
+        context_.lastAttackDoCastComplete ? 1 : 0,
+        context_.lastAttackDoCastWaitTick);
 
     context_.lastAutoAttackTick = 0;
     context_.lastAttackOrderTick = 0;
@@ -92,6 +146,8 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnMissileCreate(&OrbwalkerBase::OnMissileCreateStatic);
     Events::RemoveOnCreateObject(&OrbwalkerBase::OnCreateObjectStatic);
     Events::RemoveOnDeleteObject(&OrbwalkerBase::OnDeleteObjectStatic);
+    Events::RemoveOnPlayAnimation(&OrbwalkerBase::OnPlayAnimationStatic);
+    Events::RemoveOnDash(&OrbwalkerBase::OnDashStatic);
     Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
     if (context_.fakeCursorTexture.Texture) {
         UI::Icons::ReleaseTexture(context_.fakeCursorTexture);
