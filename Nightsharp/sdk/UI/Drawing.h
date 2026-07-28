@@ -409,6 +409,8 @@ namespace detail {
 using DrawHandler = void(*)();
 using Matrix4x4 = ::CoreView::Matrix4x4;
 
+inline bool g_HideAllDrawing = false;
+
 inline std::uint32_t Color(int r, int g, int b, int a = 255) {
     return detail::ToArgb(r, g, b, a);
 }
@@ -1185,6 +1187,9 @@ inline bool RemoveOnPostReset(DrawHandler handler) { return detail::PostResetHan
 
 inline void DispatchDraw() {
     detail::UpdateHotkey();
+    if (g_HideAllDrawing) {
+        return;
+    }
     if (IsEnabled()) {
         detail::DrawHandlers.Fire();
     }
@@ -1193,6 +1198,9 @@ inline void DispatchDraw() {
 
 inline void DispatchEndScene() {
     detail::UpdateHotkey();
+    if (g_HideAllDrawing) {
+        return;
+    }
     if (IsEnabled()) {
         detail::EndSceneHandlers.Fire();
     }

@@ -338,6 +338,9 @@ void RestoreCoreMemoryHacks() {
 }
 
 void RenderStatusOverlaysSafe(OverlayStatus::Mode mode) {
+    if (SDK::Drawing::g_HideAllDrawing) {
+        return;
+    }
     __try {
         OverlayStatus::Render(mode);
     }
@@ -854,6 +857,15 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
             NightSharpDebug::Logf("[Overlay] VK_END received in external game WndProc");
             OverlayManager::RequestShutdown();
             return TRUE;
+        }
+        if (wParam == 'L') {
+            const bool imguiKeyboard = ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
+            const bool gameChat = SDK::Game::IsChatOpen();
+            if (!imguiKeyboard && !gameChat) {
+                SDK::Drawing::g_HideAllDrawing = !SDK::Drawing::g_HideAllDrawing;
+                NightSharpDebug::Logf("[Overlay] Toggled Hide All Drawing: %s", SDK::Drawing::g_HideAllDrawing ? "TRUE" : "FALSE");
+                return TRUE;
+            }
         }
     }
 
