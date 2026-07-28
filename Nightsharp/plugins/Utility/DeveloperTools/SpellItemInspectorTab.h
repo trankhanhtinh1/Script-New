@@ -1,51 +1,151 @@
 #pragma once
 #include "IDeveloperTab.h"
 #include "../DeveloperToolsPlugin.h"
+#include <mutex>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 namespace Plugins::DevTools {
 
 class SpellItemInspectorTab final : public IDeveloperTab {
 private:
+    struct SpellSlotInfo {
+        SDK::SpellSlot slot;
+        std::string name;
+        int state = 0;
+        float remainingCD = 0.0f;
+        float totalCD = 0.0f;
+        int level = 0;
+        int ammo = 0;
+        int maxAmmo = 0;
+        float manaCost = 0.0f;
+        bool isValid = false;
+    };
+
+    struct LiveSpellbookTargetInfo {
+        bool isValid = false;
+        std::string characterName;
+        std::string name;
+        uintptr_t address = 0;
+        bool isLocalPlayer = false;
+        bool hasSpellbook = false;
+        std::vector<SpellSlotInfo> spells;
+    };
+
     int inspectMode_ = 0; // 0 = Live, 1 = Snapshot
+    mutable std::mutex spellbookMutex_;
+    LiveSpellbookTargetInfo cachedSpellbookTarget_;
+    int lastUpdateTick_ = 0;
 
 public:
     using IDeveloperTab::IDeveloperTab;
 
     const char* GetTabName() const override { return "Spellbook"; }
 
+    void OnUpdate() override {
+        if (!plugin_->enabled_) {
+            std::lock_guard<std::mutex> lk(spellbookMutex_);
+            cachedSpellbookTarget_ = {};
+            return;
+        }
+
+        if (inspectMode_ == 1) {
+            std::lock_guard<std::mutex> lk(spellbookMutex_);
+            cachedSpellbookTarget_ = {};
+            return;
+        }
+
+        const int now = SDK::Variables::TickCount();
+        if (now - lastUpdateTick_ < 100) {
+            return;
+        }
+        lastUpdateTick_ = now;
+
+        const auto obj = plugin_->GetFocusedObject();
+        LiveSpellbookTargetInfo targetInfo;
+        
+        if (obj.IsValid()) {
+            targetInfo.isValid = true;
+            targetInfo.characterName = obj.CharacterName();
+            targetInfo.name = obj.Name();
+            targetInfo.address = obj.Address();
+            targetInfo.hasSpellbook = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
+            
+            const auto localPlayer = SDK::ObjectManager::Player();
+            targetInfo.isLocalPlayer = localPlayer.IsValid() && obj.Address() == localPlayer.Address();
+            
+            if (targetInfo.hasSpellbook) {
+                const auto player = SDK::AIBaseClient(obj.Handle());
+                if (player.IsValid()) {
+                    const float gameTime = SDK::Game::Time();
+                    
+                    static const SDK::SpellSlot slots[] = {
+                        SDK::SpellSlot::Q, SDK::SpellSlot::W, SDK::SpellSlot::E, SDK::SpellSlot::R,
+                        SDK::SpellSlot::Summoner1, SDK::SpellSlot::Summoner2,
+                        SDK::SpellSlot::Item1, SDK::SpellSlot::Item2, SDK::SpellSlot::Item3,
+                        SDK::SpellSlot::Item4, SDK::SpellSlot::Item5, SDK::SpellSlot::Item6,
+                        SDK::SpellSlot::Trinket
+                    };
+                    
+                    for (const auto slot : slots) {
+                        auto spell = player.GetSpell(slot);
+                        SpellSlotInfo info;
+                        info.slot = slot;
+                        if (spell.IsValid()) {
+                            info.isValid = true;
+                            info.name = spell.Name();
+                            info.state = static_cast<int>(spell.State(gameTime));
+                            info.remainingCD = spell.RemainingCooldown(gameTime);
+                            info.totalCD = spell.Cooldown();
+                            info.level = spell.Level();
+                            info.ammo = spell.Ammo();
+                            info.maxAmmo = spell.MaxAmmo();
+                            info.manaCost = spell.ManaCost();
+                        }
+                        targetInfo.spells.push_back(std::move(info));
+                    }
+                }
+            }
+        }
+        
+        std::lock_guard<std::mutex> lk(spellbookMutex_);
+        cachedSpellbookTarget_ = std::move(targetInfo);
+    }
+
     void OnDrawTab() override {
         ImGui::RadioButton("Live Object", &inspectMode_, 0);
         ImGui::SameLine();
         ImGui::RadioButton("Snapshot Object", &inspectMode_, 1);
 
-        SDK::AIBaseClient player;
         std::string charName;
         std::string name;
         uintptr_t address = 0;
         bool isLocalPlayer = false;
-        float gameTime = SDK::Game::Time();
         bool hasTarget = false;
+        bool hasSpellbook = false;
 
         DevTools::ObjectSnapshot selectedSnap;
+        LiveSpellbookTargetInfo liveTarget;
 
         if (inspectMode_ == 0) {
-            const auto obj = plugin_->GetFocusedObject();
-            if (obj.IsValid()) {
-                const bool hasSpellbook = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
+            {
+                std::lock_guard<std::mutex> lk(spellbookMutex_);
+                liveTarget = cachedSpellbookTarget_;
+            }
+            if (liveTarget.isValid) {
+                charName = liveTarget.characterName;
+                name = liveTarget.name;
+                address = liveTarget.address;
+                isLocalPlayer = liveTarget.isLocalPlayer;
+                hasSpellbook = liveTarget.hasSpellbook;
+                hasTarget = true;
+
                 if (!hasSpellbook) {
-                    ImGui::Text("Inspecting Live: %s (%s) | Addr: 0x%llX",
-                                obj.CharacterName().c_str(), obj.Name().c_str(),
-                                static_cast<unsigned long long>(obj.Address()));
+                    ImGui::Text("Inspecting Live: %s (%s) | Addr: 0x%llX", charName.c_str(), name.c_str(), static_cast<unsigned long long>(address));
                     ImGui::Text("This object type has no Spellbook.");
                     return;
                 }
-                player = SDK::AIBaseClient(obj.Handle());
-                charName = player.CharacterName();
-                name = player.Name();
-                address = player.Address();
-                const auto localPlayer = SDK::ObjectManager::Player();
-                isLocalPlayer = localPlayer.IsValid() && player.Address() == localPlayer.Address();
-                hasTarget = true;
             } else {
                 ImGui::Text("No focused live object in range.");
                 return;
@@ -129,16 +229,18 @@ public:
                 bool hasSpell = false;
 
                 if (inspectMode_ == 0) {
-                    auto spell = player.GetSpell(slot);
-                    if (spell.IsValid()) {
-                        spellName = spell.Name();
-                        state = spell.State(gameTime);
-                        remainingCD = spell.RemainingCooldown(gameTime);
-                        totalCD = spell.Cooldown();
-                        level = spell.Level();
-                        ammo = spell.Ammo();
-                        maxAmmo = spell.MaxAmmo();
-                        manaCost = spell.ManaCost();
+                    auto it = std::find_if(liveTarget.spells.begin(), liveTarget.spells.end(), [&](const SpellSlotInfo& s) {
+                        return s.slot == slot;
+                    });
+                    if (it != liveTarget.spells.end() && it->isValid) {
+                        spellName = it->name;
+                        state = static_cast<CoreSpellBook::State>(it->state);
+                        remainingCD = it->remainingCD;
+                        totalCD = it->totalCD;
+                        level = it->level;
+                        ammo = it->ammo;
+                        maxAmmo = it->maxAmmo;
+                        manaCost = it->manaCost;
                         hasSpell = true;
                     }
                 } else {
@@ -183,13 +285,15 @@ public:
                     char selfBtnId[64];
                     std::snprintf(selfBtnId, sizeof(selfBtnId), "Self##Spell%d", static_cast<int>(slot));
                     if (ImGui::Button(selfBtnId)) {
-                        player.Spellbook().CastSpell(slot);
+                        auto local = SDK::ObjectManager::Player();
+                        if (local.IsValid()) local.Spellbook().CastSpell(slot);
                     }
                     ImGui::SameLine();
                     char cursorBtnId[64];
                     std::snprintf(cursorBtnId, sizeof(cursorBtnId), "Cursor##Spell%d", static_cast<int>(slot));
                     if (ImGui::Button(cursorBtnId)) {
-                        player.Spellbook().CastSpell(slot, SDK::Game::CursorPos());
+                        auto local = SDK::ObjectManager::Player();
+                        if (local.IsValid()) local.Spellbook().CastSpell(slot, SDK::Game::CursorPos());
                     }
                 } else {
                     ImGui::TextUnformatted("-");
@@ -235,16 +339,18 @@ public:
                 bool hasSpell = false;
 
                 if (inspectMode_ == 0) {
-                    auto spell = player.GetSpell(slot);
-                    if (spell.IsValid()) {
-                        itemName = (spell.Name().length() > 0) ? spell.Name() : "Empty";
-                        state = spell.State(gameTime);
-                        remainingCD = spell.RemainingCooldown(gameTime);
-                        totalCD = spell.Cooldown();
-                        level = spell.Level();
-                        ammo = spell.Ammo();
-                        maxAmmo = spell.MaxAmmo();
-                        manaCost = spell.ManaCost();
+                    auto it = std::find_if(liveTarget.spells.begin(), liveTarget.spells.end(), [&](const SpellSlotInfo& s) {
+                        return s.slot == slot;
+                    });
+                    if (it != liveTarget.spells.end() && it->isValid) {
+                        itemName = (it->name.length() > 0) ? it->name : "Empty";
+                        state = static_cast<CoreSpellBook::State>(it->state);
+                        remainingCD = it->remainingCD;
+                        totalCD = it->totalCD;
+                        level = it->level;
+                        ammo = it->ammo;
+                        maxAmmo = it->maxAmmo;
+                        manaCost = it->manaCost;
                         hasSpell = true;
                     }
                 } else {
@@ -289,13 +395,15 @@ public:
                     char selfBtnId[64];
                     std::snprintf(selfBtnId, sizeof(selfBtnId), "Self##Item%d", static_cast<int>(slot));
                     if (ImGui::Button(selfBtnId)) {
-                        player.Spellbook().CastSpell(slot);
+                        auto local = SDK::ObjectManager::Player();
+                        if (local.IsValid()) local.Spellbook().CastSpell(slot);
                     }
                     ImGui::SameLine();
                     char cursorBtnId[64];
                     std::snprintf(cursorBtnId, sizeof(cursorBtnId), "Cursor##Item%d", static_cast<int>(slot));
                     if (ImGui::Button(cursorBtnId)) {
-                        player.Spellbook().CastSpell(slot, SDK::Game::CursorPos());
+                        auto local = SDK::ObjectManager::Player();
+                        if (local.IsValid()) local.Spellbook().CastSpell(slot, SDK::Game::CursorPos());
                     }
                 } else {
                     ImGui::TextUnformatted("-");
@@ -309,14 +417,14 @@ public:
         std::string dump = "=== DEVELOPER TOOLS SPELLBOOK INSPECTOR ===\n";
         
         if (inspectMode_ == 0) {
-            const auto obj = plugin_->GetFocusedObject();
-            if (!obj.IsValid()) return;
-            const bool hasSpellbook = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
-            if (!hasSpellbook) return;
+            LiveSpellbookTargetInfo liveTarget;
+            {
+                std::lock_guard<std::mutex> lk(spellbookMutex_);
+                liveTarget = cachedSpellbookTarget_;
+            }
+            if (!liveTarget.isValid || !liveTarget.hasSpellbook) return;
             
-            const auto target = SDK::AIBaseClient(obj.Handle());
-            const float gameTime = SDK::Game::Time();
-            dump += "Target: " + target.CharacterName() + " (Live) | Address: 0x" + ToHexStr(target.Address()) + "\n";
+            dump += "Target: " + liveTarget.characterName + " (Live) | Address: 0x" + ToHexStr(liveTarget.address) + "\n";
 
             static const std::pair<SDK::SpellSlot, const char*> slots[] = {
                 { SDK::SpellSlot::Q, "Q" },
@@ -335,18 +443,20 @@ public:
             };
 
             for (const auto& [slot, label] : slots) {
-                auto spell = target.GetSpell(slot);
-                if (!spell.IsValid()) continue;
-                const auto state = spell.State(gameTime);
+                auto it = std::find_if(liveTarget.spells.begin(), liveTarget.spells.end(), [&](const SpellSlotInfo& s) {
+                    return s.slot == slot;
+                });
+                if (it == liveTarget.spells.end() || !it->isValid) continue;
+
                 char line[256];
                 std::snprintf(line, sizeof(line),
                               "Slot: %s | Name: %s | State: %s | CD: %.2f/%.2f | Level: %d | Ammo: %d/%d | Cost: %.0f\n",
-                              label, spell.Name().c_str(), StateToString(state),
-                              spell.RemainingCooldown(gameTime), spell.Cooldown(),
-                              spell.Level(), spell.Ammo(), spell.MaxAmmo(), spell.ManaCost());
+                              label, it->name.c_str(), StateToString(static_cast<CoreSpellBook::State>(it->state)),
+                              it->remainingCD, it->totalCD,
+                              it->level, it->ammo, it->maxAmmo, it->manaCost);
                 dump += line;
             }
-            NightSharpDebug::Logf("[Dev] Copied spell details of %s (Live) to Clipboard!", target.CharacterName().c_str());
+            NightSharpDebug::Logf("[Dev] Copied spell details of %s (Live) to Clipboard!", liveTarget.characterName.c_str());
         } else {
             if (plugin_->snapshots_.empty()) return;
             static int selectedSnapIdx = 0;

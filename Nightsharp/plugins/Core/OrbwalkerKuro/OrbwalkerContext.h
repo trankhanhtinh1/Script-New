@@ -29,6 +29,7 @@ struct OrbwalkerRuntimeContext {
     int pendingAttackTick = 0;
     int pendingAttackTargetNetworkId = 0;
     int lastAttackConfirmTick = 0;
+    int lastAttackOrderToAnimGapMs = 0; // gap: OnDoCast tick - pendingAttackTick (ms)
     int lastAfterAttackStartTick = 0;
     int lastAttackDoCastWaitTick = 0;
     int lastAutoAttackResetTick = 0;

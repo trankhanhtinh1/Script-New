@@ -474,11 +474,11 @@
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\EventLoggerTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\IDeveloperTab.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\NavigationTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\ObjectDetectorTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\PlayerBuffInspectorTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\SpellItemInspectorTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\StatsInspectorTab.h" />
-    <ClInclude Include="Plugins\Utility\DeveloperTools\NavigationTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperToolsPlugin.h" />
     <ClInclude Include="Plugins\Utility\IsDeadDebugPlugin.h" />
     <ClInclude Include="Plugins\Utility\MinionTracePlugin.h" />

@@ -249,7 +249,13 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     }
 
     // Strict Windup Protection: Never allow movement if current time is strictly less than attack windup end!
-    const float strictWindupEnd = static_cast<float>(attackTick) + context_.attackWindupMs;
+    // When lastAutoAttackTick was set from pendingAttackTick (order-send time), it is earlier than the
+    // actual animation start by lastAttackOrderToAnimGapMs. Add that gap so the windup gate ends at
+    // the correct time relative to the real animation start on the server.
+    const float animGap = (!pending && context_.lastAttackOrderToAnimGapMs > 0)
+        ? static_cast<float>(context_.lastAttackOrderToAnimGapMs)
+        : 0.0f;
+    const float strictWindupEnd = static_cast<float>(attackTick) + context_.attackWindupMs + animGap;
     if (static_cast<float>(now) < strictWindupEnd) {
         return false;
     }
@@ -263,7 +269,8 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     const float pingLead = pending || rangedPreCast
         ? 0.0f
         : (context_.hasConfirmedAttack ? std::min(oneWayPing, kMoveSafetyMs) : 0.0f);
-    float moveSafety = pending ? (kMoveSafetyMs + cappedPing) : MoveSafetyMs();
+    // Also add animGap to moveSafety so the readyAt gate aligns correctly with the real windup end.
+    float moveSafety = pending ? (kMoveSafetyMs + cappedPing) : (MoveSafetyMs() + animGap);
     if (rangedPreCast) {
         moveSafety += kRangedPreCastMoveSafetyMs;
     }

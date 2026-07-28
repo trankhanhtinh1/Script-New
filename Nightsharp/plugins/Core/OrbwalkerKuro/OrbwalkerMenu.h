@@ -128,48 +128,55 @@ private:
 
         advancedMenu_ = menu_->AddSubMenu(new Menu("advanced", "Advanced"));
         if (advancedMenu_) {
-            advancedMenu_->Add(new MenuSeparator("separatorLogic", "Logic"));
-            movementLogic_ = advancedMenu_->Add(new MenuList("movementLogic", "Movement Logic", { "Kuro", "TreTrau" }, 0));
+            // ── Movement sub-menu ────────────────────────────────────────────
+            movementAdvMenu_ = advancedMenu_->AddSubMenu(new Menu("adv_movement", "Movement"));
+            if (movementAdvMenu_) {
+                movementAdvMenu_->Add(new MenuSeparator("separatorLogic", "Logic"));
+                movementLogic_ = movementAdvMenu_->Add(new MenuList("movementLogic", "Movement Logic", { "Kuro", "TreTrau" }, 0));
 
-            advancedMenu_->Add(new MenuSeparator("separatorEvade", "KuroEvade Coordination"));
-            coordinateKuroEvade_ = advancedMenu_->Add(new MenuBool(
-                "coordinateKuroEvade", "Let KuroEvade Own Actions While Dodging", true));
-            evadeHandoffGrace_ = advancedMenu_->Add(new MenuSlider(
-                "evadeHandoffGrace", "Movement Handoff Grace (ms)", 55, 0, 150));
+                movementAdvMenu_->Add(new MenuSeparator("separatorEvade", "KuroEvade Coordination"));
+                coordinateKuroEvade_ = movementAdvMenu_->Add(new MenuBool(
+                    "coordinateKuroEvade", "Let KuroEvade Own Actions While Dodging", true));
+                evadeHandoffGrace_ = movementAdvMenu_->Add(new MenuSlider(
+                    "evadeHandoffGrace", "Movement Handoff Grace (ms)", 55, 0, 150));
 
-            advancedMenu_->Add(new MenuSeparator("separatorMovement", "Movement"));
-            movementRandomize_ = advancedMenu_->Add(new MenuBool("movementRandomize", "Randomize Location", true));
-            movementExtraHold_ = advancedMenu_->Add(new MenuSlider("movementExtraHold", "Extra Hold Position", 0, 0, 250));
-            movementMaximumDistance_ = advancedMenu_->Add(new MenuSlider("movementMaximumDistance", "Maximum Distance", 1500, 500, 1500));
+                movementAdvMenu_->Add(new MenuSeparator("separatorMovement", "Movement"));
+                movementRandomize_ = movementAdvMenu_->Add(new MenuBool("movementRandomize", "Randomize Location", true));
+                movementExtraHold_ = movementAdvMenu_->Add(new MenuSlider("movementExtraHold", "Extra Hold Position", 0, 0, 250));
+                movementMaximumDistance_ = movementAdvMenu_->Add(new MenuSlider("movementMaximumDistance", "Maximum Distance", 1500, 500, 1500));
 
-            advancedMenu_->Add(new MenuSeparator("separatorDelay", "Delay"));
-            delayMovement_ = advancedMenu_->Add(new MenuSlider("delayMovement", "Movement", 60, 0, 500));
-            delayWindup_ = advancedMenu_->Add(new MenuSlider("delayWindup", "Windup", 0, 0, 200));
-            delayFarm_ = advancedMenu_->Add(new MenuSlider("delayFarm", "Farm", 30, 0, 200));
+                movementAdvMenu_->Add(new MenuSeparator("separatorDelay", "Delay"));
+                delayMovement_ = movementAdvMenu_->Add(new MenuSlider("delayMovement", "Movement", 60, 0, 500));
+                delayWindup_ = movementAdvMenu_->Add(new MenuSlider("delayWindup", "Windup", 0, 0, 200));
+                delayFarm_ = movementAdvMenu_->Add(new MenuSlider("delayFarm", "Farm", 30, 0, 200));
+            }
 
-            advancedMenu_->Add(new MenuSeparator("separatorPrioritization", "Prioritization"));
-            prioritizeFarm_ = advancedMenu_->Add(new MenuBool("prioritizeFarm", "Farm Over Harass", true));
-            prioritizeMinions_ = advancedMenu_->Add(new MenuBool("prioritizeMinions", "Minions Over Objectives", false));
-            prioritizeSmallJungle_ = advancedMenu_->Add(new MenuBool("prioritizeSmallJungle", "Small Jungle", false));
-            prioritizeWards_ = advancedMenu_->Add(new MenuBool("prioritizeWards", "Wards", false));
-            prioritizeSpecialMinions_ = advancedMenu_->Add(new MenuBool("prioritizeSpecialMinions", "Special Minions", false));
+            // ── Targeting sub-menu ───────────────────────────────────────────
+            targetingMenu_ = advancedMenu_->AddSubMenu(new Menu("adv_targeting", "Targeting"));
+            if (targetingMenu_) {
+                targetingMenu_->Add(new MenuSeparator("separatorPrioritization", "Prioritization"));
+                prioritizeFarm_ = targetingMenu_->Add(new MenuBool("prioritizeFarm", "Farm Over Harass", true));
+                prioritizeMinions_ = targetingMenu_->Add(new MenuBool("prioritizeMinions", "Minions Over Objectives", false));
+                prioritizeSmallJungle_ = targetingMenu_->Add(new MenuBool("prioritizeSmallJungle", "Small Jungle", false));
+                prioritizeWards_ = targetingMenu_->Add(new MenuBool("prioritizeWards", "Wards", false));
+                prioritizeSpecialMinions_ = targetingMenu_->Add(new MenuBool("prioritizeSpecialMinions", "Special Minions", false));
 
-            advancedMenu_->Add(new MenuSeparator("separatorAttack", "Attack"));
-            attackWards_ = advancedMenu_->Add(new MenuBool("attackWards", "Wards", false));
-            attackBarrels_ = advancedMenu_->Add(new MenuBool("attackBarrels", "Barrels", false));
-            attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
-            attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
-            attackEarlyWindow_ = advancedMenu_->Add(new MenuSlider("attackEarlyWindow", "Attack Early Window (ms)", 25, 0, 250));
+                targetingMenu_->Add(new MenuSeparator("separatorAttack", "Attack"));
+                attackWards_ = targetingMenu_->Add(new MenuBool("attackWards", "Wards", false));
+                attackBarrels_ = targetingMenu_->Add(new MenuBool("attackBarrels", "Barrels", false));
+                attackClones_ = targetingMenu_->Add(new MenuBool("attackClones", "Clones", false));
+                attackSpecialMinions_ = targetingMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
+                attackEarlyWindow_ = targetingMenu_->Add(new MenuSlider("attackEarlyWindow", "Attack Early Window (ms)", 25, 0, 250));
 
-            advancedMenu_->Add(new MenuSeparator("separatorCollision", "Collision"));
-            windWallCheck_ = advancedMenu_->Add(new MenuBool(
-                "windWallCheck", "Wind Wall Check (Yasuo/Samira/Mel)", true));
+                targetingMenu_->Add(new MenuSeparator("separatorCollision", "Collision"));
+                windWallCheck_ = targetingMenu_->Add(new MenuBool(
+                    "windWallCheck", "Wind Wall Check (Yasuo/Samira/Mel)", true));
 
-            advancedMenu_->Add(new MenuSeparator("separatorAkshan", "Akshan Passive"));
-            akshanPassiveMode_ = advancedMenu_->Add(new MenuList(
-                "akshanPassiveMode", "Akshan Passive",
-                { "Always 2-Hit", "Always 1-Hit", "Smart" }, 0));
-
+                targetingMenu_->Add(new MenuSeparator("separatorAkshan", "Akshan Passive"));
+                akshanPassiveMode_ = targetingMenu_->Add(new MenuList(
+                    "akshanPassiveMode", "Akshan Passive",
+                    { "Always 2-Hit", "Always 1-Hit", "Smart" }, 0));
+            }
         }
 
         menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
@@ -184,6 +191,9 @@ private:
     Menu* menu_ = nullptr;
     Menu* drawingsMenu_ = nullptr;
     Menu* advancedMenu_ = nullptr;
+    Menu* movementAdvMenu_ = nullptr;
+    Menu* targetingMenu_ = nullptr;
+
 
     MenuBool* drawAARange_ = nullptr;
     MenuSlider* aaRangeFadeWidth_ = nullptr;

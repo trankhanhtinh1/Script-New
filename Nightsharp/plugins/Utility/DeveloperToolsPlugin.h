@@ -103,6 +103,8 @@ public:
     bool enabled_ = true;
     int maxRange_ = 400;
     int scanProviderIndex_ = 0; // 0 = ObjectManager, 1 = GameObjects Facade
+    int lastFocusedScanTick_ = 0;
+    int lastSnapshotTick_ = 0;
     
     struct ListOption {
         const char* Name;
@@ -196,6 +198,7 @@ public:
     std::set<std::uint32_t> openEventLogWindows_;
     std::unordered_map<std::uint32_t, std::vector<DevTools::EventLogEntry>> objectEventLogs_;
     bool mKeyPressedLast_ = false;
+    SDK::GameObject focusedObject_;
 
     void LogEventForObject(std::uint32_t netId, const std::string& eventName, const std::string& details) {
         auto it = objectEventLogs_.find(netId);
@@ -332,6 +335,10 @@ public:
     }
 
     SDK::GameObject GetFocusedObject() const {
+        return focusedObject_;
+    }
+
+    SDK::GameObject ScanFocusedObject() const {
         const auto player = SDK::ObjectManager::Player();
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
@@ -586,7 +593,6 @@ inline DeveloperToolsPlugin* s_instance = nullptr;
 #include "DeveloperTools/SpellItemInspectorTab.h"
 #include "DeveloperTools/PlayerBuffInspectorTab.h"
 #include "DeveloperTools/StatsInspectorTab.h"
-#include "DeveloperTools/NavigationTab.h"
 
 namespace Plugins {
 
@@ -595,6 +601,7 @@ inline void DeveloperToolsPlugin::OnLoad() {
     enabled_ = true;
     maxRange_ = 400;
     trackedObjectTicks_.clear();
+    focusedObject_ = SDK::GameObject{};
 
     // Create sub-tabs dynamically
     tabs_.clear();
@@ -603,7 +610,6 @@ inline void DeveloperToolsPlugin::OnLoad() {
     tabs_.push_back(std::make_unique<DevTools::SpellItemInspectorTab>(this));
     tabs_.push_back(std::make_unique<DevTools::PlayerBuffInspectorTab>(this));
     tabs_.push_back(std::make_unique<DevTools::StatsInspectorTab>(this));
-    tabs_.push_back(std::make_unique<DevTools::NavigationTab>(this));
 
     for (auto& tab : tabs_) {
         tab->OnLoad();
@@ -699,21 +705,33 @@ inline void DeveloperToolsPlugin::OnUpdate() {
     if (!enabled_) {
         pKeyPressedLast_ = false;
         mKeyPressedLast_ = false;
+        focusedObject_ = SDK::GameObject{};
         return;
     }
 
-    // Update live validity of snapshots
-    for (auto& snap : snapshots_) {
-        bool found = false;
-        for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
-            if (obj.IsValid() && static_cast<std::uint32_t>(obj.NetworkId()) == snap.networkId) {
-                found = true;
-                snap.isUnderlyingValid = true;
-                break;
+    const int now = SDK::Variables::TickCount();
+
+    // Scan focused object every 100ms
+    if (now - lastFocusedScanTick_ >= 100) {
+        lastFocusedScanTick_ = now;
+        focusedObject_ = ScanFocusedObject();
+
+        // Update live validity of snapshots only once per 1000ms (1 second)
+        if (now - lastSnapshotTick_ >= 1000) {
+            lastSnapshotTick_ = now;
+            for (auto& snap : snapshots_) {
+                bool found = false;
+                for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
+                    if (obj.IsValid() && static_cast<std::uint32_t>(obj.NetworkId()) == snap.networkId) {
+                        found = true;
+                        snap.isUnderlyingValid = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    snap.isUnderlyingValid = false;
+                }
             }
-        }
-        if (!found) {
-            snap.isUnderlyingValid = false;
         }
     }
 

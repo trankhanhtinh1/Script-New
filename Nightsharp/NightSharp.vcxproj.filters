@@ -1357,6 +1357,9 @@
     <ClInclude Include="Plugins\Utility\DeveloperTools\IDeveloperTab.h">
       <Filter>Plugins\Utility\DeveloperTools</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Utility\DeveloperTools\NavigationTab.h">
+      <Filter>Plugins\Utility\DeveloperTools</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Utility\DeveloperTools\ObjectDetectorTab.h">
       <Filter>Plugins\Utility\DeveloperTools</Filter>
     </ClInclude>
@@ -1367,9 +1370,6 @@
       <Filter>Plugins\Utility\DeveloperTools</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Utility\DeveloperTools\StatsInspectorTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\NavigationTab.h">
       <Filter>Plugins\Utility\DeveloperTools</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Utility\DeveloperToolsPlugin.h">

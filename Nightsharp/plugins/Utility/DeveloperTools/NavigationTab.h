@@ -1,16 +1,43 @@
 #pragma once
 #include "IDeveloperTab.h"
 #include "../DeveloperToolsPlugin.h"
+#include <mutex>
+#include <vector>
+#include <string>
 
 namespace Plugins::DevTools {
 
 class NavigationTab final : public IDeveloperTab {
 private:
+    struct NavigationObjectInfo {
+        uintptr_t address = 0;
+        std::uint32_t color = 0xFFFFFFFF;
+        Vec3 position;
+        float attackRange = 0.0f;
+        std::vector<Vec3> path;
+        bool hasPath = false;
+        float moveSpeed = 0.0f;
+    };
+
+    struct FocusedObjectNavInfo {
+        bool isValid = false;
+        std::string characterName;
+        bool hasPath = false;
+        float moveSpeed = 0.0f;
+        std::vector<Vec3> path;
+        Vec3 position;
+    };
+
     bool drawPaths_ = true;
     bool drawRange_ = false;
     bool drawPrediction_ = false;
     int predictionMs_ = 500;
     bool onlyFocused_ = false;
+
+    mutable std::mutex navMutex_;
+    std::vector<NavigationObjectInfo> cachedNavObjects_;
+    FocusedObjectNavInfo cachedFocusedInfo_;
+    int lastUpdateTick_ = 0;
 
 public:
     using IDeveloperTab::IDeveloperTab;
@@ -33,16 +60,19 @@ public:
 
         ImGui::Separator();
         
-        const auto obj = plugin_->GetFocusedObject();
-        if (obj.IsValid() && (obj.IsHero() || obj.IsMinion())) {
-            const auto player = SDK::AIBaseClient(obj.Handle());
-            ImGui::Text("Focused Object: %s", player.CharacterName().c_str());
-            ImGui::Text("Has Path: %s", player.HasPath() ? "Yes" : "No");
-            ImGui::Text("Move Speed: %.1f", player.MoveSpeed());
+        FocusedObjectNavInfo focusedInfo;
+        {
+            std::lock_guard<std::mutex> lk(navMutex_);
+            focusedInfo = cachedFocusedInfo_;
+        }
+
+        if (focusedInfo.isValid) {
+            ImGui::Text("Focused Object: %s", focusedInfo.characterName.c_str());
+            ImGui::Text("Has Path: %s", focusedInfo.hasPath ? "Yes" : "No");
+            ImGui::Text("Move Speed: %.1f", focusedInfo.moveSpeed);
             
-            auto path = player.Path();
-            if (!path.empty()) {
-                ImGui::Text("Path Waypoints Count: %d", static_cast<int>(path.size()));
+            if (!focusedInfo.path.empty()) {
+                ImGui::Text("Path Waypoints Count: %d", static_cast<int>(focusedInfo.path.size()));
                 
                 if (ImGui::BeginTable("WaypointsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                     ImGui::TableSetupColumn("Idx");
@@ -52,19 +82,19 @@ public:
                     ImGui::TableSetupColumn("Dist from Unit");
                     ImGui::TableHeadersRow();
                     
-                    const Vec3 unitPos = player.Position();
-                    for (int i = 0; i < static_cast<int>(path.size()); ++i) {
+                    const Vec3 unitPos = focusedInfo.position;
+                    for (int i = 0; i < static_cast<int>(focusedInfo.path.size()); ++i) {
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         ImGui::Text("%d", i);
                         ImGui::TableNextColumn();
-                        ImGui::Text("%.1f", path[i].x);
+                        ImGui::Text("%.1f", focusedInfo.path[i].x);
                         ImGui::TableNextColumn();
-                        ImGui::Text("%.1f", path[i].y);
+                        ImGui::Text("%.1f", focusedInfo.path[i].y);
                         ImGui::TableNextColumn();
-                        ImGui::Text("%.1f", path[i].z);
+                        ImGui::Text("%.1f", focusedInfo.path[i].z);
                         ImGui::TableNextColumn();
-                        ImGui::Text("%.1f", unitPos.Distance(path[i]));
+                        ImGui::Text("%.1f", unitPos.Distance(focusedInfo.path[i]));
                     }
                     ImGui::EndTable();
                 }
@@ -76,10 +106,22 @@ public:
         }
     }
 
-    void OnRender() override {
-        if (!SDK::Drawing::IsEnabled()) {
+    void OnUpdate() override {
+        if (!plugin_->enabled_) {
+            std::lock_guard<std::mutex> lk(navMutex_);
+            cachedNavObjects_.clear();
+            cachedFocusedInfo_ = {};
             return;
         }
+
+        const int now = SDK::Variables::TickCount();
+        if (now - lastUpdateTick_ < 100) {
+            return;
+        }
+        lastUpdateTick_ = now;
+
+        std::vector<NavigationObjectInfo> list;
+        FocusedObjectNavInfo focusedInfo;
 
         const auto localPlayer = SDK::ObjectManager::Player();
         const auto focusedObj = plugin_->GetFocusedObject();
@@ -98,41 +140,86 @@ public:
                 continue;
             }
 
-            std::uint32_t color = 0xFFFFFFFF; // White
+            NavigationObjectInfo info;
+            info.address = aiObj.Address();
+            info.position = aiObj.Position();
+            info.attackRange = aiObj.AttackRange();
+            info.path = aiObj.Path();
+            info.hasPath = aiObj.HasPath();
+            info.moveSpeed = aiObj.MoveSpeed();
+
+            info.color = 0xFFFFFFFF; // White
             if (aiObj.IsHero()) {
                 if (localPlayer.IsValid() && aiObj.Address() == localPlayer.Address()) {
-                    color = 0xFF00FFFF; // Cyan (Local Player)
+                    info.color = 0xFF00FFFF; // Cyan (Local Player)
                 } else if (aiObj.Team() == SDK::GameObjectTeam::Order) {
-                    color = 0xFF00FF00; // Green (Allies)
+                    info.color = 0xFF00FF00; // Green (Allies)
                 } else if (aiObj.Team() == SDK::GameObjectTeam::Chaos) {
-                    color = 0xFFFF0000; // Red (Enemies)
+                    info.color = 0xFFFF0000; // Red (Enemies)
                 }
             } else {
-                color = 0xFF888888; // Grey (Minions)
+                info.color = 0xFF888888; // Grey (Minions)
+            }
+
+            list.push_back(std::move(info));
+        }
+
+        // Populate focused object nav info for GUI
+        if (focusedObj.IsValid() && (focusedObj.IsHero() || focusedObj.IsMinion())) {
+            const auto player = SDK::AIBaseClient(focusedObj.Handle());
+            if (player.IsValid()) {
+                focusedInfo.isValid = true;
+                focusedInfo.characterName = player.CharacterName();
+                focusedInfo.hasPath = player.HasPath();
+                focusedInfo.moveSpeed = player.MoveSpeed();
+                focusedInfo.path = player.Path();
+                focusedInfo.position = player.Position();
+            }
+        }
+
+        std::lock_guard<std::mutex> lk(navMutex_);
+        cachedNavObjects_ = std::move(list);
+        cachedFocusedInfo_ = std::move(focusedInfo);
+    }
+
+    void OnRender() override {
+        if (!SDK::Drawing::IsEnabled()) {
+            return;
+        }
+
+        std::vector<NavigationObjectInfo> renderList;
+        {
+            std::lock_guard<std::mutex> lk(navMutex_);
+            renderList = cachedNavObjects_;
+        }
+
+        const auto focusedObj = plugin_->GetFocusedObject();
+
+        for (const auto& unit : renderList) {
+            if (onlyFocused_ && focusedObj.IsValid() && unit.address != focusedObj.Address()) {
+                continue;
             }
 
             if (drawRange_) {
-                float range = aiObj.AttackRange();
-                SDK::Drawing::DrawCircle(aiObj.Position(), range, color, 1.5f, 64, false);
+                SDK::Drawing::DrawCircle(unit.position, unit.attackRange, unit.color, 1.5f, 64, false);
             }
 
-            auto path = aiObj.Path();
-            if (drawPaths_ && !path.empty()) {
-                Vec3 current = aiObj.Position();
-                for (const auto& point : path) {
-                    SDK::Drawing::DrawLine(current, point, color, 1.5f, false);
-                    SDK::Drawing::DrawCircle(point, 10.0f, color, 1.0f, 64, false);
+            if (drawPaths_ && !unit.path.empty()) {
+                Vec3 current = unit.position;
+                for (const auto& point : unit.path) {
+                    SDK::Drawing::DrawLine(current, point, unit.color, 1.5f, false);
+                    SDK::Drawing::DrawCircle(point, 10.0f, unit.color, 1.0f, 64, false);
                     current = point;
                 }
             }
 
-            if (drawPrediction_ && aiObj.HasPath() && aiObj.MoveSpeed() > 0.01f) {
-                float distToMove = aiObj.MoveSpeed() * (static_cast<float>(predictionMs_) / 1000.0f);
-                Vec3 predictedPos = aiObj.Position();
+            if (drawPrediction_ && unit.hasPath && unit.moveSpeed > 0.01f) {
+                float distToMove = unit.moveSpeed * (static_cast<float>(predictionMs_) / 1000.0f);
+                Vec3 predictedPos = unit.position;
                 
-                if (!path.empty()) {
-                    Vec3 current = aiObj.Position();
-                    for (const auto& wp : path) {
+                if (!unit.path.empty()) {
+                    Vec3 current = unit.position;
+                    for (const auto& wp : unit.path) {
                         float dist = current.Distance(wp);
                         if (distToMove <= dist) {
                             predictedPos = current.Extend(wp, distToMove);
@@ -149,7 +236,7 @@ public:
                 }
 
                 SDK::Drawing::DrawCircle(predictedPos, 20.0f, 0xFFFFD700, 2.0f, 64, false); // Gold
-                SDK::Drawing::DrawLine(aiObj.Position(), predictedPos, 0xFFFFD700, 2.0f, false);
+                SDK::Drawing::DrawLine(unit.position, predictedPos, 0xFFFFD700, 2.0f, false);
             }
         }
     }

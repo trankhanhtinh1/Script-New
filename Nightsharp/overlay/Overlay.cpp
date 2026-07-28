@@ -859,9 +859,9 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
             return TRUE;
         }
         if (wParam == 'L') {
-            const bool imguiKeyboard = ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
+            const bool imguiTextInput = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
             const bool gameChat = SDK::Game::IsChatOpen();
-            if (!imguiKeyboard && !gameChat) {
+            if (!imguiTextInput && !gameChat) {
                 SDK::Drawing::g_HideAllDrawing = !SDK::Drawing::g_HideAllDrawing;
                 NightSharpDebug::Logf("[Overlay] Toggled Hide All Drawing: %s", SDK::Drawing::g_HideAllDrawing ? "TRUE" : "FALSE");
                 return TRUE;
@@ -869,7 +869,7 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
     }
 
-    if ((NightSharpMenu::showMenu || NightSharpMenu::showPluginSelector) && ImGui::GetCurrentContext()) {
+    if ((NightSharpMenu::showMenu || NightSharpMenu::HasAnyRuntimeOpen()) && ImGui::GetCurrentContext()) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }

@@ -1024,7 +1024,7 @@ public:
         return a ? *reinterpret_cast<const float*>(a + Offset::AttackableUnit::MagicalShield) : 0.0f;
     }
     float HealthRegenRate() const {
-        return IsValid() ? ::CoreAIHeroClient::HealthRegenRate(Address()) : 0.0f;
+        return IsValid() && (IsHero() || IsMinion() || IsTurret()) ? ::CoreAIHeroClient::HealthRegenRate(Address()) : 0.0f;
     }
 };
 

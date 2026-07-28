@@ -11,15 +11,15 @@ inline void OrbwalkerBase::OnGameUpdateStatic(const Events::GameUpdateEventArgs&
     }
 }
 
-inline void OrbwalkerBase::OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args) {
-    if (OrbwalkingDetail::RuntimeInstance) {
-        OrbwalkingDetail::RuntimeInstance->OnProcessSpell(args);
-    }
-}
-
 inline void OrbwalkerBase::OnDoCastStatic(const Events::ProcessSpellEventArgs& args) {
     if (OrbwalkingDetail::RuntimeInstance) {
         OrbwalkingDetail::RuntimeInstance->OnDoCast(args);
+    }
+}
+
+inline void OrbwalkerBase::OnProcessSpellStatic(const Events::ProcessSpellEventArgs& args) {
+    if (OrbwalkingDetail::RuntimeInstance) {
+        OrbwalkingDetail::RuntimeInstance->OnProcessSpell(args);
     }
 }
 
@@ -127,6 +127,12 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const int attackStartTick = hadPendingAttack
         ? context_.pendingAttackTick
         : manualAttackStartTick;
+    // Record how long it took from order-send to animation-start (= server processing latency).
+    // CanMove() will add this gap to attackWindupMs so that the movement gate is measured
+    // from the real animation start, not from the earlier order-send tick.
+    context_.lastAttackOrderToAnimGapMs = hadPendingAttack
+        ? std::max(0, now - context_.pendingAttackTick)
+        : 0;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
         context_.lastTarget = target;

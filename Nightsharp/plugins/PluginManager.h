@@ -13,6 +13,9 @@
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
 
+// Forward-declare g_HideAllDrawing to avoid pulling in all of Drawing.h here.
+namespace SDK::Drawing { extern bool g_HideAllDrawing; }
+
 #include <cstdio>
 #include <memory>
 #include <type_traits>
@@ -229,6 +232,9 @@ namespace Plugins {
         }
 
         void OnRender() {
+            if (::SDK::Drawing::g_HideAllDrawing) {
+                return;
+            }
             for (auto& plugin : m_plugins) {
                 if (plugin->m_loaded && plugin->m_enabled) {
                     NightSharpDebug::CrashTrace::Record(

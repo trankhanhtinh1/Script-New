@@ -1297,13 +1297,26 @@ inline void DrawSingleRuntimePopup(MenuRuntime* runtime, int windowIndex) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 7.0f));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.08f, 0.94f));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.35f, 0.35f, 0.45f, 0.80f));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.12f, 0.12f, 0.16f, 0.95f));
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.20f, 0.22f, 0.30f, 0.95f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.20f, 0.20f, 0.20f, 0.90f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.20f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::ColorConvertU32ToFloat4(RootContainerColor));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImGui::ColorConvertU32ToFloat4(BorderColor));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(TextColor));
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImGui::ColorConvertU32ToFloat4(RootContainerColor));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImGui::ColorConvertU32ToFloat4(ContainerSelectedColor));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImGui::ColorConvertU32ToFloat4(ButtonColor));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImGui::ColorConvertU32ToFloat4(ButtonHoverColor));
+
+    auto& style = SDK::UI::g_FunctionalMenuStyle;
+    const auto oldStyle = style;
+    style.enabled = true;
+    style.itemHeight = 30.0f;
+    style.padX = 12.0f;
+    style.colItem = IM_COL32(18, 20, 30, 118);
+    style.colItemHover = IM_COL32(52, 48, 82, 215);
+    style.colItemActive = IM_COL32(82, 66, 132, 232);
+    style.colBorder = BorderColor;
+    style.colText = TextColor;
+    style.colTextDim = IM_COL32(185, 185, 205, 255);
+    style.colAccent = EnabledColor;
 
     const ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoSavedSettings |
@@ -1320,6 +1333,9 @@ inline void DrawSingleRuntimePopup(MenuRuntime* runtime, int windowIndex) {
         }
     }
     ImGui::End();
+
+    style = oldStyle;
+
     ImGui::PopStyleColor(7);
     ImGui::PopStyleVar(6);
     ImGui::PopFont();

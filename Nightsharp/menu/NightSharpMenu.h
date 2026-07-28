@@ -13,6 +13,9 @@
 #include "../Plugins/PluginRegistry.h"
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/PermaShow.h"
+
+// Forward-declare g_HideAllDrawing to avoid pulling in all of Drawing.h here.
+namespace SDK::Drawing { extern bool g_HideAllDrawing; }
 #include "../FpsDropDebug.h"
 #include "MenuConfig.h"
 #include "ConfigStore.h"
@@ -46,7 +49,6 @@ namespace NightSharpMenu {
     }
 
     inline bool showMenu = true;
-    inline bool showPluginSelector = true;
     inline int activePrimaryIdx = -1;
     inline int activeSecondaryIdx = -1;
     inline bool primarySelected = false;
@@ -119,7 +121,10 @@ namespace NightSharpMenu {
     inline SDK::UI::MenuBool* ensoulProfiler = nullptr;
     inline SDK::UI::MenuBool* ensoulProfilerLog = nullptr;
     inline SDK::UI::MenuRuntime* ensoulProfilerRuntime = nullptr;
+    inline SDK::UI::MenuRuntime* ensoulPluginSelectorRuntime = nullptr;
     inline SDK::UI::Menu* ensoulRuntimeMenus = nullptr;
+
+    inline void DrawPluginSelectorRuntimeBridge(void*);
 
     inline void DrawProfilerRuntimeBridge(void*) {
         NightSharpPerf::DrawStatsBody();
@@ -148,14 +153,7 @@ namespace NightSharpMenu {
     inline SDK::UI::MenuList* ensoulMenuStyle = nullptr;
     inline SDK::UI::MenuSlider* ensoulMaxItemsPerColumn = nullptr;
 
-    struct PluginMenuBinding {
-        int registryIndex = -1;
-        SDK::UI::MenuBool* loaded = nullptr;
-        SDK::UI::MenuBool* alwaysLoad = nullptr;
-    };
 
-    inline PluginMenuBinding ensoulPluginBindings[PluginRegistry::MAX_PLUGINS] = {};
-    inline int ensoulPluginBindingCount = 0;
 
     struct RuntimeMenuBinding {
         int registryIndex = -1;
@@ -190,6 +188,7 @@ namespace NightSharpMenu {
         ensoulProfiler = nullptr;
         ensoulProfilerLog = nullptr;
         ensoulProfilerRuntime = nullptr;
+        ensoulPluginSelectorRuntime = nullptr;
         ensoulRuntimeMenus = nullptr;
         ensoulTextColor = nullptr;
         ensoulHoverColor = nullptr;
@@ -211,7 +210,6 @@ namespace NightSharpMenu {
         ensoulThemePreset = nullptr;
         ensoulMenuStyle = nullptr;
         ensoulMaxItemsPerColumn = nullptr;
-        ensoulPluginBindingCount = 0;
         ensoulRuntimeBindingCount = 0;
         EnsoulSharpTheme::OpenList = nullptr;
         EnsoulSharpTheme::OpenColor = nullptr;
@@ -705,37 +703,13 @@ namespace NightSharpMenu {
         // 4. Plugins Manager
         auto* plugins = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("Plugins", "Plugins"));
-        ensoulPluginBindingCount = 0;
-        for (int i = 0;
-             i < PluginRegistry::PluginCount &&
-             ensoulPluginBindingCount < PluginRegistry::MAX_PLUGINS;
-             ++i) {
-            auto& plugin = PluginRegistry::Plugins[i];
-            if (plugin.Kind == PluginRegistry::PluginKind::SDK ||
-                !plugin.Name || !plugin.InternalId) {
-                continue;
-            }
-            if (plugin.Category == PluginRegistry::PluginCategory::Champion &&
-                !PluginRegistry::CanPluginLoad(i)) {
-                continue;
-            }
-
-            auto* pluginMenu = plugins->AddSubMenu(
-                new SDK::UI::Menu(plugin.InternalId, plugin.Name));
-            auto* loaded = pluginMenu->Add(new SDK::UI::MenuBool(
-                "Loaded", "Loaded", plugin.Loaded));
-            auto* alwaysLoad = pluginMenu->Add(new SDK::UI::MenuBool(
-                "AlwaysLoad", "Always Load", plugin.AlwaysLoad));
-            const void* encodedIndex =
-                reinterpret_cast<void*>(static_cast<intptr_t>(i + 1));
-            loaded->ValueChanged = &OnPluginLoadedChanged;
-            loaded->ValueChangedUd = const_cast<void*>(encodedIndex);
-            alwaysLoad->ValueChanged = &OnPluginAlwaysLoadChanged;
-            alwaysLoad->ValueChangedUd = const_cast<void*>(encodedIndex);
-            ensoulPluginBindings[ensoulPluginBindingCount++] = {
-                i, loaded, alwaysLoad
-            };
-        }
+        ensoulPluginSelectorRuntime = plugins->Add(new SDK::UI::MenuRuntime(
+            "PluginSelector",
+            "Plugin Selector",
+            &DrawPluginSelectorRuntimeBridge,
+            nullptr,
+            550.0f));
+        ensoulPluginSelectorRuntime->Open = true; // Default to open!
 
         ensoulRuntimeMenus = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("RuntimeMenus", "Runtime Panels"));
@@ -825,6 +799,30 @@ namespace NightSharpMenu {
 
         ensoulCoreRoot->Attach();
         KeepCoreMenuFirst();
+
+        // Copy loaded configuration values to theme globals on startup
+        if (ensoulThemePreset) {
+            EnsoulSharpTheme::SelectedPresetIndex = ensoulThemePreset->Index;
+            EnsoulSharpTheme::ApplyThemePreset(EnsoulSharpTheme::SelectedPresetIndex);
+        }
+        if (ensoulTextColor) EnsoulSharpTheme::TextColor = ensoulTextColor->Value;
+        if (ensoulHoverColor) EnsoulSharpTheme::HoverColor = ensoulHoverColor->Value;
+        if (ensoulRootContainerColor) EnsoulSharpTheme::RootContainerColor = ensoulRootContainerColor->Value;
+        if (ensoulContainerSelectedColor) EnsoulSharpTheme::ContainerSelectedColor = ensoulContainerSelectedColor->Value;
+        if (ensoulContainerSeparatorColor) EnsoulSharpTheme::ContainerSeparatorColor = ensoulContainerSeparatorColor->Value;
+        if (ensoulBorderColor) EnsoulSharpTheme::BorderColor = ensoulBorderColor->Value;
+        if (ensoulEnabledColor) EnsoulSharpTheme::EnabledColor = ensoulEnabledColor->Value;
+        if (ensoulDisabledColor) EnsoulSharpTheme::DisabledColor = ensoulDisabledColor->Value;
+        if (ensoulSliderColor) EnsoulSharpTheme::SliderColor = ensoulSliderColor->Value;
+        if (ensoulSliderActiveColor) EnsoulSharpTheme::SliderActiveColor = ensoulSliderActiveColor->Value;
+        if (ensoulButtonColor) EnsoulSharpTheme::ButtonColor = ensoulButtonColor->Value;
+        if (ensoulButtonHoverColor) EnsoulSharpTheme::ButtonHoverColor = ensoulButtonHoverColor->Value;
+
+        if (ensoulThemeFontSize) EnsoulSharpTheme::FontSize = ensoulThemeFontSize->Value;
+        if (ensoulThemeRowHeight) EnsoulSharpTheme::ContainerHeight = ensoulThemeRowHeight->Value;
+        if (ensoulThemePanelWidth) EnsoulSharpTheme::ContainerWidth = ensoulThemePanelWidth->Value;
+        if (ensoulThemeTextPadding) EnsoulSharpTheme::ContainerTextOffset = ensoulThemeTextPadding->Value;
+        if (ensoulFontFamily) EnsoulSharpTheme::SelectedFontIndex = ensoulFontFamily->Index;
     }
 
     inline void SyncEnsoulCoreMenu() {
@@ -878,16 +876,7 @@ namespace NightSharpMenu {
         if (ensoulMenuStyle) ensoulMenuStyle->Index = Config::MenuStyle::index;
         if (ensoulMaxItemsPerColumn) ensoulMaxItemsPerColumn->Value = Config::MenuStyle::maxItemsPerColumn;
 
-        for (int i = 0; i < ensoulPluginBindingCount; ++i) {
-            auto& binding = ensoulPluginBindings[i];
-            if (binding.registryIndex < 0 ||
-                binding.registryIndex >= PluginRegistry::PluginCount) {
-                continue;
-            }
-            const auto& plugin = PluginRegistry::Plugins[binding.registryIndex];
-            binding.loaded->Value = plugin.Loaded;
-            binding.alwaysLoad->Value = plugin.AlwaysLoad;
-        }
+
         bool anyRuntimeVisible = false;
         for (int i = 0; i < ensoulRuntimeBindingCount; ++i) {
             auto& binding = ensoulRuntimeBindings[i];
@@ -979,8 +968,37 @@ namespace NightSharpMenu {
     inline float permaDragOffX = 0.0f;
     inline float permaDragOffY = 0.0f;
 
+    inline bool CheckAnyRuntimeOpen(SDK::UI::Menu* menu) {
+        if (!menu) return false;
+        for (int i = 0; i < static_cast<int>(menu->Components.size()); ++i) {
+            auto* comp = menu->Components[i];
+            if (!comp) continue;
+            if (comp->IsMenu()) {
+                if (CheckAnyRuntimeOpen(static_cast<SDK::UI::Menu*>(comp))) {
+                    return true;
+                }
+            } else if (comp->Kind() == SDK::UI::MenuValueType::Runtime) {
+                auto* r = static_cast<SDK::UI::MenuRuntime*>(comp);
+                if (r->Open) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    inline bool HasAnyRuntimeOpen() {
+        auto& mm = SDK::UI::MenuManager::Instance();
+        for (int i = 0; i < static_cast<int>(mm.Menus.size()); ++i) {
+            if (CheckAnyRuntimeOpen(mm.Menus[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     inline bool IsPointInside(float x, float y) {
-        if (showPluginSelector) {
+        if (HasAnyRuntimeOpen()) {
             if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
                 return true;
             }
@@ -1094,7 +1112,7 @@ namespace NightSharpMenu {
         WPARAM wParam,
         float clientX,
         float clientY) {
-        if (!showMenu && !showPluginSelector) {
+        if (!showMenu && !HasAnyRuntimeOpen()) {
             ResetMouseInputCapture();
             return false;
         }
@@ -1298,6 +1316,8 @@ namespace NightSharpMenu {
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
         SDK::UI::EndFunctionalMenuRow();
+
+        DrawOnOffEditor("Hide All Drawings (Hotkey L)", ::SDK::Drawing::g_HideAllDrawing, "hide_all_drawings");
     }
 
     inline void DrawPermaShowSection() {
@@ -1605,28 +1625,41 @@ namespace NightSharpMenu {
             }
 
             float rightEdge = ImGui::GetContentRegionAvail().x;
-            float targetX = ImGui::GetCursorPosX() + rightEdge - 210.0f;
+            // Reserve space for: [Unload 74] [gap 8] [Load 74] [gap 8] [Always Load checkbox]
+            // Unload is on the left, Load is on the right — only one is visible at a time.
+            constexpr float kBtnW = 74.0f;
+            constexpr float kBtnGap = 8.0f;
+            constexpr float kCheckboxW = 110.0f;
+            float targetX = ImGui::GetCursorPosX() + rightEdge - (kBtnW * 2 + kBtnGap + kCheckboxW + kBtnGap);
             if (targetX > ImGui::GetCursorPosX()) {
                 ImGui::SetCursorPosX(targetX);
             }
 
             if (canLoad) {
                 if (p.Loaded) {
-                    if (DrawStateButton("unload", "Unload", true, false, 74.0f)) {
+                    // Loaded → show Unload on the LEFT slot
+                    if (DrawStateButton("unload", "Unload", true, false, kBtnW)) {
                         PluginRegistry::UnloadPlugin(i);
                     }
+                    // Empty placeholder for the right slot so checkbox stays aligned
+                    ImGui::SameLine(0, kBtnGap);
+                    ImGui::Dummy(ImVec2(kBtnW, 0));
                 } else {
-                    if (DrawStateButton("load", "Load", false, true, 74.0f)) {
+                    // Not loaded → empty placeholder for the left slot, Load on the RIGHT slot
+                    ImGui::Dummy(ImVec2(kBtnW, ImGui::GetFrameHeight()));
+                    ImGui::SameLine(0, kBtnGap);
+                    if (DrawStateButton("load", "Load", false, true, kBtnW)) {
                         PluginRegistry::LoadPlugin(i);
                     }
                 }
             } else {
+                // N/A spans both slots
                 ImGui::BeginDisabled(true);
-                ImGui::Button("N/A", ImVec2(74.0f, 0));
+                ImGui::Button("N/A", ImVec2(kBtnW * 2 + kBtnGap, 0));
                 ImGui::EndDisabled();
             }
 
-            ImGui::SameLine(0, 8);
+            ImGui::SameLine(0, kBtnGap);
             bool alwaysLoad = p.AlwaysLoad;
             if (ImGui::Checkbox("Always Load", &alwaysLoad)) {
                 PluginRegistry::SetAlwaysLoad(i, alwaysLoad);
@@ -1645,33 +1678,75 @@ namespace NightSharpMenu {
         }
     }
 
-    inline void DrawPluginsSection() {
-        DrawSectionTitle("Plugin Selector");
-        
-        ImGui::Spacing();
-        ImGui::TextWrapped("Plugin Selection is now managed in a runtime floating window.");
-        ImGui::TextWrapped("You can load, unload, and configure automatic loading there.");
-        ImGui::Spacing();
-        
-        if (ImGui::Button("Open Plugin Selector Window", ImVec2(240.0f, 40.0f))) {
-            showPluginSelector = true;
-        }
-        
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-        
-        DrawSectionTitle("Currently Loaded Plugins");
-        int loadedCount = 0;
-        for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
-            if (PluginRegistry::Plugins[i].Loaded) {
-                loadedCount++;
-                ImGui::BulletText("%s (%s)", PluginRegistry::Plugins[i].Name, PluginRegistry::CategoryName(PluginRegistry::Plugins[i].Category));
+    inline void DrawPluginSelectorContent() {
+        if (ImGui::BeginTabBar("PluginCategoriesTabBar")) {
+            const char* tabNames[] = { "Core Plugins", "Champion Scripts", "Utility Plugins", "Misc Plugins" };
+            PluginRegistry::PluginCategory categories[] = {
+                PluginRegistry::PluginCategory::Core,
+                PluginRegistry::PluginCategory::Champion,
+                PluginRegistry::PluginCategory::Utility,
+                PluginRegistry::PluginCategory::Misc
+            };
+
+            for (int catIdx = 0; catIdx < 4; ++catIdx) {
+                if (ImGui::BeginTabItem(tabNames[catIdx])) {
+                    if (ImGui::BeginTable("PluginSelectorTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300.0f))) {
+                        ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthStretch);
+                        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                        ImGui::TableHeadersRow();
+
+                        for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
+                            auto& p = PluginRegistry::Plugins[i];
+                            if (p.Category != categories[catIdx]) {
+                                continue;
+                            }
+
+                            if (p.Category == PluginRegistry::PluginCategory::Champion && !PluginRegistry::CanPluginLoad(i)) {
+                                continue;
+                            }
+
+                            ImGui::PushID(i);
+                            ImGui::TableNextRow();
+
+                            // Plugin Name Column
+                            ImGui::TableNextColumn();
+                            ImGui::Text("%s", p.Name ? p.Name : "Unknown");
+                            if (p.ChampionName && p.ChampionName[0]) {
+                                ImGui::SameLine();
+                                ImGui::TextColored(ImVec4(0.68f, 0.78f, 1.0f, 0.95f), "(%s)", p.ChampionName);
+                            }
+
+                            // Action Column: show only the relevant button
+                            ImGui::TableNextColumn();
+                            if (p.Loaded) {
+                                // Loaded → Unload button (left-aligned in cell)
+                                if (ImGui::Button("Unload", ImVec2(70.0f, 0.0f))) {
+                                    PluginRegistry::UnloadPlugin(i);
+                                }
+                            } else {
+                                // Not loaded → Load button
+                                if (ImGui::Button("Load", ImVec2(70.0f, 0.0f))) {
+                                    PluginRegistry::LoadPlugin(i);
+                                }
+                            }
+
+                            ImGui::PopID();
+                        }
+                        ImGui::EndTable();
+                    }
+                    ImGui::EndTabItem();
+                }
             }
+            ImGui::EndTabBar();
         }
-        if (loadedCount == 0) {
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No plugins are currently loaded.");
-        }
+    }
+
+    inline void DrawPluginsSection() {
+        DrawPluginSelectorContent();
+    }
+
+    inline void DrawPluginSelectorRuntimeBridge(void*) {
+        DrawPluginSelectorContent();
     }
 
     inline int LoadedPluginCount() {
@@ -2282,106 +2357,7 @@ namespace NightSharpMenu {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
     }
 
-    inline void DrawPluginSelectorWindow() {
-        if (!showPluginSelector) {
-            return;
-        }
 
-        ImGui::SetNextWindowSize(ImVec2(650, 420), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("NightSharp Plugin Selector", &showPluginSelector, ImGuiWindowFlags_NoCollapse)) {
-            ImGui::TextColored(ImVec4(0.0f, 0.9f, 1.0f, 1.0f), "Choose plugins to load in this session");
-            ImGui::Separator();
-
-            if (ImGui::BeginTabBar("PluginCategoriesTabBar")) {
-                const char* tabNames[] = { "Core Plugins", "Champion Scripts", "Utility Plugins", "Misc Plugins" };
-                PluginRegistry::PluginCategory categories[] = {
-                    PluginRegistry::PluginCategory::Core,
-                    PluginRegistry::PluginCategory::Champion,
-                    PluginRegistry::PluginCategory::Utility,
-                    PluginRegistry::PluginCategory::Misc
-                };
-
-                for (int catIdx = 0; catIdx < 4; ++catIdx) {
-                    if (ImGui::BeginTabItem(tabNames[catIdx])) {
-                        if (ImGui::BeginTable("PluginSelectorTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 260))) {
-                            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-                            ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthStretch);
-                            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-                            ImGui::TableSetupColumn("Auto Load", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-                            ImGui::TableHeadersRow();
-
-                            for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
-                                auto& p = PluginRegistry::Plugins[i];
-                                if (p.Category != categories[catIdx]) {
-                                    continue;
-                                }
-
-                                if (p.Category == PluginRegistry::PluginCategory::Champion && !PluginRegistry::CanPluginLoad(i)) {
-                                    continue;
-                                }
-
-                                ImGui::PushID(i);
-                                ImGui::TableNextRow();
-
-                                // Status Column
-                                ImGui::TableNextColumn();
-                                ImVec4 statusColor = p.Loaded ? ImVec4(0.30f, 0.86f, 0.34f, 1.0f) : ImVec4(0.62f, 0.64f, 0.70f, 1.0f);
-                                ImGui::TextColored(statusColor, p.Loaded ? "[ACTIVE]" : "[INACTIVE]");
-
-                                // Plugin Name Column
-                                ImGui::TableNextColumn();
-                                ImGui::Text("%s", p.Name ? p.Name : "Unknown");
-                                if (p.ChampionName && p.ChampionName[0]) {
-                                    ImGui::SameLine();
-                                    ImGui::TextColored(ImVec4(0.68f, 0.78f, 1.0f, 0.95f), "(%s)", p.ChampionName);
-                                }
-
-                                // Action Column
-                                ImGui::TableNextColumn();
-                                if (p.Loaded) {
-                                    if (ImGui::Button("Unload", ImVec2(80.0f, 0.0f))) {
-                                        PluginRegistry::UnloadPlugin(i);
-                                    }
-                                } else {
-                                    if (ImGui::Button("Load", ImVec2(80.0f, 0.0f))) {
-                                        PluginRegistry::LoadPlugin(i);
-                                    }
-                                }
-
-                                // Auto Load Column
-                                ImGui::TableNextColumn();
-                                bool alwaysLoad = p.AlwaysLoad;
-                                if (ImGui::Checkbox("Always Load", &alwaysLoad)) {
-                                    PluginRegistry::SetAlwaysLoad(i, alwaysLoad);
-                                }
-
-                                ImGui::PopID();
-                            }
-                            ImGui::EndTable();
-                        }
-                        ImGui::EndTabItem();
-                    }
-                }
-                ImGui::EndTabBar();
-            }
-            
-            ImGui::Separator();
-            if (ImGui::Button("Close Selector", ImVec2(120.0f, 30.0f))) {
-                showPluginSelector = false;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Load All Auto-Loads", ImVec2(165.0f, 30.0f))) {
-                for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
-                    if (PluginRegistry::Plugins[i].AlwaysLoad) {
-                        PluginRegistry::LoadPlugin(i);
-                    } else {
-                        PluginRegistry::UnloadPlugin(i);
-                    }
-                }
-            }
-        }
-        ImGui::End();
-    }
 
     inline void RenderLegacy();
 
@@ -2394,7 +2370,6 @@ namespace NightSharpMenu {
         KeepCoreMenuFirst();
 
         DrawPermaShowOverlay();
-        DrawPluginSelectorWindow();
 
         if (!showMenu) {
             ResetMouseInputCapture();
@@ -2402,6 +2377,9 @@ namespace NightSharpMenu {
             ClearFunctionalMenuSidebarStyle();
             menuBoundsRight = menuPosX;
             menuBoundsBottom = menuPosY;
+            if (Config::MenuStyle::index != 1) {
+                EnsoulSharpTheme::DrawRuntimePopup();
+            }
             return;
         }
 

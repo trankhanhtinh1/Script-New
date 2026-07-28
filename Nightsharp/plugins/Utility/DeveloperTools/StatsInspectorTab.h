@@ -1,52 +1,174 @@
 #pragma once
 #include "IDeveloperTab.h"
 #include "../DeveloperToolsPlugin.h"
+#include <mutex>
+#include <vector>
+#include <string>
 
 namespace Plugins::DevTools {
 
 class StatsInspectorTab final : public IDeveloperTab {
 private:
+    struct LiveStatsTargetInfo {
+        bool isValid = false;
+        std::string characterName;
+        std::string name;
+        uintptr_t address = 0;
+        bool isLocalPlayer = false;
+        bool hasStats = false;
+        bool isAIBase = false;
+
+        float health = 0.0f;
+        float maxHealth = 0.0f;
+        float healthPercent = 0.0f;
+        float allShield = 0.0f;
+        float physicalShield = 0.0f;
+        float magicalShield = 0.0f;
+        float healthRegenRate = 0.0f;
+
+        int level = 0;
+        float mana = 0.0f;
+        float maxMana = 0.0f;
+        float manaPercent = 0.0f;
+        float moveSpeed = 0.0f;
+        float attackRange = 0.0f;
+        float baseAD = 0.0f;
+        float bonusAD = 0.0f;
+        float totalAD = 0.0f;
+        float ap = 0.0f;
+        float attackSpeedMod = 0.0f;
+        float armor = 0.0f;
+        float bonusArmor = 0.0f;
+        float spellBlock = 0.0f;
+        float bonusSpellBlock = 0.0f;
+        float crit = 0.0f;
+        float lethality = 0.0f;
+        float flatArmorPen = 0.0f;
+        float percentArmorPen = 0.0f;
+        float flatMagicPen = 0.0f;
+        float percentMagicPen = 0.0f;
+    };
+
     int inspectMode_ = 0; // 0 = Live, 1 = Snapshot
+    mutable std::mutex statsMutex_;
+    LiveStatsTargetInfo cachedStatsTarget_;
+    int lastUpdateTick_ = 0;
 
 public:
     using IDeveloperTab::IDeveloperTab;
 
     const char* GetTabName() const override { return "Stats"; }
 
+    void OnUpdate() override {
+        if (!plugin_->enabled_) {
+            std::lock_guard<std::mutex> lk(statsMutex_);
+            cachedStatsTarget_ = {};
+            return;
+        }
+
+        if (inspectMode_ == 1) {
+            std::lock_guard<std::mutex> lk(statsMutex_);
+            cachedStatsTarget_ = {};
+            return;
+        }
+
+        const int now = SDK::Variables::TickCount();
+        if (now - lastUpdateTick_ < 100) {
+            return;
+        }
+        lastUpdateTick_ = now;
+
+        const auto obj = plugin_->GetFocusedObject();
+        LiveStatsTargetInfo targetInfo;
+
+        if (obj.IsValid()) {
+            targetInfo.isValid = true;
+            targetInfo.hasStats = obj.IsHero() || obj.IsMinion() || obj.IsTurret() || 
+                                 obj.Type() == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+                                 obj.Type() == ::Core::Objects::ObjectType::HQClient;
+            
+            targetInfo.characterName = obj.CharacterName();
+            targetInfo.name = obj.Name();
+            targetInfo.address = obj.Address();
+            const auto localPlayer = SDK::ObjectManager::Player();
+            targetInfo.isLocalPlayer = localPlayer.IsValid() && obj.Address() == localPlayer.Address();
+
+            if (targetInfo.hasStats) {
+                const auto player = SDK::AIBaseClient(obj.Handle());
+                const auto att = SDK::AttackableUnit(obj.Handle());
+                
+                targetInfo.health = att.Health();
+                targetInfo.maxHealth = att.MaxHealth();
+                targetInfo.healthPercent = att.HealthPercent();
+                targetInfo.allShield = att.AllShield();
+                targetInfo.physicalShield = att.PhysicalShield();
+                targetInfo.magicalShield = att.MagicalShield();
+                targetInfo.healthRegenRate = att.HealthRegenRate();
+
+                targetInfo.isAIBase = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
+                if (targetInfo.isAIBase && player.IsValid()) {
+                    targetInfo.level = player.Level();
+                    targetInfo.mana = player.Mana();
+                    targetInfo.maxMana = player.MaxMana();
+                    targetInfo.manaPercent = player.ManaPercent();
+                    targetInfo.moveSpeed = player.MoveSpeed();
+                    targetInfo.attackRange = player.AttackRange();
+                    targetInfo.baseAD = player.BaseAttackDamage();
+                    targetInfo.bonusAD = player.BonusAttackDamage();
+                    targetInfo.totalAD = player.TotalAttackDamage();
+                    targetInfo.ap = player.TotalMagicalDamage();
+                    targetInfo.attackSpeedMod = player.AttackSpeedMod();
+                    targetInfo.armor = player.Armor();
+                    targetInfo.bonusArmor = player.BonusArmor();
+                    targetInfo.spellBlock = player.SpellBlock();
+                    targetInfo.bonusSpellBlock = player.BonusSpellBlock();
+                    targetInfo.crit = player.Crit();
+                    targetInfo.lethality = player.Lethality();
+                    targetInfo.flatArmorPen = player.FlatArmorPenetrationMod();
+                    targetInfo.percentArmorPen = player.PercentArmorPenetrationMod();
+                    targetInfo.flatMagicPen = player.FlatMagicPenetrationMod();
+                    targetInfo.percentMagicPen = player.PercentMagicPenetrationMod();
+                }
+            }
+        }
+
+        std::lock_guard<std::mutex> lk(statsMutex_);
+        cachedStatsTarget_ = std::move(targetInfo);
+    }
+
     void OnDrawTab() override {
         ImGui::RadioButton("Live Object", &inspectMode_, 0);
         ImGui::SameLine();
         ImGui::RadioButton("Snapshot Object", &inspectMode_, 1);
 
-        SDK::AIBaseClient player;
         std::string charName;
         std::string name;
         uintptr_t address = 0;
         bool isLocalPlayer = false;
         bool hasTarget = false;
+        bool hasStats = false;
 
         DevTools::ObjectSnapshot selectedSnap;
+        LiveStatsTargetInfo liveTarget;
 
         if (inspectMode_ == 0) {
-            const auto obj = plugin_->GetFocusedObject();
-            if (obj.IsValid()) {
-                const bool hasStats = obj.IsHero() || obj.IsMinion() || obj.IsTurret() || 
-                                     obj.Type() == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-                                     obj.Type() == ::Core::Objects::ObjectType::HQClient;
+            {
+                std::lock_guard<std::mutex> lk(statsMutex_);
+                liveTarget = cachedStatsTarget_;
+            }
+            if (liveTarget.isValid) {
+                charName = liveTarget.characterName;
+                name = liveTarget.name;
+                address = liveTarget.address;
+                isLocalPlayer = liveTarget.isLocalPlayer;
+                hasStats = liveTarget.hasStats;
+                hasTarget = true;
+
                 if (!hasStats) {
-                    ImGui::Text("Inspecting Live: %s (%s) | Addr: 0x%llX",
-                                obj.CharacterName().c_str(), obj.Name().c_str(),
-                                static_cast<unsigned long long>(obj.Address()));
+                    ImGui::Text("Inspecting Live: %s (%s) | Addr: 0x%llX", charName.c_str(), name.c_str(), static_cast<unsigned long long>(address));
                     ImGui::Text("This object type has no stats.");
                     return;
                 }
-                player = SDK::AIBaseClient(obj.Handle());
-                charName = player.CharacterName();
-                name = player.Name();
-                address = player.Address();
-                const auto localPlayer = SDK::ObjectManager::Player();
-                isLocalPlayer = localPlayer.IsValid() && player.Address() == localPlayer.Address();
-                hasTarget = true;
             } else {
                 ImGui::Text("No focused live object in range.");
                 return;
@@ -118,38 +240,36 @@ public:
             };
 
             if (inspectMode_ == 0) {
-                const auto att = SDK::AttackableUnit(player.Handle());
-                drawStatRow("Health", att.Health());
-                drawStatRow("Max Health", att.MaxHealth());
-                drawStatRow("Health %", att.HealthPercent(), "%.1f%%");
-                drawStatRow("All Shield", att.AllShield());
-                drawStatRow("Physical Shield", att.PhysicalShield());
-                drawStatRow("Magical Shield", att.MagicalShield());
-                drawStatRow("Health Regen Rate", att.HealthRegenRate());
+                drawStatRow("Health", liveTarget.health);
+                drawStatRow("Max Health", liveTarget.maxHealth);
+                drawStatRow("Health %", liveTarget.healthPercent, "%.1f%%");
+                drawStatRow("All Shield", liveTarget.allShield);
+                drawStatRow("Physical Shield", liveTarget.physicalShield);
+                drawStatRow("Magical Shield", liveTarget.magicalShield);
+                drawStatRow("Health Regen Rate", liveTarget.healthRegenRate);
 
-                const bool isAIBase = player.IsHero() || player.IsMinion() || player.IsTurret();
-                if (isAIBase) {
-                    drawStatRowInt("Level", player.Level());
-                    drawStatRow("Mana", player.Mana());
-                    drawStatRow("Max Mana", player.MaxMana());
-                    drawStatRow("Mana %", player.ManaPercent(), "%.1f%%");
-                    drawStatRow("Move Speed", player.MoveSpeed());
-                    drawStatRow("Attack Range", player.AttackRange());
-                    drawStatRow("Base AD", player.BaseAttackDamage());
-                    drawStatRow("Bonus AD", player.BonusAttackDamage());
-                    drawStatRow("Total AD", player.TotalAttackDamage());
-                    drawStatRow("Ability Power (AP)", player.TotalMagicalDamage());
-                    drawStatRow("Attack Speed Mod", player.AttackSpeedMod());
-                    drawStatRow("Armor", player.Armor());
-                    drawStatRow("Bonus Armor", player.BonusArmor());
-                    drawStatRow("Spell Block (MR)", player.SpellBlock());
-                    drawStatRow("Bonus Spell Block", player.BonusSpellBlock());
-                    drawStatRow("Critical Chance", player.Crit(), "%.1f%%");
-                    drawStatRow("Lethality", player.Lethality());
-                    drawStatRow("Flat Armor Pen", player.FlatArmorPenetrationMod());
-                    drawStatRow("Percent Armor Pen Mod", player.PercentArmorPenetrationMod(), "%.3f");
-                    drawStatRow("Flat Magic Pen", player.FlatMagicPenetrationMod());
-                    drawStatRow("Percent Magic Pen Mod", player.PercentMagicPenetrationMod(), "%.3f");
+                if (liveTarget.isAIBase) {
+                    drawStatRowInt("Level", liveTarget.level);
+                    drawStatRow("Mana", liveTarget.mana);
+                    drawStatRow("Max Mana", liveTarget.maxMana);
+                    drawStatRow("Mana %", liveTarget.manaPercent, "%.1f%%");
+                    drawStatRow("Move Speed", liveTarget.moveSpeed);
+                    drawStatRow("Attack Range", liveTarget.attackRange);
+                    drawStatRow("Base AD", liveTarget.baseAD);
+                    drawStatRow("Bonus AD", liveTarget.bonusAD);
+                    drawStatRow("Total AD", liveTarget.totalAD);
+                    drawStatRow("Ability Power (AP)", liveTarget.ap);
+                    drawStatRow("Attack Speed Mod", liveTarget.attackSpeedMod);
+                    drawStatRow("Armor", liveTarget.armor);
+                    drawStatRow("Bonus Armor", liveTarget.bonusArmor);
+                    drawStatRow("Spell Block (MR)", liveTarget.spellBlock);
+                    drawStatRow("Bonus Spell Block", liveTarget.bonusSpellBlock);
+                    drawStatRow("Critical Chance", liveTarget.crit, "%.1f%%");
+                    drawStatRow("Lethality", liveTarget.lethality);
+                    drawStatRow("Flat Armor Pen", liveTarget.flatArmorPen);
+                    drawStatRow("Percent Armor Pen Mod", liveTarget.percentArmorPen, "%.3f");
+                    drawStatRow("Flat Magic Pen", liveTarget.flatMagicPen);
+                    drawStatRow("Percent Magic Pen Mod", liveTarget.percentMagicPen, "%.3f");
                 }
             } else {
                 drawStatRow("Health", selectedSnap.health);
@@ -198,34 +318,35 @@ public:
         std::string dump = "=== DEVELOPER TOOLS OBJECT STATS ===\n";
         
         if (inspectMode_ == 0) {
-            const auto obj = plugin_->GetFocusedObject();
-            if (!obj.IsValid()) return;
+            LiveStatsTargetInfo liveTarget;
+            {
+                std::lock_guard<std::mutex> lk(statsMutex_);
+                liveTarget = cachedStatsTarget_;
+            }
+            if (!liveTarget.isValid || !liveTarget.hasStats) return;
             
-            const auto player = SDK::AIBaseClient(obj.Handle());
-            const auto att = SDK::AttackableUnit(player.Handle());
-            dump += "Target: " + player.CharacterName() + " (Live) | Address: 0x" + ToHexStr(player.Address()) + "\n";
+            dump += "Target: " + liveTarget.characterName + " (Live) | Address: 0x" + ToHexStr(liveTarget.address) + "\n";
             
             char line[256];
-            std::snprintf(line, sizeof(line), "Health: %.2f / %.2f | Regen: %.2f\n", att.Health(), att.MaxHealth(), att.HealthRegenRate());
+            std::snprintf(line, sizeof(line), "Health: %.2f / %.2f | Regen: %.2f\n", liveTarget.health, liveTarget.maxHealth, liveTarget.healthRegenRate);
             dump += line;
-            std::snprintf(line, sizeof(line), "Shields: All=%.2f Phys=%.2f Mag=%.2f\n", att.AllShield(), att.PhysicalShield(), att.MagicalShield());
+            std::snprintf(line, sizeof(line), "Shields: All=%.2f Phys=%.2f Mag=%.2f\n", liveTarget.allShield, liveTarget.physicalShield, liveTarget.magicalShield);
             dump += line;
 
-            const bool isAIBase = player.IsHero() || player.IsMinion() || player.IsTurret();
-            if (isAIBase) {
-                std::snprintf(line, sizeof(line), "Level: %d | Mana: %.2f / %.2f\n", player.Level(), player.Mana(), player.MaxMana());
+            if (liveTarget.isAIBase) {
+                std::snprintf(line, sizeof(line), "Level: %d | Mana: %.2f / %.2f\n", liveTarget.level, liveTarget.mana, liveTarget.maxMana);
                 dump += line;
-                std::snprintf(line, sizeof(line), "AD: Total=%.2f Base=%.2f Bonus=%.2f | AP: %.2f\n", player.TotalAttackDamage(), player.BaseAttackDamage(), player.BonusAttackDamage(), player.TotalMagicalDamage());
+                std::snprintf(line, sizeof(line), "AD: Total=%.2f Base=%.2f Bonus=%.2f | AP: %.2f\n", liveTarget.totalAD, liveTarget.baseAD, liveTarget.bonusAD, liveTarget.ap);
                 dump += line;
-                std::snprintf(line, sizeof(line), "Armor: %.2f (Bonus: %.2f) | MR: %.2f (Bonus: %.2f)\n", player.Armor(), player.BonusArmor(), player.SpellBlock(), player.BonusSpellBlock());
+                std::snprintf(line, sizeof(line), "Armor: %.2f (Bonus: %.2f) | MR: %.2f (Bonus: %.2f)\n", liveTarget.armor, liveTarget.bonusArmor, liveTarget.spellBlock, liveTarget.bonusSpellBlock);
                 dump += line;
-                std::snprintf(line, sizeof(line), "MoveSpeed: %.2f | Range: %.2f | AS Mod: %.2f | Crit: %.2f%%\n", player.MoveSpeed(), player.AttackRange(), player.AttackSpeedMod(), player.Crit());
+                std::snprintf(line, sizeof(line), "MoveSpeed: %.2f | Range: %.2f | AS Mod: %.2f | Crit: %.2f%%\n", liveTarget.moveSpeed, liveTarget.attackRange, liveTarget.attackSpeedMod, liveTarget.crit);
                 dump += line;
                 std::snprintf(line, sizeof(line), "Pen: Lethality=%.2f FlatArmorPen=%.2f %%ArmorPen=%.2f | FlatMagicPen=%.2f %%MagicPen=%.2f\n",
-                              player.Lethality(), player.FlatArmorPenetrationMod(), player.PercentArmorPenetrationMod(), player.FlatMagicPenetrationMod(), player.PercentMagicPenetrationMod());
+                              liveTarget.lethality, liveTarget.flatArmorPen, liveTarget.percentArmorPen, liveTarget.flatMagicPen, liveTarget.percentMagicPen);
                 dump += line;
             }
-            NightSharpDebug::Logf("[Dev] Copied stats of %s (Live) to Clipboard!", player.CharacterName().c_str());
+            NightSharpDebug::Logf("[Dev] Copied stats of %s (Live) to Clipboard!", liveTarget.characterName.c_str());
         } else {
             if (plugin_->snapshots_.empty()) return;
             static int selectedSnapIdx = 0;

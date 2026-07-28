@@ -417,7 +417,7 @@ inline std::uint32_t Color(int r, int g, int b, int a = 255) {
 
 inline bool IsEnabled() {
     detail::UpdateHotkey();
-    return detail::DrawingEnabled;
+    return detail::DrawingEnabled && !g_HideAllDrawing;
 }
 
 inline void SetEnabled(bool enabled) {

@@ -1,6 +1,9 @@
 #pragma once
 #include "IDeveloperTab.h"
 #include "../DeveloperToolsPlugin.h"
+#include <mutex>
+#include <string>
+#include <vector>
 
 namespace Plugins::DevTools {
 
@@ -28,6 +31,14 @@ private:
         char lastEvent[12] = {};
     };
 
+    struct LiveTargetInfo {
+        bool isValid = false;
+        std::string characterName;
+        std::string name;
+        uintptr_t address = 0;
+        bool isLocalPlayer = false;
+    };
+
     mutable SRWLOCK buffLock_ = SRWLOCK_INIT;
     BuffEntry buffEntries_[256] = {};
     int buffCursor_ = 0;
@@ -41,21 +52,54 @@ private:
     std::uint32_t lastTargetNetId_ = 0;
     int inspectMode_ = 0; // 0 = Live, 1 = Snapshot
 
+    mutable std::mutex targetLock_;
+    LiveTargetInfo cachedTargetInfo_;
+    int lastUpdateTick_ = 0;
+
 public:
     using IDeveloperTab::IDeveloperTab;
 
     const char* GetTabName() const override { return "Buffs"; }
 
     void OnUpdate() override {
+        if (!plugin_->enabled_) {
+            std::lock_guard<std::mutex> lk(targetLock_);
+            cachedTargetInfo_ = {};
+            return;
+        }
+
         if (inspectMode_ == 1) {
+            std::lock_guard<std::mutex> lk(targetLock_);
+            cachedTargetInfo_ = {};
             return; // No live updates when inspecting snapshot
         }
+
+        const int now = SDK::Variables::TickCount();
+        if (now - lastUpdateTick_ < 100) {
+            return;
+        }
+        lastUpdateTick_ = now;
 
         const auto target = plugin_->GetFocusedObject();
         const std::uint32_t currentNetId = target.IsValid() ? static_cast<std::uint32_t>(target.NetworkId()) : 0;
         if (currentNetId != lastTargetNetId_) {
             ResetBuffEntries();
             lastTargetNetId_ = currentNetId;
+        }
+
+        LiveTargetInfo targetInfo;
+        if (target.IsValid()) {
+            targetInfo.isValid = true;
+            targetInfo.characterName = target.CharacterName();
+            targetInfo.name = target.Name();
+            targetInfo.address = target.Address();
+            const auto localPlayer = SDK::ObjectManager::Player();
+            targetInfo.isLocalPlayer = localPlayer.IsValid() && target.Address() == localPlayer.Address();
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(targetLock_);
+            cachedTargetInfo_ = std::move(targetInfo);
         }
 
         const float gameTime = SDK::Game::Time();
@@ -163,20 +207,22 @@ public:
         // Live mode drawing
         const float gameTime = SDK::Game::Time();
         const int now = SDK::Game::TickCount();
-        const auto player = plugin_->GetFocusedObject();
+        
+        LiveTargetInfo targetInfo;
+        {
+            std::lock_guard<std::mutex> lk(targetLock_);
+            targetInfo = cachedTargetInfo_;
+        }
 
-        if (!player.IsValid()) {
+        if (!targetInfo.isValid) {
             ImGui::Text("No focused live object in range.");
             return;
         }
 
-        const auto localPlayer = SDK::ObjectManager::Player();
-        const bool isLocalPlayer = localPlayer.IsValid() && player.Address() == localPlayer.Address();
-
         ImGui::Text("Inspecting Buffs: %s (%s) | Addr: 0x%llX",
-                    player.CharacterName().c_str(), player.Name().c_str(),
-                    static_cast<unsigned long long>(player.Address()));
-        if (isLocalPlayer) {
+                    targetInfo.characterName.c_str(), targetInfo.name.c_str(),
+                    static_cast<unsigned long long>(targetInfo.address));
+        if (targetInfo.isLocalPlayer) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "[Local Player]");
         }
@@ -244,25 +290,25 @@ public:
                 : 0;
 
             ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
+            ImGui::TableNextColumn();
             ImGui::TextUnformatted(entry.name);
-            ImGui::TableSetColumnIndex(1);
+            ImGui::TableNextColumn();
             ImGui::TextUnformatted(entry.hasBuff ? "1" : "0");
-            ImGui::TableSetColumnIndex(2);
+            ImGui::TableNextColumn();
             ImGui::Text("%d", entry.sdkCount);
-            ImGui::TableSetColumnIndex(3);
+            ImGui::TableNextColumn();
             ImGui::TextUnformatted(entry.live ? "1" : "0");
-            ImGui::TableSetColumnIndex(4);
+            ImGui::TableNextColumn();
             ImGui::Text("%d", entry.liveStacks);
-            ImGui::TableSetColumnIndex(5);
+            ImGui::TableNextColumn();
             ImGui::TextUnformatted(entry.lastEvent[0] ? entry.lastEvent : "-");
-            ImGui::TableSetColumnIndex(6);
+            ImGui::TableNextColumn();
             ImGui::Text("%d", entry.type);
-            ImGui::TableSetColumnIndex(7);
+            ImGui::TableNextColumn();
             ImGui::Text("%.2f", RemainingBuffTime(entry, gameTime));
-            ImGui::TableSetColumnIndex(8);
+            ImGui::TableNextColumn();
             ImGui::Text("%dms", ageMs);
-            ImGui::TableSetColumnIndex(9);
+            ImGui::TableNextColumn();
             ImGui::Text("0x%llX", static_cast<unsigned long long>(entry.address));
         }
 
@@ -271,15 +317,19 @@ public:
 
     void OnCopyHotkey() override {
         if (inspectMode_ == 0) {
-            const auto target = plugin_->GetFocusedObject();
-            if (!target.IsValid()) return;
+            LiveTargetInfo targetInfo;
+            {
+                std::lock_guard<std::mutex> lk(targetLock_);
+                targetInfo = cachedTargetInfo_;
+            }
+            if (!targetInfo.isValid) return;
 
             BuffEntry entries[256] = {};
             int count = 0;
             CopyBuffEntries(entries, count);
 
             std::string dump = "=== DEVELOPER TOOLS BUFFS INSPECTOR (LIVE) ===\n";
-            dump += "Target: " + target.CharacterName() + " | Address: 0x" + ToHexStr(target.Address()) + "\n";
+            dump += "Target: " + targetInfo.characterName + " | Address: 0x" + ToHexStr(targetInfo.address) + "\n";
 
             const float gameTime = SDK::Game::Time();
             for (int i = 0; i < count; ++i) {
@@ -297,7 +347,7 @@ public:
             }
 
             ImGui::SetClipboardText(dump.c_str());
-            NightSharpDebug::Logf("[Dev] Copied buff details of %s (Live) to Clipboard!", target.CharacterName().c_str());
+            NightSharpDebug::Logf("[Dev] Copied buff details of %s (Live) to Clipboard!", targetInfo.characterName.c_str());
         } else {
             if (plugin_->snapshots_.empty()) return;
             static int selectedSnapIdx = 0;
