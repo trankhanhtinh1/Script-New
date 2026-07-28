@@ -150,6 +150,7 @@
     <ClInclude Include="Core\CoreZoomHack.h" />
     <ClInclude Include="Core\Globals.h" />
     <ClInclude Include="Core\Humanizer.h" />
+    <ClInclude Include="Core\IoctlFilter.h" />
     <ClInclude Include="Core\KuroCombatCoordinator.h" />
     <ClInclude Include="Core\LeagueObfuscation.h" />
     <ClInclude Include="Core\offset.h" />
@@ -275,6 +276,7 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Rengar.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Senna.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Sylas.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Syndra.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\TwistedFate.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Viktor.h" />
@@ -470,6 +472,12 @@
     <ClInclude Include="Plugins\PluginManager.h" />
     <ClInclude Include="Plugins\PluginRegistry.h" />
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\EventLoggerTab.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\IDeveloperTab.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\ObjectDetectorTab.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\PlayerBuffInspectorTab.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\SpellItemInspectorTab.h" />
+    <ClInclude Include="Plugins\Utility\DeveloperTools\StatsInspectorTab.h" />
     <ClInclude Include="Plugins\Utility\DeveloperToolsPlugin.h" />
     <ClInclude Include="Plugins\Utility\IsDeadDebugPlugin.h" />
     <ClInclude Include="Plugins\Utility\MinionTracePlugin.h" />

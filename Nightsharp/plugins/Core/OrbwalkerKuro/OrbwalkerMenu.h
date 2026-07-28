@@ -53,6 +53,7 @@ public:
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
     bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
+    int AttackEarlyWindow() const { return SliderValue(attackEarlyWindow_, 25); }
     int AkshanPassiveMode() const { return ListValue(akshanPassiveMode_, 0); }
     bool WindWallCheck() const { return BoolValue(windWallCheck_, true); }
 
@@ -158,6 +159,7 @@ private:
             attackBarrels_ = advancedMenu_->Add(new MenuBool("attackBarrels", "Barrels", false));
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
             attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
+            attackEarlyWindow_ = advancedMenu_->Add(new MenuSlider("attackEarlyWindow", "Attack Early Window (ms)", 25, 0, 250));
 
             advancedMenu_->Add(new MenuSeparator("separatorCollision", "Collision"));
             windWallCheck_ = advancedMenu_->Add(new MenuBool(
@@ -215,6 +217,7 @@ private:
     MenuBool* attackBarrels_ = nullptr;
     MenuBool* attackClones_ = nullptr;
     MenuBool* attackSpecialMinions_ = nullptr;
+    MenuSlider* attackEarlyWindow_ = nullptr;
     MenuList* akshanPassiveMode_ = nullptr;
     MenuBool* windWallCheck_ = nullptr;
 

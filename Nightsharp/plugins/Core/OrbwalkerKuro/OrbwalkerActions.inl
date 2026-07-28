@@ -21,18 +21,12 @@ inline bool OrbwalkerBase::EvadeBlocksAttack(int now) const {
             now, menu_.EvadeHandoffGrace());
 }
 
-// TEMP PROBE (remove after FPS profiling). ACCUMULATOR: sum ms per name, ONE file
-// write per second → `[OrbAcc/1s] name=totalMs/count`. No per-call file-I/O
-// (avoids observer effect). Game-thread only, no locking. Defined here (in the
-// first .inl included) so both Actions.inl and EventHandlers.inl can use it.
 struct OrbProbeAcc { const char* n; double ms; unsigned cnt; };
 inline OrbProbeAcc g_orbAcc[48] = {};
 inline int g_orbAccN = 0;
 inline DWORD g_orbAccLast = 0;
 
 struct OrbProbe {
-    // Off — flip to true to re-enable FPS-drop profiling. While false the ctor
-    // and dtor bodies compile away entirely, so the call sites cost nothing.
     static constexpr bool kEnabled = false;
 
     const char* n;
@@ -95,15 +89,11 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
                           context_.attackDelayMs +
                           ChampionExtraAttackDelayMs(player) +
                           AttackSafetyMs();
-    // lastAutoAttackTick is stamped when the DoCast confirmation arrives, which
-    // is already one one-way ping after the server started the attack, and the
-    // next order needs another trip to get there. Without the lead every cycle
-    // silently gives away a ping's worth of attack speed — the faster the
-    // attack speed, the larger the share of the cycle that costs.
-    return static_cast<float>(now) + AttackPingLeadMs() + extraWindup >= readyAt;
+
+    return static_cast<float>(now) + AttackPingLeadMs() + extraWindup + static_cast<float>(menu_.AttackEarlyWindow()) >= readyAt;
 }
 
-inline void OrbwalkerBase::CheckAfterAttack() {
+inline void OrbwalkerBase::CheckAttackCastedBefore() {
     if (context_.lastAutoAttackTick <= 0) {
         return;
     }
@@ -127,7 +117,7 @@ inline bool OrbwalkerBase::IsAutoAttacking() {
 
 inline bool OrbwalkerBase::IsWindingUp() {
     ExpirePendingAttack();
-    CheckAfterAttack();
+    CheckAttackCastedBefore();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return false;
@@ -138,18 +128,18 @@ inline bool OrbwalkerBase::IsWindingUp() {
     if (context_.lastAutoAttackTick <= 0 || context_.attackCastComplete) {
         return false;
     }
-    return Tick() < AttackCastReadyTick(player);
+    return Tick() < AttackCastDoneTick(player);
 }
 
 inline bool OrbwalkerBase::IsAttackCastComplete() {
     ExpirePendingAttack();
-    CheckAfterAttack();
+    CheckAttackCastedBefore();
     return context_.lastAutoAttackTick > 0 && context_.attackCastComplete;
 }
 
 inline int OrbwalkerBase::AttackCastDelayRemaining() {
     ExpirePendingAttack();
-    CheckAfterAttack();
+    CheckAttackCastedBefore();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) {
         return 0;
@@ -158,12 +148,12 @@ inline int OrbwalkerBase::AttackCastDelayRemaining() {
         (context_.lastAutoAttackTick <= 0 || context_.attackCastComplete)) {
         return 0;
     }
-    return std::max(0, AttackCastReadyTick(player) - Tick());
+    return std::max(0, AttackCastDoneTick(player) - Tick());
 }
 
 inline int OrbwalkerBase::NextAttackReadyTick() {
     ExpirePendingAttack();
-    CheckAfterAttack();
+    CheckAttackCastedBefore();
     const auto player = GameObjects::Player();
     if (!context_.attackEnabled || !player.IsValid() || player.IsDead()) {
         return 0;
@@ -179,7 +169,7 @@ inline int OrbwalkerBase::AttackCooldownRemaining() {
 inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) {
     (void)disableMissileCheck;
     ExpirePendingAttack();
-    CheckAfterAttack();
+    CheckAttackCastedBefore();
     const int now = Tick();
     if (EvadeBlocksMovement(now) || !context_.moveEnabled ||
         now < context_.allPauseTick || now < context_.movePauseTick) {
@@ -285,8 +275,7 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
 
 inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     ExpirePendingAttack();
-    // Champion scripts call Attack() directly, so the wall filter used by
-    // IsValidCurrentAttackTarget below has to be in sync here too.
+
     OrbwalkingDetail::WallCheckEnabled = menu_.WindWallCheck();
     const auto player = GameObjects::Player();
     if (!context_.attackEnabled ||
@@ -507,13 +496,6 @@ inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
 }
 
 inline float OrbwalkerBase::AttackSafetyMs() const {
-    // The safety window has to shrink with the attack cycle. A flat 35ms is
-    // noise at 1.5s per attack but a real slice of a 350ms cycle, and the old
-    // `attackDelayMs <= 450 ? +30ms` term made that worse in the wrong
-    // direction: crossing into high attack speed *added* delay, so an
-    // attack-speed steroid landing mid-fight never produced a faster next
-    // attack. Scaling by the cycle keeps the same relative margin at every
-    // attack speed, so extra attack speed now actually shortens the wait.
     const float cycleSafety =
         std::clamp(context_.attackDelayMs * kAttackSafetyRatio,
                    kMinAttackSafetyMs,
@@ -541,53 +523,6 @@ inline float OrbwalkerBase::LiveAttackSpeedMod(const AIHeroClient& player) const
     return (mod >= kMinAttackSpeedMod && mod <= kMaxAttackSpeedMod) ? mod : 1.0f;
 }
 
-// The raw getters behind ReadAttackDelayFor/ReadAttackWindupFor do not
-// necessarily return attack-speed-adjusted timings: GetAttackWindup reads out of
-// the champion's attack-profile table, and either getter falls back to a flat
-// constant when its RVA no longer resolves on the current patch. Whenever the
-// value is a *base* timing, the orbwalker measured every cycle against a number
-// that never moved, so an attack-speed steroid cast mid-cycle produced no faster
-// next attack — the wait had effectively been decided before the buff landed.
-//
-// Rather than assume either way, watch the raw value across the first real
-// attack-speed change of the game: if the mod moves and the raw value follows,
-// it is already scaled and is used as-is; if the raw value sits still, it is a
-// base timing and gets divided by the mod from then on. Until a change is seen
-// the previous behaviour is kept, so nothing regresses on builds where the
-// getters were already live.
-inline void OrbwalkerBase::CalibrateAttackTimingScale(const AIHeroClient& player,
-                                                      float rawDelayMs,
-                                                      float rawWindupMs) {
-    if (context_.attackTimingCalibrated || rawDelayMs <= 0.0f || rawWindupMs <= 0.0f) {
-        return;
-    }
-
-    const float mod = player.AttackSpeedMod();
-    if (mod < kMinAttackSpeedMod || mod > kMaxAttackSpeedMod) {
-        return;
-    }
-
-    if (context_.calibrationSpeedMod <= 0.0f) {
-        context_.calibrationSpeedMod = mod;
-        context_.calibrationRawDelayMs = rawDelayMs;
-        context_.calibrationRawWindupMs = rawWindupMs;
-        return;
-    }
-
-    const float modShift = std::fabs(mod - context_.calibrationSpeedMod) /
-                           context_.calibrationSpeedMod;
-    if (modShift < kCalibrationMinShift) {
-        return;
-    }
-
-    const auto tracksSpeed = [modShift](float current, float sampled) {
-        return std::fabs(current - sampled) / sampled >= modShift * 0.5f;
-    };
-    context_.rawDelayTracksSpeed = tracksSpeed(rawDelayMs, context_.calibrationRawDelayMs);
-    context_.rawWindupTracksSpeed = tracksSpeed(rawWindupMs, context_.calibrationRawWindupMs);
-    context_.attackTimingCalibrated = true;
-}
-
 inline void OrbwalkerBase::ReadAttackTimingsFromMemory(const AIHeroClient& player) {
     if (!player.IsValid() || player.IsDead()) {
         context_.attackDelayMs = kDefaultAttackDelayMs;
@@ -597,24 +532,14 @@ inline void OrbwalkerBase::ReadAttackTimingsFromMemory(const AIHeroClient& playe
 
     const float attackDelay = CoreControl::ReadAttackDelayFor(player.Address());
     const float attackWindup = CoreControl::ReadAttackWindupFor(player.Address());
-    const bool delayRead = attackDelay > 0.0f;
-    const bool windupRead = attackWindup > 0.0f;
-    const float rawDelayMs = delayRead ? attackDelay * 1000.0f : kDefaultAttackDelayMs;
-    const float rawWindupMs = windupRead ? attackWindup * 1000.0f : kDefaultAttackWindupMs;
-
-    if (delayRead && windupRead) {
-        CalibrateAttackTimingScale(player, rawDelayMs, rawWindupMs);
-    }
-
+    
     const float speedMod = LiveAttackSpeedMod(player);
-    // A defaulted timing is a flat constant, so it always needs the mod applied.
-    const bool scaleDelay = !delayRead || !context_.rawDelayTracksSpeed;
-    const bool scaleWindup = !windupRead || !context_.rawWindupTracksSpeed;
-    context_.attackDelayMs = scaleDelay ? rawDelayMs / speedMod : rawDelayMs;
-    context_.attackWindupMs = scaleWindup ? rawWindupMs / speedMod : rawWindupMs;
+
+    context_.attackDelayMs = attackDelay > 0.0f ? attackDelay * 1000.0f : (kDefaultAttackDelayMs / speedMod);
+    context_.attackWindupMs = attackWindup > 0.0f ? attackWindup * 1000.0f : (kDefaultAttackWindupMs / speedMod);
 }
 
-inline int OrbwalkerBase::AttackCastReadyTick(const AIHeroClient& player) {
+inline int OrbwalkerBase::AttackCastDoneTick(const AIHeroClient& player) {
     ReadAttackTimingsFromMemory(player);
     const int attackTick = context_.pendingAttack
         ? context_.pendingAttackTick

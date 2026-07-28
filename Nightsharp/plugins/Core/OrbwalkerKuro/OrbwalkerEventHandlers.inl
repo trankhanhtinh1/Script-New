@@ -125,11 +125,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     // gated from the same event at the same instant.
     const int manualAttackStartTick = now;
     const int attackStartTick = hadPendingAttack
-        ? (isAzirSoldierAttack
-            ? context_.pendingAttackTick + static_cast<int>(OneWayPingMs())
-            : std::max(
-                context_.pendingAttackTick + static_cast<int>(OneWayPingMs()),
-                now))
+        ? context_.pendingAttackTick
         : manualAttackStartTick;
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
@@ -169,9 +165,12 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         const std::string championName = player.IsValid()
             ? player.CharacterName()
             : std::string(args.Sender.CharacterName);
-        const char* matchType = resetMatch == AutoAttackResetMatch::SpellName
-            ? "spell-name"
-            : "champion-slot";
+        std::string matchTypeDetail;
+        if (resetMatch == AutoAttackResetMatch::SpellName) {
+            matchTypeDetail = "spell-name: " + std::string(args.SpellName ? args.SpellName : "unknown");
+        } else {
+            matchTypeDetail = "champion-slot: " + std::to_string(args.Slot);
+        }
         const char* reason = resetMatch == AutoAttackResetMatch::SpellName
             ? "auto-attack reset spell name"
             : "champion/slot auto-attack reset";
@@ -179,7 +178,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         ResetAutoAttackTimerWithReason(
             reason,
             "OnProcessSpell",
-            matchType,
+            matchTypeDetail.c_str(),
             championName.c_str(),
             args.SpellName,
             args.Slot,
@@ -253,20 +252,12 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
             OrbwalkingDetail::FireAfterAttack(afterArgs);
         }
     } else {
-        const int ping = Game::Ping();
-        const int pingCheck = 33;
-        if (ping <= pingCheck) {
-            SDK::Utils::DelayAction::Add(pingCheck - ping, [eventTarget]() {
-                if (eventTarget.IsValid()) {
-                    OrbwalkingActionArgs afterArgs(
-                        OrbwalkingType::AfterAttack,
-                        eventTarget,
-                        eventTarget.Position(),
-                        "Kuro");
-                    OrbwalkingDetail::FireAfterAttack(afterArgs);
-                }
-            });
-        } else {
+        const int windupEndTick = context_.lastAutoAttackTick + static_cast<int>(context_.attackWindupMs);
+        int delayMs = windupEndTick - now;
+        if (delayMs < 0) {
+            delayMs = 0;
+        }
+        SDK::Utils::DelayAction::Add(delayMs, [eventTarget]() {
             if (eventTarget.IsValid()) {
                 OrbwalkingActionArgs afterArgs(
                     OrbwalkingType::AfterAttack,
@@ -275,7 +266,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
                     "Kuro");
                 OrbwalkingDetail::FireAfterAttack(afterArgs);
             }
-        }
+        });
     }
 }
 
@@ -519,12 +510,19 @@ inline OrbwalkerBase::AutoAttackResetMatch OrbwalkerBase::GetLocalAutoAttackRese
     if (IsAutoAttackReset(args.SpellName)) {
         return AutoAttackResetMatch::SpellName;
     }
-    if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
-        const auto player = GameObjects::Player();
-        if (player.IsValid() && args.SpellName[0]) {
-            auto spell = player.GetSpell(static_cast<SpellSlot>(args.Slot));
-            if (spell.IsValid() && _stricmp(spell.Name().c_str(), args.SpellName) == 0) {
-                return AutoAttackResetMatch::ChampionSlot;
+    const auto player = GameObjects::Player();
+    if (player.IsValid()) {
+        if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
+            return AutoAttackResetMatch::ChampionSlot;
+        }
+        if (args.SpellName && args.SpellName[0]) {
+            for (int slot = 0; slot < 4; ++slot) {
+                if (IsLocalAutoAttackResetSlot(args.Sender, slot)) {
+                    auto spell = player.GetSpell(static_cast<SpellSlot>(slot));
+                    if (spell.IsValid() && _stricmp(spell.Name().c_str(), args.SpellName) == 0) {
+                        return AutoAttackResetMatch::ChampionSlot;
+                    }
+                }
             }
         }
     }

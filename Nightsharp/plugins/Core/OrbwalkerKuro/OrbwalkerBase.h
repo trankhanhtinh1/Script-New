@@ -159,7 +159,7 @@ private:
         std::uint32_t senderNetworkId = 0,
         std::uint32_t sourceNetworkId = 0);
     void ExpirePendingAttack();
-    void CheckAfterAttack();
+    void CheckAttackCastedBefore();
     int PendingAttackTimeoutMs();
     int DoCastMoveGateTimeoutMs();
     float OneWayPingMs() const;
@@ -173,11 +173,8 @@ private:
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     float LiveAttackSpeedMod(const AIHeroClient& player) const;
-    void CalibrateAttackTimingScale(const AIHeroClient& player,
-                                    float rawDelayMs,
-                                    float rawWindupMs);
     void ReadAttackTimingsFromMemory(const AIHeroClient& player);
-    int AttackCastReadyTick(const AIHeroClient& player);
+    int AttackCastDoneTick(const AIHeroClient& player);
     int AttackReadyTick(const AIHeroClient& player);
     void TryShowFakeClick(Hud::ClickType type, const Vector3& position, int now, int& lastTick);
     void TrackFakeCursorClick(const Vector3& position, int now);
