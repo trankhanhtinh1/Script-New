@@ -857,7 +857,7 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
     }
 
-    if (NightSharpMenu::showMenu && ImGui::GetCurrentContext()) {
+    if ((NightSharpMenu::showMenu || NightSharpMenu::showPluginSelector) && ImGui::GetCurrentContext()) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }

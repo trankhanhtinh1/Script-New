@@ -46,6 +46,7 @@ namespace NightSharpMenu {
     }
 
     inline bool showMenu = true;
+    inline bool showPluginSelector = true;
     inline int activePrimaryIdx = -1;
     inline int activeSecondaryIdx = -1;
     inline bool primarySelected = false;
@@ -979,6 +980,12 @@ namespace NightSharpMenu {
     inline float permaDragOffY = 0.0f;
 
     inline bool IsPointInside(float x, float y) {
+        if (showPluginSelector) {
+            if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
+                return true;
+            }
+        }
+
         if (!showMenu) {
             return false;
         }
@@ -1087,7 +1094,7 @@ namespace NightSharpMenu {
         WPARAM wParam,
         float clientX,
         float clientY) {
-        if (!showMenu) {
+        if (!showMenu && !showPluginSelector) {
             ResetMouseInputCapture();
             return false;
         }
@@ -1639,18 +1646,32 @@ namespace NightSharpMenu {
     }
 
     inline void DrawPluginsSection() {
-        DrawSectionTitle("Plugin Manager");
-        DrawPluginManagerFilters();
-        DrawPluginManagerRows(PluginRegistry::PluginKind::Plugin, "No source plugins for this filter.");
-
-        const int extCount = CountPluginManagerRows(PluginRegistry::PluginKind::External);
-        if (extCount <= 0) {
-            return;
-        }
-
+        DrawSectionTitle("Plugin Selector");
+        
         ImGui::Spacing();
-        DrawSectionTitle("External Plugins");
-        DrawPluginManagerRows(PluginRegistry::PluginKind::External, "No external plugins for this filter.", 1000);
+        ImGui::TextWrapped("Plugin Selection is now managed in a runtime floating window.");
+        ImGui::TextWrapped("You can load, unload, and configure automatic loading there.");
+        ImGui::Spacing();
+        
+        if (ImGui::Button("Open Plugin Selector Window", ImVec2(240.0f, 40.0f))) {
+            showPluginSelector = true;
+        }
+        
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        DrawSectionTitle("Currently Loaded Plugins");
+        int loadedCount = 0;
+        for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
+            if (PluginRegistry::Plugins[i].Loaded) {
+                loadedCount++;
+                ImGui::BulletText("%s (%s)", PluginRegistry::Plugins[i].Name, PluginRegistry::CategoryName(PluginRegistry::Plugins[i].Category));
+            }
+        }
+        if (loadedCount == 0) {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No plugins are currently loaded.");
+        }
     }
 
     inline int LoadedPluginCount() {
@@ -2261,6 +2282,107 @@ namespace NightSharpMenu {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "This plugin has no custom ImGui menu callback.");
     }
 
+    inline void DrawPluginSelectorWindow() {
+        if (!showPluginSelector) {
+            return;
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(650, 420), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("NightSharp Plugin Selector", &showPluginSelector, ImGuiWindowFlags_NoCollapse)) {
+            ImGui::TextColored(ImVec4(0.0f, 0.9f, 1.0f, 1.0f), "Choose plugins to load in this session");
+            ImGui::Separator();
+
+            if (ImGui::BeginTabBar("PluginCategoriesTabBar")) {
+                const char* tabNames[] = { "Core Plugins", "Champion Scripts", "Utility Plugins", "Misc Plugins" };
+                PluginRegistry::PluginCategory categories[] = {
+                    PluginRegistry::PluginCategory::Core,
+                    PluginRegistry::PluginCategory::Champion,
+                    PluginRegistry::PluginCategory::Utility,
+                    PluginRegistry::PluginCategory::Misc
+                };
+
+                for (int catIdx = 0; catIdx < 4; ++catIdx) {
+                    if (ImGui::BeginTabItem(tabNames[catIdx])) {
+                        if (ImGui::BeginTable("PluginSelectorTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 260))) {
+                            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                            ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthStretch);
+                            ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+                            ImGui::TableSetupColumn("Auto Load", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+                            ImGui::TableHeadersRow();
+
+                            for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
+                                auto& p = PluginRegistry::Plugins[i];
+                                if (p.Category != categories[catIdx]) {
+                                    continue;
+                                }
+
+                                if (p.Category == PluginRegistry::PluginCategory::Champion && !PluginRegistry::CanPluginLoad(i)) {
+                                    continue;
+                                }
+
+                                ImGui::PushID(i);
+                                ImGui::TableNextRow();
+
+                                // Status Column
+                                ImGui::TableNextColumn();
+                                ImVec4 statusColor = p.Loaded ? ImVec4(0.30f, 0.86f, 0.34f, 1.0f) : ImVec4(0.62f, 0.64f, 0.70f, 1.0f);
+                                ImGui::TextColored(statusColor, p.Loaded ? "[ACTIVE]" : "[INACTIVE]");
+
+                                // Plugin Name Column
+                                ImGui::TableNextColumn();
+                                ImGui::Text("%s", p.Name ? p.Name : "Unknown");
+                                if (p.ChampionName && p.ChampionName[0]) {
+                                    ImGui::SameLine();
+                                    ImGui::TextColored(ImVec4(0.68f, 0.78f, 1.0f, 0.95f), "(%s)", p.ChampionName);
+                                }
+
+                                // Action Column
+                                ImGui::TableNextColumn();
+                                if (p.Loaded) {
+                                    if (ImGui::Button("Unload", ImVec2(80.0f, 0.0f))) {
+                                        PluginRegistry::UnloadPlugin(i);
+                                    }
+                                } else {
+                                    if (ImGui::Button("Load", ImVec2(80.0f, 0.0f))) {
+                                        PluginRegistry::LoadPlugin(i);
+                                    }
+                                }
+
+                                // Auto Load Column
+                                ImGui::TableNextColumn();
+                                bool alwaysLoad = p.AlwaysLoad;
+                                if (ImGui::Checkbox("Always Load", &alwaysLoad)) {
+                                    PluginRegistry::SetAlwaysLoad(i, alwaysLoad);
+                                }
+
+                                ImGui::PopID();
+                            }
+                            ImGui::EndTable();
+                        }
+                        ImGui::EndTabItem();
+                    }
+                }
+                ImGui::EndTabBar();
+            }
+            
+            ImGui::Separator();
+            if (ImGui::Button("Close Selector", ImVec2(120.0f, 30.0f))) {
+                showPluginSelector = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load All Auto-Loads", ImVec2(165.0f, 30.0f))) {
+                for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
+                    if (PluginRegistry::Plugins[i].AlwaysLoad) {
+                        PluginRegistry::LoadPlugin(i);
+                    } else {
+                        PluginRegistry::UnloadPlugin(i);
+                    }
+                }
+            }
+        }
+        ImGui::End();
+    }
+
     inline void RenderLegacy();
 
     inline void Render() {
@@ -2272,6 +2394,7 @@ namespace NightSharpMenu {
         KeepCoreMenuFirst();
 
         DrawPermaShowOverlay();
+        DrawPluginSelectorWindow();
 
         if (!showMenu) {
             ResetMouseInputCapture();
