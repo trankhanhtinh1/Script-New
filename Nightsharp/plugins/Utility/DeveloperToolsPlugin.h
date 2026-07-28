@@ -586,6 +586,7 @@ inline DeveloperToolsPlugin* s_instance = nullptr;
 #include "DeveloperTools/SpellItemInspectorTab.h"
 #include "DeveloperTools/PlayerBuffInspectorTab.h"
 #include "DeveloperTools/StatsInspectorTab.h"
+#include "DeveloperTools/NavigationTab.h"
 
 namespace Plugins {
 
@@ -602,6 +603,7 @@ inline void DeveloperToolsPlugin::OnLoad() {
     tabs_.push_back(std::make_unique<DevTools::SpellItemInspectorTab>(this));
     tabs_.push_back(std::make_unique<DevTools::PlayerBuffInspectorTab>(this));
     tabs_.push_back(std::make_unique<DevTools::StatsInspectorTab>(this));
+    tabs_.push_back(std::make_unique<DevTools::NavigationTab>(this));
 
     for (auto& tab : tabs_) {
         tab->OnLoad();
