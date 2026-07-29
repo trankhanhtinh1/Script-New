@@ -190,6 +190,50 @@ inline float GetCurrentAutoAttackDamage(const AIHeroClient& player,
     return damage;
 }
 
+inline bool SupportsPredictedCriticalDamage(const AIHeroClient& player,
+                                            const AIBaseClient& target) {
+    if (!player.IsValid() || !target.IsValid()) {
+        return false;
+    }
+
+    const AttackableUnit attackTarget(target.Handle());
+    if (WillUseAzirSoldierAttack(player, attackTarget)) {
+        return false;
+    }
+
+    // These attacks do not use the ordinary one-projectile AD crit formula.
+    // Their existing champion-specific damage remains authoritative.
+    const std::string name = player.CharacterName();
+    return _stricmp(name.c_str(), "Ashe") != 0 &&
+           _stricmp(name.c_str(), "Corki") != 0 &&
+           _stricmp(name.c_str(), "Graves") != 0;
+}
+
+inline float GetPredictedAutoAttackDamage(const AIHeroClient& player,
+                                          const AIBaseClient& target,
+                                          bool applyPredictedCrit,
+                                          float critDamageMultiplier) {
+    const float normalDamage = GetCurrentAutoAttackDamage(player, target);
+    if (!applyPredictedCrit ||
+        !SupportsPredictedCriticalDamage(player, target)) {
+        return normalDamage;
+    }
+
+    // At 100% crit chance DamagePassives already includes the live crit bonus.
+    if (player.Crit() >= FarmLogic::kCertainCritProbability) {
+        return normalDamage;
+    }
+
+    const float multiplier =
+        std::isfinite(critDamageMultiplier)
+            ? std::clamp(critDamageMultiplier, 1.0f, 4.0f)
+            : 2.0f;
+    const float crittablePhysicalDamage =
+        Damage::GetAutoAttackDamage(player, target, false);
+    return normalDamage +
+           std::max(0.0f, multiplier - 1.0f) * crittablePhysicalDamage;
+}
+
 inline bool IsAzirSoldierAttackEvent(
     const Events::ProcessSpellEventArgs& args
 ) {

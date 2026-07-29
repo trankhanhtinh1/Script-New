@@ -1039,8 +1039,7 @@ inline bool ThreatConditionMet(const AIHeroClient& enemy,
         return enemy.HasBuff("anniepassiveprimed") ||
                enemy.HasBuff("pyromania_particle");
     case ThreatCondition::TwistedFateGoldCard:
-        return enemy.HasBuff("GoldCardPreAttack") ||
-               enemy.HasBuff("goldcardpreattack");
+        return enemy.HasBuff("GoldCardPreAttack");
     default:
         return true;
     }

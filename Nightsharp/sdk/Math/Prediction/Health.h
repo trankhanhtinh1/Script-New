@@ -366,7 +366,7 @@ inline float GetPredictionDefault(const AIBaseClient& unit, int time, int delay 
         float landTime = static_cast<float>(pd.StartTick) + pd.Delay
             + 1000.0f * (pd.Source.IsMelee() ? 0.0f
                 : std::max(0.0f, unit.Distance(pd.Source) - pd.TargetBoundingRadius)
-                  / static_cast<float>(pd.ProjectileSpeed))
+                  / static_cast<float>(std::max(1, pd.ProjectileSpeed)))
             + static_cast<float>(delay);
 
         if (landTime < static_cast<float>(now + time)) {
@@ -395,13 +395,17 @@ inline float GetPredictionSimulated(const AIBaseClient& unit, int time) {
 
             // DLL uses do-while (executes at least once)
             do {
-                float travelTime = pd.Delay / 1000.0f
-                    + (pd.Source.IsMelee() ? 0.0f
+                // StartTick/AnimationTime/endTime are milliseconds. The old
+                // port converted windup + flight to seconds here and then added
+                // that value directly to a millisecond tick, making simulated
+                // minion attacks land hundreds of milliseconds too early.
+                const float travelTimeMs = pd.Delay
+                    + 1000.0f * (pd.Source.IsMelee() ? 0.0f
                         : std::max(0.0f, unit.Distance(pd.Source) - pd.TargetBoundingRadius)
-                          / static_cast<float>(pd.ProjectileSpeed));
+                          / static_cast<float>(std::max(1, pd.ProjectileSpeed)));
 
                 if (tick >= now
-                    && static_cast<float>(tick) + travelTime < static_cast<float>(endTime)) {
+                    && static_cast<float>(tick) + travelTimeMs < static_cast<float>(endTime)) {
                     hitCount++;
                 }
 

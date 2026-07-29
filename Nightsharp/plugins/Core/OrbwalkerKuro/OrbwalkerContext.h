@@ -1,5 +1,6 @@
 #pragma once
 
+#include "OrbwalkerFarmLogic.h"
 #include "OrbwalkerTypes.h"
 #include "../../../sdk/UI/Icons.h"
 
@@ -46,6 +47,8 @@ struct OrbwalkerRuntimeContext {
     int cachedTargetForceTargetNetworkId = 0;
     int cachedShouldWaitTick = -1;
     int lastRengarLeapTick = 0;
+    int lastCritProcessSpellTick = -1;
+    int lastCritProcessSpellTargetNetworkId = 0;
 
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
@@ -73,6 +76,7 @@ struct OrbwalkerRuntimeContext {
 
     UI::Icons::LoadedTexture fakeCursorTexture = {};
     std::string fakeCursorTexturePath;
+    FarmLogic::CritSequenceTracker critSequence = {};
 };
 
 } // namespace OrbwalkerKuro

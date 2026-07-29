@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
 
 namespace Plugins::KuroAIO::AI::MarksmanControllerHelpers {
 
@@ -98,15 +99,39 @@ inline bool PredictionHits(int index,
            (!requireNoCollision || prediction.CollisionObjects.empty());
 }
 
+inline float SpellProjectileWallRadius(int index, float fallbackRadius) {
+    if (index < 0 || index >= 4 || !Engine::ActiveProfile) {
+        return fallbackRadius;
+    }
+    const auto& spec = Engine::ResolvedSpecs[index];
+    // Circle/cone width describes the landing area, not the travelling
+    // missile. Only line width is safe to reuse as projectile thickness.
+    return spec.Kind == CastKind::Line
+        ? std::max(fallbackRadius, spec.Width)
+        : fallbackRadius;
+}
+
+inline bool PositionProjectileWall(int index,
+                                   const Vector3& destination,
+                                   float fallbackRadius) {
+    return destination.IsValid() && !destination.IsZero() &&
+           ControllerHelpers::ProjectileWallBlocksFromPlayer(
+               destination,
+               SpellProjectileWallRadius(index, fallbackRadius));
+}
+
+inline bool TargetProjectileWall(int index,
+                                 const AIBaseClient& target,
+                                 float fallbackRadius) {
+    return target.IsValid() &&
+           PositionProjectileWall(index, target.Position(), fallbackRadius);
+}
+
 inline bool PredictionProjectileWall(int index,
                                      const SDK::PredictionOutput& prediction,
                                      float fallbackRadius) {
-    const Vector3 cast = prediction.GetCastPosition();
-    const float radius = index >= 0 && index < 4 && Engine::ActiveProfile
-        ? std::max(fallbackRadius, Engine::ResolvedSpecs[index].Width)
-        : fallbackRadius;
-    return cast.IsValid() && !cast.IsZero() &&
-           ControllerHelpers::ProjectileWallBlocksFromPlayer(cast, radius);
+    return PositionProjectileWall(
+        index, prediction.GetCastPosition(), fallbackRadius);
 }
 
 inline bool CastPredictedClear(int index,
@@ -134,17 +159,81 @@ inline bool ManualUltimatePressed() {
     return Key(Engine::AutomaticMenu, "ManualR", false);
 }
 
+// The current marksman controllers below all use projectile basic attacks.
+// Keep route scoring and temporary focus aligned with the orbwalker's own
+// projectile-wall rejection so a wall cannot turn a forced target into a
+// dead focus. Non-projectile marksmen keep their champion-specific handling.
+inline bool OrbwalkerAttackProjectileBlocked(const AIBaseClient& target) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || !target.IsValid()) return false;
+    static constexpr std::array<const char*, 8> projectileMarksmen = {
+        "Caitlyn", "Ezreal", "Jhin", "KogMaw",
+        "MissFortune", "Tristana", "Twitch", "Varus",
+    };
+    const std::string championName = player.CharacterName();
+    bool wallBlocksAttack = false;
+    for (const char* champion : projectileMarksmen) {
+        if (ControllerHelpers::NameEquals(
+                championName.c_str(), champion)) {
+            wallBlocksAttack = true;
+            break;
+        }
+    }
+    return wallBlocksAttack &&
+           ControllerHelpers::ProjectileWallBlocksFromPlayer(
+               target.Position(), 0.0f);
+}
+
 inline bool LocalAttackAvailable(const AIBaseClient& target,
                                  float bonusRange = 0.0f) {
     return ControllerHelpers::OrbwalkerTargets(target) &&
            ControllerHelpers::InAutoAttackRange(target, bonusRange) &&
+           !OrbwalkerAttackProjectileBlocked(target) &&
            Orbwalker::CanAttack();
+}
+
+// A spell should not steal a high-value attack merely because the orbwalker
+// is a few milliseconds short of CanAttack().  This is deliberately tied to
+// the orbwalker's real target; an unrelated unit must not block a legal cast.
+inline bool LocalAttackReadySoon(const AIBaseClient& target,
+                                 int horizonMs = 220,
+                                 float bonusRange = 0.0f) {
+    if (!ControllerHelpers::OrbwalkerTargets(target) ||
+        !ControllerHelpers::InAutoAttackRange(target, bonusRange) ||
+        OrbwalkerAttackProjectileBlocked(target)) {
+        return false;
+    }
+    if (Orbwalker::CanAttack()) return true;
+    const int remaining = Orbwalker::AttackCooldownRemaining();
+    return remaining > 0 && remaining <= std::max(0, horizonMs);
+}
+
+inline float BuffRemainingMs(const AIBaseClient& target,
+                             const char* buffName) {
+    if (!target.IsValid() || !buffName || !buffName[0] ||
+        !target.HasBuff(buffName)) {
+        return 0.0f;
+    }
+    return std::max(0.0f, CoreBuffs::GetBuffRemainingTime(
+        target.Address(), buffName, SDK::Game::Time()) * 1000.0f);
 }
 
 inline bool OrbwalkerAttackRoute(const AIBaseClient& target,
                                  float bonusRange = 0.0f) {
-    return ControllerHelpers::OrbwalkerTargets(target) &&
+    // Reachability and current selection are different facts.  Any clean unit
+    // inside the live attack range is a route the orbwalker can take; the
+    // current orbwalker target receives its own stickiness bonus in
+    // SelectReachableEnemy and must not be the only attackable candidate.
+    return Orbwalker::AttackEnabled() && target.IsValid() &&
+           !target.IsDead() && target.IsEnemy() && target.IsTargetable() &&
+           !ControllerHelpers::IsCommonUntargetableOrImmune(target) &&
+           !OrbwalkerAttackProjectileBlocked(target) &&
            ControllerHelpers::InAutoAttackRange(target, bonusRange);
+}
+
+inline bool ImmediateAttackKillRoute(const AIHeroClient& target) {
+    return OrbwalkerAttackRoute(target) && Orbwalker::CanAttack() &&
+           AutoDamage(target) >= target.Health() + target.AllShield();
 }
 
 // Champion controllers may temporarily steer the orbwalker when an AA has
@@ -157,7 +246,8 @@ inline bool SetTemporaryOrbwalkerFocus(const AIHeroClient& target,
                                        int& ownedNetworkId,
                                        int& ownedUntilTick) {
     if (!Engine::ValidEnemy(target, allowedRange) ||
-        ControllerHelpers::IsCommonUntargetableOrImmune(target)) {
+        ControllerHelpers::IsCommonUntargetableOrImmune(target) ||
+        OrbwalkerAttackProjectileBlocked(target)) {
         return false;
     }
     Orbwalker::ForceTarget(AttackableUnit(target.Handle()));
@@ -166,11 +256,21 @@ inline bool SetTemporaryOrbwalkerFocus(const AIHeroClient& target,
     return true;
 }
 
+inline bool ForceImmediateAttackKill(const AIHeroClient& target,
+                                     int lifetimeMs,
+                                     int& ownedNetworkId,
+                                     int& ownedUntilTick) {
+    return ImmediateAttackKillRoute(target) &&
+        SetTemporaryOrbwalkerFocus(
+            target, ControllerHelpers::AutoAttackRange(target), lifetimeMs,
+            ownedNetworkId, ownedUntilTick);
+}
+
 inline void ClearTemporaryOrbwalkerFocus(int& ownedNetworkId,
                                          int& ownedUntilTick) {
     if (ownedNetworkId != 0) {
         const auto current = Orbwalker::ForceTarget();
-        if (current.IsValid() &&
+        if (!current.IsValid() ||
             static_cast<int>(current.NetworkId()) == ownedNetworkId) {
             Orbwalker::ForceTarget(AttackableUnit());
         }
@@ -179,13 +279,22 @@ inline void ClearTemporaryOrbwalkerFocus(int& ownedNetworkId,
     ownedUntilTick = 0;
 }
 
-inline AIHeroClient OwnedOrbwalkerFocus(int ownedNetworkId,
-                                       int ownedUntilTick,
+inline AIHeroClient OwnedOrbwalkerFocus(int& ownedNetworkId,
+                                       int& ownedUntilTick,
                                        float range) {
-    if (ownedNetworkId == 0 ||
-        ControllerHelpers::Now() > ownedUntilTick) return {};
+    if (ownedNetworkId == 0) return {};
+    if (ControllerHelpers::Now() > ownedUntilTick) {
+        ClearTemporaryOrbwalkerFocus(ownedNetworkId, ownedUntilTick);
+        return {};
+    }
     const auto target = ControllerHelpers::HeroByNetworkId(ownedNetworkId);
-    return Engine::ValidEnemy(target, range) ? target : AIHeroClient{};
+    if (!Engine::ValidEnemy(target, range) ||
+        ControllerHelpers::IsCommonUntargetableOrImmune(target) ||
+        OrbwalkerAttackProjectileBlocked(target)) {
+        ClearTemporaryOrbwalkerFocus(ownedNetworkId, ownedUntilTick);
+        return {};
+    }
+    return target;
 }
 
 inline bool RedirectBeforeAttackToFocus(
@@ -194,6 +303,7 @@ inline bool RedirectBeforeAttackToFocus(
     float bonusRange = 0.0f) {
     if (!Engine::ValidEnemy(target) ||
         ControllerHelpers::IsCommonUntargetableOrImmune(target) ||
+        OrbwalkerAttackProjectileBlocked(target) ||
         !ControllerHelpers::InAutoAttackRange(target, bonusRange)) {
         return false;
     }

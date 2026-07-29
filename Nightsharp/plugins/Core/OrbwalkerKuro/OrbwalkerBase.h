@@ -23,6 +23,7 @@
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../../sdk/Extensions/AIBaseClientExtensions.h"
 #include "../../../core/CoreControl.h"
+#include "../../../core/CoreAIHeroClient.h"
 #include "../../../DebugLog.h"
 #include "../../../FpsDropDebug.h"
 

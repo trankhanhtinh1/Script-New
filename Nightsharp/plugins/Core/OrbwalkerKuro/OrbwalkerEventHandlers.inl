@@ -202,6 +202,47 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     const int now = Tick();
     const auto player = GameObjects::Player();
 
+    std::string spellNameStr = args.SpellName ? args.SpellName : "";
+    for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
+    // Crit sequence tracking intentionally lives on OnProcessSpell and is not
+    // gated by the orbwalker's pending/timer recovery state. At this point the
+    // game has selected the concrete normal/crit attack variant.
+    const bool isAzirSoldierAttack =
+        OrbwalkingDetail::IsAzirSoldierAttackEvent(args) ||
+        OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender);
+    const int critTargetNetworkId = args.Target.IsValid()
+        ? static_cast<int>(args.Target.NetworkId)
+        : static_cast<int>(args.TargetNetworkId);
+    const bool duplicateCritProcessSpell =
+        context_.lastCritProcessSpellTick >= 0 &&
+        now - context_.lastCritProcessSpellTick >= 0 &&
+        now - context_.lastCritProcessSpellTick <= 5 &&
+        context_.lastCritProcessSpellTargetNetworkId == critTargetNetworkId;
+    const bool forcedFioraCrit =
+        player.IsValid() &&
+        _stricmp(player.CharacterName().c_str(), "Fiora") == 0 &&
+        (player.HasBuff("fiorae2") ||
+         spellNameStr.find("fiorae2") != std::string::npos);
+    if (player.IsValid() &&
+        !isAzirSoldierAttack &&
+        !forcedFioraCrit &&
+        !duplicateCritProcessSpell) {
+        const bool didCrit =
+            FarmLogic::IsCriticalAttackName(args.SpellName) ||
+            FarmLogic::IsCriticalAttackName(args.MissileName) ||
+            FarmLogic::IsCriticalAttackName(args.ScriptName) ||
+            FarmLogic::IsCriticalAttackName(args.SpellSlotName) ||
+            FarmLogic::IsCriticalAttackName(args.PayloadSpellName) ||
+            FarmLogic::IsCriticalAttackName(args.PayloadMissileName) ||
+            spellNameStr.find("akshancrit") != std::string::npos;
+        context_.critSequence.Observe(player.Crit(), didCrit);
+        context_.lastCritProcessSpellTick = now;
+        context_.lastCritProcessSpellTargetNetworkId = critTargetNetworkId;
+        context_.cachedTargetTick = -1;
+        context_.cachedShouldWaitTick = -1;
+    }
+
     if (!context_.pendingAttack &&
         context_.lastAutoAttackResetTick > 0 &&
         now - context_.lastAutoAttackResetTick >= 0 &&
@@ -213,9 +254,6 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     if (target.IsValid()) {
         context_.lastTarget = target;
     }
-
-    std::string spellNameStr = args.SpellName ? args.SpellName : "";
-    for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 
     const bool isSpecialAfterAA = IsSpecialAfterAttack(spellNameStr);
     if (isSpecialAfterAA) {
@@ -624,6 +662,17 @@ inline void OrbwalkerBase::OnDraw() {
         return;
     }
 
+    ReadAttackTimingsFromMemory(player);
+    const int farmDelay = menu_.DelayFarm();
+    const int lastHitWindowHorizonMs = std::clamp(
+        static_cast<int>(OrbwalkingDetail::kLaneClearWaitCycles *
+            (context_.attackDelayMs + context_.attackWindupMs)),
+        500,
+        2500);
+    const OrbwalkingDetail::CritAttackPrediction critPrediction =
+        OrbwalkingDetail::BuildCritAttackPrediction(player, context_.critSequence);
+
+    int stableOrder = 0;
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (!OrbwalkingDetail::IsValidMinionTarget(minion) ||
             !OrbwalkingDetail::IsTargetWithinCurrentAttackRange(
@@ -631,8 +680,8 @@ inline void OrbwalkerBase::OnDraw() {
             continue;
         }
 
-        const float damage =
-            OrbwalkingDetail::GetCurrentAutoAttackDamage(player, minion);
+        const float damage = OrbwalkingDetail::PredictedLastHitDamage(
+            player, minion, critPrediction);
         if (damage <= 0.0f) {
             continue;
         }
@@ -648,7 +697,13 @@ inline void OrbwalkerBase::OnDraw() {
                 0xFF00FF00u | static_cast<std::uint32_t>(blue),
                 1.5f,
                 32);
-        } else if (OrbwalkingDetail::CanLastHitMinion(player, minion, menu_.DelayFarm())) {
+        } else if (OrbwalkingDetail::EvaluateLastHitMinion(
+                       player,
+                       minion,
+                       critPrediction,
+                       farmDelay,
+                       lastHitWindowHorizonMs,
+                       stableOrder++).window.valid) {
             Drawing::DrawCircle(
                 minion.Position(),
                 minion.BoundingRadius() * 2.0f,

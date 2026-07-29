@@ -691,6 +691,18 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJhinGeometry.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKogMawController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKogMawGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMissFortuneController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMissFortuneGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRyzeController.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
@@ -701,6 +713,18 @@
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITaliyahGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITristanaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITristanaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITwitchController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITwitchGeometry.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVarusController.h">
@@ -769,10 +793,22 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIJhin.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIKogMaw.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIMissFortune.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIRyze.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AITaliyah.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AITristana.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AITwitch.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIVarus.h">
@@ -1151,6 +1187,9 @@
       <Filter>Plugins\Core\OrbwalkerKuro</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerEventHandlers.inl">
+      <Filter>Plugins\Core\OrbwalkerKuro</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerFarmLogic.h">
       <Filter>Plugins\Core\OrbwalkerKuro</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerKuroPlugin.h">

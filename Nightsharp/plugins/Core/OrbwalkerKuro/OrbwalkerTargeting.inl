@@ -6,7 +6,8 @@ using namespace ::SDK;
 
 namespace OrbwalkerKuro::OrbwalkingDetail {
 
-inline constexpr float kLaneClearWaitTime = 1.7f;
+inline constexpr float kLaneClearWaitCycles = 2.0f;
+inline constexpr int kLastHitWindowStepMs = 50;
 
 inline bool IsValidAttackTarget(const AIHeroClient& player,
                                 const AttackableUnit& target,
@@ -420,18 +421,88 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     return lists;
 }
 
-inline bool CanLastHitMinion(const AIHeroClient& player,
-                             const AIMinionClient& minion,
-                             int farmDelay) {
-    const float damage = GetCurrentAutoAttackDamage(player, minion);
+struct CritAttackPrediction {
+    float critChance = 0.0f;
+    float nextCritProbability = 0.0f;
+    float critDamageMultiplier = 2.0f;
+};
+
+inline CritAttackPrediction BuildCritAttackPrediction(
+    const AIHeroClient& player,
+    const FarmLogic::CritSequenceTracker& tracker
+) {
+    CritAttackPrediction result;
+    if (!player.IsValid()) {
+        return result;
+    }
+
+    result.critChance = FarmLogic::ClampProbability(player.Crit());
+    result.nextCritProbability =
+        tracker.PredictNextCritProbability(result.critChance);
+    result.critDamageMultiplier =
+        ::CoreAIHeroClient::CritDamageMultiplier(player.Address());
+    if (!std::isfinite(result.critDamageMultiplier) ||
+        result.critDamageMultiplier < 1.0f ||
+        result.critDamageMultiplier > 4.0f) {
+        result.critDamageMultiplier = 2.0f;
+    }
+    return result;
+}
+
+inline float PredictedLastHitDamage(const AIHeroClient& player,
+                                    const AIMinionClient& minion,
+                                    const CritAttackPrediction& critPrediction) {
+    const bool applyCrit = FarmLogic::ShouldApplyPredictedCritDamage(
+        critPrediction.nextCritProbability,
+        critPrediction.critChance,
+        IsSiegeMinion(minion));
+    return GetPredictedAutoAttackDamage(
+        player,
+        minion,
+        applyCrit,
+        critPrediction.critDamageMultiplier);
+}
+
+struct LastHitEvaluation {
+    AttackableUnit target = {};
+    FarmLogic::LastHitWindowCandidate window = {};
+    bool siege = false;
+};
+
+inline int EstimateLastHitClosingWindow(const AIMinionClient& minion,
+                                        int timeToHit,
+                                        int farmDelay,
+                                        int horizonMs) {
+    const int safeHorizon = std::max(0, horizonMs);
+    for (int offset = 0; offset <= safeHorizon; offset += kLastHitWindowStepMs) {
+        const float futureHealth = HealthPrediction::GetPrediction(
+            minion,
+            timeToHit + offset,
+            farmDelay,
+            HealthPredictionType::Simulated);
+        if (futureHealth <= 0.0f) {
+            return offset;
+        }
+    }
+    return std::numeric_limits<int>::max();
+}
+
+inline LastHitEvaluation EvaluateLastHitMinion(
+    const AIHeroClient& player,
+    const AIMinionClient& minion,
+    const CritAttackPrediction& critPrediction,
+    int farmDelay,
+    int windowHorizonMs,
+    int stableOrder
+) {
+    LastHitEvaluation result;
+    if (!IsValidCurrentMinionTarget(player, minion)) {
+        return result;
+    }
+
+    const float damage = PredictedLastHitDamage(player, minion, critPrediction);
     if (damage <= 0.0f) {
-        return false;
-    }
-    if (minion.MaxHealth() <= 10.0f) {
-        return minion.Health() <= 1.0f || minion.Health() <= damage;
-    }
-    if (minion.Health() <= damage) {
-        return true;
+        return result;
     }
 
     const int timeToHit = static_cast<int>(
@@ -440,19 +511,54 @@ inline bool CanLastHitMinion(const AIHeroClient& player,
         minion,
         timeToHit,
         farmDelay);
+    if (!FarmLogic::IsInsideLastHitDamageWindow(predictedHealth, damage)) {
+        return result;
+    }
 
-    return predictedHealth <= damage;
+    result.target = AttackableUnit(minion.Handle());
+    result.siege = IsSiegeMinion(minion);
+    result.window.valid = true;
+    result.window.closingWindowMs = EstimateLastHitClosingWindow(
+        minion, timeToHit, farmDelay, windowHorizonMs);
+    result.window.boundarySafety =
+        FarmLogic::LastHitBoundarySafety(predictedHealth, damage);
+    result.window.predictedHealth = predictedHealth;
+    result.window.stableOrder = stableOrder;
+    return result;
 }
 
-inline AttackableUnit GetKillableMinion(const AIHeroClient& player,
-                                        const std::vector<AIMinionClient>& minions,
-                                        int farmDelay) {
-    for (const auto& minion : minions) {
-        if (CanLastHitMinion(player, minion, farmDelay)) {
-            return minion;
+inline LastHitEvaluation GetKillableMinion(
+    const AIHeroClient& player,
+    const std::vector<AIMinionClient>& laneMinions,
+    const CritAttackPrediction& critPrediction,
+    int farmDelay,
+    int windowHorizonMs
+) {
+    LastHitEvaluation best;
+    int stableOrder = 0;
+    for (const auto& minion : laneMinions) {
+        LastHitEvaluation candidate = EvaluateLastHitMinion(
+            player,
+            minion,
+            critPrediction,
+            farmDelay,
+            windowHorizonMs,
+            stableOrder++);
+        if (!candidate.window.valid) {
+            continue;
+        }
+
+        // A killable cannon is an absolute priority: do not let a lower-value
+        // minion score displace it and lose the cannon during another cycle.
+        if (candidate.siege) {
+            return candidate;
+        }
+
+        if (FarmLogic::PreferLastHitCandidate(candidate.window, best.window)) {
+            best = candidate;
         }
     }
-    return {};
+    return best;
 }
 
 inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
@@ -541,34 +647,54 @@ inline AttackableUnit GetComboFallbackTarget(const OrbwalkerMenu& menu,
 
 inline bool IsSoonKillableMinion(const AIHeroClient& player,
                                  const AIMinionClient& minion,
+                                 const CritAttackPrediction& critPrediction,
                                  int farmDelay,
                                  int predictionTime) {
     if (!IsValidCurrentMinionTarget(player, minion)) {
         return false;
     }
 
-    const float damage = GetCurrentAutoAttackDamage(player, minion);
+    const float damage = PredictedLastHitDamage(player, minion, critPrediction);
     if (damage <= 0.0f) {
         return false;
     }
 
-    const float predictedHealth = HealthPrediction::GetPrediction(
-        minion,
-        predictionTime,
-        farmDelay,
-        HealthPredictionType::Simulated);
-    return predictedHealth < damage;
+    const int timeToHit = static_cast<int>(
+        std::max(0.0f, Utils::AutoAttack::GetTimeToHit(minion)));
+    const int horizon = std::max(timeToHit, predictionTime);
+    for (int sampleTime = timeToHit;
+         sampleTime <= horizon;
+         sampleTime += kLastHitWindowStepMs) {
+        const float predictedHealth = HealthPrediction::GetPrediction(
+            minion,
+            sampleTime,
+            farmDelay,
+            HealthPredictionType::Simulated);
+        if (predictedHealth <= 0.0f) {
+            return false;
+        }
+        if (FarmLogic::IsInsideLastHitDamageWindow(predictedHealth, damage)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 inline bool HasSoonKillableMinion(const AIHeroClient& player,
                                   const std::vector<AIMinionClient>& minions,
                                   const AIMinionClient& skip,
+                                  const CritAttackPrediction& critPrediction,
                                   int farmDelay,
                                   int predictionTime) {
     for (const auto& minion : minions) {
         if ((skip.IsValid() && skip.Compare(minion)) ||
             IsGangplankBarrel(minion) ||
-            !IsSoonKillableMinion(player, minion, farmDelay, predictionTime)) {
+            !IsSoonKillableMinion(
+                player,
+                minion,
+                critPrediction,
+                farmDelay,
+                predictionTime)) {
             continue;
         }
         return true;
@@ -578,12 +704,14 @@ inline bool HasSoonKillableMinion(const AIHeroClient& player,
 
 inline bool HasSoonKillableMinion(const AIHeroClient& player,
                                   const AIMinionClient& skip,
+                                  const CritAttackPrediction& critPrediction,
                                   int farmDelay,
                                   int predictionTime) {
     return HasSoonKillableMinion(
         player,
         GameObjects::EnemyMinions(),
         skip,
+        critPrediction,
         farmDelay,
         predictionTime);
 }
@@ -611,11 +739,21 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         return {};
     }
 
+    const bool farmMode =
+        mode == OrbwalkingMode::LaneClear ||
+        mode == OrbwalkingMode::Hybrid ||
+        mode == OrbwalkingMode::Harass ||
+        mode == OrbwalkingMode::LastHit;
+
     const int forceTargetNetworkId = context_.forceTarget.IsValid()
         ? context_.forceTarget.NetworkId()
         : 0;
     constexpr int kTargetSelectionThrottleMs = 35;
-    if (context_.cachedTargetTick > 0 &&
+    // Farm targets are deliberately re-evaluated every call. A target that was
+    // killable 20 ms ago may now already be covered by an allied projectile;
+    // reusing it merely because it is still alive is a common missed-CS cause.
+    if (!farmMode &&
+        context_.cachedTargetTick > 0 &&
         now - context_.cachedTargetTick >= 0 &&
         now - context_.cachedTargetTick < kTargetSelectionThrottleMs &&
         context_.cachedTargetMode == mode &&
@@ -635,6 +773,14 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     };
 
     ReadAttackTimingsFromMemory(player);
+    const int farmDelay = menu_.DelayFarm();
+    const int lastHitWindowHorizonMs = std::clamp(
+        static_cast<int>(OrbwalkingDetail::kLaneClearWaitCycles *
+            (context_.attackDelayMs + context_.attackWindupMs)),
+        500,
+        2500);
+    const OrbwalkingDetail::CritAttackPrediction critPrediction =
+        OrbwalkingDetail::BuildCritAttackPrediction(player, context_.critSequence);
 
     AttackableUnit cachedHeroTarget;
     bool heroTargetResolved = false;
@@ -645,21 +791,6 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         }
         return cachedHeroTarget;
     };
-
-    if ((mode == OrbwalkingMode::Hybrid || mode == OrbwalkingMode::LaneClear) &&
-        !menu_.PrioritizeFarm()) {
-        const AttackableUnit target = getHeroTarget();
-        if (target.IsValid()) {
-            return cacheTarget(target);
-        }
-    }
-
-    const bool farmMode =
-        mode == OrbwalkingMode::LaneClear ||
-        mode == OrbwalkingMode::Hybrid ||
-        mode == OrbwalkingMode::Harass ||
-        mode == OrbwalkingMode::LastHit;
-    const int farmDelay = menu_.DelayFarm();
 
     if (mode == OrbwalkingMode::Combo) {
         if (context_.forceTarget.IsValid() &&
@@ -684,19 +815,57 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     const auto minionLists = OrbwalkingDetail::GetMinionsForMode(mode, menu_, player);
     const auto& minions = minionLists.targets;
 
+    OrbwalkingDetail::LastHitEvaluation killableMinion;
     if (farmMode) {
-        const AttackableUnit killableMinion =
-            OrbwalkingDetail::GetKillableMinion(player, minions, farmDelay);
+        killableMinion = OrbwalkingDetail::GetKillableMinion(
+            player,
+            minionLists.laneMinions,
+            critPrediction,
+            farmDelay,
+            lastHitWindowHorizonMs);
 
-        if (killableMinion.IsValid()) {
-            return cacheTarget(killableMinion);
+        // A cannon that is already inside its last-hit window is absolute:
+        // it must win even when the menu normally prioritizes a champion.
+        if (killableMinion.siege && killableMinion.target.IsValid()) {
+            return cacheTarget(killableMinion.target);
         }
+    }
+
+    if ((mode == OrbwalkingMode::Hybrid || mode == OrbwalkingMode::LaneClear) &&
+        !menu_.PrioritizeFarm()) {
+        const AttackableUnit target = getHeroTarget();
+        if (target.IsValid()) {
+            return cacheTarget(target);
+        }
+    }
+
+    if (killableMinion.target.IsValid()) {
+        return cacheTarget(killableMinion.target);
     }
 
     if (context_.forceTarget.IsValid() &&
         OrbwalkingDetail::IsValidCurrentAttackTarget(
             player, context_.forceTarget)) {
         return cacheTarget(context_.forceTarget);
+    }
+
+    // This gate must run before heroes, jungle, structures, and lane-clear
+    // fillers. Previously it lived near the end of GetTarget(), after the hero
+    // branch had already returned, so LaneClear consumed its next attack even
+    // while a lane minion was about to enter the last-hit window.
+    if (mode == OrbwalkingMode::LaneClear) {
+        const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
+            player,
+            minionLists.laneMinions,
+            {},
+            critPrediction,
+            farmDelay,
+            lastHitWindowHorizonMs);
+        context_.cachedShouldWait = shouldWait;
+        context_.cachedShouldWaitTick = now;
+        if (shouldWait) {
+            return cacheTarget(AttackableUnit());
+        }
     }
 
     if (mode == OrbwalkingMode::LaneClear &&
@@ -787,20 +956,6 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     }
 
     if (mode == OrbwalkingMode::LaneClear) {
-        const int predictionTime = static_cast<int>(
-            context_.attackDelayMs * OrbwalkingDetail::kLaneClearWaitTime);
-        const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
-            player,
-            minionLists.laneMinions,
-            {},
-            farmDelay,
-            predictionTime);
-        context_.cachedShouldWait = shouldWait;
-        context_.cachedShouldWaitTick = now;
-        if (shouldWait) {
-            return cacheTarget(AttackableUnit());
-        }
-
         auto canLaneClear = [&](const AIMinionClient& minion) {
             if (!OrbwalkingDetail::IsValidCurrentMinionTarget(player, minion) ||
                 minion.Team() == GameObjectTeam::Neutral) {
@@ -849,11 +1004,17 @@ inline bool OrbwalkerBase::ShouldWait() {
     }
 
     ReadAttackTimingsFromMemory(player);
-    const int predictionTime = static_cast<int>(
-        context_.attackDelayMs * OrbwalkingDetail::kLaneClearWaitTime);
+    const int predictionTime = std::clamp(
+        static_cast<int>(OrbwalkingDetail::kLaneClearWaitCycles *
+            (context_.attackDelayMs + context_.attackWindupMs)),
+        500,
+        2500);
+    const OrbwalkingDetail::CritAttackPrediction critPrediction =
+        OrbwalkingDetail::BuildCritAttackPrediction(player, context_.critSequence);
     context_.cachedShouldWait = OrbwalkingDetail::HasSoonKillableMinion(
         player,
         {},
+        critPrediction,
         menu_.DelayFarm(),
         predictionTime);
     context_.cachedShouldWaitTick = now;

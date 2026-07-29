@@ -30,10 +30,16 @@ inline float Lerp18(float min, float max, const AIHeroClient& h) { return min + 
 
 // ── Crit multiplier (matching GetCritMultiplier in C#) ──
 inline float GetCritMultiplier(const AIHeroClient& hero, bool checkCrit = false) {
-    const bool hasIE = hero.HasBuff("InfinityEdge") || hero.HasItem(3031); // Infinity Edge
-    const float critBonus = hasIE ? 1.25f : 1.0f;
+    float totalMultiplier = ::CoreAIHeroClient::CritDamageMultiplier(hero.Address());
+    if (!std::isfinite(totalMultiplier) || totalMultiplier < 1.0f || totalMultiplier > 4.0f) {
+        // Patch 26.1 restored the ordinary base critical strike to 200%.
+        // This is only a corrupt/unavailable-memory fallback; live memory owns
+        // champion and item exceptions whenever it is sane.
+        totalMultiplier = 2.0f;
+    }
+    const float critBonus = std::max(0.0f, totalMultiplier - 1.0f);
     if (!checkCrit) return critBonus;
-    return (std::abs(hero.Crit() - 1.0f) < 0.001f) ? (1.0f + critBonus) : 1.0f;
+    return (std::abs(hero.Crit() - 1.0f) < 0.001f) ? totalMultiplier : 1.0f;
 }
 
 namespace detail {

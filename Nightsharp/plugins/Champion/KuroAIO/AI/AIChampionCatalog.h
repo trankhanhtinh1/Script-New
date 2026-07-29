@@ -21,8 +21,12 @@
 #include "Profiles/AICaitlyn.h"
 #include "Profiles/AIEzreal.h"
 #include "Profiles/AIJhin.h"
+#include "Profiles/AIKogMaw.h"
+#include "Profiles/AIMissFortune.h"
 #include "Profiles/AIRyze.h"
 #include "Profiles/AITaliyah.h"
+#include "Profiles/AITristana.h"
+#include "Profiles/AITwitch.h"
 #include "Profiles/AIVarus.h"
 #include "Controllers/AIAatroxController.h"
 #include "Controllers/AIAhriController.h"
@@ -44,8 +48,12 @@
 #include "Controllers/AICaitlynController.h"
 #include "Controllers/AIEzrealController.h"
 #include "Controllers/AIJhinController.h"
+#include "Controllers/AIKogMawController.h"
+#include "Controllers/AIMissFortuneController.h"
 #include "Controllers/AIRyzeController.h"
 #include "Controllers/AITaliyahController.h"
+#include "Controllers/AITristanaController.h"
+#include "Controllers/AITwitchController.h"
 #include "Controllers/AIVarusController.h"
 
 #include <array>
@@ -58,7 +66,7 @@ struct ChampionEntry {
     const ChampionController* Controller = nullptr;
 };
 
-inline constexpr std::array<ChampionEntry, 23> AllChampions = {
+inline constexpr std::array<ChampionEntry, 27> AllChampions = {
     ChampionEntry{ &Profiles::Aatrox, &Controllers::Aatrox::Controller },
     ChampionEntry{ &Profiles::Ahri, &Controllers::Ahri::Controller },
     ChampionEntry{ &Profiles::Akali, &Controllers::Akali::Controller },
@@ -81,8 +89,13 @@ inline constexpr std::array<ChampionEntry, 23> AllChampions = {
     ChampionEntry{ &Profiles::Caitlyn, &Controllers::Caitlyn::Controller },
     ChampionEntry{ &Profiles::Ezreal, &Controllers::Ezreal::Controller },
     ChampionEntry{ &Profiles::Jhin, &Controllers::Jhin::Controller },
+    ChampionEntry{ &Profiles::KogMaw, &Controllers::KogMaw::Controller },
+    ChampionEntry{ &Profiles::MissFortune,
+                   &Controllers::MissFortune::Controller },
     ChampionEntry{ &Profiles::Ryze, &Controllers::Ryze::Controller },
     ChampionEntry{ &Profiles::Taliyah, &Controllers::Taliyah::Controller },
+    ChampionEntry{ &Profiles::Tristana, &Controllers::Tristana::Controller },
+    ChampionEntry{ &Profiles::Twitch, &Controllers::Twitch::Controller },
     ChampionEntry{ &Profiles::Varus, &Controllers::Varus::Controller },
 };
 
