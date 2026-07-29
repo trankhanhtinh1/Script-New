@@ -38,3 +38,6 @@ obj/
 *.bak
 Nightsharp/PredictedInputCache_NightSharp_Release_x64.dat
 .claude/
+Nightsharp/plugins/Champion/KuroAIO/AI/Research/
+[Tt]est/
+[Tt]ests/
