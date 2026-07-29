@@ -1,17 +1,21 @@
 #pragma once
-
+// Patch RVAs refreshed for League of Legends 16.15.799.6036.
+// Static source: IDA image-base-0 dump, SHA-256
+// fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954.
+// Runtime spot-check: Cheat Engine 12.0 against the matching live module.
+// A zero RVA is intentionally disabled when no ABI-safe 16.15 match was proven.
 
 namespace Offset {
 
 namespace GameObjectsRuntime {
-    constexpr auto Player = 0x1F15390;
-    constexpr auto TeamTable = 0x1ED6C78;
-    constexpr auto Objects = 0x1ED6C98;
-    constexpr auto Heroes = 0x1ED6DB8;
-    constexpr auto Minions = 0x1ED6DF8;
-    constexpr auto Missiles = 0x1ED9FC0;
-    constexpr auto Turrets = 0x1EDE7A0;
-    constexpr auto UnderMouseObject = 0x1EDA1B8;
+    constexpr auto Player = 0x1F2D608;
+    constexpr auto TeamTable = 0x1EEFB18;
+    constexpr auto Objects = 0x1EEFB38;
+    constexpr auto Heroes = 0x1EEFC58;
+    constexpr auto Minions = 0x1EEFC98;
+    constexpr auto Missiles = 0x1EF3000;
+    constexpr auto Turrets = 0x1EF7640;
+    constexpr auto UnderMouseObject = 0x1EF31F8;
 } // namespace GameObjectsRuntime
 
 namespace VTable {
@@ -64,59 +68,60 @@ namespace StructureVTable {
         constexpr auto NetworkIdTreeNodeIsNil = 0x19;
         constexpr auto NetworkIdTreeNodeKey = 0x20;
         constexpr auto NetworkIdTreeNodeObject = 0x28;
-        constexpr auto GetFirstObject = 0xA2E090;
-        constexpr auto GetNextObject = 0x557750;
-        constexpr auto FindObject = 0x555D10;
+        constexpr auto GetFirstObject = 0xA31D10;
+        constexpr auto GetNextObject = 0x565B00;
+        constexpr auto FindObject = 0x5644C0;
     } // namespace ObjectManagerRuntime
 
 namespace GameRuntime {
-    constexpr auto GameTime = 0x1EE5D30;
-    constexpr auto NetInstance = 0x1ED6C90;
-    constexpr auto MissionInfoInstance = 0x1ED6DA8;
-    constexpr auto ChatViewController = 0x1EE8D58;
-    constexpr auto ShopInstance = 0x1EE8D60;
-    constexpr auto OpenWindowsArray = 0x1FB2A88;
-    constexpr auto OpenWindowsCount = 0x1FB2A90;
-    constexpr auto MySpellState = 0x1F066A0;
+    constexpr auto GameTime = 0x1EFED50;
+    constexpr auto NetInstance = 0x1EEFB30;
+    constexpr auto MissionInfoInstance = 0x1EEFC48;
+    constexpr auto ChatViewController = 0x1F01F78;
+    constexpr auto ShopInstance = 0x1F01F80;
+    constexpr auto OpenWindowsArray = 0x1FCCB78;
+    constexpr auto OpenWindowsCount = 0x1FCCB80;
+    constexpr auto MySpellState = 0x1F1AC60;
     // Cursor world position (Vec3: x,y as qword + z as dword = 12 bytes).
     // Verified on IDA 13337 (current dump): 4+ constructors use this as the
     // canonical cursor world pos source — sub_1F18A0 (UnderMouseObject struct),
     // sub_258980, sub_259140, sub_BF7D0, sub_BF810, sub_BF880 all copy
-    // qword_1F76630 (x,y) + dword_1F76638 (z) as the cursor position.
+    // qword_1F8FD40 (x,y) + dword_1F8FD48 (z) as the cursor position.
     // Old 0x1F75578 was a 24-byte zero buffer — wrong since patch 15.x.
-    constexpr auto CursorPosRaw = 0x1F76630;
+    constexpr auto CursorPosRaw = 0x1F8FD40;
     // Global MouseInput pointer. sub_5AC6F0 reads screen X/Y from +0x0C/+0x10.
     // Verified still valid on IDA 13337 (current dump): 3/4 pattern matches
-    // (48 8B 0D ?? ?? ?? ?? E8 ...) resolve to qword_1ED9F70.
-    constexpr auto MouseScreenVec2 = 0x1ED9F70;
-    constexpr auto GetPing = 0x6D1680;
-    constexpr auto GetMapID = 0x27E900;
-    // ChatViewController::DisplayChat dispatcher (sub_B62E90). Signature
+    // (48 8B 0D ?? ?? ?? ?? E8 ...) resolve to qword_1EF2FB0.
+    constexpr auto MouseScreenVec2 = 0x1EF2FB0;
+    constexpr auto GetPing = 0x6D9150;
+    constexpr auto GetMapID = 0x282B60; // old RVA was AK::WriteBytesMem::Size; use MissionInfo::MapId
+    // ChatViewController::DisplayChat dispatcher (sub_B86450). Signature
     //   void __fastcall(void* chatContainer, const char* utf8, int flags)
-    // Pre-game it queues the line; in-game it tail-calls sub_B62690 which
+    // Pre-game it queues the line; in-game it forwards to the renderer which
     // renders with channel/color flags. flags=0 is a plain system line.
     // (Old value 0x1158CB0 was wrong: that is only a UTF-8 truncation helper.)
-    constexpr auto PrintChat = 0xB81700;
+    constexpr auto PrintChat = 0xB86450;
     // 'this' container passed to PrintChat/DisplayChat; deref before the call.
     // IDA labels it NetInstance but it is distinct from GameRuntime::NetInstance.
-    constexpr auto ChatMessageInstance = 0x1EDA200;
+    constexpr auto ChatMessageInstance = 0x1EF3240;
 } // namespace GameRuntime
 
 namespace MouseInputLayout {
+    // int32_t pixel coordinates on 16.15 (CE sample: 1362, 675).
     constexpr auto ScreenX = 0x0C;
     constexpr auto ScreenY = 0x10;
 } // namespace MouseInputLayout
 
 namespace DrawingRuntime {
-    constexpr auto WorldToScreen = 0x13280D0;
-    // qword_1ED9F68 points to the render/view state. Native W2S receives
-    // qword_1ED9F68 + 0x2F8 as its first argument.
-    // Verified: caller sub_3ACB60 passes (qword_1ED9F68 + 760) = +0x2F8.
-    constexpr auto ViewProjectionRoot = 0x1ED9F68;
+    constexpr auto WorldToScreen = 0x133A050;
+    // qword_1EF2FA8 points to the render/view state. Native W2S receives
+    // qword_1EF2FA8 + 0x2F8 as its first argument.
+    // Verified: native W2S callers pass (qword_1EF2FA8 + 760) = +0x2F8.
+    constexpr auto ViewProjectionRoot = 0x1EF2FA8;
     constexpr auto WorldToScreenContextOffset = 0x2F8;
     // Hud root/controller object. Verified current dump: 488 xrefs.
-    constexpr auto HudRoot = 0x1ED6E20;
-    constexpr auto HudInstance = 0x1ED6E28;
+    constexpr auto HudRoot = 0x1EEFCC0;
+    constexpr auto HudInstance = 0x1EEFCC8;
     // `qword_1EAED80` owns the published ScoreboardViewController interface.
     // IDA 13337: ScoreboardViewController::Setup (sub_E28270) writes its
     // secondary interface pointer to `[qword_1EAED80 + 0x128]`; the
@@ -124,19 +129,19 @@ namespace DrawingRuntime {
     // (TeamScoresDefinitions / DragonTracker) still require runtime
     // verification and are deliberately not represented here.
     constexpr auto ScoreboardViewController = 0x128;
-    constexpr auto ViewPort = 0x1EE8CC0;
-    constexpr auto ViewPort2 = 0x1FB42E0;
-    constexpr auto Renderer = 0x1FB4310;
-    constexpr auto ViewProjOffset = 0x1F9E520;
-    // qword_1ED6E60: stats manager. Owns a std::map<uint32_t, vector<StatBlock*>>
+    constexpr auto ViewPort = 0x1F01EE0;
+    constexpr auto ViewPort2 = 0x1FCE4F8;
+    constexpr auto Renderer = 0x1FCE528;
+    constexpr auto ViewProjOffset = 0x1FB81F0;
+    // qword_1EEFD00: stats manager. Owns a std::map<uint32_t, vector<StatBlock*>>
     // at +0x30 keyed by team ID (100=ORDER, 200=CHAOS). Each StatBlock is 8128
     // bytes allocated by sub_2FDB70 and initialised by sub_2EA000.
-    // Verified current dump: sub_2ECCF0 is the constructor (writes qword_1ED6E60
-    // = this). sub_307E10 reads *(statsManager+0x30) tree, finds node by
+    // Verified current dump: the constructor publishes `this` in qword_1EEFD00.
+    // The stats readers walk *(statsManager+0x30), find the node by
     // teamId, double-dereferences vector begin to get StatBlock*.
     // sub_2EF5E0 (hero destructor) removes hero netId from the same tree.
-    // Old global 0x1E9D180 had 0 xrefs — moved to 0x1ED6E60.
-    constexpr auto StatsManager = 0x1ED6E60;
+    // The previous patch used qword_1ED6E60.
+    constexpr auto StatsManager = 0x1EEFD00;
 } // namespace DrawingRuntime
 
 namespace StatsRuntime {
@@ -196,8 +201,8 @@ namespace DrawingMatrixRuntime {
 // patch-specific module RVAs, so they remain shared by the renderer readers
 // and the internal D3D11 hook.
 namespace D3D {
-    // Verified via Renderer constructor sub_13BA0E0:
-    //   qword_1FB4310 = renderer; *(renderer+0x1E0)=device;
+    // Verified via the 16.15 renderer constructor/store in sub_13CD620:
+    //   qword_1FCE528 = renderer; *(renderer+0x1E0)=device;
     //   *(renderer+0x218)=swapChain; *(renderer+0x2A8/0x2AC)=screen W/H;
     //   *(renderer+0x2B0)=deviceContext.
     constexpr auto Renderer                  = DrawingRuntime::Renderer;
@@ -231,7 +236,7 @@ namespace HudRuntime {
 } // namespace HudRuntime
 
 namespace HudCursorTargetLogicRuntime {
-    constexpr auto ShowClickEffect = 0xBE1A30; // native cursor click effect dispatcher
+    constexpr auto ShowClickEffect = 0xBE5AF0; // native cursor click effect dispatcher
 } // namespace HudCursorTargetLogicRuntime
 
 namespace HudCursorTargetLogicLayout {
@@ -289,7 +294,6 @@ namespace TacticalMapLayout {
     constexpr auto ScaleY          = 0x18C;
 } // namespace TacticalMapLayout
 
-
 // ChatViewController layout (object lives at GameRuntime::ChatViewController).
 // IDA 13337:
 //   - Pattern "48 8B 05 ? ? ? ? 44 0F B6 FA" in sub_B5A730 resolves qword_1EB34E8.
@@ -313,114 +317,114 @@ namespace ChatViewControllerLayout {
 } // namespace ChatViewControllerLayout
 
 namespace ControlRuntime {
-    constexpr auto IssueOrder = 0x289BF0;
-    // sub_98E310(spellbook, spellSlot, slotIndex, Vector3f* position, releaseFlag)
+    constexpr auto IssueOrder = 0x28E4F0;
+    // sub_98C360(spellbook, spellSlot, slotIndex, Vector3f* position, releaseFlag)
     // is the native charge update/release packet sender. It serializes the three
     // floats at *position verbatim into the packet and sends via SendNetworkPacket,
     // so the aim never touches the HUD cursor / PrimeCastPosition.
     //   releaseFlag = 0 -> charge begin/update (caller: charge tick sub_BEDE90)
-    //   releaseFlag = 1 -> release            (callers: HudSpellHandler sub_BD01F0,
-    //                                                    ReleaseActiveCharge sub_BC3B00)
+    //   releaseFlag = 1 -> release            (callers: HudSpellHandler sub_BD41C0,
+    //                                                    ReleaseActiveCharge sub_BC7BD0)
     // spellbook is GetPlayerClient() + SpellBookOffset (0x3108); slotIndex is the
     // 0..63 spellbook index, i.e. the same value as the slot for Q/W/E/R.
-    // Verified against the running client: base+0x98E310 begins
+    // IDA 16.15: base+0x98C360 begins
     //   48 8B C4 44 89 40 18 48 89 48 08 ... 48 83 BA 30 01 00 00 (cmp [rdx+130h],0)
-    // which matches sub_98E310's `if (*(_QWORD *)(a2 + 304))` guard.
+    // which matches sub_98C360's `if (*(_QWORD *)(a2 + 304))` guard.
     // NOTE: this was previously 0x980F80, which is an unrelated vision/unit-count
     // helper (`v1 = *(_DWORD *)(a1 + 208)`). Charge release therefore sent no packet
     // at all, and Hooks::OnUpdateChargeableSpell hooked the wrong function.
-    constexpr auto UpdateChargeableSpell = 0x98E310;
+    constexpr auto UpdateChargeableSpell = 0x98C360;
 
-    // sub_98EA10(spellbook, Vector3f* position) — opcode 1195 (mov eax, 4ABh in the
+    // sub_98CA40(spellbook, Vector3f* position) — opcode 1154 (mov eax, 482h in the
     // prologue), a bare "where the charge is currently aimed" packet holding one
     // Vec3. While a charge is open the client's charge tick (sub_BEDE90) calls this
     // EVERY frame with the HUD cursor world position (hud->input + 0x34), so the
     // charge visibly tracks the mouse even when the begin and release packets carry
     // our own coordinates. Send it ourselves with the predicted position to keep the
     // server's view of the aim on target for the duration of the charge.
-    constexpr auto UpdateChargeAim = 0x98EA10;
+    constexpr auto UpdateChargeAim = 0x98CA40;
 
     // ─────────────────────────────────────────────────────────────────────
     // Cast spell pipeline (verified IDB 13337 via EnsoulSharp.dll ILSpy map).
     // EnsoulSharp's managed Spellbook.CastSpell(...) forwards to the native
     // SpellbookClient.CastSpell, which on this build is the programmatic
-    // dispatcher CastSpellSafe (sub_C04B50). See
+    // dispatcher CastSpellSafe (sub_BE7460). See
     // CastSpell_EnsoulSharp_IDA_Analysis.md for the full reverse notes.
     //
     // CastSpellSafe is the regular cast dispatcher. Charge input is a
     // separate state machine driven by HudSpellHandler and sub_984130.
-    constexpr auto CastSpellSafe          = 0xBE3300; // programmatic CastSpell dispatcher
-    constexpr auto SendSpellCastPacket    = 0x98C480; // HUD SendSpellCastPacket (== Hooks::OnProcessSpell)
-    constexpr auto BuildCastPacket        = 0x974430; // build cast-spell packet payload
-    constexpr auto SendNetworkPacket      = 0x6F36B0; // send packet via NetInstance
-    constexpr auto InitChargeChanneling   = 0xBCFC20; // server ack/timer helper; not charge begin
-    constexpr auto InitChargeState        = 0xBE4560; // stores SpellInput at HudSpellState+0x38
-    constexpr auto ReleaseActiveCharge    = 0xBC3B00; // resolves slot and sends release
-    constexpr auto GetPlayerClient        = 0x27C990; // charge sender uses return value + SpellBookOffset
+    constexpr auto CastSpellSafe          = 0xBE7460; // programmatic CastSpell dispatcher
+    constexpr auto SendSpellCastPacket    = 0x989920; // HUD SendSpellCastPacket (== Hooks::OnProcessSpell)
+    constexpr auto BuildCastPacket        = 0x970350; // build cast-spell packet payload
+    constexpr auto SendNetworkPacket      = 0x6FB9B0; // send packet via NetInstance
+    constexpr auto InitChargeChanneling   = 0xBD3BF0; // server ack/timer helper; not charge begin
+    constexpr auto InitChargeState        = 0xBE86A0; // stores SpellInput at HudSpellState+0x38
+    constexpr auto ReleaseActiveCharge    = 0xBC7BD0; // resolves slot and sends release
+    constexpr auto GetPlayerClient        = 0x280BB0; // charge sender uses return value + SpellBookOffset
     // Cast dispatch helpers (offsets corrected against IDB 13337 decompile —
     // see CastSpellSafe_Reverse_13337.md §7-§10 for full reverse notes).
-    constexpr auto FindOwnerSlot          = 0xBCD190;
-    constexpr auto GetOwnerSlotIndex      = 0xBCD280;
-    constexpr auto NormalCastGate         = 0x2F7A60;
-    constexpr auto ServiceRegistryLookup  = 0x23F610;
-    constexpr auto IsSlotQWER             = 0x3F3B10;
-    constexpr auto PrepareCast            = 0x987F30;
-    constexpr auto ValidateProcessCast    = 0x30D110;
-    constexpr auto ExecuteNormalCast      = 0x32E380;
-    constexpr auto ExecuteSelfCast        = 0x3388B0;
-    constexpr auto ValidateTarget         = 0x309ED0;
-    constexpr auto RangeCheck             = 0x3106C0;
-    constexpr auto ExecuteTargetCast      = 0x338780;
+    constexpr auto FindOwnerSlot          = 0xBD1220;
+    constexpr auto GetOwnerSlotIndex      = 0xBD1310;
+    constexpr auto NormalCastGate         = 0x2FCD90;
+    constexpr auto ServiceRegistryLookup  = 0x241FA0;
+    constexpr auto IsSlotQWER             = 0x3FBE20;
+    constexpr auto PrepareCast            = 0x985400;
+    constexpr auto ValidateProcessCast    = 0x311B40;
+    constexpr auto ExecuteNormalCast      = 0x331F70;
+    constexpr auto ExecuteSelfCast        = 0x33BCC0;
+    constexpr auto ValidateTarget         = 0x30E950;
+    constexpr auto RangeCheck             = 0x314820;
+    constexpr auto ExecuteTargetCast      = 0x33BB90;
 
     // ── Pre-cast gate + position priming (REQUIRED before CastSpellSafe) ───
     // Native callers run CanCastCheck (sub_C12220) before CastSpellSafe.
     // It resolves the target/current cursor and primes internal HUD cast state.
-    constexpr auto CanCastCheck           = 0xBF6430;
-    constexpr auto PrimeCastPosition      = 0xBCB770;
+    constexpr auto CanCastCheck           = 0xBFAEB0;
+    constexpr auto PrimeCastPosition      = 0xBCF800;
     // HUD spell handler (the function the game itself calls when the player
     // presses/releases a hotkey). Signature confirmed in IDB 13337:
     //   sub_BF1EF0(__int64 hudSpellInfo, unsigned int slot,
     //              int castMode, __int64 keyState)
     // arg3 is the hotkey/cast mode (2 = Smart/Quick Cast).
     // arg4 is key state (1 = press, 2 = release).
-    constexpr auto HudSpellHandler        = 0xBD01F0;
+    constexpr auto HudSpellHandler        = 0xBD41C0;
     // ── Two-position (vector) cast — Viktor E / EnsoulSharp CastSpell(start,end) ─
-    // sub_97A980(book, slotObj, slot, Vector3f* start, Vector3f* end, visionIdx):
-    // sibling of the normal cast builder sub_97A0B0, but takes TWO explicit world
+    // sub_985CB0(book, slotObj, slot, Vector3f* start, Vector3f* end, visionIdx):
+    // sibling of the normal cast builder sub_985400, but takes TWO explicit world
     // positions and emits an opcode-271 cast packet directly, WITHOUT calling
     // CanCastCheck — so it accepts vector spells the CastSpellSafe/HUD paths
     // reject. Only x/z are serialized. Confirmed IDB 13337 via caller sub_9D70C0
     // (book=player+0x3108, slotObj=GetSpellSlot(book,slot)) and the shared packet
-    // builder sub_9651F0. This is the native entry EnsoulSharp's managed
+    // builder sub_970350. This is the native entry EnsoulSharp's managed
     // Spellbook.CastSpell(slot, start, end) forwards to.
-    constexpr auto CastSpellVector        = 0x988810;
-    // GetSpellSlot(book, slot) == *(book + 0xAE0 + slot*8). sub_977B50.
-    constexpr auto GetSpellSlot           = 0x977B50;
+    constexpr auto CastSpellVector        = 0x985CB0;
+    // GetSpellSlot(book, slot) == *(book + 0xAE0 + slot*8). sub_974680.
+    constexpr auto GetSpellSlot           = 0x974680;
     // Default fog/vision index the cast packet uses when there is no special
-    // vision source (sub_97A0B0 / CastSpellSafe fallback `dword_1F18A30`).
-    constexpr auto CastVisionIndexDefault = 0x1F50350;
-    constexpr auto SpellTypeClassify      = 0x925DD0;
-    constexpr auto GetSpellLevel          = 0x3ADA60;
+    // vision source (sub_985400 / CastSpellSafe fallback `dword_1F699B0`).
+    constexpr auto CastVisionIndexDefault = 0x1F699B0;
+    constexpr auto SpellTypeClassify      = 0x9121E0;
+    constexpr auto GetSpellLevel          = 0x3B1530;
     // Cast packet opcode (chargeable/normal): 609 (0x261), vtable off_1A4BDF8
     constexpr auto CastPacketOpcode       = 0x261;
 
     // AIBaseClient handler registered for PKT_NPC_CastSpellAns_s (packet 0x370).
     // Signature: 4C 8B DC 55 57 49 8D AB ?? ?? ?? ?? 48 81 EC 28 02 00 00
-    constexpr auto ProcessCastSpell = 0x2923E0;
-    constexpr auto GetSpellState = 0x96C140;
-    // IDA 13339: sub_95F2E0 calls sub_912E30(slot) for remaining cooldown.
-    // sub_912E30 reads slot+0x30, checks slot+0x68 ammo recharge, then clamps.
+    constexpr auto ProcessCastSpell = 0x297510;
+    constexpr auto GetSpellState = 0x96A2B0;
+    // IDA 16.15: the slot cooldown reader is sub_90E4D0.
+    // It reads slot+0x30, checks slot+0x68 ammo recharge, then clamps.
     // 0x92D820 resolves inside another function and is not a safe entry point.
-    constexpr auto GetSpellRemainingCooldown = 0x921B10;
-    constexpr auto IsAlive = 0x2B0CE0;
-    constexpr auto GetSpellCastInfo = 0x277380;
-    constexpr auto GetResourceType = 0x274F60;
-    constexpr auto GetAttackDelay = 0x576B80;
-    constexpr auto GetAttackWindup = 0x576A80;
-    constexpr auto GetBoundingRadius = 0x277FF0;
-    constexpr auto IssueOrderFlag = 0x1E3BDC8;
-    constexpr auto CastSpellFlag = 0x1E3BD60;
-    constexpr auto CanAttack = 0x211070;
+    constexpr auto GetSpellRemainingCooldown = 0x90E4D0;
+    constexpr auto IsAlive = 0x2B6690;
+    constexpr auto GetSpellCastInfo = 0x27B340;
+    constexpr auto GetResourceType = 0x278EB0;
+    constexpr auto GetAttackDelay = 0x57D620;
+    constexpr auto GetAttackWindup = 0x57D520;
+    constexpr auto GetBoundingRadius = 0x27BFB0;
+    constexpr auto IssueOrderFlag = 0x1E53DB8;
+    constexpr auto CastSpellFlag = 0x1E53D50;
+    constexpr auto CanAttack = 0x213450;
 } // namespace ControlRuntime
 
 // BasicAttackRuntime removed Apr 25/2026 - replaced by AIBaseClient::GetAutoAttackDamage()
@@ -487,11 +491,11 @@ namespace BuffEventLayout {
 } // namespace BuffEventLayout
 
 namespace NavGridRuntime {
-    constexpr auto NavGrid = 0x1ED9F08;
+    constexpr auto NavGrid = 0x1EF2F48;
     // IDA 13337: 0x1243760 is a path-neighbor expansion helper that calls
     // sub_124AEA0; CoreNavGrid reads cell flags directly instead of calling it.
-    constexpr auto GetCollisionFlags = 0x127B570;
-    constexpr auto GetAiManager = 0x27EF30; // inner AiManager pointer resolver
+    constexpr auto GetCollisionFlags = 0x1288340;
+    constexpr auto GetAiManager = 0x281FA0; // inner AiManager pointer resolver
 } // namespace NavGridRuntime
 
 namespace SpellRuntime {
@@ -554,49 +558,48 @@ namespace SpellBookLayout {
     }*/ // namespace HookSignatures
 
     namespace Hooks {
-        constexpr uintptr_t OnIntegerPropertyChange = 0x383150; //OnIntegerPropertyChange
-        // ClientMainLoop is intentionally 0: NIGHTSHARP_ENABLE_CLIENTMAINLOOP_HOOK
-        // is off by default and CoreHook::IsInlineAllowed() skips RVA == 0.
-        constexpr uintptr_t ClientMainLoop          = 0x5F5F00;
+        constexpr uintptr_t OnIntegerPropertyChange = 0x386980; // packet property-update handler
+        // Optional hook: NIGHTSHARP_ENABLE_CLIENTMAINLOOP_HOOK remains off by default.
+        constexpr uintptr_t ClientMainLoop          = 0x5FA950;
         // Central animation request wrapper. It stores the AIBaseClient
         // callback receiver at *(RCX+0x08) and accepts an RDX string-view.
-        constexpr uintptr_t OnPlayAnimationWrapper  = 0xE3E380;
-        constexpr uintptr_t CreateClientEffect      = 0x918F40;
+        constexpr uintptr_t OnPlayAnimationWrapper  = 0xE44570;
+        constexpr uintptr_t CreateClientEffect      = 0x9061A0;
 
-        constexpr uintptr_t DispatchEvent           = 0x4B8940;
-        constexpr uintptr_t OnTeleport              = 0x743AB0; //OnTeleport
-        constexpr uintptr_t Hud_OnDisconnect        = 0x6D62C0;
+        constexpr uintptr_t DispatchEvent           = 0x4CFA90;
+        constexpr uintptr_t OnTeleport              = 0x739800; //OnTeleport
+        constexpr uintptr_t Hud_OnDisconnect        = 0x6DEC20;
         constexpr uintptr_t ProcessCastSpell        = ControlRuntime::ProcessCastSpell;
         constexpr uintptr_t OnUpdateChargeableSpell = ControlRuntime::UpdateChargeableSpell;
-        constexpr uintptr_t OnBuffAdd               = 0x21D9D0;
-        constexpr uintptr_t OnBuffRemove            = 0x21D9D0; //OnBuffLose - same function as OnBuffAdd, switch on arg2 for event type
-        constexpr uintptr_t OnBuffUpdate            = 0x21D5B0;
+        constexpr uintptr_t OnBuffAdd               = 0x21FFF0;
+        constexpr uintptr_t OnBuffRemove            = 0x21FFF0; //OnBuffLose - same function as OnBuffAdd, switch on arg2 for event type
+        constexpr uintptr_t OnBuffUpdate            = 0x21F220;
         // AssignNetworkId: writes networkId to obj+0xBC, inserts into
         // ObjectManager tree, then calls post-init vfunc. Hook this instead
         // of the raw tree-insert so the object is fully ready when event fires.
         //   RCX = GameObject*, RDX = networkId (uint32_t).
         // IDA sig: 40 56 48 83 EC ? 45 33 C9
-        constexpr uintptr_t OnCreate                = 0x567330; //AssignNetworkId
-        constexpr uintptr_t OnMissileCreate         = 0x92CB00;
-        // sub_28F220(GameObject* this) fires GameEventId.OnDelete (event ID = 465/0x1D1)
+        constexpr uintptr_t OnCreate                = 0x571110; //AssignNetworkId
+        constexpr uintptr_t OnMissileCreate         = 0x97B700;
+        // sub_2942D0(GameObject* this) fires GameEventId.OnDelete (event ID = 465/0x1D1)
         // via sub_4BC670(eventObj, 0, &data). RCX = GameObject* (this pointer).
         // IDA sig: 48 89 5C 24 ? 55 56 57 48 83 EC 40 48 8B 01 48 8D 54 24
-        constexpr uintptr_t OnDelete                = 0x28F220; //OnDelete
-        constexpr uintptr_t OnMissileDelete         = 0x90C980;
-        constexpr uintptr_t OnDamage                = 0x29A630;
-        constexpr uintptr_t OnDoCast                = 0x986510;
-        constexpr uintptr_t OnFinishCast            = 0x29B020;
-        constexpr uintptr_t OnGameUpdate            = 0x553800; //OnUpdate
-        constexpr uintptr_t OnLevelUp               = 0x28FE60;
+        constexpr uintptr_t OnDelete                = 0x2942D0; //OnDelete
+        constexpr uintptr_t OnMissileDelete         = 0x9633A0;
+        constexpr uintptr_t OnDamage                = 0x29F860;
+        constexpr uintptr_t OnDoCast                = 0x9835E0;
+        constexpr uintptr_t OnFinishCast            = 0x2A0250;
+        constexpr uintptr_t OnGameUpdate            = 0x562AD0; //OnUpdate
+        constexpr uintptr_t OnLevelUp               = 0x294EF0;
         // Packet callback for ids 0x11D/0x1F1. RCX is AIBaseClient and the
         // internal animation-name view is at RDX+0x18.
-        constexpr uintptr_t OnPlayAnimation         = 0x2951A0;
-        constexpr uintptr_t OnProcessSpell          = 0x98C480; //OnProcessSpellCast
-        constexpr uintptr_t OnSpellImpact           = 0x9849A0;
-        constexpr uintptr_t OnStopCast              = 0x98C790;
-        constexpr uintptr_t OnStealth               = 0x299D20;
+        constexpr uintptr_t OnPlayAnimation         = 0x29A350;
+        constexpr uintptr_t OnProcessSpell          = 0x989920; //OnProcessSpellCast
+        constexpr uintptr_t OnSpellImpact           = 0x981D20;
+        constexpr uintptr_t OnStopCast              = 0x989C30;
+        constexpr uintptr_t OnStealth               = 0x29EEC0;
         constexpr uintptr_t OnSurrender             = 0; // FIXME: 0xE8D423 was wrong (string builder, not surrender handler). Needs re-verification.
-        constexpr uintptr_t ProcessWorldEvent       = 0x6D73A0;
+        constexpr uintptr_t ProcessWorldEvent       = 0x6DFD60;
 
         // ─────────────────────────────────────────────────────────────────
         // EnsoulSharp-derived event hooks (verified against EnsoulSharp.dll
@@ -614,7 +617,7 @@ namespace SpellBookLayout {
         //   It calls sub_271720 -> sub_300890 after resolving the movement
         //   component. Hooking sub_300890 directly loses the GameObject
         //   sender and exposes a different seven-argument ABI.
-        constexpr uintptr_t OnNewPath               = 0x567B80;
+        constexpr uintptr_t OnNewPath               = 0x5715A0;
         //
         // OnTeleport (EnsoulSharp: AttackableUnit.OnTeleport)
         //   Native signature: void(AttackableUnit*, StlString* recallType,
@@ -636,8 +639,6 @@ namespace SpellBookLayout {
         //constexpr uintptr_t OnIntegerPropertyChange = CRepl32InfoUpdatePacket; // 0x37AC50
     }
 
-
-
     // =========================================================================
     // SpellCastInfo layout — read by OnStopCast / OnFinishCast / channel poller
     // =========================================================================
@@ -656,7 +657,7 @@ namespace SpellBookLayout {
     //     populated >= 0x300-byte struct allocated only while a cast is in
     //     flight. ALL the offsets below apply, including `CasterNetId`.
     // Verified current dump:
-    //   * `GetSpellCastInfo` (sub_277380) computes
+    //   * `GetSpellCastInfo` (sub_27B340) computes
     //   `(a1+0x4040 - a1+0x4038) / 408` to count slots and returns
     //   `array_begin + 408 * slot`, confirming the 0x198 stride.
     //   * process-spell setup writes caster position to SpellCastInfo+0xD0
@@ -699,7 +700,7 @@ namespace SpellBookLayout {
     // dedicated runtime IsDead offset.
 
     // AiManager field offsets are relative to the inner pointer returned by
-    // NavGridRuntime::GetAiManager (RVA 0x27EF30). IDA confirms that function
+    // NavGridRuntime::GetAiManager (RVA 0x281FA0). IDA confirms that function
     // decodes hero + 0x4250 and dereferences wrapper + 0x10 before returning.
     namespace AiManager
     {
@@ -814,7 +815,7 @@ namespace SpellBookLayout {
         // sub_910A80 decodes the request byte at +0xC4 into parsedCastInfo+0x154,
         // the same slot field used by OnProcessSpell.
         constexpr auto EncodedSlot = 0xC4;
-        constexpr auto DecodeTable = 0x1A6E320;
+        constexpr auto DecodeTable = 0x1ABE610;
     } // namespace ProcessCastSpellRequestLayout
 
     namespace SpellInfoLayout {
@@ -991,7 +992,7 @@ namespace SpellBookLayout {
     //
     // These three namespaces are the CANONICAL source for per-object field
     // offsets. The dead state is queried by Core::Objects::IsDead() via the
-    // native IsAlive RVA (ControlRuntime::IsAlive = 0x2B0CE0), inverted.
+    // native IsAlive RVA (ControlRuntime::IsAlive = 0x2B6690), inverted.
     // Do NOT call the native IsDead RVA (0x287230) — it decrypts an
     // encrypted blob and crashes the game on 26.6. All::Dead (0x11B) is
     // kept as a diagnostic field only; it is NOT authoritative across
@@ -1001,20 +1002,20 @@ namespace SpellBookLayout {
         constexpr auto Team                = 0x239;  // byte team index
         constexpr auto Name                = 0x68;
         // NetworkId is a DISTINCT field from Index. Verified on current dump:
-        //   - sub_567330 (OnCreate/AssignNetworkId) writes the network id to
+        //   - sub_571110 (OnCreate/AssignNetworkId) writes the network id to
         //     obj+0xBC and registers it into the ObjectManager network-id
         //     red-black tree via sub_5655F0.
-        //   - sub_90C980 (OnMissileDelete) reads *(obj+0xBC) to deregister
+        //   - sub_9633A0 (OnMissileDelete) reads *(obj+0xBC) to deregister
         //     from the missile manager tree.
-        //   - FindObject (sub_555D10) and GetNextObject (sub_557750) look up
+        //   - FindObject (sub_5644C0) and GetNextObject (sub_565B00) look up
         //     by Index (obj+0x20), not by NetworkId.
         //   - sub_5576B0 does tree-based lookup by NetworkId in the
         //     ObjectManager tree at manager+0x38.
         // Previous build had NetId = 0xCC which was wrong.
         constexpr auto NetId               = 0xBC;    // obj+0xBC -> object network id (GetNetworkID)
         constexpr auto NetworkId           = NetId;
-        // Current object position is split: X is stored separately from Y/Z.
-        // Do not read a contiguous Vec3 starting at Position.
+        // CE 16.15: local-player position is a contiguous Vec3 at +0x23C
+        // (live sample: 604.0, 183.57, 612.0).
         constexpr auto Position            = 0x23C;
         constexpr auto PositionX           = Position;
         constexpr auto PositionY           = 0x260;
@@ -1160,21 +1161,20 @@ namespace SpellBookLayout {
         constexpr auto CastEndPos                = 0xE8;
     } // namespace MissileEventLayout
 
-
     // ── Hack / bypass plumbing (old source SDK used these for zoom,
     //    skin change, DirectInput hook, etc.) ──────────────────────────
     // GadgetRuntime::ThreadTrampoline removed Apr 25/2026 - replaced by CoreEventHook::FindSpoofGadget (dynamic byte-pattern 'FF 23' search)
 
     namespace DirectInputRuntime {
-        constexpr auto KeyboardInput     = 0x11C45A0;
-        constexpr auto MouseInput        = 0x11C47B0;
-        constexpr auto KeyboardDevice    = 0x1F8E730;
-        constexpr auto KeyboardBuffer    = 0x1F8E740;
-        constexpr auto KeyboardCount     = 0x1F8E760;
-        constexpr auto KeyboardFlag      = 0x1F2B258;
-        constexpr auto MouseDevice       = 0x1F8E738;
-        constexpr auto MouseBuffer       = 0x1F8E748;
-        constexpr auto MouseCount        = 0x1F8E770;
+        constexpr auto KeyboardInput     = 0x1214240;
+        constexpr auto MouseInput        = 0x1214450;
+        constexpr auto KeyboardDevice    = 0x1FA7F60;
+        constexpr auto KeyboardBuffer    = 0x1FA7F70;
+        constexpr auto KeyboardCount     = 0x1FA7F90;
+        constexpr auto KeyboardFlag      = 0x1F448D8;
+        constexpr auto MouseDevice       = 0x1FA7F68;
+        constexpr auto MouseBuffer       = 0x1FA7F78;
+        constexpr auto MouseCount        = 0x1FA7FA0;
         constexpr auto VT_GetDeviceState = 0x48;
         constexpr auto VT_GetDeviceData  = 0x50;
     } // namespace DirectInputRuntime
@@ -1185,7 +1185,7 @@ namespace SpellBookLayout {
         // globals have likely moved. The struct field offsets (CurrentZoom,
         // ZoomConfigPtr, etc.) may still be valid if the camera object is
         // found via a different path. Re-verify before using.
-        constexpr auto CameraInstance   = 0x1E21698;  // FIXME: no xrefs in current dump - needs re-verification
+        constexpr auto CameraInstance   = 0;  // unresolved; use HudInstance -> HudToCameraPtr
         constexpr auto HudToCameraPtr   = 0x18;
         constexpr auto CurrentZoom      = 0x324;
         constexpr auto ZoomConfigPtr    = 0x3D0;
@@ -1194,8 +1194,8 @@ namespace SpellBookLayout {
         constexpr auto ZoomClampFlag    = 0x344;
         constexpr auto ZC_MinZoom       = 0x24;
         constexpr auto ZC_MaxZoom       = 0x28;
-        constexpr auto HardcodedMaxZoom = 0x1961E8C;  // FIXME: no xrefs in current dump - needs re-verification
-        constexpr auto ZoomEnableConfig = 0x1E8EBE0;  // FIXME: no xrefs in current dump - needs re-verification
+        constexpr auto HardcodedMaxZoom = 0;  // unresolved legacy global
+        constexpr auto ZoomEnableConfig = 0;  // unresolved legacy global
     } // namespace ZoomRuntime
 
     namespace SkinRuntime {
@@ -1209,10 +1209,10 @@ namespace SpellBookLayout {
         // local + CharacterDataStack -> std::vector + base_skin.
         // base_skin.skin = stack + BaseSkin + CharacterStackSkin.
         // CharacterDataStackUpdate is the current stack-update routine.
-        // CharacterDataStackPush is sub_22AEE0(this, model, skin, id, ...).
+        // CharacterDataStackPush is sub_22D590(this, model, skin, id, ...).
         constexpr auto CharacterDataStack       = 0x40E8;
-        constexpr auto CharacterDataStackUpdate = 0x210460;
-        constexpr auto CharacterDataStackPush   = 0x22AEE0; // sub_22AEE0: Push(this=hero+0x40E8, model, skin, id, ...). 160-byte entries, calls Update after push.
+        constexpr auto CharacterDataStackUpdate = 0x212840;
+        constexpr auto CharacterDataStackPush   = 0x22D590; // Push(this=hero+0x40E8, model, skin, id, ...). 160-byte entries, calls Update after push.
         constexpr auto CharacterDataStackBegin  = 0x00;
         constexpr auto CharacterDataStackEnd    = 0x08;
         constexpr auto CharacterDataStackCap    = 0x10;

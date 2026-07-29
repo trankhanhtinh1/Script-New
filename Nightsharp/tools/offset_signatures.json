@@ -1,0 +1,3387 @@
+{
+  "schema_version": 2,
+  "fixtures": {
+    "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": {
+      "version": "16.14.794.5912",
+      "ida_session": "13338"
+    },
+    "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": {
+      "version": "16.15.799.6036",
+      "ida_session": "13337"
+    }
+  },
+  "targets": [
+    {
+      "id": "Offset::GameObjectsRuntime::Player",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F15390",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F2D608"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C ?? ?? 74 ?? 49",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::TeamTable",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6C78",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFB18"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 05 ?? ?? ?? ?? 8B 54 88 20 48 8D 05 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::Objects",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6C98",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFB38"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B F0 48 85 C0 75 ?? 48 8B CF",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::Heroes",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6DB8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFC58"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 05 ?? ?? ?? ?? 45 33 FF 49 89 73 08 0F 57 C0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::Minions",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6DF8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFC98"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 33 FF 48 85 C0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::Missiles",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED9FC0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF3000"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 1D ?? ?? ?? ?? 48 8D ?? ?? ?? ?? ?? ?? 48 8D 4C 24 38",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::Turrets",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EDE7A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF7640"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 0D ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 33 D2 48 89 01 48 8B C1",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameObjectsRuntime::UnderMouseObject",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EDA1B8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF31F8"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 0D ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ?? 48 89 01 33 D2 48 89 51 08",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ObjectManagerRuntime::GetFirstObject",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xA2E090",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xA31D10"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 20 48 8B D9 48 8D 54 24 30 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 53 78",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ObjectManagerRuntime::GetNextObject",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x557750",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x565B00"
+      },
+      "locators": [
+        {
+          "pattern": "0F B7 42 20 44 8B 41 28 FF C0 41 3B C0 73 1B 4C 8B 49 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ObjectManagerRuntime::FindObject",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x555D10",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x5644C0"
+      },
+      "locators": [
+        {
+          "pattern": "4C 8B C1 85 D2 74 1B 49 8B 40 20 0F B7 CA F6 04 C8 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::GameTime",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EE5D30",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EFED50"
+      },
+      "locators": [
+        {
+          "pattern": "F3 0F 5C 35 ?? ?? ?? ?? 0F 28 F8 0F 2F CE",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 4,
+            "instruction_size": 8
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::NetInstance",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6C90",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFB30"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 05 ?? ?? ?? ?? 0F B6 15 ?? ?? ?? ?? 48 85 C0 41 0F 95 C1 48 85 C0 74 0A",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::MissionInfoInstance",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6DA8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFC48"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? 48 8D 4C 24 ?? 48 89 4C 24 ?? 44 8B C0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::ChatViewController",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EE8D58",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F01F78"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 48 8B D8 48 85 C9 74 0D E8 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::ShopInstance",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EE8D60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F01F80"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 48 85 C9 74 0D E8 ?? ?? ?? ?? 84 C0 0F ?? ?? ?? ?? ?? 48 85 DB",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::OpenWindowsArray",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1FB2A88",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FCCB78"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 1D ?? ?? ?? ?? 8B 05 ?? ?? ?? ?? 48 8D 2C C3 48 3B DD 0F ?? ?? ?? ?? ?? 44 8B 05 ?? ?? ?? ?? 48 8B 33",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::OpenWindowsCount",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1FB2A90",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FCCB80"
+      },
+      "locators": [
+        {
+          "pattern": "8B 05 ?? ?? ?? ?? 48 8D 2C C3 48 3B DD 0F ?? ?? ?? ?? ?? 44 8B 05 ?? ?? ?? ?? 48 8B 33",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 6,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::MySpellState",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F066A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F1AC60"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 05 ?? ?? ?? ?? 48 8D 05 6C BE 56 01 48 89 07",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "89 05 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 85 C0 74 ?? 48 8D 0D ?? ?? ?? ?? 48 89 08 48 8D 0D ?? ?? ?? ?? 48 89 48 08 EB ?? 48 8B C6",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 6,
+            "addend": 160
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::CursorPosRaw",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F76630",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F8FD40"
+      },
+      "locators": [
+        {
+          "pattern": "F2 0F 10 05 ?? ?? ?? ?? 8B 05 5A 6E EB 01 F2 0F 11 05 6A 81 E1 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 4,
+            "instruction_size": 8,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "10 05 ?? ?? ?? ?? 8B 05 DA 04 ED 01 F2 0F 11 05 7A 0F E3 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 6,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::MouseScreenVec2",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED9F70",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF2FB0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 48 8B D7 48 83 C1 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::GetPing",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x6D1680",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x6D9150"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 EC 28 0F B6 ?? ?? ?? ?? ?? 3A 05 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::GetMapID",
+      "target_kind": "function",
+      "required": true,
+      "notes": "Resolved from the Maps/Shipping/Map%u semantic caller; the tiny mov eax,[rcx+8] accessor is ICF-folded.",
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x27E900",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x282B60"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? 48 8D 4C 24 ?? 48 89 4C 24 ?? 44 8B C0",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 7,
+          "resolver": {
+            "kind": "call_rel32",
+            "displacement_offset": 1,
+            "instruction_size": 5
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ],
+            "target_pattern": "8B 41 08 C3"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::PrintChat",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xB81700",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xB86450"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 57 41 57 48 ?? ?? ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 44 24 78",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::GameRuntime::ChatMessageInstance",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EDA200",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF3240"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 3D ?? ?? ?? ?? 48 89 44 24 20 C7 ?? ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::WorldToScreen",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x13280D0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x133A050"
+      },
+      "locators": [
+        {
+          "pattern": "E8 ?? ?? ?? ?? F3 44 0F 10 44 24 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "call_rel32",
+            "displacement_offset": 1,
+            "instruction_size": 5
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ],
+            "target_pattern": "48 83 EC 48 F3 0F 10 02"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::ViewProjectionRoot",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED9F68",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF2FA8"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 35 ?? ?? ?? ?? 48 8D 4C 24 20 F3 0F 10 46 50",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::HudRoot",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6E20",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFCC0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B CE 88 46 68",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::HudInstance",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6E28",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFCC8"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 8B 57 20 48 8B 49 28",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::ViewPort",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EE8CC0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F01EE0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 48 8D 57 18 E8 ?? ?? ?? ?? 48 8B 5C 24 50",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::ViewPort2",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1FB42E0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FCE4F8"
+      },
+      "locators": [
+        {
+          "pattern": "48 C7 05 ?? ?? ?? ?? ?? ?? ?? ?? 48 8D 4B 08 48 89 03",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 11,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::Renderer",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1FB4310",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FCE528"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 35 ?? ?? ?? ?? 48 8D 54 24 20 83 C0 0F",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::ViewProjOffset",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F9E520",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FB81F0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 0D ?? ?? ?? ?? 48 C7 05 ?? ?? ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DrawingRuntime::StatsManager",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED6E60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EEFD00"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 85 C0 0F ?? ?? ?? ?? ?? 48 8B 7C 24 70",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::HudCursorTargetLogicRuntime::ShowClickEffect",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBE1A30",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBE5AF0"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 EC 28 80 FA 05 73 73 0F B6 C2 48 89 7C 24 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::IssueOrder",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x289BF0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28E4F0"
+      },
+      "locators": [
+        {
+          "pattern": "E8 ?? ?? ?? ?? C7 05 ?? ?? ?? ?? 13 00 00 00 F3 0F 10 45 E0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "call_rel32",
+            "displacement_offset": 1,
+            "instruction_size": 5
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::UpdateChargeableSpell",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x98E310",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x98C360"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B C4 44 89 40 18 48 89 48 08 55 53 57 41 54",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::UpdateChargeAim",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x98EA10",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x98CA40"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 40 B8 ?? ?? ?? ?? 48 C7 ?? ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::CastSpellSafe",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBE3300",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBE7460"
+      },
+      "locators": [
+        {
+          "pattern": "40 57 41 54 48 83 EC 58 4C 8B E2 E8 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::SendSpellCastPacket",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x98C480",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x989920"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 30 4C 8B 02 48 8B DA 48 8B ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::BuildCastPacket",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x974430",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x970350"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B CA 41 0F B6 F1",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::SendNetworkPacket",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x6F36B0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x6FB9B0"
+      },
+      "locators": [
+        {
+          "pattern": "44 3B 0D ?? ?? ?? ?? 75 03 32 C0 C3 44 89 4A 0C",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::InitChargeChanneling",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBCFC20",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBD3BF0"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 30 48 8B D9 48 85 D2 74 3F 48 8B 41 38",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::InitChargeState",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBE4560",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBE86A0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 57 48 83 EC 30 48 89 51 38 48 8B D9",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ReleaseActiveCharge",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBC3B00",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBC7BD0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 40 8B DA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetPlayerClient",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x27C990",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x280BB0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 05 ?? ?? ?? ?? 0F B6 0D ?? ?? ?? ?? 48 85 C0 41 0F 95 C0 48 85 C0 74 09 0F B6 ?? ?? ?? ?? ?? EB 03 0F B6 D1 3A D1 75 03",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::FindOwnerSlot",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBCD190",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBD1220"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B EA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetOwnerSlotIndex",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBCD280",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBD1310"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 56 41 57 48 83 EC 20 BD ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::NormalCastGate",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2F7A60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2FCD90"
+      },
+      "locators": [
+        {
+          "pattern": "83 FA 03 77 14 48 63 C2 48 83 C0 02 48 8D 04 40",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ServiceRegistryLookup",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x23F610",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x241FA0"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 EC 28 48 8B 01 FF 50 10 4C 8D 05 47 B5 C9 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "48 83 EC 28 48 8B 01 FF 50 10 4C 8D 05 77 2E CB 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::IsSlotQWER",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x3F3B10",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x3FBE20"
+      },
+      "locators": [
+        {
+          "pattern": "83 F9 03 0F 96 C0 C3 CC CC CC CC CC CC CC CC CC",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::PrepareCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x987F30",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x985400"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B C4 48 89 50 10 48 89 48 08 55 56 41 54 41 55 41 56 48 8D A8 38 FF FF FF",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "48 8B C4 48 89 50 10 48 89 48 08 55 56 41 54 41 55 41 56 48 8D A8 48 FF FF FF",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ValidateProcessCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x30D110",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x311B40"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 49 8B C8 49 8B F9",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ExecuteNormalCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x32E380",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x331F70"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 63 71 1C",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ExecuteSelfCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x3388B0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x33BCC0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B F1 48 63 FA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ValidateTarget",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x309ED0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30E950"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 EC 28 48 83 C2 28 E8 ?? ?? ?? ?? 48 85 C0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::RangeCheck",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x3106C0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x314820"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 EC 28 48 8B 49 10 48 8B 01 FF ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ExecuteTargetCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x338780",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x33BB90"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 40 48 83 C2 28",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::CanCastCheck",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBF6430",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBFAEB0"
+      },
+      "locators": [
+        {
+          "pattern": "44 89 44 24 18 53 55 56 57 41 56 48 ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::PrimeCastPosition",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBCB770",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBCF800"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B C4 48 89 58 08 55 56 57 48 83 EC 60 F3 0F 10 05 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::HudSpellHandler",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBD01F0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBD41C0"
+      },
+      "locators": [
+        {
+          "pattern": "89 54 24 10 55 53 57 41 56 41 57 48 8D 6C 24 C9",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::CastSpellVector",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x988810",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x985CB0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B C4 4C 89 48 20 48 89 48 08 55 53 57 41 54",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetSpellSlot",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x977B50",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x974680"
+      },
+      "locators": [
+        {
+          "pattern": "83 FA 3F 77 0C 48 63 C2 48 8B 84 ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::CastVisionIndexDefault",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F50350",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F699B0"
+      },
+      "locators": [
+        {
+          "pattern": "8B 05 ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? 40 ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 6,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::SpellTypeClassify",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x925DD0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x9121E0"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 20 80 79 2F 12 48 8B D9 75 2E 48 8B 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetSpellLevel",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x3ADA60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x3B1530"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B CB 48 8B 68 60 E8 ?? ?? ?? ?? 80 BC F7 84 00 00 00 00 74 ?? F3 0F 10 87 A4 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 7,
+          "resolver": {
+            "kind": "call_rel32",
+            "displacement_offset": 1,
+            "instruction_size": 5
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ],
+            "target_pattern": "8B 41 28 C3"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::ProcessCastSpell",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2923E0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x297510"
+      },
+      "locators": [
+        {
+          "pattern": "4C 8B DC 55 57 49 8D ?? ?? ?? ?? ?? 48 81 ?? ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 ?? ?? ?? ?? ?? ?? 49 89 5B 18 4D 89 63 E0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "4C 8B DC 55 57 49 8D AB C8 FE FF FF 48 81 EC 28 02 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetSpellState",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x96C140",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x96A2B0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 74 24 20 57 41 56 41 57 48 83 EC 30 48 63 FA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetSpellRemainingCooldown",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x921B10",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x90E4D0"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 40 48 8B D9 0F 29 74 24 30 48 8B 0D ?? ?? ?? ?? 0F 29 7C 24 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::IsAlive",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2B0CE0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2B6690"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 20 48 8B 01 48 8B D9 FF ?? ?? ?? ?? ?? 84 C0 74 19",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetSpellCastInfo",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x277380",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x27B340"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 57 48 83 EC 20 4C 8B ?? ?? ?? ?? ?? 44 8B CA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetResourceType",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x274F60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x278EB0"
+      },
+      "locators": [
+        {
+          "pattern": "0F B6 C2 48 ?? ?? ?? ?? ?? ?? 0F B6 84 ?? ?? ?? ?? ?? C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetAttackDelay",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x576B80",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x57D620"
+      },
+      "locators": [
+        {
+          "pattern": "F3 0F 10 ?? ?? ?? ?? ?? E9 ?? ?? ?? ?? CC CC CC 48 8B C4",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetAttackWindup",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x576A80",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x57D520"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 60 48 8B 01 8B DA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::GetBoundingRadius",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x277FF0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x27BFB0"
+      },
+      "locators": [
+        {
+          "pattern": "E8 ?? ?? ?? ?? F3 44 0F 58 C0 48 8B AC 24 98 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "call_rel32",
+            "displacement_offset": 1,
+            "instruction_size": 5
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::IssueOrderFlag",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1E3BDC8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1E53DB8"
+      },
+      "locators": [
+        {
+          "pattern": "C7 05 ?? ?? ?? ?? ?? ?? ?? ?? E8 ?? ?? ?? ?? C7 05 ?? ?? ?? ?? ?? ?? ?? ?? F3 0F 10 45 E0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 10,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::CastSpellFlag",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1E3BD60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1E53D50"
+      },
+      "locators": [
+        {
+          "pattern": "0F B6 05 ?? ?? ?? ?? 48 8D 57 30 84 C0 4C 8D 42 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "C7 05 ?? ?? ?? ?? 13 00 00 00 E8 ?? ?? ?? ?? C7 05 ?? ?? ?? ?? 13 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 10,
+            "addend": -104
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::ControlRuntime::CanAttack",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x211070",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x213450"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 20 48 ?? ?? ?? ?? 48 8B D9 74 21 E8 ?? ?? ?? ?? 84 C0 74 18 48 8B 4B 48 48 8B 53 50 48 8B 01 FF 50 18 8B 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::NavGridRuntime::NavGrid",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1ED9F08",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EF2F48"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 05 ?? ?? ?? ?? 48 89 84 ?? ?? ?? ?? ?? 49 8B CE",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::NavGridRuntime::GetCollisionFlags",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x127B570",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1288340"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 48 83 EC 60 8B ?? ?? ?? ?? ?? ?? 4C 8B D1",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::NavGridRuntime::GetAiManager",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x27EF30",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x281FA0"
+      },
+      "locators": [
+        {
+          "pattern": "0F 82 DE 00 00 00 48 8D 42 F8 4A 8D 04 C0 4C 8D 14 24 4E 8D 4C C4 F8 4C 3B D0 77 09 4C 3B CA 0F 83 BF 00 00 00 4D 8B D0 48 89 5C 24 20 49 83 E2 F8 48 89 7C 24 10 66 0F 6F 15 96 90 79 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "0F 82 DE 00 00 00 48 8D 42 F8 4A 8D 04 C0 4C 8D 14 24 4E 8D 4C C4 F8 4C 3B D0 77 09 4C 3B CA 0F 83 BF 00 00 00 4D 8B D0 48 89 5C 24 20 49 83 E2 F8 48 89 7C 24 10 66 0F 6F 15 46 B6 7A 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnIntegerPropertyChange",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x383150",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x386980"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 50 4C 8B 42 18",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "48 89 5C 24 10 48 89 74 24 18 57 48 83 EC 50 4C 8B 42 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::ClientMainLoop",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x5F5F00",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x5FA950"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 EC 48 80 3D ?? ?? ?? ?? ?? 48 89 5C 24 50",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnPlayAnimationWrapper",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xE3E380",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xE44570"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 56 41 57 48 83 EC 40 48 8B E9",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::CreateClientEffect",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x918F40",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x9061A0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 18 55 56 57 41 54 41 55 41 56 41 57 48 8D AC ?? ?? ?? ?? ?? 48 81 ?? ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 ?? ?? ?? ?? ?? ?? 45 33 E4",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::DispatchEvent",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4BC7D0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4CFA90"
+      },
+      "locators": [
+        {
+          "pattern": "E8 ?? ?? ?? ?? 48 8B 5C 24 78 48 83 C4 48",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "call_rel32",
+            "displacement_offset": 1,
+            "instruction_size": 5
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnTeleport",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x743AB0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x739800"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 6C 24 18 56 57 41 54 41 56 41 57 48 83 EC 60 4C 8D ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::Hud_OnDisconnect",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x6D62C0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x6DEC20"
+      },
+      "locators": [
+        {
+          "pattern": "40 55 53 56 57 41 54 41 56 41 57 48 8D AC ?? ?? ?? ?? ?? 48 81 ?? ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 ?? ?? ?? ?? ?? ?? 48 8B F1",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "40 55 53 56 57 41 54 41 56 41 57 48 8D AC 24 60 FE FF FF 48 81 EC A0 02 00 00 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 85 90 01 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnBuffAdd",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x21D0F0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x21FFF0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B 8A 28 04 00 00 49 8B F9 49 8B F0 48 8B DA 48 85 C9 74 5D 48 8B 01 FF 50 10 84 C0 75 43 8B 56 08 48 8B 0E E8 57 42 F9 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "40 53 55 56 57 41 54 41 56 41 57 48 81 EC 40 01 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnBuffRemove",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x21D210",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x21FFF0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B 8A 28 04 00 00 49 8B F9 49 8B F0 48 8B DA 48 85 C9 74 5D 48 8B 01 FF 50 10 84 C0 75 43 8B 56 08 48 8B 0E E8 37 41 F9 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "40 53 55 56 57 41 54 41 56 41 57 48 81 EC 40 01 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnBuffUpdate",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x21CC70",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x21F220"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 01 FF 50 10 84 C0 75 ?? 8B 57 08",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnCreate",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x567330",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x571110"
+      },
+      "locators": [
+        {
+          "pattern": "40 56 48 83 EC 20 45 33 C9 48 89 7C 24 48 44 8B C2",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnMissileCreate",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x92CB00",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x97B700"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 48 83 EC 50 48 8B F1",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnDelete",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x28F220",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2942D0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 18 55 56 57 48 83 EC 40 48 8B 01 48 8D 54 24 20",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnMissileDelete",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x90C980",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x9633A0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 74 24 18 57 41 56 41 57 48 83 EC 20 8B ?? ?? ?? ?? ?? 48 8D 05 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnDamage",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x29A630",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x29F860"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 20 55 56 41 54 41 55 41 56 48 8D 6C 24 E0",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnDoCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x986510",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x9835E0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 48 83 EC 50 48 8B EA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnFinishCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x29B020",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2A0250"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 57 48 83 EC 20 48 8B F9 48 8B DA 8B ?? ?? ?? ?? ?? E8 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnGameUpdate",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x553800",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x562AD0"
+      },
+      "locators": [
+        {
+          "pattern": "4C 8B DC 41 55 48 83 EC 70 48 ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnLevelUp",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x28FE60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x294EF0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 20 56 57 41 56 48 83 EC 60 48 8B 01",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnPlayAnimation",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2951A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x29A350"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 57 48 83 EC 20 48 8B DA 48 8B F9 8B 52 28",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnProcessSpell",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x98C480",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x989920"
+      },
+      "locators": [
+        {
+          "pattern": "40 53 48 83 EC 30 4C 8B 02 48 8B DA 48 8B ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnSpellImpact",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x9849A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x981D20"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 54 41 55 41 56 41 57 48 ?? ?? ?? ?? ?? ?? 4C 8B EA 48 8B F1 33 FF",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnStopCast",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x98C790",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x989C30"
+      },
+      "locators": [
+        {
+          "pattern": "44 88 4C 24 20 4C 89 44 24 18 88 54 24 10 53 55",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnStealth",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x299D20",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x29EEC0"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B D9 48 8B F2",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B F9 48 8B DA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::ProcessWorldEvent",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x6D73A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x6DFD60"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8D AC ?? ?? ?? ?? ?? B8 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::Hooks::OnNewPath",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x567B80",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x5715A0"
+      },
+      "locators": [
+        {
+          "pattern": "44 8B C3 49 8B D4 F2 0F 10 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ProcessCastSpellRequestLayout::DecodeTable",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1A6E320",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1ABE610"
+      },
+      "locators": [
+        {
+          "pattern": "4C 8D 05 ?? ?? ?? ?? BA ?? ?? ?? ?? B9 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 80 ?? ?? ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 24
+          },
+          "validations": {
+            "target_sections": [
+              ".rdata"
+            ]
+          },
+          "fixtures": [
+            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
+          ]
+        },
+        {
+          "pattern": "8D 05 ?? ?? ?? ?? C7 45 CF 01 00 00 00 48 89 45 C7",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 2,
+            "instruction_size": 6,
+            "addend": 192
+          },
+          "validations": {
+            "target_sections": [
+              ".rdata"
+            ]
+          },
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::KeyboardInput",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1208EB0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1214240"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 77",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::MouseInput",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x12090C0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1214450"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 0F 87",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::KeyboardDevice",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F8E730",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FA7F60"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 77",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::KeyboardBuffer",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F8E740",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FA7F70"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 77",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 14,
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::KeyboardCount",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F8E760",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FA7F90"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 77",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 7,
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::KeyboardFlag",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F2B258",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F448D8"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 0D ?? ?? ?? ?? 48 89 05 ?? ?? ?? ?? 41 B8 70 F9 B0 BA",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7,
+            "addend": 0
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::MouseDevice",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F8E738",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FA7F68"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 0F 87",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::MouseBuffer",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F8E748",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FA7F78"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 0F 87",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 14,
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::DirectInputRuntime::MouseCount",
+      "target_kind": "global",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F8E770",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FA7FA0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 0D ?? ?? ?? ?? 4C 8D 0D ?? ?? ?? ?? 4C 8B 05 ?? ?? ?? ?? BA 18 00 00 00 C7 05 ?? ?? ?? ?? 00 04 00 00 89 5C 24 20 48 8B 01 FF 50 50 83 F8 01 0F 87",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 7,
+          "resolver": {
+            "kind": "rip_rel32",
+            "displacement_offset": 3,
+            "instruction_size": 7
+          },
+          "validations": {
+            "target_sections": [
+              ".data"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SkinRuntime::CharacterDataStackUpdate",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x210460",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x212840"
+      },
+      "locators": [
+        {
+          "pattern": "88 54 24 10 55 53 56 57 41 54 41 55 41 56 41 57",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SkinRuntime::CharacterDataStackPush",
+      "target_kind": "function",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x22AEE0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x22D590"
+      },
+      "locators": [
+        {
+          "pattern": "48 89 5C 24 10 48 89 74 24 18 48 89 7C 24 20 55 41 54 41 55 41 56 41 57 48 8D 6C 24 F9",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "match"
+          },
+          "validations": {
+            "target_sections": [
+              ".text"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
