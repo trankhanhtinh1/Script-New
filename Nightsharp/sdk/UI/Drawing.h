@@ -6,6 +6,7 @@
 #include "../../Core/Vector.h"
 #include "../../imgui/imgui.h"
 #include "../Core/Game.h"
+#include "DrawingVisibility.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -409,15 +410,13 @@ namespace detail {
 using DrawHandler = void(*)();
 using Matrix4x4 = ::CoreView::Matrix4x4;
 
-inline bool g_HideAllDrawing = false;
-
 inline std::uint32_t Color(int r, int g, int b, int a = 255) {
     return detail::ToArgb(r, g, b, a);
 }
 
 inline bool IsEnabled() {
     detail::UpdateHotkey();
-    return detail::DrawingEnabled && !g_HideAllDrawing;
+    return detail::DrawingEnabled && !IsAllDrawingHidden();
 }
 
 inline void SetEnabled(bool enabled) {
@@ -1187,7 +1186,7 @@ inline bool RemoveOnPostReset(DrawHandler handler) { return detail::PostResetHan
 
 inline void DispatchDraw() {
     detail::UpdateHotkey();
-    if (g_HideAllDrawing) {
+    if (IsAllDrawingHidden()) {
         return;
     }
     if (IsEnabled()) {
@@ -1198,7 +1197,7 @@ inline void DispatchDraw() {
 
 inline void DispatchEndScene() {
     detail::UpdateHotkey();
-    if (g_HideAllDrawing) {
+    if (IsAllDrawingHidden()) {
         return;
     }
     if (IsEnabled()) {

@@ -11,11 +11,9 @@
 #include "../Core/CoreEvents.h"
 #include "../imgui/imgui.h"
 #include "../Plugins/PluginRegistry.h"
+#include "../SDK/UI/DrawingVisibility.h"
 #include "../SDK/UI/UI.h"
 #include "../SDK/UI/PermaShow.h"
-
-// Forward-declare g_HideAllDrawing to avoid pulling in all of Drawing.h here.
-namespace SDK::Drawing { extern bool g_HideAllDrawing; }
 #include "../FpsDropDebug.h"
 #include "MenuConfig.h"
 #include "ConfigStore.h"
@@ -998,6 +996,10 @@ namespace NightSharpMenu {
     }
 
     inline bool IsPointInside(float x, float y) {
+        if (::SDK::Drawing::IsAllDrawingHidden()) {
+            return false;
+        }
+
         if (HasAnyRuntimeOpen()) {
             if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
                 return true;
@@ -1057,6 +1059,9 @@ namespace NightSharpMenu {
     }
 
     inline bool HasMouseInputCapture() {
+        if (::SDK::Drawing::IsAllDrawingHidden()) {
+            return false;
+        }
         return mouseCaptureButtons != 0 || rawMouseCaptureButtons != 0 ||
                EnsoulSharpTheme::HasRootPointerCapture();
     }
@@ -1112,6 +1117,11 @@ namespace NightSharpMenu {
         WPARAM wParam,
         float clientX,
         float clientY) {
+        if (::SDK::Drawing::IsAllDrawingHidden()) {
+            ResetMouseInputCapture();
+            return false;
+        }
+
         if (!showMenu && !HasAnyRuntimeOpen()) {
             ResetMouseInputCapture();
             return false;
@@ -1139,7 +1149,7 @@ namespace NightSharpMenu {
     }
 
     inline bool ShouldCaptureRawMouseInput(HWND hWnd, LPARAM lParam) {
-        if (!showMenu || !hWnd) {
+        if (::SDK::Drawing::IsAllDrawingHidden() || !showMenu || !hWnd) {
             ResetMouseInputCapture();
             return false;
         }
@@ -1317,7 +1327,12 @@ namespace NightSharpMenu {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Bypass OBS: overlay hidden from screen capture");
         SDK::UI::EndFunctionalMenuRow();
 
-        DrawOnOffEditor("Hide All Drawings (Hotkey L)", ::SDK::Drawing::g_HideAllDrawing, "hide_all_drawings");
+        bool hideAllDrawings = ::SDK::Drawing::IsAllDrawingHidden();
+        const bool oldHideAllDrawings = hideAllDrawings;
+        DrawOnOffEditor("Hide All Drawings (Hotkey L)", hideAllDrawings, "hide_all_drawings");
+        if (hideAllDrawings != oldHideAllDrawings) {
+            ::SDK::Drawing::SetAllDrawingHidden(hideAllDrawings);
+        }
     }
 
     inline void DrawPermaShowSection() {
@@ -2365,6 +2380,19 @@ namespace NightSharpMenu {
         // Persist any pending menu/core changes (debounced). Runs even while the
         // menu is hidden so a change made just before hiding still flushes.
         ConfigStore::Tick();
+
+        if (::SDK::Drawing::IsAllDrawingHidden()) {
+            ResetMouseInputCapture();
+            EnsoulSharpTheme::CancelRootDrag();
+            ClearFunctionalMenuSidebarStyle();
+            isPermaDragging = false;
+            permaShowBoundsRight = 0.0f;
+            permaShowBoundsBottom = 0.0f;
+            menuBoundsRight = menuPosX;
+            menuBoundsBottom = menuPosY;
+            return;
+        }
+
         EnsureEnsoulCoreMenu();
         SyncEnsoulCoreMenu();
         KeepCoreMenuFirst();

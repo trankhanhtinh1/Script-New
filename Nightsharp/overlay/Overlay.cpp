@@ -338,7 +338,7 @@ void RestoreCoreMemoryHacks() {
 }
 
 void RenderStatusOverlaysSafe(OverlayStatus::Mode mode) {
-    if (SDK::Drawing::g_HideAllDrawing) {
+    if (SDK::Drawing::IsAllDrawingHidden()) {
         return;
     }
     __try {
@@ -676,7 +676,7 @@ void SetAntiCapture(bool enabled) {
 }
 
 void UpdateClickThroughFromMenuBounds() {
-    if (!IsTargetForeground()) {
+    if (SDK::Drawing::IsAllDrawingHidden() || !IsTargetForeground()) {
         SetClickThrough(true);
         return;
     }
@@ -708,6 +708,49 @@ void ToggleMenuVisible() {
     }
 }
 
+bool TryToggleAllDrawingVisibility() {
+    const bool currentlyHidden = SDK::Drawing::IsAllDrawingHidden();
+    const bool imguiTextInput =
+        !currentlyHidden &&
+        ImGui::GetCurrentContext() &&
+        ImGui::GetIO().WantTextInput;
+    if (imguiTextInput || SDK::Game::IsChatOpen()) {
+        return false;
+    }
+
+    const bool hidden = SDK::Drawing::ToggleAllDrawingHidden();
+    NightSharpMenu::ResetMouseInputCapture();
+    NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+    if (hidden) {
+        SetClickThrough(true);
+    } else {
+        UpdateClickThroughFromMenuBounds();
+    }
+    NightSharpDebug::Logf(
+        "[Overlay] Toggled Hide All Drawing: %s",
+        hidden ? "TRUE" : "FALSE");
+    return true;
+}
+
+bool TryHandleDrawingVisibilityHotkey(UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg != WM_KEYDOWN ||
+        wParam != SDK::Drawing::HideAllDrawingHotkey) {
+        return false;
+    }
+
+    if (!SDK::Drawing::IsHideAllDrawingHotkeyPress(msg, wParam, lParam)) {
+        // Consume eligible auto-repeat messages without toggling repeatedly.
+        const bool currentlyHidden = SDK::Drawing::IsAllDrawingHidden();
+        const bool imguiTextInput =
+            !currentlyHidden &&
+            ImGui::GetCurrentContext() &&
+            ImGui::GetIO().WantTextInput;
+        return !imguiTextInput && !SDK::Game::IsChatOpen();
+    }
+
+    return TryToggleAllDrawingVisibility();
+}
+
 void SyncImGuiMouse() {
     if (!g_hOverlay) {
         return;
@@ -720,6 +763,7 @@ void SyncImGuiMouse() {
     ImGuiIO& io = ImGui::GetIO();
     io.MousePos = ImVec2(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
     const bool acceptMenuInput =
+        !SDK::Drawing::IsAllDrawingHidden() &&
         g_bMenuVisible != 0 &&
         IsTargetForeground() &&
         (IsClientPointOverMenu(mousePos) ||
@@ -751,7 +795,9 @@ void RenderStatusOnlyFrame() {
 
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
     g_pd3dContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
-    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    if (!SDK::Drawing::IsAllDrawingHidden()) {
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    }
     g_pSwapChain->Present(0, 0);
 }
 
@@ -762,7 +808,9 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     if (msg == WM_NCHITTEST) {
-        if (!IsTargetForeground() || g_bMenuVisible == 0) {
+        if (SDK::Drawing::IsAllDrawingHidden() ||
+            !IsTargetForeground() ||
+            g_bMenuVisible == 0) {
             return HTTRANSPARENT;
         }
 
@@ -770,12 +818,12 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return IsScreenPointOverMenu(pt) ? HTCLIENT : HTTRANSPARENT;
     }
 
-    if (g_bMenuVisible &&
+    if (!SDK::Drawing::IsAllDrawingHidden() && g_bMenuVisible &&
         SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
         return TRUE;
     }
 
-    if (g_bMenuVisible) {
+    if (!SDK::Drawing::IsAllDrawingHidden() && g_bMenuVisible) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }
@@ -830,12 +878,18 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
     }
 
-    if (NightSharpMenu::showMenu &&
+    if (TryHandleDrawingVisibilityHotkey(msg, wParam, lParam)) {
+        return TRUE;
+    }
+
+    const bool drawingVisible = !SDK::Drawing::IsAllDrawingHidden();
+
+    if (drawingVisible && NightSharpMenu::showMenu &&
         SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
         return TRUE;
     }
 
-    if (msg == WM_INPUT &&
+    if (drawingVisible && msg == WM_INPUT &&
         NightSharpMenu::ShouldCaptureRawMouseInput(hWnd, lParam)) {
         return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
@@ -858,18 +912,11 @@ LRESULT WINAPI GameWndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
             OverlayManager::RequestShutdown();
             return TRUE;
         }
-        if (wParam == 'L') {
-            const bool imguiTextInput = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
-            const bool gameChat = SDK::Game::IsChatOpen();
-            if (!imguiTextInput && !gameChat) {
-                SDK::Drawing::g_HideAllDrawing = !SDK::Drawing::g_HideAllDrawing;
-                NightSharpDebug::Logf("[Overlay] Toggled Hide All Drawing: %s", SDK::Drawing::g_HideAllDrawing ? "TRUE" : "FALSE");
-                return TRUE;
-            }
-        }
     }
 
-    if ((NightSharpMenu::showMenu || NightSharpMenu::HasAnyRuntimeOpen()) && ImGui::GetCurrentContext()) {
+    if (drawingVisible &&
+        (NightSharpMenu::showMenu || NightSharpMenu::HasAnyRuntimeOpen()) &&
+        ImGui::GetCurrentContext()) {
         if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
             return TRUE;
         }
@@ -1176,6 +1223,9 @@ void Overlay::Run() {
                 OverlayManager::RequestShutdown();
                 break;
             }
+            if (useHotkeyFallback && (GetAsyncKeyState('L') & 1)) {
+                (void)TryToggleAllDrawingVisibility();
+            }
             NightSharpPerf::ToggleHotkeys();
             UpdateClickThroughFromMenuBounds();
         } else {
@@ -1242,15 +1292,19 @@ void Overlay::Run() {
             "NightSharpMenu::Render",
             NightSharpPerf::MsSince(perfStart));
 
-        NightSharpPerf::RenderOverlay();
-        RenderStatusOverlaysSafe(OverlayStatus::Mode::External);
+        if (!SDK::Drawing::IsAllDrawingHidden()) {
+            NightSharpPerf::RenderOverlay();
+            RenderStatusOverlaysSafe(OverlayStatus::Mode::External);
+        }
 
         ImGui::EndFrame();
         ImGui::Render();
 
         g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
         g_pd3dContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
-        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        if (!SDK::Drawing::IsAllDrawingHidden()) {
+            ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        }
         perfStart = NightSharpPerf::Now();
         g_pSwapChain->Present(0, 0);
         NightSharpPerf::AddPhase("Present", NightSharpPerf::MsSince(perfStart));

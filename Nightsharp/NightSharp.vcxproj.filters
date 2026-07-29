@@ -1879,6 +1879,9 @@
     <ClInclude Include="SDK\UI\Drawing.h">
       <Filter>SDK\UI</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\UI\DrawingVisibility.h">
+      <Filter>SDK\UI</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\UI\Icons.h">
       <Filter>SDK\UI</Filter>
     </ClInclude>

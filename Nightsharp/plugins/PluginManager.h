@@ -12,9 +12,7 @@
 #include "../CrashTrace.h"
 #include "../DebugLog.h"
 #include "../FpsDropDebug.h"
-
-// Forward-declare g_HideAllDrawing to avoid pulling in all of Drawing.h here.
-namespace SDK::Drawing { extern bool g_HideAllDrawing; }
+#include "../SDK/UI/DrawingVisibility.h"
 
 #include <cstdio>
 #include <memory>
@@ -232,7 +230,7 @@ namespace Plugins {
         }
 
         void OnRender() {
-            if (::SDK::Drawing::g_HideAllDrawing) {
+            if (::SDK::Drawing::IsAllDrawingHidden()) {
                 return;
             }
             for (auto& plugin : m_plugins) {

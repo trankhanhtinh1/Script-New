@@ -278,6 +278,35 @@ static void CleanupRenderTargetInternal() {
 // -----------------------------------------------------------------------
 // WndProc hook
 // -----------------------------------------------------------------------
+static bool TryHandleDrawingVisibilityHotkey(UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg != WM_KEYDOWN ||
+        wParam != SDK::Drawing::HideAllDrawingHotkey) {
+        return false;
+    }
+
+    const bool currentlyHidden = SDK::Drawing::IsAllDrawingHidden();
+    const bool imguiTextInput =
+        !currentlyHidden &&
+        ImGui::GetCurrentContext() &&
+        ImGui::GetIO().WantTextInput;
+    if (imguiTextInput || SDK::Game::IsChatOpen()) {
+        return false;
+    }
+
+    if (SDK::Drawing::IsHideAllDrawingHotkeyPress(msg, wParam, lParam)) {
+        const bool hidden = SDK::Drawing::ToggleAllDrawingHidden();
+        NightSharpMenu::ResetMouseInputCapture();
+        NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
+        NightSharpDebug::Logf(
+            "[D3D11Hook] Toggled Hide All Drawing: %s",
+            hidden ? "TRUE" : "FALSE");
+    }
+
+    // Consume repeat keydown messages too, otherwise a held L can leak into
+    // the game after its initial toggle.
+    return true;
+}
+
 static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (IsUnloading()) {
         return g_originalWndProc
@@ -299,7 +328,13 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         NightSharpMenu::EnsoulSharpTheme::CancelRootDrag();
     }
 
-    if (NightSharpMenu::showMenu &&
+    if (TryHandleDrawingVisibilityHotkey(msg, wParam, lParam)) {
+        return TRUE;
+    }
+
+    const bool drawingVisible = !SDK::Drawing::IsAllDrawingHidden();
+
+    if (drawingVisible && NightSharpMenu::showMenu &&
         SDK::UI::MenuManager::Instance().DispatchCapturedInput(msg, wParam, lParam)) {
         return TRUE;
     }
@@ -307,13 +342,13 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     // Raw mouse input bypasses the normal WM_*BUTTON messages on some game
     // input paths.  Consume only mouse packets owned by the visible menu and
     // still let DefWindowProc perform the required foreground-input cleanup.
-    if (msg == WM_INPUT &&
+    if (drawingVisible && msg == WM_INPUT &&
         NightSharpMenu::ShouldCaptureRawMouseInput(hWnd, lParam)) {
         return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
 
     // Let ImGui process input first
-    if (ImGui::GetCurrentContext() &&
+    if (drawingVisible && ImGui::GetCurrentContext() &&
         ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) {
         return TRUE;
     }
@@ -322,7 +357,8 @@ static LRESULT WINAPI WndProcHook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
     // widgets, so WantCaptureMouse is not sufficient.  Consume pointer input
     // over one of its actual panels to keep the same click-through behavior as
     // the external overlay and prevent a menu click from reaching the game.
-    if (NightSharpMenu::showMenu && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
+    if (drawingVisible && NightSharpMenu::showMenu &&
+        msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
         POINT point{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         if (msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) {
             ScreenToClient(hWnd, &point);
@@ -600,6 +636,10 @@ static void RestoreCoreMemoryHacks() {
 }
 
 static void RenderStatusOverlaysSafe(OverlayStatus::Mode mode) {
+    if (SDK::Drawing::IsAllDrawingHidden()) {
+        return;
+    }
+
     __try {
         OverlayStatus::Render(mode);
     }
@@ -705,7 +745,9 @@ static void Render() {
 
     NightSharpDebug::SetPhase("d3d11hook-dx11-submit");
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
-    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    if (!SDK::Drawing::IsAllDrawingHidden()) {
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    }
 
     NightSharpPerf::EndFrame();
     NightSharpDebug::SetPhase("d3d11hook-render-idle");

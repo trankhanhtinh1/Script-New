@@ -648,6 +648,7 @@
     <ClInclude Include="SDK\Signals\Signal.h" />
     <ClInclude Include="SDK\Signals\SignalManager.h" />
     <ClInclude Include="SDK\UI\Drawing.h" />
+    <ClInclude Include="SDK\UI\DrawingVisibility.h" />
     <ClInclude Include="SDK\UI\Icons.h" />
     <ClInclude Include="SDK\UI\IMenu\Abstracts\AMenuComponent.h" />
     <ClInclude Include="SDK\UI\IMenu\ColorSpectrum.h" />

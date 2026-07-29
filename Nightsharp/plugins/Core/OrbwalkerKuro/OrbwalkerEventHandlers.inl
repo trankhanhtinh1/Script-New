@@ -113,6 +113,7 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const bool isAzirSoldierAttack =
         OrbwalkingDetail::IsAzirSoldierAttackEvent(args) ||
         OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender);
+
     // OnDoCast fires at the START of the windup, so an attack the orbwalker did
     // not order — a manual right-click, or a champion script issuing its own
     // attack command — is starting right now. It used to be back-dated by a full
@@ -123,13 +124,12 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     // too early on top. Stamping `now` matches what the pending branch below
     // resolves to for the orbwalker's own attacks, so both kinds of attack are
     // gated from the same event at the same instant.
+
     const int manualAttackStartTick = now;
     const int attackStartTick = hadPendingAttack
         ? context_.pendingAttackTick
         : manualAttackStartTick;
-    // Record how long it took from order-send to animation-start (= server processing latency).
-    // CanMove() will add this gap to attackWindupMs so that the movement gate is measured
-    // from the real animation start, not from the earlier order-send tick.
+
     context_.lastAttackOrderToAnimGapMs = hadPendingAttack
         ? std::max(0, now - context_.pendingAttackTick)
         : 0;
