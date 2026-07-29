@@ -98,6 +98,7 @@ inline int PassiveRingExpireTick = 0;
 inline int PassiveWeaponExpireTick = 0;
 inline int PassiveCandidateTargetId = 0;
 inline int PassiveCandidateExpireTick = 0;
+inline int PassiveRingObjectId = 0;
 inline Vector3 PassiveRingOrigin = {};
 inline Vector3 PassiveExitCoachPoint = {};
 inline float PassiveExitRemaining = 0.0f;
@@ -397,13 +398,30 @@ inline void StartPassiveRing(const AIHeroClient& target, bool confirmed) {
     if (!Engine::ValidEnemy(target)) return;
     const auto player = GameObjects::Player();
     PassiveTargetId = static_cast<int>(target.NetworkId());
-    PassiveRingOrigin = Geometry::PassiveRingCenter(player.Position(), target.Position());
+    if (PassiveRingObjectId == 0 || PassiveRingOrigin.IsZero()) {
+        PassiveRingOrigin = Geometry::PassiveRingCenter(
+            player.Position(), target.Position());
+    }
     PassiveRingExpireTick = SDK::Variables::TickCount() + kPassiveRingMs;
     PassiveRingActive = true;
     if (confirmed) {
         ActiveSequence = Sequence::PassiveRingExit;
         SequenceTargetId = PassiveTargetId;
         SequenceExpireTick = PassiveRingExpireTick;
+    }
+}
+
+inline void ClearPassiveRing() {
+    PassiveRingActive = false;
+    PassiveRingObjectId = 0;
+    PassiveRingExpireTick = 0;
+    PassiveRingOrigin = {};
+    PassiveExitCoachPoint = {};
+    PassiveExitRemaining = 0.0f;
+    if (ActiveSequence == Sequence::PassiveRingExit) {
+        ActiveSequence = Sequence::None;
+        SequenceTargetId = 0;
+        SequenceExpireTick = 0;
     }
 }
 
@@ -439,6 +457,9 @@ inline bool CastQ(const AIHeroClient& target,
         return false;
     }
     const auto player = GameObjects::Player();
+    if (player.IsDashing() && !bufferDuringDash) {
+        return false;
+    }
     const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
     const Vector3 predicted = prediction.GetCastPosition().IsValid() &&
         !prediction.GetCastPosition().IsZero()
@@ -503,6 +524,8 @@ inline bool CastW(const AIHeroClient& target,
         !SpellEnabled(1, mode) || !CastThrottleReady(1) || WActive) {
         return false;
     }
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || player.IsDashing()) return false;
     if (!defensive && MordekaiserCanPunishShroud() &&
         Bool(ShroudMenu, "SaveVsMordekaiser", true)) {
         return false;
@@ -519,7 +542,6 @@ inline bool CastW(const AIHeroClient& target,
     PendingShroudPosition = ChooseShroudPosition(target, defensive);
     if (Engine::ControllerCastPosition(1, PendingShroudPosition)) {
         WCastTick = SDK::Variables::TickCount();
-        const auto player = GameObjects::Player();
         const auto spell = player.Spellbook().GetSpell(SDK::SpellSlot::W);
         const int rank = spell.IsValid() ? std::clamp(spell.Level(), 1, 5) : 1;
         WExpireTick = WCastTick + 5000 + (rank - 1) * 500;
@@ -1271,9 +1293,7 @@ inline void RefreshState() {
             if (Engine::ValidEnemy(target)) StartPassiveRing(target, true);
         }
     } else if (PassiveRingActive && now > PassiveRingExpireTick) {
-        PassiveRingActive = false;
-        PassiveExitCoachPoint = {};
-        PassiveExitRemaining = 0.0f;
+        ClearPassiveRing();
     }
     if (PassiveCandidateExpireTick > 0 && now > PassiveCandidateExpireTick) {
         PassiveCandidateTargetId = 0;
@@ -1438,7 +1458,7 @@ inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
             PassiveWeaponExpireTick = now +
                 ControllerHelpers::RemainingMilliseconds(
                     args.EndTime, kPassiveWeaponMs, 250, 5000);
-            PassiveRingActive = false;
+            ClearPassiveRing();
             ActiveSequence = Sequence::PassiveKama;
             SequenceTargetId = PassiveTargetId;
             SequenceExpireTick = PassiveWeaponExpireTick;
@@ -1470,7 +1490,7 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
             PassiveWeaponReady = false;
             PassiveWeaponExpireTick = 0;
         } else if (Engine::TextContains(args.BuffName, "AkaliPZoneGround")) {
-            PassiveRingActive = false;
+            ClearPassiveRing();
         } else if (Engine::TextContains(args.BuffName, "AkaliW")) {
             WActive = false;
             ShroudCenter = {};
@@ -1526,6 +1546,36 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid()) return;
+    const bool passiveRing =
+        IsPassiveRingSpawnObjectName(args.Sender.Name) ||
+        IsPassiveRingSpawnObjectName(args.Sender.CharacterName);
+    const bool passiveExpired =
+        IsPassiveRingExpiredObjectName(args.Sender.Name) ||
+        IsPassiveRingExpiredObjectName(args.Sender.CharacterName);
+    const auto player = GameObjects::Player();
+    const bool expirationMatchesTrackedRing = PassiveRingActive &&
+        PassiveRingOrigin.IsValid() && !PassiveRingOrigin.IsZero() &&
+        args.Sender.Position.IsValid() && !args.Sender.Position.IsZero() &&
+        args.Sender.Position.Distance2D(PassiveRingOrigin) <= 250.0f;
+    if (passiveExpired && expirationMatchesTrackedRing) {
+        ClearPassiveRing();
+    } else if (passiveRing && player.IsValid() && !HasPassiveWeapon() &&
+               args.Sender.Position.IsValid() &&
+               !args.Sender.Position.IsZero() &&
+               args.Sender.Position.Distance2D(player.Position()) <= 900.0f) {
+        PassiveRingObjectId = static_cast<int>(args.Sender.NetworkId);
+        PassiveRingOrigin = args.Sender.Position;
+        PassiveRingExpireTick = SDK::Variables::TickCount() + kPassiveRingMs;
+        PassiveRingActive = true;
+        AIHeroClient target = HeroByNetworkId(PassiveCandidateTargetId);
+        if (!Engine::ValidEnemy(target)) target = HeroByNetworkId(QTargetId);
+        if (Engine::ValidEnemy(target)) {
+            PassiveTargetId = static_cast<int>(target.NetworkId());
+            ActiveSequence = Sequence::PassiveRingExit;
+            SequenceTargetId = PassiveTargetId;
+            SequenceExpireTick = PassiveRingExpireTick;
+        }
+    }
     if ((Engine::TextContains(args.Sender.Name, "AkaliWSmoke") ||
          Engine::TextContains(args.Sender.CharacterName, "AkaliWSmoke")) &&
         SDK::Variables::TickCount() - WCastTick <= 1200) {
@@ -1538,8 +1588,20 @@ inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
 }
 
 inline void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+    const int objectId = static_cast<int>(args.Sender.NetworkId);
+    const bool namedPassiveRing =
+        IsPassiveRingObjectName(args.Sender.Name) ||
+        IsPassiveRingObjectName(args.Sender.CharacterName);
+    const bool matchesTrackedRing = PassiveRingActive &&
+        PassiveRingOrigin.IsValid() && !PassiveRingOrigin.IsZero() &&
+        args.Sender.Position.IsValid() && !args.Sender.Position.IsZero() &&
+        args.Sender.Position.Distance2D(PassiveRingOrigin) <= 250.0f;
+    if ((PassiveRingObjectId != 0 && objectId == PassiveRingObjectId) ||
+        (namedPassiveRing && matchesTrackedRing)) {
+        ClearPassiveRing();
+    }
     if (WObjectNetworkId != 0 &&
-        static_cast<int>(args.Sender.NetworkId) == WObjectNetworkId) {
+        objectId == WObjectNetworkId) {
         WObjectNetworkId = 0;
         if (!HasStealthShroudBuff()) {
             WActive = false;
@@ -1722,6 +1784,7 @@ inline void OnLoad() {
     PassiveWeaponExpireTick = 0;
     PassiveCandidateTargetId = 0;
     PassiveCandidateExpireTick = 0;
+    PassiveRingObjectId = 0;
     PassiveRingOrigin = {};
     PassiveExitCoachPoint = {};
     PassiveExitRemaining = 0.0f;
@@ -1775,6 +1838,8 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Read live AkaliPWeapon rather than assuming a passive attack exists",
     "Read the passive-zone buff and calculate the ring center 120 units toward Akali",
+    "Use the local passive indicator object as the authoritative ring center when available",
+    "Clear passive-ring state from indicator expiry and deletion events",
     "Draw a player-owned ring-exit vector without issuing movement orders",
     "Hold Q/E long enough for a confirmed passive kama in doubled AA range",
     "Preserve a prepared kama from being spent on a minion while its champion target is in range",
@@ -1788,6 +1853,7 @@ inline constexpr const char* Scenarios[] = {
     "Save offensive W against ready Mordekaiser R",
     "Delay offensive W into an immediate reveal threat",
     "Use W against incoming spell lines, hard CC, multi-enemy pressure, low HP, and flee",
+    "Do not spend Q or W during an unrelated dash while preserving the intentional E2-Q buffer",
     "Track local shroud missile/object center for future E-to-shroud routes",
     "Use E1 with collision-aware high prediction after Q tip, CC, dash, or a committed cast",
     "Compute the 400-unit E backflip destination before casting E1",

@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <memory>
 
 namespace Plugins::DevTools {
 
@@ -30,10 +31,9 @@ private:
     };
 
     mutable std::vector<SDK::GameObject> scanCache_;
-    mutable std::vector<SDK::GameObject> activeObjectsCache_;
     mutable std::mutex detectorMutex_;
-    std::vector<DetectedObjectInfo> detectedObjects_;
-    std::vector<DetectorTabActiveObject> guiActiveObjects_;
+    std::shared_ptr<const std::vector<DetectedObjectInfo>> detectedObjects_;
+    std::shared_ptr<const std::vector<DetectorTabActiveObject>> guiActiveObjects_;
     int lastUpdateTick_ = 0;
 
 public:
@@ -44,8 +44,14 @@ public:
     void OnUpdate() override {
         if (!plugin_->enabled_) {
             std::lock_guard<std::mutex> lk(detectorMutex_);
-            detectedObjects_.clear();
-            guiActiveObjects_.clear();
+            detectedObjects_.reset();
+            guiActiveObjects_.reset();
+            return;
+        }
+
+        const bool buildDrawingData = SDK::Drawing::IsEnabled();
+        const bool buildGuiData = plugin_->activeTabIdx_ == 0;
+        if (!buildDrawingData && !buildGuiData) {
             return;
         }
 
@@ -62,40 +68,62 @@ public:
 
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(plugin_->maxRange_ * plugin_->maxRange_);
+        if (!cursorPos.IsValid()) {
+            std::lock_guard<std::mutex> lk(detectorMutex_);
+            detectedObjects_.reset();
+            guiActiveObjects_.reset();
+            return;
+        }
 
         for (const auto& obj : scanCache_) {
             if (!obj.IsValid()) {
                 continue;
             }
 
-            const Vec3 pos = obj.Position();
+            const uintptr_t address = obj.Address();
+            if (!Globals::IsValidPtr(address)) {
+                continue;
+            }
+
+            // Position is one guarded field read.  Reject distant objects
+            // before the full type-aware snapshot (names, team and stats),
+            // which is the dominant cost when AllGameObjects is selected.
+            const Vec3 pos = ::Core::Objects::ReadPosition(address);
+            if (!pos.IsValid()) {
+                continue;
+            }
             const float distSqr = pos.DistanceSqr(cursorPos);
             if (distSqr >= rangeSqr) {
                 continue;
             }
 
-            const std::string& name = plugin_->GetObjectName(obj);
-            const std::string& charName = plugin_->GetObjectCharacterName(obj);
+            // Core::Objects performs the bulk read behind an SEH boundary and
+            // only touches fields supported by the resolved runtime type.
+            const auto type = obj.Type();
+            const auto objectData = ::Core::Objects::ReadSnapshot(address, type);
+            const std::uint32_t netId = objectData.handle.networkId;
+            if (netId == 0 || netId == 0xFFFFFFFFu) {
+                continue;
+            }
+
+            const std::string name = objectData.name;
+            const std::string charName = objectData.characterName;
 
             if (plugin_->IsClutter(obj, name, charName)) {
                 continue;
             }
 
             // Track age
-            const std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-            float age = 0.0f;
-            auto it = plugin_->trackedObjectTicks_.find(netId);
-            if (it == plugin_->trackedObjectTicks_.end()) {
-                plugin_->trackedObjectTicks_[netId] = now;
-            } else {
-                age = static_cast<float>(now - it->second) / 1000.0f;
-            }
+            const float age = plugin_->TrackObjectAndGetAge(netId, now);
 
-            const std::string& displayName = (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) ? charName : name;
+            const bool isHero = type == ::Core::Objects::ObjectType::AIHeroClient;
+            const bool isMinion = type == ::Core::Objects::ObjectType::AIMinionClient;
+            const bool supportsAIBaseData = isHero || isMinion;
+            const std::string& displayName = supportsAIBaseData ? charName : name;
             const std::string& fallbackName = displayName.empty() ? (name.empty() ? charName : name) : displayName;
 
             // --- 1. Populate DetectedObjectInfo (for 3D text drawing) ---
-            {
+            if (buildDrawingData) {
                 DetectedObjectInfo info;
                 info.position = pos;
                 info.networkId = netId;
@@ -104,7 +132,7 @@ public:
                 info.lines.push_back(fallbackName);
 
                 // 2. Object Type
-                const char* typeStr = plugin_->ObjectTypeToString(obj.Type());
+                const char* typeStr = plugin_->ObjectTypeToString(type);
                 info.lines.push_back(typeStr);
 
                 // 3. NetworkID
@@ -123,18 +151,18 @@ public:
                 info.lines.push_back(ageTxt);
 
                 // 6. AIBaseClient Info (Health)
-                if (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) {
-                    SDK::AIBaseClient aiObj(obj.Handle());
-                    if (aiObj.IsValid()) {
-                        char hpTxt[128];
-                        std::snprintf(hpTxt, sizeof(hpTxt), "Health: %.1f/%.1f (%.1f%%)",
-                                      aiObj.Health(), aiObj.MaxHealth(), aiObj.HealthPercent());
-                        info.lines.push_back(hpTxt);
-                    }
+                if (supportsAIBaseData) {
+                    const float healthPercent = objectData.maxHealth > 0.0f
+                        ? objectData.health * 100.0f / objectData.maxHealth
+                        : 0.0f;
+                    char hpTxt[128];
+                    std::snprintf(hpTxt, sizeof(hpTxt), "Health: %.1f/%.1f (%.1f%%)",
+                                  objectData.health, objectData.maxHealth, healthPercent);
+                    info.lines.push_back(hpTxt);
                 }
 
                 // 7. AIHeroClient Info (Spells & Buffs)
-                if (obj.IsHero()) {
+                if (isHero) {
                     SDK::AIHeroClient hero(obj.Handle());
                     if (hero.IsValid()) {
                         info.lines.push_back("Spells:");
@@ -189,7 +217,7 @@ public:
                 }
 
                 // 8. Missile Info
-                if (obj.IsMissile()) {
+                if (type == ::Core::Objects::ObjectType::MissileClient) {
                     float speed = 0.0f;
                     float mRange = 0.0f;
                     plugin_->GetMissileSpeedAndRange(obj, speed, mRange);
@@ -207,18 +235,35 @@ public:
             }
 
             // --- 2. Populate DetectorTabActiveObject (for GUI Table) ---
-            {
+            if (buildGuiData) {
                 DetectorTabActiveObject guiObj;
                 guiObj.name = name;
                 guiObj.characterName = charName;
                 guiObj.networkId = netId;
-                guiObj.address = obj.Address();
-                guiObj.typeStr = plugin_->ObjectTypeToString(obj.Type());
-                guiObj.teamStr = plugin_->TeamToString(obj);
-                
-                char statusBuf[256] = {};
-                plugin_->GetStatusString(obj, statusBuf, sizeof(statusBuf));
-                guiObj.statusStr = statusBuf;
+                guiObj.address = address;
+                guiObj.typeStr = plugin_->ObjectTypeToString(type);
+
+                switch (objectData.team) {
+                case 100: guiObj.teamStr = "Blue (100)"; break;
+                case 200: guiObj.teamStr = "Red (200)"; break;
+                case 300: guiObj.teamStr = "Neutral"; break;
+                default: guiObj.teamStr = "Unknown"; break;
+                }
+
+                if (supportsAIBaseData) {
+                    guiObj.statusStr = objectData.isDead ? "Dead" : "Alive";
+                    if (!objectData.isVisible) guiObj.statusStr += ", Fog";
+                    if (!objectData.isTargetable) guiObj.statusStr += ", Untargetable";
+                    char healthText[96] = {};
+                    const float healthPercent = objectData.maxHealth > 0.0f
+                        ? objectData.health * 100.0f / objectData.maxHealth
+                        : 0.0f;
+                    std::snprintf(healthText, sizeof(healthText), ", HP:%.0f/%.0f(%.0f%%)",
+                                  objectData.health, objectData.maxHealth, healthPercent);
+                    guiObj.statusStr += healthText;
+                } else {
+                    guiObj.statusStr = objectData.isVisible ? "Visible object" : "Object in fog";
+                }
                 
                 guiObj.distance = std::sqrt(distSqr);
                 guiObj.age = age;
@@ -228,9 +273,15 @@ public:
             }
         }
 
+        auto detectedSnapshot =
+            std::make_shared<std::vector<DetectedObjectInfo>>(
+                std::move(detectedList));
+        auto guiSnapshot =
+            std::make_shared<std::vector<DetectorTabActiveObject>>(
+                std::move(guiActiveList));
         std::lock_guard<std::mutex> lk(detectorMutex_);
-        detectedObjects_ = std::move(detectedList);
-        guiActiveObjects_ = std::move(guiActiveList);
+        detectedObjects_ = std::move(detectedSnapshot);
+        guiActiveObjects_ = std::move(guiSnapshot);
     }
 
     void OnRender() override {
@@ -238,15 +289,18 @@ public:
             return;
         }
 
-        std::vector<DetectedObjectInfo> renderList;
+        std::shared_ptr<const std::vector<DetectedObjectInfo>> renderList;
         {
             std::lock_guard<std::mutex> lk(detectorMutex_);
             renderList = detectedObjects_;
         }
+        if (!renderList) {
+            return;
+        }
 
         const Vec2 rendererSize = SDK::Drawing::GetRendererSize();
 
-        for (const auto& obj : renderList) {
+        for (const auto& obj : *renderList) {
             Vec2 screen = {};
             if (!SDK::Drawing::WorldToScreen(obj.position, screen) || !screen.IsValid()) {
                 continue;
@@ -269,7 +323,8 @@ public:
 
     void OnDeleteObject(const SDK::Events::ObjectEventArgs& args) override {
         if (args.Sender.NetworkId != 0) {
-            plugin_->trackedObjectTicks_.erase(static_cast<std::uint32_t>(args.Sender.NetworkId));
+            plugin_->ForgetTrackedObject(
+                static_cast<std::uint32_t>(args.Sender.NetworkId));
         }
     }
 
@@ -337,13 +392,13 @@ public:
         ImGui::Separator();
         ImGui::Text("Active Objects Near Cursor (On Screen):");
 
-        std::vector<DetectorTabActiveObject> activeObjects;
+        std::shared_ptr<const std::vector<DetectorTabActiveObject>> activeObjects;
         {
             std::lock_guard<std::mutex> lk(detectorMutex_);
             activeObjects = guiActiveObjects_;
         }
 
-        if (activeObjects.empty()) {
+        if (!activeObjects || activeObjects->empty()) {
             ImGui::Text("No objects near cursor.");
         } else {
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Hotkey Hint: Press key 'P' to copy ALL objects in table below to Clipboard.");
@@ -364,7 +419,7 @@ public:
                 ImGui::TableSetupColumn("Action");
                 ImGui::TableHeadersRow();
 
-                for (const auto& obj : activeObjects) {
+                for (const auto& obj : *activeObjects) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::TextUnformatted(obj.name.c_str());
@@ -393,15 +448,9 @@ public:
                     ImGui::SameLine();
                     char eventBtnId[64];
                     std::snprintf(eventBtnId, sizeof(eventBtnId), "Track Events##%u", obj.networkId);
-                    bool isTracking = plugin_->openEventLogWindows_.find(obj.networkId) != plugin_->openEventLogWindows_.end();
+                    bool isTracking = plugin_->IsEventLogOpen(obj.networkId);
                     if (ImGui::Checkbox(eventBtnId, &isTracking)) {
-                        if (isTracking) {
-                            plugin_->openEventLogWindows_.insert(obj.networkId);
-                            plugin_->objectEventLogs_[obj.networkId] = std::vector<DevTools::EventLogEntry>();
-                        } else {
-                            plugin_->openEventLogWindows_.erase(obj.networkId);
-                            plugin_->objectEventLogs_.erase(obj.networkId);
-                        }
+                        plugin_->SetEventLogOpen(obj.networkId, isTracking);
                     }
                 }
                 ImGui::EndTable();
@@ -525,17 +574,11 @@ public:
                     }
                     if (snap.isUnderlyingValid) {
                         ImGui::SameLine();
-                        bool isTracking = plugin_->openEventLogWindows_.find(snap.networkId) != plugin_->openEventLogWindows_.end();
+                        bool isTracking = plugin_->IsEventLogOpen(snap.networkId);
                         char eventCheckId[64];
                         std::snprintf(eventCheckId, sizeof(eventCheckId), "Events##Win%u", snap.networkId);
                         if (ImGui::Checkbox(eventCheckId, &isTracking)) {
-                            if (isTracking) {
-                                plugin_->openEventLogWindows_.insert(snap.networkId);
-                                plugin_->objectEventLogs_[snap.networkId] = std::vector<DevTools::EventLogEntry>();
-                            } else {
-                                plugin_->openEventLogWindows_.erase(snap.networkId);
-                                plugin_->objectEventLogs_.erase(snap.networkId);
-                            }
+                            plugin_->SetEventLogOpen(snap.networkId, isTracking);
                         }
                     }
 
@@ -556,15 +599,18 @@ public:
     }
 
     void OnCopyHotkey() override {
-        std::vector<DetectorTabActiveObject> copyList;
+        std::shared_ptr<const std::vector<DetectorTabActiveObject>> copyList;
         {
             std::lock_guard<std::mutex> lk(detectorMutex_);
             copyList = guiActiveObjects_;
         }
+        if (!copyList) {
+            return;
+        }
 
         std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
         int count = 0;
-        for (const auto& obj : copyList) {
+        for (const auto& obj : *copyList) {
             char lineBuf[512];
             std::snprintf(lineBuf, sizeof(lineBuf),
                           "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
@@ -584,6 +630,7 @@ public:
 private:
     void PopulateScanCache() const {
         scanCache_.clear();
+        plugin_->BeginObjectCollection();
         if (plugin_->scanProviderIndex_ == 0) {
             // Using SDK::ObjectManager::Get
             if (plugin_->scanRawGameObjects_) {

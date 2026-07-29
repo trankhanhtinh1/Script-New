@@ -27,6 +27,17 @@ int main() {
                 WeaponFromRuntimeName("apheliosoffhandbuffcrescendum") ==
                     Weapon::Crescendum,
             "runtime names must identify weapons case-insensitively");
+    Require(IsCalibrumMarkBuffName(
+                "ApheliosCalibrumBonusRangeBuff") &&
+                IsCalibrumMarkBuffName(
+                    "aphelioscalibrumbonusrangedebuff") &&
+                !IsCalibrumMarkBuffName("ApheliosGravitumDebuff"),
+            "both SDK Calibrum mark aliases must map to one mark state");
+    Require(ObservedWeaponAmmo(true, 37, false, -1) == 37 &&
+                ObservedWeaponAmmo(false, -1, true, 12) == 12 &&
+                ObservedWeaponAmmo(true, 4, true, 31) == 31 &&
+                ObservedWeaponAmmo(true, 99, false, -1) == -1,
+            "manager/off-hand ammo stacks must reconcile and reject invalid counters");
 
     WeaponState state{};
     Require(HasUniqueWeapons(state) && state.QueueKnown,

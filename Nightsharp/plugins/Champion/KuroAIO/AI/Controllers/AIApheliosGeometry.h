@@ -109,6 +109,32 @@ inline Weapon WeaponFromRuntimeName(const char* name) {
     return Weapon::Unknown;
 }
 
+// Older EnsoulSharp builds expose Calibrum's target mark as ...RangeBuff,
+// while newer/native event feeds commonly use ...RangeDebuff.  Both identify
+// the same consume-on-attack state and must drive one mark state machine.
+inline bool IsCalibrumMarkBuffName(const char* name) {
+    return ContainsInsensitive(name, "aphelioscalibrumbonusrangebuff") ||
+           ContainsInsensitive(name, "aphelioscalibrumbonusrangedebuff");
+}
+
+// Main/off-hand manager buff stacks are an independent ammo observation path
+// used by the C# implementation.  Prefer whichever live hand is present while
+// rejecting unrelated or corrupt stack counters.
+inline int ObservedWeaponAmmo(bool managerPresent,
+                              int managerStacks,
+                              bool offhandPresent,
+                              int offhandStacks) {
+    int observed = -1;
+    const auto accept = [&](bool present, int stacks) {
+        if (present && stacks >= 0 && stacks <= kWeaponAmmo) {
+            observed = std::max(observed, stacks);
+        }
+    };
+    accept(managerPresent, managerStacks);
+    accept(offhandPresent, offhandStacks);
+    return observed;
+}
+
 struct WeaponState {
     Weapon Main = Weapon::Calibrum;
     Weapon Offhand = Weapon::Severum;

@@ -17,6 +17,43 @@ using SharedGeometry::ProjectPointToSegment2D;
 using SharedGeometry::Rotate2D;
 using SharedGeometry::SegmentProjection;
 
+inline bool ContainsInsensitive(const char* value, const char* token) {
+    if (!value || !token || !token[0]) return false;
+    for (const char* start = value; *start; ++start) {
+        const char* left = start;
+        const char* right = token;
+        while (*left && *right) {
+            char a = *left++;
+            char b = *right++;
+            if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+            if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+            if (a != b) break;
+        }
+        if (!*right) return true;
+    }
+    return false;
+}
+
+// EnsoulSharp exposes the passive ring through skin-qualified particle names
+// (for example Akali_..._P_Indicator_Circle_Self), while the native buff can
+// be absent for a few frames.  Keep the matcher pure so object-event tracking
+// can be regression-tested without a live game.
+inline bool IsPassiveRingSpawnObjectName(const char* name) {
+    return ContainsInsensitive(name, "akali_") &&
+           ContainsInsensitive(name, "p_indicator_circle_self");
+}
+
+inline bool IsPassiveRingObjectName(const char* name) {
+    return IsPassiveRingSpawnObjectName(name) ||
+           (ContainsInsensitive(name, "akali_") &&
+            ContainsInsensitive(name, "p_indicator_circle_activate"));
+}
+
+inline bool IsPassiveRingExpiredObjectName(const char* name) {
+    return ContainsInsensitive(name, "akali_") &&
+           ContainsInsensitive(name, "p_indicator_circle_expired");
+}
+
 struct ConeHit {
     bool Hits = false;
     bool TipSlow = false;

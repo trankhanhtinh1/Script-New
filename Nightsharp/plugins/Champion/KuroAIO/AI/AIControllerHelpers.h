@@ -7,6 +7,7 @@
 
 #include "AIChampionEngine.h"
 #include "AIGeometry.h"
+#include "AIMarksmanTargeting.h"
 
 #include <algorithm>
 #include <array>
@@ -217,6 +218,24 @@ inline bool SpellEnabled(int index, Mode mode) {
     return Engine::MenuSpellEnabled(Engine::MenuForMode(mode), index, true);
 }
 
+inline bool ControllerSpellAvailable(int index,
+                                     Mode mode,
+                                     bool allowDuringWindup = false) {
+    if (index < 0 || index >= 4 || !Engine::ActiveProfile ||
+        !Engine::RuntimeSpells[index] ||
+        !Engine::RuntimeSpells[index]->IsReady() ||
+        !SpellEnabled(index, mode)) {
+        return false;
+    }
+    const auto& spec = Engine::ResolvedSpecs[index];
+    if (!Engine::ModeEnabled(spec, mode) ||
+        !Engine::ResourceOkay(spec, mode)) {
+        return false;
+    }
+    return allowDuringWindup ||
+           !Engine::ShouldPreserveAttack(spec, StepRule::None);
+}
+
 inline bool RuntimeNameContains(int index, const char* token) {
     return index >= 0 && index < 4 && token && token[0] &&
            Engine::TextContains(Engine::RuntimeSpellNames[index].c_str(), token);
@@ -346,6 +365,30 @@ inline AIHeroClient RawAllyHeroByNetworkId(int networkId) {
     return {};
 }
 
+inline bool IsCommonUntargetableOrImmune(const AIBaseClient& target);
+
+inline AIHeroClient OrbwalkerHeroTarget(float range = FLT_MAX) {
+    const auto orbTarget = Orbwalker::GetTarget();
+    if (!orbTarget.IsValid() || !orbTarget.IsHero()) return {};
+    const AIHeroClient hero(orbTarget.Handle());
+    return Engine::ValidEnemy(hero, range) ? hero : AIHeroClient{};
+}
+
+inline bool OrbwalkerTargets(const AIBaseClient& target,
+                             float range = FLT_MAX) {
+    if (!target.IsValid()) return false;
+    const auto hero = OrbwalkerHeroTarget(range);
+    return hero.IsValid() && hero.NetworkId() == target.NetworkId();
+}
+
+inline AIHeroClient PlayerSelectedEnemy(float range = FLT_MAX) {
+    if (auto* selector = SDK::TargetSelector::Instance()) {
+        const auto selected = selector->GetSelectedTarget();
+        if (Engine::ValidEnemy(selected, range)) return selected;
+    }
+    return {};
+}
+
 inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
                                          float range = 1400.0f) {
     const auto player = GameObjects::Player();
@@ -364,6 +407,63 @@ inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
             bestDistance = distance;
         }
     }
+    return best;
+}
+
+// The builder supplies champion-specific reach facts (prediction, collision,
+// marks, charge state and real combo damage). The shared loop guarantees that
+// a selected or locked target never wins merely by preference when no legal
+// damage route can actually reach it.
+template <typename ContextBuilder>
+inline AIHeroClient SelectReachableEnemy(
+    const AIHeroClient& preferred,
+    float searchRange,
+    ContextBuilder&& buildContext,
+    MarksmanTargeting::TargetEvaluation* chosenEvaluation = nullptr) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || searchRange <= 0.0f) return {};
+
+    AIHeroClient best{};
+    MarksmanTargeting::TargetEvaluation bestEvaluation{};
+    const int preferredId = Engine::ValidEnemy(preferred)
+        ? static_cast<int>(preferred.NetworkId()) : 0;
+    const auto orbTarget = OrbwalkerHeroTarget(searchRange);
+    const int orbTargetId = orbTarget.IsValid()
+        ? static_cast<int>(orbTarget.NetworkId()) : 0;
+
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!Engine::ValidEnemy(enemy, searchRange) ||
+            IsCommonUntargetableOrImmune(enemy)) {
+            continue;
+        }
+        auto context = buildContext(enemy);
+        context.Valid = context.Valid && enemy.IsValid() && !enemy.IsDead();
+        context.Targetable = context.Targetable && enemy.IsTargetable();
+        context.Distance = player.Position().Distance2D(enemy.Position());
+        context.MaximumReach = searchRange;
+        context.HealthPercent = enemy.HealthPercent();
+        context.EffectiveHealth = std::max(
+            context.EffectiveHealth,
+            std::max(1.0f, enemy.Health()));
+        context.Selected = context.Selected ||
+            (preferredId != 0 &&
+             static_cast<int>(enemy.NetworkId()) == preferredId);
+        context.Locked = context.Locked ||
+            (Engine::LockedTargetNetworkId != 0 &&
+             static_cast<int>(enemy.NetworkId()) ==
+                 Engine::LockedTargetNetworkId);
+        context.OrbwalkerTarget = context.OrbwalkerTarget ||
+            (orbTargetId != 0 &&
+             static_cast<int>(enemy.NetworkId()) == orbTargetId);
+
+        const auto evaluation = MarksmanTargeting::EvaluateTarget(context);
+        if (MarksmanTargeting::BetterTarget(evaluation, bestEvaluation)) {
+            best = enemy;
+            bestEvaluation = evaluation;
+        }
+    }
+
+    if (chosenEvaluation) *chosenEvaluation = bestEvaluation;
     return best;
 }
 

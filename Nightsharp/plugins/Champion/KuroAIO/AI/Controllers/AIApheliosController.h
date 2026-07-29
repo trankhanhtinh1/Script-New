@@ -228,7 +228,7 @@ inline bool PlayerReloading() {
 }
 
 inline bool IsCalibrumMarkName(const char* name) {
-    return Engine::TextContains(name, "aphelioscalibrumbonusrangedebuff");
+    return IsCalibrumMarkBuffName(name);
 }
 
 inline bool IsGravitumDebuffName(const char* name) {
@@ -313,6 +313,39 @@ inline int LiveQAmmo(const AIHeroClient& player) {
     return std::clamp(ammo, 0, kWeaponAmmo);
 }
 
+inline const char* ManagerBuffName(Weapon weapon) {
+    switch (weapon) {
+    case Weapon::Calibrum: return "ApheliosCalibrumManager";
+    case Weapon::Severum: return "ApheliosSeverumManager";
+    case Weapon::Gravitum: return "ApheliosGravitumManager";
+    case Weapon::Infernum: return "ApheliosInfernumManager";
+    case Weapon::Crescendum: return "ApheliosCrescendumManager";
+    default: return "";
+    }
+}
+
+inline const char* OffhandBuffName(Weapon weapon) {
+    switch (weapon) {
+    case Weapon::Calibrum: return "ApheliosOffHandBuffCalibrum";
+    case Weapon::Severum: return "ApheliosOffHandBuffSeverum";
+    case Weapon::Gravitum: return "ApheliosOffHandBuffGravitum";
+    case Weapon::Infernum: return "ApheliosOffHandBuffInfernum";
+    case Weapon::Crescendum: return "ApheliosOffHandBuffCrescendum";
+    default: return "";
+    }
+}
+
+inline int LiveBuffAmmo(const AIHeroClient& player, Weapon weapon) {
+    if (!player.IsValid() || !IsWeapon(weapon)) return -1;
+    const char* manager = ManagerBuffName(weapon);
+    const char* offhand = OffhandBuffName(weapon);
+    const bool managerPresent = manager[0] && player.HasBuff(manager);
+    const bool offhandPresent = offhand[0] && player.HasBuff(offhand);
+    return ObservedWeaponAmmo(
+        managerPresent, managerPresent ? player.GetBuffCount(manager) : -1,
+        offhandPresent, offhandPresent ? player.GetBuffCount(offhand) : -1);
+}
+
 inline void RefreshMarks() {
     const int now = Now();
     for (auto& mark : Marks) {
@@ -351,7 +384,8 @@ inline WeaponMark* FindMark(int networkId, bool create = false) {
 
 inline bool HasCalibrumMark(const AIBaseClient& target) {
     if (!target.IsValid()) return false;
-    if (target.HasBuff("ApheliosCalibrumBonusRangeDebuff")) return true;
+    if (target.HasBuff("ApheliosCalibrumBonusRangeBuff") ||
+        target.HasBuff("ApheliosCalibrumBonusRangeDebuff")) return true;
     const auto* mark = FindMark(static_cast<int>(target.NetworkId()));
     return mark && mark->Calibrum &&
            mark->CalibrumExpireTick >= Now();
@@ -428,12 +462,26 @@ inline void RefreshWeaponState() {
         }
     }
 
-    const int liveAmmo = Bool(AmmoMenu, "LiveReconcile", true)
-        ? LiveQAmmo(player) : -1;
-    if (liveAmmo >= 0 && IsWeapon(State.Main)) {
-        SetAmmo(State, State.Main, liveAmmo, true);
+    const bool liveReconcile = Bool(AmmoMenu, "LiveReconcile", true);
+    int liveMainAmmo = liveReconcile ? LiveQAmmo(player) : -1;
+    if (liveMainAmmo < 0 && liveReconcile) {
+        liveMainAmmo = LiveBuffAmmo(player, State.Main);
+    }
+    const int liveOffhandAmmo = liveReconcile
+        ? LiveBuffAmmo(player, State.Offhand) : -1;
+    bool observedAmmo = false;
+    if (liveMainAmmo >= 0 && IsWeapon(State.Main)) {
+        SetAmmo(State, State.Main, liveMainAmmo, true);
+        observedAmmo = true;
+    }
+    if (liveOffhandAmmo >= 0 && IsWeapon(State.Offhand)) {
+        SetAmmo(State, State.Offhand, liveOffhandAmmo, true);
+        observedAmmo = true;
+    }
+    if (observedAmmo) {
         LastAmmoObservationTick = Now();
-        Confidence = Confidence == StateConfidence::PairObserved
+        Confidence = Confidence == StateConfidence::PairObserved ||
+                     Confidence == StateConfidence::FullyObserved
             ? StateConfidence::FullyObserved
             : StateConfidence::AmmoObserved;
     }
@@ -2742,6 +2790,8 @@ inline constexpr const char* Scenarios[] = {
     "Mark queue confidence false when runtime identity contradicts the predicted queue",
     "Expose predicted, pair-live, ammo-live and fully-live confidence separately",
     "Read live ammo only when MaxAmmo resembles the fifty-shot Moonlight reservoir",
+    "Fall back to main/off-hand manager buff stacks when Q ammo is unavailable",
+    "Reconcile off-hand ammo before Phase exposes that weapon as main-hand Q",
     "Reject ordinary one-charge and three-charge spell ammo as weapon ammo",
     "Clamp every observed weapon ammo value to zero through fifty",
     "Decrement ordinary main-hand attacks by one ammo",
@@ -2765,6 +2815,7 @@ inline constexpr const char* Scenarios[] = {
     "Reconcile an event-predicted cooldown with live Q cooldown when exposed",
     "Never cast an unavailable off-hand Q merely because Phase is ready",
     "Expire stale marks, sentries, threats and requested swaps independently",
+    "Recognize both BonusRangeBuff and BonusRangeDebuff Calibrum mark aliases",
     "Reset all five-gun state without leaking a prior game's queue",
 
     "Build the standard Calibrum-Gravitum-Infernum-Severum-Crescendum cycle",

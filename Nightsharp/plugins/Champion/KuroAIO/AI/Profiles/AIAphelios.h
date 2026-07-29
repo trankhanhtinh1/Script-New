@@ -191,8 +191,8 @@ inline constexpr ChampionProfile Aphelios = [] {
         "Pinned to Riot 26.14 with Aphelios changes through 26.13/26.4/26.1 "
         "and CommunityDragon 16.14. Cross-checked The Book of Aphelios, "
         "current Challenger/OTP rotation material, Season 16 Aleksis007, "
-        "Peyz/Viper/Gumayusi reviews, combo catalogs and every local champion "
-        "plugin; no local Aphelios controller existed.";
+        "Peyz/Viper/Gumayusi reviews, the local EnsoulSharp five-gun/ammo "
+        "implementation, combo catalogs and every local champion plugin.";
     return p;
 }();
 

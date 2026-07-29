@@ -18,6 +18,20 @@ void Require(bool condition, const char* message) {
 } // namespace
 
 int main() {
+    Require(IsPassiveRingSpawnObjectName(
+                "Akali_Skin01_P_Indicator_Circle_Self") &&
+                !IsPassiveRingSpawnObjectName(
+                    "AKALI_BASE_P_INDICATOR_CIRCLE_ACTIVATE") &&
+                IsPassiveRingObjectName(
+                    "AKALI_BASE_P_INDICATOR_CIRCLE_ACTIVATE") &&
+                !IsPassiveRingObjectName("AkaliWSmoke"),
+            "passive object matcher must accept skin-qualified ring indicators only");
+    Require(IsPassiveRingExpiredObjectName(
+                "Akali_Skin32_P_Indicator_Circle_Expired") &&
+                !IsPassiveRingExpiredObjectName(
+                    "Akali_Skin32_P_Indicator_Circle_Self"),
+            "passive object matcher must distinguish expiry particles");
+
     const Vec3 source{ 0.0f, 0.0f, 0.0f };
     const Vec3 forward{ 1.0f, 0.0f, 0.0f };
 

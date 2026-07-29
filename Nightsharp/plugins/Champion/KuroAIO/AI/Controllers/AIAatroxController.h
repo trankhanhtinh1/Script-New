@@ -1266,6 +1266,7 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Q stage synchronization from runtime name and local cast events",
+    "Resolve Q2 as a widening cone and Q3 as a circle in the runtime catalog",
     "Q1 far-edge sweetspot without spending E",
     "Q1 forward E correction for an escaping target",
     "Q1 backward E correction against a target stepping inside",

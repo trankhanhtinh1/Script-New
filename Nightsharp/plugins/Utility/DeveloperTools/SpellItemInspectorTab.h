@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cmath>
 
 namespace Plugins::DevTools {
 
@@ -70,7 +71,11 @@ public:
             targetInfo.characterName = obj.CharacterName();
             targetInfo.name = obj.Name();
             targetInfo.address = obj.Address();
-            targetInfo.hasSpellbook = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
+            // Spell state calls eventually enter native game code.  Only a
+            // verified AIHeroClient is guaranteed to expose the full spellbook
+            // layout used by this inspector.
+            targetInfo.hasSpellbook =
+                obj.Type() == ::Core::Objects::ObjectType::AIHeroClient;
             
             const auto localPlayer = SDK::ObjectManager::Player();
             targetInfo.isLocalPlayer = localPlayer.IsValid() && obj.Address() == localPlayer.Address();
@@ -95,8 +100,20 @@ public:
                         if (spell.IsValid()) {
                             info.isValid = true;
                             info.name = spell.Name();
-                            info.state = static_cast<int>(spell.State(gameTime));
-                            info.remainingCD = spell.RemainingCooldown(gameTime);
+                            const float cooldownExpires = spell.CooldownExpires();
+                            info.remainingCD = std::isfinite(cooldownExpires) &&
+                                               cooldownExpires > gameTime &&
+                                               cooldownExpires - gameTime < 100000.0f
+                                ? cooldownExpires - gameTime
+                                : 0.0f;
+                            if (static_cast<int>(slot) <= static_cast<int>(SDK::SpellSlot::R) &&
+                                !spell.Learned()) {
+                                info.state = static_cast<int>(CoreSpellBook::State_NotLearned);
+                            } else if (info.remainingCD > 0.0f) {
+                                info.state = static_cast<int>(CoreSpellBook::State_Cooldown);
+                            } else {
+                                info.state = static_cast<int>(CoreSpellBook::State_Ready);
+                            }
                             info.totalCD = spell.Cooldown();
                             info.level = spell.Level();
                             info.ammo = spell.Ammo();

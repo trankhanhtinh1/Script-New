@@ -82,52 +82,65 @@ public:
         LiveStatsTargetInfo targetInfo;
 
         if (obj.IsValid()) {
-            targetInfo.isValid = true;
-            targetInfo.hasStats = obj.IsHero() || obj.IsMinion() || obj.IsTurret() || 
-                                 obj.Type() == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-                                 obj.Type() == ::Core::Objects::ObjectType::HQClient;
-            
-            targetInfo.characterName = obj.CharacterName();
-            targetInfo.name = obj.Name();
-            targetInfo.address = obj.Address();
+            const auto type = obj.Type();
+            const uintptr_t address = obj.Address();
+            const bool isHero = type == ::Core::Objects::ObjectType::AIHeroClient;
+            const bool isMinion = type == ::Core::Objects::ObjectType::AIMinionClient;
+
+            targetInfo.isValid = Globals::IsReadablePtr(address, sizeof(std::uintptr_t));
+            targetInfo.hasStats = isHero || isMinion;
+            targetInfo.address = address;
+
+            // Read one type-aware snapshot under Core::Objects' SEH boundary.
+            // Do not cast structures, missiles, emitters or turrets to an
+            // AIBaseClient merely because they share a few field offsets.
+            const auto raw = ::Core::Objects::ReadSnapshot(address, type);
+            targetInfo.characterName = raw.characterName;
+            targetInfo.name = raw.name;
             const auto localPlayer = SDK::ObjectManager::Player();
-            targetInfo.isLocalPlayer = localPlayer.IsValid() && obj.Address() == localPlayer.Address();
+            targetInfo.isLocalPlayer = localPlayer.IsValid() && address == localPlayer.Address();
 
             if (targetInfo.hasStats) {
-                const auto player = SDK::AIBaseClient(obj.Handle());
-                const auto att = SDK::AttackableUnit(obj.Handle());
-                
-                targetInfo.health = att.Health();
-                targetInfo.maxHealth = att.MaxHealth();
-                targetInfo.healthPercent = att.HealthPercent();
-                targetInfo.allShield = att.AllShield();
-                targetInfo.physicalShield = att.PhysicalShield();
-                targetInfo.magicalShield = att.MagicalShield();
-                targetInfo.healthRegenRate = att.HealthRegenRate();
+                targetInfo.health = raw.health;
+                targetInfo.maxHealth = raw.maxHealth;
+                targetInfo.healthPercent = raw.maxHealth > 0.0f
+                    ? raw.health * 100.0f / raw.maxHealth
+                    : 0.0f;
+                targetInfo.allShield = raw.allShield;
+                targetInfo.physicalShield = raw.physicalShield;
+                targetInfo.magicalShield = raw.magicalShield;
+                targetInfo.healthRegenRate =
+                    ::CoreAIHeroClient::HealthRegenRate(address);
 
-                targetInfo.isAIBase = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
-                if (targetInfo.isAIBase && player.IsValid()) {
-                    targetInfo.level = player.Level();
-                    targetInfo.mana = player.Mana();
-                    targetInfo.maxMana = player.MaxMana();
-                    targetInfo.manaPercent = player.ManaPercent();
-                    targetInfo.moveSpeed = player.MoveSpeed();
-                    targetInfo.attackRange = player.AttackRange();
-                    targetInfo.baseAD = player.BaseAttackDamage();
-                    targetInfo.bonusAD = player.BonusAttackDamage();
-                    targetInfo.totalAD = player.TotalAttackDamage();
-                    targetInfo.ap = player.TotalMagicalDamage();
-                    targetInfo.attackSpeedMod = player.AttackSpeedMod();
-                    targetInfo.armor = player.Armor();
-                    targetInfo.bonusArmor = player.BonusArmor();
-                    targetInfo.spellBlock = player.SpellBlock();
-                    targetInfo.bonusSpellBlock = player.BonusSpellBlock();
-                    targetInfo.crit = player.Crit();
-                    targetInfo.lethality = player.Lethality();
-                    targetInfo.flatArmorPen = player.FlatArmorPenetrationMod();
-                    targetInfo.percentArmorPen = player.PercentArmorPenetrationMod();
-                    targetInfo.flatMagicPen = player.FlatMagicPenetrationMod();
-                    targetInfo.percentMagicPen = player.PercentMagicPenetrationMod();
+                targetInfo.isAIBase = true;
+                targetInfo.level = raw.level;
+                targetInfo.mana = raw.mana;
+                targetInfo.maxMana = raw.maxMana;
+                targetInfo.manaPercent = raw.maxMana > 0.0f
+                    ? raw.mana * 100.0f / raw.maxMana
+                    : 0.0f;
+                targetInfo.moveSpeed = raw.moveSpeed;
+                targetInfo.attackRange = raw.attackRange;
+                targetInfo.baseAD = raw.baseAttackDamage;
+                targetInfo.totalAD = raw.totalAttackDamage;
+                targetInfo.bonusAD = raw.totalAttackDamage - raw.baseAttackDamage;
+                targetInfo.ap = raw.abilityPower;
+                targetInfo.attackSpeedMod = raw.attackSpeedMod;
+                targetInfo.armor = raw.armor;
+                targetInfo.spellBlock = raw.spellBlock;
+
+                // These offsets are hero-only.  Reading them from a minion or
+                // another AIBase-shaped object can produce invalid data.
+                if (isHero) {
+                    const auto heroStats = ::CoreAIHeroClient::Read(address);
+                    targetInfo.bonusArmor = heroStats.bonusArmor;
+                    targetInfo.bonusSpellBlock = heroStats.bonusSpellBlock;
+                    targetInfo.crit = heroStats.crit;
+                    targetInfo.lethality = heroStats.physicalLethality;
+                    targetInfo.flatArmorPen = heroStats.flatArmorPen;
+                    targetInfo.percentArmorPen = heroStats.percentArmorPen;
+                    targetInfo.flatMagicPen = heroStats.flatMagicPen;
+                    targetInfo.percentMagicPen = heroStats.percentMagicPen;
                 }
             }
         }

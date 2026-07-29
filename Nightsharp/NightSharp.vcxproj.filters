@@ -565,6 +565,12 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\AIGeometry.h">
       <Filter>Plugins\Champion\KuroAIO\AI</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\AIMarksmanControllerHelpers.h">
+      <Filter>Plugins\Champion\KuroAIO\AI</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\AIMarksmanTargeting.h">
+      <Filter>Plugins\Champion\KuroAIO\AI</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAatroxController.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
@@ -667,6 +673,24 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBlitzcrankGeometry.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICaitlynController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICaitlynGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEzrealController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEzrealGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJhinController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJhinGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRyzeController.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
@@ -677,6 +701,12 @@
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITaliyahGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVarusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVarusGeometry.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIAatrox.h">
@@ -730,10 +760,22 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIBlitzcrank.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AICaitlyn.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIEzreal.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIJhin.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIRyze.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AITaliyah.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIVarus.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Fiora\Fiora.h">

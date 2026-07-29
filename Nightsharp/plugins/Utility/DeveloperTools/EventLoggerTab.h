@@ -2,9 +2,10 @@
 #include "IDeveloperTab.h"
 #include "../DeveloperToolsPlugin.h"
 #include <mutex>
-#include <vector>
+#include <deque>
 #include <string>
 #include <cstdarg>
+#include <algorithm>
 
 namespace Plugins::DevTools {
 
@@ -12,7 +13,7 @@ class EventLoggerTab final : public IDeveloperTab {
 private:
     static constexpr std::size_t kMaxEventLogEntries = 512;
     std::mutex eventLogMutex_;
-    std::vector<std::string> eventLog_;
+    std::deque<std::string> eventLog_;
     bool logAutoScroll_ = true;
 
 public:
@@ -23,7 +24,6 @@ public:
     void OnLoad() override {
         std::lock_guard<std::mutex> lk(eventLogMutex_);
         eventLog_.clear();
-        eventLog_.reserve(kMaxEventLogEntries);
     }
 
     void OnUnload() override {
@@ -168,21 +168,22 @@ public:
         if (!PassesNameFilter(owner)) {
             return;
         }
-        const Vec3 dest = args.PathCount > 0 ? args.Path[args.PathCount - 1] : Vec3{};
+        const int pathCount = std::clamp(args.PathCount, 0, 32);
+        const Vec3 dest = pathCount > 0 ? args.Path[pathCount - 1] : Vec3{};
         EmitF("[NewPath] %s isDash=%d speed=%.1f waypoints=%d dest=(%.0f, %.0f, %.0f)",
-              owner, args.IsDash ? 1 : 0, args.Speed, args.PathCount,
+              owner, args.IsDash ? 1 : 0, args.Speed, pathCount,
               dest.x, dest.y, dest.z);
         if (!plugin_->logVerbose_) {
             return;
         }
         EmitObjectInfo("owner", args.Sender);
-        const int shown = args.PathCount < 8 ? args.PathCount : 8;
+        const int shown = std::min(pathCount, 8);
         for (int i = 0; i < shown; ++i) {
             EmitF("    wp[%d]   (%.1f, %.1f, %.1f)",
                   i, args.Path[i].x, args.Path[i].y, args.Path[i].z);
         }
-        if (args.PathCount > shown) {
-            EmitF("    wp      ... %d more waypoints omitted", args.PathCount - shown);
+        if (pathCount > shown) {
+            EmitF("    wp      ... %d more waypoints omitted", pathCount - shown);
         }
         EmitF("    ptrs    pathArray=0x%llX",
               static_cast<unsigned long long>(args.PathArray));
@@ -272,8 +273,15 @@ public:
         if (ImGui::BeginChild("EventLogScroll", ImVec2(0, 260), true,
                               ImGuiWindowFlags_HorizontalScrollbar)) {
             std::lock_guard<std::mutex> lk(eventLogMutex_);
-            for (const auto& line : eventLog_) {
-                ImGui::TextUnformatted(line.c_str());
+            ImGuiListClipper clipper;
+            clipper.Begin(static_cast<int>(eventLog_.size()));
+            while (clipper.Step()) {
+                for (int index = clipper.DisplayStart;
+                     index < clipper.DisplayEnd;
+                     ++index) {
+                    ImGui::TextUnformatted(
+                        eventLog_[static_cast<std::size_t>(index)].c_str());
+                }
             }
             if (logAutoScroll_ && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f) {
                 ImGui::SetScrollHereY(1.0f);
@@ -307,8 +315,7 @@ private:
         }
         std::lock_guard<std::mutex> lk(eventLogMutex_);
         if (eventLog_.size() >= kMaxEventLogEntries) {
-            eventLog_.erase(eventLog_.begin(),
-                            eventLog_.begin() + (eventLog_.size() - kMaxEventLogEntries + 1));
+            eventLog_.pop_front();
         }
         eventLog_.emplace_back(line);
     }

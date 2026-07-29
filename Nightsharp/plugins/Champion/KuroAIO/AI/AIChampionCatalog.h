@@ -18,8 +18,12 @@
 #include "Profiles/AIBard.h"
 #include "Profiles/AIBelveth.h"
 #include "Profiles/AIBlitzcrank.h"
+#include "Profiles/AICaitlyn.h"
+#include "Profiles/AIEzreal.h"
+#include "Profiles/AIJhin.h"
 #include "Profiles/AIRyze.h"
 #include "Profiles/AITaliyah.h"
+#include "Profiles/AIVarus.h"
 #include "Controllers/AIAatroxController.h"
 #include "Controllers/AIAhriController.h"
 #include "Controllers/AIAkaliController.h"
@@ -37,8 +41,12 @@
 #include "Controllers/AIBardController.h"
 #include "Controllers/AIBelvethController.h"
 #include "Controllers/AIBlitzcrankController.h"
+#include "Controllers/AICaitlynController.h"
+#include "Controllers/AIEzrealController.h"
+#include "Controllers/AIJhinController.h"
 #include "Controllers/AIRyzeController.h"
 #include "Controllers/AITaliyahController.h"
+#include "Controllers/AIVarusController.h"
 
 #include <array>
 #include <cstring>
@@ -50,7 +58,7 @@ struct ChampionEntry {
     const ChampionController* Controller = nullptr;
 };
 
-inline constexpr std::array<ChampionEntry, 19> AllChampions = {
+inline constexpr std::array<ChampionEntry, 23> AllChampions = {
     ChampionEntry{ &Profiles::Aatrox, &Controllers::Aatrox::Controller },
     ChampionEntry{ &Profiles::Ahri, &Controllers::Ahri::Controller },
     ChampionEntry{ &Profiles::Akali, &Controllers::Akali::Controller },
@@ -70,8 +78,12 @@ inline constexpr std::array<ChampionEntry, 19> AllChampions = {
     ChampionEntry{ &Profiles::Belveth, &Controllers::Belveth::Controller },
     ChampionEntry{ &Profiles::Blitzcrank,
                    &Controllers::Blitzcrank::Controller },
+    ChampionEntry{ &Profiles::Caitlyn, &Controllers::Caitlyn::Controller },
+    ChampionEntry{ &Profiles::Ezreal, &Controllers::Ezreal::Controller },
+    ChampionEntry{ &Profiles::Jhin, &Controllers::Jhin::Controller },
     ChampionEntry{ &Profiles::Ryze, &Controllers::Ryze::Controller },
     ChampionEntry{ &Profiles::Taliyah, &Controllers::Taliyah::Controller },
+    ChampionEntry{ &Profiles::Varus, &Controllers::Varus::Controller },
 };
 
 inline const ChampionEntry* FindEntry(const char* championName) {

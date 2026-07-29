@@ -153,8 +153,9 @@ inline constexpr ChampionProfile Akali = [] {
         "commit, and hold R2 for missing-health execution or exit.";
     p.ResearchSummary =
         "CommunityDragon 16.14 bin/kit data, Meraki live mechanics, current "
-        "Challenger long-form guide, high-elo Akali matchup material, current "
-        "combo catalogues, Akali-main edge cases, and pure geometry tests.";
+        "Challenger long-form guide, local EnsoulSharp passive/dash event audit, "
+        "high-elo Akali matchup material, current combo catalogues, Akali-main "
+        "edge cases, and pure geometry tests.";
     return p;
 }();
 

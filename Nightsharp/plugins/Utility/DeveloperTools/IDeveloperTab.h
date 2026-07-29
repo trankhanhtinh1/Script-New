@@ -1,6 +1,8 @@
 #pragma once
 #include "../../../SDK/SDK.h"
 #include "../../../imgui/imgui.h"
+#include <Windows.h>
+#include <cstdint>
 
 namespace Plugins {
     class DeveloperToolsPlugin;
@@ -112,5 +114,108 @@ public:
     virtual void OnNewPathEvent(const SDK::Events::NewPathEventArgs&) {}
     virtual void OnDeleteObject(const SDK::Events::ObjectEventArgs&) {}
 };
+
+// Keep SEH in tiny leaf functions.  The tab implementations use STL/RAII and
+// therefore cannot safely place __try in their own bodies on MSVC (C2712).
+// A bad/stale game object is allowed to fault one tab, but must never escape to
+// PluginManager and disable the whole Developer Tools plugin.
+struct TabFaultCapture {
+    std::uint32_t code = 0;
+    std::uintptr_t address = 0;
+};
+
+inline int CaptureTabException(EXCEPTION_POINTERS* exception,
+                               TabFaultCapture* capture) noexcept {
+    if (capture) {
+        capture->code = exception && exception->ExceptionRecord
+            ? static_cast<std::uint32_t>(exception->ExceptionRecord->ExceptionCode)
+            : 0;
+        capture->address = exception && exception->ExceptionRecord
+            ? reinterpret_cast<std::uintptr_t>(exception->ExceptionRecord->ExceptionAddress)
+            : 0;
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+inline bool InvokeTabLoadGuarded(IDeveloperTab* tab,
+                                 TabFaultCapture* capture) noexcept {
+    if (!tab) return false;
+    __try {
+        tab->OnLoad();
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
+
+inline bool InvokeTabUnloadGuarded(IDeveloperTab* tab,
+                                   TabFaultCapture* capture) noexcept {
+    if (!tab) return false;
+    __try {
+        tab->OnUnload();
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
+
+inline bool InvokeTabUpdateGuarded(IDeveloperTab* tab,
+                                   TabFaultCapture* capture) noexcept {
+    if (!tab) return false;
+    __try {
+        tab->OnUpdate();
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
+
+inline bool InvokeTabRenderGuarded(IDeveloperTab* tab,
+                                   TabFaultCapture* capture) noexcept {
+    if (!tab) return false;
+    __try {
+        tab->OnRender();
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
+
+inline bool InvokeTabDrawGuarded(IDeveloperTab* tab,
+                                 TabFaultCapture* capture) noexcept {
+    if (!tab) return false;
+    __try {
+        tab->OnDrawTab();
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
+
+inline bool InvokeTabCopyGuarded(IDeveloperTab* tab,
+                                 TabFaultCapture* capture) noexcept {
+    if (!tab) return false;
+    __try {
+        tab->OnCopyHotkey();
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
+
+template <typename TArgs>
+inline bool InvokeTabEventGuarded(
+    IDeveloperTab* tab,
+    void (IDeveloperTab::*callback)(const TArgs&),
+    const TArgs& args,
+    TabFaultCapture* capture) noexcept {
+    if (!tab || !callback) return false;
+    __try {
+        (tab->*callback)(args);
+        return true;
+    } __except (CaptureTabException(GetExceptionInformation(), capture)) {
+        return false;
+    }
+}
 
 } // namespace Plugins::DevTools

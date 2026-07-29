@@ -32,6 +32,32 @@ inline constexpr ChampionProfile Aatrox = [] {
     p.Spells[0].RecastSpellName = "AatroxQ2";
     p.Spells[0].ClearManaPercent = 0.0f;
 
+    // The runtime exposes each Darkin Blade cast under its own spell name.
+    // Preserve those forms in the catalog so prediction is rebuilt with the
+    // widening Q2 blade and the circular Q3 body instead of retaining Q1's
+    // narrow line metadata for the whole three-cast sequence.
+    SpellSpec q2 = p.Spells[0];
+    q2.Name = "The Darkin Blade - Second Cast";
+    q2.Kind = CastKind::Cone;
+    q2.Range = q2.TriggerRange = 525.0f;
+    q2.Width = 500.0f;
+    q2.Shape = SDK::SpellType::SkillshotCone;
+    q2.RecastSpellName = "AatroxQ3";
+    p.Variants[p.VariantCount++] = {
+        SDK::SpellSlot::Q, "AatroxQ2", q2,
+    };
+
+    SpellSpec q3 = p.Spells[0];
+    q3.Name = "The Darkin Blade - Third Cast";
+    q3.Kind = CastKind::Circle;
+    q3.Range = q3.TriggerRange = 400.0f;
+    q3.Width = 300.0f;
+    q3.Shape = SDK::SpellType::SkillshotCircle;
+    q3.RecastSpellName = "";
+    p.Variants[p.VariantCount++] = {
+        SDK::SpellSlot::Q, "AatroxQ3", q3,
+    };
+
     p.Spells[1] = Spell(
         SDK::SpellSlot::W, "Infernal Chains", CastKind::Line,
         Intent::Damage | Intent::CrowdControl | Intent::Setup |
@@ -107,7 +133,8 @@ inline constexpr ChampionProfile Aatrox = [] {
         "commit R only when the extended fight or reset is justified.";
     p.ResearchSummary =
         "CommunityDragon 26.14 kit data, League Wiki geometry/timings, local "
-        "AIO state-machine audit, and challenger/pro combo-guide review.";
+        "EnsoulSharp TestOrbwalker stage/event audit, AIO state-machine audit, "
+        "and challenger/pro combo-guide review.";
     return p;
 }();
 

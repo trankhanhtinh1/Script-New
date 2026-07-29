@@ -39,6 +39,16 @@ private:
         bool isLocalPlayer = false;
     };
 
+    struct BuffObservation {
+        char name[96] = {};
+        int stacks = 0;
+        int type = -1;
+        float startTime = 0.0f;
+        float endTime = 0.0f;
+        uintptr_t address = 0;
+        bool live = false;
+    };
+
     mutable SRWLOCK buffLock_ = SRWLOCK_INIT;
     BuffEntry buffEntries_[256] = {};
     int buffCursor_ = 0;
@@ -518,14 +528,48 @@ private:
             return;
         }
 
-        const bool hasBuffs = obj.IsHero() || obj.IsMinion() || obj.IsTurret();
+        const auto type = obj.Type();
+        const bool hasBuffs =
+            type == ::Core::Objects::ObjectType::AIHeroClient ||
+            type == ::Core::Objects::ObjectType::AIMinionClient;
         if (!hasBuffs) {
             return;
         }
 
-        const auto player = SDK::AIBaseClient(obj.Handle());
+        const uintptr_t playerAddress = obj.Address();
+        if (!Globals::IsReadablePtr(playerAddress, sizeof(std::uintptr_t))) {
+            return;
+        }
+
         uintptr_t buffs[256] = {};
-        const int buffCount = CoreBuffs::Enumerate(player.Address(), buffs, 256);
+        const int buffCount = CoreBuffs::Enumerate(playerAddress, buffs, 256);
+
+        // Finish every game-memory read before taking buffLock_.  If a stale
+        // buff pointer ever faults, the outer tab guard can recover without
+        // leaving the SRW lock permanently held.
+        BuffObservation observations[256] = {};
+        int observationCount = 0;
+        char name[96] = {};
+        for (int i = 0; i < buffCount && observationCount < 256; ++i) {
+            const CoreBuffs::BuffRef buff{ buffs[i] };
+            if (!buff.ReadName(name, static_cast<int>(sizeof(name)))) {
+                continue;
+            }
+
+            auto& observation = observations[observationCount++];
+            CopyBuffText(observation.name,
+                         static_cast<int>(sizeof(observation.name)),
+                         name);
+            observation.address = buff.address;
+            observation.live = buff.IsActive(gameTime);
+            observation.stacks = buff.GetStacks();
+            observation.type = buff.GetType();
+            observation.startTime = buff.GetStartTime();
+            observation.endTime = buff.GetEndTime();
+        }
+
+        BuffEntry changedEntries[256] = {};
+        int changedCount = 0;
 
         AcquireSRWLockExclusive(&buffLock_);
 
@@ -542,24 +586,20 @@ private:
             }
         }
 
-        char name[96] = {};
-        for (int i = 0; i < buffCount; ++i) {
-            CoreBuffs::BuffRef buff{ buffs[i] };
-            if (!buff.ReadName(name, static_cast<int>(sizeof(name)))) {
-                continue;
-            }
-            if (IsBuffRawSuppressedLocked(name)) {
+        for (int i = 0; i < observationCount; ++i) {
+            const auto& observation = observations[i];
+            if (IsBuffRawSuppressedLocked(observation.name)) {
                 continue;
             }
 
-            BuffEntry& entry = EnsureBuffEntryLocked(name);
-            entry.address = buff.address;
-            entry.live = buff.IsActive(gameTime);
+            BuffEntry& entry = EnsureBuffEntryLocked(observation.name);
+            entry.address = observation.address;
+            entry.live = observation.live;
             entry.liveSeenThisRefresh = true;
-            entry.liveStacks = buff.GetStacks();
-            entry.type = buff.GetType();
-            entry.startTime = buff.GetStartTime();
-            entry.endTime = buff.GetEndTime();
+            entry.liveStacks = observation.stacks;
+            entry.type = observation.type;
+            entry.startTime = observation.startTime;
+            entry.endTime = observation.endTime;
             if (entry.live) {
                 entry.lastSeenTime = gameTime;
             }
@@ -570,8 +610,11 @@ private:
                 continue;
             }
 
-            entry.hasBuff = player.HasBuff(entry.name);
-            entry.sdkCount = player.GetBuffCount(entry.name);
+            // The raw enumeration above is already the authoritative snapshot
+            // for this refresh.  Re-querying every name rebuilt the buff cache
+            // repeatedly and was the last operation visible before the crash.
+            entry.hasBuff = entry.live;
+            entry.sdkCount = entry.liveStacks;
 
             const bool liveRecently =
                 gameTime - entry.lastSeenTime <= buffKeepRecentSeconds_;
@@ -590,13 +633,17 @@ private:
             if (changed) {
                 entry.initialized = true;
                 entry.lastChangeTime = gameTime;
-                if (buffLogChanges_) {
-                    LogBuffEntry("refresh", entry);
+                if (buffLogChanges_ && changedCount < 256) {
+                    changedEntries[changedCount++] = entry;
                 }
             }
         }
 
         ReleaseSRWLockExclusive(&buffLock_);
+
+        for (int i = 0; i < changedCount; ++i) {
+            LogBuffEntry("refresh", changedEntries[i]);
+        }
     }
 
     void HandlePlayerBuffEvent(const char* eventName, const SDK::Events::BuffEventArgs& args) {
@@ -606,6 +653,7 @@ private:
         }
 
         const float gameTime = SDK::Game::Time();
+        const int gameTick = SDK::Game::TickCount();
         AcquireSRWLockExclusive(&buffLock_);
 
         const bool removeEvent = eventName && _stricmp(eventName, "remove") == 0;
@@ -613,6 +661,7 @@ private:
         if (removeEvent || (updateEvent && args.Count <= 0)) {
             SuppressBuffRawLocked(args.BuffName);
             RemoveBuffEntryLocked(args.BuffName);
+            ReleaseSRWLockExclusive(&buffLock_);
             if (buffLogChanges_) {
                 NightSharpDebug::Logf(
                     "[PlayerBuffDebug] remove-display name=%s event=%s count=%d",
@@ -620,14 +669,13 @@ private:
                     eventName ? eventName : "?",
                     args.Count);
             }
-            ReleaseSRWLockExclusive(&buffLock_);
             return;
         }
 
         UnsuppressBuffRawLocked(args.BuffName);
 
         BuffEntry& entry = EnsureBuffEntryLocked(args.BuffName);
-        entry.lastEventTick = SDK::Game::TickCount();
+        entry.lastEventTick = gameTick;
         entry.lastChangeTime = gameTime;
         CopyBuffText(entry.lastEvent,
                      static_cast<int>(sizeof(entry.lastEvent)),
@@ -635,10 +683,11 @@ private:
         if (args.Count > 0) {
             entry.lastSeenTime = gameTime;
         }
-        if (buffLogChanges_) {
-            LogBuffEntry(eventName, entry);
-        }
+        const BuffEntry entryForLog = entry;
         ReleaseSRWLockExclusive(&buffLock_);
+        if (buffLogChanges_) {
+            LogBuffEntry(eventName, entryForLog);
+        }
     }
 
     static void LogBuffEntry(const char* source, const BuffEntry& entry) {
