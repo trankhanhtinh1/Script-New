@@ -281,12 +281,10 @@ static void DebugLogRendBuff(const AIBaseClient& target, const char* context) {
     const int sdkStacks = target.GetBuffCount("kalistaexpungemarker");
 
     int rawStacks38 = -1;
-    int rawStacks3C = -1;
     float endTime = -1.0f;
     const auto buffRef = ::CoreBuffs::FindRawByName(target.Address(), "kalistaexpungemarker");
     if (buffRef.IsValid()) {
         rawStacks38 = ::Globals::Read<int>(buffRef.address + Offset::BuffDataLayout::BuffStacks);
-        rawStacks3C = ::Globals::Read<int>(buffRef.address + Offset::BuffDataLayout::BuffStacksAlt);
         endTime = buffRef.GetEndTime();
     }
 
@@ -297,13 +295,12 @@ static void DebugLogRendBuff(const AIBaseClient& target, const char* context) {
     }
 
     DebugLogLine(
-        "[%s] target=%s hasBuff=%d sdkStacks=%d raw38=%d raw3C=%d endTime=%.2f hp=%.1f dist=%.1f",
+        "[%s] target=%s hasBuff=%d sdkStacks=%d raw38=%d endTime=%.2f hp=%.1f dist=%.1f",
         context,
         name,
         hasBuff ? 1 : 0,
         sdkStacks,
         rawStacks38,
-        rawStacks3C,
         endTime,
         target.Health(),
         target.DistanceToPlayer());

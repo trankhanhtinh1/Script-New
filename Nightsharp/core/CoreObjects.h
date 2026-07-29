@@ -500,11 +500,6 @@ inline Vec3 ReadPosition(uintptr_t object) {
 }
 
 inline float ReadBoundingRadius(uintptr_t object) {
-    const float fieldRadius = ReadField<float>(object, Offset::All::Radius);
-    if (IsSaneFloat(fieldRadius, 0.0f, 10000.0f)) {
-        return fieldRadius;
-    }
-
     float radius = 0.0f;
 #if NIGHTSHARP_ENABLE_OBJECT_VFUNC_READS
     if (TryCallObjectFloatVFunc(object, Offset::VTable::GameObjectBoundingRadius, radius)) {
@@ -577,11 +572,19 @@ inline bool ReadCharacterName(uintptr_t object, char* out, int outCount) {
 }
 
 inline MinionClass ReadMinionClass(uintptr_t object) {
+    if (!Globals::IsValidPtr(object) ||
+        Offset::MinionClassRuntime::TypeOffset == 0) {
+        return MinionClass::Unset;
+    }
     return static_cast<MinionClass>(
         ReadField<std::uint8_t>(object, Offset::MinionClassRuntime::TypeOffset));
 }
 
 inline JungleRuntimeType ReadJungleRuntimeType(uintptr_t object) {
+    if (!Globals::IsValidPtr(object) ||
+        Offset::JungleTypeRuntime::TypeOffset == 0) {
+        return JungleRuntimeType::Other;
+    }
     return static_cast<JungleRuntimeType>(
         ReadField<std::uint8_t>(object, Offset::JungleTypeRuntime::TypeOffset));
 }
@@ -591,7 +594,7 @@ inline bool IsDead(uintptr_t object) {
         return true;
     }
 
-    // Use the native IsAlive RVA (0x2B0CE0) and invert the result.
+    // Use ControlRuntime::IsAlive and invert the result.
     //
     // Pattern match `E8 ? ? ? ? 84 C0 74 ? 48 8B 83 ? ? ? ? 48 8D 8B`
     // found at sub_E48C50 (targetable check), which calls IsAlive natively.
@@ -821,14 +824,7 @@ namespace detail {
             snapshot.position = *reinterpret_cast<const Vec3*>(object + Offset::All::Position);
             snapshot.direction = Vec3{};
 
-            const float rawRadius = *reinterpret_cast<const float*>(object + Offset::All::Radius);
-            if (rawRadius == rawRadius && rawRadius >= 0.0f && rawRadius <= 10000.0f) {
-                snapshot.boundingRadius = rawRadius;
-            } else {
-                float r = 0.0f;
-                if (TryCallObjectFloatFunction(object, Offset::ControlRuntime::GetBoundingRadius, r))
-                    snapshot.boundingRadius = r;
-            }
+            snapshot.boundingRadius = ReadBoundingRadius(object);
 
             if (IsAttackable(type)) {
                 snapshot.health = *reinterpret_cast<const float*>(object + Offset::AttackableUnit::HP);
@@ -854,10 +850,8 @@ namespace detail {
             }
 
             if (type == ObjectType::AIMinionClient || type == ObjectType::NeutralMinionCampClient) {
-                snapshot.minionClass = static_cast<int>(*reinterpret_cast<const std::uint8_t*>(
-                    object + Offset::MinionClassRuntime::TypeOffset));
-                snapshot.jungleType = static_cast<int>(*reinterpret_cast<const std::uint8_t*>(
-                    object + Offset::JungleTypeRuntime::TypeOffset));
+                snapshot.minionClass = static_cast<int>(ReadMinionClass(object));
+                snapshot.jungleType = static_cast<int>(ReadJungleRuntimeType(object));
             }
 
             if (IsMissile(type)) {

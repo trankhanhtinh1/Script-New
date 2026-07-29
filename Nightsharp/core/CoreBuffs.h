@@ -54,21 +54,11 @@ namespace CoreBuffs {
         int GetStacks() const {
             if (!IsValid()) return 0;
 
-            const auto begin = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffStackArrayBegin);
-            const auto end = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffStacks);
-
-            if (Globals::IsValidPtr(begin) && Globals::IsValidPtr(end) && end >= begin) {
-                const auto count = static_cast<int>((end - begin) / Offset::BuffScriptInstanceLayout::EntryStride);
-                if (count >= 0 && count < 1000) {
-                    return count;
-                }
+            const int count = Globals::Read<int>(
+                address + Offset::BuffDataLayout::BuffStackCount);
+            if (count >= 0 && count < 1000) {
+                return count;
             }
-
-            const int alt = Globals::Read<int>(address + Offset::BuffDataLayout::BuffStacksAlt);
-            if (alt > 0 && alt < 1000) {
-                return alt;
-            }
-
             return 0;
         }
 
@@ -101,7 +91,8 @@ namespace CoreBuffs {
         bool IsActive(float gameTime) const {
             if (!IsValid()) return false;
 
-            const auto liveCount = Globals::Read<uintptr_t>(address + 0x38);
+            const int liveCount = Globals::Read<int>(
+                address + Offset::BuffDataLayout::BuffStackCount);
             if (liveCount == 0 || GetStacks() <= 0) {
                 return false;
             }
@@ -141,9 +132,9 @@ namespace CoreBuffs {
                 address + Offset::BuffDataLayout::BuffStackArrayBegin);
             if (!Globals::IsValidPtr(arrayBegin)) return 0;
 
-            const auto arrayEnd = Globals::Read<uintptr_t>(
-                address + Offset::BuffDataLayout::BuffStacks);
-            if (!Globals::IsValidPtr(arrayEnd) || arrayEnd <= arrayBegin) return 0;
+            const int stackCount = Globals::Read<int>(
+                address + Offset::BuffDataLayout::BuffStackCount);
+            if (stackCount <= 0 || stackCount >= 1000) return 0;
 
             const auto scriptInstance = Globals::Read<uintptr_t>(arrayBegin);
             if (!Globals::IsValidPtr(scriptInstance)) return 0;
@@ -390,7 +381,9 @@ namespace CoreBuffs {
 
     inline uintptr_t GetActiveSpellCast(uintptr_t obj) {
         if (!Globals::IsValidPtr(obj)) return 0;
-        return Globals::Read<uintptr_t>(obj + Offset::SpellRuntime::ActiveSpellCast);
+        const auto spellBook = obj + Offset::SpellRuntime::SpellBookOffset;
+        return Globals::Read<uintptr_t>(
+            spellBook + Offset::SpellRuntime::ActiveSpellCast);
     }
 
     inline bool IsRecallSlotCastingActive(uintptr_t obj) {
@@ -410,8 +403,8 @@ namespace CoreBuffs {
         const auto cast = GetActiveSpellCast(obj);
         if (!Globals::IsValidPtr(cast)) return false;
 
-        const int slot = static_cast<int>(Globals::Read<uint8_t>(
-            cast + Offset::SpellCastInfoLayout::SpellSlot));
+        const int slot = Globals::Read<std::int32_t>(
+            cast + Offset::ActiveSpellCastLayout::SpellSlot);
         return slot == kRecallSpellSlot;
     }
 

@@ -219,10 +219,10 @@ inline Vec3 MouseWorldPosition() {
 }
 
 inline std::uint32_t SelectedNetworkId() {
-    const uintptr_t input = Input();
-    return Globals::IsValidPtr(input)
-        ? Globals::Read<std::uint32_t>(input + Offset::HudInputLayout::SelectedObjNetId)
-        : 0;
+    // IDA 13337 disproves the legacy HudInput+0x64 field as a stable
+    // selected-object network ID.  The picker keeps its result in transient
+    // caller state, so expose "unknown" instead of returning unrelated data.
+    return 0;
 }
 
 inline std::uint32_t SelectedObjectIndex() {
@@ -387,7 +387,9 @@ namespace detail {
                 return Globals::Read<uintptr_t>(begin);
             }
             const uintptr_t next = Globals::Read<uintptr_t>(
-                node + (key < teamId ? 0x08 : 0x00));
+                node + (key < teamId
+                    ? Offset::StatsRuntime::NodeRight
+                    : Offset::StatsRuntime::NodeLeft));
             node = next;
         }
         return 0;
